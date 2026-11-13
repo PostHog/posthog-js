@@ -170,6 +170,214 @@
         "v2-object": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
         "v2-empty-object": "{}"
       },
+      "getFlagsWithDetails": {
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        },
+        "bool-off": {
+          "key": "bool-off",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v1-variant": {
+          "key": "v1-variant",
+          "enabled": true,
+          "variant": "control",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 502,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\": 2}",
+            "has_experiment": true
+          }
+        },
+        "v1-object-payload": {
+          "key": "v1-object-payload",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 503,
+            "version": 4,
+            "description": null,
+            "payload": {
+              "columns": 3
+            },
+            "has_experiment": false
+          }
+        },
+        "v2-string": {
+          "key": "v2-string",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 504,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 505,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "v2-false": {
+          "key": "v2-false",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 506,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-null": {
+          "key": "v2-null",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 507,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-number": {
+          "key": "v2-number",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 508,
+            "version": 4,
+            "description": null,
+            "payload": "12.5",
+            "has_experiment": false
+          }
+        },
+        "v2-zero": {
+          "key": "v2-zero",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 509,
+            "version": 4,
+            "description": null,
+            "payload": "0",
+            "has_experiment": false
+          }
+        },
+        "v2-object": {
+          "key": "v2-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 510,
+            "version": 4,
+            "description": null,
+            "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+            "has_experiment": false
+          }
+        },
+        "v2-empty-object": {
+          "key": "v2-empty-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 511,
+            "version": 4,
+            "description": null,
+            "payload": "{}",
+            "has_experiment": false
+          }
+        }
+      },
       "tracked": {
         "getFeatureFlag:bool-on": true,
         "isFeatureEnabled:bool-on": true,
@@ -1012,6 +1220,43 @@
       "getFlagPayloads": {
         "healthy": "{\"columns\":2}"
       },
+      "getFlagsWithDetails": {
+        "failed": {
+          "key": "failed",
+          "enabled": false,
+          "variant": null,
+          "failed": true,
+          "reason": {
+            "code": "dependency_error",
+            "condition_index": null,
+            "description": "A dependency could not be evaluated"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\":2}",
+            "has_experiment": false
+          }
+        }
+      },
       "tracked": {
         "getFeatureFlag:failed": false,
         "isFeatureEnabled:failed": false,
@@ -1254,6 +1499,59 @@
         "failed": null,
         "healthy": "{\"columns\":4}",
         "bool-on": "{\"plan\":\"pro\"}"
+      },
+      "getFlagsWithDetails": {
+        "failed": {
+          "key": "failed",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "dependency_error",
+            "condition_index": null,
+            "description": "A dependency could not be evaluated"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "wide",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\":4}",
+            "has_experiment": false
+          }
+        },
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:failed": "compact",
@@ -1549,6 +1847,42 @@
         "healthy": "{\"columns\":2}",
         "bool-on": "{\"plan\":\"pro\"}"
       },
+      "getFlagsWithDetails": {
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\":2}",
+            "has_experiment": false
+          }
+        },
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        }
+      },
       "tracked": {
         "getFeatureFlag:healthy": "compact",
         "isFeatureEnabled:healthy": true,
@@ -1742,6 +2076,42 @@
           "healthy": "{\"columns\":2}",
           "bool-on": "{\"plan\":\"pro\"}"
         },
+        "getFlagsWithDetails": {
+          "healthy": {
+            "key": "healthy",
+            "enabled": true,
+            "variant": "compact",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 601,
+              "version": 4,
+              "description": null,
+              "payload": "{\"columns\":2}",
+              "has_experiment": false
+            }
+          },
+          "bool-on": {
+            "key": "bool-on",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 500,
+              "version": 4,
+              "description": null,
+              "payload": "{\"plan\":\"pro\"}",
+              "has_experiment": false
+            }
+          }
+        },
         "tracked": {
           "getFeatureFlag:bool-on": true,
           "isFeatureEnabled:bool-on": true,
@@ -1790,6 +2160,42 @@
       "getFlagPayloads": {
         "healthy": "{\"columns\":2}",
         "bool-on": "{\"plan\":\"pro\"}"
+      },
+      "getFlagsWithDetails": {
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\":2}",
+            "has_experiment": false
+          }
+        },
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:missing": "<undefined>",
@@ -2009,6 +2415,7 @@
             "plan": "bootstrapped"
           }
         },
+        "getFlagsWithDetails": {},
         "tracked": {
           "getFeatureFlag:v2-split": "arm-a",
           "isFeatureEnabled:v2-split": true,
@@ -2143,6 +2550,214 @@
         "v2-zero": "0",
         "v2-object": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
         "v2-empty-object": "{}"
+      },
+      "getFlagsWithDetails": {
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        },
+        "bool-off": {
+          "key": "bool-off",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v1-variant": {
+          "key": "v1-variant",
+          "enabled": true,
+          "variant": "control",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 502,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\": 2}",
+            "has_experiment": true
+          }
+        },
+        "v1-object-payload": {
+          "key": "v1-object-payload",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 503,
+            "version": 4,
+            "description": null,
+            "payload": {
+              "columns": 3
+            },
+            "has_experiment": false
+          }
+        },
+        "v2-string": {
+          "key": "v2-string",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 504,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 505,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "v2-false": {
+          "key": "v2-false",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 506,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-null": {
+          "key": "v2-null",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 507,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-number": {
+          "key": "v2-number",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 508,
+            "version": 4,
+            "description": null,
+            "payload": "12.5",
+            "has_experiment": false
+          }
+        },
+        "v2-zero": {
+          "key": "v2-zero",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 509,
+            "version": 4,
+            "description": null,
+            "payload": "0",
+            "has_experiment": false
+          }
+        },
+        "v2-object": {
+          "key": "v2-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 510,
+            "version": 4,
+            "description": null,
+            "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+            "has_experiment": false
+          }
+        },
+        "v2-empty-object": {
+          "key": "v2-empty-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 511,
+            "version": 4,
+            "description": null,
+            "payload": "{}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:v2-split": "arm-b",
@@ -2671,6 +3286,223 @@
             "forced": true
           }
         },
+        "getFlagsWithDetails": {
+          "bool-on": {
+            "key": "bool-on",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 500,
+              "version": 4,
+              "description": null,
+              "payload": "{\"plan\":\"pro\"}",
+              "has_experiment": false
+            }
+          },
+          "bool-off": {
+            "key": "bool-off",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "no_condition_match",
+              "condition_index": null,
+              "description": "No matching condition set"
+            },
+            "metadata": {
+              "id": 501,
+              "version": 4,
+              "description": null,
+              "payload": {
+                "forced": true
+              },
+              "has_experiment": false,
+              "original_payload": null
+            },
+            "original_enabled": false,
+            "original_variant": null
+          },
+          "v1-variant": {
+            "key": "v1-variant",
+            "enabled": true,
+            "variant": "control",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 502,
+              "version": 4,
+              "description": null,
+              "payload": "{\"columns\": 2}",
+              "has_experiment": true
+            }
+          },
+          "v1-object-payload": {
+            "key": "v1-object-payload",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 503,
+              "version": 4,
+              "description": null,
+              "payload": {
+                "columns": 3
+              },
+              "has_experiment": false
+            }
+          },
+          "v2-string": {
+            "key": "v2-string",
+            "enabled": true,
+            "variant": "compact",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 504,
+              "version": 4,
+              "description": null,
+              "payload": {
+                "layout": "overridden"
+              },
+              "has_experiment": false,
+              "original_payload": null
+            }
+          },
+          "v2-split": {
+            "key": "v2-split",
+            "enabled": true,
+            "variant": "arm-a",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 505,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": true
+            },
+            "original_variant": "arm-b"
+          },
+          "v2-false": {
+            "key": "v2-false",
+            "enabled": false,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 506,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v2-null": {
+            "key": "v2-null",
+            "enabled": false,
+            "variant": null,
+            "reason": {
+              "code": "no_condition_match",
+              "condition_index": null,
+              "description": "No matching condition set"
+            },
+            "metadata": {
+              "id": 507,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v2-number": {
+            "key": "v2-number",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 508,
+              "version": 4,
+              "description": null,
+              "payload": "12.5",
+              "has_experiment": false
+            }
+          },
+          "v2-zero": {
+            "key": "v2-zero",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 509,
+              "version": 4,
+              "description": null,
+              "payload": "0",
+              "has_experiment": false
+            }
+          },
+          "v2-object": {
+            "key": "v2-object",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 510,
+              "version": 4,
+              "description": null,
+              "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+              "has_experiment": false
+            }
+          },
+          "v2-empty-object": {
+            "key": "v2-empty-object",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 511,
+              "version": 4,
+              "description": null,
+              "payload": "{}",
+              "has_experiment": false
+            }
+          }
+        },
         "tracked": {
           "getFeatureFlag:v2-split": "arm-a",
           "isFeatureEnabled:v2-split": true,
@@ -3065,6 +3897,214 @@
         "v2-zero": "0",
         "v2-object": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
         "v2-empty-object": "{}"
+      },
+      "getFlagsWithDetails": {
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        },
+        "bool-off": {
+          "key": "bool-off",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v1-variant": {
+          "key": "v1-variant",
+          "enabled": true,
+          "variant": "control",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 502,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\": 2}",
+            "has_experiment": true
+          }
+        },
+        "v1-object-payload": {
+          "key": "v1-object-payload",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 503,
+            "version": 4,
+            "description": null,
+            "payload": {
+              "columns": 3
+            },
+            "has_experiment": false
+          }
+        },
+        "v2-string": {
+          "key": "v2-string",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 504,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 505,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "v2-false": {
+          "key": "v2-false",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 506,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-null": {
+          "key": "v2-null",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 507,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-number": {
+          "key": "v2-number",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 508,
+            "version": 4,
+            "description": null,
+            "payload": "12.5",
+            "has_experiment": false
+          }
+        },
+        "v2-zero": {
+          "key": "v2-zero",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 509,
+            "version": 4,
+            "description": null,
+            "payload": "0",
+            "has_experiment": false
+          }
+        },
+        "v2-object": {
+          "key": "v2-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 510,
+            "version": 4,
+            "description": null,
+            "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+            "has_experiment": false
+          }
+        },
+        "v2-empty-object": {
+          "key": "v2-empty-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 511,
+            "version": 4,
+            "description": null,
+            "payload": "{}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:v2-split": "arm-b",
@@ -3619,6 +4659,76 @@
         "bool-on": "{\"plan\":\"pro\"}",
         "survey-targeting": null
       },
+      "getFlagsWithDetails": {
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "wide",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        },
+        "survey-targeting": {
+          "key": "survey-targeting",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 701,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        }
+      },
       "tracked": {
         "getFeatureFlag:healthy": "wide",
         "isFeatureEnabled:healthy": true,
@@ -3898,6 +5008,42 @@
       "getFlagPayloads": {
         "v2-split": null,
         "healthy": "{\"columns\":2}"
+      },
+      "getFlagsWithDetails": {
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "healthy": {
+          "key": "healthy",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 601,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\":2}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:healthy": "compact",
@@ -5740,6 +6886,214 @@
           "v2-object": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
           "v2-empty-object": "{}"
         },
+        "getFlagsWithDetails": {
+          "bool-on": {
+            "key": "bool-on",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 500,
+              "version": 4,
+              "description": null,
+              "payload": "{\"plan\":\"pro\"}",
+              "has_experiment": false
+            }
+          },
+          "bool-off": {
+            "key": "bool-off",
+            "enabled": false,
+            "variant": null,
+            "reason": {
+              "code": "no_condition_match",
+              "condition_index": null,
+              "description": "No matching condition set"
+            },
+            "metadata": {
+              "id": 501,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v1-variant": {
+            "key": "v1-variant",
+            "enabled": true,
+            "variant": "control",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 502,
+              "version": 4,
+              "description": null,
+              "payload": "{\"columns\": 2}",
+              "has_experiment": true
+            }
+          },
+          "v1-object-payload": {
+            "key": "v1-object-payload",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 503,
+              "version": 4,
+              "description": null,
+              "payload": {
+                "columns": 3
+              },
+              "has_experiment": false
+            }
+          },
+          "v2-string": {
+            "key": "v2-string",
+            "enabled": true,
+            "variant": "compact",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 504,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v2-split": {
+            "key": "v2-split",
+            "enabled": true,
+            "variant": "arm-b",
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 505,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": true
+            }
+          },
+          "v2-false": {
+            "key": "v2-false",
+            "enabled": false,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 506,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v2-null": {
+            "key": "v2-null",
+            "enabled": false,
+            "variant": null,
+            "reason": {
+              "code": "no_condition_match",
+              "condition_index": null,
+              "description": "No matching condition set"
+            },
+            "metadata": {
+              "id": 507,
+              "version": 4,
+              "description": null,
+              "payload": null,
+              "has_experiment": false
+            }
+          },
+          "v2-number": {
+            "key": "v2-number",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 508,
+              "version": 4,
+              "description": null,
+              "payload": "12.5",
+              "has_experiment": false
+            }
+          },
+          "v2-zero": {
+            "key": "v2-zero",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 509,
+              "version": 4,
+              "description": null,
+              "payload": "0",
+              "has_experiment": false
+            }
+          },
+          "v2-object": {
+            "key": "v2-object",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 510,
+              "version": 4,
+              "description": null,
+              "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+              "has_experiment": false
+            }
+          },
+          "v2-empty-object": {
+            "key": "v2-empty-object",
+            "enabled": true,
+            "variant": null,
+            "reason": {
+              "code": "condition_match",
+              "condition_index": 0,
+              "description": "Matched condition set 1"
+            },
+            "metadata": {
+              "id": 511,
+              "version": 4,
+              "description": null,
+              "payload": "{}",
+              "has_experiment": false
+            }
+          }
+        },
         "tracked": {
           "getFeatureFlag:v2-split": "arm-b",
           "isFeatureEnabled:v2-split": true,
@@ -5921,6 +7275,214 @@
         "v2-zero": "0",
         "v2-object": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
         "v2-empty-object": "{}"
+      },
+      "getFlagsWithDetails": {
+        "bool-on": {
+          "key": "bool-on",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 500,
+            "version": 4,
+            "description": null,
+            "payload": "{\"plan\":\"pro\"}",
+            "has_experiment": false
+          }
+        },
+        "bool-off": {
+          "key": "bool-off",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 501,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v1-variant": {
+          "key": "v1-variant",
+          "enabled": true,
+          "variant": "control",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 502,
+            "version": 4,
+            "description": null,
+            "payload": "{\"columns\": 2}",
+            "has_experiment": true
+          }
+        },
+        "v1-object-payload": {
+          "key": "v1-object-payload",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 503,
+            "version": 4,
+            "description": null,
+            "payload": {
+              "columns": 3
+            },
+            "has_experiment": false
+          }
+        },
+        "v2-string": {
+          "key": "v2-string",
+          "enabled": true,
+          "variant": "compact",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 504,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-split": {
+          "key": "v2-split",
+          "enabled": true,
+          "variant": "arm-b",
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 505,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": true
+          }
+        },
+        "v2-false": {
+          "key": "v2-false",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 506,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-null": {
+          "key": "v2-null",
+          "enabled": false,
+          "variant": null,
+          "reason": {
+            "code": "no_condition_match",
+            "condition_index": null,
+            "description": "No matching condition set"
+          },
+          "metadata": {
+            "id": 507,
+            "version": 4,
+            "description": null,
+            "payload": null,
+            "has_experiment": false
+          }
+        },
+        "v2-number": {
+          "key": "v2-number",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 508,
+            "version": 4,
+            "description": null,
+            "payload": "12.5",
+            "has_experiment": false
+          }
+        },
+        "v2-zero": {
+          "key": "v2-zero",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 509,
+            "version": 4,
+            "description": null,
+            "payload": "0",
+            "has_experiment": false
+          }
+        },
+        "v2-object": {
+          "key": "v2-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 510,
+            "version": 4,
+            "description": null,
+            "payload": "{\"layout\":\"compact\",\"columns\":[1,2],\"beta\":null}",
+            "has_experiment": false
+          }
+        },
+        "v2-empty-object": {
+          "key": "v2-empty-object",
+          "enabled": true,
+          "variant": null,
+          "reason": {
+            "code": "condition_match",
+            "condition_index": 0,
+            "description": "Matched condition set 1"
+          },
+          "metadata": {
+            "id": 511,
+            "version": 4,
+            "description": null,
+            "payload": "{}",
+            "has_experiment": false
+          }
+        }
       },
       "tracked": {
         "getFeatureFlag:v2-split": "arm-b",
@@ -6319,6 +7881,7 @@
       "getFlags": [],
       "getFlagVariants": {},
       "getFlagPayloads": {},
+      "getFlagsWithDetails": {},
       "tracked": {
         "getFeatureFlag:v2-split": "<undefined>",
         "isFeatureEnabled:v2-split": "<undefined>",
@@ -6377,6 +7940,7 @@
       "getFlagPayloads": {
         "bool-on": "{\"plan\":\"pro\"}"
       },
+      "getFlagsWithDetails": {},
       "tracked": {
         "getFeatureFlag:bool-on": true,
         "isFeatureEnabled:bool-on": true,

@@ -355,6 +355,7 @@ export function quietReads(posthog: PostHog, keys: string[]): Record<string, unk
     outputs.getFlags = plain(posthog.featureFlags?.getFlags())
     outputs.getFlagVariants = plain(posthog.featureFlags?.getFlagVariants())
     outputs.getFlagPayloads = plain(posthog.featureFlags?.getFlagPayloads())
+    outputs.getFlagsWithDetails = plain(posthog.featureFlags?.getFlagsWithDetails())
     return outputs
 }
 

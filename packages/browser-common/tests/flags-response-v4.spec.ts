@@ -6,7 +6,7 @@ import { isNull, isUndefined } from '@posthog/core'
 import type { FeatureFlagDetail } from '@posthog/types'
 import { PostHogFeatureFlags, type FlagsResponseFormat } from '../src/feature-flags'
 import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '../src/feature-flags-config'
-import { flagsResponseV4, readFlagRecords, typedFlagDetailOf } from '../src/flags-response-v4'
+import { flagsResponseV4, publicFlagDetail, readFlagRecords, typedFlagDetailOf } from '../src/flags-response-v4'
 import { createTestClient, type TestClient } from './helpers/test-client'
 
 // Reading the /flags?v=4 response, checked against the released wire contract. The contract files
@@ -958,6 +958,198 @@ describe('the /flags?v=4 response', () => {
             expect(flags.getFeatureFlagDetails('split')).toEqual(record)
             expect(typedFlagDetailOf(flags.getFeatureFlagDetails('split'))).toBeUndefined()
             expect(client.sentRequests).toEqual([])
+        })
+    })
+
+    describe('public reads of a flag record', () => {
+        // The members of a flag record that the public types declare. The typed value and the rule
+        // metadata are stored with the record for this SDK's own use. No public type declares
+        // them, so no public read returns them. A member that is not listed here fails these tests.
+        const DETAIL_MEMBERS = [
+            'key',
+            'enabled',
+            'variant',
+            'reason',
+            'metadata',
+            'failed',
+            'original_enabled',
+            'original_variant',
+        ]
+        const REASON_MEMBERS = ['code', 'condition_index', 'description']
+        const METADATA_MEMBERS = ['id', 'version', 'description', 'payload', 'has_experiment', 'original_payload']
+
+        /** The members of `value` that have a value and that the public type does not declare. */
+        const undeclared = (value: Record<string, any> | null | undefined, declared: string[]): string[] =>
+            Object.keys(value ?? {}).filter((name) => !isUndefined(value![name]) && !declared.includes(name))
+
+        /** The members a public read returns for one record that no public type declares. */
+        const undeclaredMembers = (detail: FeatureFlagDetail | undefined): string[] => [
+            ...undeclared(detail, DETAIL_MEMBERS),
+            ...undeclared(detail?.reason, REASON_MEMBERS).map((name) => `reason.${name}`),
+            ...undeclared(detail?.metadata, METADATA_MEMBERS).map((name) => `metadata.${name}`),
+        ]
+
+        /** Checks both public reads of every stored record against the stored record itself. */
+        function expectOnlyDeclaredMembers(flags: PostHogFeatureFlags, stored: Record<string, any>): void {
+            const details = flags.getFlagsWithDetails()
+            expect(Object.keys(details)).toEqual(Object.keys(stored))
+            for (const key of Object.keys(stored)) {
+                const detail: Record<string, any> = details[key]!
+                expect([key, undeclaredMembers(detail as FeatureFlagDetail)]).toEqual([key, []])
+                // Every declared member is returned as it is stored.
+                for (const name of DETAIL_MEMBERS.filter((member) => member !== 'metadata')) {
+                    expect([key, name, detail[name]]).toEqual([key, name, stored[key][name]])
+                }
+                for (const name of METADATA_MEMBERS) {
+                    expect([key, name, detail.metadata?.[name]]).toEqual([key, name, stored[key].metadata?.[name]])
+                }
+                expect(flags.getFeatureFlagDetails(key)).toEqual(detail)
+            }
+        }
+
+        const validCases = RESPONSES.cases.filter((testCase: any) => testCase.expected === 'valid')
+
+        it.each(byId(validCases))('return only the declared members of %s', async (_id, testCase) => {
+            const { flags, client, load: loadFlags } = await setup()
+            await loadFlags(build(RESPONSES, testCase))
+            const stored = structuredClone(storedDetails(client))
+
+            expectOnlyDeclaredMembers(flags, stored)
+            // The reads leave the stored records, with their typed members, as they were.
+            expect(storedDetails(client)).toEqual(stored)
+        })
+
+        it('return no typed member of a record that has every one', async () => {
+            const { flags, client, load: loadFlags } = await setup()
+            const record = v4Record({
+                value: { columns: 2 },
+                'reason.code': 'experiment_split',
+                'metadata.description': 'Garden layout',
+                'metadata.rule_type': 'experiment',
+                'metadata.variant_key': 'arm-b',
+                'metadata.forced_variant': true,
+            })
+            await loadFlags(envelope({ 'garden-layout': record }))
+
+            // The stored record has them.
+            expect(storedDetails(client)['garden-layout']).toMatchObject({
+                value: { columns: 2 },
+                metadata: {
+                    config_version: 2,
+                    rule_type: 'experiment',
+                    rule_id: RULE_ID,
+                    variant_key: 'arm-b',
+                    forced_variant: true,
+                },
+            })
+            const expected = {
+                key: 'garden-layout',
+                enabled: true,
+                variant: null,
+                reason: { code: 'experiment_split', condition_index: 0, description: 'Matched rule 1' },
+                metadata: {
+                    id: 201,
+                    version: 7,
+                    description: 'Garden layout',
+                    has_experiment: false,
+                    payload: '{"columns":2}',
+                },
+            }
+            expect(flags.getFeatureFlagDetails('garden-layout')).toEqual(expected)
+            expect(flags.getFlagsWithDetails()).toEqual({ 'garden-layout': expected })
+            expect(JSON.stringify(flags.getFlagsWithDetails())).not.toMatch(
+                /"(value|config_version|rule_type|rule_id|variant_key|forced_variant)"/
+            )
+        })
+
+        it('return no typed member of an overridden flag', async () => {
+            const { flags, client, load: loadFlags } = await setup()
+            await loadFlags(
+                envelope({
+                    'garden-layout': v4Record(),
+                    'payload-only': v4Record({ key: 'payload-only' }),
+                    untouched: v4Record({ key: 'untouched', value: 12.5 }),
+                })
+            )
+            const stored = structuredClone(storedDetails(client))
+
+            flags.overrideFeatureFlags({
+                flags: { 'garden-layout': 'wide', 'override-only': true },
+                payloads: { 'garden-layout': { forced: true }, 'payload-only': { forced: true } },
+                suppressWarning: true,
+            })
+
+            const details = flags.getFlagsWithDetails()
+            expect(Object.keys(details).sort()).toEqual(['garden-layout', 'override-only', 'payload-only', 'untouched'])
+            for (const key of Object.keys(details)) {
+                expect([key, undeclaredMembers(details[key])]).toEqual([key, []])
+                expect(flags.getFeatureFlagDetails(key)).toEqual(details[key])
+            }
+            expect(details['garden-layout']).toMatchObject({
+                enabled: true,
+                variant: 'wide',
+                original_variant: 'compact',
+                metadata: { id: 201, payload: { forced: true }, original_payload: null },
+            })
+            expect(details['payload-only']).toMatchObject({
+                variant: 'compact',
+                metadata: { payload: { forced: true } },
+            })
+            expect(storedDetails(client)).toEqual(stored)
+        })
+
+        it('return no typed member of a record that another page stored', async () => {
+            const first = await setup()
+            await first.load(envelope({ 'garden-layout': v4Record() }))
+            const stored = structuredClone(storedDetails(first.client))
+
+            // The next page reads the stored flags before its own response arrives.
+            const { flags, client } = await setup()
+            client.kv.set({
+                $active_feature_flags: ['garden-layout'],
+                $enabled_feature_flags: { 'garden-layout': 'compact' },
+                $feature_flag_payloads: { 'garden-layout': null },
+                $feature_flag_details: JSON.parse(JSON.stringify(stored)),
+            })
+
+            expect(typedFlagDetailOf(stored['garden-layout'])).toBeDefined()
+            expectOnlyDeclaredMembers(flags, JSON.parse(JSON.stringify(stored)))
+        })
+
+        it('keep the typed members of the stored flags that a merged response leaves out', async () => {
+            const {
+                flags,
+                client,
+                load: loadFlags,
+            } = await setup(flagsResponseV4, {
+                onlyEvaluateSurveyFeatureFlags: true,
+            })
+            await loadFlags(envelope({ 'garden-layout': v4Record() }))
+            expect(undeclaredMembers(flags.getFeatureFlagDetails('garden-layout'))).toEqual([])
+
+            await loadFlags(envelope({ survey: v4Record({ key: 'survey', value: true }) }))
+
+            // The response is merged into the stored records, not into what the public read returns.
+            expect(typedFlagDetailOf(storedDetails(client)['garden-layout'])).toMatchObject({
+                value: 'compact',
+                metadata: { config_version: 2, rule_type: 'targeted_release', rule_id: RULE_ID },
+            })
+            expect(undeclaredMembers(flags.getFeatureFlagDetails('garden-layout'))).toEqual([])
+        })
+
+        it.each([
+            ['a record without a typed value', olderRecord()],
+            ['a record that could not be read', { key: 'garden-layout', enabled: false, failed: true }],
+        ])('return %s as it is stored', (_name, record) => {
+            expect(publicFlagDetail(record as FeatureFlagDetail)).toBe(record)
+        })
+
+        it('return the stored records as they are for a client that does not opt in', async () => {
+            const { flags, client, load: loadFlags } = await setup(null)
+            await loadFlags(envelope({ 'garden-layout': olderRecord() }))
+
+            expect(flags.getFlagsWithDetails()).toEqual(storedDetails(client))
+            expect(flags.getFeatureFlagDetails('garden-layout')).toEqual(olderRecord())
         })
     })
 })

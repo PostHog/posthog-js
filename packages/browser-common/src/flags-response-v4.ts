@@ -17,7 +17,8 @@ import type { FlagsResponse } from './types/feature-flags'
  *
  * The rendering of a typed record keeps the typed value and the rule metadata beside the legacy
  * members, under their wire names, so they are stored with the flag and survive a page load. They
- * are internal: no public type declares them. A stored record without `value` has no typed value.
+ * are internal: no public type declares them, and {@link publicFlagDetail} takes them off every
+ * record a public getter returns. A stored record without `value` has no typed value.
  */
 
 /** A flag's typed value. `null` means the flag has no value. */
@@ -194,8 +195,35 @@ export const readFlagRecords = (
     return { body: { ...body, flags: rendered as Record<string, FeatureFlagDetail> }, withoutTypedValues }
 }
 
+// The members of a stored typed record's metadata that no public type declares.
+const TYPED_METADATA_MEMBERS = ['config_version', 'rule_type', 'rule_id', 'variant_key', 'forced_variant']
+
+/**
+ * A stored flag record as the public getters return it. The rendering of a typed record is
+ * returned without its typed value and rule metadata, which leaves the members a v2 record has.
+ * Any other record is returned as it is.
+ */
+export const publicFlagDetail = (detail: FeatureFlagDetail): FeatureFlagDetail => {
+    if (!typedFlagDetailOf(detail)) {
+        return detail
+    }
+    const legacy: Record<string, any> = { ...detail }
+    delete legacy.value
+    if (isObject(legacy.metadata)) {
+        const metadata: Record<string, any> = (legacy.metadata = { ...legacy.metadata })
+        for (const member of TYPED_METADATA_MEMBERS) {
+            delete metadata[member]
+        }
+    }
+    return legacy as FeatureFlagDetail
+}
+
 /**
  * Requests `/flags?v=4` and reads its typed records. A client opts in by returning it from the
  * flags extension's `_responseFormat`.
  */
-export const flagsResponseV4: FlagsResponseFormat = { version: 4, read: readFlagRecords }
+export const flagsResponseV4: FlagsResponseFormat = {
+    version: 4,
+    read: readFlagRecords,
+    publicDetail: publicFlagDetail,
+}
