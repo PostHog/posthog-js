@@ -3,6 +3,34 @@ export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToProperties?: (name: string, params: any) => Record<string, any>
 }
 
+/** Per-call settings for reading a feature flag. */
+export type PostHogFeatureFlagOptions = {
+  /**
+   * Whether this read sends a `$feature_flag_called` event.
+   * Defaults to the `sendFeatureFlagEvent` client option.
+   */
+  sendFeatureFlagEvent?: boolean
+}
+
+/** Per-call settings for `isFeatureEnabled()`. */
+export type PostHogIsFeatureEnabledOptions = PostHogFeatureFlagOptions & {
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  defaultValue?: boolean
+}
+
+/** The feature flags passed to an `onFeatureFlags` callback. Disabled flags are left out. */
+export type PostHogFeatureFlagsLoaded = {
+  /** The keys of the enabled feature flags. */
+  flags: string[]
+  /** The values of the enabled feature flags: `true` for a boolean flag, or the variant for a multivariate flag. */
+  variants: Record<string, string | boolean>
+  /**
+   * `true` if the latest attempt to load feature flags failed. `flags` and `variants` then hold the last
+   * known values, which can be empty. A quota-limited response is not a failure.
+   */
+  errorsLoading: boolean
+}
+
 export type PostHogRageClickConfig = {
   /**
    * Enable or disable rage click (rage tap) detection.

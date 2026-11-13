@@ -14,12 +14,13 @@ import {
 export const normalizeFlagsResponse = (
   flagsResponse:
     | PartialWithRequired<PostHogV2FlagsResponse, 'flags'>
-    | PartialWithRequired<PostHogV1FlagsResponse, 'featureFlags' | 'featureFlagPayloads'>
+    | PartialWithRequired<PostHogV1FlagsResponse, 'featureFlags' | 'featureFlagPayloads'>,
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFeatureFlagsResponse => {
   if ('flags' in flagsResponse) {
     // Convert v2 format to v1 format
     const featureFlags = getFlagValuesFromFlags(flagsResponse.flags)
-    const featureFlagPayloads = getPayloadsFromFlags(flagsResponse.flags)
+    const featureFlagPayloads = getPayloadsFromFlags(flagsResponse.flags, decodePayload)
 
     return {
       ...flagsResponse,
@@ -30,7 +31,7 @@ export const normalizeFlagsResponse = (
     // Convert v1 format to v2 format
     const featureFlags = flagsResponse.featureFlags ?? {}
     const featureFlagPayloads = Object.fromEntries(
-      Object.entries(flagsResponse.featureFlagPayloads || {}).map(([k, v]) => [k, parsePayload(v)])
+      Object.entries(flagsResponse.featureFlagPayloads || {}).map(([k, v]) => [k, decodePayload(v)])
     )
 
     const flags = Object.fromEntries(
@@ -87,7 +88,8 @@ export const getFlagValuesFromFlags = (flags: PostHogFlagsResponse['flags']): Po
  * @returns The payloads
  */
 export const getPayloadsFromFlags = (
-  flags: PostHogFlagsResponse['flags']
+  flags: PostHogFlagsResponse['flags'],
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFlagsResponse['featureFlagPayloads'] => {
   const safeFlags = flags ?? {}
   return Object.fromEntries(
@@ -98,7 +100,7 @@ export const getPayloadsFromFlags = (
       })
       .map((flag) => {
         const payload = safeFlags[flag].metadata?.payload as string
-        return [flag, payload ? parsePayload(payload) : undefined]
+        return [flag, payload ? decodePayload(payload) : undefined]
       })
   )
 }
@@ -163,7 +165,10 @@ export function getVariantFromValue(value: FeatureFlagValue): string | undefined
   return typeof value === 'string' ? value : undefined
 }
 
-export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
+export const flagDetailsToResults = (
+  flagDetails: Record<string, FeatureFlagDetail>,
+  decodePayload: (payload: any) => JsonType = parsePayload
+): FeatureFlagResult[] => {
   return Object.values(flagDetails).map((detail) => {
     const value = detail.variant ?? detail.enabled
     const rawPayload = detail.metadata?.payload
@@ -171,7 +176,7 @@ export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDeta
       key: detail.key,
       enabled: getEnabledFromValue(value),
       variant: getVariantFromValue(value),
-      payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
+      payload: rawPayload !== undefined ? decodePayload(rawPayload) : null,
     }
   })
 }

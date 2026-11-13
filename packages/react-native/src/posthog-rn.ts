@@ -5,7 +5,7 @@ import {
   CaptureLogger,
   JsonType,
   PostHogCaptureOptions,
-  PostHogCore,
+  PostHogCoreBase,
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -22,9 +22,8 @@ import {
   patchFetchForTracingHeaders,
   raceWithTimeout,
   safeSetTimeout,
+  FeatureFlagResult,
   FeatureFlagValue,
-  FeatureFlagResultOptions,
-  IsFeatureEnabledOptions,
   ErrorTracking as CoreErrorTracking,
   isObject,
   uuidv7,
@@ -45,6 +44,9 @@ import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
+  PostHogFeatureFlagOptions,
+  PostHogFeatureFlagsLoaded,
+  PostHogIsFeatureEnabledOptions,
   PostHogPushIdentityProvider,
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
@@ -358,7 +360,7 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
-export class PostHog extends PostHogCore {
+export class PostHog extends PostHogCoreBase {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
@@ -429,6 +431,7 @@ export class PostHog extends PostHogCore {
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
   private _overrideDisplayLanguage: string | null
+  private _featureFlagsLoaded = false
   private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
@@ -482,6 +485,9 @@ export class PostHog extends PostHogCore {
     }
 
     super(normalizedProjectToken, options)
+    this.on('featureflags', () => {
+      this._featureFlagsLoaded = true
+    })
     this._isInitialized = false
     // Replay has no macOS backend, so opt-in has nothing to restart there.
     this._sessionReplayWanted = options?.enableSessionReplay === true && !isMacOS()
@@ -576,7 +582,7 @@ export class PostHog extends PostHogCore {
       () => {
         // Pulled at capture time so each tag reflects state at the moment
         // the log was fired, not at flush.
-        const flags = this.getFeatureFlags()
+        const flags = this.getFeatureFlagValues()
         const flagKeys = flags ? Object.keys(flags) : undefined
         return {
           distinctId: this.getDistinctId() || undefined,
@@ -645,6 +651,8 @@ export class PostHog extends PostHogCore {
     })
 
     const initAfterStorage = (): void => {
+      // Clear flag overrides persisted by 4.x's overrideFeatureFlag().
+      this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
       // reset session id on app restart
       const enablePersistSessionIdAcrossRestart = options?.enablePersistSessionIdAcrossRestart
       if (!enablePersistSessionIdAcrossRestart) {
@@ -713,7 +721,7 @@ export class PostHog extends PostHogCore {
       // Re-evaluate session replay on every flags load/reload so the linked flag
       // gates recording without an app restart. A pending manual start can also retry here,
       // even when replay was disabled at setup.
-      this.onFeatureFlags(() => {
+      this.on('featureflags', () => {
         if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
         }
@@ -1202,9 +1210,8 @@ export class PostHog extends PostHogCore {
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides and app lifecycle properties
+   * // reset but keep app lifecycle properties
    * posthog.reset([
-   *   PostHogPersistedProperty.OverrideFeatureFlags,
    *   PostHogPersistedProperty.InstalledAppBuild,
    *   PostHogPersistedProperty.InstalledAppVersion,
    * ])
@@ -1218,6 +1225,8 @@ export class PostHog extends PostHogCore {
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
+    // The previous user's flags are no longer current, so late listeners wait for the next load.
+    this._featureFlagsLoaded = false
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
     // properties and device_id to prevent duplicate "Application Installed" events and
     // to maintain stable feature flag bucketing across identity changes.
@@ -1606,9 +1615,9 @@ export class PostHog extends PostHogCore {
    * @param options Optional per-call settings
    * @returns True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
    */
-  isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
-  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
-  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+  isFeatureEnabled(key: string, options: PostHogIsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined {
     return super.isFeatureEnabled(key, options)
   }
 
@@ -1637,32 +1646,31 @@ export class PostHog extends PostHogCore {
    * @param options Optional per-call settings
    * @returns The current feature flag value, or undefined if flags are unavailable
    */
-  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
+  getFeatureFlag(key: string, options?: PostHogFeatureFlagOptions): boolean | string | undefined {
     return super.getFeatureFlag(key, options)
   }
 
   /**
-   * Gets the payload of a feature flag for the current user.
+   * Gets the evaluation result for a feature flag: whether it's enabled, its variant, and its payload.
    *
-   * Returns JsonType or undefined if not loaded yet or if there was a problem loading.
+   * `enabled: false` is a conclusive off result; `undefined` means no evaluation is available for the key.
    *
    * {@label Feature flags}
    *
-   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
-   *
    * @example
    * ```js
-   * // get feature flag payload
-   * const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
+   * const result = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')
+   * const payload = result?.payload
    * ```
    *
    * @public
    *
    * @param key The feature flag key
-   * @returns The feature flag payload or undefined if not loaded
+   * @param options Optional per-call settings
+   * @returns The flag's evaluation result, or undefined if none is available
    */
-  getFeatureFlagPayload(key: string): JsonType | undefined {
-    return super.getFeatureFlagPayload(key)
+  getFeatureFlagResult(key: string, options?: PostHogFeatureFlagOptions): FeatureFlagResult | undefined {
+    return super.getFeatureFlagResult(key, options)
   }
 
   /**
@@ -1715,10 +1723,89 @@ export class PostHog extends PostHogCore {
     return super.reloadFeatureFlagsAsync()
   }
 
+  // A payload that isn't valid JSON reads as null rather than as its raw string.
+  protected decodeFeatureFlagPayload(payload: any): JsonType {
+    if (typeof payload !== 'string') {
+      return payload
+    }
+    try {
+      return JSON.parse(payload)
+    } catch {
+      this._logger.warn('Feature flag payload is not valid JSON; reading it as null.')
+      return null
+    }
+  }
+
+  /**
+   * Calls `callback` whenever feature flags load, including when a load fails.
+   *
+   * The callback receives the enabled flags, their values, and whether the latest load failed. After a
+   * failed load the values are the last known ones, which can be empty. If flags have already loaded
+   * when you register, it's also called with the current values shortly afterwards.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * const unsubscribe = posthog.onFeatureFlags(({ flags, variants, errorsLoading }) => {
+   *   if (errorsLoading) {
+   *     // flags and variants hold the last known values
+   *   }
+   *   if (variants['new-checkout'] === 'test') {
+   *     // show the test variant
+   *   }
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param callback Called with the enabled flags, their values, and whether the latest load failed
+   * @returns A function that stops further calls
+   */
+  onFeatureFlags(callback: (loaded: PostHogFeatureFlagsLoaded) => void): () => void {
+    let active = true
+    let delivered = false
+    const deliver = (): void => {
+      if (!active) {
+        return
+      }
+      delivered = true
+      // A throwing app callback must not stop the other listeners or the flag load itself.
+      try {
+        callback(this._currentFeatureFlagsLoaded())
+      } catch (error) {
+        this._logger.error('onFeatureFlags callback threw:', error)
+      }
+    }
+    const unsubscribe = this.on('featureflags', deliver)
+    if (this._featureFlagsLoaded) {
+      void Promise.resolve().then(() => {
+        // reset() in the same tick discards the loaded flags, so there's nothing to catch up on.
+        if (this._featureFlagsLoaded && !delivered) {
+          deliver()
+        }
+      })
+    }
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }
+
+  private _currentFeatureFlagsLoaded(): PostHogFeatureFlagsLoaded {
+    const variants: Record<string, string | boolean> = {}
+    for (const [key, value] of Object.entries(this.getFeatureFlagDetails()?.featureFlags ?? {})) {
+      if (value === true || (typeof value === 'string' && value !== '')) {
+        variants[key] = value
+      }
+    }
+    return { flags: Object.keys(variants), variants, errorsLoading: this.didLatestFeatureFlagsLoadFail() }
+  }
+
   /**
    * Replaces (or merges into) the stored feature flags and payloads with locally supplied
    * values, exactly as if they had been returned by the flags endpoint: the values are
-   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * persisted, `getFeatureFlag()`/`getFeatureFlagResult()` read them back, and
    * `onFeatureFlags` listeners fire. Makes no network request.
    *
    * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
