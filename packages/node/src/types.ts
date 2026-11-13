@@ -522,6 +522,11 @@ export type PostHogOptions = Omit<
    * It has the final say: it can change or remove any of them, and nothing is added after it.
    * Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields
    * are already applied to the properties it sees.
+   *
+   * On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
+   * events it sees `options.process_person_profile` and no `$process_person_profile` property.
+   * Those events get their default from the event name the call used, so a hook that renames an
+   * event to one of them must set `options.process_person_profile` itself.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
