@@ -45,11 +45,30 @@ describe('default analytics acquisition', () => {
     })
 
     it('snapshots product configuration independently of the later acquisition time', async () => {
-        const configuration = { flushAt: 1 }
+        const configuration: AutomaticAnalyticsOptions = { flushAt: 1, personProfiles: 'never' }
         const client = await createPostHog({ ...options, analytics: configuration })
         configuration.flushAt = 99
+        configuration.personProfiles = 'always'
         await client.resolveExtension('analytics')
-        expect(analytics).toHaveBeenCalledWith({ flushAt: 1 })
+        expect(analytics).toHaveBeenCalledWith({ flushAt: 1, personProfiles: 'never' })
+        await client.shutdown()
+    })
+
+    it('isolates a failing person-policy getter while retaining other product options', async () => {
+        const read = vi.fn((): never => {
+            throw new Error('person configuration unavailable')
+        })
+        const configuration: AutomaticAnalyticsOptions = {
+            flushInterval: 0,
+            get personProfiles() {
+                return read()
+            },
+        }
+        const client = await createPostHog({ ...options, analytics: configuration })
+        expect(read).toHaveBeenCalledOnce()
+        await client.resolveExtension('analytics')
+        expect(read).toHaveBeenCalledOnce()
+        expect(analytics).toHaveBeenCalledWith({ flushInterval: 0 })
         await client.shutdown()
     })
 

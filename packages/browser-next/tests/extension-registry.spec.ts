@@ -173,6 +173,7 @@ describe('extension lookup bindings', () => {
             const reload = vi.spyOn(shared, 'reloadFeatureFlags')
             const reset = vi.spyOn(shared, 'reset')
             const identified = vi.spyOn(scoped, 'onIdentify')
+            const propertiesChanged = vi.spyOn(scoped, 'onChangeProperties')
             const grouped = vi.spyOn(scoped, 'onGroup')
             const resetListener = vi.spyOn(scoped, 'onReset')
             const registry = new ExtensionRegistry(() => scoped, client.logger)
@@ -200,6 +201,7 @@ describe('extension lookup bindings', () => {
             expect(setup).toHaveBeenCalledOnce()
             if (mode === 'rollback') {
                 expect(identified).toHaveBeenCalledOnce()
+                expect(propertiesChanged).toHaveBeenCalledOnce()
                 expect(grouped).toHaveBeenCalledOnce()
                 expect(resetListener).toHaveBeenCalledOnce()
                 reload.mockClear()
@@ -209,6 +211,8 @@ describe('extension lookup bindings', () => {
                 expect(reload).toHaveBeenCalledTimes(2)
                 requireInstalledExtension(client.analytics).reset()
                 expect(reload).toHaveBeenCalledTimes(3)
+                requireInstalledExtension(client.analytics).setPersonProperties({ plan: 'paid' })
+                expect(reload).toHaveBeenCalledTimes(4)
                 expect(reset).toHaveBeenCalledOnce()
                 await registry.rollback(facade)
             }
@@ -217,6 +221,7 @@ describe('extension lookup bindings', () => {
             reload.mockClear()
             reset.mockClear()
             requireInstalledExtension(client.analytics).identify('after-cleanup')
+            requireInstalledExtension(client.analytics).setPersonProperties({ plan: 'free' })
             requireInstalledExtension(client.analytics).group('company', 'after-cleanup')
             requireInstalledExtension(client.analytics).reset()
             expect(reload).not.toHaveBeenCalled()

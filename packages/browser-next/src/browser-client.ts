@@ -13,6 +13,13 @@ export interface IdentifyInfo {
     readonly wasIdentified: boolean
     readonly set: DeepReadonly<Record<string, unknown>> | undefined
     readonly setOnce: DeepReadonly<Record<string, unknown>> | undefined
+    readonly unset?: readonly string[]
+}
+
+export interface ChangePropertiesInfo {
+    readonly set?: DeepReadonly<Record<string, unknown>> | undefined
+    readonly setOnce?: DeepReadonly<Record<string, unknown>> | undefined
+    readonly unset?: readonly string[]
 }
 
 export interface GroupInfo {
@@ -55,7 +62,7 @@ export interface ICoreCapabilities extends Omit<
 > {
     /** Fires when consent changes, including changes observed from another tab. Does not replay. */
     readonly onConsentChange: Listener<ConsentChangeInfo>
-    /** Fires after identification or person-property updates, independently of capture consent. Does not replay. */
+    /** Fires after identification, independently of capture consent. Does not replay. */
     readonly onIdentify: Listener<IdentifyInfo>
     /** Fires after group membership or property updates, independently of capture consent. Does not replay. */
     readonly onGroup: Listener<GroupInfo>
@@ -66,5 +73,7 @@ export interface ICoreCapabilities extends Omit<
 /** SDK-internal scoped view; shared implementations receive a separate Client adapter. */
 export interface IPostHogInternal extends ICoreCapabilities, BrowserExtensionAccess<InternalBrowserProducts> {
     readonly sharedClient: Client
+    /** Local person-property changes, independently of capture consent. Does not replay. */
+    readonly onChangeProperties: Listener<ChangePropertiesInfo>
     readonly onEvent: Client['onEvent']
 }

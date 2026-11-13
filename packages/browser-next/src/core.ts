@@ -28,3 +28,5 @@ export type {
     SessionContext,
     StorageLike,
 } from './types'
+
+export type { PersonProfileMode } from './analytics-options'

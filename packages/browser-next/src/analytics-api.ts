@@ -19,6 +19,10 @@ export interface IAnalytics extends BrowserExtension {
     identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): Promise<void>
     group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
     reset(): void
+    createPersonProfile(): void
+    setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    unsetPersonProperties(names: string | readonly string[]): void
+    setInternalOrTestUser(): void
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
     flush(): Promise<void>
 }
