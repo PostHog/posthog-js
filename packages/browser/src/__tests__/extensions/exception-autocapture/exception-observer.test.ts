@@ -7,7 +7,6 @@ import { assignableWindow } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { afterEach } from 'vitest'
 
 /** help out jsdom */
@@ -39,13 +38,6 @@ describe('Exception Observer', () => {
     const beforeSendMock = vi.fn().mockImplementation((e) => e)
     const loadScriptMock = vi.fn()
 
-    const addErrorWrappingFlagToWindow = () => {
-        // assignableWindow.onerror = vi.fn()
-        // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
-
-        assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
-    }
-
     const expectNoHandlers = () => {
         expect((window?.console?.error as any)?.__POSTHOG_INSTRUMENTED__).toBeUndefined()
         expect((window?.onerror as any)?.__POSTHOG_INSTRUMENTED__).toBeUndefined()
@@ -53,12 +45,8 @@ describe('Exception Observer', () => {
     }
 
     beforeEach(async () => {
-        loadScriptMock.mockImplementation((_ph, _path, callback) => {
-            addErrorWrappingFlagToWindow()
-            callback()
-        })
-
-        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock })
+        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock, capture_exceptions: false })
+        posthog.config.capture_exceptions = undefined
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
         }
@@ -85,10 +73,7 @@ describe('Exception Observer', () => {
             expect((window?.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__).toBe(true)
         })
 
-        it('does not call loadExternalDependency if script is already loaded', () => {
-            addErrorWrappingFlagToWindow()
-            loadScriptMock.mockClear()
-
+        it('does not load an external dependency when started', () => {
             exceptionObserver.startIfEnabledOrStop()
 
             expect(loadScriptMock).not.toHaveBeenCalled()
@@ -276,9 +261,11 @@ describe('Exception Observer', () => {
         const originalOnUnhandledRejection = vi.fn()
 
         beforeEach(() => {
+            exceptionObserver['_stopCapturing']()
             vi.clearAllMocks()
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
+            exceptionObserver.startIfEnabledOrStop()
 
             exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
@@ -329,11 +316,11 @@ describe('Exception Observer', () => {
     })
 
     describe('when no flags response', () => {
-        it('cannot be started', () => {
-            expect(exceptionObserver.isEnabled).toBe(false)
-            expectNoHandlers()
-            exceptionObserver['_startCapturing']()
-            expectNoHandlers()
+        it('installs handlers but buffers captures', () => {
+            expect(exceptionObserver.isEnabled).toBe(true)
+            expect((window!.onerror as any).__POSTHOG_INSTRUMENTED__).toBe(true)
+            window!.onerror?.call(window, 'startup error', 'app.js', 1, 1, new Error('startup error'))
+            expect(beforeSendMock).not.toHaveBeenCalled()
         })
     })
 
