@@ -2,6 +2,7 @@ import type { FunctionArgs, Scheduler } from 'convex/server'
 import { ConvexError, getConvexSize } from 'convex/values'
 import type { ComponentApi } from '../component/_generated/component.js'
 import type { EmailSendFailure, SentEmail } from '../component/emails.js'
+import { fieldNotSent } from '../shared/emailArgs.js'
 import {
   type FeatureFlagResult,
   type FeatureFlagValue,
@@ -105,8 +106,15 @@ const INTEGRATION_NAME = 'convex'
 const MAX_QUEUED_EMAIL_BYTES = 1_000_000
 
 /** The email can't be sent as asked, so nothing was sent or queued. */
-const refusal = (code: string, detail: string, fix: string): ConvexError<EmailSendFailure> =>
-  new ConvexError({ code, name: 'validation_error', detail, fix, retryable: false })
+const refusal = (code: string, detail: string, fix: string, attr?: string): ConvexError<EmailSendFailure> =>
+  new ConvexError({
+    code,
+    name: 'validation_error',
+    detail,
+    fix,
+    retryable: false,
+    ...(attr !== undefined && { attr }),
+  })
 
 export function normalizeError(error: unknown): {
   message: string
@@ -219,6 +227,10 @@ export class PostHog {
         `templateKey ${JSON.stringify(templateKey)} is not a valid template key.`,
         'Use letters, digits, - and _, at most 400.'
       )
+    }
+    const field = fieldNotSent(email)
+    if (field !== undefined) {
+      throw refusal('invalid_field', `@posthog/convex doesn't send ${field}.`, `Remove ${field} and send again.`, field)
     }
     return { ...email, templateKey }
   }

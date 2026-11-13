@@ -1,5 +1,6 @@
 import { EmailError, type EmailErrorName, type SendCodeEmailOptions, type SendEmailResponse } from 'posthog-node/edge'
 import { ConvexError, v, type Infer, type ObjectType } from 'convex/values'
+import { emailArgs } from '../shared/emailArgs.js'
 import { action } from './_generated/server.js'
 import { getEmailClient } from './lib.js'
 import { version } from './version.js'
@@ -7,39 +8,6 @@ import { version } from './version.js'
 const WORKPOOL_NON_RETRYABLE = '__convexWorkpoolNonRetryable'
 const COOLDOWN_BUDGET_MS = 5 * 60_000
 const INTEGRATION = `convex/${version}`
-
-const addresses = v.union(v.string(), v.array(v.string()))
-
-const tracking = v.union(
-  v.boolean(),
-  v.object({ opens: v.optional(v.boolean()), clicks: v.optional(v.boolean()), engagement: v.optional(v.boolean()) })
-)
-
-const emailArgs = {
-  to: v.string(),
-  subject: v.string(),
-  templateKey: v.string(),
-  html: v.optional(v.string()),
-  text: v.optional(v.string()),
-  from: v.optional(v.string()),
-  replyTo: v.optional(addresses),
-  cc: v.optional(addresses),
-  bcc: v.optional(addresses),
-  attachments: v.optional(
-    v.array(
-      v.object({
-        filename: v.string(),
-        content: v.string(),
-        contentType: v.optional(v.string()),
-        contentId: v.optional(v.string()),
-      })
-    )
-  ),
-  distinctId: v.optional(v.string()),
-  idempotencyKey: v.optional(v.string()),
-  sensitive: v.optional(v.boolean()),
-  tracking: v.optional(tracking),
-}
 
 const queuedEmailArgs = { ...emailArgs, idempotencyKey: v.string() }
 
