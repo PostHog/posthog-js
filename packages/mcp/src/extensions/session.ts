@@ -20,7 +20,7 @@ import type { RequestClient } from './client-conversation'
 import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
-import { carriesNoSession, decodeSessionId, readMcpSessionHeader } from './session-token'
+import { decodeSessionId, isHandshakeBound, readMcpSessionHeader } from './session-token'
 import type { SessionTokenPayload } from './session-token'
 
 /**
@@ -312,17 +312,12 @@ export function getSessionInfo(
   sessionId?: string,
   extra?: CompatibleRequestHandlerExtra
 ): SessionInfo {
-  const instanceIdentifiesClient = !carriesNoSession(extra)
+  const handshakeBound = isHandshakeBound(extra)
   let clientInfo: ServerClientInfoLike | undefined
-  if (!instanceIdentifiesClient) {
-    clientInfo = undefined
-  } else if (data?.sessionInfo.clientName) {
-    clientInfo = {
-      name: data.sessionInfo.clientName,
-      version: data.sessionInfo.clientVersion,
-    }
-  } else {
-    clientInfo = server.getClientVersion()
+  if (handshakeBound) {
+    clientInfo = data?.sessionInfo.clientName
+      ? { name: data.sessionInfo.clientName, version: data.sessionInfo.clientVersion }
+      : server.getClientVersion()
   }
   const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)
 
@@ -337,13 +332,15 @@ export function getSessionInfo(
     clientVersion: clientInfo?.version,
     // No SDK getter for this (unlike getClientVersion) — the MCP SDK never
     // retains the negotiated version, so it lives only where we stored it.
-    protocolVersion: instanceIdentifiesClient ? data?.sessionInfo.protocolVersion : undefined,
+    protocolVersion: handshakeBound ? data?.sessionInfo.protocolVersion : undefined,
     identifyActorGivenId: actorInfo?.distinctId,
     identifyActorData: actorInfo?.properties || {},
     identifyActorGroups: actorInfo?.groups,
   }
 
-  if (!data) {
+  // An unbound request's snapshot leaves out the instance's client, so writing it
+  // back would erase that client for the requests the handshake does bind.
+  if (!data || !handshakeBound) {
     return sessionInfo
   }
 
