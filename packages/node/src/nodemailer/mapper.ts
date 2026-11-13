@@ -216,7 +216,9 @@ function withStableDataUrlCids(
       return attachment
     }
     const cid = nextFreeCid()
-    stableHtml = stableHtml?.replaceAll(`cid:${attachment.cid}`, `cid:${cid}`)
+    // Only whole references: a longer content ID that starts with this one keeps its name.
+    // The generated ID is hex and `@localhost`, so it needs no escaping in the pattern.
+    stableHtml = stableHtml?.replace(new RegExp(`cid:${attachment.cid}(?![^\\s"'<>)])`, 'g'), `cid:${cid}`)
     return { ...attachment, cid }
   })
   return { html: stableHtml, attachments: stableAttachments }

@@ -492,6 +492,22 @@ describe('posthog-node/nodemailer', () => {
       expect(gif.contentId).not.toBe(logo.contentId)
       expect(fake.emails[0].html).toBe(`<img src="cid:data-url-1@localhost"><img src="cid:${gif.contentId}">`)
     })
+
+    it('renumbers a generated content ID without touching a longer content ID that starts with it', async () => {
+      const generated = '0123456789abcdef0123@localhost'
+      await transporter().sendMail({
+        ...ORDER_SHIPPED,
+        html: `<img src="cid:${generated}"><img src="cid:${generated}-second">`,
+        attachments: [
+          { filename: 'first.png', content: 'iVBORw0KGgo=', encoding: 'base64', cid: generated },
+          { filename: 'second.png', content: 'iVBORw0KGgo=', encoding: 'base64', cid: `${generated}-second` },
+        ],
+      })
+
+      const [first, second] = fake.emails[0].attachments
+      expect(second.contentId).toBe(`${generated}-second`)
+      expect(fake.emails[0].html).toBe(`<img src="cid:${first.contentId}"><img src="cid:${second.contentId}">`)
+    })
   })
 
   describe('the error map', () => {
