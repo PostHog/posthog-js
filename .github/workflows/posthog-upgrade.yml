@@ -168,6 +168,7 @@ jobs:
 
             - name: Discard partial replay schema output
               if: ${{ steps.replay-schema.outcome == 'failure' }}
+              continue-on-error: true
               run: |
                   echo "::warning::Replay schema regeneration failed; the PR ships without it and CI will flag the stale schema."
                   git checkout -- frontend/src/scenes/session-recordings/mobile-replay/schema
@@ -179,6 +180,7 @@ jobs:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+                  REPLAY_SCHEMA_OUTCOME: ${{ steps.replay-schema.outcome }}
               run: |
                   PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
                   TITLE_PREFIX="chore(deps): Update ${PACKAGE_NAME} to "
@@ -233,6 +235,11 @@ jobs:
                       echo "$PACKAGE_NAME version $PACKAGE_VERSION has been released. This updates PostHog to use it."
                       echo
                       echo "[GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${PACKAGE_NAME}?activeTab=version)"
+                      if [ "$REPLAY_SCHEMA_OUTCOME" = "failure" ]; then
+                          echo
+                          # shellcheck disable=SC2016 # literal backticks for markdown
+                          echo '⚠️ The replay schema was not regenerated. Run `pnpm --filter=@posthog/frontend mobile-replay:schema:build:json` and commit the result.'
+                      fi
                       echo 'EOF'
                   } >> "$GITHUB_OUTPUT"
 
