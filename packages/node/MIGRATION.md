@@ -107,7 +107,7 @@ Each wrapper package works with these posthog-node versions:
 
 On 6.x.x, `@posthog/ai` sends AI events with `captureAi()`. `@posthog/openfeature-node-provider` uses only the feature flag APIs.
 
-`@posthog/convex`, `@posthog/next`, and `@posthog/nuxt` have posthog-node 5.x.x as a dependency. Check each package's changelog for posthog-node 6.x.x support.
+`@posthog/convex`, `@posthog/next`, and `@posthog/nuxt` have posthog-node 5.x.x as a dependency. `@posthog/next` and `@posthog/nuxt` need posthog-node 5.58.0 or later. Check each package's changelog for posthog-node 6.x.x support.
 
 Upgrade `@posthog/ai` and `@posthog/mcp` to a version that accepts posthog-node 6.x.x before or together with posthog-node.
 
@@ -212,6 +212,8 @@ posthog.on('error', (error) => {
 The SDK retries `404`, `408`, `429`, `500`, `502`, `503`, and `504` responses and network errors. Every other status fails the batch at once.
 
 5.x.x retried `408`, `429`, and every `5xx`, but not `404`. A proxy in front of capture can return `404` or `429`.
+
+A `404` that lasts through every retry can mean the PostHog deployment has no capture v1 route.
 
 - **`captureMaxRetries`.** This new option sets how many times a capture request is retried after its first attempt, on both lanes. It accepts 0 to 9. When it isn't set, the SDK uses `fetchRetryCount` (default 3).
 - **Waits.** Waits start at 100 ms and double each retry, up to 30 seconds. Each wait varies randomly by up to 25%, so many clients don't retry at the same moment.
@@ -341,7 +343,7 @@ Context and `register()` properties and options now reach `identify`, `alias`, a
 
 With person processing off, PostHog drops `$identify`, `$create_alias`, `$merge_dangerously`, and `$groupidentify` events and ignores the person update of a `$set` or `$set_once` event, so these events default to `process_person_profile: true`, whichever method sends them:
 
-- **The call's option.** The call's own `process_person_profile` option wins. If a `capture()` or `captureAi()` call has none, its `$process_person_profile` property becomes the option and is removed from the properties. The `properties` of `identify`, `setPersonProperties`, and `groupIdentify` are person and group properties, so set the option there.
+- **The call's option.** The call's own `process_person_profile` option wins. If a `capture()` or `captureAi()` call has none, its `$process_person_profile` property becomes the option and is removed from the properties. The `properties` of `identify`, `setPersonProperties`, and `groupIdentify` are person and group properties, so pass `process_person_profile` in the call's `options`.
 - **The default.** Otherwise the option is `true`, so person processing turned off with `registerOptions()`, context options, or a `$process_person_profile: false` property in `register()` or a context doesn't reach these events. `identify`, `alias`, and `groupIdentify` keep creating and updating persons and groups, as in 5.x.x.
 - **Personless IDs.** An event with a generated personless distinct ID keeps `process_person_profile: false`. The `$<groupType>_<groupKey>` ID `groupIdentify` falls back to isn't generated, so it gets `true`.
 - **`null` values.** A `null` option or property counts as unset.
@@ -481,7 +483,7 @@ await openai.responses.create({
 const handler = new LangChainCallbackHandler({ client: posthog, options: { process_person_profile: false } })
 ```
 
-An event with no distinct ID still has person processing turned off, whatever its options say.
+An event with no distinct ID still has person processing turned off, whatever its options say. On posthog-node 5.x.x, `@posthog/ai` sends each option that version knows in the form it reads, and drops other keys.
 
 ### Add MCP event options
 
