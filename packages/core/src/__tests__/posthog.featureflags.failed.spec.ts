@@ -50,6 +50,101 @@ describe('failed client flag records', () => {
     }
   )
 
+  it.each(['quota_limited', 'timeout', 'api_error_503', 'connection_error'])(
+    'retained failed diagnostics after unsuccessful reload (%s)',
+    async (requestError) => {
+      const [posthog, mocks] = createTestClient('token', {
+        fetchRetryCount: 0,
+        featureFlagsRequestMaxRetries: 0,
+      })
+      try {
+        mocks.fetch.mockResolvedValueOnce({
+          status: 200,
+          json: async () => ({
+            flags: { failed, disabled: { key: 'disabled', enabled: false, metadata: {} } },
+            errorsWhileComputingFlags: true,
+          }),
+        })
+        await posthog.reloadFeatureFlagsAsync()
+        if (requestError === 'quota_limited') {
+          mocks.fetch.mockResolvedValueOnce({ status: 200, json: async () => ({ quotaLimited: ['feature_flags'] }) })
+        } else if (requestError === 'api_error_503') {
+          mocks.fetch.mockResolvedValueOnce({ status: 503, text: async () => 'Service Unavailable' })
+        } else {
+          const error = new Error('Request failed')
+          error.name = requestError === 'timeout' ? 'AbortError' : 'TypeError'
+          mocks.fetch.mockRejectedValueOnce(error)
+        }
+        await posthog.reloadFeatureFlagsAsync()
+
+        const capture = vi.spyOn(posthog, 'capture')
+        expect(posthog.getFeatureFlagResult('failed')).toBeUndefined()
+        expect(posthog.getFeatureFlagResult('disabled')).toMatchObject({ enabled: false })
+        expect(posthog.getFeatureFlagResult('missing')).toBeUndefined()
+        expect(capture).toHaveBeenCalledTimes(3)
+        expect(capture).toHaveBeenNthCalledWith(
+          1,
+          '$feature_flag_called',
+          expect.objectContaining({
+            $feature_flag_response: undefined,
+            $feature_flag_error: `${requestError},evaluation_failed`,
+            $feature_flag_id: 42,
+            $feature_flag_reason: 'dependency_error',
+          })
+        )
+        for (const call of [2, 3]) {
+          expect(capture).toHaveBeenNthCalledWith(
+            call,
+            '$feature_flag_called',
+            expect.objectContaining({ $feature_flag_error: requestError })
+          )
+        }
+      } finally {
+        await posthog.shutdown()
+      }
+    }
+  )
+
+  it.each(
+    [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
+      [false, true].map((healthyFalseCache) => ({ errorsWhileComputingFlags, healthyFalseCache }))
+    )
+  )(
+    'cold failed-only records do not establish a legacy non-empty value cache (%j)',
+    async ({ errorsWhileComputingFlags, healthyFalseCache }) => {
+      const [posthog, mocks] = createTestClient('token')
+      try {
+        mocks.fetch.mockResolvedValueOnce({
+          status: 200,
+          json: async () => ({
+            flags: {
+              failed,
+              ...(healthyFalseCache ? { disabled: { key: 'disabled', enabled: false, metadata: {} } } : {}),
+            },
+            errorsWhileComputingFlags,
+          }),
+        })
+        await posthog.reloadFeatureFlagsAsync()
+
+        for (const key of ['failed', 'missing']) {
+          expect(posthog.getFeatureFlag(key, { sendEvent: false })).toBe(healthyFalseCache ? false : undefined)
+          expect(posthog.isFeatureEnabled(key, { sendEvent: false })).toBe(healthyFalseCache ? false : undefined)
+          expect(posthog.getFeatureFlagResult(key, { sendEvent: false })).toBeUndefined()
+          expect(posthog.isFeatureEnabled(key, { defaultValue: true, sendEvent: false })).toBe(true)
+          expect(posthog.getFeatureFlagPayload(key)).toBeNull()
+        }
+        expect(posthog.getFeatureFlags()).toEqual(healthyFalseCache ? { disabled: false } : {})
+        expect(posthog.getFeatureFlagDetails()?.flags.failed.failed).toBe(true)
+        if (healthyFalseCache) {
+          expect(posthog.getFeatureFlag('disabled', { sendEvent: false })).toBe(false)
+          expect(posthog.isFeatureEnabled('disabled', { defaultValue: true, sendEvent: false })).toBe(false)
+        }
+      } finally {
+        await posthog.shutdown()
+      }
+    }
+  )
+
   it.each([false, true])(
     'filters pre-fix persisted failures and preserves diagnostics on reopen (bootstrap %s)',
     async (bootstrap) => {
@@ -80,6 +175,52 @@ describe('failed client flag records', () => {
       await posthog.shutdown()
     }
   )
+
+  it.each(['failed', 'fresh'])('bootstrap does not carry a prior request failure (%s)', async (bootstrapKey) => {
+    const cache = {
+      [PostHogPersistedProperty.FeatureFlagDetails]: {
+        flags: { failed, unresolved: { ...failed, key: 'unresolved' } },
+        requestError: { type: 'timeout' },
+        errorsWhileComputingFlags: true,
+        minimalFlagCalledEvents: true,
+        quotaLimited: ['feature_flags'],
+        evaluatedAt: 1234,
+      },
+    }
+    const [posthog, mocks] = createTestClient(
+      'token',
+      {
+        bootstrap: {
+          featureFlags: { [bootstrapKey]: 'bootstrap-success' },
+          featureFlagPayloads: { [bootstrapKey]: { bootstrap: true } },
+        },
+      },
+      undefined,
+      cache
+    )
+    try {
+      const capture = vi.spyOn(posthog, 'capture')
+      expect(posthog.getFeatureFlagResult(bootstrapKey)).toMatchObject({
+        variant: 'bootstrap-success',
+        payload: { bootstrap: true },
+      })
+      expect(capture.mock.calls[0][1].$feature_flag_error).toBe('errors_while_computing_flags,quota_limited')
+      expect(posthog.getFeatureFlagDetails()).toMatchObject({
+        errorsWhileComputingFlags: true,
+        minimalFlagCalledEvents: true,
+        quotaLimited: ['feature_flags'],
+        evaluatedAt: 1234,
+      })
+      expect(cache[PostHogPersistedProperty.FeatureFlagDetails].requestError).toBeUndefined()
+      expect(posthog.getFeatureFlagResult('unresolved')).toBeUndefined()
+      expect(capture.mock.calls[1][1].$feature_flag_error).toBe(
+        'errors_while_computing_flags,quota_limited,evaluation_failed'
+      )
+      expect(mocks.fetch).not.toHaveBeenCalled()
+    } finally {
+      await posthog.shutdown()
+    }
+  })
 
   it.each([true, false, 'cached'])(
     'uses same-key bootstrap only over failed persisted decisions, including reopen (healthy %s)',

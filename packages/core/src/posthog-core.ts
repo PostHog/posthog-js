@@ -135,6 +135,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         const currentFeatureFlagDetails = this.getKnownFeatureFlagDetails() || { flags: {}, requestId: undefined }
         const newFeatureFlagDetails = {
           ...this.getStoredFlagDetails(),
+          requestError: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
             ...Object.fromEntries(
@@ -1096,13 +1097,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
         if (isQuotaLimited) {
           errors.push(FeatureFlagError.QUOTA_LIMITED)
-        } else if (flagValue === undefined && featureFlag?.failed) {
-          errors.push(FeatureFlagError.EVALUATION_FAILED)
         } else if (flagValue === undefined && !featureFlag) {
           // Track missing flags only when we had a successful, non-limited request.
           // When quota limited or request failed, we cannot determine if the flag is truly missing.
           errors.push(FeatureFlagError.FLAG_MISSING)
         }
+      }
+
+      if (flagValue === undefined && featureFlag?.failed) {
+        errors.push(FeatureFlagError.EVALUATION_FAILED)
       }
 
       const bootstrappedResponse = this.getBootstrappedFeatureFlags()?.[key]
@@ -1139,7 +1142,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         case 'getFeatureFlagPayload':
           return details ? { key, enabled: false, payload: null } : undefined
         case 'getFeatureFlag':
-          return details && Object.keys(details.flags).length ? { key, enabled: false, payload: null } : undefined
+          return details && Object.keys(details.featureFlags).length
+            ? { key, enabled: false, payload: null }
+            : undefined
         case undefined:
           return undefined
       }
