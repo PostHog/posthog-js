@@ -1347,7 +1347,16 @@ export interface BrowserMetricsConfig extends MetricsConfig {
      * IANA timezone as `client.timezone`. Requests that the SDK drops before they
      * reach the network are not recorded.
      *
-     * This option, the metric name, and its attributes may change or be removed
+     * An attempt that gets a response also splits that duration into three histograms
+     * with the same attributes: `posthog.flags.request.pre_send_duration` (until the
+     * request starts), `posthog.flags.request.network_duration` (until the last byte
+     * of the response arrives, from the request's Resource Timing entry) and
+     * `posthog.flags.request.main_thread_duration` (until the SDK's callback runs).
+     * The attempt records them only when the browser reports a Resource Timing entry
+     * within 5 seconds of the callback that no other `/flags` request from this copy
+     * of the SDK to the same URL can own.
+     *
+     * This option, the metric names, and their attributes may change or be removed
      * in any release.
      *
      * @default undefined

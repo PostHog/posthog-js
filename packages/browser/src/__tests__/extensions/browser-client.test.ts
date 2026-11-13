@@ -21,6 +21,7 @@ import type {
     SessionIdChangedCallback,
 } from '../../types'
 import { createPosthogInstance } from '../helpers/posthog-instance'
+import { FakePerformanceObserver, resourceEntry } from '../helpers/fake-performance-observer'
 
 interface MockPostHog extends PostHog {
     emitEvent(event: string, properties?: Properties): void
@@ -678,22 +679,28 @@ describe('BrowserClientAdapter', () => {
         })
 
         // A `dropped` response models a request that `_send_request` drops before the network.
-        // It calls back synchronously and never calls `onDispatch`.
+        // It calls back synchronously and never calls `onDispatch` or `onSend`.
+        function createFlagsInstance(metrics: { flags?: boolean } | undefined): MockPostHog {
+            const instance = createMockPostHog()
+            instance.config.metrics = metrics
+            ;(instance as unknown as { metrics: { histogram: typeof histogram } }).metrics = { histogram }
+            return instance
+        }
+
         function createClient(
             metrics: { flags?: boolean } | undefined,
             responses: (RequestResponse | { dropped: RequestResponse })[]
         ): BrowserClientAdapter {
-            const instance = createMockPostHog()
-            instance.config.metrics = metrics
-            ;(instance as unknown as { metrics: { histogram: typeof histogram } }).metrics = { histogram }
+            const instance = createFlagsInstance(metrics)
             const queue = [...responses]
-            vi.mocked(instance._send_request).mockImplementation(({ callback, onDispatch }) => {
+            vi.mocked(instance._send_request).mockImplementation(({ url, callback, onDispatch, onSend }) => {
                 const response = queue.shift()!
                 if ('dropped' in response) {
                     callback?.(response.dropped)
                     return
                 }
                 onDispatch?.()
+                onSend?.(url)
                 setTimeout(() => callback?.(response), 0)
             })
             return new BrowserClientAdapter(instance)
@@ -769,6 +776,183 @@ describe('BrowserClientAdapter', () => {
             const client = createClient({ flags: true }, [{ statusCode: 200 }])
 
             await expect(client.sendRequest('/flags/', { target: 'flags' })).resolves.toEqual({ statusCode: 200 })
+        })
+
+        describe('pre-send, network and main-thread split', () => {
+            const FLAGS_URL = 'https://flags.example.com/flags/'
+            const PRE_SEND = 'posthog.flags.request.pre_send_duration'
+            const NETWORK = 'posthog.flags.request.network_duration'
+            const MAIN_THREAD = 'posthog.flags.request.main_thread_duration'
+            const SPLIT_BOUNDS = [5, 10, 25, ...BOUNDS]
+            let clock: number
+
+            beforeEach(() => {
+                FakePerformanceObserver.reset()
+                vi.stubGlobal('PerformanceObserver', FakePerformanceObserver)
+                clock = 0
+                vi.spyOn(performance, 'now').mockImplementation(() => clock)
+            })
+
+            afterEach(() => {
+                vi.unstubAllGlobals()
+            })
+
+            // The attempt dispatches at 100ms, the transport sends it at 110ms, and the callback runs at 340ms.
+            // `entries` are the Resource Timing entries that the browser has recorded but not delivered
+            // when the callback runs.
+            function createTimedClient(
+                response: RequestResponse,
+                entries: Partial<PerformanceResourceTiming>[] = []
+            ): BrowserClientAdapter {
+                const instance = createFlagsInstance({ flags: true })
+                vi.mocked(instance._send_request).mockImplementation(({ url, callback, onDispatch, onSend }) => {
+                    clock = 100
+                    onDispatch?.()
+                    clock = 110
+                    onSend?.(url)
+                    setTimeout(() => {
+                        FakePerformanceObserver.latest?.queue(...entries)
+                        clock = 340
+                        callback?.(response)
+                    }, 0)
+                })
+                return new BrowserClientAdapter(instance)
+            }
+
+            const recorded = (name: string) => histogram.mock.calls.filter(([metric]) => metric === name)
+
+            it('splits the attempt into pre-send, network and main-thread time with the total attributes', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                const attributes = { ...BASE_ATTRIBUTES, 'http.response.status_code': 200 }
+                expect(histogram.mock.calls).toEqual([
+                    [METRIC, 240, { unit: 'ms', bounds: BOUNDS, attributes }],
+                    [PRE_SEND, 12, { unit: 'ms', bounds: SPLIT_BOUNDS, attributes }],
+                    [NETWORK, 188, { unit: 'ms', bounds: BOUNDS, attributes }],
+                    [MAIN_THREAD, 40, { unit: 'ms', bounds: SPLIT_BOUNDS, attributes }],
+                ])
+            })
+
+            it('splits an attempt that returned an error status', async () => {
+                const client = createTimedClient({ statusCode: 503 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(recorded(NETWORK)[0][2].attributes).toEqual({
+                    ...BASE_ATTRIBUTES,
+                    'http.response.status_code': 503,
+                    'error.type': '503',
+                })
+            })
+
+            it('measures main-thread time to the callback when the entry arrives after it', async () => {
+                const client = createTimedClient({ statusCode: 200 })
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+                expect(histogram).toHaveBeenCalledTimes(1)
+
+                clock = 500
+                FakePerformanceObserver.latest.deliver(resourceEntry(FLAGS_URL, 112, 300))
+
+                expect(recorded(MAIN_THREAD)[0][1]).toBe(40)
+                expect(recorded(METRIC)).toEqual([[METRIC, 240, expect.anything()]])
+            })
+
+            it('ends network time at the callback when the entry ends after it, so the parts sum to the total', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 341)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(recorded(NETWORK)[0][1]).toBe(228)
+                expect(recorded(MAIN_THREAD)[0][1]).toBe(0)
+            })
+
+            it.each([
+                ['no entry arrives', { statusCode: 200 }, [], true],
+                ['no response arrives', { statusCode: 0 }, [resourceEntry(FLAGS_URL, 112, 300)], true],
+                ['the browser has no PerformanceObserver', { statusCode: 200 }, [], false],
+                ['the entry ends before it starts', { statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 0)], true],
+            ] as const)('records only the total when %s', async (_name, response, entries, hasObserver) => {
+                if (!hasObserver) {
+                    vi.stubGlobal('PerformanceObserver', undefined)
+                }
+                const client = createTimedClient(response, [...entries])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(histogram.mock.calls).toEqual([[METRIC, 240, expect.anything()]])
+            })
+
+            it('gives each histogram its own attributes object', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                const attributeObjects = new Set(histogram.mock.calls.map(([, , options]) => options.attributes))
+                expect(attributeObjects.size).toBe(4)
+            })
+
+            it('resolves the request when reading the Resource Timing entry throws', async () => {
+                vi.spyOn(FakePerformanceObserver.prototype, 'takeRecords').mockImplementation(() => {
+                    throw new Error('boom')
+                })
+                vi.spyOn(logger, 'error').mockImplementation(() => {})
+                const client = createTimedClient({ statusCode: 200 })
+
+                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                    statusCode: 200,
+                })
+                expect(recorded(METRIC)).toHaveLength(1)
+                expect(FakePerformanceObserver.latest.disconnected).toBe(true)
+            })
+
+            it('sends the request and records the total when reading PerformanceObserver throws', async () => {
+                Object.defineProperty(window, 'PerformanceObserver', {
+                    configurable: true,
+                    get() {
+                        throw new Error('boom')
+                    },
+                })
+                const client = createTimedClient({ statusCode: 200 })
+
+                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                    statusCode: 200,
+                })
+                expect(recorded(METRIC)).toHaveLength(1)
+            })
+
+            it('logs instead of throwing when recording a split that arrives after the callback throws', async () => {
+                const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+                const client = createTimedClient({ statusCode: 200 })
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+                histogram.mockImplementationOnce(() => {
+                    throw new Error('boom')
+                })
+
+                expect(() => FakePerformanceObserver.latest.deliver(resourceEntry(FLAGS_URL, 112, 300))).not.toThrow()
+                expect(error).toHaveBeenCalledWith(
+                    'Failed to record the /flags request timing split',
+                    expect.any(Error)
+                )
+            })
+
+            it('stops watching when no response arrives', async () => {
+                const client = createTimedClient({ statusCode: 0 })
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(FakePerformanceObserver.latest.disconnected).toBe(true)
+            })
+
+            it('does not watch resource timing when the flags metric is off', async () => {
+                const client = createClient({ flags: false }, [{ statusCode: 200 }])
+
+                await client.sendRequest('/flags/', { target: 'flags' })
+
+                expect(FakePerformanceObserver.instances).toHaveLength(0)
+            })
         })
     })
 
