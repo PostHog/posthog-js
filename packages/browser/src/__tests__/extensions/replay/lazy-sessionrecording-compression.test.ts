@@ -476,9 +476,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                         reader.onerror = reject
                         reader.readAsText(body)
                     })
-                    const payload = JSON.parse(
-                        Buffer.from(new URLSearchParams(encoded).get('data')!, 'base64').toString('utf8')
-                    )
+                    const payload = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
                     expect(payload).toEqual([
                         expect.objectContaining({
                             event: '$snapshot',
