@@ -127,11 +127,12 @@ export class RecordingTransport {
 
   request(
     message: { id: number; method: string; params?: Record<string, unknown> },
-    requestInfo: { headers: Record<string, string> } | undefined = { headers: {} }
+    /** `null` delivers it the way stdio does: no HTTP request info. */
+    requestInfo: { headers: Record<string, string> } | null = { headers: {} }
   ): Promise<SentMessage> {
     return new Promise((resolve) => {
       this.waiting.set(message.id, resolve)
-      this.onmessage?.({ jsonrpc: '2.0', ...message }, requestInfo && { requestInfo })
+      this.onmessage?.({ jsonrpc: '2.0', ...message }, requestInfo ? { requestInfo } : undefined)
     })
   }
 }

@@ -51,6 +51,22 @@ function setFakeTransport(server: Server, transport: unknown): void {
   ;(server as unknown as { _transport?: unknown })._transport = transport
 }
 
+/**
+ * Connects the pod to `transport` and runs `initialize` through the SDK the way
+ * an HTTP client does. Resolves with the token its response carried.
+ */
+async function mintToken(
+  server: Server,
+  params: MCPRequestLike['params'] = INITIALIZE_REQUEST.params,
+  transport = new RecordingTransport()
+): Promise<string | undefined> {
+  await server.connect(transport)
+  const response = await transport.request({ id: 1, method: 'initialize', params })
+  // captureEvent publishes fire-and-forget; let the sink drain.
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  return response.sessionId
+}
+
 async function invokeHandler(
   lowLevel: MCPServerLike,
   method: string,
@@ -81,12 +97,8 @@ describe('Stateless session minting', () => {
 
   it('mints a decodable token onto a writable transport and uses its sid for $mcp_initialize', async () => {
     const { server, lowLevel } = createPod('pod-mint')
-    const transport: { sessionId?: string } = {}
-    setFakeTransport(server, transport)
 
-    await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
-
-    const decoded = decodeSessionId(transport.sessionId)
+    const decoded = decodeSessionId(await mintToken(server))
     expect(decoded).not.toBeNull()
     expect(decoded?.clientName).toBe('Claude')
     expect(decoded?.clientVersion).toBe('1.2.3')
@@ -110,13 +122,10 @@ describe('Stateless session minting', () => {
   it('mints through a getter-only wrapper transport (Node StreamableHTTP shape)', async () => {
     const { server, lowLevel } = createPod('pod-wrapper')
     const inner: { sessionId?: string } = {}
-    const wrapper: { _webStandardTransport: typeof inner; sessionId?: string } = { _webStandardTransport: inner }
+    const wrapper = Object.assign(new RecordingTransport(), { _webStandardTransport: inner })
     Object.defineProperty(wrapper, 'sessionId', { get: () => inner.sessionId, configurable: true })
-    setFakeTransport(server, wrapper)
 
-    await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
-
-    const decoded = decodeSessionId(inner.sessionId)
+    const decoded = decodeSessionId(await mintToken(server, INITIALIZE_REQUEST.params, wrapper))
     expect(decoded).not.toBeNull()
     expect(getServerTrackingData(lowLevel)?.sessionId).toBe(decoded?.sessionId)
   })
@@ -148,50 +157,7 @@ describe('Stateless session minting', () => {
   })
 
   describe('mint guards', () => {
-    it('does not mint without requestInfo (stdio / in-memory transports)', async () => {
-      const { server, lowLevel } = createPod('pod-stdio')
-      const transport: { sessionId?: string } = {}
-      setFakeTransport(server, transport)
-
-      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, undefined)
-
-      expect(transport.sessionId).toBeUndefined()
-      expect(getServerTrackingData(lowLevel)?.sessionSource).toBe('generated')
-    })
-
-    it('does not mint when the client already sent a session id header', async () => {
-      const { server, lowLevel } = createPod('pod-replay')
-      const transport: { sessionId?: string } = {}
-      setFakeTransport(server, transport)
-
-      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, {
-        requestInfo: { headers: { 'mcp-session-id': 'client-supplied' } },
-      })
-
-      expect(transport.sessionId).toBeUndefined()
-    })
-
-    it('does not mint over a stateful transport that owns its session id', async () => {
-      const { server, lowLevel } = createPod('pod-stateful')
-      const transport: { sessionId?: string } = { sessionId: 'transport-owned-uuid' }
-      setFakeTransport(server, transport)
-
-      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, {
-        sessionId: 'transport-owned-uuid',
-        requestInfo: { headers: {} },
-      })
-
-      expect(transport.sessionId).toBe('transport-owned-uuid')
-      expect(getServerTrackingData(lowLevel)?.sessionSource).toBe('mcp')
-    })
-
-    it('does not mint (and does not throw) without a transport', async () => {
-      const { lowLevel } = createPod('pod-transportless')
-
-      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
-
-      expect(getServerTrackingData(lowLevel)?.sessionSource).toBe('generated')
-    })
+    const HTTP_REQUEST = { headers: {} }
 
     /**
      * 2026-07-28 removed sessions from the protocol — a server MUST NOT mint or
@@ -202,21 +168,51 @@ describe('Stateless session minting', () => {
      * still answered correctly.
      */
     it.each([
-      ['2026-07-28', 'the revision that removed sessions'],
-      ['2027-03-01', 'any later revision — they were removed, not re-added'],
-    ])('does not mint for a request declaring %s (%s)', async (protocolVersion) => {
-      const { server, lowLevel } = createPod(`pod-${protocolVersion}`)
-      const transport: { sessionId?: string } = {}
-      setFakeTransport(server, transport)
+      { case: 'without requestInfo (stdio / in-memory transports)', requestInfo: null },
+      {
+        case: 'when the client already sent a session id header',
+        requestInfo: { headers: { 'mcp-session-id': 'client-supplied' } },
+      },
+      {
+        case: 'over a stateful transport that owns its session id',
+        requestInfo: HTTP_REQUEST,
+        transportSessionId: 'transport-owned-uuid',
+      },
+      {
+        case: 'for a request declaring 2026-07-28, the revision that removed sessions',
+        requestInfo: HTTP_REQUEST,
+        protocolVersion: '2026-07-28',
+      },
+      {
+        case: 'for a request declaring a later revision (removed, not re-added)',
+        requestInfo: HTTP_REQUEST,
+        protocolVersion: '2027-03-01',
+      },
+    ])('does not mint $case', async ({ requestInfo, transportSessionId, protocolVersion }) => {
+      const { server, lowLevel } = createPod('pod-guard')
+      const transport = new RecordingTransport()
+      transport.sessionId = transportSessionId
+      await server.connect(transport)
 
-      await invokeHandler(
-        lowLevel,
-        'initialize',
-        { ...INITIALIZE_REQUEST, params: { ...INITIALIZE_REQUEST.params, protocolVersion } },
-        { requestInfo: { headers: {} } }
+      const response = await transport.request(
+        {
+          id: 1,
+          method: 'initialize',
+          params: { ...INITIALIZE_REQUEST.params, protocolVersion: protocolVersion ?? '2025-06-18' },
+        },
+        requestInfo
       )
 
-      expect(transport.sessionId).toBeUndefined()
+      expect(response.sessionId).toBe(transportSessionId)
+      expect(getServerTrackingData(lowLevel)?.sessionSource).not.toBe('token')
+    })
+
+    it('does not mint (and does not throw) without a transport', async () => {
+      const { lowLevel } = createPod('pod-transportless')
+
+      await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+
+      expect(getServerTrackingData(lowLevel)?.sessionSource).toBe('generated')
     })
 
     it('leaves session state untouched when the transport write fails', async () => {
@@ -233,11 +229,8 @@ describe('Stateless session minting', () => {
   it('attributes a tool call on a different pod to the minted session and client (multi-pod)', async () => {
     // Pod A handles initialize and mints the token.
     const podA = createPod('pod-a')
-    const transportA: { sessionId?: string } = {}
-    setFakeTransport(podA.server, transportA)
-    await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+    const token = await mintToken(podA.server)
 
-    const token = transportA.sessionId
     const decoded = decodeSessionId(token)
     expect(decoded).not.toBeNull()
 
@@ -292,15 +285,13 @@ describe('Stateless session minting', () => {
     }
 
     const podA = createPod('pod-downgrade-a')
-    const transportA: { sessionId?: string } = {}
-    setFakeTransport(podA.server, transportA)
-    await invokeHandler(podA.lowLevel, 'initialize', downgradeRequest, { requestInfo: { headers: {} } })
+    const token = await mintToken(podA.server, downgradeRequest.params)
 
     const initEvents = eventCapture.findCapturesByEvent('$mcp_initialize')
     const negotiated = initEvents[0].properties.$mcp_protocol_version as string
     expect(negotiated).not.toBe('1999-01-01') // server downgraded
     // The re-minted token carries the negotiated version, not the requested one.
-    expect(decodeSessionId(transportA.sessionId)?.protocolVersion).toBe(negotiated)
+    expect(decodeSessionId(token)?.protocolVersion).toBe(negotiated)
 
     // A different pod replaying the token reports the negotiated version too.
     const podB = createPod('pod-downgrade-b')
@@ -308,7 +299,7 @@ describe('Stateless session minting', () => {
       podB.lowLevel,
       'tools/call',
       { method: 'tools/call', params: { name: 'get_plan', arguments: {} } },
-      { requestInfo: { headers: { 'mcp-session-id': transportA.sessionId } } }
+      { requestInfo: { headers: { 'mcp-session-id': token } } }
     )
     const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
     expect(toolCalls).toHaveLength(1)
@@ -323,11 +314,8 @@ describe('Stateless session minting', () => {
     it('attributes tool calls on fresh pods replaying the token without publishing $identify', async () => {
       // Pod A handles initialize and mints the token.
       const podA = createPod('pod-identify-a', { identify: async () => IDENTITY })
-      const transportA: { sessionId?: string } = {}
-      setFakeTransport(podA.server, transportA)
-      await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+      const token = await mintToken(podA.server)
 
-      const token = transportA.sessionId
       expect(decodeSessionId(token)).not.toBeNull()
 
       // Fresh pods share nothing with pod A, so their identity caches are empty.
@@ -363,17 +351,15 @@ describe('Stateless session minting', () => {
 
     it('sends no $mcp_initialize but still mints the token another pod resolves', async () => {
       const podA = createPod('pod-off-a', OFF)
-      const transportA: { sessionId?: string } = {}
-      setFakeTransport(podA.server, transportA)
-      await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+      const token = await mintToken(podA.server)
 
-      const decoded = decodeSessionId(transportA.sessionId)
+      const decoded = decodeSessionId(token)
       expect(decoded).not.toBeNull()
       expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
 
       const podB = createPod('pod-off-b', OFF)
       await invokeHandler(podB.lowLevel, 'tools/call', callTool, {
-        requestInfo: { headers: { 'mcp-session-id': transportA.sessionId } },
+        requestInfo: { headers: { 'mcp-session-id': token } },
       })
 
       const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
@@ -386,16 +372,9 @@ describe('Stateless session minting', () => {
 
     it('still re-mints the token with the negotiated version after a downgrade', async () => {
       const podA = createPod('pod-off-downgrade', OFF)
-      const transportA: { sessionId?: string } = {}
-      setFakeTransport(podA.server, transportA)
-      await invokeHandler(
-        podA.lowLevel,
-        'initialize',
-        { method: 'initialize', params: { ...INITIALIZE_REQUEST.params, protocolVersion: '1999-01-01' } },
-        { requestInfo: { headers: {} } }
-      )
+      const token = await mintToken(podA.server, { ...INITIALIZE_REQUEST.params, protocolVersion: '1999-01-01' })
 
-      expect(decodeSessionId(transportA.sessionId)?.protocolVersion).toBe(LATEST_PROTOCOL_VERSION)
+      expect(decodeSessionId(token)?.protocolVersion).toBe(LATEST_PROTOCOL_VERSION)
       expect(eventCapture.findCapturesByEvent('$mcp_initialize')).toHaveLength(0)
     })
 

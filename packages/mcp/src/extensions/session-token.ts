@@ -110,13 +110,79 @@ export function readMcpSessionHeader(headers: unknown): string | undefined {
   return readHeaderValue(headers, MCP_SESSION_HEADER)
 }
 
+type SendFn = (message: unknown, options?: unknown) => unknown
+
+const tokensAwaitingResponse = new WeakMap<object, Map<unknown, string>>()
+
 /**
- * Puts a minted token on the transport so it goes out as the `Mcp-Session-Id`
- * response header. The Node transport's `sessionId` is a getter backed by an
- * inner web-standard transport, so verify the write by reading back and fall
- * back to writing the inner one. Returns whether the write stuck; never throws.
+ * Sends `token` as the `Mcp-Session-Id` header of the response to `requestId`
+ * only. The transport builds that header from its `sessionId` while sending, so
+ * the token is put there for the response's synchronous send and taken off
+ * again. Leaving it on would break a stateless transport reused across clients
+ * (SDK v2 before 2.3): it rejects the next `initialize` and echoes the token to
+ * every client. Returns whether the transport can carry the token; never throws.
  */
-export function writeSessionIdToTransport(transport: unknown, token: string): boolean {
+export function sendSessionTokenWithResponse(transport: unknown, requestId: unknown, token: string): boolean {
+  if (requestId === undefined || !transport || typeof transport !== 'object') {
+    return false
+  }
+  const carried = writeSessionIdToTransport(transport, token)
+  writeSessionIdToTransport(transport, undefined)
+  if (!carried) {
+    return false
+  }
+  let tokens = tokensAwaitingResponse.get(transport)
+  if (!tokens) {
+    tokens = new Map()
+    if (!wrapSend(transport, tokens)) {
+      return false
+    }
+    tokensAwaitingResponse.set(transport, tokens)
+  }
+  tokens.set(requestId, token)
+  return true
+}
+
+function wrapSend(transport: object, tokens: Map<unknown, string>): boolean {
+  const target = transport as { send?: SendFn }
+  const send = target.send
+  if (typeof send !== 'function') {
+    return false
+  }
+  try {
+    target.send = (message, options) => {
+      const id = readResponseId(message)
+      const token = tokens.get(id)
+      if (token === undefined) {
+        return send.call(transport, message, options)
+      }
+      tokens.delete(id)
+      writeSessionIdToTransport(transport, token)
+      try {
+        return send.call(transport, message, options)
+      } finally {
+        writeSessionIdToTransport(transport, undefined)
+      }
+    }
+  } catch {
+    return false
+  }
+  return target.send !== send
+}
+
+/** The id of a JSON-RPC response; undefined for requests and notifications, whose ids are not the client's. */
+function readResponseId(message: unknown): unknown {
+  const response = message as { id?: unknown; result?: unknown; error?: unknown } | null
+  return response && ('result' in response || 'error' in response) ? response.id : undefined
+}
+
+/**
+ * Sets the session id the transport puts in the `Mcp-Session-Id` response
+ * header. The Node transport's `sessionId` is a getter backed by an inner
+ * web-standard transport, so verify the write by reading back and fall back to
+ * writing the inner one. Returns whether the write stuck; never throws.
+ */
+export function writeSessionIdToTransport(transport: unknown, token: string | undefined): boolean {
   if (!transport || typeof transport !== 'object') {
     return false
   }

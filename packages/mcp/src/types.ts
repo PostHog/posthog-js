@@ -491,6 +491,8 @@ export interface CompatibleHttpRequestLike {
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
+  /** MCP SDK v1's id of the request being handled; v2 puts it on `mcpReq.id`. */
+  requestId?: string | number
   /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
   requestInfo?: CompatibleRequestInfoLike
   /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */

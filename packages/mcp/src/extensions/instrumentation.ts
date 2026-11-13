@@ -51,7 +51,7 @@ import {
   isModernEraRequest,
   newSessionId,
 } from './session'
-import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import { decodeSessionId, encodeSessionId, readMcpSessionHeader, sendSessionTokenWithResponse } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -1117,7 +1117,7 @@ function mintStatelessSessionOnInitialize(
       clientVersion: clientInfo?.version,
       protocolVersion: requestedProtocolVersion,
     })
-    if (!writeSessionIdToTransport(transport, token)) {
+    if (!sendSessionTokenWithResponse(transport, readRequestId(extra), token)) {
       return undefined // transport can't carry a response session id — keep generated behavior
     }
 
@@ -1143,6 +1143,7 @@ function mintStatelessSessionOnInitialize(
  */
 function upgradeMintedTokenToNegotiated(
   server: MCPServerLike,
+  extra: CompatibleRequestHandlerExtra | undefined,
   mintedSessionId: string,
   sessionInfo: SessionInfo,
   negotiatedProtocolVersion: string | undefined,
@@ -1159,10 +1160,15 @@ function upgradeMintedTokenToNegotiated(
       clientVersion: sessionInfo.clientVersion,
       protocolVersion: negotiatedProtocolVersion,
     })
-    writeSessionIdToTransport(transport, token)
+    sendSessionTokenWithResponse(transport, readRequestId(extra), token)
   } catch (error) {
     logger(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
   }
+}
+
+/** The JSON-RPC id of the request being handled: `requestId` on SDK v1, `mcpReq.id` on v2. */
+function readRequestId(extra: CompatibleRequestHandlerExtra | undefined): unknown {
+  return extra?.requestId ?? extra?.mcpReq?.id
 }
 
 /**
@@ -1268,7 +1274,14 @@ export async function handleInitializeRequest(
     setServerTrackingData(server, data)
   }
   if (mintedSessionId) {
-    upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
+    upgradeMintedTokenToNegotiated(
+      server,
+      extra,
+      mintedSessionId,
+      requestSessionInfo,
+      negotiatedProtocolVersion,
+      data.logger
+    )
   }
   if (data.options.sendInitializeEvent !== false) {
     captureEvent(server, event, data.logger, {
