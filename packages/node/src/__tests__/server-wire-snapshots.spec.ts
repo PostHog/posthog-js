@@ -213,7 +213,7 @@ describe('server wire snapshots', () => {
       flagKeys: ['new-checkout', 'billing-v2'],
     })
 
-    const call = mockedFetch.mock.calls.find(([url]) => (url as string).includes('/flags/?v=2')) as FetchCall
+    const call = mockedFetch.mock.calls.find(([url]) => (url as string).includes('/flags/?v=4')) as FetchCall
     expect(snapshotRequest(call)).toMatchSnapshot()
   })
 })

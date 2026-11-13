@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.67.3
+
+### Patch Changes
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Let an SDK choose the `/flags` response version it requests and how it reads it. SDKs that do not opt in keep requesting `v=2`.
+  (2026-11-13)
+
+## 1.67.2
+
+### Patch Changes
+
+- [#5672](https://github.com/PostHog/posthog-js/pull/5672) [`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(core): summarize the keys of a non-`Error` exception in one pass, so capturing a very wide thrown object no longer takes quadratic time.
+  (2026-11-12)
+
 ## 1.67.1
 
 ### Patch Changes

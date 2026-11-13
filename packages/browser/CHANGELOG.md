@@ -1,5 +1,24 @@
 # posthog-js
 
+## 1.448.0
+
+### Minor Changes
+
+- [#5675](https://github.com/PostHog/posthog-js/pull/5675) [`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add `trace_propagation_targets`: an opt-in allowlist of hostnames or origins that receive a W3C `traceparent` header on `fetch` and `XMLHttpRequest` requests, so backend traces can continue from the browser. Unlisted hosts never get the header, and a `traceparent` set by the app or by OpenTelemetry instrumentation is never overwritten or duplicated.
+  (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15)]:
+  - @posthog/types@1.425.0
+
+## 1.447.15
+
+### Patch Changes
+
+- [#5670](https://github.com/PostHog/posthog-js/pull/5670) [`753e5bf`](https://github.com/PostHog/posthog-js/commit/753e5bfda9aa216337f6b59a806666cf43f861a7) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown selection masking without changing custom multiselect behavior.
+  (2026-11-12)
+
 ## 1.447.14
 
 ### Patch Changes

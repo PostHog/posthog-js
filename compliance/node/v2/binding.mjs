@@ -12,6 +12,7 @@ export const routes = [
     '/evaluate_flags/read',
     '/flush',
     '/get_feature_flag',
+    '/get_feature_flag_payload',
     '/reload_feature_flags',
 ]
 export const failure = (kind, code, message) => ({
@@ -333,14 +334,20 @@ export class Binding {
                     flagFields,
                     route
                 )
+                const payload = route === '/get_feature_flag_payload'
+                // getFeatureFlagPayload takes an optional matchValue before its options; leave it unset.
                 const parameters = Object.keys(options).length
-                    ? [args.key, args.distinct_id, options]
+                    ? payload
+                        ? [args.key, args.distinct_id, undefined, options]
+                        : [args.key, args.distinct_id, options]
                     : own(args, 'distinct_id')
                       ? [args.key, args.distinct_id]
                       : own(args, 'key')
                         ? [args.key]
                         : []
-                result = await this.client.getFeatureFlag(...parameters)
+                result = payload
+                    ? await this.client.getFeatureFlagPayload(...parameters)
+                    : await this.client.getFeatureFlag(...parameters)
             }
             return {
                 kind: 'sdk',

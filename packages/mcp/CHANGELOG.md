@@ -1,5 +1,14 @@
 # @posthog/mcp
 
+## 1.2.1
+
+### Patch Changes
+
+- [#5672](https://github.com/PostHog/posthog-js/pull/5672) [`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(mcp): keep the thrown value on high-level `McpServer` tool calls, so `$mcp_error_type` and `$mcp_error_status` reflect what the tool threw. This covers MCP SDK v2, a thrown value that is not an `Error`, and servers built per request that share tool functions. For a thrown non-`Error`, `$mcp_error_message` and error grouping now describe the thrown value (for example `'UpstreamError' captured as exception with message: 'bad'`) instead of `[object Object]`. `$mcp_error_type` is now redacted like the message, including an `errorType` passed to `captureToolCall`. An error whose getters throw while it is captured is still recorded: a tool call falls back to the tool result, and other events record `Unknown error` instead of being dropped.
+  (2026-11-12)
+- Updated dependencies [[`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc)]:
+  - @posthog/core@1.67.2
+
 ## 1.2.0
 
 ### Minor Changes
