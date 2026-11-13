@@ -1,3 +1,4 @@
+import { format, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { MAX_MESSAGE_BYTES, trustedUrl, validateRequest } from '../shared/protocol'
 
@@ -58,6 +59,26 @@ describe('Electron bridge protocol', () => {
         ).toThrow('Unsafe')
         expect(() => validateRequest({ ...request({ type: 'hello' }), sequence: 0 })).toThrow('Invalid')
         expect(() => validateRequest({ ...request({ type: 'hello' }), version: 2 })).toThrow('Invalid')
+    })
+    it.each(['%7E', '%7e'])('matches Windows file paths with %s tilde encoding in either direction', (encoding) => {
+        const path = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\fixture\\app.asar\\index.html'
+        const configured = pathToFileURL(path, { windows: true }).href.replace('%7E', encoding)
+        const loaded = format({ protocol: 'file:', slashes: true, pathname: path.replaceAll('\\', '/') })
+        expect(configured).toContain(encoding)
+        expect(loaded).toContain('RUNNER~1')
+        expect(trustedUrl(loaded, [configured])).toBe(true)
+        expect(trustedUrl(configured, [loaded])).toBe(true)
+    })
+    it.each([
+        ['https://app.example/~page', 'https://app.example/%7Epage'],
+        ['file:///app/index.html?value=~', 'file:///app/index.html?value=%7E'],
+        ['file:///C:/Users/RUNNER~2/index.html', 'file:///C:/Users/RUNNER%7E1/index.html'],
+        ['file:///app%2Findex.html', 'file:///app/index.html'],
+        ['file:///app%5Cindex.html', 'file:///app/index.html'],
+        ['file:///app/%257E/index.html', 'file:///app/~/index.html'],
+        ['https://app.example/~page', 'file:///app.example/%7Epage'],
+    ])('does not broaden file-tilde normalization from %s to %s', (target, allowed) => {
+        expect(trustedUrl(target, [allowed])).toBe(false)
     })
     it('matches exact file and remote URLs rather than trusting opaque or shared origins', () => {
         expect(trustedUrl('file:///app/index.html#settings', ['file:///app/index.html'])).toBe(true)
