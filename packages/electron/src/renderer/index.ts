@@ -114,7 +114,7 @@ export class PostHog {
         const snapshot: Command = JSON.parse(JSON.stringify(structuredClone(command)))
         const operation = this._tail.then(async () => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
-            if (command.type === 'exception' && this.hasOptedOutCapturing()) return
+            if (command.type === 'exception' && !this._canCaptureException()) return
             const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
             bridgeSequences.set(this._bridge, sequence)
             const response = await this._bridge.request({
@@ -148,7 +148,7 @@ export class PostHog {
             typeof window !== 'undefined'
         ) {
             this._stopExceptionAutocapture = startRendererExceptionAutocapture(
-                () => !this._disposed && !this.hasOptedOutCapturing(),
+                () => this._canCaptureException(),
                 (error, properties, hint) => this._captureException(error, properties, hint)
             )
         }
@@ -223,8 +223,11 @@ export class PostHog {
     captureException(error: unknown, properties?: Properties): Promise<void> {
         return this._captureException(error, properties)
     }
+    private _canCaptureException(): boolean {
+        return !this._disposed && !this._state?.disabled && !this.hasOptedOutCapturing()
+    }
     protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
-        if (this._disposed || this.hasOptedOutCapturing()) return Promise.resolve()
+        if (!this._canCaptureException()) return Promise.resolve()
         try {
             const exception = this._builder.buildFromUnknown(error, hint)
             return this._send({

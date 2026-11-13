@@ -480,6 +480,7 @@ export class PostHog {
             anonymousId: this._core.getAnonymousId(),
             sessionId: this.getSessionId(),
             optedOut: this._core.optedOut,
+            disabled: this._core.isDisabled,
             autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
             flagsLoaded: this._core.getFeatureFlags() !== undefined,

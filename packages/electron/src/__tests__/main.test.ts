@@ -444,6 +444,38 @@ describe('main Electron client', () => {
         expect(batches).toHaveLength(1)
     })
 
+    it('synchronizes disabled state before renderer exception inspection or IPC without changing consent', async () => {
+        const owner = await start({ disabled: true, enableExceptionAutocapture: true })
+        const window = renderer(owner, 1)
+        const request = vi.fn((request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(window.event, request))
+        const api = new RendererPostHog({ request, subscribe: () => () => {} }, { enableExceptionAutocapture: true })
+        const host = vi.fn()
+        globalThis.window.addEventListener('error', host)
+        try {
+            await api.ready()
+            const getter = vi.fn(() => new Error('disabled private error'))
+            const event = new ErrorEvent('error')
+            Object.defineProperty(event, 'error', { get: getter })
+            globalThis.window.dispatchEvent(event)
+            await api.captureException(new Error('disabled manual error'))
+            await Promise.resolve()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello'])
+            expect(getter).not.toHaveBeenCalled()
+            expect(host).toHaveBeenCalledTimes(1)
+            expect(api.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(owner.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(api.hasOptedOutCapturing()).toBe(false)
+            await api.optIn()
+            await api.captureException(new Error('still disabled'))
+            await api.flush()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello', 'optIn', 'flush'])
+            expect(batches).toEqual([])
+        } finally {
+            api.dispose()
+            globalThis.window.removeEventListener('error', host)
+        }
+    })
+
     it('checks consent again when queued exception work executes', async () => {
         const owner = await start({ enableExceptionAutocapture: true })
         const getter = vi.fn(() => {
