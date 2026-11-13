@@ -1,8 +1,9 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { createAnalyticsDelivery } from '../src/analytics-delivery'
-import { Analytics, type AnalyticsDeliveryFactory } from '../src/analytics-internal'
+import { type AnalyticsDeliveryFactory } from '../src/analytics-internal'
 import { createPostHog, type BrowserFetch } from '../src/core'
 import { MemoryStorage } from './helpers'
 
@@ -44,10 +45,11 @@ describe('@posthog/browser public lifecycle state machine', () => {
             ],
         })
         const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
-        await posthog.identify('baseline-user')
-        await posthog.group('company', 'baseline-company')
-        await posthog.capture('baseline-event')
+        const installedAnalytics = requireInstalledExtension(posthog.analytics)
+        installedAnalytics.onEvent(({ event }) => observed.push(event))
+        await installedAnalytics.identify('baseline-user')
+        await installedAnalytics.group('company', 'baseline-company')
+        await installedAnalytics.capture('baseline-event')
         expect(observed).toEqual(['$identify', '$groupidentify', 'baseline-event'])
         observed.length = 0
 
@@ -61,9 +63,12 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(dispose).toBe(shutdown)
         expect(repeatedShutdown).toBe(shutdown)
 
-        posthog.reset()
-        posthog.capture('closing-capture')
-        await Promise.all([posthog.identify('closing-user'), posthog.group('company', 'closing-company')])
+        installedAnalytics.reset()
+        installedAnalytics.capture('closing-capture')
+        await Promise.all([
+            installedAnalytics.identify('closing-user'),
+            installedAnalytics.group('company', 'closing-company'),
+        ])
         expect(observed).toEqual([])
 
         await Promise.resolve()
@@ -75,11 +80,11 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(concurrentFlushSettled).toBe(true)
         expect(cleanup).toHaveBeenCalledTimes(1)
 
-        posthog.reset()
-        posthog.capture('disposed-capture')
+        installedAnalytics.reset()
+        installedAnalytics.capture('disposed-capture')
         await Promise.all([
-            posthog.identify('disposed-user'),
-            posthog.group('company', 'disposed-company'),
+            installedAnalytics.identify('disposed-user'),
+            installedAnalytics.group('company', 'disposed-company'),
             posthog.flush(),
         ])
         expect(posthog.shutdown()).toBe(shutdown)
@@ -116,8 +121,8 @@ describe('@posthog/browser public lifecycle state machine', () => {
             fetch,
             extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
         })
-        const dispose = vi.spyOn(posthog.getExtension(Analytics)!, 'dispose')
-        await posthog.capture('pending-import')
+        const dispose = vi.spyOn(requireInstalledExtension(posthog.analytics), 'dispose')
+        await requireInstalledExtension(posthog.analytics).capture('pending-import')
         await Promise.resolve()
         expect(load).toHaveBeenCalledTimes(1)
 
@@ -129,7 +134,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         await vi.advanceTimersByTimeAsync(0)
         expect(createDelivery).not.toHaveBeenCalled()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.analytics).toBeUndefined()
         expect(fetch).not.toHaveBeenCalled()
         expect(vi.getTimerCount()).toBe(0)
     })
@@ -148,7 +153,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
             fetch,
             extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
         })
-        await posthog.capture('retrying')
+        await requireInstalledExtension(posthog.analytics).capture('retrying')
         await vi.advanceTimersByTimeAsync(0)
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(vi.getTimerCount()).toBeGreaterThan(0)

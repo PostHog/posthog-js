@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Inspection } from '@posthog-tooling/sdk-mock-server'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 
 declare global {
     interface Window {
@@ -49,7 +49,7 @@ test.beforeEach(async ({ context }) => {
 })
 
 test.afterEach(async ({ page }) => {
-    await page.evaluate(() => (window.posthog as PostHog | undefined)?.shutdown?.(0)).catch(() => {})
+    await page.evaluate(() => (window.posthog as IPostHog | undefined)?.shutdown?.(0)).catch(() => {})
 })
 
 for (const mode of ['sync', 'async', 'defer']) {
@@ -61,7 +61,7 @@ for (const mode of ['sync', 'async', 'defer']) {
         await expect
             .poll(() => page.evaluate(() => window.snippetEvidence))
             .toMatchObject({ readyCount: 1, detailMatchesGlobal: true, flushed: true })
-        expect(await page.evaluate(() => typeof (window.posthog as PostHog | undefined)?.capture)).toBe('function')
+        expect(await page.evaluate(() => typeof (window.posthog as IPostHog)?.analytics?.capture)).toBe('function')
         const captures = (await backend.inspect()).requests.filter(
             (request) => request.path === '/i/v1/analytics/events'
         )
@@ -98,8 +98,10 @@ test('core is embedded in the first response; disabled products do not request c
     expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
     expect((await backend.inspect()).events).toHaveLength(0)
     const summary = await page.evaluate(async () => {
-        ;(window.posthog as PostHog).optIn()
-        return (window.posthog as PostHog).captureImmediate('after_opt_in')
+        ;(window.posthog as IPostHog).optIn()
+        const analytics = (window.posthog as IPostHog).analytics
+        if (!analytics) throw new Error('Expected installed analytics')
+        return analytics.captureImmediate('after_opt_in')
     })
     expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'after_opt_in' })])
@@ -117,9 +119,11 @@ test('persisted denial gates pageview and early capture while initialization rem
     expect((await backend.inspect()).events).toHaveLength(0)
     expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
     await page.evaluate(async () => {
-        const client = window.posthog as PostHog
+        const client = window.posthog as IPostHog
         client.optIn()
-        client.capture('after_persisted_denial')
+        const analytics = client.analytics
+        if (!analytics) throw new Error('Expected installed analytics')
+        analytics.capture('after_persisted_denial')
         await client.flush()
     })
     expect((await backend.inspect()).events.map((event) => (event as { event: string }).event)).toEqual([
@@ -155,7 +159,7 @@ test('a global claimed during initialization wins and no ready event is dispatch
     await page.goto(location(), { waitUntil: 'domcontentloaded' })
     await expect.poll(async () => (await assets.inspect()).blockedRequests.length).toBeGreaterThan(0)
     await page.evaluate(() => {
-        window.posthog = { legacy: true } as unknown as PostHog
+        window.posthog = { legacy: true } as unknown as IPostHog
     })
     await assets.releaseBarrier('chunks')
     await page.waitForLoadState('load')
@@ -193,9 +197,9 @@ test('failed optional chunks still expose a usable client; analytics loading can
     await assets.failChunks(true)
     await page.goto(location())
     await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
-    expect(await page.evaluate(() => (window.posthog as PostHog).getExtension('featureFlags'))).toBeUndefined()
+    expect(await page.evaluate(() => (window.posthog as IPostHog).featureFlags)).toBeUndefined()
     expect((await backend.inspect()).events).toHaveLength(0)
     await assets.failChunks(false)
-    await page.evaluate(() => (window.posthog as PostHog).flush())
+    await page.evaluate(() => (window.posthog as IPostHog).flush())
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
 })

@@ -1,3 +1,4 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog } from '../src'
 import { analytics } from '../src/analytics'
@@ -37,9 +38,9 @@ describe('client creation', () => {
             name,
             setup(client) {
                 setupOrder.push(name)
-                expect(client.getExtension('analytics')).toBe(supplied)
+                expect(client.analytics).toBe(supplied)
                 if (name === 'first') {
-                    client.capture('during-setup')
+                    requireInstalledExtension(client.analytics).capture('during-setup')
                 }
             },
         })
@@ -53,11 +54,11 @@ describe('client creation', () => {
             ...(configuration === undefined ? {} : { analytics: configuration }),
         })
         const posthog = await create(options)
-        expect(posthog.getExtension('analytics')).toBe(supplied)
+        expect(posthog.analytics).toBe(supplied)
         expect(setupOrder).toEqual(['first', 'last'])
         expect(extensions).toEqual([first, supplied, last])
         expect(requests).toHaveLength(0)
-        posthog.capture('after-setup')
+        requireInstalledExtension(posthog.analytics).capture('after-setup')
         await posthog.flush()
         expect(requests).toHaveLength(1)
         expect((requests[0]?.body?.batch as Array<{ event: string }>).map(({ event }) => event)).toEqual([
@@ -84,7 +85,7 @@ describe('client creation', () => {
         const options = Object.freeze(new Configuration())
         const posthog = await create(options)
         expect(posthog.projectToken).toBe('ph_test')
-        expect(posthog.getExtension('analytics')).toBeDefined()
+        expect(posthog.analytics).toBeDefined()
         await posthog.shutdown()
     })
 
@@ -121,7 +122,7 @@ describe('client creation', () => {
             },
         })
         expect(order).toEqual(['first', 'last'])
-        expect(posthog.getExtension('analytics')).toBe(supplied)
+        expect(posthog.analytics).toBe(supplied)
         expect(injected.setup).not.toHaveBeenCalled()
         await posthog.shutdown()
     })
@@ -137,7 +138,7 @@ describe('client creation', () => {
         }
         const posthog = await createPostHog(options)
         expect(requests).toHaveLength(0)
-        posthog.capture('default-delivery')
+        requireInstalledExtension(posthog.analytics).capture('default-delivery')
         await posthog.flush()
         expect(requests).toHaveLength(1)
         await posthog.shutdown()
@@ -158,7 +159,7 @@ describe('client creation', () => {
             },
         }
         const posthog = await createPostHog(options)
-        posthog.capture('snapshotted')
+        requireInstalledExtension(posthog.analytics).capture('snapshotted')
         await vi.waitFor(() => expect(requests).toHaveLength(1))
         await posthog.shutdown()
     })
@@ -185,7 +186,7 @@ describe('client creation', () => {
                     name: 'observer',
                     setup(client) {
                         order.push('setup')
-                        client.onEvent(({ event }) => order.push(event))
+                        requireInstalledExtension(client.analytics).onEvent(({ event }) => order.push(event))
                     },
                 },
                 supplied,
@@ -214,14 +215,14 @@ describe('client creation', () => {
         const start = vi.spyOn(supplied, 'start').mockImplementation(async () => {
             order.push('start')
         })
-        const enqueue = vi.spyOn(supplied, 'enqueue')
+        const capture = vi.spyOn(supplied, 'capture')
         const flush = vi.spyOn(supplied, 'flush')
         const extension = {
             name: 'supplied',
             initialize: vi.fn(),
             setup: vi.fn((client: Parameters<Extension['setup']>[0]) => {
                 order.push('setup')
-                client.capture('during-setup')
+                client.sharedClient.capture('during-setup')
             }),
         }
         const options: CorePostHogOptions = {
@@ -235,10 +236,10 @@ describe('client creation', () => {
         expect(extension.initialize).not.toHaveBeenCalled()
         expect(start).toHaveBeenCalledOnce()
         expect(order).toEqual(['initialize', 'setup', 'start'])
-        expect(posthog.getExtension('supplied')).toBe(extension)
-        expect(posthog.getExtension('analytics')).toBe(supplied)
-        expect(enqueue).toHaveBeenCalledOnce()
-        expect(enqueue.mock.calls[0]?.[0].event).toBe('during-setup')
+        expect(await posthog.resolveExtension('supplied')).toBe(extension)
+        expect(posthog.analytics).toBe(supplied)
+        expect(capture).toHaveBeenCalledOnce()
+        expect(capture.mock.calls[0]?.[0]).toBe('during-setup')
         await posthog.shutdown()
         flush.mockClear()
         await posthog.flush()
@@ -251,7 +252,7 @@ describe('client creation', () => {
         const setup = supplied.setup
         supplied.setup = async (client) => {
             await setup(client)
-            client.capture('analytics-setup', null, { uuid: 'setup-uuid' })
+            client.sharedClient.capture('analytics-setup', null, { uuid: 'setup-uuid' })
         }
         const posthog = await createCorePostHog({
             ...baseOptions,
@@ -272,8 +273,9 @@ describe('client creation', () => {
             'disconnects failed capture after %s fails, even when cleanup throws',
             async (phase) => {
                 const supplied = createAnalyticsExtension()
-                const enqueue = vi.spyOn(supplied, 'enqueue')
-                const immediate = vi.spyOn(supplied, 'deliverImmediate')
+                const observed = vi.fn()
+                const serialize = vi.fn(() => ({}))
+                const properties = { toJSON: serialize }
                 const flush = vi.spyOn(supplied, 'flush')
                 const purge = vi.spyOn(supplied, 'purge')
                 vi.spyOn(supplied, phase).mockImplementation(() => {
@@ -282,28 +284,30 @@ describe('client creation', () => {
                 const dispose = vi.spyOn(supplied, 'dispose').mockImplementation(() => {
                     throw new Error('cleanup failed')
                 })
-                const unrelated = { name: 'analytics', setup: vi.fn(), initialize: vi.fn() }
+                const unrelated = { name: 'unrelated', setup: vi.fn(), initialize: vi.fn() }
                 const posthog = await create({
                     ...baseOptions,
                     fetch: false,
                     extensions: [supplied, unrelated],
                 })
-                expect(posthog.getExtension('analytics')).toBe(unrelated)
+                expect(posthog.analytics).toBeUndefined()
                 expect(unrelated.setup).toHaveBeenCalledOnce()
                 expect(unrelated.initialize).not.toHaveBeenCalled()
-                expect(() => posthog.capture('after-failure')).not.toThrow()
-                await expect(posthog.captureImmediate('after-failure')).resolves.toMatchObject({
-                    allPersisted: false,
-                    error: { message: 'Immediate analytics delivery is unavailable' },
+                const subscription = supplied.onEvent(observed)
+                expect(() => supplied.capture('after-failure', properties)).not.toThrow()
+                await expect(supplied.captureImmediate('after-failure', properties)).resolves.toMatchObject({
+                    submitted: 0,
                 })
                 await posthog.flush()
                 posthog.optOut()
                 await posthog.shutdown()
-                expect(enqueue).not.toHaveBeenCalled()
-                expect(immediate).not.toHaveBeenCalled()
+                expect(serialize).not.toHaveBeenCalled()
+                expect(observed).not.toHaveBeenCalled()
+                expect(posthog.session).toBeUndefined()
                 expect(flush).not.toHaveBeenCalled()
                 expect(purge).not.toHaveBeenCalled()
                 expect(dispose).toHaveBeenCalledOnce()
+                subscription.dispose()
             }
         )
     })

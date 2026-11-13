@@ -12,7 +12,7 @@ runClientConformanceSuite('browser-next', async () => {
     const extension: Extension = {
         name: 'conformance',
         setup(value) {
-            client = value
+            client = value.sharedClient
         },
         dispose() {},
     }

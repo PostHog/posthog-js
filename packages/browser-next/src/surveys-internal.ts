@@ -1,7 +1,8 @@
-import type { Disposable, Extension } from '@posthog/browser-common'
+import type { Disposable } from '@posthog/browser-common'
+import type { BrowserExtension } from './browser-client'
 import type { SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
 
-export interface SurveysExtension extends Extension {
+export interface SurveysExtension extends BrowserExtension {
     getElementSelectors(): Set<string>
     getSurveys(callback: SurveyCallback, forceReload?: boolean): void
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void

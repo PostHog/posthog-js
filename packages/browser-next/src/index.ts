@@ -1,13 +1,13 @@
 import { snapshotAutocaptureOptions } from './autocapture-options'
 import { snapshotSurveysOptions } from './surveys-options'
 import { snapshotLogsOptions } from './logs-options'
-import type { Extension, PostHog, PostHogOptions } from './types'
+import type { Extension, IPostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
 import { isAnalyticsExtension } from './analytics-internal'
 import { analytics } from './automatic-analytics'
 
 /** Creates a browser client with first-party analytics delivery loaded lazily by default. */
-export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
+export const createPostHog = async (options: PostHogOptions): Promise<IPostHog> => {
     const extensions = [...(options?.extensions ?? [])]
     const loadingErrors: Array<[string, unknown]> = []
     const install = (
@@ -99,7 +99,8 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
 
 export { version } from './version'
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
+export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from './browser-client'
+export type { IAnalytics } from './analytics-api'
 export type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -117,7 +118,7 @@ export type {
     LoadStrategy,
     NewSessionInfo,
     NewSessionReason,
-    PostHog,
+    IPostHog,
     PostHogOptions,
     RemoteConfig,
     SendRequestInit,

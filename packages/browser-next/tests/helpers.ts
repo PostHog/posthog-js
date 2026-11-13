@@ -48,3 +48,9 @@ export const createFetch =
         requests.push({ url: new URL(String(input)), init, body })
         return new Response('{}', { status, headers: { 'Content-Type': 'application/json' } })
     }
+
+/** Require an installed product before exercising its behavior. */
+export const requireInstalledExtension = <T>(extension: T | undefined): T => {
+    if (extension === undefined) throw new Error('Expected extension to be installed')
+    return extension
+}

@@ -1,16 +1,17 @@
+import { requireInstalledExtension } from './helpers'
 import type { Client } from '@posthog/browser-common'
-import { createPostHog, FeatureFlagsExtension } from '../src'
+import { createPostHog } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { logs } from '../src/logs'
 import type { LogsExtension, LogsOptions } from '../src/logs'
-import type { PostHog, PostHogOptions } from '../src/types'
+import type { IPostHog, PostHogOptions } from '../src/types'
 import type { OtlpLogsPayload } from '@posthog/types'
 import { MemoryStorage } from './helpers'
 
-const clients: PostHog[] = []
-const extensions = new WeakMap<PostHog, LogsExtension>()
-const getLogs = (client: PostHog): LogsExtension => {
-    const extension = extensions.get(client) ?? client.getExtension<LogsExtension>('logs')!
+const clients: IPostHog[] = []
+const extensions = new WeakMap<IPostHog, LogsExtension>()
+const getLogs = (client: IPostHog): LogsExtension => {
+    const extension = extensions.get(client) ?? requireInstalledExtension(client.logs)
     extensions.set(client, extension)
     return extension
 }
@@ -147,7 +148,7 @@ describe('logs', () => {
         const { output } = browser()
         const original = output.log
         const client = await create()
-        expect(client.getExtension('logs')).toBeDefined()
+        expect(client.logs).toBeDefined()
         expect(output.log).toBe(original)
     })
 
@@ -156,8 +157,8 @@ describe('logs', () => {
         const disabled = await create({ logs: false, fetch })
         const core = await createCore({ ...defaults, fetch: false })
         clients.push(core)
-        expect(disabled.getExtension('logs')).toBeUndefined()
-        expect(core.getExtension('logs')).toBeUndefined()
+        expect(disabled.logs).toBeUndefined()
+        expect(core.logs).toBeUndefined()
         await disabled.flush()
         expect(fetch).not.toHaveBeenCalled()
     })
@@ -185,7 +186,7 @@ describe('logs', () => {
             config.serviceName = 'mutated'
             config.resourceAttributes!.region = 'changed'
             const captured = vi.fn()
-            client.onEvent(captured)
+            requireInstalledExtension(client.analytics).onEvent(captured)
             getLogs(client).captureLog({ body: 'hello', level: 'warn', attributes: { custom: 1 } })
             await getLogs(client).flush()
             expect(beforeSend).toHaveBeenCalledOnce()
@@ -267,7 +268,7 @@ describe('logs', () => {
         await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
         getLogs(client).captureLog({ body: 'before reset' })
-        client.reset()
+        requireInstalledExtension(client.analytics).reset()
         await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
         getLogs(client).captureLog({ body: 'fresh' })
@@ -290,8 +291,8 @@ describe('logs', () => {
             await getLogs(client).flush()
             expect(fetch).toHaveBeenCalledOnce()
             const captured = vi.fn()
-            client.onEvent(captured)
-            client.capture('analytics works')
+            requireInstalledExtension(client.analytics).onEvent(captured)
+            requireInstalledExtension(client.analytics).capture('analytics works')
             expect(captured).toHaveBeenCalledOnce()
             await client.shutdown(0)
             const count = fetch.mock.calls.length
@@ -368,7 +369,7 @@ describe('logs', () => {
                 {
                     name: 'ordinary',
                     setup: (value) => {
-                        ordinary = value
+                        ordinary = value.sharedClient
                     },
                 },
             ],
@@ -544,10 +545,10 @@ describe('logs', () => {
         })
         const remove = vi.spyOn(window, 'removeEventListener')
         const client = await create({ logs: { captureConsoleLogs: true } })
-        expect(client.getExtension('logs')).toBeUndefined()
+        expect(client.logs).toBeUndefined()
         expect(output.log).toBe(original)
         expect(remove.mock.calls.some(([type]) => type === 'online')).toBe(true)
-        expect(client.getExtension('logs')).toBeUndefined()
+        expect(client.logs).toBeUndefined()
     })
 
     it('reads active flag keys without exposure capture', async () => {
@@ -559,9 +560,9 @@ describe('logs', () => {
                 return new Response('{}')
             },
         })
-        client.getExtension(FeatureFlagsExtension)!.updateFlags({ enabled: true, disabled: false, variant: 'a' })
+        requireInstalledExtension(client.featureFlags).updateFlags({ enabled: true, disabled: false, variant: 'a' })
         const captured = vi.fn()
-        client.onEvent(captured)
+        requireInstalledExtension(client.analytics).onEvent(captured)
         getLogs(client).captureLog({ body: 'flags' })
         await getLogs(client).flush()
         expect(captured).not.toHaveBeenCalled()
@@ -596,7 +597,7 @@ describe('logs', () => {
         await getLogs(client).flush()
         expect(client.session).toBeUndefined()
         expect(records(bodies[0]!)[0]?.attributes?.some(({ key }) => key === 'sessionStartTimestamp')).toBe(false)
-        client.capture('admitted')
+        requireInstalledExtension(client.analytics).capture('admitted')
         const session = client.session
         vi.setSystemTime(1_700_000_000_100)
         getLogs(client).captureLog({ body: 'with session' })
@@ -619,7 +620,7 @@ describe('logs', () => {
             remoteConfig: { ...remoteConfig, logs: { captureConsoleLogs: true } },
         })
         output.log('private')
-        expect(client.getExtension('logs')).toBeDefined()
+        expect(client.logs).toBeDefined()
         expect([...storage.values.values()].join()).toContain('consoleCaptureEnabled')
     })
 })

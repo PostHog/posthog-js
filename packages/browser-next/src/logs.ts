@@ -1,6 +1,6 @@
 import { sanitizeUrl } from '@posthog/browser-common/utils/sanitize-url'
-import type { Disposable } from '@posthog/browser-common'
-import type { BrowserClient } from './browser-client'
+import type { Client, Disposable } from '@posthog/browser-common'
+import type { IPostHogInternal } from './browser-client'
 import { PostHogLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
@@ -13,7 +13,7 @@ export type { LogsOptions, CaptureLogOptions, UrlCaptureOptions } from './logs-o
 export type { LogsExtension } from './logs-internal'
 
 interface LogsEnvironment {
-    client: BrowserClient | undefined
+    client: Client | undefined
     browserWindow?: Window & typeof globalThis
     disposed: boolean
 }
@@ -76,8 +76,9 @@ export const logs = (options: LogsOptions = {}): LogsExtension => {
     }
     return {
         name: 'logs',
-        setup: async (value: BrowserClient) => {
-            environment.client = value
+        bindings: { logs: shared },
+        setup: async (value: IPostHogInternal) => {
+            environment.client = value.sharedClient
             try {
                 environment.browserWindow = globalThis.window
             } catch {
@@ -89,7 +90,7 @@ export const logs = (options: LogsOptions = {}): LogsExtension => {
                     if (current === 'denied') shared.reset()
                 })
             )
-            await shared.setup(value)
+            await shared.setup(value.sharedClient)
             if (environment.disposed) return
             // oxlint-disable-next-line posthog-js/no-add-event-listener
             environment.browserWindow?.addEventListener('pagehide', pagehide)

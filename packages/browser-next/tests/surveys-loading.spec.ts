@@ -1,4 +1,5 @@
-import type { Extension } from '@posthog/browser-common'
+import { requireInstalledExtension } from './helpers'
+import type { Extension } from '../src/types'
 
 const options = {
     projectToken: 'test',
@@ -60,7 +61,7 @@ describe('automatic surveys module loading', () => {
         expect(factory).toHaveBeenCalledWith({ overrideDisplayLanguage: 'en' })
         setupFinished()
         const client = await pending
-        expect(client.getExtension('surveys')).toBeDefined()
+        expect(client.surveys).toBeDefined()
         await client.dispose()
     })
 
@@ -71,10 +72,10 @@ describe('automatic surveys module loading', () => {
         })
         const { createPostHog } = await import('../src')
         const client = await createPostHog(options)
-        expect(client.getExtension('surveys')).toBeUndefined()
+        expect(client.surveys).toBeUndefined()
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.capture('still usable')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.analytics).capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })
@@ -91,7 +92,7 @@ describe('automatic surveys module loading', () => {
             ...(mode === 'disabled' ? { surveys: false as const } : { extensions: [explicit] }),
         })
         expect(imported).not.toHaveBeenCalled()
-        expect(client.getExtension('surveys')).toBe(mode === 'disabled' ? undefined : explicit)
+        expect(client.surveys).toBe(mode === 'disabled' ? undefined : explicit)
         await client.dispose()
     })
 })

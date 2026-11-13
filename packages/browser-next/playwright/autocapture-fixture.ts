@@ -1,11 +1,11 @@
-import type { SurveysExtension } from '../src/surveys-internal'
+import { requireInstalledExtension } from '../tests/helpers'
 import { createPostHog } from '../src'
 import { autocapture } from '../src/autocapture'
 import { surveys } from '../src/surveys'
-import type { PostHog } from '../src/types'
+import type { IPostHog } from '../src/types'
 import type { Survey } from '../src/surveys-options'
 
-let client: PostHog | undefined
+let client: IPostHog | undefined
 let captured: { event: string; properties: Record<string, unknown> }[] = []
 let definitions: Survey[] = []
 let requests = 0
@@ -114,18 +114,20 @@ export const autocaptureHarness = {
                 return new Response('{}')
             },
         })
-        client.onEvent((event) => captured.push({ event: event.event, properties: { ...event.properties } }))
-        if (!delayed) await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id)
-        else void client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id)
+        requireInstalledExtension(client.analytics).onEvent((event) =>
+            captured.push({ event: event.event, properties: { ...event.properties } })
+        )
+        if (!delayed) await client.surveys?.canRenderSurvey(actionSurvey.id)
+        else void client.surveys?.canRenderSurvey(actionSurvey.id)
     },
     release() {
         release?.()
     },
     async eligible() {
-        return (await client?.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id))?.visible
+        return (await client?.surveys?.canRenderSurvey(actionSurvey.id))?.visible
     },
     display() {
-        client?.getExtension<SurveysExtension>('surveys')!.displaySurvey(actionSurvey.id)
+        client?.surveys?.displaySurvey(actionSurvey.id)
     },
     optOut() {
         client?.optOut()
@@ -144,9 +146,7 @@ export const autocaptureHarness = {
     },
     async clearSelectors() {
         definitions = []
-        await new Promise<void>((resolve) =>
-            client?.getExtension<SurveysExtension>('surveys')!.getSurveys(() => resolve(), true)
-        )
+        await new Promise<void>((resolve) => client?.surveys?.getSurveys(() => resolve(), true))
     },
 }
 declare global {

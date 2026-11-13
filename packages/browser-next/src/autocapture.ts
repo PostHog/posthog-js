@@ -1,14 +1,13 @@
-import type { Client, Extension } from '@posthog/browser-common'
+import type { BrowserProducts } from './browser-client'
 import { Autocapture } from '@posthog/browser-common/autocapture'
 import type { AutocaptureConfig } from '@posthog/browser-common/autocapture-config'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
-import type { SurveysExtension } from './surveys-internal'
 import { snapshotAutocaptureOptions, type AutocaptureOptions } from './autocapture-options'
 
 export type { AutocaptureOptions, RageclickOptions } from './autocapture-options'
 
 /** Include DOM autocapture statically instead of loading it during initialization. */
-export const autocapture = (options: AutocaptureOptions = {}): Extension => {
+export const autocapture = (options: AutocaptureOptions = {}): BrowserProducts['autocapture'] => {
     const snapshot = snapshotAutocaptureOptions(options)
     const rageclick = typeof snapshot.rageclick === 'object' ? snapshot.rageclick : {}
     const config: AutocaptureConfig = {
@@ -42,14 +41,22 @@ export const autocapture = (options: AutocaptureOptions = {}): Extension => {
             : {}),
         capture_copied_text: snapshot.captureCopiedText ?? false,
     }
-    return new (class extends Autocapture {
-        override setup(client: Client): void {
-            const selectors = client.getExtension<SurveysExtension>('surveys')?.getElementSelectors?.()
-            if (selectors) this.setElementSelectors(selectors)
-            super.setup(client)
-        }
-        override setElementSelectors(selectors: Set<string>): void {
-            super.setElementSelectors(new Set(selectors))
-        }
-    })({ refresh: (target) => Object.assign(target, config) })
+    let disposed = false
+    const shared = new Autocapture({ refresh: (target) => Object.assign(target, config) })
+    const extension: BrowserProducts['autocapture'] = {
+        name: 'autocapture',
+        bindings: { autocapture: shared },
+        setup(client) {
+            if (disposed) return
+            const selectors = client.surveys?.getElementSelectors?.()
+            if (selectors) extension.setElementSelectors(selectors)
+            shared.setup(client.sharedClient)
+        },
+        setElementSelectors: (selectors) => shared.setElementSelectors(new Set(selectors)),
+        dispose: () => {
+            disposed = true
+            shared.dispose()
+        },
+    }
+    return extension
 }

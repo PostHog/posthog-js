@@ -110,9 +110,9 @@ const posthog = await createCorePostHog({
     },
 })
 
-posthog.capture('mixed_module_event')
+posthog.analytics.capture('mixed_module_event')
 await posthog.flush()
-const immediateSummary = await posthog.captureImmediate('mixed_module_immediate', undefined, {
+const immediateSummary = await posthog.analytics.captureImmediate('mixed_module_immediate', undefined, {
     uuid: 'mixed-immediate-uuid',
 })
 await posthog.dispose()
@@ -138,7 +138,7 @@ const automatic = await createPostHog({
         return new Response('{}', { status: 200 })
     },
 })
-automatic.capture('automatic_cjs_event')
+automatic.analytics.capture('automatic_cjs_event')
 await automatic.flush()
 await automatic.dispose()
 
@@ -157,7 +157,7 @@ const core = await createCorePostHog({
         return new Response('{}', { status: 200 })
     },
 })
-core.capture('core_buffered_event')
+core.analytics.capture('core_buffered_event')
 await core.flush()
 await core.dispose()
 if (
@@ -177,19 +177,16 @@ for (const createFlags of [flags, commonJsFlags]) {
         capturePageview: false,
         extensions: [createFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { mixed: 'variant' } } })],
     })
-    if (client.getExtension('featureFlags').getFeatureFlag('mixed')?.variant !== 'variant')
+    if (client.featureFlags.getFeatureFlag('mixed')?.variant !== 'variant')
         throw new Error('Mixed-module flags bootstrap failed')
     let results
-    const subscription = client.getExtension('featureFlags').onFeatureFlags((values) => {
+    const subscription = client.featureFlags.onFeatureFlags((values) => {
         results = values
     })
-    client.getExtension('featureFlags').updateFlags({ mixed: false })
-    if (
-        client.getExtension('featureFlags').getFeatureFlag('mixed')?.enabled !== false ||
-        results?.[0]?.enabled !== false
-    )
+    client.featureFlags.updateFlags({ mixed: false })
+    if (client.featureFlags.getFeatureFlag('mixed')?.enabled !== false || results?.[0]?.enabled !== false)
         throw new Error('Mixed-module flags update failed')
-    if ((await client.getExtension('featureFlags').reloadFeatureFlags()).status !== 'skipped')
+    if ((await client.featureFlags.reloadFeatureFlags()).status !== 'skipped')
         throw new Error('Mixed-module flags reload did not report disabled evaluation')
     subscription.dispose()
     await client.dispose()
@@ -245,19 +242,19 @@ for (const create of [createPostHog, createEsmPostHog]) {
             {
                 name: 'consumer',
                 setup(value) {
-                    lookupShared = () => value.getExtension(FeatureFlagsCommonExtension)
-                    lookupFacade = () => value.getExtension('featureFlags')
+                    lookupShared = () => value.sharedClient.getExtension(FeatureFlagsCommonExtension)
+                    lookupFacade = () => value.featureFlags
                 },
             },
         ],
     })
-    const facade = client.getExtension('featureFlags')
+    const facade = client.featureFlags
     const shared = lookupShared()
     if (
         !shared ||
         shared === facade ||
         lookupFacade() !== facade ||
-        client.getExtension(FeatureFlagsCommonExtension) !== shared ||
+        'getExtension' in client ||
         facade.getFeatureFlag('lookup')?.variant !== 'shared' ||
         shared.getFeatureFlag('lookup') !== 'shared'
     )
@@ -265,14 +262,14 @@ for (const create of [createPostHog, createEsmPostHog]) {
     facade.updateFlags({ lookup: 'updated' })
     if (shared.getFeatureFlag('lookup') !== 'updated' || (await shared.reloadFeatureFlagsAsync()).status !== 'skipped')
         throw new Error('Dynamic flags shared lookup did not use the live implementation')
-    client.reset()
+    client.analytics.reset()
     if (shared.getFeatureFlag('lookup') !== undefined) throw new Error('Dynamic flags shared state survived reset')
     await client.dispose()
     if (
         lookupShared() !== undefined ||
         lookupFacade() !== undefined ||
-        client.getExtension(FeatureFlagsCommonExtension) !== undefined ||
-        client.getExtension('featureFlags') !== undefined
+        'getExtension' in client ||
+        client.featureFlags !== undefined
     )
         throw new Error('Dynamic flags lookup survived disposal')
 }
@@ -287,7 +284,7 @@ for (const factory of [surveys, commonJsSurveys]) {
         capturePageview: false,
         extensions: [factory({ automaticDisplay: false })],
     })
-    const extension = client.getExtension('surveys')
+    const extension = client.surveys
     const result = await new Promise((resolve) => extension.getSurveys(resolve))
     if (result.length !== 0 || (await extension.canRenderSurvey('missing')).visible) {
         throw new Error('Mixed-module surveys must return unavailable results without a document')
@@ -306,7 +303,7 @@ for (const factory of [autocapture, commonJsAutocapture]) {
         capturePageview: false,
         extensions: [extension],
     })
-    assert.equal(client.getExtension('autocapture'), extension)
+    assert.equal(client.autocapture, extension)
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM autocapture entrypoints and SSR lifecycle passed\n')
