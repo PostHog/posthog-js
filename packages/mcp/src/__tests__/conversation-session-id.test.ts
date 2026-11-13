@@ -1,4 +1,5 @@
-import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
@@ -294,5 +295,82 @@ describe('conversation_id as the session anchor', () => {
       const expected = deriveSessionIdFromConversation(minted!)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
+  })
+})
+
+describe('a minted handle the agent never received', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const throws = async () => {
+    throw new Error('tool failed')
+  }
+  // No `content` array means no prompt-back, and no output schema means no mirror.
+  const noContent = async () => ({ structuredContent: { ok: true } })
+  const stdio = undefined
+  const statelessHttp = { requestInfo: { headers: {} } }
+
+  // Without the handle, a one-client connection keeps its own session, and a
+  // stateless HTTP request carrying no session gets a fresh one per request.
+  it.each([
+    ['the tool throws', 'stdio', throws, stdio, 1],
+    ['the result has no content array', 'stdio', noContent, stdio, 1],
+    ['the tool throws', 'stateless HTTP', throws, statelessHttp, 3],
+    ['the result has no content array', 'stateless HTTP', noContent, statelessHttp, 3],
+  ])(
+    'falls back to the handle-less session when %s over %s',
+    async (_case, _transport, toolHandler, extra, sessions) => {
+      const server = new Server({ name: 'undelivered-handle', version: '1.0.0' }, { capabilities: { tools: {} } })
+      server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: [{ name: 'echo', inputSchema: { type: 'object' as const } }],
+      }))
+      const lowLevel = server as unknown as MCPServerLike
+      // Set after `setRequestHandler` so the SDK's result validation can't add a `content` array.
+      lowLevel._requestHandlers.set('tools/call', toolHandler)
+      instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+      const call = () =>
+        lowLevel._requestHandlers.get('tools/call')!(
+          { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+          extra as never
+        ).catch(() => undefined)
+
+      await lowLevel._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, extra as never)
+      await call()
+      await call()
+      await new Promise((r) => setTimeout(r, 50))
+
+      const listed = capture.findCapturesByEvent('$mcp_tools_list').map((e) => e.properties)
+      const called = capture.findCapturesByEvent('$mcp_tool_call').map((e) => e.properties)
+      expect(called.map((p) => [p.$mcp_session_source, p.$mcp_conversation_id])).toEqual([
+        ['generated', undefined],
+        ['generated', undefined],
+      ])
+      expect(new Set([...listed, ...called].map((p) => p.$session_id)).size).toBe(sessions)
+    }
+  )
+
+  it("keeps the host's session and drops the handle when a host sessionId outranks it", async () => {
+    const server = new Server({ name: 'undelivered-handle', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', throws)
+    instrument(lowLevel, fakePostHog(), { enableConversationId: true, sessionId: () => 'host-session-1' })
+
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      statelessHttp as never
+    ).catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const called = capture.findCapturesByEvent('$mcp_tool_call')[0].properties
+    expect(called.$session_id).toBe(deriveSessionIdFromConversation('host-session-1'))
+    expect(called.$mcp_conversation_id).toBeUndefined()
   })
 })
