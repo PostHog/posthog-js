@@ -1013,7 +1013,7 @@ describe('emails', () => {
 
     it('runs a second move of the same email after the first move and its retries', async () => {
       replies = [
-        new TypeError('fetch failed'),
+        rejected(503),
         moved({ scheduled_at: '2026-12-02T09:00:00Z' }),
         moved({ scheduled_at: '2026-12-03T09:00:00Z' }),
       ]
@@ -1030,6 +1030,89 @@ describe('emails', () => {
       ])
       expect(firstResult.data?.scheduledAt).toBe('2026-12-02T09:00:00Z')
       expect(secondResult.data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
+    })
+
+    describe('after a move that got no answer', () => {
+      const FIRST_TIME = '2026-12-02T09:00:00Z'
+      const OTHER_TIME = '2026-12-03T09:00:00Z'
+      let timeAtPostHog: string
+      let reachPostHogLate: () => void
+
+      beforeEach(() => {
+        makeClient({ emailRequestTimeoutMs: 1_000, emailRequestMaxRetries: 0 })
+        timeAtPostHog = '2026-12-01T09:00:00Z'
+        fetch.mockImplementation(async (_url: string, options: { body: string }) => {
+          const time = JSON.parse(options.body).scheduled_at
+          if (fetch.mock.calls.length === 1) {
+            // PostHog applies the first move only after the client gave up on it.
+            reachPostHogLate = () => (timeAtPostHog = time)
+            return new Promise(() => {})
+          }
+          timeAtPostHog = time
+          return fakeReply(200, { id: MESSAGE_ID, status: 'scheduled', scheduled_at: time })
+        })
+      })
+
+      const moveWithoutAnswer = async (): Promise<void> => {
+        const pending = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect((await pending).error?.code).toBe('network_error')
+      }
+
+      it('refuses a move to another time, which the late move could undo', async () => {
+        await moveWithoutAnswer()
+
+        const { data, error } = await update({ id: MESSAGE_ID.toUpperCase(), scheduledAt: OTHER_TIME })
+        reachPostHogLate()
+
+        expect(data).toBeNull()
+        expect(error).toMatchObject({ code: 'move_unconfirmed' })
+        expect(error?.message).toContain('Nothing was changed.')
+        expect(error?.fix).toContain('cancel')
+        expect(timeAtPostHog).toBe(FIRST_TIME)
+        expect(fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('sends a move to the same time, which the late move cannot undo', async () => {
+        await moveWithoutAnswer()
+
+        const { data } = await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        reachPostHogLate()
+
+        expect(data?.scheduledAt).toBe(FIRST_TIME)
+        expect(timeAtPostHog).toBe(FIRST_TIME)
+      })
+
+      it('refuses a move to another time queued behind the move that got no answer', async () => {
+        const first = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        const second = update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+        await vi.advanceTimersByTimeAsync(1_000)
+
+        expect((await first).error?.code).toBe('network_error')
+        expect((await second).error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('refuses a move to another time even when a retry of the move got an answer', async () => {
+        makeClient({ emailRequestTimeoutMs: 1_000, emailRequestMaxRetries: 1 })
+        const pending = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        await vi.runAllTimersAsync()
+        expect((await pending).data?.scheduledAt).toBe(FIRST_TIME)
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it('moves other emails as before', async () => {
+        await moveWithoutAnswer()
+        const otherId = MESSAGE_ID.replace(/.$/, MESSAGE_ID.endsWith('0') ? '1' : '0')
+
+        const { data } = await update({ id: otherId, scheduledAt: OTHER_TIME })
+
+        expect(data?.scheduledAt).toBe(OTHER_TIME)
+      })
     })
 
     it('moves different emails without waiting for each other', async () => {

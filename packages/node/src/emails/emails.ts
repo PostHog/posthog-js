@@ -161,6 +161,8 @@ export class EmailSender implements Emails {
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
+  /** The body of a move that got no answer, by email: PostHog may still apply it at any later time. */
+  private readonly unansweredMoveByEmail = new Map<string, string>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -294,11 +296,31 @@ export class EmailSender implements Emails {
     }
   }
 
-  private async sendMove({ url, headers, body }: PreparedMove): Promise<UpdateEmailResponse> {
+  private async sendMove({ messageId, url, headers, body }: PreparedMove): Promise<UpdateEmailResponse> {
+    const unanswered = this.unansweredMoveByEmail.get(messageId)
+    if (unanswered !== undefined && unanswered !== body) {
+      // The late move would undo this one, and only the server could order the two.
+      return {
+        data: null,
+        error: new EmailError({
+          code: 'move_unconfirmed',
+          message:
+            'An earlier move of this email to another time got no answer, so PostHog may still apply it after this one. Nothing was changed.',
+          fix: "To move the email, cancel it, which a late move can't undo, and send it again at the new time.",
+        }),
+      }
+    }
     try {
-      const result = await this.withRetries(this.config.maxRetries, async () =>
-        parseUpdateReply(await this.request(url, 'PATCH', headers, body))
-      )
+      const result = await this.withRetries(this.config.maxRetries, async () => {
+        let reply: Reply
+        try {
+          reply = await this.request(url, 'PATCH', headers, body)
+        } catch (error) {
+          this.unansweredMoveByEmail.set(messageId, body)
+          throw error
+        }
+        return parseUpdateReply(reply)
+      })
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, MOVE_FAILED) }
