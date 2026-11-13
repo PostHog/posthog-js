@@ -1,6 +1,6 @@
 import {
-  type FetchLike,
   type Logger,
+  type PostHogFetchOptions,
   type PostHogFetchResponse,
   allSettled,
   parseRetryAfterMs,
@@ -8,9 +8,18 @@ import {
   safeJsonStringify,
 } from '@posthog/core'
 
+import {
+  type AttachmentFile,
+  type HashedFile,
+  attachmentFiles,
+  attachmentReference,
+  hashedFiles,
+  refuseRenderedMessageOverLimit,
+} from './attachments'
 import { EmailError } from './errors'
 import type {
   CodeEmailForm,
+  EmailPreferences,
   EmailReactElement,
   EmailStatus,
   EmailWarning,
@@ -21,11 +30,15 @@ import type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
+const UPLOADS_PATH = '/api/projects/@current/messaging/attachments/uploads/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {
@@ -67,6 +80,11 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   from: true,
   replyTo: true,
   captureEngagement: true,
+  cc: true,
+  bcc: true,
+  attachments: true,
+  sensitive: true,
+  tracking: true,
   html: true,
   text: true,
   react: true,
@@ -97,8 +115,12 @@ export interface EmailSenderConfig {
   migratedFrom?: string
 }
 
+export interface EmailFetchOptions extends PostHogFetchOptions {
+  redirect?: 'manual'
+}
+
 export interface EmailSenderHooks {
-  fetch: FetchLike
+  fetch: (url: string, options: EmailFetchOptions) => Promise<PostHogFetchResponse>
   isDisabled: () => boolean
   isClosed: () => boolean
   logger: Logger
@@ -106,7 +128,8 @@ export interface EmailSenderHooks {
 }
 
 interface PreparedSend {
-  body: string
+  content: Record<string, unknown>
+  files: AttachmentFile[]
   react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
@@ -124,16 +147,23 @@ export interface QueueRequest {
   missingSecretKey: string
 }
 
+interface Upload {
+  url: string
+  headers: Record<string, string>
+  bytes: Uint8Array<ArrayBuffer>
+  field: string
+}
+
 interface Reply {
   status: number
-  payload: unknown
+  text: string
   retryAfterMs?: number
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, and reads
- * the status of a sent email. Owns the attempt loop, so every attempt of a send carries the same
- * idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, reads the
+ * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
+ * attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -153,6 +183,10 @@ export class EmailSender implements Emails {
     return this.track(this.getUntracked(id))
   }
 
+  setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    return this.track(this.setPreferencesUntracked(options))
+  }
+
   private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
     const settle = (): void => {
@@ -164,7 +198,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Resolves when every send and status read in flight, retries included, has settled.
+   * Resolves when every send, status read and preferences change in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -181,10 +215,15 @@ export class EmailSender implements Emails {
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
       )
-      const body =
+      const content =
         prepared.react === undefined
-          ? prepared.body
-          : await withRenderedReact(prepared.body, prepared.react, this.config.requestTimeoutMs)
+          ? prepared.content
+          : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
+      if (prepared.react !== undefined) {
+        refuseRenderedMessageOverLimit(prepared.files, content)
+      }
+      const attachments = await this.uploadAttachments(prepared, appHost, secretKey)
+      const body = safeJsonStringify({ ...content, ...unlessEmpty('attachments', attachments) })
       const result = await this.post(appHost + SEND_PATH, secretKey, body, prepared.idempotencyKey, prepared.maxRetries)
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -243,6 +282,103 @@ export class EmailSender implements Emails {
       return { data: status, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private async uploadAttachments(
+    { files, maxRetries }: PreparedSend,
+    appHost: string,
+    secretKey: string
+  ): Promise<Record<string, unknown>[]> {
+    if (files.length === 0) {
+      return []
+    }
+    const hashed = await hashedFiles(files)
+    const distinct = new Map<string, HashedFile>()
+    for (const file of hashed) {
+      if (!distinct.has(file.sha256)) {
+        distinct.set(file.sha256, file)
+      }
+    }
+    const requested = [...distinct.values()]
+    const body = safeJsonStringify({
+      files: requested.map(({ sha256, bytes }) => ({ sha256, size: bytes.byteLength })),
+    })
+    const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+    const uploads = await this.withRetries(maxRetries, async () =>
+      parseUploadsReply(await this.request(appHost + UPLOADS_PATH, 'POST', headers, body), requested)
+    )
+    const unencrypted = isPlainHttp(appHost) ? undefined : uploads.find(({ url }) => !isHttps(url))
+    if (unencrypted) {
+      throw new EmailError({
+        code: 'api_error',
+        message: `PostHog named an upload URL for ${unencrypted.field} that isn't https, so the file would travel unencrypted. No email was sent.`,
+        field: unencrypted.field,
+        fix: "Make your PostHog's file storage URL use https. For local development over plain HTTP, set appHost to your http app host.",
+      })
+    }
+    for (const upload of uploads) {
+      await this.withRetries(maxRetries, () => this.uploadFile(upload))
+    }
+    return hashed.map(attachmentReference)
+  }
+
+  private async uploadFile({ url, headers, bytes, field }: Upload): Promise<void> {
+    let reply: Reply
+    try {
+      reply = await this.request(url, 'PUT', headers, bytes, 'manual')
+    } catch (cause) {
+      if (cause instanceof Error && cause.name === 'AbortError') {
+        throw new EmailError({
+          code: 'network_error',
+          message: `The upload of ${field} timed out after ${this.config.requestTimeoutMs}ms, so no email was sent.`,
+          fix: 'Raise emailRequestTimeoutMs on the client, or send smaller files.',
+          field,
+          cause,
+        })
+      }
+      throw new EmailError({
+        code: 'network_error',
+        message: `The upload of ${field} didn't reach PostHog's file storage, so no email was sent.`,
+        field,
+        cause,
+      })
+    }
+    if (reply.status >= 300 && reply.status < 400) {
+      throw new EmailError({
+        code: 'attachment_upload_failed',
+        message: `PostHog's file storage redirected the upload of ${field} elsewhere. The SDK uploads only to the URL PostHog signed, so no email was sent.`,
+        statusCode: reply.status,
+        fix: "Make your PostHog's file storage URL point straight at the storage, over https.",
+        field,
+      })
+    }
+    if (reply.status < 200 || reply.status >= 300) {
+      throw new EmailError({
+        code: 'attachment_upload_failed',
+        message: `PostHog's file storage refused the upload of ${field}, so no email was sent. ${storageAnswer(reply)}`,
+        statusCode: reply.status,
+        fix: 'Send the email again. Each send asks for new upload URLs.',
+        field,
+        retryAfterMs: reply.retryAfterMs,
+      })
+    }
+  }
+
+  private async setPreferencesUntracked(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
+    try {
+      const body = preparePreferences(options)
+      const { appHost, secretKey } = this.connect(
+        'no preferences changed',
+        'Setting email preferences needs secretKey, a project secret API key with the messaging_preference:write scope.'
+      )
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const preferences = await this.withRetries(this.config.maxRetries, async () =>
+        parsePreferencesReply(await this.request(appHost + PREFERENCES_PATH, 'POST', headers, body))
+      )
+      return { data: preferences, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Setting the email preferences failed unexpectedly.') }
     }
   }
 
@@ -315,9 +451,10 @@ export class EmailSender implements Emails {
 
   private async request(
     url: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     headers: Record<string, string>,
-    body?: string
+    body?: string | Uint8Array<ArrayBuffer>,
+    redirect?: 'manual'
   ): Promise<Reply> {
     const controller = new AbortController()
     const timeoutMs = this.config.requestTimeoutMs
@@ -338,6 +475,7 @@ export class EmailSender implements Emails {
         method,
         headers,
         ...(body === undefined ? {} : { body }),
+        ...(redirect ? { redirect } : {}),
         signal: controller.signal,
       })
     )
@@ -361,9 +499,9 @@ export class EmailSender implements Emails {
           throw error
         }
         // The status and Retry-After still decide the retry when an error body can't be read.
-        return { status: response.status, payload: null, retryAfterMs: readRetryAfter(response) }
+        return { status: response.status, text: '', retryAfterMs: readRetryAfter(response) }
       }
-      return { status: response.status, payload: parseJson(text), retryAfterMs: readRetryAfter(response) }
+      return { status: response.status, text, retryAfterMs: readRetryAfter(response) }
     } finally {
       clearTimeout(timer!)
       if (controller.signal.aborted && response) {
@@ -392,7 +530,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const content = contentOf(send, distinctId)
+  const { content, files } = contentOf(send, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -408,25 +546,66 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    body: safeJsonStringify({ ...content, to }),
+    content: snapshotOf({ ...content, to }),
+    files,
     react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
 }
 
+function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(safeJsonStringify(content))
+}
+
+function preparePreferences(options: SetEmailPreferencesOptions): string {
+  const fallback: Partial<SetEmailPreferencesOptions> = {}
+  const { to, allMarketing, topics } = options ?? fallback
+  if (typeof to !== 'string' || !to.trim()) {
+    throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
+  }
+  if (allMarketing !== undefined && typeof allMarketing !== 'boolean') {
+    throw invalid('invalid_preferences', 'allMarketing must be true or false.', 'allMarketing')
+  }
+  if (
+    topics !== undefined &&
+    (typeof topics !== 'object' ||
+      topics === null ||
+      Array.isArray(topics) ||
+      !Object.values(topics).every((value) => typeof value === 'boolean'))
+  ) {
+    throw invalid('invalid_preferences', 'topics must map each topic key to true or false.', 'topics')
+  }
+  const hasTopics = topics !== undefined && Object.keys(topics).length > 0
+  if (allMarketing === undefined && !hasTopics) {
+    throw invalid('invalid_preferences', 'Set allMarketing, topics, or both.', 'topics')
+  }
+  return safeJsonStringify({
+    identifier: to,
+    ...(allMarketing === undefined ? {} : { all_marketing: allMarketing }),
+    ...(hasTopics ? { topics } : {}),
+  })
+}
+
 function isRetryCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }
 
-function contentOf(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+interface SendContent {
+  content: Record<string, unknown>
+  files: AttachmentFile[]
+}
+
+function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
       message: 'Send either templateId, or templateKey with subject and html, text or react.',
     })
   }
-  return send.templateKey === undefined ? templateContent(send, distinctId) : codeContent(send, distinctId)
+  return send.templateKey === undefined
+    ? { content: templateContent(send, distinctId), files: [] }
+    : codeContent(send, distinctId)
 }
 
 function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
@@ -448,8 +627,8 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   }
 }
 
-function codeContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
-  const { templateKey, subject, html, text, react, from, replyTo, captureEngagement } = send
+function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -472,17 +651,39 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): Recor
   } else if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
-  const sendsReplyTo = replyTo !== undefined && !(Array.isArray(replyTo) && replyTo.length === 0)
+  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
   return {
-    template_key: templateKey,
-    subject,
-    ...(html !== undefined && { html }),
-    ...(text !== undefined && { text }),
-    ...(from !== undefined && { from }),
-    ...(sendsReplyTo && { reply_to: typeof replyTo === 'string' ? [replyTo] : replyTo }),
-    capture_engagement: captureEngagement ?? true,
-    ...(distinctId !== undefined && { distinct_id: distinctId }),
+    content: {
+      template_key: templateKey,
+      subject,
+      ...(html !== undefined && { html }),
+      ...(text !== undefined && { text }),
+      ...codeFormFields(send),
+      ...(distinctId !== undefined && { distinct_id: distinctId }),
+    },
+    files,
   }
+}
+
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
+  return {
+    ...(from !== undefined && { from }),
+    ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
+    ...(cc !== undefined && unlessEmpty('cc', addressList(cc))),
+    ...(bcc !== undefined && unlessEmpty('bcc', addressList(bcc))),
+    ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
+    ...(sensitive !== undefined && { sensitive }),
+    ...(tracking !== undefined && { tracking }),
+  }
+}
+
+function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
+  return Array.isArray(list) && list.length === 0 ? {} : { [field]: list }
+}
+
+function addressList(addresses: unknown): unknown {
+  return typeof addresses === 'string' ? [addresses] : addresses
 }
 
 function checkReactContent(react: unknown, html: unknown): void {
@@ -515,12 +716,15 @@ function isReactElement(value: unknown): value is EmailReactElement {
   )
 }
 
-async function withRenderedReact(body: string, react: EmailReactElement, timeoutMs: number): Promise<string> {
+async function withRenderedReact(
+  content: Record<string, unknown>,
+  react: EmailReactElement,
+  timeoutMs: number
+): Promise<Record<string, unknown>> {
   const { render, toPlainText } = await loadReactRenderer()
-  const fields: Record<string, unknown> = JSON.parse(body)
   try {
     const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
-    return safeJsonStringify({ ...fields, html, ...(fields.text === undefined && { text: toPlainText(html) }) })
+    return { ...content, html, ...(content.text === undefined && { text: toPlainText(html) }) }
   } catch (cause) {
     throw new EmailError({
       code: 'react_render_failed',
@@ -582,6 +786,14 @@ function invalid(code: string, message: string, field: string): EmailError {
   return new EmailError({ code, message, field })
 }
 
+function isHttps(url: string): boolean {
+  return url.toLowerCase().startsWith('https://')
+}
+
+function isPlainHttp(url: string): boolean {
+  return url.toLowerCase().startsWith('http://')
+}
+
 /**
  * The app host for a send, or undefined when the client can't tell it.
  * PostHog Cloud ingestion hosts don't serve the app API, so they map to their region's app host.
@@ -623,8 +835,8 @@ function replyFields(payload: unknown): Record<string, unknown> {
   >
 }
 
-function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResult {
-  const fields = replyFields(payload)
+function parseSendReply({ status, text: body, retryAfterMs }: Reply): SendEmailResult {
+  const fields = replyFields(parseJson(body))
   if (status >= 200 && status < 300) {
     const id = text(fields.message_id)
     if (!id) {
@@ -651,8 +863,8 @@ function parseSendReply({ status, payload, retryAfterMs }: Reply): SendEmailResu
   throw replyError(fields, status, retryAfterMs)
 }
 
-function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus {
-  const fields = replyFields(payload)
+function parseStatusReply({ status, text: body, retryAfterMs }: Reply): EmailStatus {
+  const fields = replyFields(parseJson(body))
   if (status < 200 || status >= 300) {
     throw replyError(fields, status, retryAfterMs)
   }
@@ -668,6 +880,83 @@ function parseStatusReply({ status, payload, retryAfterMs }: Reply): EmailStatus
     })
   }
   return { id, status: deliveryStatus, createdAt, statusAt, reason: text(fields.reason) ?? null }
+}
+
+function parseUploadsReply({ status, text: body, retryAfterMs }: Reply, requested: HashedFile[]): Upload[] {
+  const fields = replyFields(parseJson(body))
+  if (status === 404) {
+    throw replyError({ code: 'not_found', ...fields, attr: text(fields.attr) ?? 'attachments' }, status, retryAfterMs)
+  }
+  if (status < 200 || status >= 300) {
+    throw replyError({ ...fields, attr: callerField(text(fields.attr), requested) }, status, retryAfterMs)
+  }
+  const answers = Array.isArray(fields.files) ? fields.files.map(replyFields) : []
+  const uploads: Upload[] = []
+  for (const { sha256, bytes, field } of requested) {
+    const answer = answers.find((file) => file.sha256 === sha256)
+    if (answer?.status === 'present') {
+      continue
+    }
+    const url = text(answer?.url)
+    if (answer?.status !== 'upload' || !url || !isStringRecord(answer.headers)) {
+      throw new EmailError({
+        code: 'api_error',
+        message: 'PostHog answered without telling where to upload every file.',
+        statusCode: status,
+      })
+    }
+    uploads.push({ url, headers: answer.headers, bytes, field })
+  }
+  return uploads
+}
+
+function callerField(attr: string | undefined, requested: HashedFile[]): string | undefined {
+  const file = attr === undefined ? null : /^files(?:__(\d+))?(?:__|$)/.exec(attr)
+  if (!file) {
+    return attr
+  }
+  return file[1] === undefined ? 'attachments' : (requested[Number(file[1])]?.field ?? 'attachments')
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.values(value).every((item) => typeof item === 'string')
+  )
+}
+
+function storageAnswer({ status, text: body }: Reply): string {
+  const code = /<Code>([^<]{1,100})<\/Code>/.exec(body)?.[1]
+  const message = /<Message>([^<]{1,300})<\/Message>/.exec(body)?.[1]
+  const answer = `It answered HTTP ${status}${code ? ` ${code}` : ''}${message ? `: ${message}` : ''}`
+  return answer.endsWith('.') ? answer : `${answer}.`
+}
+
+function parsePreferencesReply({ status, text: body, retryAfterMs }: Reply): EmailPreferences {
+  const fields = replyFields(parseJson(body))
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const to = text(fields.identifier)
+  const allMarketing = fields.all_marketing
+  const topics = fields.topics
+  if (
+    !to ||
+    !(allMarketing === null || typeof allMarketing === 'boolean') ||
+    topics === null ||
+    typeof topics !== 'object' ||
+    Array.isArray(topics) ||
+    !Object.values(topics).every((value) => typeof value === 'boolean')
+  ) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without the preferences.',
+      statusCode: status,
+    })
+  }
+  return { to, allMarketing, topics: topics as Record<string, boolean> }
 }
 
 function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
@@ -689,15 +978,18 @@ function asEmailError(error: unknown, message: string): EmailError {
 
 function isRetryable(error: EmailError): boolean {
   // A send carries an idempotency key, so a retry can't queue a second email. A status read changes nothing.
+  // A preferences change sets each named choice to a value, so repeating it ends the same.
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
+  }
+  if (error.code === 'attachment_upload_failed') {
+    return error.statusCode === 429 || error.statusCode >= 500
   }
   if (error.statusCode === 409) {
     return error.code === 'idempotency_key_in_flight'
   }
   if (error.statusCode === 429) {
-    // Waiting doesn't fix a monthly quota.
-    return error.code !== 'quota_limited'
+    return error.code !== 'quota_limited' && error.code !== 'upload_quota_exceeded'
   }
   return error.statusCode === 503
 }

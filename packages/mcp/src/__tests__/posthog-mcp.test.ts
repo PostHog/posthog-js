@@ -212,18 +212,21 @@ describe('PostHogMCP', () => {
       expect(JSON.stringify(exception.properties.$exception_list)).toContain('query failed')
     })
 
-    it('forwards an explicit errorType to $mcp_error_type on the tool-call event', async () => {
+    it.each([
+      ['forwards', 'validation', 'validation'],
+      ['redacts a token in', 'validation-phx_abcdefghijklmnopqrstuvwxyz1234', 'validation-[redacted]'],
+    ])('%s an explicit errorType on the tool-call event', async (_case, errorType, expected) => {
       posthog.captureToolCall({
         toolName: 'execute-sql',
         distinctId: 'user-123',
         isError: true,
-        errorType: 'validation',
+        errorType,
         error: new Error('invalid HogQL'),
       })
       await tick()
 
       const toolCall = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
-      expect(toolCall.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe('validation')
+      expect(toolCall.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe(expected)
       expect(toolCall.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toContain('invalid HogQL')
     })
 

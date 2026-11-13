@@ -277,7 +277,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` and `push.send` request.
+   * Timeout in milliseconds for each `emails.send` and `push.send` request. Each attachment upload is one request,
+   * so raise it when large files upload slowly.
    *
    * @default 15000
    */

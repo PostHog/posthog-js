@@ -22,16 +22,13 @@ export function extractExceptionKeysForMessage(err: object, maxLength = 40): str
     return '[object has no keys]'
   }
 
-  for (let i = keys.length; i > 0; i--) {
-    const serialized = keys.slice(0, i).join(', ')
-    if (serialized.length > maxLength) {
-      continue
+  let serialized = ''
+  for (const key of keys) {
+    const next = serialized ? `${serialized}, ${key}` : key
+    if (next.length > maxLength) {
+      break
     }
-    if (i === keys.length) {
-      return serialized
-    }
-    return serialized.length <= maxLength ? serialized : `${serialized.slice(0, maxLength)}...`
+    serialized = next
   }
-
-  return ''
+  return serialized
 }

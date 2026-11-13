@@ -72,7 +72,7 @@ describe('local evaluation', () => {
       expect(await posthog.getFeatureFlag('person-flag', 'some-distinct-id', { personProperties })).toEqual(
         'server-fallback'
       )
-      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')
       expect(flagsCalls).toHaveLength(1)
       const requestBody = JSON.parse(flagsCalls[0][1]?.body as string)
       expect(requestBody.person_properties).toEqual({ retained: 'value', explicitNull: null })
@@ -1039,7 +1039,7 @@ describe('local evaluation', () => {
       })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -1063,7 +1063,7 @@ describe('local evaluation', () => {
       await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', { personProperties: { doesnt_matter: '1' } })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',

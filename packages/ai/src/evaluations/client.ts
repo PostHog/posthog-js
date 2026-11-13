@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { Datasets } from './datasets'
-import { EvaluationItem, EvaluationResult, itemJSON, resultJSON, type EvaluationResultOptions } from './declarations'
+import {
+  EvaluationItem,
+  EvaluationResult,
+  itemJSON,
+  resultJSON,
+  type EvaluationResultOptions,
+  type ResultStatus,
+} from './declarations'
 import { EvaluationAPIError, ExperimentCreationAbortedError, parseResponse } from './errors'
 import { Scorers } from './scorers'
 import {
@@ -59,6 +66,9 @@ export interface ItemReceipt {
 export interface ResultReceipt extends ItemReceipt {
   itemId: string
   scorerVersionId: string
+  /** Stored outcome; null when an older backend omits it for a reported result. */
+  status: ResultStatus | null
+  errorCode: string | null
 }
 export interface UploadReceipt {
   items: ItemReceipt[]
@@ -136,7 +146,24 @@ function uploadReceipt(data: WireObject, submitted: readonly EvaluationResult[])
   const items = data.items.map(itemReceipt)
   const results = data.results.map((value) => {
     const row = object(value)
-    return { ...itemReceipt(row), itemId: uuid(row.item_id), scorerVersionId: uuid(row.scorer_version_id) }
+    const hasOutcome = Object.hasOwn(row, 'status') || Object.hasOwn(row, 'error_code')
+    if (
+      hasOutcome &&
+      (typeof row.status !== 'string' ||
+        !['ok', 'error', 'skipped', 'not_applicable'].includes(row.status) ||
+        !Object.hasOwn(row, 'error_code'))
+    )
+      throw new TypeError('Invalid stored result outcome.')
+    const errorCode = hasOutcome ? nullable(row.error_code, (value) => identifier(value, 128)) : null
+    if (errorCode !== null && row.status !== 'error')
+      throw new TypeError('Only an error outcome can contain an error code.')
+    return {
+      ...itemReceipt(row),
+      itemId: uuid(row.item_id),
+      scorerVersionId: uuid(row.scorer_version_id),
+      status: hasOutcome ? (row.status as ResultStatus) : null,
+      errorCode,
+    }
   })
   const expectedItems = new Set(submitted.map((r) => r.itemId)),
     actualItems = new Set(items.map((i) => i.id))
@@ -152,6 +179,8 @@ function uploadReceipt(data: WireObject, submitted: readonly EvaluationResult[])
     new Set(results.map((r) => r.id)).size !== results.length
   )
     throw new TypeError('Incomplete result acknowledgments.')
+  if (results.some((result, index) => submitted[index].calculate && result.status === null))
+    throw new TypeError('A composite acknowledgment must include its stored outcome.')
   return { items, results }
 }
 interface Chunk {
@@ -161,6 +190,30 @@ interface Chunk {
 }
 function uploadBody(items: string[], results: string[]): string {
   return `{"items":[${items.join(',')}],"results":[${results.join(',')}]}`
+}
+function groupEnds(results: readonly EvaluationResult[]): number[] {
+  // Ingestion-only clients cannot discover dependencies. Keep all supplied results
+  // for a composite-bearing item together, merging overlapping spans without reordering.
+  const first = new Map<string, number>(),
+    last = new Map<string, number>(),
+    compositeItems = new Set<string>()
+  results.forEach((result, index) => {
+    if (!first.has(result.itemId)) first.set(result.itemId, index)
+    last.set(result.itemId, index + 1)
+    if (result.calculate) compositeItems.add(result.itemId)
+  })
+  const spans = new Map([...compositeItems].map((id) => [first.get(id)!, last.get(id)!]))
+  const ends: number[] = []
+  let index = 0
+  while (index < results.length) {
+    let end = index + 1
+    while (index < end) {
+      end = Math.max(end, spans.get(index) ?? index + 1)
+      index++
+    }
+    ends.push(end)
+  }
+  return ends
 }
 function chunks(input: readonly EvaluationResult[]): { chunks: Chunk[]; prepared: EvaluationResult[] } {
   if (!Array.isArray(input))
@@ -192,41 +245,47 @@ function chunks(input: readonly EvaluationResult[]): { chunks: Chunk[]; prepared
     encodedItems: string[] = [],
     encodedResults: string[] = [],
     itemIds = new Set<string>()
-  for (let index = 0; index < prepared.length; index++) {
-    const result = prepared[index],
-      resultBody = resultJSON(result),
-      declaration = declarations.get(result.itemId)
-    let itemBody = declaration && !itemIds.has(result.itemId) ? itemJSON(declaration) : undefined
-    let extra =
-      bytes(resultBody) +
-      (encodedResults.length ? 1 : 0) +
-      (itemBody === undefined ? 0 : bytes(itemBody) + (encodedItems.length ? 1 : 0))
-    if (
-      encodedResults.length &&
-      (encodedResults.length >= 1000 ||
-        encodedItems.length + (itemBody === undefined ? 0 : 1) > 1000 ||
-        size + extra > 5 * 1024 * 1024)
-    ) {
+  let groupStart = 0
+  for (const end of groupEnds(prepared)) {
+    const group = prepared.slice(groupStart, end)
+    const groupResults = group.map(resultJSON)
+    const groupItems = new Map<string, string>()
+    for (const result of group) {
+      const declaration = declarations.get(result.itemId)
+      if (declaration) groupItems.set(result.itemId, itemJSON(declaration))
+    }
+    const resultBytes = groupResults.reduce((total, body) => total + bytes(body), 0)
+    let newItems: string[], extra: number
+    while (true) {
+      newItems = [...groupItems].filter(([id]) => !itemIds.has(id)).map(([, body]) => body)
+      extra = resultBytes + groupResults.length - (encodedResults.length ? 0 : 1)
+      if (newItems.length)
+        extra +=
+          newItems.reduce((total, body) => total + bytes(body), 0) + newItems.length - (encodedItems.length ? 0 : 1)
+      if (
+        encodedResults.length + groupResults.length <= 1000 &&
+        encodedItems.length + newItems.length <= 1000 &&
+        size + extra <= 5 * 1024 * 1024
+      )
+        break
+      if (!encodedResults.length)
+        throw new TypeError('One result or composite item group exceeds the upload request limit.')
       output.push({
         start,
-        results: prepared.slice(start, index),
+        results: prepared.slice(start, groupStart),
         body: uploadBody(encodedItems, encodedResults),
       })
-      start = index
+      start = groupStart
       size = bytes(uploadBody([], []))
       encodedItems = []
       encodedResults = []
       itemIds = new Set()
-      itemBody = declaration ? itemJSON(declaration) : undefined
-      extra = bytes(resultBody) + (itemBody === undefined ? 0 : bytes(itemBody))
     }
-    if (size + extra > 5 * 1024 * 1024) throw new TypeError('One item/result pair exceeds the request byte limit.')
-    if (itemBody !== undefined) {
-      itemIds.add(result.itemId)
-      encodedItems.push(itemBody)
-    }
-    encodedResults.push(resultBody)
+    for (const id of groupItems.keys()) itemIds.add(id)
+    encodedItems.push(...newItems)
+    encodedResults.push(...groupResults)
     size += extra
+    groupStart = end
   }
   if (encodedResults.length)
     output.push({ start, results: prepared.slice(start), body: uploadBody(encodedItems, encodedResults) })
@@ -298,6 +357,11 @@ export class Experiment {
       (data) => uploadReceipt(data, chunk.results)
     )
   }
+  /**
+   * Keeps composite items and their supplied inputs in one request, preserving order.
+   * Interleaved items may form an indivisible group; oversized groups fail before any I/O.
+   * Ingestion-only keys must supply every pinned input, including on retries.
+   */
   async uploadResults(results: readonly EvaluationResult[], request: RequestOptions = {}): Promise<BulkUploadReceipt> {
     const prepared = chunks(results)
     return this.#queue.run(async () => {
