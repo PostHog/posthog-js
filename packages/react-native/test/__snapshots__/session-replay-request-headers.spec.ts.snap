@@ -20,6 +20,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete lega
   "sdkOptions": {
     "anonymousId": "<anonymous-id>",
     "apiKey": "test-token",
+    "appLanguage": null,
     "debug": false,
     "distinctId": "<anonymous-id>",
     "flushAt": 20,
@@ -74,6 +75,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
   "sdkOptions": {
     "anonymousId": "replay-snapshot-id",
     "apiKey": "test-token",
+    "appLanguage": null,
     "debug": false,
     "distinctId": "replay-snapshot-id",
     "flushAt": 20,

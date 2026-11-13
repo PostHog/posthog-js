@@ -1,5 +1,46 @@
 # @posthog/core
 
+## 1.67.3
+
+### Patch Changes
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Let an SDK choose the `/flags` response version it requests and how it reads it. SDKs that do not opt in keep requesting `v=2`.
+  (2026-11-13)
+
+## 1.67.2
+
+### Patch Changes
+
+- [#5672](https://github.com/PostHog/posthog-js/pull/5672) [`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(core): summarize the keys of a non-`Error` exception in one pass, so capturing a very wide thrown object no longer takes quadratic time.
+  (2026-11-12)
+
+## 1.67.1
+
+### Patch Changes
+
+- [#5626](https://github.com/PostHog/posthog-js/pull/5626) [`44e6251`](https://github.com/PostHog/posthog-js/commit/44e62517c5ff4089a6c316ca4796677a4072ba30) Thanks [@luantaraschi](https://github.com/luantaraschi)! - Relative date filters in local flag evaluation no longer roll past the end of a shorter month. `1m` on March 31 now resolves to February 28, matching the flags service.
+  (2026-11-10)
+
+## 1.67.0
+
+### Minor Changes
+
+- [#5596](https://github.com/PostHog/posthog-js/pull/5596) [`9ffdaf6`](https://github.com/PostHog/posthog-js/commit/9ffdaf6075bfaa18de4b6a2cacc9c8fea1aac04c) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): add `instrumentRequest` and `posthogHonoMiddleware` for fetch-API servers (Hono, Bun, Deno, Next route handlers). They read `x-posthog-session-id`, wrap the request in `withContext`, open a server span that continues `traceparent` and is named by route, mark 5xx as errors, and record `http.server.request.duration` and `http.server.request.count`.
+
+  feat(core): add `PostHogMetrics.flushCoalesced()`, a flush that callers can request once per unit of work: concurrent calls share one queued send, and it waits out a metrics backoff. (2026-11-10)
+
+## 1.66.0
+
+### Minor Changes
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+
 ## 1.65.0
 
 ### Minor Changes

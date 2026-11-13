@@ -1298,7 +1298,11 @@ export interface MetricsConfig {
      * are folded into per-series aggregates in memory between flushes — one
      * data point per series per window, no matter how many calls.
      *
-     * @default 10000
+     * The browser SDK defaults to 60000: every tab of an app writes to the
+     * same series, so a longer window keeps busy series under the backend's
+     * per-series point limit.
+     *
+     * @default 10000 (60000 in the browser)
      */
     flushIntervalMs?: number
     /**
@@ -1324,8 +1328,10 @@ export interface MetricsConfig {
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
-     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
-     * with other protocols are not recorded. Each transport is measured to the
+     * a histogram. `true` uses the defaults. Requests to PostHog itself, URLs
+     * with other protocols, and server-sent event streams (`text/event-stream`
+     * responses) are not recorded. Long-polling requests look like ordinary
+     * requests; skip them with a `name` function that returns `null`. Each transport is measured to the
      * boundary its API exposes: a `fetch` to its response headers, an
      * `XMLHttpRequest` to the end of its response body.
      *
@@ -1341,7 +1347,16 @@ export interface BrowserMetricsConfig extends MetricsConfig {
      * IANA timezone as `client.timezone`. Requests that the SDK drops before they
      * reach the network are not recorded.
      *
-     * This option, the metric name, and its attributes may change or be removed
+     * An attempt that gets a response also splits that duration into three histograms
+     * with the same attributes: `posthog.flags.request.pre_send_duration` (until the
+     * request starts), `posthog.flags.request.network_duration` (until the last byte
+     * of the response arrives, from the request's Resource Timing entry) and
+     * `posthog.flags.request.main_thread_duration` (until the SDK's callback runs).
+     * The attempt records them only when the browser reports a Resource Timing entry
+     * within 5 seconds of the callback that no other `/flags` request from this copy
+     * of the SDK to the same URL can own.
+     *
+     * This option, the metric names, and their attributes may change or be removed
      * in any release.
      *
      * @default undefined
@@ -1603,6 +1618,9 @@ export interface PostHogConfig {
      * - `false`: Don't capture any pageviews
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
+     *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
@@ -1906,6 +1924,10 @@ export interface PostHogConfig {
      * Determines if users should be opted out of user agent filtering such as googlebot or other bots.
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
+     *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
      *
      * @default false
      */
@@ -2610,6 +2632,32 @@ export interface PostHogConfig {
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
      */
     addTracingHeaders?: string[]
+
+    /**
+     * Hosts that should receive a W3C Trace Context `traceparent` header on `fetch` and `XMLHttpRequest`
+     * requests, so your backend can continue the trace started in the browser.
+     *
+     * Each request gets a new trace id and span id, with the sampled flag set (`00-<trace-id>-<span-id>-01`).
+     * The browser does not record a span of its own, so the span id in the header is the parent of your
+     * server's root span.
+     *
+     * Matching is exact and nothing is sent to unlisted hosts:
+     * - an entry with a scheme (`https://api.example.com`, `http://localhost:8000`) matches that origin only
+     * - any other entry (`api.example.com`) matches that hostname on any scheme or port
+     *
+     * Only list hosts that accept the header. A cross-origin request with a `traceparent` header triggers a
+     * CORS preflight, and fails if the server's `Access-Control-Allow-Headers` doesn't include `traceparent`.
+     *
+     * A `traceparent` header already set by your app or by OpenTelemetry's instrumentation is never overwritten
+     * or duplicated. If OpenTelemetry's XHR instrumentation also propagates to a cross-origin host (its
+     * `propagateTraceHeaderCorsUrls`), list that host in only one of the two.
+     *
+     * @example
+     * ```js
+     * posthog.init('<token>', { trace_propagation_targets: ['https://api.example.com', 'internal.example.com'] })
+     * ```
+     */
+    trace_propagation_targets?: string[]
 
     // ------- PREVIEW CONFIGS -------
 

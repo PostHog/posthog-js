@@ -312,13 +312,8 @@ export function _isBlockedElement(
       if (element.classList.contains(blockClass)) {
         return true;
       }
-    } else {
-      for (let eIndex = element.classList.length; eIndex--; ) {
-        const className = element.classList[eIndex];
-        if (blockClass.test(className)) {
-          return true;
-        }
-      }
+    } else if (classMatchesRegex(element, blockClass, false)) {
+      return true;
     }
     if (blockSelector) {
       return element.matches(blockSelector);
@@ -335,15 +330,17 @@ export function classMatchesRegex(
   regex: RegExp,
   checkAncestors: boolean,
 ): boolean {
-  if (!node) return false;
+  if (!node || !regex) return false;
   if (node.nodeType !== node.ELEMENT_NODE) {
     if (!checkAncestors) return false;
     return classMatchesRegex(dom.parentNode(node), regex, checkAncestors);
   }
 
+  // Stateful matchers must start at zero without writing to a possibly frozen config.
+  const matcher = regex.global || regex.sticky ? new RegExp(regex) : regex;
   for (let eIndex = (node as HTMLElement).classList.length; eIndex--; ) {
     const className = (node as HTMLElement).classList[eIndex];
-    if (regex.test(className)) {
+    if (matcher.test(className)) {
       return true;
     }
   }
@@ -852,6 +849,19 @@ function hrefFrom(n: unknown): string | undefined {
   return (n as HTMLLinkElement).href;
 }
 
+/**
+ * Whether the browser renders `n`: false inside content it skips
+ * (`content-visibility: auto` off screen, `display: none`). Browsers without
+ * `checkVisibility`, or without its `contentVisibilityAuto` option, report
+ * the element as rendered.
+ */
+function isRendered(n: Element): boolean {
+  return (
+    typeof n.checkVisibility !== 'function' ||
+    n.checkVisibility({ contentVisibilityAuto: true })
+  );
+}
+
 function serializeElementNode(
   n: Element,
   options: {
@@ -980,26 +990,47 @@ function serializeElementNode(
   }
   // form fields
   if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
-    const value = (n as HTMLInputElement | HTMLTextAreaElement).value;
+    const selectedOptions =
+      tagName === 'select'
+        ? (n as HTMLSelectElement).selectedOptions
+        : undefined;
+    const value = selectedOptions
+      ? Array.from(selectedOptions).find((option) => {
+          let ancestor: Element | null = option;
+          while (ancestor && ancestor !== n) {
+            if (_isBlockedElement(ancestor, blockClass, blockSelector))
+              return false;
+            ancestor = dom.parentElement(ancestor);
+          }
+          return true;
+        })?.value || ''
+      : (n as HTMLInputElement | HTMLTextAreaElement).value;
     const checked = (n as HTMLInputElement).checked;
     if (
       attributes.type !== 'radio' &&
       attributes.type !== 'checkbox' &&
       attributes.type !== 'submit' &&
       attributes.type !== 'button' &&
-      value
+      (selectedOptions || value)
     ) {
-      attributes.value = maskInputValue({
-        element: n as HTMLElement,
-        type: getInputType(n as HTMLElement),
-        tagName,
-        value,
-        maskInputOptions,
-        maskInputFn,
-      });
+      attributes.value = value
+        ? maskInputValue({
+            element: n as HTMLElement,
+            type: getInputType(n as HTMLElement),
+            tagName,
+            value,
+            maskInputOptions,
+            maskInputFn,
+          })
+        : '';
     } else if (checked) {
       attributes.checked = checked;
     }
+  }
+  // Custom callbacks keep scalar replay; their output does not encode masking intent.
+  if (tagName === 'select' && maskInputOptions['select'] && !maskInputFn) {
+    attributes.rr_maskedSelect = true;
+    generatedAttributeNames.add('rr_maskedSelect');
   }
   if (tagName === 'option') {
     if ((n as HTMLOptionElement).selected && !maskInputOptions['select']) {
@@ -1153,11 +1184,18 @@ function serializeElementNode(
     // Since `scrollTop` & `scrollLeft` are always 0 when an element is added to the DOM.
     // And scrolls also get picked up by rrweb's ScrollObserver
     // So we can safely skip the `scrollTop/Left` calls for newly added elements
-    if (n.scrollLeft) {
-      attributes.rr_scrollLeft = n.scrollLeft;
-    }
-    if (n.scrollTop) {
-      attributes.rr_scrollTop = n.scrollTop;
+    //
+    // Nor do we read them on content the browser skips rendering
+    // (`content-visibility: auto` off screen, `display: none`): there the read
+    // forces the style and layout of the skipped subtree, which on a page laid
+    // out with `content-visibility` makes a full snapshot lay out the whole page
+    if (isRendered(n)) {
+      if (n.scrollLeft) {
+        attributes.rr_scrollLeft = n.scrollLeft;
+      }
+      if (n.scrollTop) {
+        attributes.rr_scrollTop = n.scrollTop;
+      }
     }
   }
   // block element
