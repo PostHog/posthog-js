@@ -30,6 +30,8 @@ Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://gith
 
 `@posthog/electron` has an **independent, manual alpha path**, not a coordinated stable release. Its manifest currently contains `0.1.0-alpha.0`; the release job does not rewrite it. Electron is intentionally absent from `release.yml`'s npm matrix and is in `.changeset/config.json`'s `ignore` list. Do not add it to the stable matrix, run monorepo-wide `changeset pre enter`, or promote `latest` to release an alpha.
 
+Implementation PRs keep the package `private: true` and cannot publish Electron. Only the final, separately reviewed alpha-release PR removes that flag and enables the protected manual path below; merging it still does not publish automatically.
+
 During alpha:
 
 - Do **not** add Electron entries to `.changeset/*.md`, including mixed Electron/core changesets. Changesets rejects mixing ignored and released packages; a normal minor bump on an alpha manifest can also produce a stable version.

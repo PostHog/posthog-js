@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { readFile, access } from 'node:fs/promises'
+import { readFile, readdir, access } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +8,39 @@ import vm from 'node:vm'
 
 const root = new URL('../', import.meta.url)
 const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'))
+
+test('Electron stays outside stable releases and private until the alpha release path exists', async () => {
+    const workspace = new URL('../../', root)
+    const require = createRequire(new URL('package.json', workspace))
+    const getReleasePlan = createRequire(require.resolve('@changesets/cli/package.json'))(
+        '@changesets/get-release-plan'
+    ).default
+    const plan = await getReleasePlan(fileURLToPath(workspace))
+    for (const release of plan.releases.filter(({ name }) => name === manifest.name)) {
+        assert.equal(release.type, 'none')
+        assert.equal(release.newVersion, manifest.version)
+    }
+    const config = JSON.parse(await readFile(new URL('.changeset/config.json', workspace), 'utf8'))
+    assert.ok(config.ignore.includes(manifest.name))
+    for (const file of await readdir(new URL('.changeset/', workspace))) {
+        if (!file.endsWith('.md') || file === 'README.md') continue
+        const changeset = await readFile(new URL('.changeset/' + file, workspace), 'utf8')
+        assert.ok(!changeset.split('---')[1]?.includes(manifest.name), file)
+    }
+    const stable = await readFile(new URL('.github/workflows/release.yml', workspace), 'utf8')
+    assert.doesNotMatch(stable, /name: ['"]?@posthog\/electron/)
+    if (manifest.private) {
+        assert.equal(manifest.private, true)
+    } else {
+        const workflow = await readFile(new URL('.github/workflows/release-electron-alpha.yml', workspace), 'utf8')
+        assert.equal(manifest.publishConfig.tag, 'alpha')
+        assert.equal(manifest.publishConfig.registry, 'https://registry.npmjs.org')
+        assert.match(workflow, /workflow_dispatch:/)
+        assert.doesNotMatch(workflow, /^ {4}(push|pull_request|pull_request_target):/m)
+        assert.match(workflow, /if: inputs.publish == true/)
+        assert.match(workflow, /environment: Electron Alpha NPM/)
+    }
+})
 
 test('every published process export has runtime code and declarations', async () => {
     for (const entry of Object.values(manifest.exports)) {

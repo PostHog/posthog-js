@@ -160,6 +160,7 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
     assert.doesNotMatch(workflow, /--tag latest|changeset pre|pnpm bump|git push/)
     for (const action of workflow.matchAll(/uses: ([^\n]+)/g)) assert.match(action[1], /@[a-f0-9]{40} #/)
     const pkg = JSON.parse(readFileSync('packages/electron/package.json', 'utf8'))
+    assert.notEqual(pkg.private, true)
     assert.equal(pkg.publishConfig.tag, 'alpha')
     assert.equal(pkg.publishConfig.registry, 'https://registry.npmjs.org')
     assert.ok(pkg.files.includes('MIGRATION.md'))
