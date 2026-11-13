@@ -1,6 +1,10 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
+
+import { FakePostHog, type FakePostHogOptions, type ServerChange } from './utils/emails-fake'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -26,6 +30,14 @@ const rejected = (status: number, code?: string, headers: Record<string, string>
   body: code ? { type: 'invalid_request', code, detail: 'Nope.', attr: null } : undefined,
   headers,
 })
+
+const RECEIPT = { to: 'user@example.com', templateKey: 'receipt', subject: 'Your receipt', html: '<p>Thanks</p>' }
+const COPIES = { cc: 'finance@example.com', bcc: ['audit@example.com', 'archive@example.com'] }
+const LARGEST_FILE_WITH_EMPTY_BODIES = 29_182_821
+const EMPTY_EMAIL_ESTIMATE = 64 * 1024
+
+const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text)
+const textOf = (bytes: Uint8Array): string => new TextDecoder().decode(bytes)
 
 const SEND_FIELDS = new Set([
   'template_id',
@@ -76,6 +88,21 @@ describe('emails', () => {
   }
 
   const sentHeaders = (): string[] => fetch.mock.calls.map(([, options]) => options.headers['Idempotency-Key'])
+
+  const againstPostHog = (options: Omit<FakePostHogOptions, 'secretKey'> = {}): FakePostHog => {
+    const fake = new FakePostHog({ secretKey: SECRET_KEY, ...options })
+    makeClient({ fetch: fake.fetch })
+    return fake
+  }
+
+  const settle = async <T>(pending: Promise<T>): Promise<T> => {
+    let done = false
+    void pending.finally(() => (done = true))
+    while (!done) {
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    return pending
+  }
 
   const deliverToInbox = (): Record<string, unknown>[] => {
     const inbox: Record<string, unknown>[] = []
@@ -159,6 +186,23 @@ describe('emails', () => {
     })
   })
 
+  it('sends the options as they were at the call, whatever the caller changes later', async () => {
+    const fake = againstPostHog()
+    const templateData = { name: 'Ada' }
+    const cc = ['finance@example.com']
+
+    const templateSend = send({ templateData })
+    const codeSend = posthog.emails.send({ ...RECEIPT, cc })
+    templateData.name = 'Changed'
+    cc.push('changed@example.com')
+    await Promise.all([templateSend, codeSend])
+
+    expect(fake.emails).toEqual([
+      expect.objectContaining({ templateId: TEMPLATE_ID, messageData: { name: 'Ada' } }),
+      expect.objectContaining({ subject: 'Your receipt', cc: ['finance@example.com'] }),
+    ])
+  })
+
   it('never takes the recipient person from the request context', async () => {
     replies = [accepted()]
 
@@ -190,7 +234,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset your password',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
     [
@@ -227,7 +270,6 @@ describe('emails', () => {
         html: '<p>Reset</p>',
         text: 'Reset',
         reply_to: ['a@example.com', 'b@example.com'],
-        capture_engagement: true,
       },
     ],
     [
@@ -242,7 +284,6 @@ describe('emails', () => {
         template_key: 'password-reset',
         subject: 'Reset',
         html: '<p>Reset</p>',
-        capture_engagement: true,
       },
     ],
   ])('posts content from code with %s to the same send URL', async (_name, content, body) => {
@@ -258,6 +299,629 @@ describe('emails', () => {
       ...body,
       to: 'user@example.com',
       distinct_id: 'user_123',
+    })
+  })
+
+  it('queues a code send with its copies', async () => {
+    const fake = againstPostHog()
+
+    const { data, error } = await posthog.emails.send({ ...RECEIPT, ...COPIES })
+
+    expect(error).toBeNull()
+    expect(fake.emails).toEqual([
+      expect.objectContaining({
+        id: data?.id,
+        to: 'user@example.com',
+        cc: ['finance@example.com'],
+        bcc: ['audit@example.com', 'archive@example.com'],
+        attachments: [],
+      }),
+    ])
+  })
+
+  it('leaves out empty copies and attachments, so a PostHog that takes none of them still sends', async () => {
+    const fake = againstPostHog({ fieldsNotTaken: ['cc', 'bcc', 'attachments'] })
+
+    const { data, error } = await posthog.emails.send({ ...RECEIPT, cc: [], bcc: [], attachments: [] })
+
+    expect(error).toBeNull()
+    expect(fake.emails).toEqual([expect.objectContaining({ id: data?.id, cc: [], bcc: [], attachments: [] })])
+  })
+
+  it.each(['cc', 'bcc'])(
+    "reports a PostHog that doesn't take %s yet as its own refusal, without retrying",
+    async (field) => {
+      const fake = againstPostHog({ fieldsNotTaken: [field] })
+      fake.recoverAfter('send', 1, { fieldsNotTaken: [] })
+
+      const { data, error } = await settle(posthog.emails.send({ ...RECEIPT, ...COPIES }))
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'field_not_accepted',
+        name: 'validation_error',
+        statusCode: 400,
+        field,
+        message: "PostHog doesn't take this field yet, so it didn't send the email.",
+        why: "This PostHog version doesn't take the field yet, so it refused the email instead of sending it without it.",
+        fix: 'Send the email without this field, or send it again once PostHog takes the field.',
+      })
+      expect(fake.emails).toEqual([])
+    }
+  )
+
+  describe('attachments', () => {
+    const LOGO = [0, 255, 1]
+
+    const sendFiles = (
+      attachments: unknown,
+      content: Record<string, unknown> = {}
+    ): ReturnType<PostHog['emails']['send']> =>
+      settle(posthog.emails.send({ ...RECEIPT, ...content, attachments } as SendEmailOptions))
+
+    const expectNothingSent = (fake: FakePostHog): void => {
+      expect(fake.emails).toEqual([])
+      expect(fake.writes).toEqual([])
+    }
+
+    it('sends every file, and stores only the files PostHog does not have yet', async () => {
+      const fake = againstPostHog()
+      fake.holdAlready(utf8('hello'))
+
+      const { data, error } = await sendFiles([
+        { filename: 'receipt.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array(LOGO), contentType: 'image/png', contentId: 'logo' },
+        { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', contentType: 'text/calendar' },
+      ])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        {
+          id: data?.id,
+          to: 'user@example.com',
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          subject: 'Your receipt',
+          html: '<p>Thanks</p>',
+          captureEngagement: true,
+          attachments: [
+            { filename: 'receipt.txt', bytes: utf8('hello') },
+            { filename: 'logo.png', contentType: 'image/png', contentId: 'logo', bytes: new Uint8Array(LOGO) },
+            { filename: 'invite.ics', contentType: 'text/calendar', bytes: utf8('BEGIN:VCALENDAR') },
+          ],
+        },
+      ])
+      expect(fake.writes).toEqual([new Uint8Array(LOGO), utf8('BEGIN:VCALENDAR')])
+    })
+
+    it('asks where to upload with the secret key, and stores the bytes without it', async () => {
+      const fake = againstPostHog()
+
+      const { error } = await sendFiles([{ filename: 'logo.png', content: new Uint8Array(LOGO) }])
+
+      expect(error).toBeNull()
+      expect(fake.writes).toEqual([new Uint8Array(LOGO)])
+    })
+
+    it('sends a calendar invite with its file and without open tracking', async () => {
+      const fake = againstPostHog()
+
+      const { data, error } = await sendFiles(
+        [{ filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS', contentType: 'text/calendar' }],
+        { tracking: { opens: false }, sensitive: false }
+      )
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({
+          id: data?.id,
+          tracking: { opens: false },
+          sensitive: false,
+          attachments: [{ filename: 'invite.ics', contentType: 'text/calendar', bytes: utf8('BEGIN:VCALENDAR') }],
+        }),
+      ])
+    })
+
+    it('stores a file attached twice once, and sends it twice', async () => {
+      const fake = againstPostHog()
+
+      await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'copy.txt', content: Buffer.from('hello') },
+      ])
+
+      expect(fake.writes.map(textOf)).toEqual(['hello'])
+      expect(fake.emails.map(({ attachments }) => attachments)).toEqual([
+        [
+          { filename: 'hello.txt', bytes: utf8('hello') },
+          { filename: 'copy.txt', bytes: utf8('hello') },
+        ],
+      ])
+    })
+
+    it("sends nothing when the file storage refuses an expired upload, and returns the storage's answer", async () => {
+      const fake = againstPostHog({ uploadUrlTtlMs: 0 })
+      fake.holdAlready(utf8('hello'))
+
+      const { data, error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array(LOGO) },
+      ])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'attachment_upload_failed',
+        name: 'application_error',
+        statusCode: 403,
+        field: 'attachments__1',
+        message:
+          "PostHog's file storage refused the upload of attachments__1, so no email was sent. It answered HTTP 403 AccessDenied: Request has expired.",
+      })
+      expectNothingSent(fake)
+    })
+
+    it('sends nothing when the file storage refuses an upload once, without retrying', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', { status: 403, code: 'AccessDenied', message: 'Access Denied' })
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'attachment_upload_failed', name: 'application_error', statusCode: 403 })
+      expectNothingSent(fake)
+    })
+
+    it.each([
+      [
+        'fails on its side',
+        [
+          { status: 500, code: 'InternalError', message: 'We encountered an internal error. Please try again.' },
+          { status: 502 },
+        ],
+      ],
+      ['throttles the upload', [{ status: 429, code: 'SlowDown', message: 'Please reduce your request rate.' }]],
+      ['answers too late twice', ['hang', 'hang']],
+      ['drops the connection twice', ['network error', 'network error']],
+    ])('retries a file storage that %s, then sends', async (_name, faults) => {
+      const fake = againstPostHog()
+      fake.failNext('storage', ...faults)
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }] }),
+      ])
+      expect(fake.writes.map(textOf)).toEqual(['hello'])
+    })
+
+    it('sends nothing when the file storage keeps failing on its side', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', ...Array(3).fill({ status: 500, code: 'InternalError', message: 'Oops.' }))
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'attachment_upload_failed', name: 'service_unavailable', statusCode: 500 })
+      expectNothingSent(fake)
+    })
+
+    it('says an upload timed out, and which setting gives it longer', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', 'hang', 'hang', 'hang')
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({
+        code: 'network_error',
+        field: 'attachments__0',
+        message: 'The upload of attachments__0 timed out after 15000ms, so no email was sent.',
+        fix: 'Raise emailRequestTimeoutMs on the client, or send smaller files.',
+      })
+      expectNothingSent(fake)
+    })
+
+    it('sends nothing when an upload never reaches the file storage', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', 'network error', 'network error', 'network error')
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toMatchObject({ code: 'network_error', name: 'service_unavailable', field: 'attachments__0' })
+      expectNothingSent(fake)
+    })
+
+    it('names the attachment the upload route refuses, as the caller passed it', async () => {
+      const fake = againstPostHog({ messageLimitBytes: EMPTY_EMAIL_ESTIMATE + 10 })
+
+      const { error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'copy.txt', content: Buffer.from('hello') },
+        { filename: 'invoice.txt', content: Buffer.from('invoice') },
+      ])
+
+      expect(error).toMatchObject({
+        code: 'message_too_large',
+        name: 'validation_error',
+        statusCode: 400,
+        field: 'attachments__2',
+      })
+      expectNothingSent(fake)
+    })
+
+    it("reports a project that can't send files yet as a refusal of attachments, and sends nothing", async () => {
+      const fake = againstPostHog({ filesAllowed: false })
+      fake.recoverAfter('uploads', 1, { filesAllowed: true })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'field_not_accepted',
+        name: 'validation_error',
+        statusCode: 400,
+        field: 'attachments',
+        message: "This project can't send files yet, so PostHog didn't prepare the uploads.",
+        why: "Sending files isn't available to this project yet.",
+        fix: 'Send the email without files, or try again once files are available to this project.',
+      })
+      expectNothingSent(fake)
+    })
+
+    it('sends the bytes of the call, through a busy file storage and a send whose answer was lost', async () => {
+      const fake = againstPostHog()
+      fake.failNext('storage', { status: 503, code: 'SlowDown', message: 'Please reduce your request rate.' })
+      fake.failNext('send', 'lost reply')
+      const file = Buffer.from('invoice')
+
+      const pending = posthog.emails.send({ ...RECEIPT, attachments: [{ filename: 'invoice.txt', content: file }] })
+      file.fill(0)
+      const { data, error } = await settle(pending)
+
+      expect(error).toBeNull()
+      expect(data?.replayed).toBe(true)
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'invoice.txt', bytes: utf8('invoice') }] }),
+      ])
+      expect(fake.writes.map(textOf)).toEqual(['invoice'])
+    })
+
+    it.each([
+      [
+        'a message too large, without retrying',
+        { messageLimitBytes: EMPTY_EMAIL_ESTIMATE },
+        1,
+        { messageLimitBytes: Number.MAX_SAFE_INTEGER },
+        { code: 'message_too_large', name: 'validation_error', field: 'attachments__0' },
+      ],
+      [
+        'a daily upload quota, without retrying',
+        { uploadQuotaBytes: 4 },
+        1,
+        { uploadQuotaBytes: Number.MAX_SAFE_INTEGER },
+        { code: 'upload_quota_exceeded', name: 'rate_limit_exceeded', field: undefined },
+      ],
+      [
+        'an unavailable file storage, after retrying',
+        { storageAvailable: false },
+        3,
+        { storageAvailable: true },
+        { code: 'delivery_unavailable', name: 'service_unavailable', field: undefined },
+      ],
+    ])(
+      'sends nothing when PostHog refuses the uploads for %s',
+      async (_name, options, refusals, change: ServerChange, refusal) => {
+        const fake = againstPostHog(options)
+        fake.recoverAfter('uploads', refusals, change)
+
+        const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+        expect(error).toMatchObject(refusal)
+        expectNothingSent(fake)
+      }
+    )
+
+    it('sends once the file storage is back within the retries', async () => {
+      const fake = againstPostHog({ storageAvailable: false })
+      fake.recoverAfter('uploads', 2, { storageAvailable: true })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }] }),
+      ])
+    })
+
+    it.each([
+      ["Django's answer", (fake: FakePostHog) => fake, 'Endpoint not found.'],
+      [
+        'a page that is not JSON',
+        (fake: FakePostHog) => fake.failNext('uploads', { status: 404, page: '<html>Not Found</html>' }),
+        'PostHog answered HTTP 404.',
+      ],
+    ])(
+      'reports not_found on attachments when the upload route answers 404 with %s, and sends nothing',
+      async (_name, arrange, message) => {
+        const fake = againstPostHog({ uploadRoute: false })
+        arrange(fake)
+
+        const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+        expect(error).toMatchObject({
+          code: 'not_found',
+          name: 'not_found',
+          statusCode: 404,
+          field: 'attachments',
+          message,
+        })
+        expectNothingSent(fake)
+      }
+    )
+
+    it('hashes bytes and decodes Base64 without Buffer, as on the edge runtime', async () => {
+      const fake = againstPostHog()
+      vi.stubGlobal('Buffer', undefined)
+      let result: Awaited<ReturnType<PostHog['emails']['send']>>
+      try {
+        result = await sendFiles([
+          { filename: 'logo.png', content: new Uint8Array(LOGO) },
+          { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS' },
+        ])
+      } finally {
+        vi.unstubAllGlobals()
+      }
+
+      expect(result.error).toBeNull()
+      expect(fake.emails.map(({ attachments }) => attachments)).toEqual([
+        [
+          { filename: 'logo.png', bytes: new Uint8Array(LOGO) },
+          { filename: 'invite.ics', bytes: utf8('BEGIN:VCALENDAR') },
+        ],
+      ])
+    })
+
+    it.each([
+      [
+        'more than 10 files',
+        Array.from({ length: 11 }, (_, index) => ({ filename: `${index}.txt`, content: Buffer.from('hello') })),
+        {},
+        { code: 'too_many_attachments', field: 'attachments' },
+      ],
+      [
+        'files over 40 MB after Base64 encoding',
+        [{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES + 1) }],
+        { html: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
+        'files that fit only without the html and text',
+        [{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES) }],
+        { html: '<', text: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
+        'Base64 files over 40 MB after Base64 encoding',
+        [{ filename: 'scan.pdf', content: `${'A'.repeat(38_910_428)}AA==` }],
+        { html: '' },
+        { code: 'message_too_large', field: 'attachments' },
+      ],
+      [
+        'an empty file',
+        [{ filename: 'empty.txt', content: new Uint8Array(0) }],
+        {},
+        { code: 'invalid_attachment', field: 'attachments__0__content' },
+      ],
+    ])('refuses %s before anything is stored or sent', async (_name, attachments, content, refusal) => {
+      const fake = againstPostHog()
+
+      const { error } = await sendFiles(attachments, content)
+
+      expect(error).toMatchObject({ ...refusal, name: 'validation_error', statusCode: undefined })
+      expectNothingSent(fake)
+    })
+
+    it.each([
+      ['57 ASCII bytes, counted as 78', 29_182_707, true, 'a'.repeat(57)],
+      ['57 ASCII bytes, counted as 78', 29_182_708, false, 'a'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_593, true, 'é'.repeat(57)],
+      ['57 two-byte characters, counted as 156', 29_182_594, false, 'é'.repeat(57)],
+    ])(
+      'counts an html body of %s like a file, and again for the text PostHog derives from it, beside a file of %i bytes (fits: %s)',
+      async (_name, size, fits, html) => {
+        const fake = againstPostHog()
+
+        const { error } = await posthog.emails.send({
+          ...RECEIPT,
+          html,
+          attachments: [{ filename: 'scan.pdf', content: new Uint8Array(size) }],
+        })
+
+        if (fits) {
+          expect(error).toBeNull()
+          expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([size])
+        } else {
+          expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments' })
+          expectNothingSent(fake)
+        }
+      }
+    )
+
+    it.each([
+      ['refuses it locally without a text body, since PostHog derives one from the html', {}, false],
+      ['sends it beside a text body', { text: 'Thanks' }, true],
+    ])('counts an html body that fits once but not twice: %s', async (_name, content, sent) => {
+      const fake = againstPostHog()
+
+      const { error } = await posthog.emails.send({
+        ...RECEIPT,
+        html: 'a'.repeat(5_700),
+        ...content,
+        attachments: [{ filename: 'scan.pdf', content: new Uint8Array(29_177_115) }],
+      })
+
+      if (sent) {
+        expect(error).toBeNull()
+        expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([29_177_115])
+      } else {
+        expect(error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+        expectNothingSent(fake)
+      }
+    })
+
+    it("refuses an upload URL that isn't https before any upload, and keeps the URL out of the error", async () => {
+      const fake = againstPostHog({ storageOrigin: 'http://email-files.s3.example.com' })
+      fake.holdAlready(utf8('hello'))
+
+      const { data, error } = await sendFiles([
+        { filename: 'hello.txt', content: Buffer.from('hello') },
+        { filename: 'logo.png', content: new Uint8Array(LOGO) },
+      ])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'api_error',
+        field: 'attachments__1',
+        message:
+          "PostHog named an upload URL for attachments__1 that isn't https, so the file would travel unencrypted. No email was sent.",
+        fix: "Make your PostHog's file storage URL use https. For local development over plain HTTP, set appHost to your http app host.",
+      })
+      expectNothingSent(fake)
+    })
+
+    it("refuses an upload that file storage redirects, so the file goes nowhere PostHog didn't sign", async () => {
+      const fake = againstPostHog({ storageRedirectOrigin: 'http://email-files.example.com' })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'attachment_upload_failed',
+        field: 'attachments__0',
+        statusCode: 307,
+        message:
+          "PostHog's file storage redirected the upload of attachments__0 elsewhere. The SDK uploads only to the URL PostHog signed, so no email was sent.",
+        fix: "Make your PostHog's file storage URL point straight at the storage, over https.",
+      })
+      expect(fake.writes).toEqual([])
+      expectNothingSent(fake)
+    })
+
+    it('uploads over plain HTTP when the client sends to a plain-HTTP app host for local development', async () => {
+      const fake = new FakePostHog({
+        secretKey: SECRET_KEY,
+        appHost: 'http://localhost:8010',
+        storageOrigin: 'http://localhost:19000',
+      })
+      makeClient({ appHost: 'http://localhost:8010', fetch: fake.fetch })
+
+      const { data, error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }])
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({ id: data?.id, attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }] }),
+      ])
+    })
+
+    it.each([
+      ['42 ASCII bytes, counted as 75', 'x'.repeat(42), 29_182_821],
+      ['43 ASCII bytes, counted as 150', 'x'.repeat(43), 29_182_767],
+      ['21 two-byte characters, counted as 75', 'é'.repeat(21), 29_182_821],
+      ['22 two-byte characters, counted as 150', 'é'.repeat(22), 29_182_767],
+      ['420 ASCII bytes, counted as 750', 'x'.repeat(420), 29_182_329],
+    ])(
+      'counts a subject of %s, so the largest file that fits beside it is sent and one byte more is refused',
+      async (_name, subject, largest) => {
+        const fake = againstPostHog()
+        const withFile = (size: number): SendEmailOptions => ({
+          ...RECEIPT,
+          subject,
+          html: '',
+          attachments: [{ filename: 'scan.pdf', content: new Uint8Array(size) }],
+        })
+
+        const over = await posthog.emails.send(withFile(largest + 1))
+        const fits = await posthog.emails.send(withFile(largest))
+
+        expect(over.error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+        expect(fits.error).toBeNull()
+        expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([largest])
+      }
+    )
+
+    it('counts an empty subject as nothing, so only PostHog refuses it', async () => {
+      const fake = againstPostHog()
+      const withFile = (size: number): SendEmailOptions => ({
+        ...RECEIPT,
+        subject: '',
+        html: '',
+        attachments: [{ filename: 'scan.pdf', content: new Uint8Array(size) }],
+      })
+
+      const over = await posthog.emails.send(withFile(29_182_876))
+      const fits = await posthog.emails.send(withFile(29_182_875))
+
+      expect(over.error).toMatchObject({ code: 'message_too_large', field: 'attachments', statusCode: undefined })
+      expect(fits.error).toMatchObject({ field: 'subject', statusCode: 400 })
+      expect(fake.emails).toEqual([])
+    })
+
+    it.each([
+      ['bytes', new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES)],
+      ['Base64', 'A'.repeat(38_910_428)],
+    ])('sends the largest file that fits an email with empty bodies, as %s', async (_name, content) => {
+      const fake = againstPostHog()
+
+      const { error } = await posthog.emails.send({
+        ...RECEIPT,
+        html: '',
+        attachments: [{ filename: 'scan.pdf', content }],
+      })
+
+      expect(error).toBeNull()
+      expect(fake.emails.map(({ attachments }) => attachments[0].bytes.byteLength)).toEqual([
+        LARGEST_FILE_WITH_EMPTY_BODIES,
+      ])
+    })
+
+    it('sends the files with the html a react element renders into', async () => {
+      const fake = againstPostHog()
+
+      const { error } = await sendFiles([{ filename: 'hello.txt', content: Buffer.from('hello') }], {
+        html: undefined,
+        react: createElement('p', null, 'Welcome, Ada'),
+      })
+
+      expect(error).toBeNull()
+      expect(fake.emails).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          text: 'Welcome, Ada',
+          attachments: [{ filename: 'hello.txt', bytes: utf8('hello') }],
+        }),
+      ])
+    })
+
+    it('counts the html a react element renders into, and sends no request when the files no longer fit', async () => {
+      const fake = new FakePostHog({ secretKey: SECRET_KEY })
+      const requests: string[] = []
+      makeClient({
+        fetch: (url: string, options: Parameters<FakePostHog['fetch']>[1]) => {
+          requests.push(url)
+          return fake.fetch(url, options)
+        },
+      })
+
+      const { data, error } = await sendFiles(
+        [{ filename: 'scan.pdf', content: new Uint8Array(LARGEST_FILE_WITH_EMPTY_BODIES) }],
+        {
+          html: undefined,
+          react: createElement('p', null, 'Welcome, Ada'),
+        }
+      )
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'message_too_large', name: 'validation_error', field: 'attachments' })
+      expect(requests).toEqual([])
     })
   })
 
@@ -300,7 +964,6 @@ describe('emails', () => {
           subject: 'Welcome',
           html: expect.stringContaining('<p>Welcome, Ada</p>'),
           text: 'Welcome, Ada',
-          capture_engagement: true,
           to: 'user@example.com',
         },
       ])
@@ -791,6 +1454,72 @@ describe('emails', () => {
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
       expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['attachments that are not a list', { filename: 'a.txt', content: 'YQ==' }, 'attachments'],
+      ['a hole in a sparse list of attachments', new Array(1), 'attachments__0'],
+      ['an attachment without content', [{ filename: 'a.txt' }], 'attachments__0__content'],
+      ["a file's bytes in place of an attachment", [Buffer.from('%PDF')], 'attachments__0'],
+      ['a Base64 string in place of an attachment', ['JVBERi0='], 'attachments__0'],
+      ['an attachment whose content is a number', [{ filename: 'a.txt', content: 42 }], 'attachments__0__content'],
+      [
+        'an attachment whose content is text, not Base64',
+        [{ filename: 'a.txt', content: 'hello world' }],
+        'attachments__0__content',
+      ],
+      [
+        'an attachment whose Base64 lacks its padding',
+        [{ filename: 'a.txt', content: 'YQ' }],
+        'attachments__0__content',
+      ],
+      ['an attachment without a filename', [{ content: 'YQ==' }], 'attachments__0__filename'],
+      ['an attachment with an empty filename', [{ filename: '', content: 'YQ==' }], 'attachments__0__filename'],
+      [
+        'an attachment whose contentType is not a string',
+        [{ filename: 'a.txt', content: 'YQ==', contentType: {} }],
+        'attachments__0__contentType',
+      ],
+      [
+        'an attachment whose contentId is not a string',
+        [{ filename: 'logo.png', content: 'AA==', contentId: 7 }],
+        'attachments__0__contentId',
+      ],
+      [
+        'an attachment with a key it does not take',
+        [{ filename: 'logo.png', content: 'AA==', content_id: 'logo' }],
+        'attachments__0__content_id',
+      ],
+      [
+        "a Resend attachment path, which PostHog can't fetch",
+        [
+          { filename: 'terms.txt', content: 'dGVybXM=' },
+          { filename: 'a.pdf', path: 'https://example.com/a.pdf' },
+        ],
+        'attachments__1__path',
+      ],
+    ])('refuses %s before anything is stored or sent', async (_name, attachments, field) => {
+      const fake = againstPostHog()
+
+      const { error } = await sendForm({ ...CODE_SEND, attachments })
+
+      expect(error).toMatchObject({ code: 'invalid_attachment', name: 'validation_error', field })
+      expect(fake.emails).toEqual([])
+      expect(fake.writes).toEqual([])
+    })
+
+    it.each([
+      ['cc on the template form', { cc: 'finance@example.com' }, 'cc'],
+      ['bcc on the template form', { bcc: ['audit@example.com'] }, 'bcc'],
+      ['attachments on the template form', { attachments: [{ filename: 'a.txt', content: 'YQ==' }] }, 'attachments'],
+    ])('refuses %s before anything is stored or sent', async (_name, fields, field) => {
+      const fake = againstPostHog()
+
+      const { error } = await sendForm({ templateId: TEMPLATE_ID, ...fields })
+
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(fake.emails).toEqual([])
+      expect(fake.writes).toEqual([])
     })
 
     it.each([
@@ -1675,5 +2404,76 @@ describe('emails', () => {
       expect(error).toMatchObject({ code, name: 'validation_error' })
       expect(fetch).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('emails over HTTP', () => {
+  const CODE_SEND = { to: 'user@example.com', templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+  const CODE_SEND_BODY = { to: 'user@example.com', template_key: 'welcome', subject: 'Welcome', html: '<p>Hi</p>' }
+
+  let server: Server
+  let posthog: PostHog
+  let received: unknown[]
+
+  beforeAll(async () => {
+    vi.useRealTimers()
+    server = createServer((request, response) => {
+      let body = ''
+      request.on('data', (chunk) => (body += chunk))
+      request.on('end', () => {
+        received.push(JSON.parse(body))
+        response.writeHead(202, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ message_id: 'msg_1', replayed: false }))
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    posthog = new PostHog('phc_test', {
+      secretKey: SECRET_KEY,
+      appHost: `http://127.0.0.1:${port}`,
+      enableLocalEvaluation: false,
+    })
+  })
+
+  afterAll(async () => {
+    await posthog.shutdown()
+    await new Promise((resolve) => server.close(resolve))
+  })
+
+  beforeEach(() => {
+    received = []
+  })
+
+  it.each([
+    ['no tracking or sensitive choice, which leaves them and capture_engagement out', {}, {}],
+    ['the email marked sensitive', { sensitive: true }, { sensitive: true }],
+    ['the email marked not sensitive', { sensitive: false }, { sensitive: false }],
+    ['all tracking turned off', { tracking: false }, { tracking: false }],
+    ['all tracking turned on', { tracking: true }, { tracking: true }],
+    [
+      'each kind of tracking chosen',
+      { tracking: { opens: true, clicks: true, engagement: false } },
+      { tracking: { opens: true, clicks: true, engagement: false } },
+    ],
+    ['the deprecated captureEngagement', { captureEngagement: false }, { capture_engagement: false }],
+  ])('delivers a code send with %s', async (_name, options, body) => {
+    const { data, error } = await posthog.emails.send({ ...CODE_SEND, ...options })
+
+    expect(error).toBeNull()
+    expect(data?.id).toBe('msg_1')
+    expect(received).toEqual([{ ...CODE_SEND_BODY, ...body }])
+  })
+
+  it.each([
+    ['tracking', { tracking: false }],
+    ['sensitive', { sensitive: false }],
+  ])('refuses %s on the template form without sending', async (field, option) => {
+    const send = { to: 'user@example.com', templateId: TEMPLATE_ID, ...option } as unknown as SendEmailOptions
+
+    const { data, error } = await posthog.emails.send(send)
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+    expect(received).toEqual([])
   })
 })

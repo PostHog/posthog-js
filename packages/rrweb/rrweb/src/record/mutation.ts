@@ -38,6 +38,29 @@ import {
 } from '../utils';
 import dom from '@posthog/rrweb-utils';
 
+type SelectMutationObserver = (select: HTMLSelectElement) => void;
+const selectMutationObservers = new WeakMap<
+  Document,
+  Set<SelectMutationObserver>
+>();
+
+// Shadow roots have separate mutation buffers but share their document's input observer.
+export function registerSelectMutationObserver(
+  doc: Document,
+  observer: SelectMutationObserver,
+): () => void {
+  const observers =
+    selectMutationObservers.get(doc) || new Set<SelectMutationObserver>();
+  selectMutationObservers.set(doc, observers);
+  observers.add(observer);
+  return () => {
+    observers.delete(observer);
+    if (!observers.size && selectMutationObservers.get(doc) === observers) {
+      selectMutationObservers.delete(doc);
+    }
+  };
+}
+
 const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
@@ -73,6 +96,7 @@ export default class MutationBuffer {
   private texts = new Map<Node, string | null>();
   private attributes = new Map<Node, attributeCursor>();
   private generatedAttributes = new WeakMap<Node, Set<string>>();
+  private selectedAttributeChanges = new Set<HTMLSelectElement>();
   private removes: removedNodeMutation[] = [];
   // Repeated moves can queue the same root before any mirror cleanup runs.
   // Keep first-seen order without traversing an identical root again at emit.
@@ -219,6 +243,7 @@ export default class MutationBuffer {
   }
 
   public destroy(): void {
+    this.selectedAttributeChanges.clear();
     for (const node of this.mapRemoves) {
       // Consume before traversal, as shift() did, including when it throws.
       this.mapRemoves.delete(node);
@@ -576,17 +601,21 @@ export default class MutationBuffer {
     this.removesSubTreeCache = new Set<Node>();
     this.movedMap = {};
 
-    // payload may be empty if the mutations happened in some blocked elements
+    const selectedAttributeChanges = this.selectedAttributeChanges;
+    this.selectedAttributeChanges = new Set();
     if (
-      !payload.texts.length &&
-      !payload.attributes.length &&
-      !payload.removes.length &&
-      !payload.adds.length
+      payload.texts.length ||
+      payload.attributes.length ||
+      payload.removes.length ||
+      payload.adds.length
     ) {
-      return;
+      this.mutationCb(payload);
     }
-
-    this.mutationCb(payload);
+    for (const select of selectedAttributeChanges) {
+      selectMutationObservers
+        .get(select.ownerDocument)
+        ?.forEach((observer) => observer(select));
+    }
 
     // after the payload, so replay applies the new rel/href before the CSS that replaces the link
     for (const link of stylesheetLinksWithNewSource) {
@@ -760,6 +789,27 @@ export default class MutationBuffer {
         let value = attributeNamespace
           ? target.getAttributeNS(attributeNamespace, sourceAttributeName)
           : (m.target as Element).getAttribute(sourceAttributeName);
+
+        if (
+          tagNameLower === 'option' &&
+          attributeName === 'selected' &&
+          this.maskInputOptions.select
+        ) {
+          let parent = dom.parentElement(target);
+          if (parent?.tagName === 'OPTGROUP')
+            parent = dom.parentElement(parent);
+          // A scalar loses choices; custom multiselects keep their legacy attributes.
+          const customMultiselect =
+            this.maskInputFn &&
+            parent?.tagName === 'SELECT' &&
+            (parent as HTMLSelectElement).multiple;
+          if (!customMultiselect) {
+            if (value !== m.oldValue && parent?.tagName === 'SELECT') {
+              this.selectedAttributeChanges.add(parent as HTMLSelectElement);
+            }
+            return;
+          }
+        }
 
         if (attributeName === 'value') {
           const htmlTarget = target as HTMLElement;

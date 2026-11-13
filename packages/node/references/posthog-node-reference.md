@@ -1042,7 +1042,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="name"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
-| <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog answered. | - |
+| <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
 
 ## Flush
@@ -2828,11 +2828,16 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-captureengagement"></a> `captureEngagement?` | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. |
+| <a id="property-attachments"></a> `attachments?` | `EmailAttachment`[] | Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing. |
+| <a id="property-bcc"></a> `bcc?` | `string` \| `string`[] | Bare addresses that get a copy the other recipients never see. |
+| <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
+| <a id="property-cc"></a> `cc?` | `string` \| `string`[] | Bare addresses, such as `'finance@example.com'`, that get a copy. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
+| <a id="property-sensitive"></a> `sensitive?` | `boolean` | Marks the email as sensitive, such as one that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs. Without it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when the matching template is sensitive. |
 | <a id="property-subject"></a> `subject` | `string` | - |
 | <a id="property-templatekey"></a> `templateKey` | `string` | Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400. |
+| <a id="property-tracking"></a> `tracking?` | `boolean` \| `EmailTracking` | What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, captures engagement events, and counts clicks only when the email isn't sensitive. - `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default. Turn clicks on for a sensitive email only when its links are safe to send through PostHog's click tracking. |
 
 ### `CodeEmailForm`
 
@@ -2884,6 +2889,20 @@ Minimal cookie-reading interface compatible with Next.js `cookies()`,
 ###### Returns
 
 \{ `value`: `string`; \} \| `undefined`
+
+### `EmailAttachment`
+
+A file sent with the email.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-content"></a> `content` | `string` \| `Uint8Array`\<`ArrayBufferLike`\> | The file's bytes, or its content already Base64 encoded. At least one byte. |
+| <a id="property-contentid"></a> `contentId?` | `string` | Shows the file inline where the HTML has `<img src="cid:...">` with this id. |
+| <a id="property-contenttype"></a> `contentType?` | `string` | A MIME type, such as `'application/pdf'`. |
+| <a id="property-filename"></a> `filename` | `string` | The name the recipient sees, such as `'invoice.pdf'`. |
+| <a id="property-path"></a> `path?` | `undefined` | PostHog can't fetch a file from a path or URL: read the file and pass its `content`. |
 
 ### `EmailDeliveryStatus`
 
@@ -3108,6 +3127,18 @@ The status of an email that `posthog.emails.send()` queued.
 | <a id="property-reason"></a> `reason` | `string` \| `null` | Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise. |
 | <a id="property-status-1"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
 | <a id="property-statusat"></a> `statusAt` | `string` | When the email reached its current status, as an ISO 8601 timestamp. |
+
+### `EmailTracking`
+
+Which kinds of tracking a send with `templateKey` turns on.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-clicks"></a> `clicks?` | `boolean` | Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`. |
+| <a id="property-engagement"></a> `engagement?` | `boolean` | Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. |
+| <a id="property-opens"></a> `opens?` | `boolean` | Counts opens with PostHog's open pixel. Defaults to `true`. |
 
 ### `EmailWarning`
 
@@ -4893,6 +4924,10 @@ Supports multiple formats:
 
 > **PostHogFetchOptions** = `object`
 
+#### Extended by
+
+- `EmailFetchOptions`
+
 #### Properties
 
 | Property | Type |
@@ -4976,7 +5011,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. |
 | `custom_blocked_useragents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. **Default** `15000` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |
