@@ -30,7 +30,7 @@ export function attachUtilityProcess(
         try {
             const value = envelope(message)
             // Bound outbound state too: never flood a child with a large flag cache.
-            readEnvelope(value)
+            readEnvelope(value, 'to-utility')
             child.postMessage(value)
         } catch {
             dispose()
@@ -59,8 +59,9 @@ export function attachUtilityProcess(
                 period = performance.now()
                 requests = 0
             }
-            if (++requests > 100) throw new Error('PostHog utility rate limit exceeded')
+            const rateLimited = ++requests > 100
             if (data.kind === 'connect') {
+                if (rateLimited) throw new Error('PostHog utility rate limit exceeded')
                 connected = true
                 send({ kind: 'connected', token })
                 return
@@ -71,12 +72,14 @@ export function attachUtilityProcess(
             const request = data.request
             requestSequence = request.sequence
             if (request.sequence !== sequence + 1) throw new Error('Out-of-order PostHog utility request')
-            if (pending.size >= 100) throw new Error('Too many pending PostHog utility requests')
             if (request.sequence !== 1 && request.command.type === 'hello')
                 throw new Error('Duplicate PostHog utility handshake')
             if (request.sequence === 1 && request.command.type !== 'hello')
                 throw new Error('PostHog utility handshake required')
             sequence = request.sequence
+            // Authenticated overload rejections consume their sequence so later work can recover.
+            if (rateLimited) throw new Error('PostHog utility rate limit exceeded')
+            if (pending.size >= 100) throw new Error('Too many pending PostHog utility requests')
             clearTimeout(handshakeTimer)
             let rejectClosed!: (error: Error) => void
             const closed = new Promise<never>((_resolve, reject) => {

@@ -50,6 +50,7 @@ export class PostHog {
     private _autocapture?: RendererAutocapture
     private _autocapturePauses = 0
     private _state?: State
+    private _ready?: Promise<void>
     private _reportedFlags = new Set<string>()
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
@@ -140,7 +141,11 @@ export class PostHog {
     }
 
     async ready(): Promise<void> {
-        await this._send({ type: 'hello' })
+        if (this._disposed) throw new Error('PostHog renderer has been disposed')
+        await (this._ready ??= this._send({ type: 'hello' }).catch((error: unknown) => {
+            this._ready = undefined
+            throw error
+        }))
         if (
             !this._disposed &&
             !this._stopExceptionAutocapture &&
