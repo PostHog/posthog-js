@@ -9,6 +9,7 @@ import type { ComponentApi } from '../component/_generated/component.js'
 import { PostHog, type SendEmailArgs } from './index.js'
 
 const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
+const UPLOADS_URL = 'https://us.posthog.com/api/projects/@current/messaging/attachments/uploads/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -19,15 +20,34 @@ const workpoolTest = (await importShippedAsSource('@convex-dev/workpool/test')).
 const components = componentsGeneric() as unknown as { posthog: ComponentApi; workpool: WorkpoolComponent }
 const pool = new Workpool(components.workpool, { maxParallelism: 1, logLevel: 'ERROR' })
 
+const WELCOME_ELEMENT = { $$typeof: Symbol.for('react.transitional.element'), type: 'p', props: {} }
+
+const appArgs = {
+  email: v.any(),
+  defaultTemplateKey: v.optional(v.string()),
+  withReactElement: v.optional(v.boolean()),
+}
+
+const madeInTheApp = ({ email, withReactElement }: { email: SendEmailArgs; withReactElement?: boolean }) =>
+  (withReactElement ? { ...email, react: WELCOME_ELEMENT } : email) as SendEmailArgs
+
 const app = {
   send: actionGeneric({
-    args: { email: v.any(), defaultTemplateKey: v.optional(v.string()) },
-    handler: (ctx, { email, defaultTemplateKey }) =>
-      new PostHog(components.posthog, { emails: { defaultTemplateKey } }).sendEmail(ctx, email),
+    args: appArgs,
+    handler: (ctx, args) =>
+      new PostHog(components.posthog, { emails: { defaultTemplateKey: args.defaultTemplateKey } }).sendEmail(
+        ctx,
+        madeInTheApp(args)
+      ),
   }),
   enqueue: mutationGeneric({
-    args: { email: v.any() },
-    handler: (ctx, { email }) => new PostHog(components.posthog).enqueueEmail(ctx, pool, email),
+    args: appArgs,
+    handler: (ctx, args) =>
+      new PostHog(components.posthog, { emails: { defaultTemplateKey: args.defaultTemplateKey } }).enqueueEmail(
+        ctx,
+        pool,
+        madeInTheApp(args)
+      ),
   }),
   status: queryGeneric({
     args: { id: v.string() },
@@ -43,7 +63,7 @@ function initConvexTest() {
 }
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
-type SentRequest = { url: string; headers: Record<string, string>; body: Record<string, unknown> }
+type SentRequest = { url: string; headers: Record<string, string>; body: Record<string, unknown>; answer: Reply }
 
 const ORDER_SHIPPED = {
   from: 'Shop <shop@example.com>',
@@ -53,29 +73,33 @@ const ORDER_SHIPPED = {
   text: 'On its way.',
 } satisfies SendEmailArgs
 
-const ORDER_SHIPPED_ON_THE_WIRE = { ...ORDER_SHIPPED, capture_engagement: true }
-
 const accepted = (replayed = false): Reply => ({ status: 202, body: { message_id: MESSAGE_ID, replayed } })
+
+const COOLING_DOWN: Reply = {
+  status: 429,
+  body: { code: 'throttled', detail: 'Slow down.' },
+  headers: { 'Retry-After': '60' },
+}
 
 describe('sending email through the component', () => {
   let replies: Reply[]
+  let answer: ((request: { url: string; body: Record<string, unknown> }) => Reply) | undefined
   let requests: SentRequest[]
 
   beforeEach(() => {
+    vi.useFakeTimers()
     vi.stubEnv('POSTHOG_PROJECT_TOKEN', 'phc_test')
     vi.stubEnv('POSTHOG_SECRET_KEY', 'phs_test_secret')
     replies = []
+    answer = undefined
     requests = []
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
-        requests.push({
-          url,
-          headers: init.headers as Record<string, string>,
-          body: JSON.parse(init.body as string),
-        })
-        const reply = replies.shift()
+        const body = JSON.parse(init.body as string)
+        const reply = answer?.({ url, body }) ?? replies.shift()
         if (!reply) throw new Error('No reply queued')
+        requests.push({ url, headers: init.headers as Record<string, string>, body, answer: reply })
         if (reply instanceof Error) throw reply
         return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
           status: reply.status,
@@ -86,13 +110,13 @@ describe('sending email through the component', () => {
   })
 
   afterEach(() => {
-    vi.useFakeTimers()
+    vi.useRealTimers()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
 
-  const send = (email: unknown, defaultTemplateKey?: string) =>
-    initConvexTest().action(anyApi.emails.send, { email, defaultTemplateKey })
+  const send = (email: unknown, defaultTemplateKey?: string, withReactElement?: boolean) =>
+    initConvexTest().action(anyApi.emails.send, { email, defaultTemplateKey, withReactElement })
 
   const failureOf = async (pending: Promise<unknown>) => {
     const error = await pending.then(
@@ -102,6 +126,20 @@ describe('sending email through the component', () => {
     expect(error).toBeInstanceOf(ConvexError)
     return (error as ConvexError<Value>).data as Record<string, unknown>
   }
+
+  const QUEUE_STEP_MS = 100
+  const QUEUE_GIVES_UP_AFTER_MS = 30 * 60_000
+
+  const runQueue = async (t: ReturnType<typeof initConvexTest>, workId: string) => {
+    for (let waited = 0; waited < QUEUE_GIVES_UP_AFTER_MS; waited += QUEUE_STEP_MS) {
+      await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(QUEUE_STEP_MS))
+      const status = await t.query(anyApi.emails.status, { id: workId })
+      if (status.state === 'finished') return status
+    }
+    throw new Error('The queue never finished the email.')
+  }
+
+  const acceptedRequests = () => requests.filter(({ answer }) => !(answer instanceof Error) && answer.status === 202)
 
   describe('the conformance cases', () => {
     test.each([
@@ -119,38 +157,25 @@ describe('sending email through the component', () => {
         {},
       ],
       [
-        '04-attachments-and-inline',
-        {
-          html: '<img src="cid:logo">',
-          attachments: [
-            { filename: 'invoice.pdf', contentType: 'application/pdf', content: 'JVBERi0xLjQK' },
-            { filename: 'logo.png', contentType: 'image/png', content: 'iVBORw0KGgo=', contentId: 'logo' },
-          ],
-        },
-        undefined,
-        {
-          template_key: 'convex',
-          html: '<img src="cid:logo">',
-          attachments: [
-            { filename: 'invoice.pdf', content_type: 'application/pdf', content: 'JVBERi0xLjQK' },
-            { filename: 'logo.png', content_type: 'image/png', content: 'iVBORw0KGgo=', content_id: 'logo' },
-          ],
-        },
-        {},
-      ],
-      [
         '05-posthog-options',
         {
           distinctId: 'user_42',
           templateKey: 'order-shipped',
           idempotencyKey: 'order-981-shipped',
-          captureEngagement: false,
+          tracking: { opens: true, clicks: false },
+          sensitive: true,
         },
         undefined,
-        { template_key: 'order-shipped', distinct_id: 'user_42', capture_engagement: false },
+        {
+          template_key: 'order-shipped',
+          distinct_id: 'user_42',
+          tracking: { opens: true, clicks: false },
+          sensitive: true,
+        },
         { 'Idempotency-Key': 'order-981-shipped' },
       ],
       ['07-template-key-config-default', {}, 'transactional', { template_key: 'transactional' }, {}],
+      ['tracking off', { tracking: false }, undefined, { template_key: 'convex', tracking: false }, {}],
     ])('%s', async (_case, email, defaultTemplateKey, body, headers) => {
       replies.push(accepted())
 
@@ -161,37 +186,93 @@ describe('sending email through the component', () => {
 
       expect(requests).toHaveLength(1)
       expect(requests[0].url).toBe(SEND_URL)
-      expect(requests[0].body).toEqual({ ...ORDER_SHIPPED_ON_THE_WIRE, ...body })
+      expect(requests[0].body).toEqual({ ...ORDER_SHIPPED, ...body })
       expect(requests[0].headers).toMatchObject({
         'X-PostHog-Integration': expect.stringMatching(/^convex\/[0-9A-Za-z.+-]{1,40}$/),
         ...headers,
       })
     })
 
+    test('04-attachments-and-inline', async () => {
+      answer = ({ url, body }) =>
+        url === UPLOADS_URL
+          ? {
+              status: 200,
+              body: {
+                files: (body.files as { sha256: string }[]).map(({ sha256 }) => ({ sha256, status: 'present' })),
+              },
+            }
+          : accepted()
+      const attachments = [
+        { filename: 'invoice.pdf', contentType: 'application/pdf', content: 'JVBERi0xLjQK' },
+        { filename: 'logo.png', contentType: 'image/png', content: 'iVBORw0KGgo=', contentId: 'logo' },
+      ]
+
+      await expect(send({ ...ORDER_SHIPPED, html: '<img src="cid:logo">', attachments })).resolves.toMatchObject({
+        message_id: MESSAGE_ID,
+      })
+
+      const sent = requests.find(({ url }) => url === SEND_URL)
+      expect(sent?.body).toMatchObject({ html: '<img src="cid:logo">', template_key: 'convex' })
+      expect(sent?.body.attachments).toEqual([
+        expect.objectContaining({ filename: 'invoice.pdf', content_type: 'application/pdf' }),
+        expect.objectContaining({ filename: 'logo.png', content_type: 'image/png', content_id: 'logo' }),
+      ])
+    })
+
     test.each([
-      ['08-refuse-invalid-template-key', { ...ORDER_SHIPPED, templateKey: 'order shipped!' }, 'invalid_template_key'],
+      [
+        '08-refuse-invalid-template-key',
+        { ...ORDER_SHIPPED, templateKey: 'order shipped!' },
+        undefined,
+        'invalid_template_key',
+      ],
+      ['an invalid default template key', ORDER_SHIPPED, 'order shipped!', 'invalid_template_key'],
       [
         '16-refuse-template-unsupported',
         { to: 'ana@example.com', templateId: '0190f0c2-7d1e-7a3b-9c2e-5f1a2b3c4d5e' },
+        undefined,
         'template_unsupported',
       ],
-    ])('%s', async (_case, email, refusal) => {
-      const posthog = new PostHog(components.posthog)
-      const ctx = { runAction: vi.fn(), scheduler: { runAfter: vi.fn() } }
-      const queue = { enqueueAction: vi.fn() }
+      ['a React element', { to: 'ana@example.com', subject: 'Welcome' }, undefined, 'react_unsupported', true],
+    ])(
+      '%s is refused before anything is sent or queued',
+      async (_case, email, defaultTemplateKey, refusal, withReactElement?: boolean) => {
+        const refused = { code: refusal, retryable: false }
+        expect(await failureOf(send(email, defaultTemplateKey, withReactElement))).toMatchObject(refused)
 
-      const refused = { code: refusal, retryable: false }
-      expect(await failureOf(posthog.sendEmail(ctx, email as SendEmailArgs))).toMatchObject(refused)
-      expect(await failureOf(posthog.enqueueEmail(ctx, queue, email as SendEmailArgs))).toMatchObject(refused)
+        const t = initConvexTest()
+        const enqueued = t.mutation(anyApi.emails.enqueue, { email, defaultTemplateKey, withReactElement })
+        expect(await failureOf(enqueued)).toMatchObject(refused)
+        await t.finishAllScheduledFunctions(vi.runAllTimers)
 
-      expect(ctx.runAction).not.toHaveBeenCalled()
-      expect(queue.enqueueAction).not.toHaveBeenCalled()
+        expect(requests).toHaveLength(0)
+      }
+    )
+  })
+
+  describe('a self-hosted or proxied PostHog', () => {
+    test('sends to POSTHOG_APP_HOST', async () => {
+      vi.stubEnv('POSTHOG_HOST', 'https://ingest.example.com')
+      vi.stubEnv('POSTHOG_APP_HOST', 'https://posthog.example.com/')
+      replies.push(accepted())
+
+      await expect(send(ORDER_SHIPPED)).resolves.toMatchObject({ message_id: MESSAGE_ID })
+
+      expect(requests.map(({ url }) => url)).toEqual([
+        'https://posthog.example.com/api/projects/@current/messaging/send/email/',
+      ])
+    })
+
+    test('without POSTHOG_APP_HOST, refuses to guess and sends nothing', async () => {
+      vi.stubEnv('POSTHOG_HOST', 'https://ingest.example.com')
+
+      expect(await failureOf(send(ORDER_SHIPPED))).toMatchObject({ code: 'missing_app_host', retryable: false })
+      expect(requests).toHaveLength(0)
     })
   })
 
   describe('the error map', () => {
-    const LONG_WAIT = { 'Retry-After': '60' }
-
     test.each([
       ['400', { status: 400, body: { code: 'invalid_input', detail: 'Bad to.', attr: 'to' } }, false, undefined],
       ['401', { status: 401, body: { code: 'authentication_failed', detail: 'Bad key.' } }, false, undefined],
@@ -199,21 +280,20 @@ describe('sending email through the component', () => {
       ['404', { status: 404, body: { code: 'not_found', detail: 'No template.' } }, false, undefined],
       [
         '409 in flight',
-        { status: 409, body: { code: 'idempotency_key_in_flight', detail: 'Still sending.' }, headers: LONG_WAIT },
+        {
+          status: 409,
+          body: { code: 'idempotency_key_in_flight', detail: 'Still sending.' },
+          headers: { 'Retry-After': '60' },
+        },
         true,
         60,
       ],
       ['422', { status: 422, body: { code: 'recipient_suppressed', detail: 'Suppressed.' } }, false, undefined],
       ['429 quota', { status: 429, body: { code: 'quota_limited', detail: 'Over quota.' } }, false, undefined],
-      [
-        '429 throttled',
-        { status: 429, body: { code: 'throttled', detail: 'Slow down.' }, headers: LONG_WAIT },
-        true,
-        60,
-      ],
+      ['429 throttled', COOLING_DOWN, true, 60],
       [
         '503',
-        { status: 503, body: { code: 'service_unavailable', detail: 'Try later.' }, headers: LONG_WAIT },
+        { status: 503, body: { code: 'service_unavailable', detail: 'Try later.' }, headers: { 'Retry-After': '60' } },
         true,
         60,
       ],
@@ -257,26 +337,34 @@ describe('sending email through the component', () => {
   })
 
   describe('a queued send', () => {
-    const runQueue = async (t: ReturnType<typeof initConvexTest>, workId: string) => {
-      await t.finishAllScheduledFunctions(vi.runAllTimers)
-      return await t.query(anyApi.emails.status, { id: workId })
-    }
-
     test('makes its key at enqueue and retries a retryable failure with it', async () => {
-      replies.push(
-        { status: 503, body: { code: 'service_unavailable', detail: 'Try later.' }, headers: { 'Retry-After': '60' } },
-        accepted(true)
-      )
+      const networkDown = new TypeError('fetch failed')
+      replies.push(networkDown, networkDown, networkDown, accepted(true))
       const t = initConvexTest()
 
       const workId = await t.mutation(anyApi.emails.enqueue, { email: ORDER_SHIPPED })
 
       expect(requests).toHaveLength(0)
       await expect(runQueue(t, workId)).resolves.toEqual({ state: 'finished' })
-      expect(requests).toHaveLength(2)
-      const [first, second] = requests.map((r) => r.headers['Idempotency-Key'])
-      expect(first).toMatch(UUID)
-      expect(second).toBe(first)
+      expect(acceptedRequests()).toHaveLength(1)
+      const keys = new Set(requests.map((r) => r.headers['Idempotency-Key']))
+      expect(keys.size).toBe(1)
+      expect([...keys][0]).toMatch(UUID)
+    })
+
+    test('waits out a cooldown longer than every Workpool backoff, and sends once it ends', async () => {
+      let cooldownEndsAt: number | undefined
+      answer = () => {
+        cooldownEndsAt ??= Date.now() + 60_000
+        return Date.now() < cooldownEndsAt ? COOLING_DOWN : accepted()
+      }
+      const t = initConvexTest()
+
+      const workId = await t.mutation(anyApi.emails.enqueue, { email: ORDER_SHIPPED })
+
+      await expect(runQueue(t, workId)).resolves.toEqual({ state: 'finished' })
+      expect(acceptedRequests()).toHaveLength(1)
+      expect(new Set(requests.map((r) => r.headers['Idempotency-Key'])).size).toBe(1)
     })
 
     test('keeps the key the app passed', async () => {
