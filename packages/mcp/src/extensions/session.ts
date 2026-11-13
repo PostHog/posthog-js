@@ -189,7 +189,9 @@ export function resolveSession(
   const carriedSessionId = readSessionIdFromRequest(data, extra)
   // 4 on a shared HTTP instance: its own id would group every client it serves.
   // A handle-free client was minted no handle to group it, so the call stands alone.
-  if (!carriedSessionId && client?.row?.handleFree && getRequestHeaders(extra)) {
+  // So does any other HTTP request that carried no session: the spec gives it a
+  // fresh id of its own.
+  if (!carriedSessionId && getRequestHeaders(extra)) {
     return { sessionId: newSessionId(), source: 'generated' }
   }
 
