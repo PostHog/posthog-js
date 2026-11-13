@@ -46,7 +46,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: [macos-14, windows-2022, ubuntu-22.04]
+                os: [macos-15, windows-2022, ubuntu-22.04]
                 # Exact, mature releases: initial supported major, 42, and a newer major.
                 electron: ['41.0.2', '42.4.0', '43.0.0']
         runs-on: ${{ matrix.os }}
