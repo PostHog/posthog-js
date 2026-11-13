@@ -1,5 +1,5 @@
 ---
-title: "PostHog Node.js SDK 6.x (experimental)"
+title: "PostHog Node.js SDK 6.x"
 sidebar: Docs
 showTitle: true
 contentMaxWidthClass: max-w-full

@@ -230,7 +230,7 @@ const docsDir = path.join(ROOT, 'packages', positionals[0], 'docs')
 const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'))
 const declared = Number(pkg.version.split('.')[0])
 // A branch for the next major keeps the old version until the release applies its major changeset, so a
-// pending one means the code is the next major. It gets the experimental page, and the current pages stay.
+// pending one means the code is the next major. It gets its own page, and the current pages stay.
 const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
     c.releases.some((r) => r.name === pkg.name && r.type === 'major')
 )
@@ -283,10 +283,7 @@ const write = (name, sections) => {
     process.stdout.write(`wrote packages/${positionals[0]}/references/${name}\n`)
 }
 const title = `PostHog ${config.name} SDK`
-write(`${config.id}-${major}.md`, [
-    frontMatter(`${title} ${major}.x${declared >= major ? '' : ' (experimental)'}`, body, config.logo),
-    ...body,
-])
+write(`${config.id}-${major}.md`, [frontMatter(`${title} ${major}.x`, body, config.logo), ...body])
 if (declared >= major) write(`${config.id}-reference.md`, [frontMatter(title, body, config.logo), ...body])
 // The package's MIGRATION.md, when it has one, is the docs site's migration page. Its H1 becomes the page
 // title, so the page shows one title.
