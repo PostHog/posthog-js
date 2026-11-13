@@ -103,8 +103,8 @@ const TEMPLATE_KEY = /^[a-zA-Z0-9_-]{1,400}$/
 const INTEGRATION_NAME = 'convex'
 
 /** The email can't be sent as asked, so nothing was sent or queued. */
-const refusal = (code: string, detail: string): ConvexError<EmailSendFailure> =>
-  new ConvexError({ code, detail, retryable: false })
+const refusal = (code: string, detail: string, fix: string): ConvexError<EmailSendFailure> =>
+  new ConvexError({ code, name: 'validation_error', detail, fix, retryable: false })
 
 export function normalizeError(error: unknown): {
   message: string
@@ -192,14 +192,26 @@ export class PostHog {
 
   private emailSend(email: SendEmailArgs): ComponentEmailArgs {
     if (email.templateId !== undefined) {
-      throw refusal('template_unsupported', 'Render the email in your code and send its html.')
+      throw refusal(
+        'template_unsupported',
+        '@posthog/convex sends the email your code rendered, not a template made in PostHog.',
+        'Render the email in your code and send its html.'
+      )
     }
     if (email.react !== undefined) {
-      throw refusal('react_unsupported', 'Render the element with render() from @react-email/render and send its html.')
+      throw refusal(
+        'react_unsupported',
+        '@posthog/convex takes html and text, not a React element.',
+        'Render the element with render() from @react-email/render and send its html.'
+      )
     }
     const templateKey = email.templateKey ?? this.defaultTemplateKey
     if (!TEMPLATE_KEY.test(templateKey)) {
-      throw refusal('invalid_template_key', 'Use letters, digits, - and _, at most 400.')
+      throw refusal(
+        'invalid_template_key',
+        `templateKey ${JSON.stringify(templateKey)} is not a valid template key.`,
+        'Use letters, digits, - and _, at most 400.'
+      )
     }
     return { ...email, templateKey }
   }

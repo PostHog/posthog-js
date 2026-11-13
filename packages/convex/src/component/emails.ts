@@ -1,4 +1,4 @@
-import { EmailError, type SendCodeEmailOptions, type SendEmailResponse } from 'posthog-node/edge'
+import { EmailError, type EmailErrorName, type SendCodeEmailOptions, type SendEmailResponse } from 'posthog-node/edge'
 import { ConvexError, v, type Infer, type ObjectType } from 'convex/values'
 import { action } from './_generated/server.js'
 import { getEmailClient } from './lib.js'
@@ -53,8 +53,13 @@ export type SentEmail = Infer<typeof sentEmail>
 export type EmailSendFailure = {
   status?: number
   code: string
+  /** A coarse category of the failure, for code that branches on the kind of failure rather than the exact `code`. */
+  name: EmailErrorName
   detail: string
   attr?: string
+  why?: string
+  fix?: string
+  docs_url?: string
   retryable: boolean
   retry_after?: number
 }
@@ -117,10 +122,14 @@ function sendFailure(
 ): ConvexError<EmailSendFailure> {
   const failure: EmailSendFailure = {
     code: error.code,
+    name: error.name,
     detail: error.message,
     retryable: isRetryableLikePostHogNode(error),
     ...(error.statusCode !== undefined && { status: error.statusCode }),
     ...(error.field !== undefined && { attr: error.field }),
+    ...(error.why !== undefined && { why: error.why }),
+    ...(error.fix !== undefined && { fix: error.fix }),
+    ...(error.docsUrl !== undefined && { docs_url: error.docsUrl }),
     ...(error.retryAfterMs !== undefined && { retry_after: Math.ceil(error.retryAfterMs / 1000) }),
   }
   if (failure.retryable && queueStopsFor === undefined) {
