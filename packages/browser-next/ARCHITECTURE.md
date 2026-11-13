@@ -133,17 +133,17 @@ Consent is prospective point-in-time analytics authority, not a global client li
 
 Apply those boundaries method by method:
 
-| Surface                                       | Consent and lifecycle boundary                                                                                                                                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Identity, group, device, and session getters  | Prepare and return retained state without reinterpreting it from consent. `BrowserState` separately owns fresh compatible-consent observation.                                                                           |
-| `capture()`                                   | Check once before evaluating caller properties. The synchronous capture operation then runs to completion; delivery applies its own dispatch-time gate.                                                                  |
-| `identify()` and `group()`                    | Valid calls update and persist state regardless of capture consent, matching `posthog-js`. Their generated analytics events pass through ordinary `capture()` admission.                                                 |
-| `reset()`                                     | Treat reset as cleanup, not an operation that a consent transition can invalidate. Lifecycle still prevents mutation after disposal.                                                                                     |
-| `sendRequest()`                               | Check immediately before each actual transport dispatch. Do not prepare analytics identity state and do not reinterpret an already-started result after consent changes.                                                 |
-| Remote configuration                          | Consent does not gate control-plane loading, caching, subscriptions, or publication. Lifecycle prevents new work after shutdown.                                                                                         |
-| Initial `$pageview`                           | Rely on ordinary `capture()` admission. Do not duplicate consent checks around DOM access or listener setup.                                                                                                             |
-| Extension KV                                  | Reads and writes are independent of capture consent, matching `posthog-js`. Lifecycle and state readiness still apply; any future durable-storage restriction belongs to a separate persistence policy.                  |
-| Analytics initialization and delivery loading | Analytics initializes independently of consent. Eager or already-started delivery loading finishes under denial; lazy loading begins only after an admitted capture. Denial purges queued analytics and blocks dispatch. |
+| Surface                                       | Consent and lifecycle boundary                                                                                                                                                                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity, group, device, and session getters  | Prepare and return retained state without reinterpreting it from consent. `BrowserState` separately owns fresh compatible-consent observation.                                                                                           |
+| `capture()`                                   | Check once before evaluating caller properties. The synchronous capture operation then runs to completion; delivery applies its own dispatch-time gate.                                                                                  |
+| `identify()` and `group()`                    | Valid calls update and persist state regardless of capture consent, matching `posthog-js`. Their generated analytics events pass through ordinary `capture()` admission.                                                                 |
+| `reset()`                                     | Treat reset as cleanup, not an operation that a consent transition can invalidate. Lifecycle still prevents mutation after disposal.                                                                                                     |
+| Internal `sendRequest()`                      | Check immediately before each actual transport dispatch, unless the request explicitly permits dispatch while opted out. Do not prepare analytics identity state and do not reinterpret an already-started result after consent changes. |
+| Remote configuration                          | Consent does not gate control-plane loading, caching, subscriptions, or publication. Lifecycle prevents new work after shutdown.                                                                                                         |
+| Initial `$pageview`                           | Rely on ordinary `capture()` admission. Do not duplicate consent checks around DOM access or listener setup.                                                                                                                             |
+| Extension KV                                  | Reads and writes are independent of capture consent, matching `posthog-js`. Lifecycle and state readiness still apply; any future durable-storage restriction belongs to a separate persistence policy.                                  |
+| Analytics initialization and delivery loading | Analytics initializes independently of consent. Eager or already-started delivery loading finishes under denial; lazy loading begins only after an admitted capture. Denial purges queued analytics and blocks dispatch.                 |
 
 No general `canContinue` or `canUseState` predicate should coordinate these surfaces. State preparation belongs only to operations that consume persisted analytics state; requests, remote configuration, pageview listener setup, and delivery retries must not initialize identity state as a side effect of authorization.
 
@@ -439,7 +439,9 @@ An extension must release owned resources in its final `dispose()`.
 Cleanup must be safe after partial setup.
 
 The host must give each browser-next extension a scoped `IPostHogInternal` view, with its own narrow `sharedClient` adapter for shared implementations.
-These views must expose capabilities, not the concrete host implementation.
+These views must expose capabilities, not the concrete host implementation. Raw request transport belongs to the internal host and shared `Client`, not the application client or its root/core type exports. Keep the concrete transport method private and route scoped hosts to it.
+
+Request consent authority is explicit per request. Omitted or false `allowWhileOptedOut` remains consent-gated; true relaxes only the opt-out check. It must not change persisted consent or bypass bot filtering, configured-host validation, transport restrictions, or the existing shutdown-delivery contract. A shared call site owns this permission; do not infer it from routes or HTTP methods.
 
 The host must keep extension state separate. The host must dispose extensions in reverse installation order.
 

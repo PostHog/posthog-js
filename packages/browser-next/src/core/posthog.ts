@@ -314,8 +314,18 @@ class PostHog implements IPostHog {
         return this._state.consent === 'denied'
     }
 
-    sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && !this.hasOptedOut())
+    private async _sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
+        try {
+            const allowWhileOptedOut = init?.allowWhileOptedOut === true
+            return await sendRequest(
+                this._requestRuntime,
+                path,
+                init,
+                () => !this._blocked && (allowWhileOptedOut || !this.hasOptedOut())
+            )
+        } catch (error) {
+            return { statusCode: 0, error }
+        }
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
@@ -729,7 +739,7 @@ class PostHog implements IPostHog {
             get projectToken() {
                 return host.projectToken
             },
-            sendRequest: (path, init) => host.sendRequest(path, init),
+            sendRequest: (path, init) => host._sendRequest(path, init),
             onRemoteConfig: host.onRemoteConfig,
             onEvent: host._eventPublisher.listener,
             onSession: host.onSession,

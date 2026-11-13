@@ -57,6 +57,7 @@ for (const name of guardedGlobals) {
 let createPostHog
 let createEsmPostHog
 let createCorePostHog
+let createEsmCorePostHog
 let analytics
 let featureFlags
 let logs
@@ -76,7 +77,7 @@ try {
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
     ;({ analytics } = await import('@posthog/browser/analytics'))
     ;({ createPostHog: createEsmPostHog } = await import('@posthog/browser'))
-    await import('@posthog/browser/core')
+    ;({ createPostHog: createEsmCorePostHog } = await import('@posthog/browser/core'))
     ;({ featureFlags } = await import('@posthog/browser/flags'))
     ;({ featureFlags: commonJsFlags } = require('@posthog/browser/flags'))
     ;({ logs } = await import('@posthog/browser/logs'))
@@ -94,6 +95,31 @@ try {
         }
     }
 }
+
+for (const create of [createPostHog, createEsmPostHog, createCorePostHog, createEsmCorePostHog]) {
+    let host
+    const client = await create({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        capturePageview: false,
+        fetch: false,
+        extensions: [
+            {
+                name: 'request-boundary',
+                setup: (value) => {
+                    host = value
+                },
+            },
+        ],
+    })
+    assert.equal('sendRequest' in client, false)
+    assert.equal(typeof host.sendRequest, 'function')
+    assert.equal(typeof host.sharedClient.sendRequest, 'function')
+    assert.equal((await host.sendRequest('/internal/', { allowWhileOptedOut: true })).statusCode, 0)
+    await client.dispose()
+}
+process.stdout.write('Built CommonJS/ESM root and core transport boundaries passed\n')
 
 const requests = []
 const posthog = await createCorePostHog({

@@ -616,6 +616,26 @@ describe('BrowserClientAdapter', () => {
         )
     })
 
+    it('preserves opted-out listing request options with internal permission metadata', async () => {
+        const instance = createMockPostHog()
+        vi.mocked(instance.has_opted_out_capturing).mockReturnValue(true)
+        const send = vi.mocked(instance._send_request)
+        send.mockImplementation(({ callback }) => callback?.({ statusCode: 200, json: { earlyAccessFeatures: [] } }))
+        const client = new BrowserClientAdapter(instance)
+        const path = '/api/early_access_features/?token=test-token&stage=beta'
+        const init = { target: 'api', method: 'GET', sentAt: 'query' } as const
+        const before = await client.sendRequest(path, init)
+        const after = await client.sendRequest(path, { ...init, allowWhileOptedOut: true })
+        const { callback: beforeCallback, ...beforeOptions } = send.mock.calls[0][0]
+        const { callback: afterCallback, ...afterOptions } = send.mock.calls[1][0]
+        expect(beforeCallback).toEqual(expect.any(Function))
+        expect(afterCallback).toEqual(expect.any(Function))
+        expect(afterOptions).toEqual(beforeOptions)
+        expect(after).toEqual(before)
+        expect(after.statusCode).toBe(200)
+        expect(client.isOptedOut).toBe(true)
+    })
+
     it('uses the regular API target by default and resolves dropped requests', async () => {
         const instance = createMockPostHog()
         const requestError = new Error('network failure')
