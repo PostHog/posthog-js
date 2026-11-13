@@ -45,6 +45,9 @@
             "feature-flags-config": [
                 "dist/feature-flags-config.d.ts"
             ],
+            "flags-response-v4": [
+                "dist/flags-response-v4.d.ts"
+            ],
             "logs": [
                 "dist/logs.d.ts"
             ],
@@ -146,6 +149,11 @@
             "types": "./dist/feature-flags-config.d.ts",
             "require": "./dist/feature-flags-config.js",
             "import": "./dist/feature-flags-config.mjs"
+        },
+        "./flags-response-v4": {
+            "types": "./dist/flags-response-v4.d.ts",
+            "require": "./dist/flags-response-v4.js",
+            "import": "./dist/flags-response-v4.mjs"
         },
         "./logs": {
             "types": "./dist/logs.d.ts",
