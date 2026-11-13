@@ -61,7 +61,9 @@ export interface CompatibleToolsListLike {
  * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
  * `CallToolResult` — the direction that would silently break callers.
  */
-export interface CompatibleTextToolResult {
+// A type alias, not an interface: only an alias gets the implicit index signature
+// that `CallToolResult`'s `[x: string]: unknown` requires.
+export type CompatibleTextToolResult = {
   content: { type: 'text'; text: string }[]
   isError?: boolean
 }
