@@ -26,6 +26,7 @@ import { isLikelyBot } from './bot-filter'
 import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './capture-summary'
 import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
+import { deepFreeze } from './immutable'
 import { createLogger } from './logger'
 import { ClientRateLimiter } from './rate-limiter'
 import { sendRequest, type RequestRuntime } from './request'
@@ -39,6 +40,7 @@ import type {
     PostHog,
     StorageLike,
 } from './types'
+import { utf8Bytes } from './utf8'
 import { version } from './version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
@@ -73,14 +75,6 @@ const isValidDistinctId = (value: unknown): value is string =>
     isNonEmptyString(value) &&
     !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
 
-const deepFreeze = <T>(value: T): T => {
-    if (value && typeof value === 'object') {
-        Object.values(value as Record<string, unknown>).forEach(deepFreeze)
-        Object.freeze(value)
-    }
-    return value
-}
-
 const getDefaultFetch = (): BrowserFetch | undefined => {
     try {
         return globalThis.fetch?.bind(globalThis)
@@ -103,24 +97,6 @@ const eventTimestamp = (timestamp: Date | undefined): string => {
     } catch {
         return new Date().toISOString()
     }
-}
-
-const utf8Bytes = (value: string): number => {
-    let bytes = 0
-    for (let index = 0; index < value.length; index++) {
-        const code = value.charCodeAt(index)
-        if (code < 0x80) {
-            bytes++
-        } else if (code < 0x800) {
-            bytes += 2
-        } else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00) {
-            bytes += 4
-            index++
-        } else {
-            bytes += 3
-        }
-    }
-    return bytes
 }
 
 /** Module-private client; the top-level factory owns its initialization. */
