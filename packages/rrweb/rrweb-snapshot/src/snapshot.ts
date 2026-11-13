@@ -3,6 +3,7 @@ import type {
   SlimDOMOptions,
   MaskTextFn,
   MaskInputFn,
+  SelectMaskingFn,
   MaskAttributeFn,
   KeepIframeSrcFn,
   ICanvas,
@@ -24,6 +25,7 @@ import {
   isElement,
   isShadowRoot,
   maskInputValue,
+  getInputMaskOptions,
   maskAttributeValue,
   isNativeShadowDom,
   stringifyStylesheet,
@@ -665,6 +667,7 @@ function serializeNode(
     maskInputOptions: MaskInputOptions;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    selectMaskingFn?: SelectMaskingFn;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
@@ -688,6 +691,7 @@ function serializeNode(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    selectMaskingFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
     dataURLOptions = {},
@@ -729,6 +733,7 @@ function serializeNode(
         inlineStylesheet,
         maskInputOptions,
         maskInputFn,
+        selectMaskingFn,
         maskAllElementAttributes,
         maskAttributeFn,
         dataURLOptions,
@@ -871,6 +876,7 @@ function serializeElementNode(
     inlineStylesheet: boolean;
     maskInputOptions: MaskInputOptions;
     maskInputFn: MaskInputFn | undefined;
+    selectMaskingFn?: SelectMaskingFn;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
@@ -892,6 +898,7 @@ function serializeElementNode(
     inlineStylesheet,
     maskInputOptions = {},
     maskInputFn,
+    selectMaskingFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
     dataURLOptions = {},
@@ -904,6 +911,24 @@ function serializeElementNode(
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
   const tagName = getValidTagName(n);
+  let inputMaskOptions = maskInputOptions;
+  if (
+    selectMaskingFn &&
+    !needBlock &&
+    (tagName === 'select' || tagName === 'option')
+  ) {
+    let owner: Element | null = n;
+    if (tagName === 'option') {
+      owner = dom.parentElement(n);
+      if (owner?.tagName === 'OPTGROUP') owner = dom.parentElement(owner);
+    }
+    if (owner)
+      inputMaskOptions = getInputMaskOptions(
+        owner,
+        maskInputOptions,
+        selectMaskingFn,
+      );
+  }
   const generatedAttributeNames = new Set<string>();
   let attributes: attributes = {};
   const len = n.attributes.length;
@@ -1019,7 +1044,7 @@ function serializeElementNode(
             type: getInputType(n as HTMLElement),
             tagName,
             value,
-            maskInputOptions,
+            maskInputOptions: inputMaskOptions,
             maskInputFn,
           })
         : '';
@@ -1027,13 +1052,17 @@ function serializeElementNode(
       attributes.checked = checked;
     }
   }
-  // Custom callbacks keep scalar replay; their output does not encode masking intent.
-  if (tagName === 'select' && maskInputOptions['select'] && !maskInputFn) {
-    attributes.rr_maskedSelect = true;
+  // Legacy callbacks do not encode selection-masking intent.
+  if (
+    tagName === 'select' &&
+    (selectMaskingFn || (inputMaskOptions['select'] && !maskInputFn))
+  ) {
+    // Null tags explicit unmasking so later inputs can update the policy.
+    attributes.rr_maskedSelect = inputMaskOptions['select'] ? true : null;
     generatedAttributeNames.add('rr_maskedSelect');
   }
   if (tagName === 'option') {
-    if ((n as HTMLOptionElement).selected && !maskInputOptions['select']) {
+    if ((n as HTMLOptionElement).selected && !inputMaskOptions['select']) {
       attributes.selected = true;
     } else {
       // ignore the html attribute (which corresponds to DOM (n as HTMLOptionElement).defaultSelected)
@@ -1410,6 +1439,7 @@ export function serializeNodeWithId(
     needsMask?: boolean;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    selectMaskingFn?: SelectMaskingFn;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
     slimDOMOptions: SlimDOMOptions;
@@ -1452,6 +1482,7 @@ export function serializeNodeWithId(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    selectMaskingFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
     slimDOMOptions,
@@ -1509,6 +1540,7 @@ export function serializeNodeWithId(
     maskInputOptions,
     maskTextFn,
     maskInputFn,
+    selectMaskingFn,
     maskAllElementAttributes,
     maskAttributeFn,
     dataURLOptions,
@@ -1587,6 +1619,7 @@ export function serializeNodeWithId(
       maskInputOptions,
       maskTextFn,
       maskInputFn,
+      selectMaskingFn,
       maskAllElementAttributes,
       maskAttributeFn,
       slimDOMOptions,
@@ -1661,6 +1694,7 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            selectMaskingFn,
             maskAllElementAttributes,
             maskAttributeFn,
             slimDOMOptions,
@@ -1717,6 +1751,7 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            selectMaskingFn,
             maskAllElementAttributes,
             maskAttributeFn,
             slimDOMOptions,
@@ -1787,6 +1822,7 @@ function snapshot(
     maskAllInputs?: boolean | MaskInputOptions;
     maskTextFn?: MaskTextFn;
     maskInputFn?: MaskInputFn;
+    selectMaskingFn?: SelectMaskingFn;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
     slimDOM?: 'all' | boolean | SlimDOMOptions;
@@ -1835,6 +1871,7 @@ function snapshot(
     maskAllInputs = false,
     maskTextFn,
     maskInputFn,
+    selectMaskingFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
     slimDOM = false,
@@ -1891,6 +1928,7 @@ function snapshot(
       maskInputOptions,
       maskTextFn,
       maskInputFn,
+      selectMaskingFn,
       maskAllElementAttributes,
       maskAttributeFn,
       slimDOMOptions,

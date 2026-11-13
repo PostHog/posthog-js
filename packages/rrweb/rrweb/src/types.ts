@@ -3,6 +3,7 @@ import type {
   MaskInputOptions,
   SlimDOMOptions,
   MaskInputFn,
+  SelectMaskingFn,
   MaskTextFn,
   MaskAttributeFn,
 } from '@posthog/rrweb-snapshot';
@@ -56,6 +57,7 @@ export type recordOptions<T> = {
   maskAllInputs?: boolean;
   maskInputOptions?: MaskInputOptions;
   maskInputFn?: MaskInputFn;
+  selectMaskingFn?: SelectMaskingFn;
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes?: boolean;
   maskAttributeFn?: MaskAttributeFn;
@@ -136,6 +138,7 @@ export type observerParam = {
   maskTextSelector: string | null;
   maskInputOptions: MaskInputOptions;
   maskInputFn?: MaskInputFn;
+  selectMaskingFn?: SelectMaskingFn;
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes: boolean;
   maskAttributeFn?: MaskAttributeFn;
@@ -187,6 +190,7 @@ export type MutationBufferParam = Pick<
   | 'maskInputOptions'
   | 'maskTextFn'
   | 'maskInputFn'
+  | 'selectMaskingFn'
   | 'maskAllElementAttributes'
   | 'maskAttributeFn'
   | 'keepIframeSrcFn'

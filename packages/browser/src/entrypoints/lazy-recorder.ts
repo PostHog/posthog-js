@@ -11,5 +11,6 @@ import { LazyLoadedSessionRecording } from '../extensions/replay/external/lazy-l
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>
     new LazyLoadedSessionRecording(ph, documentWasEverVisible)
+assignableWindow.__PosthogExtensions__.initSessionRecording.supportsSelectMasking = true
 
 export * from './recorder'

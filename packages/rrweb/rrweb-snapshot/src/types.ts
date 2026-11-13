@@ -147,6 +147,13 @@ export type SlimDOMOptions = Partial<{
 
 export type MaskTextFn = (text: string, element: HTMLElement | null) => string;
 export type MaskInputFn = (text: string, element: HTMLElement) => string;
+/**
+ * Controls selection metadata, not the text returned by maskInputFn.
+ * Returning original text from maskInputFn still records it for masked selects.
+ */
+export type SelectMaskingFn = (
+  element: HTMLSelectElement,
+) => 'masked' | 'unmasked';
 export type MaskAttributeFn = (
   name: string,
   value: string,

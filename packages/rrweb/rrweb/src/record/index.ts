@@ -344,6 +344,7 @@ function record<T = eventWithTime>(
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
     maskInputFn,
+    selectMaskingFn,
     maskTextFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
@@ -673,6 +674,7 @@ function record<T = eventWithTime>(
       dataURLOptions,
       maskTextFn,
       maskInputFn,
+      selectMaskingFn,
       maskAllElementAttributes,
       maskAttributeFn,
       recordCanvas,
@@ -742,6 +744,7 @@ function record<T = eventWithTime>(
           inlineStylesheetBudgetRules,
           maskTextFn,
           maskInputFn,
+          selectMaskingFn,
           maskAllElementAttributes,
           maskAttributeFn,
           slimDOM: slimDOMOptions,
@@ -1008,6 +1011,7 @@ function record<T = eventWithTime>(
           collectFonts,
           doc,
           maskInputFn,
+          selectMaskingFn,
           maskTextFn,
           maskAllElementAttributes,
           maskAttributeFn,
@@ -1272,6 +1276,7 @@ declare namespace record {
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
   var isRecording: () => boolean;
+  var supportsSelectMasking: boolean;
   var withStyleRuleSourceHandoff: (
     stop: listenerHandler,
     restart: (cancel: listenerHandler) => void,
@@ -1309,6 +1314,7 @@ record.takeFullSnapshot = ((isCheckout?: boolean) => {
 // until DOMContentLoaded or load. Until init() runs nothing is observed, so a
 // caller that only holds the stop handler cannot tell recording from pending.
 record.isRecording = (() => recording) satisfies typeof record.isRecording;
+record.supportsSelectMasking = true;
 
 record.mirror = mirror;
 

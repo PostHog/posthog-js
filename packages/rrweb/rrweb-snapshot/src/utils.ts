@@ -3,6 +3,7 @@ import type {
   MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
+  SelectMaskingFn,
   nodeMetaMap,
 } from './types';
 
@@ -840,6 +841,29 @@ export function createMirror(): Mirror {
   return new Mirror();
 }
 
+export function updateSelectMaskingState(
+  node: Node,
+  mirror: Mirror,
+  masked: boolean,
+): void {
+  if (node.nodeName !== 'SELECT') return;
+  const meta = mirror.getMeta(node);
+  const marker = masked ? true : null;
+  if (
+    meta?.type !== NodeType.Element ||
+    (meta.attributes.rr_maskedSelect !== true &&
+      meta.attributes.rr_maskedSelect !== null) ||
+    meta.attributes.rr_maskedSelect === marker
+  ) {
+    return;
+  }
+  // Mirror metadata can share objects with the immutable full snapshot.
+  mirror.add(node, {
+    ...meta,
+    attributes: { ...meta.attributes, rr_maskedSelect: marker },
+  });
+}
+
 export function restoreSelectState(node: Node | null, mirror: Mirror): void {
   if (node?.nodeName !== 'SELECT') return;
   const select = node as HTMLSelectElement;
@@ -850,6 +874,22 @@ export function restoreSelectState(node: Node | null, mirror: Mirror): void {
     meta.attributes.rr_maskedSelect === true
   ) {
     select.selectedIndex = -1;
+  }
+}
+
+export function getInputMaskOptions(
+  element: Element,
+  options: MaskInputOptions,
+  selectMaskingFn?: SelectMaskingFn,
+): MaskInputOptions {
+  if (!selectMaskingFn || element.tagName !== 'SELECT') return options;
+  try {
+    return {
+      ...options,
+      select: selectMaskingFn(element as HTMLSelectElement) !== 'unmasked',
+    };
+  } catch {
+    return { ...options, select: true };
   }
 }
 
