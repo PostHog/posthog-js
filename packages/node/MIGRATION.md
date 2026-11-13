@@ -345,7 +345,7 @@ Context and `register()` properties and options now reach `identify`, `alias`, a
 
 With person processing off, PostHog drops `$identify`, `$create_alias`, `$merge_dangerously`, and `$groupidentify` events and ignores the person update of a `$set` or `$set_once` event, so these events default to `process_person_profile: true`, whichever method sends them:
 
-- **The call's option.** The call's own `process_person_profile` option wins. If the call has none, its `$process_person_profile` property becomes the option and is removed from the properties.
+- **The call's option.** The call's own `process_person_profile` option wins. If a `capture()` or `captureAi()` call has none, its `$process_person_profile` property becomes the option and is removed from the properties. The `properties` of `identify`, `setPersonProperties`, and `groupIdentify` are person and group properties, so set the option there.
 - **The default.** Otherwise the option is `true`, so person processing turned off with `registerOptions()`, context options, or a `$process_person_profile: false` property in `register()` or a context doesn't reach these events. `identify`, `alias`, and `groupIdentify` keep creating and updating persons and groups, as in 5.x.x.
 - **Personless IDs.** An event with a generated personless distinct ID keeps `process_person_profile: false`. The `$<groupType>_<groupKey>` ID `groupIdentify` falls back to isn't generated, so it gets `true`.
 - **`null` values.** A `null` option or property counts as unset.
@@ -457,7 +457,7 @@ posthog.capture({
 - **Boolean options.** Capture reads common forms of a boolean option value, such as the strings `"true"`, `"yes"`, `"on"`, or `"1"`, but a value it can't read drops the whole event (`invalid_options`). Pass `true` or `false`.
 - **Values that aren't an object.** The SDK logs an `options` value that isn't an object as an error and ignores it. It still sends the event.
 
-Legacy option properties still work, but an option overrides its legacy property. Use options. On an [identify-style event](#identify-style-events), a `$process_person_profile` property passed to the call becomes the call's option, so it wins over context and `registerOptions()`.
+Legacy option properties still work, but an option overrides its legacy property. Use options. On an [identify-style event](#identify-style-events), a `$process_person_profile` property passed to `capture()` or `captureAi()` becomes the call's option, so it wins over context and `registerOptions()`.
 
 | Legacy option property    | Option                    |
 | ------------------------- | ------------------------- |
