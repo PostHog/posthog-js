@@ -203,11 +203,19 @@ function withStableDataUrlCids(
 ): { html: string | undefined; attachments: NormalizedAttachment[] | undefined } {
   let stableHtml = html
   let count = 0
+  const taken = new Set(attachments?.map((attachment) => attachment.cid))
+  const nextFreeCid = (): string => {
+    let cid: string
+    do {
+      cid = `data-url-${++count}@localhost`
+    } while (taken.has(cid))
+    return cid
+  }
   const stableAttachments = attachments?.map((attachment) => {
     if (!attachment.cid || !NODEMAILER_DATA_URL_CID.test(attachment.cid)) {
       return attachment
     }
-    const cid = `data-url-${++count}@localhost`
+    const cid = nextFreeCid()
     stableHtml = stableHtml?.replaceAll(`cid:${attachment.cid}`, `cid:${cid}`)
     return { ...attachment, cid }
   })

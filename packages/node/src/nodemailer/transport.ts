@@ -74,13 +74,9 @@ function sendError(error: EmailError, hasIdempotencyKey: boolean): PostHogSendEr
   return Object.assign(new Error(error.message, { cause: error }), {
     code: error.code,
     detail: error.message,
-    retryable: isRetryable(error) && (hasIdempotencyKey || !mayHaveReachedPostHog(error)),
+    retryable: hasIdempotencyKey && isRetryable(error),
     ...(error.statusCode !== undefined && { status: error.statusCode }),
     ...(error.field !== undefined && { attr: error.field }),
     ...(error.retryAfterMs !== undefined && { retry_after: Math.ceil(error.retryAfterMs / 1000) }),
   })
-}
-
-function mayHaveReachedPostHog(error: EmailError): boolean {
-  return error.code === 'network_error' || error.code === 'idempotency_key_in_flight'
 }

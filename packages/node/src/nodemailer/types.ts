@@ -57,8 +57,8 @@ export interface PostHogSendError extends Error {
   /** The request field the error is about, when PostHog named one. */
   attr?: string
   /**
-   * Whether sending the same message again can succeed without a second copy reaching the recipient. A failure that may
-   * have reached PostHog, such as a network error, is retryable only when the message has a `posthog.idempotency_key`.
+   * Whether sending the same message again can succeed without a second copy reaching the recipient. Always `false`
+   * for a message without `posthog.idempotency_key`, since an earlier attempt of the send may have queued it.
    */
   retryable: boolean
   /** How long PostHog asked to wait before a retry, in seconds. */
