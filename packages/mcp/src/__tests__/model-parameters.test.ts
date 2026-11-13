@@ -58,7 +58,7 @@ describe('addModelParameterToTool', () => {
     expect(result.inputSchema?.required).toEqual(required)
   })
 
-  it('removes additionalProperties:false (would otherwise reject the injected param)', () => {
+  it('keeps additionalProperties:false, since the injected param is a declared property', () => {
     const result = addModelParameterToTool({
       name: 'strict-tool',
       inputSchema: {
@@ -69,7 +69,7 @@ describe('addModelParameterToTool', () => {
     })
 
     expect(result.inputSchema?.properties?.llm_model).toBeDefined()
-    expect(result.inputSchema?.additionalProperties).toBeUndefined()
+    expect(result.inputSchema?.additionalProperties).toBe(false)
   })
 
   it.each([

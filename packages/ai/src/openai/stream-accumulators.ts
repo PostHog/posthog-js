@@ -64,11 +64,14 @@ export class OpenAIChatStreamAccumulator {
         if (toolCall.id) {
           current.id = toolCall.id
         }
-        if (toolCall.function?.name) {
-          current.name = toolCall.function.name
+        // Custom tools stream their free-form text in `custom.input`, with no `function` object.
+        const name = toolCall.function?.name ?? toolCall.custom?.name
+        const argumentsDelta = toolCall.function?.arguments ?? toolCall.custom?.input
+        if (name) {
+          current.name = name
         }
-        if (toolCall.function?.arguments) {
-          current.arguments += toolCall.function.arguments
+        if (argumentsDelta) {
+          current.arguments += argumentsDelta
         }
         this.toolCalls.set(key, current)
         this.lastToolCallKey = key
@@ -90,9 +93,15 @@ export class OpenAIChatStreamAccumulator {
 
   /**
    * Some OpenAI-compatible providers stream tool calls without an `index`. Match those deltas by a known
-   * `id`; a new `id` or a function name opens a new call, and anything else continues the latest call.
+   * `id`; a new `id`, a function name, or a custom tool name opens a new call, and anything else continues
+   * the latest call.
    */
-  private toolCallKey(toolCall: { index?: number; id?: string; function?: { name?: string } }): number | string {
+  private toolCallKey(toolCall: {
+    index?: number
+    id?: string
+    function?: { name?: string }
+    custom?: { name?: string }
+  }): number | string {
     if (toolCall.index !== undefined) {
       return toolCall.index
     }
@@ -103,7 +112,7 @@ export class OpenAIChatStreamAccumulator {
         }
       }
     }
-    if (toolCall.id || toolCall.function?.name || this.lastToolCallKey === undefined) {
+    if (toolCall.id || toolCall.function?.name || toolCall.custom?.name || this.lastToolCallKey === undefined) {
       return `no-index-${this.toolCalls.size}`
     }
     return this.lastToolCallKey

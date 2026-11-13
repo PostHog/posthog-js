@@ -5,6 +5,7 @@ import type {
   JsonType,
   Metrics,
   MetricsConfig,
+  PostHogLogsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -211,6 +212,21 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   metrics?: MetricsConfig
   /**
+   * Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent
+   * to PostHog Logs as OTLP records, with no OpenTelemetry packages needed.
+   *
+   * Each record carries the active span's `trace_id` / `span_id` and, inside `withContext`,
+   * the `distinctId` and `sessionId`, so logs join back to traces, persons and replays.
+   * `serviceName` defaults to the `traces` / `metrics` `serviceName`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { logs: { serviceName: 'checkout-api' } })
+   * client.logger.info('order placed', { order_id: 'ord_1' })
+   * ```
+   */
+  logs?: PostHogLogsConfig
+  /**
    * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
    * off until this is set; supplying it is all that's needed to turn it on.
    *
@@ -260,7 +276,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` request.
+   * Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,
+   * so raise it when large files upload slowly.
    *
    * @default 15000
    */

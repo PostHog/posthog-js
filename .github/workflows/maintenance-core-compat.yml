@@ -1,0 +1,98 @@
+name: Maintenance branch core compatibility
+
+# A maintenance branch publishes an older SDK major whose npm releases depend on
+# @posthog/core and @posthog/types with a caret range. Every install of that major
+# therefore takes the newest core and types published from main. This job runs the
+# maintenance branch's tests against this PR's core and types source, so a main
+# change cannot break users of an older major.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/core/**"
+      - "packages/types/**"
+      - ".github/workflows/maintenance-core-compat.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  core-compat:
+    permissions:
+      contents: read
+    name: ${{ matrix.package }} from ${{ matrix.branch }} with this PR's core
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One row per maintenance branch. Keep in sync with the release-context table in release.yml.
+          - branch: posthog-node-5
+            package: posthog-node
+    steps:
+      - name: Check that ${{ matrix.branch }} exists
+        id: branch
+        env:
+          BRANCH: ${{ matrix.branch }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # Exit 2 means no matching branch; any other failure (such as a network error) must fail the job, not skip it.
+          status=0
+          git ls-remote --exit-code --heads "https://github.com/$REPOSITORY.git" "$BRANCH" > /dev/null || status=$?
+          case "$status" in
+            0)
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              ;;
+            2)
+              echo "::notice::$BRANCH does not exist yet, so there is nothing to check."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Could not look up $BRANCH (git ls-remote exited with $status)."
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout ${{ matrix.branch }}
+        if: steps.branch.outputs.exists == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.branch }}
+          persist-credentials: false
+
+      - name: Checkout this PR
+        if: steps.branch.outputs.exists == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          persist-credentials: false
+
+      # Only the source moves over, so the maintenance branch's lockfile still applies.
+      # A core change that needs a new dependency fails here, and it would reach
+      # the maintenance branch's users the same way.
+      - name: Use this PR's core and types source
+        if: steps.branch.outputs.exists == 'true'
+        run: |
+          for package in core types; do
+            rm -rf "packages/$package/src"
+            cp -R "pr/packages/$package/src" "packages/$package/src"
+          done
+          rm -rf pr
+          git status --short -- packages/core packages/types
+
+      - name: Setup environment
+        if: steps.branch.outputs.exists == 'true'
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Run ${{ matrix.package }} unit tests
+        if: steps.branch.outputs.exists == 'true'
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: pnpm turbo run test:unit --filter="$PACKAGE"

@@ -140,6 +140,7 @@ export const addSurveyCSSVariablesToElement = (
         appearance?.textColor || getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
+    setLogoVariant(hostStyle, effectiveAppearance.backgroundColor)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
@@ -159,6 +160,18 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
     hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
     hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)
+}
+
+/**
+ * The gradient PostHog logo is made for light backgrounds. On dark backgrounds,
+ * @posthog/brand uses the one-color (mono) logo in the text color, so we do the same.
+ */
+export function setLogoVariant(style: CSSStyleDeclaration, backgroundColor?: string) {
+    if (getContrastingTextColor(backgroundColor) === 'white') {
+        style.setProperty('--ph-logo-mono', '1')
+    } else {
+        style.removeProperty('--ph-logo-mono')
+    }
 }
 
 function nameToHex(name: string) {

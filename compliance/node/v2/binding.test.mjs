@@ -22,6 +22,7 @@ async function spies(run, captureMode = 'v0') {
         captureException: undefined,
         flush: undefined,
         getFeatureFlag: undefined,
+        getFeatureFlagPayload: undefined,
         reloadFeatureFlags: undefined,
     }
     for (const name of Object.keys(results)) {
@@ -472,6 +473,39 @@ test('flag getter maps options, preserves omission/results, performs no flush', 
         await binding.invoke('/get_feature_flag', { key: 'flag' })
         assert.deepEqual(calls.at(-1), ['getFeatureFlag', ['flag']])
         assert.equal(calls.filter(([name]) => name === 'getFeatureFlag').length, 7)
+        assert.equal(calls.filter(([name]) => name === 'flush').length, 0)
+    }))
+
+test('flag payload getter takes the getter arguments and leaves matchValue unset', async () =>
+    spies(async (binding, calls, results) => {
+        await setup(binding)
+        for (const value of [undefined, null, false, 0, 'compact', { columns: 2 }]) {
+            results.getFeatureFlagPayload = Promise.resolve(value)
+            const result = await binding.invoke('/get_feature_flag_payload', {
+                key: 'flag',
+                distinct_id: 'person',
+                person_properties: {},
+                send_event: false,
+            })
+            assert.deepEqual(result, {
+                kind: 'sdk',
+                outcome: value === undefined ? { kind: 'undefined' } : { kind: 'value', value },
+            })
+            assert.deepEqual(calls.at(-1), [
+                'getFeatureFlagPayload',
+                ['flag', 'person', undefined, { personProperties: {}, sendFeatureFlagEvents: false }],
+            ])
+            assert.equal(calls.at(-1)[1].length, 4)
+        }
+        await binding.invoke('/get_feature_flag_payload', { key: 'flag', distinct_id: 'person' })
+        assert.deepEqual(calls.at(-1), ['getFeatureFlagPayload', ['flag', 'person']])
+        await binding.invoke('/get_feature_flag_payload', { key: 'flag' })
+        assert.deepEqual(calls.at(-1), ['getFeatureFlagPayload', ['flag']])
+        assert.equal(
+            (await binding.invoke('/get_feature_flag_payload', { key: 'f', match_value: true })).failure.kind,
+            'unsupported_binding'
+        )
+        assert.equal(calls.filter(([name]) => name === 'getFeatureFlag').length, 0)
         assert.equal(calls.filter(([name]) => name === 'flush').length, 0)
     }))
 

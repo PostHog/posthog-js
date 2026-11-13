@@ -1,4 +1,5 @@
 import fixtures from './python-parity.json'
+import compositeFixtures from './python-composite-parity.json'
 import {
   EvaluationItem,
   EvaluationResult,
@@ -21,7 +22,7 @@ function normalize(value: unknown, key = ''): unknown {
     )
   return value
 }
-function invoke(instance: ReturnType<typeof client>, row: (typeof fixtures.cases)[number]): Promise<unknown> {
+function invoke(instance: ReturnType<typeof client>, row: (typeof cases)[number]): Promise<unknown> {
   const target =
     row.resource === 'client'
       ? instance
@@ -35,8 +36,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
-describe('Python SDK wire parity (generated from the recorded Python revision)', () => {
-  it.each(fixtures.cases)('$name sends the Python request and accepts its response', async (row) => {
+const cases = [...fixtures.cases, ...compositeFixtures.cases]
+describe('Python SDK wire parity (generated from the recorded Python revisions)', () => {
+  it.each(cases)('$name sends the Python request and accepts its response', async (row) => {
     const fetch = mockFetch().mockResolvedValue(reply(row.response))
     await invoke(client(), row)
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -54,7 +56,7 @@ describe('Python SDK wire parity (generated from the recorded Python revision)',
     if ('body' in row.request) expect(normalize(requestBody(fetch))).toEqual(normalize(row.request.body))
     else expect(fetch.mock.calls[0][1].body).toBeUndefined()
   })
-  it.each(fixtures.cases)('$name preserves the Python retry policy', async (row) => {
+  it.each(cases)('$name preserves the Python retry policy', async (row) => {
     vi.useFakeTimers()
     const fetch = mockFetch().mockImplementation(() => Promise.resolve(reply({ code: 'unavailable' }, 503)))
     const promise = invoke(client({ maxRetries: 1 }), row).catch((e) => e)
@@ -62,15 +64,18 @@ describe('Python SDK wire parity (generated from the recorded Python revision)',
     expect(await promise).toMatchObject({ status: 503, persistence: 'unknown' })
     expect(fetch).toHaveBeenCalledTimes(row.request.retrySafe ? 2 : 1)
   })
-  it.each(fixtures.declarations)('restores Python $kind declaration %#', (row) => {
-    const declaration =
-      row.kind === 'item'
-        ? new EvaluationItem(row.options as EvaluationItemOptions)
-        : new EvaluationResult(row.options as unknown as EvaluationResultOptions)
-    expect(normalize(declaration.toJSON())).toEqual(normalize(row.wire))
-    const restored = row.kind === 'item' ? EvaluationItem.fromJSON(row.wire) : EvaluationResult.fromJSON(row.wire)
-    expect(normalize(restored.toJSON())).toEqual(normalize(row.wire))
-  })
+  it.each([...fixtures.declarations, ...compositeFixtures.declarations])(
+    'restores Python $kind declaration %#',
+    (row) => {
+      const declaration =
+        row.kind === 'item'
+          ? new EvaluationItem(row.options as EvaluationItemOptions)
+          : new EvaluationResult(row.options as unknown as EvaluationResultOptions)
+      expect(normalize(declaration.toJSON())).toEqual(normalize(row.wire))
+      const restored = row.kind === 'item' ? EvaluationItem.fromJSON(row.wire) : EvaluationResult.fromJSON(row.wire)
+      expect(normalize(restored.toJSON())).toEqual(normalize(row.wire))
+    }
+  )
   it.each(fixtures.portableDeclarations)('preserves exact integers in Python-restorable $kind JSON %#', (row) => {
     const saved = JSON.parse(row.json)
     const declaration = row.kind === 'item' ? EvaluationItem.fromJSON(saved) : EvaluationResult.fromJSON(saved)
@@ -88,5 +93,14 @@ describe('Python SDK wire parity (generated from the recorded Python revision)',
     const receipt = await client().resumeExperiment(ID).uploadResults([result])
     expect(requestBody(fetch)).toEqual(fixtures.upload.body)
     expect(receipt.chunks[0].results[0].id).toBe(fixtures.upload.response.results[0].id)
+  })
+  it('preserves Python composite upload order and stored formula errors', async () => {
+    const fixture = compositeFixtures.compositeUpload
+    const fetch = mockFetch().mockResolvedValue(reply(fixture.response))
+    const item = EvaluationItem.fromJSON(fixture.body.items[0])
+    const results = fixture.body.results.map((row) => EvaluationResult.fromJSON(row, { item }))
+    const receipt = await client().resumeExperiment(ID).uploadResults(results)
+    expect(requestBody(fetch)).toEqual(fixture.body)
+    expect(receipt.chunks[0].results[0]).toMatchObject({ status: 'error', errorCode: 'composite_formula_error' })
   })
 })
