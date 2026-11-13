@@ -2,7 +2,8 @@
     "name": "posthog-docusaurus",
     "version": "2.0.5",
     "description": "🦔 PostHog plugin for Docusaurus",
-    "main": "./src/index.js",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js.git",
@@ -21,17 +22,25 @@
     },
     "scripts": {
         "check-types": "tsc --noEmit",
+        "clean": "rimraf dist",
+        "build": "rslib build",
+        "dev": "rslib build --watch",
         "lint": "oxlint --report-unused-disable-directives-severity error src test",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src test --fix",
-        "test": "node --test test/*.test.js",
-        "test:unit": "node --test test/*.test.js",
+        "test": "vitest run test/index.test.js",
+        "test:unit": "vitest run test/index.test.js",
+        "test:built": "node --test test/package.test.mjs",
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "devDependencies": {
+        "@rslib/core": "catalog:",
         "@types/node": "^22.19.1",
-        "typescript": "catalog:native"
+        "typescript": "catalog:native",
+        "vitest": "catalog:"
     },
     "files": [
+        "dist",
         "src",
         "LICENSE",
         "README.md"

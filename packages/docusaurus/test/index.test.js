@@ -1,7 +1,6 @@
-const assert = require('node:assert/strict')
-const test = require('node:test')
-const vm = require('node:vm')
-const posthogPlugin = require('../src')
+import { describe, expect, it } from 'vitest'
+import vm from 'node:vm'
+import posthogPlugin from '../src'
 
 function initializationOptions(options = {}) {
     const plugin = posthogPlugin(
@@ -28,14 +27,14 @@ function initializationOptions(options = {}) {
     return context.posthog._i[0][1]
 }
 
-test('preserves SDK pageview and pageleave defaults', () => {
-    const options = initializationOptions()
-    assert.equal(options.capture_pageview, undefined)
-    assert.equal(options.capture_pageleave, undefined)
-})
-
-for (const capture_pageview of [false, true]) {
-    test(`preserves capture_pageview: ${capture_pageview}`, () => {
-        assert.equal(initializationOptions({ capture_pageview }).capture_pageview, capture_pageview)
+describe('initialization options', () => {
+    it('preserves SDK pageview and pageleave defaults', () => {
+        const options = initializationOptions()
+        expect(options.capture_pageview).toBeUndefined()
+        expect(options.capture_pageleave).toBeUndefined()
     })
-}
+
+    it.each([false, true])('preserves capture_pageview: %s', (capture_pageview) => {
+        expect(initializationOptions({ capture_pageview }).capture_pageview).toBe(capture_pageview)
+    })
+})

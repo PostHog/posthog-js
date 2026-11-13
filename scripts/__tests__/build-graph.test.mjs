@@ -300,6 +300,7 @@ test('root tests schedule leaf suites once, including every existing rrweb suite
         'posthog-js#test:functional',
         '@posthog/browser#test:built',
         'posthog-docusaurus#test:unit',
+        'posthog-docusaurus#test:built',
     ]) {
         assert.ok(
             executable(tasks).some((task) => task.taskId === id),

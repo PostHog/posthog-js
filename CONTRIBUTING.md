@@ -67,8 +67,6 @@ The repository contains the following top-level packages in `./packages/`:
 
 Vendored recording/replay packages live under `packages/rrweb/`.
 
-`posthog-docusaurus` publishes its JavaScript source directly, so it has no build step. Its type checks, unit tests, linting, and tarball packaging run through the standard workspace commands. See the [Docusaurus example](examples/example-docusaurus/README.md) for installed-package browser checks.
-
 ### Package-specific guides
 
 Some packages have their own contributor guides with extra package-level checks:

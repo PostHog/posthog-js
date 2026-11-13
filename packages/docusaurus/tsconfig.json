@@ -2,7 +2,9 @@
     "compilerOptions": {
         "allowJs": true,
         "checkJs": true,
-        "noEmit": true,
+        "declaration": true,
+        "rootDir": "./src",
+        "outDir": "./dist",
         "strict": true,
         "target": "ES2015",
         "module": "commonjs",

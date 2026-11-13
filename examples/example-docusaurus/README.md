@@ -14,7 +14,7 @@ cd examples/example-docusaurus
 pnpm install
 ```
 
-The shared pnpm hook installs `posthog-docusaurus` from `target/posthog-docusaurus.tgz`. Repack and reinstall after changing the plugin. The example is an independent workspace with the same seven-day dependency cooldown as the monorepo.
+The shared pnpm hook installs `posthog-docusaurus` from `target/posthog-docusaurus.tgz`. After changing the plugin, repack it, remove this example's `node_modules`, and run `pnpm install` again so pnpm replaces the cached local tarball. The example is an independent workspace with the same seven-day dependency cooldown as the monorepo.
 
 ## Run the compatibility checks
 
@@ -26,6 +26,7 @@ pnpm test
 
 The test builds the site, launches a separate headless Brave process with a temporary profile, and checks:
 
+- The installed plugin matches the current built artifact.
 - Production static rendering, hydration, SDK initialization, and configuration forwarding.
 - Exactly one initial pageview.
 - Custom events and button autocapture delivered to ingestion.
@@ -35,7 +36,7 @@ The test builds the site, launches a separate headless Brave process with a temp
 - Default pageleave capture on unload.
 - The landing pageview after opt-in, without navigation.
 
-SDK assets come from `packages/browser/dist`, built during setup. Configuration, feature flag responses, and ingestion are mocked locally; all non-local browser requests are blocked. No real project key is used and no events are sent to PostHog. Session replay and surveys are disabled and are not verified. The [Docusaurus CI workflow](../../.github/workflows/docusaurus.yml) runs these credential-free checks.
+SDK assets come from `packages/browser/dist`, built during setup. Configuration, feature flag responses, and ingestion are mocked locally; all non-local browser requests are blocked. No real project key is used and no events are sent to PostHog. Session replay and surveys are disabled and are not verified. The [Library checks workflow](../../.github/workflows/library-ci.yml) runs these credential-free checks.
 
 The SDK captures the initial pageview. The plugin's route hook skips the initial load and captures subsequent pathname changes, preserving SDK defaults for pageleave and consent behavior.
 

@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -68,6 +69,12 @@ function decodeEvents(body) {
 }
 
 await test('Docusaurus compatibility with the real PostHog SDK', async (t) => {
+    const installedPlugin = createRequire(import.meta.url).resolve('posthog-docusaurus')
+    const builtPlugin = new URL('../../../packages/docusaurus/dist/index.js', import.meta.url)
+    assert.ok(
+        (await readFile(installedPlugin)).equals(await readFile(builtPlugin)),
+        "Repack the plugin, remove this example's node_modules, and run pnpm install to install the current build"
+    )
     const events = []
     const ingestionErrors = []
     const assets = new Map()
