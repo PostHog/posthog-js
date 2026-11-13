@@ -523,6 +523,25 @@ describe('sending email through the component', () => {
       expect(requests).toHaveLength(0)
     })
 
+    test('refuses an email too large for a queued job before it is queued, and points at sendEmail', async () => {
+      const largeInvoice = { filename: 'invoice.pdf', content: 'A'.repeat(1_000_000), contentType: 'application/pdf' }
+      const t = initConvexTest()
+
+      const refused = failureOf(
+        t.mutation(anyApi.emails.enqueue, { email: { ...ORDER_SHIPPED, attachments: [largeInvoice] } })
+      )
+
+      expect(await refused).toMatchObject({
+        code: 'queued_email_too_large',
+        name: 'validation_error',
+        retryable: false,
+        fix: expect.stringContaining('sendEmail'),
+      })
+      await t.finishAllScheduledFunctions(vi.runAllTimers)
+      expect(requests).toHaveLength(0)
+      expect(finishedEmails).toHaveLength(0)
+    })
+
     test('keeps the key the app passed', async () => {
       replies.push(accepted())
       const t = initConvexTest()
