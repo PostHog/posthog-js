@@ -1,7 +1,15 @@
 /// <reference types="vite/client" />
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi } from 'vitest'
 import { convexTest, type TestConvex } from 'convex-test'
-import { actionGeneric, anyApi, componentsGeneric, defineSchema, mutationGeneric, queryGeneric } from 'convex/server'
+import {
+  actionGeneric,
+  anyApi,
+  componentsGeneric,
+  defineSchema,
+  type FunctionArgs,
+  mutationGeneric,
+  queryGeneric,
+} from 'convex/server'
 import { ConvexError, v, type Value } from 'convex/values'
 import { Workpool, type WorkId, type WorkpoolComponent } from '@convex-dev/workpool'
 import posthogTest from '../test.js'
@@ -49,6 +57,10 @@ const app = {
         madeInTheApp(args)
       ),
   }),
+  sendQueuedDirectly: actionGeneric({
+    args: { email: v.any() },
+    handler: (ctx, { email }) => ctx.runAction(components.posthog.emails.sendQueued, email),
+  }),
   status: queryGeneric({
     args: { id: v.string() },
     handler: (ctx, { id }) => pool.status(ctx, id as WorkId),
@@ -75,11 +87,38 @@ const ORDER_SHIPPED = {
 
 const accepted = (replayed = false): Reply => ({ status: 202, body: { message_id: MESSAGE_ID, replayed } })
 
+const STORAGE_URL = 'https://storage.example.com/invoice.pdf'
+
+const INVOICE_ATTACHED = {
+  ...ORDER_SHIPPED,
+  attachments: [{ filename: 'invoice.pdf', contentType: 'application/pdf', content: 'JVBERi0xLjQK' }],
+} satisfies SendEmailArgs
+
+const uploadsAnswering =
+  ({ uploads, storage }: { uploads?: Reply; storage?: Reply }) =>
+  ({ url, body }: { url: string; body: Record<string, unknown> }): Reply => {
+    if (url === UPLOADS_URL) {
+      const files = (body.files as { sha256: string }[]).map(({ sha256 }) => ({
+        sha256,
+        status: 'upload',
+        url: STORAGE_URL,
+        headers: { 'Content-Type': 'application/pdf' },
+      }))
+      return uploads ?? { status: 200, body: { files } }
+    }
+    return url === STORAGE_URL ? (storage ?? { status: 200 }) : accepted()
+  }
+
 const COOLING_DOWN: Reply = {
   status: 429,
   body: { code: 'throttled', detail: 'Slow down.' },
   headers: { 'Retry-After': '60' },
 }
+
+test('every field the app can pass reaches the component, so its validator never rejects a typed email', () => {
+  type ComponentEmailArgs = FunctionArgs<ComponentApi['emails']['send']>
+  expectTypeOf<Exclude<keyof SendEmailArgs, 'templateId' | 'react'>>().toMatchTypeOf<keyof ComponentEmailArgs>()
+})
 
 describe('sending email through the component', () => {
   let replies: Reply[]
@@ -96,7 +135,7 @@ describe('sending email through the component', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
-        const body = JSON.parse(init.body as string)
+        const body = typeof init.body === 'string' ? JSON.parse(init.body) : {}
         const reply = answer?.({ url, body }) ?? replies.shift()
         if (!reply) throw new Error('No reply queued')
         requests.push({ url, headers: init.headers as Record<string, string>, body, answer: reply })
@@ -326,6 +365,27 @@ describe('sending email through the component', () => {
       expect(new Set(requests.map((r) => r.headers['Idempotency-Key'])).size).toBe(1)
     }, 15_000)
 
+    test('a file storage outage is retryable after the SDK retries the upload', async () => {
+      vi.useRealTimers()
+      answer = uploadsAnswering({ storage: { status: 502 } })
+
+      const data = await failureOf(send(INVOICE_ATTACHED))
+
+      expect(data).toMatchObject({ status: 502, code: 'attachment_upload_failed', retryable: true })
+      expect(requests.filter(({ url }) => url === SEND_URL)).toHaveLength(0)
+    }, 15_000)
+
+    test('an exhausted upload quota is a permanent failure', async () => {
+      answer = uploadsAnswering({
+        uploads: { status: 429, body: { code: 'upload_quota_exceeded', detail: 'Over the upload quota.' } },
+      })
+
+      const data = await failureOf(send(INVOICE_ATTACHED))
+
+      expect(data).toMatchObject({ status: 429, code: 'upload_quota_exceeded', retryable: false })
+      expect(requests).toHaveLength(1)
+    })
+
     test('a missing secret key is a permanent failure that sends nothing', async () => {
       vi.stubEnv('POSTHOG_SECRET_KEY', '')
 
@@ -365,6 +425,29 @@ describe('sending email through the component', () => {
       await expect(runQueue(t, workId)).resolves.toEqual({ state: 'finished' })
       expect(acceptedRequests()).toHaveLength(1)
       expect(new Set(requests.map((r) => r.headers['Idempotency-Key'])).size).toBe(1)
+    })
+
+    test('ends at once, without sending early, when PostHog asks to wait longer than a queued send waits', async () => {
+      replies.push(
+        { status: 429, body: { code: 'throttled', detail: 'Slow down.' }, headers: { 'Retry-After': '1800' } },
+        accepted(),
+        accepted()
+      )
+      const t = initConvexTest()
+
+      const workId = await t.mutation(anyApi.emails.enqueue, { email: ORDER_SHIPPED })
+
+      await expect(runQueue(t, workId)).resolves.toEqual({ state: 'finished' })
+      expect(requests).toHaveLength(1)
+    })
+
+    test('the queued action refuses an email without an idempotency key, so no retry can send it twice', async () => {
+      const t = initConvexTest()
+
+      await expect(
+        t.action(anyApi.emails.sendQueuedDirectly, { email: { ...ORDER_SHIPPED, templateKey: 'convex' } })
+      ).rejects.toThrow(/idempotencyKey/)
+      expect(requests).toHaveLength(0)
     })
 
     test('keeps the key the app passed', async () => {
