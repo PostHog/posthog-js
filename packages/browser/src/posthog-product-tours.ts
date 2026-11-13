@@ -7,7 +7,7 @@ import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 import { Extension } from './extensions/types'
 
-const logger = createLogger('[Product Tours]')
+const logger = /* @__PURE__ */ createLogger('[Product Tours]')
 
 interface ProductTourManagerInterface {
     start: () => void

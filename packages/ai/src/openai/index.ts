@@ -13,7 +13,7 @@ import type {
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import { sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { extractRequestId, isTerminalResponse } from './utils'
+import { extractRequestId, isTerminalResponse, type Base64EmbeddingResponse } from './utils'
 import type { MonitoringEventPropertiesWithDefaults } from '../utils'
 import {
   BackgroundResponseTracker,
@@ -672,10 +672,23 @@ export class WrappedEmbeddings extends Embeddings {
     this.baseURL = client.baseURL
   }
 
+  // --- Overload #1: base64 embeddings, typed as strings by openai 7.5+
+  public create(
+    body: EmbeddingCreateParams & { encoding_format: 'base64' } & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<Base64EmbeddingResponse>
+
+  // --- Overload #2: float embeddings
   public create(
     body: EmbeddingCreateParams & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<CreateEmbeddingResponse> {
+  ): APIPromise<CreateEmbeddingResponse>
+
+  // --- Implementation Signature
+  public create(
+    body: EmbeddingCreateParams & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<CreateEmbeddingResponse | Base64EmbeddingResponse> {
     const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 

@@ -1,5 +1,42 @@
 # posthog-react-native
 
+## 4.86.0
+
+### Minor Changes
+
+- [#5601](https://github.com/PostHog/posthog-js/pull/5601) [`09a0f1f`](https://github.com/PostHog/posthog-js/commit/09a0f1fa25946196895e2023e61da0609bef7579) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `setAppLanguage()` to send the language your app displays as `$app_language` on every event
+  (2026-11-10)
+
+### Patch Changes
+
+- Updated dependencies [[`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3), [`1ae99e2`](https://github.com/PostHog/posthog-js/commit/1ae99e2909dbbf5b21b374a850c56bbf2fbee52b), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - @posthog/types@1.423.0
+  - @posthog/react-native-plugin@2.13.1
+  - @posthog/core@1.66.0
+
+## 4.85.4
+
+### Patch Changes
+
+- [#5586](https://github.com/PostHog/posthog-js/pull/5586) [`441658f`](https://github.com/PostHog/posthog-js/commit/441658f2519af0b17ec33c2a31eddb6ee9f59f50) Thanks [@marandaneto](https://github.com/marandaneto)! - Forward Expo skipOnConflict and force options to shared Android upload defaults when native symbol uploads are enabled.
+  (2026-11-09)
+
+## 4.85.3
+
+### Patch Changes
+
+- [#5481](https://github.com/PostHog/posthog-js/pull/5481) [`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Feature flags read before the user opts in to capturing now send `$feature_flag_called` when the user opts in, without being read again. This fixes missing exposures from the React and React Native hooks, which read a flag once on mount.
+  (2026-11-04)
+- Updated dependencies [[`5764ddd`](https://github.com/PostHog/posthog-js/commit/5764ddda162d28d0535133658ac68486376234a6)]:
+  - @posthog/core@1.63.1
+
+## 4.85.2
+
+### Patch Changes
+
+- [#5525](https://github.com/PostHog/posthog-js/pull/5525) [`f3fe629`](https://github.com/PostHog/posthog-js/commit/f3fe629b0788325a1ebd5610a6b1a410bff2b4ef) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Fix `posthog-xcode.sh` uploading from `DERIVED_FILE_DIR` when `SOURCEMAP_FILE` is preset elsewhere (e.g. EAS builds), so the composed source map is found.
+  (2026-11-03)
+
 ## 4.85.1
 
 ### Patch Changes

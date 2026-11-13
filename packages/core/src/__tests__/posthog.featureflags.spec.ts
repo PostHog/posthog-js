@@ -822,11 +822,44 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
-      it('should capture feature_flag_called after opt in for a flag read while opted out', async () => {
+      const readFlag = (): void => void posthog.getFeatureFlag('feature-1')
+      const noop = (): void => {}
+
+      it.each([
+        ['read again after opt in', undefined, noop, readFlag, 1],
+        // The React Native hooks read a flag on mount and only again when flags change
+        ['not read again after opt in', undefined, noop, noop, 1],
+        ['read with sendEvent false, which sends nothing', { sendEvent: false }, noop, noop, 0],
+        [
+          'identify() as another user before opt in, which sends nothing',
+          undefined,
+          () => posthog.identify('other-user'),
+          noop,
+          0,
+        ],
+      ])(
+        'should send the expected $feature_flag_called for a flag read while opted out: %s',
+        async (_, readOptions, beforeOptIn, afterOptIn, expectedCount) => {
+          posthog.optOut()
+          posthog.getFeatureFlag('feature-1', readOptions)
+          beforeOptIn()
+          posthog.optIn()
+          afterOptIn()
+          await waitForPromises()
+
+          const flagCalledEvents = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .filter((e: any) => e.event === '$feature_flag_called')
+          expect(flagCalledEvents).toHaveLength(expectedCount)
+        }
+      )
+
+      it('should stop sending reads made while opted out once a capture listener changes the identity', async () => {
         posthog.optOut()
         posthog.getFeatureFlag('feature-1')
+        posthog.getFeatureFlag('feature-2')
+        posthog.on('capture', () => posthog.identify('other-user'))
         posthog.optIn()
-        posthog.getFeatureFlag('feature-1')
         await waitForPromises()
 
         const flagCalledEvents = mocks.fetch.mock.calls

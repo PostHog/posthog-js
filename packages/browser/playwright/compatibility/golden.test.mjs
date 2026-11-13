@@ -136,7 +136,7 @@ async function assertPreserved(space) {
 
 test('full coverage includes loader goldens without inventing a historical loader deployment', () => {
     const result = buildGoldens(fixture())
-    assert.equal(result.cellCount, 525)
+    assert.equal(result.cellCount, 588)
     assert.equal(Object.keys(result.files).length, 7)
     assert.ok(result.files['current-loader.json'])
     assert.ok(!result.files['historical-1.354.0-loader.json'])

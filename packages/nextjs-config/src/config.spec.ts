@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { runInNewContext } from 'node:vm'
 import type { NextConfig } from 'next'
 import * as utils from './utils'
 import { PosthogWebpackPlugin, type PluginConfig } from '@posthog/webpack-plugin'
@@ -284,6 +285,13 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
     vi.stubEnv('POSTHOG_RELEASE_ID', '')
     distDir = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-next-hook-'))
     await fs.mkdir(path.join(distDir, 'static'))
+    await fs.mkdir(path.join(distDir, 'server/chunks/ssr'), { recursive: true })
+    for (const directory of ['server/chunks', 'server/chunks/ssr']) {
+      await fs.writeFile(
+        path.join(distDir, directory, '[turbopack]_runtime.js'),
+        'const loaded = true;\n//# sourceMappingURL=[turbopack]_runtime.js.map\n'
+      )
+    }
   })
 
   afterEach(async () => {
@@ -435,13 +443,43 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
     expect(resolveRelease).not.toHaveBeenCalled()
   })
 
+  it('inserts the release in server bootstraps before upload without altering other chunks', async () => {
+    const releaseId = 'release-"\\\\\nwith-newline'
+    vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue(releaseId)
+    const serverChunk = path.join(distDir, 'server/chunks/[root-of-the-server]__hash._.js')
+    const browserChunk = path.join(distDir, 'static/hashed.js')
+    await fs.writeFile(serverChunk, 'const server = true;\n//# debugId=server\n')
+    await fs.writeFile(browserChunk, 'const browser = true;\n//# debugId=browser\n')
+    const originalRuntime = await fs.readFile(path.join(distDir, 'server/chunks/[turbopack]_runtime.js'), 'utf8')
+    let uploadedRuntime: string | undefined
+    vi.spyOn(utils, 'processSourceMaps').mockImplementation(async () => {
+      uploadedRuntime = await fs.readFile(path.join(distDir, 'server/chunks/[turbopack]_runtime.js'), 'utf8')
+    })
+    const config = await resolveNextConfig({})
+    await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+    await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+
+    for (const directory of ['server/chunks', 'server/chunks/ssr']) {
+      const runtime = await fs.readFile(path.join(distDir, directory, '[turbopack]_runtime.js'), 'utf8')
+      expect(runtime).toContain(originalRuntime.split('//# sourceMappingURL')[0])
+      expect(runtime.endsWith('//# sourceMappingURL=[turbopack]_runtime.js.map\n')).toBe(true)
+      expect(runtime.match(/posthog-server-release/g)).toHaveLength(1)
+      expect(runInNewContext(runtime + '\nglobalThis._posthogReleaseId', { globalThis: {} })).toBe(releaseId)
+      expect(
+        runInNewContext(runtime + '\nglobalThis._posthogReleaseId', { globalThis: { _posthogReleaseId: 'existing' } })
+      ).toBe('existing')
+    }
+    expect(uploadedRuntime).toContain('posthog-server-release')
+    expect(await fs.readFile(serverChunk, 'utf8')).toBe('const server = true;\n//# debugId=server\n')
+    expect(await fs.readFile(browserChunk, 'utf8')).toBe('const browser = true;\n//# debugId=browser\n')
+  })
+
   it('uploads native debug ID maps without rewriting JavaScript', async () => {
     vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
     vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue(undefined)
     const source = 'a();\n//# debugId=00000000-0000-4000-8000-000000000001\n//# sourceMappingURL=app.js.map\n'
     await fs.writeFile(path.join(distDir, 'static/app.js'), source)
     await fs.writeFile(path.join(distDir, 'static/app.js.map'), '{}')
-    await fs.mkdir(path.join(distDir, 'server'))
     await fs.writeFile(path.join(distDir, 'server/app.js.map'), '{}')
     const processMaps = vi.spyOn(utils, 'processSourceMaps').mockImplementation(async () => undefined)
     const config = await resolveNextConfig({})

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { version } from '../../package.json'
 
 type CapturedEvent = { event: string; properties: Record<string, unknown> }
@@ -91,6 +92,64 @@ for (const installation of ['local', 'hosted']) {
         } finally {
             releaseCore()
         }
+    })
+}
+
+for (const integrityCase of ['matching', 'mismatching', 'modified bytes']) {
+    test(`local bootstrap core integrity handles ${integrityCase} without fallback`, async ({ page }, testInfo) => {
+        const overrides = (testInfo.project.use as { staticOverrides?: Record<string, string> }).staticOverrides
+        const coreSource = readFileSync(
+            path.resolve(__dirname, '../../dist', overrides?.['array.js'] || 'array.js'),
+            'utf8'
+        )
+        const approvedHash = `sha384-${createHash('sha384').update(coreSource).digest('base64')}`
+        const integrity = integrityCase === 'mismatching' ? 'sha384-' + 'A'.repeat(64) : approvedHash
+        const coreURL = `https://us-assets.i.posthog.com/static/${version}/array.js`
+        const scriptRequests: string[] = []
+        await page.route('**/*', async (route) => {
+            const url = route.request().url()
+            if (url === 'https://customer.example/') {
+                return route.fulfill({
+                    contentType: 'text/html',
+                    body: `<!doctype html>
+                        <script src="/bootstrap.js" data-asset-host="https://us-assets.i.posthog.com"
+                            data-sdk-version="${version}" data-core-integrity="${integrity}"></script>
+                        <script>posthog.init('phc_integrity', {
+                            api_host: 'https://us.i.posthog.com',
+                            persistence: 'memory',
+                            autocapture: false,
+                            capture_pageview: false,
+                            capture_pageleave: false,
+                            disable_external_dependency_loading: true,
+                            advanced_disable_feature_flags: true
+                        });</script>`,
+                })
+            }
+            if (url === 'https://customer.example/bootstrap.js') {
+                return route.fulfill({ path: path.resolve(__dirname, '../../dist/loader-bootstrap.js') })
+            }
+            if (url === 'https://us-assets.i.posthog.com/array/phc_integrity/config') {
+                return route.fulfill({ json: {} })
+            }
+            if (url.startsWith('https://us-assets.i.posthog.com/') && route.request().resourceType() === 'script') {
+                scriptRequests.push(url)
+                return route.fulfill({
+                    contentType: 'application/javascript',
+                    body:
+                        integrityCase === 'modified bytes'
+                            ? coreSource + '\nwindow.integrityTampered = true;'
+                            : coreSource,
+                    headers: { 'access-control-allow-origin': 'https://customer.example' },
+                })
+            }
+            return route.fulfill({ status: 404, body: '' })
+        })
+        await page.goto('https://customer.example/', { waitUntil: 'load' })
+        expect(scriptRequests).toEqual([coreURL])
+        expect(await page.evaluate(() => (window as any).posthog.__loaded)).toBe(
+            integrityCase === 'matching' ? true : undefined
+        )
+        expect(await page.evaluate(() => (window as any).integrityTampered)).toBeUndefined()
     })
 }
 

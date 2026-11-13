@@ -60,6 +60,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   private sendFeatureFlagEvent: boolean
   private disableRemoteFeatureFlags: boolean
   private flagCallReported: { [key: string]: Set<FeatureFlagValue | undefined> } = {}
+  private flagCallsPendingOptIn = new Set<string>()
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -149,10 +150,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.props = undefined
     this.sessionProps = {}
     this.flagCallReported = {}
+    this.flagCallsPendingOptIn = new Set()
   }
 
   on(event: string, cb: (...args: any[]) => void): () => void {
     return this._events.on(event, cb)
+  }
+
+  async optIn(): Promise<void> {
+    await super.optIn()
+    this.wrap(() => {
+      const pending = this.flagCallsPendingOptIn
+      this.flagCallsPendingOptIn = new Set()
+      const distinctId = this.getDistinctId()
+      pending.forEach((key) => {
+        // A capture listener can call identify() during this loop
+        if (this.getDistinctId() === distinctId) {
+          this._getFeatureFlagResult(key, { sendEvent: true })
+        }
+      })
+    })
   }
 
   /**
@@ -386,6 +403,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const shouldTransitionToIdentified = idWasSupplied && !identityChanged && !this._isIdentified()
 
       if (identityChanged) {
+        // Reads made while opted out belong to the previous identity
+        this.flagCallsPendingOptIn = new Set()
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
@@ -1044,9 +1063,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
+    const sendEventRequested = options.sendEvent ?? this.sendFeatureFlagEvent
+    // Callers such as the React Native hooks do not read the flag again after opt in, so optIn() reports this read.
+    if (sendEventRequested && this.optedOut) {
+      this.flagCallsPendingOptIn.add(key)
+    }
     // An opted-out client drops the event, so marking the flag as reported would suppress the exposure after opt in.
-    const sendEvent =
-      (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
+    const sendEvent = sendEventRequested && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []

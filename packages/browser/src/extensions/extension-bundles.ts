@@ -45,6 +45,8 @@ import { WebMCP } from './webmcp'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
+// Don't spread bundles into each other: the build lowers spread to a helper call that blocks tree-shaking.
+
 /** Feature flags. */
 export const FeatureFlagsExtensions = {
     featureFlags: PostHogFeatureFlags,
@@ -73,7 +75,7 @@ export const ErrorTrackingExtensions = {
 /** In-app product tours. Includes feature flags for targeting. */
 export const ProductToursExtensions = {
     productTours: PostHogProductTours,
-    ...FeatureFlagsExtensions,
+    featureFlags: PostHogFeatureFlags,
 } as const satisfies ExtensionClasses
 
 /** Site apps support. */
@@ -89,7 +91,7 @@ export const TracingExtensions = {
 /** In-app surveys. Includes feature flags for targeting. */
 export const SurveysExtensions = {
     surveys: BrowserSurveys,
-    ...FeatureFlagsExtensions,
+    featureFlags: PostHogFeatureFlags,
 } as const satisfies ExtensionClasses
 
 /** PostHog toolbar for visual element inspection and action setup. */
@@ -100,7 +102,7 @@ export const ToolbarExtensions = {
 /** Web experiments. Includes feature flags for variant evaluation. */
 export const ExperimentsExtensions = {
     experiments: WebExperiments,
-    ...FeatureFlagsExtensions,
+    featureFlags: PostHogFeatureFlags,
 } as const satisfies ExtensionClasses
 
 /** In-app conversations. */
@@ -125,18 +127,23 @@ export const WebMCPExtensions = {
 
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
-    ...FeatureFlagsExtensions,
-    ...SessionReplayExtensions,
-    ...AnalyticsExtensions,
-    ...ErrorTrackingExtensions,
-    ...ProductToursExtensions,
-    ...SiteAppsExtensions,
-    ...SurveysExtensions,
-    ...TracingExtensions,
-    ...ToolbarExtensions,
-    ...ExperimentsExtensions,
-    ...ConversationsExtensions,
-    ...LogsExtensions,
-    ...MetricsExtensions,
-    ...WebMCPExtensions,
+    featureFlags: PostHogFeatureFlags,
+    sessionRecording: SessionRecording,
+    autocapture: BrowserAutocapture,
+    historyAutocapture: HistoryAutocapture,
+    heatmaps: Heatmaps,
+    deadClicksAutocapture: DeadClicksAutocapture,
+    webVitalsAutocapture: WebVitalsAutocapture,
+    exceptionObserver: ExceptionObserver,
+    exceptions: PostHogExceptions,
+    productTours: PostHogProductTours,
+    siteApps: SiteApps,
+    surveys: BrowserSurveys,
+    tracingHeaders: TracingHeaders,
+    toolbar: Toolbar,
+    experiments: WebExperiments,
+    conversations: PostHogConversations,
+    logs: PostHogLogs,
+    metrics: PostHogMetrics,
+    webMCP: WebMCP,
 } as const satisfies ExtensionClasses

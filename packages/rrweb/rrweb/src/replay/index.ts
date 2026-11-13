@@ -7,6 +7,7 @@ import {
   createMirror,
   toLowerCase,
   attachShadowRootSafely,
+  restoreSelectState,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -81,6 +82,7 @@ import {
   type AppendedIframe,
   getBaseDimension,
   hasShadowRoot,
+  canContainChildren,
   isSerializedIframe,
   getNestedRule,
   getPositionsAndIndex,
@@ -1862,6 +1864,12 @@ export class Replayer {
     }
     const mirror = this.usingVirtualDom ? this.virtualDom.mirror : this.mirror;
     type TNode = typeof mirror extends Mirror ? Node : RRNode;
+    const selectsToRestore = new Set<Node>();
+    const queueSelectRestore = (parent: Node | RRNode) => {
+      if (this.usingVirtualDom) return;
+      const select = parent.nodeName === 'OPTGROUP' ? parent.parentNode : parent;
+      if (select?.nodeName === 'SELECT') selectsToRestore.add(select as Node);
+    };
 
     // filter into a local copy — never mutate the event data itself, as the
     // caller's events array must stay intact for later seeks (a rebuild from
@@ -1892,32 +1900,30 @@ export class Replayer {
       }
       // target may be removed with its parents before
       mirror.removeNodeFromMap(target as Node & RRNode);
-      if (parent)
-        try {
-          parent.removeChild(target as Node & RRNode);
-          /**
-           * https://github.com/rrweb-io/rrweb/pull/887
-           * Remove any virtual style rules for stylesheets if a child text node is removed.
-           */
-          if (
-            this.usingVirtualDom &&
-            target.nodeName === '#text' &&
-            parent.nodeName === 'STYLE' &&
-            (parent as RRStyleElement).rules?.length > 0
-          )
-            (parent as RRStyleElement).rules = [];
-        } catch (error) {
-          if (error instanceof DOMException) {
-            this.warn(
-              'parent could not remove child in mutation',
-              parent,
-              target,
-              d,
-            );
-          } else {
-            throw error;
-          }
-        }
+      if (!parent) return;
+      if (parent !== target.parentNode) {
+        return this.warn(
+          canContainChildren(parent)
+            ? 'parent mismatch, cannot be used to remove node in mutation'
+            : 'invalid parent, cannot be used to remove node in mutation',
+          parent,
+          target,
+          d,
+        );
+      }
+      parent.removeChild(target as Node & RRNode);
+      queueSelectRestore(parent);
+      /**
+       * https://github.com/rrweb-io/rrweb/pull/887
+       * Remove any virtual style rules for stylesheets if a child text node is removed.
+       */
+      if (
+        this.usingVirtualDom &&
+        target.nodeName === '#text' &&
+        parent.nodeName === 'STYLE' &&
+        (parent as RRStyleElement).rules?.length > 0
+      )
+        (parent as RRStyleElement).rules = [];
     });
 
     const legacy_missingNodeMap: missingNodeMap = {
@@ -1949,6 +1955,14 @@ export class Replayer {
           (add) => add.node.id === mutation.parentId,
         );
         return parentIdInCurrentBatch ? queue.push(mutation) : undefined;
+      }
+
+      if (!canContainChildren(parent)) {
+        return this.warn(
+          'parent is a leaf node and cannot be used to append new child in mutation',
+          parent,
+          mutation.node,
+        );
       }
 
       if (mutation.node.isShadow) {
@@ -2106,13 +2120,17 @@ export class Replayer {
         )
           parentDoc.removeChild(parentDoc.childNodes[0] as Node & RRNode);
         /**
-         * To detect the exist of the old HTML element before adding a new HTML element.
-         * The reason is similar to the above. One document only allows exactly one DocType and one HTML Element.
+         * To detect the exist of the old root element before adding a new root element.
+         * The reason is similar to the above. One document only allows exactly one DocType and one root Element.
          */
-        if (target.nodeName === 'HTML' && parentDoc.documentElement)
-          parentDoc.removeChild(
-            parentDoc.documentElement as HTMLElement & RRNode,
-          );
+        if (target.nodeType === Node.ELEMENT_NODE) {
+          // RRDocument.documentElement only matches an HTML root, so look up any element child.
+          const existingRoot = Array.from(
+            parentDoc.childNodes as ArrayLike<Node | RRNode>,
+          ).find((child) => child.nodeType === Node.ELEMENT_NODE);
+          if (existingRoot)
+            parentDoc.removeChild(existingRoot as Node & RRNode);
+        }
       }
 
       if (previous && previous.nextSibling && previous.nextSibling.parentNode) {
@@ -2133,6 +2151,7 @@ export class Replayer {
        * target was added, execute plugin hooks
        */
       afterAppend(target, mutation.node.id);
+      queueSelectRestore(parent);
 
       /**
        * https://github.com/rrweb-io/rrweb/pull/887
@@ -2230,6 +2249,9 @@ export class Replayer {
         );
         restoreStyleRules(detachedRoot.styleRules);
       }
+      selectsToRestore.forEach((select) =>
+        restoreSelectState(select, this.mirror),
+      );
       pendingDialogs.forEach((dialog) => {
         applyDialogToTopLevel(dialog);
       });
@@ -2469,7 +2491,22 @@ export class Replayer {
     }
     try {
       (target as HTMLInputElement).checked = d.isChecked;
-      (target as HTMLInputElement).value = d.text;
+      if (target.nodeName === 'SELECT' && d.selectedOptionIds) {
+        const select = target as HTMLSelectElement;
+        const selectedOptionIds = new Set(d.selectedOptionIds);
+        if (selectedOptionIds.size <= 1) {
+          select.selectedIndex = Array.from(select.options).findIndex((option) =>
+            selectedOptionIds.has(this.mirror.getId(option)),
+          );
+        } else {
+          Array.from(select.options).forEach((option) => {
+            option.selected = selectedOptionIds.has(this.mirror.getId(option));
+          });
+        }
+      } else {
+        (target as HTMLInputElement).value = d.text;
+      }
+      restoreSelectState(target, this.mirror);
     } catch (error) {
       // for safe
     }

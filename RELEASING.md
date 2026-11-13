@@ -44,6 +44,8 @@ A stable `posthog-js` release uploads:
 - mutable major-version aliases under `/static/<major>/`; and
 - top-level compatibility aliases under `/static/`.
 
+The integrity manifest is published only under `/static/<version>/integrity.json`, never at the mutable aliases.
+
 Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
 ### `@posthog/browser` S3 publication
@@ -82,6 +84,16 @@ For `posthog-js`, keep the original SDK and regional toolbar artifacts when retr
 The `posthog-js` CLI retains its combined upload mode for compatibility. Workflows use `upload-s3 <bucket> <version> --immutable-only`, followed by `--aliases-only` behind a cross-region barrier. Alias-only mode re-verifies the complete immutable set before writing aliases and cannot be combined with `--force-overwrite` or `--immutable-only`. No compressed asset format, public path, or cache lifetime changes are introduced.
 
 PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C07HTMN9X47) for release workflow failure notifications.
+
+### Failed or cancelled release
+
+The independent [release failure notification workflow](.github/workflows/release-failure-notification.yml) checks every completed release attempt on `main` and on the `posthog-node-5` maintenance branch, and alerts if a job failed, timed out, or was cancelled. This includes runner startup failures and cancellations with job records. It also alerts when the run did not succeed, no job failed, and an npm publish job (`Publish packages` or `Publish posthog-js`) was never created, for example when GitHub Actions stops a run before the publish jobs start. Maintenance runs skip `Publish posthog-js`, so only `Publish packages` counts there. Once every npm publish job succeeds, alerts describe follow-up problems rather than claiming the release failed, and the workflow alerts if the released Slack notification was skipped. It only acts on runs that a push or a manual dispatch started in this repository.
+
+Cancelled runs with no jobs are ignored, including superseded queued runs and manual cancellations before any job is created. A version-bump failure before any steps ran is also ignored when the rejection-reply step confirms an explicit rejection in the same attempt and no other job failed.
+
+Job inspection retries transient GitHub API failures up to three times. If inspection still fails, it logs the HTTP status or error type and message, then posts a fallback alert with the overall run status and logs link so the release can be checked manually. Error diagnostics stay in the run log, not in the Slack message.
+
+Alerts reply to the approval thread in the release approvals Slack channel. The release workflow preserves the thread timestamp in a run artifact for 30 days, independently of release approval. Failed-job reruns reuse the latest available thread from the same or an earlier attempt. If the timestamp is missing, invalid, or unavailable, the alert falls back to a new channel message, so it does not depend on the approval notification succeeding. The failure message surfaces Slack API errors rather than silently ignoring them. The notification workflow must be present on the default branch to run.
 
 ## Manual S3 recovery
 

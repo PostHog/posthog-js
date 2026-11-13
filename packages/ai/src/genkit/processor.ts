@@ -316,8 +316,8 @@ export class PostHogGenkitSpanProcessor {
       role: message.role === 'model' ? 'assistant' : message.role,
       content: (message.content ?? []).map((part) => formatPart(part, this._client)),
     }))
-    // Redacts base64 media and bounds long strings, the same way the Claude Agent SDK integration does.
-    return formatToolResult(formatted, this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
+    // Redacts credentials (tool results reach the model as messages), base64 media and long strings.
+    return formatToolResult(redactCredentials(formatted), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
   }
 }
 

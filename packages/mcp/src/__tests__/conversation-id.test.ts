@@ -33,9 +33,7 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id.type).toBe('string')
       expect(schema.properties.conversation_id.description).toBe(DEFAULT_CONVERSATION_ID_DESCRIPTION)
       // Without this clause, ChatGPT drops the handle on each new user message and every message becomes its own session.
-      expect(schema.properties.conversation_id.description).toMatch(
-        /rest of the conversation, including after later user messages/
-      )
+      expect(schema.properties.conversation_id.description).toMatch(/including after later user messages/)
       expect(schema.required ?? []).not.toContain('conversation_id')
     })
 
@@ -58,7 +56,7 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id).toBeDefined()
     })
 
-    it('strips additionalProperties:false so the new property is valid', () => {
+    it('keeps additionalProperties:false, since the new property is declared', () => {
       const result = addConversationIdToTool({
         name: 'tool',
         inputSchema: {
@@ -67,8 +65,9 @@ describe('conversation-id', () => {
           additionalProperties: false,
         },
       })
-      const schema = result.inputSchema as { additionalProperties?: boolean }
-      expect(schema.additionalProperties).toBeUndefined()
+      const schema = result.inputSchema as { additionalProperties?: boolean; properties: Record<string, unknown> }
+      expect(schema.properties.conversation_id).toBeDefined()
+      expect(schema.additionalProperties).toBe(false)
     })
 
     it('skips tools that already define conversation_id', () => {

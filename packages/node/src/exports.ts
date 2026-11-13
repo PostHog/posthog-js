@@ -1,5 +1,6 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
+export * from './extensions/fetch-request'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
@@ -10,8 +11,11 @@ export type {
   CodeEmailForm,
   EmailAttachment,
   EmailDeliveryStatus,
+  EmailPreferences,
+  EmailReactElement,
   Emails,
   EmailStatus,
+  EmailTracking,
   EmailWarning,
   GetEmailResponse,
   SendCodeEmailOptions,
@@ -20,6 +24,8 @@ export type {
   SendEmailResponse,
   SendEmailResult,
   SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './emails/types'
 export type {
@@ -35,7 +41,7 @@ export type { FeatureFlagErrorType, UnresolvedFlagReason } from '@posthog/core'
 
 // Metrics types re-exported so consumers can name the `metrics` client option
 // and API surface without a direct @posthog/core dependency.
-export type { CaptureMetricOptions, Metrics, MetricsConfig } from '@posthog/core'
+export type { CaptureMetricOptions, HistogramOptions, Metrics, MetricsConfig } from '@posthog/core'
 
 // Tracing types re-exported so consumers can name the `traces` client option and
 // the span API without a direct @posthog/core dependency.

@@ -48,6 +48,7 @@ export function compatibilityServer(settings) {
         'version-fallback',
     ].includes(settings.scenario)
     let flagSequence = 0
+    let xhrFault
     const server = createMockServer({
         barriers: [
             'config',
@@ -62,7 +63,11 @@ export function compatibilityServer(settings) {
                 settings.scenario === 'replay-minimum-duration' ? replayMinimumDurationMs : null,
             surveysEnabled,
             surveys: [survey],
-            flags: { 'compat-enabled': true, 'compat-variant': 'blue' },
+            flags: {
+                'compat-enabled': true,
+                'compat-variant': 'blue',
+                ...(settings.scenario.startsWith('xhr-timeout') ? { 'compat-timeout': 'cached' } : {}),
+            },
             projectToken: 'phc_COMPAT',
             configOverrides: {
                 supportedCompression: [],
@@ -96,6 +101,18 @@ export function compatibilityServer(settings) {
         },
         async adapter(request, context) {
             const path = request.path
+            if (path === '/__compat/xhr-timeout' && request.method === 'POST') {
+                const mode = request.body?.mode
+                if (!['recover', 'exhaust'].includes(mode)) return { status: 400, json: { error: 'Invalid XHR fault' } }
+                xhrFault = { mode, attempts: 0 }
+                server.holdBarrier('xhr-timeout')
+                server.updateState({ flags: { 'compat-timeout': 'fresh' } })
+                return { json: { afterId: request.id } }
+            }
+            if (xhrFault && request.method === 'POST' && /^\/(flags|decide)\/?$/.test(path)) {
+                xhrFault.attempts++
+                if (xhrFault.mode === 'exhaust' || xhrFault.attempts === 1) await context.waitForBarrier('xhr-timeout')
+            }
             const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
             if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)
                 return { body: networkSample.responseBody, headers: replayNetworkHeaders.response }

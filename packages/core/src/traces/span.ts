@@ -269,6 +269,14 @@ export class PostHogSpan implements Span {
     return formatTraceparent(this._traceId, this._spanId, this._traceFlags)
   }
 
+  get traceId(): string {
+    return this._traceId
+  }
+
+  get spanId(): string {
+    return this._spanId
+  }
+
   tracestate(): string | null {
     return this._traceState ?? null
   }
@@ -490,6 +498,12 @@ export class NoopSpan implements Span {
   traceparent(): string | null {
     return null
   }
+  get traceId(): string | null {
+    return null
+  }
+  get spanId(): string | null {
+    return null
+  }
   tracestate(): string | null {
     return null
   }
@@ -517,6 +531,15 @@ export class PassThroughSpan extends NoopSpan {
 
   override traceparent(): string {
     return this._traceparent
+  }
+
+  // `00-<traceId>-<spanId>-<flags>`: the inbound header is already normalized.
+  override get traceId(): string | null {
+    return this._traceparent.split('-')[1] ?? null
+  }
+
+  override get spanId(): string | null {
+    return this._traceparent.split('-')[2] ?? null
   }
 
   override tracestate(): string | null {
