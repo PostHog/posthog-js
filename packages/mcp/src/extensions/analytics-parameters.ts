@@ -98,12 +98,6 @@ export function addAnalyticsParameterToTool<TTool extends AnalyticsInjectableToo
     inputSchema.properties = {}
   }
 
-  // The MCP SDK emits `additionalProperties: false` when converting Zod schemas;
-  // left in place it would make the injected key invalid.
-  if (inputSchema.additionalProperties === false) {
-    inputSchema.additionalProperties = undefined
-  }
-
   inputSchema.properties[parameterName] = {
     type: 'string',
     description,

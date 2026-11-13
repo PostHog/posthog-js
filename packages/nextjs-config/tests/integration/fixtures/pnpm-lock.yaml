@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@posthog/cli':
-        specifier: 0.18.11
-        version: 0.18.11
+        specifier: 0.19.1
+        version: 0.19.1
       core-js:
         specifier: 3.49.0
         version: 3.49.0
@@ -380,8 +380,8 @@ packages:
   '@posthog/browser-common@0.9.4':
     resolution: {integrity: sha512-QlG0WZFG9iTp9cmXTypB4cgnxBAD3GImrj9AwmA84uh8uy5vIVgVLjoTTdOAW29XL+kh/eLn/5ZtBQt2JQfR+w==}
 
-  '@posthog/cli@0.18.11':
-    resolution: {integrity: sha512-DwesPjw+QdBJk9JCrPFOeKVsOc3maYytmQEgL7oMgHtZznsvvYUQfHeLdz+wfnfhCx6qFSDYSN+6jlXL71zSgw==}
+  '@posthog/cli@0.19.1':
+    resolution: {integrity: sha512-n3AdK/Y1jZlXJoH3O/I1sKr+9ga4+OP1QL+kDGxHDPpegpsfJOyf2kTeBTwKY9HUo3TyY+mgqrVLs9jkN9x96g==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -1065,7 +1065,7 @@ snapshots:
       '@posthog/core': 1.59.0
       '@posthog/types': 1.416.0
 
-  '@posthog/cli@0.18.11':
+  '@posthog/cli@0.19.1':
     dependencies:
       detect-libc: 2.1.2
 

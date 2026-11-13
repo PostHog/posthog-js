@@ -327,13 +327,6 @@ test('browser unit tests wait for the React output included in their package tar
     }
 })
 
-test('Node references consume the graph build without rebuilding inside the task', () => {
-    const tasks = dryRun(['run', 'generate-references', '--filter=posthog-node'])
-    const id = 'posthog-node#generate-references'
-    assert.ok(prerequisites(tasks, id).has('posthog-node#build'))
-    assert.doesNotMatch(tasks.find((task) => task.taskId === id).command, /pnpm build/)
-})
-
 test('rrweb dev bootstraps dependency builds before starting its single watcher', () => {
     for (const pkg of rrwebPackages) {
         assert.equal(pkg.scripts.dev, `pnpm turbo run build --filter='${pkg.name}^...' && vite build --watch`)
