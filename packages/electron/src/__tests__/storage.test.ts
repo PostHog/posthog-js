@@ -51,6 +51,49 @@ describe('ElectronStorage', () => {
         await fs.rm(directory, { recursive: true, force: true })
     })
 
+    it.each(['nested mutation', 'cycle'] as const)('detaches accepted queue data from caller %s', async (change) => {
+        const store = await storage()
+        const nested = { value: 'accepted' }
+        const properties: Record<string, unknown> = { nested }
+        const item = { message: { ...event('accepted').message, properties } }
+        store.set('queue', [item])
+        await store.flush()
+        if (change === 'cycle') properties.cycle = properties
+        else nested.value = 'changed'
+        expect(store.get('queue')).toEqual([
+            { message: { ...event('accepted').message, properties: { nested: { value: 'accepted' } } } },
+        ])
+        await store.flush()
+        expect((await diskState()).values.queue[0].message.properties).toEqual({ nested: { value: 'accepted' } })
+    })
+
+    it('keeps the accepted queue intact when a copy is changed before a rejected set', async () => {
+        const store = await storage()
+        store.set('queue', [event('accepted')])
+        await store.flush()
+        const next = store.get<ReturnType<typeof event>[]>('queue') ?? []
+        next.push({ message: { ...event('invalid').message, properties: { invalid: 1n } } })
+        expect(() => store.set('queue', next)).toThrow()
+        expect(store.get('queue')).toEqual([event('accepted')])
+        await store.flush()
+        expect((await diskState()).values.queue.map((item: ReturnType<typeof event>) => item.message.event)).toEqual([
+            'accepted',
+        ])
+    })
+
+    it('does not serialize the store again for unchanged queue reads while still expiring old entries', async () => {
+        const store = await storage({ maxQueueAgeMs: 100 })
+        store.set('queue', [event('accepted')])
+        await store.flush()
+        const stringify = vi.spyOn(JSON, 'stringify')
+        for (let i = 0; i < 20; i++) expect(store.get('queue')).toHaveLength(1)
+        expect(stringify).not.toHaveBeenCalled()
+        vi.mocked(Date.now).mockReturnValue(NOW + 101)
+        expect(store.get('queue')).toEqual([])
+        await store.flush()
+        expect((await diskState()).values.queue).toEqual([])
+    })
+
     it('loads an absent file without opting out and persists identity and properties across restart', async () => {
         const store = await storage()
         await store.load()

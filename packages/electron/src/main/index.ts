@@ -1,7 +1,14 @@
 import { app, powerMonitor, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { PostHogPersistedProperty, type PostHogCoreOptions, type FeatureFlagValue, type JsonType } from '@posthog/core'
+import {
+    PostHogPersistedProperty,
+    flagDetailsToResults,
+    type PostHogCoreOptions,
+    type PostHogFeatureFlagDetails,
+    type FeatureFlagValue,
+    type JsonType,
+} from '@posthog/core'
 import type { EventHint } from '@posthog/core/error-tracking'
 import { ElectronCore } from './client'
 import { startProcessExceptionAutocapture } from './exception-autocapture'
@@ -100,6 +107,8 @@ export class PostHog {
     private _cancelReady!: () => void
     private _cleanups: (() => void)[] = []
     private _tail: Promise<unknown> = Promise.resolve()
+    private _readyForSnapshots = false
+    private _pendingConsent = 0
 
     constructor(private _options: PostHogOptions) {
         if (singleton) throw new Error('PostHog Electron is already initialized; use init()')
@@ -142,7 +151,9 @@ export class PostHog {
             new Promise<void>((resolve) => {
                 this._cancelReady = resolve
             }),
-        ])
+        ]).then(() => {
+            this._readyForSnapshots = true
+        })
     }
 
     private _report(error: unknown): void {
@@ -228,19 +239,26 @@ export class PostHog {
         operation: () => void | Promise<unknown>,
         generation?: number,
         authorize?: () => void,
+        changesConsent = false,
         shouldRun?: () => boolean
     ): Promise<void> {
         if (this._closing) throw new Error('PostHog is shut down')
-        const pending = this._tail.then(async () => {
-            await this._ready
-            if (this._closed) throw new Error('PostHog is shut down')
-            if (generation !== undefined && generation !== this._generation) throw new Error('Stale PostHog identity')
-            authorize?.()
-            if (shouldRun && !shouldRun()) return
-            await operation()
-            await this._core.persist()
-            this._scheduleState()
-        })
+        if (changesConsent) this._pendingConsent++
+        const pending = this._tail
+            .then(async () => {
+                await this._ready
+                if (this._closed) throw new Error('PostHog is shut down')
+                if (generation !== undefined && generation !== this._generation)
+                    throw new Error('Stale PostHog identity')
+                authorize?.()
+                if (shouldRun && !shouldRun()) return
+                await operation()
+                await this._core.persist()
+                this._scheduleState()
+            })
+            .finally(() => {
+                if (changesConsent) this._pendingConsent--
+            })
         this._tail = pending.catch(() => {})
         return pending
     }
@@ -256,26 +274,42 @@ export class PostHog {
     private _alias(alias: string): void {
         if (!this._core.optedOut) this._core.alias(alias)
     }
+    private _snapshotEventProperties(properties?: Properties): Properties | undefined {
+        // Unknown persisted consent and queued consent changes must settle before inspecting caller data.
+        if (
+            this._closing ||
+            !this._readyForSnapshots ||
+            this._pendingConsent ||
+            this._core.optedOut ||
+            this._core.isDisabled
+        ) {
+            return properties
+        }
+        return properties === undefined ? undefined : structuredClone(properties)
+    }
     async screen(name: string, properties?: Properties): Promise<void> {
         if (!name?.trim()) return Promise.resolve()
+        const copy = this._snapshotEventProperties(properties)
         return this._run(() => {
-            if (!this._core.optedOut) {
-                this._core.capture('$screen', structuredClone({ ...properties, $screen_name: name }))
+            if (!this._core.optedOut && !this._core.isDisabled) {
+                this._core.capture('$screen', structuredClone({ ...copy, $screen_name: name }))
             }
         })
     }
     async setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
-        return this._run(() => this._setPersonProperties(properties, propertiesOnce))
+        const set = this._snapshotEventProperties(properties)
+        const once = this._snapshotEventProperties(propertiesOnce)
+        return this._run(() => this._setPersonProperties(set, once))
     }
     private _setPersonProperties(properties?: Properties, propertiesOnce?: Properties): void {
-        if (this._core.optedOut) return
+        if (this._core.optedOut || this._core.isDisabled) return
         const set = properties === undefined ? undefined : structuredClone(properties)
         const once = propertiesOnce === undefined ? undefined : structuredClone(propertiesOnce)
         this._core.setPersonProperties(set, once)
     }
     async setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
         const copy = structuredClone(properties)
-        return this._run(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
+        return this._runFlagContext(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
     }
     private async _setPersonPropertiesForFlags(properties: Properties, reload: boolean): Promise<void> {
         if (!Object.keys(properties).length) return
@@ -284,7 +318,7 @@ export class PostHog {
     }
     async setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
         const copy = structuredClone(properties)
-        return this._run(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
+        return this._runFlagContext(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
     }
     private async _setGroupPropertiesForFlags(properties: Record<string, Properties>, reload: boolean): Promise<void> {
         if (!Object.keys(properties).length) return
@@ -292,24 +326,47 @@ export class PostHog {
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
     resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
-        return this._run(() => this._resetPersonPropertiesForFlags(reloadFeatureFlags))
+        return this._runFlagContext(() => this._resetPersonPropertiesForFlags(reloadFeatureFlags))
     }
     private async _resetPersonPropertiesForFlags(reload: boolean): Promise<void> {
         this._core.resetPersonPropertiesForFlags()
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
     resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
-        return this._run(() => this._resetGroupPropertiesForFlags(reloadFeatureFlags))
+        return this._runFlagContext(() => this._resetGroupPropertiesForFlags(reloadFeatureFlags))
     }
     private async _resetGroupPropertiesForFlags(reload: boolean): Promise<void> {
         this._core.resetGroupPropertiesForFlags()
         if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    private async _runFlagContext(
+        operation: () => void | Promise<unknown>,
+        generation?: number,
+        authorize?: () => void
+    ): Promise<void> {
+        let reloading: Promise<unknown> = Promise.resolve()
+        await this._run(
+            () => {
+                reloading = Promise.resolve(operation())
+                // Observe a rejection while persistence is pending, without holding the mutation tail on networking.
+                void reloading.catch(() => {})
+            },
+            generation,
+            authorize
+        )
+        await reloading
+        await this._core.persist()
+        this._scheduleState()
     }
     identify(distinctId: string, properties?: Properties): Promise<void> {
         if (!distinctId?.trim()) return Promise.resolve()
         return this._run(() => this._identify(distinctId, properties))
     }
     private _identify(distinctId: string, properties?: Properties): void {
+        if (!this._core.canIdentify()) {
+            this._core.identify(distinctId, properties)
+            return
+        }
         if (distinctId !== this._core.getDistinctId()) {
             this._generation++
             this._core.invalidateIdentity()
@@ -343,10 +400,10 @@ export class PostHog {
         return this._run(() => this._core.unregister(key))
     }
     optIn(): Promise<void> {
-        return this._run(() => this._core.optIn())
+        return this._run(() => this._core.optIn(), undefined, undefined, true)
     }
     optOut(): Promise<void> {
-        return this._run(() => this._optOut())
+        return this._run(() => this._optOut(), undefined, undefined, true)
     }
     private async _optOut(): Promise<void> {
         this._generation++
@@ -372,6 +429,7 @@ export class PostHog {
             },
             this._generation,
             undefined,
+            false,
             canCapture
         )
     }
@@ -385,7 +443,7 @@ export class PostHog {
         return this._core.optedOut
     }
     getSessionId(): string {
-        return this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
+        return this._core.isDisabled ? '' : this._core.getSessionId()
     }
     getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
         return this._core.getFeatureFlag(key, { sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent })
@@ -408,10 +466,18 @@ export class PostHog {
         return normalizeFlagResult({ ...result, payload: this.getFeatureFlagPayload(result.key) ?? null })
     }
     getAllFeatureFlags(): FeatureFlagResult[] {
-        return this._core.getAllFeatureFlags().map((result) => this._copyFlagResult(result))
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        return flagDetailsToResults(details?.flags ?? {}).map((result) =>
+            normalizeFlagResult({ ...result, payload: this._decodeFlagPayload(result.key, details) ?? null })
+        )
     }
     getFeatureFlagPayload(key: string): JsonType | undefined {
         const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        return this._decodeFlagPayload(key, details)
+    }
+    private _prunePayloadErrors(details: PostHogFeatureFlagDetails | undefined): void {
         // Retain only the current malformed value per current flag, not a history of raw payloads.
         for (const [reportedKey, reportedRaw] of this._reportedPayloadErrors) {
             if (
@@ -422,6 +488,8 @@ export class PostHog {
                 this._reportedPayloadErrors.delete(reportedKey)
             }
         }
+    }
+    private _decodeFlagPayload(key: string, details: PostHogFeatureFlagDetails | undefined): JsonType | undefined {
         if (!details) return undefined
         const raw = Object.prototype.hasOwnProperty.call(details.flags, key)
             ? details.flags[key].metadata?.payload
@@ -467,10 +535,12 @@ export class PostHog {
     }
 
     getState(): State {
-        const flags = this._core.getFeatureFlags() ?? {}
-        const payloads: Record<string, JsonType> = {}
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        const flags = details?.featureFlags ?? {}
+        const payloads: Record<string, JsonType> = Object.create(null)
         for (const key of Object.keys(flags)) {
-            const payload = this.getFeatureFlagPayload(key)
+            const payload = this._decodeFlagPayload(key, details)
             if (payload !== undefined) payloads[key] = payload
         }
         return structuredClone({
@@ -478,12 +548,12 @@ export class PostHog {
             generation: this._generation,
             distinctId: this._core.getDistinctId(),
             anonymousId: this._core.getAnonymousId(),
-            sessionId: this.getSessionId(),
+            sessionId: this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? '',
             optedOut: this._core.optedOut,
             disabled: this._core.isDisabled,
             autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
-            flagsLoaded: this._core.getFeatureFlags() !== undefined,
+            flagsLoaded: details !== undefined,
             flagRevision: this._flagRevision,
             featureFlagPayloads: payloads,
         })
@@ -645,64 +715,74 @@ export class PostHog {
             this._scheduleState()
             return
         }
-        return this._run(
-            () =>
-                this._core.withContext(context, () => {
-                    switch (command.type) {
-                        case 'capture':
-                            return this._core.capture(command.event, { ...command.properties, ...context })
-                        case 'alias':
-                            return this._alias(command.alias)
-                        case 'screen':
-                            return this._core.capture('$screen', {
-                                ...command.properties,
-                                ...context,
-                                $screen_name: command.name,
-                            })
-                        case 'setPersonProperties':
-                            return this._setPersonProperties(command.properties, command.propertiesOnce)
-                        case 'setPersonPropertiesForFlags':
-                            return this._setPersonPropertiesForFlags(command.properties, command.reloadFeatureFlags)
-                        case 'setGroupPropertiesForFlags':
-                            return this._setGroupPropertiesForFlags(command.properties, command.reloadFeatureFlags)
-                        case 'resetPersonPropertiesForFlags':
-                            return this._resetPersonPropertiesForFlags(command.reloadFeatureFlags)
-                        case 'resetGroupPropertiesForFlags':
-                            return this._resetGroupPropertiesForFlags(command.reloadFeatureFlags)
-                        case 'identify':
-                            return this._identify(command.distinctId, command.properties)
-                        case 'reset':
-                            return this._reset()
-                        case 'group':
-                            return this._core.group(command.groupType, command.groupKey, command.properties)
-                        case 'register':
-                            return this._core.register(command.properties)
-                        case 'unregister':
-                            return this._core.unregister(command.key)
-                        case 'optIn':
-                            return this._core.optIn()
-                        case 'optOut':
-                            return this._optOut()
-                        case 'flag': {
-                            if (
-                                command.flagRevision === this._flagRevision &&
-                                this._core.getFeatureFlag(command.key, { sendEvent: false }) ===
-                                    (command.value ?? undefined)
-                            ) {
-                                this._core.getFeatureFlag(command.key)
-                            }
-                            return
+        const operation = () =>
+            this._core.withContext(context, () => {
+                switch (command.type) {
+                    case 'capture':
+                        return this._core.capture(command.event, { ...command.properties, ...context })
+                    case 'alias':
+                        return this._alias(command.alias)
+                    case 'screen':
+                        return this._core.capture('$screen', {
+                            ...command.properties,
+                            ...context,
+                            $screen_name: command.name,
+                        })
+                    case 'setPersonProperties':
+                        return this._setPersonProperties(command.properties, command.propertiesOnce)
+                    case 'setPersonPropertiesForFlags':
+                        return this._setPersonPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                    case 'setGroupPropertiesForFlags':
+                        return this._setGroupPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                    case 'resetPersonPropertiesForFlags':
+                        return this._resetPersonPropertiesForFlags(command.reloadFeatureFlags)
+                    case 'resetGroupPropertiesForFlags':
+                        return this._resetGroupPropertiesForFlags(command.reloadFeatureFlags)
+                    case 'identify':
+                        return this._identify(command.distinctId, command.properties)
+                    case 'reset':
+                        return this._reset()
+                    case 'group':
+                        return this._core.group(command.groupType, command.groupKey, command.properties)
+                    case 'register':
+                        return this._core.register(command.properties)
+                    case 'unregister':
+                        return this._core.unregister(command.key)
+                    case 'optIn':
+                        return this._core.optIn()
+                    case 'optOut':
+                        return this._optOut()
+                    case 'flag': {
+                        if (
+                            command.flagRevision === this._flagRevision &&
+                            this._core.getFeatureFlag(command.key, { sendEvent: false }) ===
+                                (command.value ?? undefined)
+                        ) {
+                            this._core.getFeatureFlag(command.key)
                         }
-                        case 'exception':
-                            return this._core.capture(
-                                '$exception',
-                                { ...command.properties, ...context },
-                                { _originatedFromCaptureException: true }
-                            )
+                        return
                     }
-                }),
+                    case 'exception':
+                        return this._core.capture(
+                            '$exception',
+                            { ...command.properties, ...context },
+                            { _originatedFromCaptureException: true }
+                        )
+                }
+            })
+        if (
+            command.type === 'setPersonPropertiesForFlags' ||
+            command.type === 'setGroupPropertiesForFlags' ||
+            command.type === 'resetPersonPropertiesForFlags' ||
+            command.type === 'resetGroupPropertiesForFlags'
+        ) {
+            return this._runFlagContext(operation, generation, authorize)
+        }
+        return this._run(
+            operation,
             command.type === 'optOut' ? undefined : generation,
-            authorize
+            authorize,
+            command.type === 'optOut' || command.type === 'optIn'
         )
     }
 
