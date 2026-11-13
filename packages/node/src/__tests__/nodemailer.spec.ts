@@ -1,7 +1,10 @@
+import { PassThrough } from 'node:stream'
 import nodemailer from 'nodemailer'
 
 import { PostHog } from '@/entrypoints/index.node'
 import { createPostHogTransport, type PostHogTransportOptions } from '@/entrypoints/nodemailer'
+
+import { FakePostHog } from './utils/emails-fake'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -25,7 +28,6 @@ const ORDER_SHIPPED_ON_THE_WIRE = {
   subject: 'Your order shipped',
   html: '<p>On its way.</p>',
   text: 'On its way.',
-  capture_engagement: true,
 }
 
 describe('posthog-node/nodemailer', () => {
@@ -101,32 +103,6 @@ describe('posthog-node/nodemailer', () => {
         {},
       ],
       [
-        '04-attachments-and-inline',
-        {},
-        {
-          ...ORDER_SHIPPED,
-          html: '<img src="cid:logo">',
-          attachments: [
-            { filename: 'invoice.pdf', contentType: 'application/pdf', content: Buffer.from('JVBERi0xLjQK', 'base64') },
-            {
-              filename: 'logo.png',
-              contentType: 'image/png',
-              content: 'iVBORw0KGgo=',
-              encoding: 'base64',
-              cid: 'logo',
-            },
-          ],
-        },
-        {
-          html: '<img src="cid:logo">',
-          attachments: [
-            { filename: 'invoice.pdf', content_type: 'application/pdf', content: 'JVBERi0xLjQK' },
-            { filename: 'logo.png', content_type: 'image/png', content: 'iVBORw0KGgo=', content_id: 'logo' },
-          ],
-        },
-        {},
-      ],
-      [
         '05-posthog-options',
         {},
         {
@@ -135,11 +111,25 @@ describe('posthog-node/nodemailer', () => {
             distinct_id: 'user_42',
             template_key: 'order-shipped',
             idempotency_key: 'order-981-shipped',
-            capture_engagement: false,
+            sensitive: true,
           },
         },
-        { template_key: 'order-shipped', distinct_id: 'user_42', capture_engagement: false },
+        { template_key: 'order-shipped', distinct_id: 'user_42', sensitive: true },
         { 'Idempotency-Key': 'order-981-shipped' },
+      ],
+      [
+        '14-tracking, as the PostHog tracking option',
+        {},
+        { ...ORDER_SHIPPED, posthog: { tracking: { opens: true, clicks: false } } },
+        { tracking: { opens: true, clicks: false } },
+        {},
+      ],
+      [
+        '14-tracking, with all tracking off',
+        {},
+        { ...ORDER_SHIPPED, posthog: { tracking: false } },
+        { tracking: false },
+        {},
       ],
       [
         '07-template-key-config-default',
@@ -159,6 +149,20 @@ describe('posthog-node/nodemailer', () => {
         '11-headers-ignored-and-refused, with the ignored header as a list',
         {},
         { ...ORDER_SHIPPED, headers: [{ key: 'Message-ID', value: '<x@example.com>' }] },
+        {},
+        {},
+      ],
+      [
+        '11-headers-ignored-and-refused, with a Content-Type header PostHog sets itself',
+        {},
+        { ...ORDER_SHIPPED, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+        {},
+        {},
+      ],
+      [
+        '13-refuse-envelope-mismatch, with the envelope naming the domains in another case',
+        {},
+        { ...ORDER_SHIPPED, envelope: { from: 'shop@EXAMPLE.com', to: ['ana@Example.COM'] } },
         {},
         {},
       ],
@@ -229,6 +233,11 @@ describe('posthog-node/nodemailer', () => {
         { ...ORDER_SHIPPED, envelope: { from: 'bounce@example.com', to: ['ana@example.com'] } },
         'envelope_mismatch',
       ],
+      [
+        '13-refuse-envelope-mismatch, with a recipient whose mailbox differs only in case',
+        { ...ORDER_SHIPPED, to: 'Ana@example.com', envelope: { from: 'shop@example.com', to: ['ana@example.com'] } },
+        'envelope_mismatch',
+      ],
     ])('%s refuses before any request', async (_name, mail, refusal) => {
       const error = await transporter()
         .sendMail(mail)
@@ -272,6 +281,24 @@ describe('posthog-node/nodemailer', () => {
     ['a reply thread', { inReplyTo: '<earlier@example.com>' }, 'unsupported_header'],
     ['a list header', { list: { unsubscribe: 'https://example.com/unsubscribe' } }, 'unsupported_header'],
     ['a sender other than from', { sender: 'bounce@example.com' }, 'unsupported_header'],
+    ['a one-time code header', { otp: { code: '123456', origin: 'https://example.com' } }, 'unsupported_header'],
+    [
+      'a Content-Disposition header',
+      { headers: { 'Content-Disposition': 'attachment; filename=calendar.ics' } },
+      'unsupported_header',
+    ],
+    [
+      'an HTML part with a raw source',
+      { html: { content: '<p>On its way.</p>', raw: 'Content-Type: text/html\r\n\r\n<p>Other</p>' } },
+      'unsupported_part',
+    ],
+    ['a REQUIRETLS delivery', { requireTLSExtensionEnabled: true }, 'unsupported_option'],
+    [
+      'a DKIM signature',
+      { dkim: { domainName: 'example.com', keySelector: 'mail', privateKey: 'not-a-key' } },
+      'unsupported_option',
+    ],
+    ['an option PostHog does not know', { encoding: 'base64' }, 'unsupported_option'],
   ])('refuses %s, which PostHog cannot carry', async (_name, extra, refusal) => {
     const error = await transporter()
       .sendMail({ ...ORDER_SHIPPED, ...extra })
@@ -284,26 +311,110 @@ describe('posthog-node/nodemailer', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('sends a plain address, a quoted sender name and a text attachment', async () => {
+  it.each([
+    [
+      'a MIME transform from a stream plugin',
+      (mailer: nodemailer.Transporter) =>
+        mailer.use('stream', (mail, done) => {
+          mail.message.transform(() => new PassThrough())
+          done()
+        }),
+    ],
+    [
+      'a process function from a stream plugin',
+      (mailer: nodemailer.Transporter) =>
+        mailer.use('stream', (mail, done) => {
+          mail.message.processFunc((input) => input)
+          done()
+        }),
+    ],
+  ])('refuses %s, which PostHog cannot apply', async (_name, register) => {
+    const mailer = transporter()
+    register(mailer)
+
+    const error = await mailer.sendMail(ORDER_SHIPPED).then(
+      () => undefined,
+      (rejection: unknown) => rejection
+    )
+
+    expect(refusalOf(error)).toBe('unsupported_option')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('sends a message without a subject with an empty one', async () => {
     replies = [{ status: 202, body: { message_id: MESSAGE_ID, replayed: false } }]
 
-    await transporter().sendMail({
-      from: { name: 'Doe, Jane', address: 'jane@example.com' },
-      to: 'ana@example.com',
-      subject: 'Notes',
-      text: 'See attached.',
-      priority: 'normal',
-      attachments: [{ filename: 'notes.txt', content: 'hello' }],
+    await transporter().sendMail({ ...ORDER_SHIPPED, subject: undefined })
+
+    expect(sentRequests()[0].body).toEqual({ ...ORDER_SHIPPED_ON_THE_WIRE, template_key: 'nodemailer', subject: '' })
+  })
+
+  it('fails a message whose attachment stream never ends, and closes the stream', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const stalled = new PassThrough()
+
+    const pending = transporter()
+      .sendMail({ ...ORDER_SHIPPED, attachments: [{ filename: 'report.csv', content: stalled }] })
+      .then(
+        () => undefined,
+        (rejection: unknown) => rejection
+      )
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    expect(await pending).toMatchObject({ code: 'ETIMEDOUT' })
+    expect(stalled.destroyed).toBe(true)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  describe('with attachments', () => {
+    let fake: FakePostHog
+
+    beforeEach(() => {
+      fake = new FakePostHog({ secretKey: 'phs_test_secret' })
+      posthog = new PostHog('phc_test', {
+        secretKey: 'phs_test_secret',
+        enableLocalEvaluation: false,
+        emailRequestMaxRetries: 0,
+        fetch: fake.fetch,
+      })
     })
 
-    expect(sentRequests()[0].body).toEqual({
-      to: 'ana@example.com',
-      from: '"Doe, Jane" <jane@example.com>',
-      subject: 'Notes',
-      text: 'See attached.',
-      template_key: 'nodemailer',
-      capture_engagement: true,
-      attachments: [{ filename: 'notes.txt', content_type: 'text/plain', content: 'aGVsbG8=' }],
+    it('04-attachments-and-inline delivers each file and the inline image', async () => {
+      await transporter().sendMail({
+        ...ORDER_SHIPPED,
+        html: '<img src="cid:logo">',
+        attachments: [
+          { filename: 'invoice.pdf', contentType: 'application/pdf', content: Buffer.from('JVBERi0xLjQK', 'base64') },
+          { filename: 'logo.png', contentType: 'image/png', content: 'iVBORw0KGgo=', encoding: 'base64', cid: 'logo' },
+        ],
+      })
+
+      expect(fake.emails).toHaveLength(1)
+      expect(fake.emails[0]).toMatchObject({ to: 'ana@example.com', html: '<img src="cid:logo">' })
+      expect(fake.emails[0].attachments).toEqual([
+        { filename: 'invoice.pdf', contentType: 'application/pdf', bytes: bytesOf('JVBERi0xLjQK') },
+        { filename: 'logo.png', contentType: 'image/png', contentId: 'logo', bytes: bytesOf('iVBORw0KGgo=') },
+      ])
+    })
+
+    it('delivers a text file and a file read from a stream, with a plain address and a quoted sender name', async () => {
+      await transporter().sendMail({
+        from: { name: 'Doe, Jane', address: 'jane@example.com' },
+        to: 'ana@example.com',
+        subject: 'Notes',
+        text: 'See attached.',
+        priority: 'normal',
+        attachments: [
+          { filename: 'notes.txt', content: 'hello' },
+          { filename: 'report.csv', content: streamOf('a,b\n1,2\n') },
+        ],
+      })
+
+      expect(fake.emails[0]).toMatchObject({ from: '"Doe, Jane" <jane@example.com>', subject: 'Notes' })
+      expect(fake.emails[0].attachments).toEqual([
+        { filename: 'notes.txt', contentType: 'text/plain', bytes: new Uint8Array(Buffer.from('hello')) },
+        { filename: 'report.csv', contentType: 'text/csv', bytes: new Uint8Array(Buffer.from('a,b\n1,2\n')) },
+      ])
     })
   })
 
@@ -376,3 +487,13 @@ describe('posthog-node/nodemailer', () => {
     expect(createPostHogTransport({ client: posthog })).toMatchObject({ name: 'PostHog', version: '1.2.3' })
   })
 })
+
+function bytesOf(base64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(base64, 'base64'))
+}
+
+function streamOf(text: string): PassThrough {
+  const stream = new PassThrough()
+  stream.end(text)
+  return stream
+}

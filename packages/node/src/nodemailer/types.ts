@@ -1,6 +1,6 @@
 import type {} from 'nodemailer/lib/mailer'
 
-import type { Emails } from '../emails/types'
+import type { Emails, EmailTracking } from '../emails/types'
 
 /** The PostHog options of one message, passed to Nodemailer as `sendMail({ ..., posthog: { ... } })`. */
 export interface PostHogMailOptions {
@@ -11,12 +11,16 @@ export interface PostHogMailOptions {
   /** A key derived from what the email is for, such as `order-981-shipped`, so a queue retry can't send it twice. */
   idempotency_key?: string
   /**
-   * Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events on
-   * the recipient's person. Defaults to `true`. Turning it off doesn't change the email: PostHog still adds its open
-   * pixel to count opens. It never rewrites the email's links, so it counts no clicks. A project whose admin turned
-   * engagement capture off captures nothing, whatever the message asks.
+   * What PostHog tracks for this email: `true` or `false` for everything, or `{ opens, clicks, engagement }` to turn
+   * each kind on or off. Without it, PostHog counts opens, captures engagement events, and counts clicks only when
+   * the email isn't sensitive.
    */
-  capture_engagement?: boolean
+  tracking?: boolean | EmailTracking
+  /**
+   * Marks the email as sensitive, such as one with a login link, a reset token or a code: PostHog keeps its links as
+   * they are unless `tracking` turns clicks on, and keeps its subject and content out of its events and logs.
+   */
+  sensitive?: boolean
 }
 
 export interface PostHogTransportOptions {
@@ -35,6 +39,7 @@ export type PostHogRefusal =
   | 'unsupported_priority'
   | 'unsupported_part'
   | 'invalid_template_key'
+  | 'unsupported_option'
 
 /** The error `sendMail` rejects with when PostHog can't carry part of a message. Nothing was sent. */
 export interface PostHogUnsupportedError extends Error {
@@ -89,16 +94,8 @@ export interface NormalizedMail {
   subject?: string
   html?: string
   text?: string
-  watchHtml?: unknown
-  amp?: unknown
-  icalEvent?: unknown
-  alternatives?: unknown[]
-  raw?: unknown
   attachments?: NormalizedAttachment[]
   headers?: Record<string, unknown> | { key: string; value: unknown }[]
-  list?: unknown
-  references?: unknown
-  inReplyTo?: unknown
   envelope?: { from?: string | false; to?: string[] }
   priority?: string
   posthog?: PostHogMailOptions
@@ -109,7 +106,8 @@ export interface NormalizedMail {
  * its data stays `unknown` here and the transport reads it as a `NormalizedMail`.
  */
 export interface NodemailerMail {
-  data?: { attachments?: unknown }
+  data?: { html?: unknown; text?: unknown; attachments?: unknown }
+  message?: unknown
   normalize(callback: (error: Error | null, data?: unknown) => void): void
 }
 

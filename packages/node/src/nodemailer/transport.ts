@@ -2,7 +2,7 @@ import { isRetryable } from '../emails/emails'
 import type { EmailError } from '../emails/errors'
 import type { SendCodeEmailOptions } from '../emails/types'
 import { version } from '../version'
-import { mapMail, refuseBeforeNormalize } from './mapper'
+import { mapMail, refuseBeforeNormalize, refuseMimeChanges } from './mapper'
 import type {
   NodemailerMail,
   NormalizedMail,
@@ -13,6 +13,7 @@ import type {
 } from './types'
 
 const INTEGRATION = `nodemailer/${version}`
+const NORMALIZE_TIMEOUT_MS = 60_000
 
 /**
  * A Nodemailer transport that sends each message through PostHog:
@@ -23,6 +24,7 @@ const INTEGRATION = `nodemailer/${version}`
 export function createPostHogTransport({ client, defaultTemplateKey }: PostHogTransportOptions): PostHogTransport {
   const sendThroughPostHog = async (mail: NodemailerMail): Promise<PostHogSentMessageInfo> => {
     refuseBeforeNormalize(mail.data)
+    refuseMimeChanges(mail.message)
     const mapped = mapMail(await normalize(mail), defaultTemplateKey)
     const { data, error } = await client.emails.send({ ...(mapped as SendCodeEmailOptions), integration: INTEGRATION })
     if (error) {
@@ -44,8 +46,22 @@ export function createPostHogTransport({ client, defaultTemplateKey }: PostHogTr
 }
 
 function normalize(mail: NodemailerMail): Promise<NormalizedMail> {
-  return new Promise((resolve, reject) =>
-    mail.normalize((error, data) => (error ? reject(error) : resolve(data as NormalizedMail)))
+  return new Promise((resolve, reject) => {
+    const deadline = setTimeout(() => reject(normalizeTimeout()), NORMALIZE_TIMEOUT_MS)
+    deadline.unref?.()
+    mail.normalize((error, data) => {
+      clearTimeout(deadline)
+      return error ? reject(error) : resolve(data as NormalizedMail)
+    })
+  })
+}
+
+function normalizeTimeout(): Error {
+  return Object.assign(
+    new Error(
+      `Nodemailer didn't finish reading the message within ${NORMALIZE_TIMEOUT_MS / 1000} seconds, so no email was sent.`
+    ),
+    { code: 'ETIMEDOUT' }
   )
 }
 

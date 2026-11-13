@@ -26,6 +26,8 @@ export const smtpOnly = transporter.sendMail({ to: 'ana@example.com', text: 'Hi'
 export const wrongOptions: PostHogMailOptions[] = [
   // @ts-expect-error the PostHog options keep the API's names
   { distinctId: 'user_42' },
-  // @ts-expect-error capture_engagement is a boolean
-  { capture_engagement: 'yes' },
+  // @ts-expect-error tracking names its kinds
+  { tracking: { open: true } },
+  // @ts-expect-error capture_engagement gave way to tracking
+  { capture_engagement: false },
 ]
