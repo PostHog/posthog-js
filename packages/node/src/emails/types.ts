@@ -22,7 +22,8 @@ export interface SendEmailBase {
   /**
    * Names the library that made this send, as `<name>/<version>`, such as `'nodemailer/5.61.2'`, so PostHog
    * can tell its sends apart. Set by integrations that send through this client, not by app code.
-   * Lower-case letters, digits and hyphens for the name, at most 40 each side.
+   * The name takes lower-case letters, digits and hyphens, the version letters, digits, `.`, `+` and `-`, at most 40
+   * characters each.
    */
   integration?: string
 }

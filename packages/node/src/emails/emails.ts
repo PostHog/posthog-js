@@ -510,7 +510,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (integration !== undefined && (typeof integration !== 'string' || !INTEGRATION_PATTERN.test(integration))) {
     throw invalid(
       'invalid_integration',
-      "integration must be '<name>/<version>', such as 'nodemailer/5.61.2': a lower-case name of letters, digits and hyphens.",
+      "integration must be '<name>/<version>', such as 'nodemailer/5.61.2': a name of lower-case letters, digits and hyphens, and a version of letters, digits, '.', '+' and '-', at most 40 characters each.",
       'integration'
     )
   }

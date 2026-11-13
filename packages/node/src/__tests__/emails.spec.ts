@@ -4,6 +4,7 @@ import { createElement, type ReactElement, Suspense, use } from 'react'
 
 import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
+import type { EmailFetchOptions } from '../emails/emails'
 import { FakePostHog, type FakePostHogOptions, type ServerChange } from './utils/emails-fake'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -1145,6 +1146,33 @@ describe('emails', () => {
     const [markedBody, unmarkedBody] = fetch.mock.calls.map(([, options]) => JSON.parse(options.body))
     expect(markedBody).not.toHaveProperty('integration')
     expect(markedBody).toEqual(unmarkedBody)
+  })
+
+  it('names the integration on the send only, not on the upload of its files', async () => {
+    const fake = new FakePostHog({ secretKey: SECRET_KEY })
+    const requests: { url: string; integration?: string }[] = []
+    makeClient({
+      fetch: (url: string, options: EmailFetchOptions) => {
+        requests.push({ url, integration: options.headers?.['X-PostHog-Integration'] })
+        return fake.fetch(url, options)
+      },
+    })
+
+    const { error } = await settle(
+      posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'receipt',
+        subject: 'Your receipt',
+        text: 'Attached.',
+        attachments: [{ filename: 'receipt.txt', content: Buffer.from('Paid.') }],
+        integration: 'nodemailer/5.61.2',
+      })
+    )
+
+    expect(error).toBeNull()
+    expect(fake.emails).toHaveLength(1)
+    const toPostHog = requests.filter(({ url }) => url.startsWith('https://us.posthog.com/'))
+    expect(toPostHog.map(({ integration }) => integration)).toEqual([undefined, 'nodemailer/5.61.2'])
   })
 
   it('names the integration on each retry of a send', async () => {
