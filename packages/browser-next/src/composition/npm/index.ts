@@ -42,6 +42,9 @@ export type {
 } from '../../core/types'
 
 export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     FeatureFlagsOptions,
     FeatureFlagsConfiguration,
     FeatureFlagsCallback,

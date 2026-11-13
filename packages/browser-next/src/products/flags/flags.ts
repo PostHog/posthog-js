@@ -10,6 +10,9 @@ import { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 
 export { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     FeatureFlagsOptions,
     FeatureFlagsCallback,
     FeatureFlagResult,
@@ -121,6 +124,33 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
                 }
             }
             return { dispose() {} }
+        },
+        getEarlyAccessFeatures: (callback, forceReload, stages) => {
+            if (disposed) return
+            try {
+                shared.getEarlyAccessFeatures(
+                    (features) => {
+                        if (disposed) return
+                        try {
+                            callback(features)
+                        } catch (error) {
+                            client?.logger.error('Early access feature callback failed', error)
+                        }
+                    },
+                    forceReload,
+                    stages
+                )
+            } catch (error) {
+                client?.logger.error('Early access feature listing failed', error)
+            }
+        },
+        updateEarlyAccessFeatureEnrollment: (key, isEnrolled, stage) => {
+            if (disposed) return
+            try {
+                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
+            } catch (error) {
+                client?.logger.error('Early access feature enrollment failed', error)
+            }
         },
         updateFlags: (values, payloads, settings) => {
             if (disposed) return

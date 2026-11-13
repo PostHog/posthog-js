@@ -226,6 +226,21 @@ const posthog = await createPostHog({
 })
 ```
 
+Early-access controls are available on `posthog.featureFlags`:
+
+```ts
+posthog.featureFlags?.getEarlyAccessFeatures(
+    (features) => {
+        console.log(features)
+    },
+    true,
+    ['beta']
+)
+posthog.featureFlags?.updateEarlyAccessFeatureEnrollment('new-onboarding', true, 'beta')
+```
+
+`getEarlyAccessFeatures(callback, forceReload?, stages?)` reuses cached definitions unless forced. Stage filters apply to requests, not an existing cache; force a reload when changing stages. Enrollment updates the local flag value and person evaluation context immediately, then captures `$feature_enrollment_update` through ordinary consent gating. The optional stage and cached feature name are included in that event. Listing callbacks are isolated from application exceptions and stop after disposal. `EarlyAccessFeature`, `EarlyAccessFeatureCallback`, and `EarlyAccessFeatureStage` types are exported from the root and `/flags` entrypoints.
+
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
 Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
