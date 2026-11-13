@@ -1761,7 +1761,7 @@ describe('emails', () => {
       expect(secondResult.data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
     })
 
-    describe('after a move that got no answer', () => {
+    describe("after a move that wasn't confirmed", () => {
       const FIRST_TIME = '2026-12-02T09:00:00Z'
       const OTHER_TIME = '2026-12-03T09:00:00Z'
       let timeAtPostHog: string
@@ -1796,7 +1796,9 @@ describe('emails', () => {
 
         expect(data).toBeNull()
         expect(error).toMatchObject({ code: 'move_unconfirmed' })
-        expect(error?.message).toContain('Nothing was changed.')
+        expect(error?.message).toBe(
+          "An earlier move of this email to another time wasn't confirmed, so PostHog may still apply it after this one. Nothing was changed."
+        )
         expect(error?.fix).toContain('cancel')
         expect(timeAtPostHog).toBe(FIRST_TIME)
         expect(fetch).toHaveBeenCalledTimes(1)
@@ -1848,7 +1850,7 @@ describe('emails', () => {
         expect(data?.scheduledAt).toBe(OTHER_TIME)
       })
 
-      it('refuses a move to another time queued behind the move that got no answer', async () => {
+      it("refuses a move to another time queued behind the move that wasn't confirmed", async () => {
         const first = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
         const second = update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
         await vi.advanceTimersByTimeAsync(1_000)

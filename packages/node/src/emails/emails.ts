@@ -337,7 +337,7 @@ export class EmailSender implements Emails {
         error: new EmailError({
           code: 'move_unconfirmed',
           message:
-            'An earlier move of this email to another time got no clear answer, so PostHog may still apply it after this one. Nothing was changed.',
+            "An earlier move of this email to another time wasn't confirmed, so PostHog may still apply it after this one. Nothing was changed.",
           fix: "To move the email, cancel it, which a late move can't undo, and send it again at the new time.",
         }),
       }
