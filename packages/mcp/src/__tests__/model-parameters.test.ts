@@ -104,7 +104,9 @@ describe('addModelParameterToTool', () => {
     const customDescription = 'State your model identifier'
     const result = addModelParameterToTool<ModelInjectableTool>({ name: 'tool' }, customDescription)
 
-    expect((result.inputSchema?.properties?.llm_model as { description?: string }).description).toBe(customDescription)
+    expect((result.inputSchema?.properties?.llm_model as { description?: string } | undefined)?.description).toBe(
+      customDescription
+    )
   })
 })
 

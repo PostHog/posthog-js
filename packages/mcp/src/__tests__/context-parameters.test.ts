@@ -146,7 +146,9 @@ describe('addContextParameterToTool', () => {
       const customDescription = 'Explain your reasoning for this action'
       const result = addContextParameterToTool<ContextInjectableTool>({ name: 'tool' }, customDescription)
 
-      expect((result.inputSchema?.properties?.context as { description?: string }).description).toBe(customDescription)
+      expect((result.inputSchema?.properties?.context as { description?: string } | undefined)?.description).toBe(
+        customDescription
+      )
     })
   })
 })

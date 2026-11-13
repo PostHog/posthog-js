@@ -593,6 +593,7 @@ describe('sanitizeEvent - integration', () => {
 
     const event = makeEvent({
       resourceName: 'my-tool',
+      clientName: 'claude-code',
       parameters: {
         imageData: largeBase64,
         query: 'hello',
@@ -622,6 +623,7 @@ describe('sanitizeEvent - integration', () => {
     expect(result.id).toBe('evt_1')
     expect(result.sessionId).toBe('ses_1')
     expect(result.resourceName).toBe('my-tool')
+    expect(result.clientName).toBe('claude-code')
   })
 
   it('should not mutate the original event', () => {

@@ -533,6 +533,7 @@ describe('truncateEvent - edge cases', () => {
     const event = makeEvent({
       id: 'evt_abc123',
       sessionId: 'ses_xyz789',
+      clientName: 'claude-code',
       eventType: 'mcp:tools/call',
       timestamp: ts,
       duration: 342,
@@ -544,6 +545,7 @@ describe('truncateEvent - edge cases', () => {
     const result = truncateEvent(event)
     expect(result.id).toBe('evt_abc123')
     expect(result.sessionId).toBe('ses_xyz789')
+    expect(result.clientName).toBe('claude-code')
     expect(result.eventType).toBe('mcp:tools/call')
     expect(result.timestamp).toBe(ts)
     expect(result.duration).toBe(342)
