@@ -15,6 +15,9 @@
  * here. The docs/ folder still comes from this checkout.
  *
  * `--major` defaults to the package.json major, plus one when a major changeset for the package is pending.
+ *
+ * When the package has a MIGRATION.md, the script also writes it as `<id>-migration.md`, the docs site's
+ * migration page.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -32,6 +35,7 @@ const PACKAGES = {
         name: 'JavaScript Web',
         logo: 'javascript',
         entry: 'src/entrypoints/module.no-external.es.ts',
+        extraEntries: ['src/customizations/before-send.ts'],
     },
     node: { id: 'posthog-node', name: 'Node.js', logo: 'nodejs', entry: 'src/entrypoints/index.node.ts' },
     'react-native': { id: 'posthog-react-native', name: 'React Native', logo: 'react', entry: 'src/index.ts' },
@@ -143,7 +147,10 @@ function capabilityMap(labels, caps, current) {
 
 function reference(app, project, caps, current) {
     const render = renderer(app, project)
-    const exported = project.children.filter(isPublic)
+    const entries = config.extraEntries
+        ? project.children.flatMap((r) => (r.kindOf(Kind.Module) && r.name !== '<internal>' ? r.children : [r]))
+        : project.children
+    const exported = entries.filter(isPublic)
     const main = exported.find((c) => c.name === 'PostHog')
     // Every public PostHog member and every other public export goes through the capability map.
     const members = (main.children ?? []).filter((m) => m.kindOf(MEMBER_KINDS) && isPublic(m))
@@ -223,14 +230,14 @@ const docsDir = path.join(ROOT, 'packages', positionals[0], 'docs')
 const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'))
 const declared = Number(pkg.version.split('.')[0])
 // A branch for the next major keeps the old version until the release applies its major changeset, so a
-// pending one means the code is the next major. It gets the experimental page, and the current pages stay.
+// pending one means the code is the next major. It gets its own page, and the current pages stay.
 const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
     c.releases.some((r) => r.name === pkg.name && r.type === 'major')
 )
 const major = Number(values.major ?? declared + Number(nextMajor))
 
 const app = await Application.bootstrapWithPlugins({
-    entryPoints: [path.join(pkgDir, config.entry)],
+    entryPoints: [config.entry, ...(config.extraEntries ?? [])].map((entry) => path.join(pkgDir, entry)),
     tsconfig: path.join(pkgDir, 'tsconfig.json'),
     // missing-exports documents the types a page names that the package doesn't export, such as @posthog/core's.
     plugin: ['typedoc-plugin-markdown', 'typedoc-plugin-missing-exports'].map((p) =>
@@ -276,8 +283,19 @@ const write = (name, sections) => {
     process.stdout.write(`wrote packages/${positionals[0]}/references/${name}\n`)
 }
 const title = `PostHog ${config.name} SDK`
-write(`${config.id}-${major}.md`, [
-    frontMatter(`${title} ${major}.x${declared >= major ? '' : ' (experimental)'}`, body, config.logo),
-    ...body,
-])
+write(`${config.id}-${major}.md`, [frontMatter(`${title} ${major}.x`, body, config.logo), ...body])
 if (declared >= major) write(`${config.id}-reference.md`, [frontMatter(title, body, config.logo), ...body])
+// The package's MIGRATION.md, when it has one, is the docs site's migration page. Its H1 becomes the page
+// title, so the page shows one title.
+const migration = path.join(pkgDir, 'MIGRATION.md')
+if (fs.existsSync(migration)) {
+    let guide = fs.readFileSync(migration, 'utf8').trim()
+    let pageTitle = `${title} migration guides`
+    if (guide.startsWith('# ')) {
+        const end = guide.indexOf('\n')
+        pageTitle = (end === -1 ? guide : guide.slice(0, end)).slice(2).trim()
+        guide = end === -1 ? '' : guide.slice(end).trim()
+    }
+    const head = ['---', `title: ${JSON.stringify(pageTitle)}`, 'sidebar: Docs', 'showTitle: true', '---'].join('\n')
+    write(`${config.id}-migration.md`, [head, guide])
+}

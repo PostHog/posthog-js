@@ -38,7 +38,7 @@ const handler = new LangChainCallbackHandler({ client: posthog, options: { proce
 
 - Per-call options beat options from `registerOptions()` and `withContext()`.
 - An event with no distinct id always has person processing turned off, whatever its options say.
-- posthog-node 5 has no per-event options. `@posthog/ai` sends each option 5.x knows in the form 5.x reads, and drops other keys.
+- posthog-node 5.x.x has no per-event options. `@posthog/ai` sends each option posthog-node 5.x.x knows in the form it reads, and drops other keys.
 - An `options` value that is not an object is logged and ignored. The event is still sent.
 
 ## Gemini Interactions

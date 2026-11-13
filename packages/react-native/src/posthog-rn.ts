@@ -164,6 +164,9 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
    *
+   * Events captured offline stay in the queue. A flush that fails with a network error keeps them and retries later.
+   * With 'file', the queue is stored on the device and survives an app restart.
+   *
    * @default 'file'
    */
   persistence?: 'memory' | 'file'
@@ -186,6 +189,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
   /**
    * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
    * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
+   * On by default from 4.39.0.
    *
    * @default true
    */

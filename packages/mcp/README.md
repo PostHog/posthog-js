@@ -253,8 +253,8 @@ Events from a session with no resolved identity are personless by default: they 
 `process_person_profile: false` option. An explicit `process_person_profile` in `eventOptions` wins
 over that default.
 
-`beforeSend` receives the options as `event.options` and can change them; the SDK sends what it
-returns. On posthog-node 6, the client's own `before_send` sees them too. posthog-node 5 has no
+`beforeSend` receives the options as `event.options` and can change them. The SDK sends what it
+returns. On posthog-node 6.x.x, the client's own `before_send` sees them too. posthog-node 5.x.x has no
 per-event options, so the SDK sends the known options the way that version reads them and drops
 other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
 `options` field instead of `eventOptions`.
@@ -440,8 +440,8 @@ does not — the registry is empty and the two calls behave the same.
 `instrument()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
 
 - Give MCP analytics its own `PostHog` client if your app also captures other events.
-- With posthog-node 6, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5, an event captured just before `instrument()` can get the MCP label too.
-- With posthog-node 6, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
+- With posthog-node 6.x.x, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5.x.x, an event captured just before `instrument()` can get the MCP label too.
+- With posthog-node 6.x.x, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
 - To find MCP traffic, filter on `$mcp_*` events or `$mcp_source = 'posthog_mcp_analytics'` rather than `$lib`.
 
 ## Developing locally
