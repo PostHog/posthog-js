@@ -3156,7 +3156,7 @@ Returns the extension registered under a typed stable name, or `undefined` when 
 
 | Type Parameter |
 | ------ |
-| <a id="type-parameter-t-4"></a> `T` *extends* `Extension` |
+| <a id="type-parameter-t-4"></a> `T` *extends* `Extension`\<`Client`\> |
 
 ###### Parameters
 
@@ -3178,7 +3178,7 @@ Returns the extension registered under a stable name, or `undefined` when it is 
 
 | Type Parameter | Default type |
 | ------ | ------ |
-| <a id="type-parameter-t-5"></a> `T` *extends* `Extension` | `Extension` |
+| <a id="type-parameter-t-5"></a> `T` *extends* `Extension`\<`Client`\> | `Extension`\<`Client`\> |
 
 ###### Parameters
 
@@ -3634,7 +3634,7 @@ NOTE: This type is also defined in `@posthog/core` (exception-steps.ts). Keep bo
 
 A shared browser extension. The client calls `setup(client)` once to start it
 and optional `dispose()` once for final best-effort resource cleanup.
-Everything an extension consumes flows through Client.
+Everything an extension consumes flows through its host, Client by default.
 
 `setup` may be async so an extension can read async KV state or remote config
 before it is ready. Async extensions must guard work after each `await` so
@@ -3652,11 +3652,17 @@ interface SessionReplayExtension extends Extension {
 }
 ```
 
+#### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-host"></a> `Host` | `Client` |
+
 #### Properties
 
 | Property | Modifier | Type | Description |
 | ------ | ------ | ------ | ------ |
-| <a id="property-bindings"></a> `bindings?` | `readonly` | `Readonly`\<`Record`\<`string`, `Extension`\>\> | Additional lookup targets whose lifecycle belongs to this extension. |
+| <a id="property-bindings"></a> `bindings?` | `readonly` | `Readonly`\<`Record`\<`string`, `Extension`\<`Client`\>\>\> | Additional lookup targets whose lifecycle belongs to this extension. |
 | <a id="property-name-2"></a> `name` | `readonly` | `string` | Stable extension name used for diagnostics and de-duplication within a client instance. |
 
 #### Methods
@@ -3698,7 +3704,7 @@ after construction; return a promise when setup needs asynchronous state.
 
 | Parameter | Type |
 | ------ | ------ |
-| `client` | `Client` |
+| `client` | `Host` |
 
 ###### Returns
 
@@ -6877,7 +6883,7 @@ are unset so flags re-evaluate without the removed values.
 
 A shared browser extension. The client calls `setup(client)` once to start it
 and optional `dispose()` once for final best-effort resource cleanup.
-Everything an extension consumes flows through Client.
+Everything an extension consumes flows through its host, Client by default.
 
 `setup` may be async so an extension can read async KV state or remote config
 before it is ready. Async extensions must guard work after each `await` so
