@@ -201,14 +201,15 @@ export async function startServer({ consumer, host = '127.0.0.1', port = 8080 })
             let ready
             try {
                 ready = await fixture.exchange(null, milliseconds)
+                requireRequest(
+                    ready.ready === true && ready.runtime?.electron === fixture.runtimeVersion,
+                    'Unexpected Electron runtime'
+                )
             } catch (error) {
                 fixtures.delete(id)
+                await fixture.stop()
                 throw error
             }
-            requireRequest(
-                ready.ready === true && ready.runtime?.electron === fixture.runtimeVersion,
-                'Unexpected Electron runtime'
-            )
             process.stderr.write(
                 JSON.stringify({ fixture_id: id, profile: data.profile_id, runtime: ready.runtime }) + '\n'
             )

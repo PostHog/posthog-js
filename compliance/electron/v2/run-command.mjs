@@ -7,7 +7,7 @@ if (!command || !Number.isSafeInteger(duration) || duration <= 0) throw new Erro
 const child = spawn(command, args, { stdio: 'inherit', detached: true })
 let failureCode
 function terminate() {
-    if (!child.pid) return
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
     try {
         process.kill(-child.pid, 'SIGKILL')
     } catch (error) {
