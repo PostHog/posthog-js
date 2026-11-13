@@ -258,6 +258,8 @@ This is **not** a sandbox or an untrusted-plugin interface: a registered utility
 - Back up and investigate the store before manual ownership recovery; never erase `state.json` or delete coordination files while a writer may still be active.
 - Networking uses an isolated Electron session with `credentials: 'omit'`. **Authenticated proxies are unsupported**; a 407 is retained for later recovery, not silently dropped, but retention does not make proxy authentication work. Validate your unauthenticated proxy/TLS/self-hosted deployment separately; do not promise all system proxy configurations are supported.
 
+Requests use an isolated Electron session with omitted cookies and HTTP credentials. Automatic redirects are rejected: configure the final ingestion URL, including any reverse-proxy path, rather than relying on redirects to move event or flag bodies.
+
 ## Lifecycle and shutdown
 
 Lifecycle capture defaults on (`captureAppLifecycleEvents: false` disables its events). Installed means first observed SDK launch, not installer execution. Updates compare the saved app version and optional `appBuild`. Installed/Updated carry Electron/Node/Chromium versions; ordinary events carry app/OS context. Focus is aggregated across registered windows. Sessions start fresh on process restart, with core's default 30-minute inactivity and 24-hour maximum boundaries; periodic flag reloads alone do not extend them. Admitted analytics events currently count as activity; avoid periodic heartbeat captures if that is not the session behavior you want.
@@ -281,6 +283,7 @@ pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
 # After installing the Electron binary explicitly (installs use --ignore-scripts):
 node packages/electron/node_modules/electron/install.js
 pnpm --filter @posthog/electron test:autocapture
+pnpm --filter @posthog/electron test:transport
 ```
 
 For the dedicated real utility-process test (after building), run `pnpm --filter @posthog/electron test:utility`. It packs and independently installs the SDK/browser-common/core/types tarballs into a temporary app, starts the installed Electron binary normally, and forks actual utility processes. It needs a GUI-capable Electron environment (or Xvfb on Linux), but no credentials. The fixture checks coordinated identity/consent/session, handled exceptions, protected context, flag exposure deduplication, reset, pending promise rejection on unregister, unexpected exit cleanup and replacement-child attribution. See [the fixture proof](test/utility-process/README.md).

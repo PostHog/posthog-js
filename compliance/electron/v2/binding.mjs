@@ -11,14 +11,14 @@ export const routes = [
     '/reload_feature_flags',
 ]
 export const failure = (kind, code, message) => ({ kind: 'harness', failure: { kind, code, message } })
-class Gap extends Error {
+export class CompletionError extends Error {
     constructor(completion) {
-        super(completion.failure.message)
+        super(completion.failure?.message ?? 'SDK setup did not return a client')
         this.completion = completion
     }
 }
 const unsupported = (path) => {
-    throw new Gap(failure('unsupported_binding', 'unsupported-parameter', `No binding for ${path}`))
+    throw new CompletionError(failure('unsupported_binding', 'unsupported-parameter', `No binding for ${path}`))
 }
 const own = (value, key) => Object.hasOwn(value, key)
 function keys(value, allowed, path) {
@@ -139,7 +139,7 @@ export class Binding {
                 )
             return { kind: 'sdk', outcome: { kind: 'value', value: result } }
         } catch (error) {
-            if (error instanceof Gap) return error.completion
+            if (error instanceof CompletionError) return error.completion
             if (!(error instanceof Error))
                 return failure('blocked_fixture', 'native-non-json-result', 'Native throw is not an exception object')
             if (!this.exceptions.has(error)) this.exceptions.set(error, globalThis.crypto.randomUUID())

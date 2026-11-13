@@ -394,14 +394,21 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
     let curEl: Element = el
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if (isShadowRoot(curEl.parentNode)) {
-            targetElementList.push(curEl.parentNode.host)
-            curEl = curEl.parentNode.host
+    const seen = new Set<Element>([el])
+    while (!isTag(curEl, 'body')) {
+        const parent: ParentNode | null = curEl.assignedSlot || curEl.parentNode
+        const parentNode: Element | null = isShadowRoot(parent)
+            ? parent.host
+            : parent && isElementNode(parent)
+              ? parent
+              : null
+        if (!parentNode || seen.has(parentNode) || seen.size >= MAX_DOM_ANCESTOR_DEPTH) break
+        seen.add(parentNode)
+        if (isShadowRoot(parent)) {
+            targetElementList.push(parentNode)
+            curEl = parentNode
             continue
         }
-        const parentNode = getParentElement(curEl)
-        if (!parentNode) break
         if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
@@ -520,6 +527,28 @@ export function shouldCaptureDomEvent(
     }
 }
 
+export function isAutocapturePrivacyBlocked(el: Element): boolean {
+    const seen = new Set<Node>()
+    let depth = 0
+    let curEl: Element | null = el
+    while (curEl) {
+        // Abnormal (too deep or cyclic) chain: we can't finish the sensitivity
+        // checks, so fail closed and don't capture.
+        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
+            return true
+        }
+        seen.add(curEl)
+
+        const classes = getClassNames(curEl)
+        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
+            return true
+        }
+        const parent: ParentNode | null = curEl.assignedSlot || curEl.parentNode
+        curEl = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+    }
+    return false
+}
+
 /*
  * Check whether a DOM element should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
@@ -527,21 +556,7 @@ export function shouldCaptureDomEvent(
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
-    const seen = new Set<Node>()
-    let depth = 0
-    for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
-        // Abnormal (too deep or cyclic) chain: we can't finish the sensitivity
-        // checks, so fail closed and don't capture.
-        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
-            return false
-        }
-        seen.add(curEl)
-
-        const classes = getClassNames(curEl)
-        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
-            return false
-        }
-    }
+    if (isAutocapturePrivacyBlocked(el)) return false
 
     if (includes(getClassNames(el), 'ph-include')) {
         return true

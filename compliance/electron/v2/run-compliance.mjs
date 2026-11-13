@@ -1,7 +1,7 @@
 // Native macOS + OrbStack hybrid. This network is deliberately not claimed hermetic.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,27 +30,75 @@ copyFileSync(join(consumer, 'build.json'), join(output, 'build.json'))
 const identity = randomUUID()
 const network = `electron-compliance-${identity}`
 const container = `${network}-harness`
-const command = (milliseconds, args, name) => {
+let cancellation, activeCommand, cancelStartup
+for (const [signal, code] of [
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+]) {
+    process.on(signal, () => {
+        if (cancellation) return
+        cancellation = code
+        writeFileSync(join(output, 'cancellation.json'), JSON.stringify({ signal, exit: code }) + '\n')
+        cancelStartup?.(new Error(`Runner cancelled by ${signal}`))
+        if (activeCommand?.pid && activeCommand.exitCode === null && activeCommand.signalCode === null)
+            activeCommand.kill(signal)
+    })
+}
+const command = async (milliseconds, args, name, cleanup = false) => {
+    if (cancellation && !cleanup) throw new Error('Runner cancelled')
+    const log = join(output, `${name}.log`)
+    writeFileSync(log, '')
+    let size = 0
+    let overflow = false
     try {
-        const stdout = execFileSync(
+        const child = spawn(
             process.execPath,
             [join(directory, 'run-command.mjs'), String(milliseconds), 'docker', ...args],
-            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 50 * 1024 * 1024 }
+            { stdio: ['ignore', 'pipe', 'pipe'] }
         )
-        writeFileSync(join(output, `${name}.log`), stdout)
-        writeFileSync(join(output, `${name}.exit`), '0\n')
-        return 0
-    } catch (error) {
-        writeFileSync(join(output, `${name}.log`), (error.stdout ?? '') + (error.stderr ?? '') + (error.message ?? ''))
-        const code = error.status ?? 1
+        activeCommand = child
+        const closed = new Promise((done) => child.once('close', done))
+        const record = (data) => {
+            const remaining = Math.max(0, 50 * 1024 * 1024 - size)
+            appendFileSync(log, data.subarray(0, remaining))
+            size += data.length
+            if (size > 50 * 1024 * 1024 && !overflow) {
+                overflow = true
+                process.stderr.write(`Command output limit exceeded: ${name}\n`)
+                if (child.pid && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+            }
+        }
+        child.stdout.on('data', record)
+        child.stderr.on('data', record)
+        const status = await new Promise((done) => {
+            child.once('error', (error) => {
+                appendFileSync(log, `${error.message}\n`)
+                done(1)
+            })
+            child.once('exit', (status) => done(status ?? 1))
+        })
+        let drain
+        await Promise.race([
+            closed,
+            new Promise((done) => {
+                drain = setTimeout(done, 100)
+            }),
+        ])
+        clearTimeout(drain)
+        child.stdout.destroy()
+        child.stderr.destroy()
+        const code = (!cleanup && cancellation) || (overflow ? 1 : status)
         writeFileSync(join(output, `${name}.exit`), `${code}\n`)
         return code
+    } finally {
+        activeCommand = undefined
     }
 }
 let adapter,
+    adapterExited,
     adapterClosed,
     lines,
-    created = false
+    networkAttempted = false
 let result = 1
 try {
     let specs = join(directory, 'features')
@@ -103,17 +151,23 @@ try {
         env: { ...process.env, POSTHOG_ELECTRON_CONSUMER: consumer, HOST: '127.0.0.1', PORT: '0' },
         stdio: ['ignore', 'pipe', 'pipe'],
     })
-    adapterClosed = new Promise((resolveClose) => adapter.once('close', resolveClose))
-    const log = []
-    adapter.stdout.on('data', (data) => log.push(data.toString()))
-    adapter.stderr.on('data', (data) => log.push(data.toString()))
+    adapterExited = new Promise((done) => {
+        adapter.once('exit', done)
+        adapter.once('error', done)
+    })
+    adapterClosed = new Promise((done) => adapter.once('close', done))
+    writeFileSync(join(output, 'adapter.log'), '')
+    adapter.stdout.on('data', (data) => appendFileSync(join(output, 'adapter.log'), data))
+    adapter.stderr.on('data', (data) => appendFileSync(join(output, 'adapter.log'), data))
     lines = createInterface({ input: adapter.stdout })
     const startup = await new Promise((resolveStartup, reject) => {
         const timer = setTimeout(() => reject(new Error('Adapter startup deadline exceeded')), 5000)
         const done = (callback) => (value) => {
             clearTimeout(timer)
+            cancelStartup = undefined
             callback(value)
         }
+        cancelStartup = done(reject)
         lines.once(
             'line',
             done((line) => {
@@ -131,13 +185,12 @@ try {
         )
     })
     writeFileSync(join(output, 'startup.json'), JSON.stringify(startup) + '\n')
-    adapter.once('close', () => writeFileSync(join(output, 'adapter.log'), log.join('')))
-    if (command(30000, ['network', 'create', network], 'network-create') !== 0)
+    networkAttempted = true
+    if ((await command(30000, ['network', 'create', network], 'network-create')) !== 0)
         throw new Error('Network creation failed')
-    created = true
     // No host ports are published. OrbStack routes native Electron to the per-case
     // private container listener; host.docker.internal routes the reverse direction.
-    const run = command(
+    const run = await command(
         1200000,
         [
             'run',
@@ -158,7 +211,7 @@ try {
         ],
         'run'
     )
-    const check = command(
+    const check = await command(
         30000,
         [
             'run',
@@ -188,27 +241,45 @@ try {
         ) + '\n'
     )
     result = run === 0 && check === 0 && selected > 0 && executed > 0 ? 0 : 1
+} catch (error) {
+    process.stderr.write(`${error.stack ?? error}\n`)
 } finally {
     if (adapter) {
-        adapter.kill('SIGTERM')
-        const kill = setTimeout(() => adapter.kill('SIGKILL'), 5000)
-        await adapterClosed
+        const active = () => adapter.pid && adapter.exitCode === null && adapter.signalCode === null
+        if (active()) adapter.kill('SIGTERM')
+        const kill = setTimeout(() => {
+            if (active()) adapter.kill('SIGKILL')
+        }, 5000)
+        await adapterExited
         clearTimeout(kill)
+        // Descendants can retain these pipes after the owned leader exits. Do not signal a retired identity.
+        let drain
+        await Promise.race([
+            adapterClosed,
+            new Promise((done) => {
+                drain = setTimeout(done, 100)
+            }),
+        ])
+        clearTimeout(drain)
         lines?.close()
+        adapter.stdout.destroy()
+        adapter.stderr.destroy()
     }
-    if (created) {
+    if (networkAttempted) {
         // Only our uniquely named resources; a timed-out run may still own its container.
-        const query = command(
+        const query = await command(
             30000,
             ['ps', '--all', '--quiet', '--filter', `name=^/${container}$`],
-            'container-cleanup-query'
+            'container-cleanup-query',
+            true
         )
         if (query !== 0) result = 1
         else if (readFileSync(join(output, 'container-cleanup-query.log'), 'utf8').trim()) {
-            if (command(30000, ['rm', '--force', container], 'container-cleanup') !== 0) result = 1
+            if ((await command(30000, ['rm', '--force', container], 'container-cleanup', true)) !== 0) result = 1
         }
-        if (command(30000, ['network', 'rm', network], 'network-cleanup') !== 0) result = 1
+        if ((await command(30000, ['network', 'rm', network], 'network-cleanup', true)) !== 0) result = 1
     }
+    result = cancellation ?? result
     writeFileSync(join(output, 'wrapper.exit'), `${result}\n`)
 }
 process.exitCode = result

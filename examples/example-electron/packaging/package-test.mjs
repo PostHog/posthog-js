@@ -73,6 +73,17 @@ if (tool === 'forge') {
 }
 const executable = await stat(binary)
 assert.ok(executable.isFile() && executable.size > 0, 'packager must produce a native executable')
+await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [join(directory, 'package-isolation.test.mjs'), binary], {
+        cwd: directory,
+        stdio: 'inherit',
+    })
+    child.once('error', reject)
+    child.once('close', (code, signal) => {
+        if (code === 0) resolve()
+        else reject(new Error(`${tool} dependency isolation failed: code ${code}, signal ${signal}`))
+    })
+})
 console.log(`Running ${tool} packaged consumer with Electron ${electronVersion}: ${binary}`)
 await new Promise((resolve, reject) => {
     const child = spawn(

@@ -627,6 +627,38 @@ describe('main Electron client', () => {
         expect(batches).toHaveLength(1)
     })
 
+    it('synchronizes disabled state before renderer exception inspection or IPC without changing consent', async () => {
+        const owner = await start({ disabled: true, enableExceptionAutocapture: true })
+        const window = renderer(owner, 1)
+        const request = vi.fn((request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(window.event, request))
+        const api = new RendererPostHog({ request, subscribe: () => () => {} }, { enableExceptionAutocapture: true })
+        const host = vi.fn()
+        globalThis.window.addEventListener('error', host)
+        try {
+            await api.ready()
+            const getter = vi.fn(() => new Error('disabled private error'))
+            const event = new ErrorEvent('error')
+            Object.defineProperty(event, 'error', { get: getter })
+            globalThis.window.dispatchEvent(event)
+            await api.captureException(new Error('disabled manual error'))
+            await Promise.resolve()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello'])
+            expect(getter).not.toHaveBeenCalled()
+            expect(host).toHaveBeenCalledTimes(1)
+            expect(api.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(owner.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(api.hasOptedOutCapturing()).toBe(false)
+            await api.optIn()
+            await api.captureException(new Error('still disabled'))
+            await api.flush()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello', 'optIn', 'flush'])
+            expect(batches).toEqual([])
+        } finally {
+            api.dispose()
+            globalThis.window.removeEventListener('error', host)
+        }
+    })
+
     it('checks consent again when queued exception work executes', async () => {
         const owner = await start({ enableExceptionAutocapture: true })
         const getter = vi.fn(() => {
@@ -638,6 +670,213 @@ describe('main Electron client', () => {
         await expect(capture).rejects.toThrow('Stale PostHog identity')
         expect(getter).not.toHaveBeenCalled()
         expect(batches).toEqual([])
+    })
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'snapshots ready main %s properties at invocation',
+        async (operation) => {
+            const owner = await start()
+            const properties = { nested: { value: 'original' } }
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Home', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            properties.nested.value = 'changed'
+            await pending
+            await owner.flush()
+            const event = batches.find(({ event }) => event === (operation === 'screen' ? '$screen' : '$set'))!
+            expect(
+                operation === 'screen' ? event.properties : event.properties[operation === 'set' ? '$set' : '$set_once']
+            ).toMatchObject({ nested: { value: 'original' } })
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'does not inspect %s properties behind a queued opt-out',
+        async (operation) => {
+            const owner = await start()
+            const inspect = vi.fn(() => {
+                throw new Error('queued opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            const optingOut = owner.optOut()
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Private', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            await Promise.all([optingOut, pending])
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'restores persisted consent before inspecting early %s properties',
+        async (operation) => {
+            const previous = await start()
+            await previous.optOut()
+            await previous.shutdown(50)
+            client = undefined
+            const inspect = vi.fn(() => {
+                throw new Error('persisted opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            client = init({
+                projectToken: 'test-token',
+                storageDirectory: directory,
+                captureAppLifecycleEvents: false,
+                preloadFeatureFlags: false,
+                flushInterval: 0,
+            })
+            if (operation === 'screen') await client.screen('Private', properties)
+            else if (operation === 'set') await client.setPersonProperties(properties)
+            else await client.setPersonProperties(undefined, properties)
+            expect(client.optedOut).toBe(true)
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    describe.each(['main', 'renderer'] as const)('%s flag-context admission', (process) => {
+        const helpers = [
+            { type: 'setPersonPropertiesForFlags', properties: { plan: 'new' }, reloadFeatureFlags: true },
+            { type: 'setGroupPropertiesForFlags', properties: { company: { tier: 'new' } }, reloadFeatureFlags: true },
+            { type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: true },
+            { type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: true },
+        ] as const
+        describe.each(helpers)('$type', (command) => {
+            if (process === 'renderer') {
+                it.each(['identity', 'navigation'] as const)(
+                    'rechecks queued context %s authorization',
+                    async (change) => {
+                        const owner = await start()
+                        await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                        await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                        const page = renderer(owner, 1)
+                        await page.send({ type: 'hello' })
+                        let release!: () => void
+                        vi.spyOn(ElectronStorage.prototype, 'flush').mockImplementationOnce(
+                            () =>
+                                new Promise<void>((resolve) => {
+                                    release = resolve
+                                })
+                        )
+                        const registering = owner.register({ workspace: 'one' })
+                        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                        const identifying = change === 'identity' ? owner.identify('next-user') : Promise.resolve()
+                        const pending = page.send(structuredClone(command))
+                        await Promise.resolve()
+                        if (change === 'navigation') page.contents.mainFrame.url = 'file:///not-allowed.html'
+                        release()
+                        await Promise.all([registering, identifying])
+                        expect(await pending).toMatchObject({
+                            ok: false,
+                            error: expect.stringContaining(change === 'identity' ? 'Stale' : 'navigated'),
+                        })
+                        await owner.reloadFeatureFlags()
+                        expect(JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+                            person_properties: { plan: 'old' },
+                            group_properties: { company: { tier: 'old' } },
+                        })
+                    }
+                )
+            }
+            it.each(['identify', 'reset', 'optOut'] as const)(
+                'does not block %s on its flag response',
+                async (change) => {
+                    const owner = await start()
+                    await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                    await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                    const page = renderer(owner, 1)
+                    await page.send({ type: 'hello' })
+                    let release!: (response: Response) => void
+                    mock.fetch.mockImplementationOnce(
+                        () =>
+                            new Promise<Response>((resolve) => {
+                                release = resolve
+                            })
+                    )
+                    let helperFinished = false
+                    const helper = (
+                        process === 'renderer'
+                            ? page.send(structuredClone(command)).then((response) => {
+                                  expect(response.ok).toBe(true)
+                              })
+                            : command.type === 'setPersonPropertiesForFlags'
+                              ? owner.setPersonPropertiesForFlags(command.properties)
+                              : command.type === 'setGroupPropertiesForFlags'
+                                ? owner.setGroupPropertiesForFlags(command.properties)
+                                : command.type === 'resetPersonPropertiesForFlags'
+                                  ? owner.resetPersonPropertiesForFlags(true)
+                                  : owner.resetGroupPropertiesForFlags(true)
+                    ).then(() => {
+                        helperFinished = true
+                    })
+                    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                    const request = JSON.parse(mock.fetch.mock.calls[0][1]!.body as string)
+                    expect(request.person_properties).toEqual(
+                        command.type === 'resetPersonPropertiesForFlags'
+                            ? {}
+                            : { plan: command.type === 'setPersonPropertiesForFlags' ? 'new' : 'old' }
+                    )
+                    expect(request.group_properties).toEqual(
+                        command.type === 'resetGroupPropertiesForFlags'
+                            ? {}
+                            : { company: { tier: command.type === 'setGroupPropertiesForFlags' ? 'new' : 'old' } }
+                    )
+                    let mutationFinished = false
+                    const mutation = (
+                        change === 'identify'
+                            ? owner.identify('next-user')
+                            : change === 'reset'
+                              ? owner.reset()
+                              : owner.optOut()
+                    ).then(() => {
+                        mutationFinished = true
+                    })
+                    try {
+                        await vi.waitFor(() => expect(mutationFinished).toBe(true), { timeout: 300 })
+                        expect(helperFinished).toBe(false)
+                        if (change === 'identify') expect(owner.getDistinctId()).toBe('next-user')
+                        if (change === 'optOut') expect(owner.optedOut).toBe(true)
+                    } finally {
+                        release(new Response(JSON.stringify({ featureFlags: { stale_context: true } })))
+                        await Promise.all([helper, mutation])
+                    }
+                    if (change !== 'optOut') {
+                        const snapshots = page.contents.mainFrame.send.mock.calls.map(([, state]) => state as State)
+                        expect(snapshots.some((state) => state.featureFlags.stale_context)).toBe(false)
+                        expect(owner.getState().featureFlags).not.toHaveProperty('stale_context')
+                    }
+                }
+            )
+        })
+    })
+
+    it.each([4, 8])('normalizes all %i flag payloads with linear parse work', async (count) => {
+        const owner = await start()
+        const raw = Array.from({ length: count }, (_, i) => JSON.stringify({ index: i }))
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: Object.fromEntries(
+                        raw.map((payload, i) => [
+                            `flag-${i}`,
+                            { key: `flag-${i}`, enabled: true, metadata: { payload } },
+                        ])
+                    ),
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await owner.flush()
+        const parse = vi.spyOn(JSON, 'parse')
+        const results = owner.getAllFeatureFlags()
+        const payloadParses = parse.mock.calls.filter(([value]) => raw.includes(value)).length
+        expect(results.map(({ payload }) => payload)).toEqual(Array.from({ length: count }, (_, index) => ({ index })))
+        expect(payloadParses).toBeLessThanOrEqual(3 * count)
     })
     it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
         const captures: Promise<void>[] = []
@@ -858,6 +1097,151 @@ describe('main Electron client', () => {
         await vi.waitFor(async () => expect(await fs.readdir(join(directory, namespace))).toEqual(['state.json']))
     })
 
+    it('reinitializes a disposed renderer on the same bridge without resetting its request sequence', async () => {
+        const owner = await start()
+        const page = renderer(owner, 1)
+        const listeners = new Set<(state: State) => void>()
+        page.contents.mainFrame.send.mockImplementation((channel, state) => {
+            if (channel === STATE_CHANNEL) for (const listener of listeners) listener(state)
+        })
+        const bridge = {
+            request: (request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(page.event, request),
+            subscribe: (listener: (state: State) => void) => {
+                listeners.add(listener)
+                return () => listeners.delete(listener)
+            },
+        }
+        const first = new RendererPostHog(bridge)
+        await first.ready()
+        await first.capture('before-dispose')
+        first.dispose()
+        const second = new RendererPostHog(bridge)
+        try {
+            await second.ready()
+            await second.capture('after-reinitialize')
+            await second.flush()
+            expect(batches.map(({ event }) => event)).toEqual(['before-dispose', 'after-reinitialize'])
+        } finally {
+            second.dispose()
+        }
+    })
+
+    it.each([{ personProfiles: 'never' }, { disabled: true }])(
+        'does not invalidate identity or flags when identify is guarded by %j',
+        async (options) => {
+            const owner = await start(options)
+            if (!options.disabled) await owner.reloadFeatureFlagsAsync()
+            const before = owner.getState()
+            await owner.identify('ignored-identity')
+            const after = owner.getState()
+            expect(after.distinctId).toBe(before.distinctId)
+            expect(after.generation).toBe(before.generation)
+            expect(after.featureFlags).toEqual(before.featureFlags)
+        }
+    )
+
+    it('keeps queued events detached from nested properties after capture is acknowledged', async () => {
+        const owner = await start()
+        const nested = { value: 'accepted' }
+        await owner.capture('accepted', { nested })
+        nested.value = 'changed'
+        Object.assign(nested, { cycle: nested })
+        await owner.flush()
+        expect(batches.find(({ event }) => event === 'accepted')?.properties.nested).toEqual({ value: 'accepted' })
+    })
+
+    it.each(['cycle', 'bigint'])('does not poison accepted events after rejecting %s properties', async (kind) => {
+        const owner = await start()
+        await owner.capture('before-invalid')
+        const properties: Record<string, unknown> = {}
+        properties.invalid = kind === 'cycle' ? properties : 1n
+        await Reflect.apply(owner.capture, owner, ['invalid', properties]).catch(() => {})
+        await owner.capture('after-invalid')
+        await owner.flush()
+        expect(batches.map(({ event }) => event)).toEqual(['before-invalid', 'after-invalid'])
+    })
+
+    it('rotates expired sessions in the public getter without treating snapshots as activity', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        const now = Date.now()
+        const owner = await start()
+        const first = owner.getSessionId()
+        vi.setSystemTime(now + 20 * 60 * 1000)
+        expect(owner.getState().sessionId).toBe(first)
+        vi.setSystemTime(now + 31 * 60 * 1000)
+        expect(owner.getState().sessionId).toBe(first)
+        const next = owner.getSessionId()
+        expect(next).not.toBe(first)
+        await owner.capture('new-session')
+        await owner.flush()
+        expect(batches.find(({ event }) => event === 'new-session')?.properties.$session_id).toBe(next)
+    })
+
+    it('rejects automatic redirects on both event and flag requests', async () => {
+        const owner = await start()
+        await owner.reloadFeatureFlagsAsync()
+        await owner.capture('configured-host-only')
+        await owner.flush()
+        expect(mock.fetch.mock.calls).toHaveLength(2)
+        for (const [, options] of mock.fetch.mock.calls) expect(options?.redirect).toBe('error')
+    })
+
+    it.each([400, 407, 503])(
+        'releases an unconsumed final HTTP %i response at its diagnostic deadline',
+        async (status) => {
+            vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+            const cancelled = vi.fn()
+            const owner = await start({ requestTimeout: 100 })
+            mock.fetch.mockImplementationOnce(
+                async () => new Response(new ReadableStream({ cancel: cancelled }), { status })
+            )
+            await owner.capture('failed-response')
+            await owner.flush().catch(() => {})
+            expect(cancelled).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(101)
+            expect(cancelled).toHaveBeenCalledTimes(1)
+        }
+    )
+
+    it('preserves lazy HTTP diagnostic reads within the request deadline', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        let failure: unknown
+        const owner = await start({
+            requestTimeout: 100,
+            onError: (error: unknown) => {
+                failure = error
+            },
+        })
+        mock.fetch.mockResolvedValueOnce(new Response('request diagnostic', { status: 400 }))
+        await owner.capture('diagnostic')
+        await owner.flush().catch(() => {})
+        expect(failure).toBeInstanceOf(Error)
+        const diagnostic = Reflect.get(Object(failure), 'text')
+        await expect(diagnostic).resolves.toBe('request diagnostic')
+        await vi.advanceTimersByTimeAsync(101)
+    })
+
+    it('normalizes each cached flag payload only linearly when building a state snapshot', async () => {
+        const owner = await start()
+        const count = 40
+        const flags = Object.fromEntries(Array.from({ length: count }, (_, i) => ['flag-' + i, true]))
+        const payloads = Object.fromEntries(
+            Array.from({ length: count }, (_, i) => ['flag-' + i, JSON.stringify({ value: i })])
+        )
+        mock.fetch.mockResolvedValueOnce(
+            new Response(JSON.stringify({ featureFlags: flags, featureFlagPayloads: payloads }))
+        )
+        await owner.reloadFeatureFlagsAsync()
+        const parse = vi.spyOn(JSON, 'parse')
+        const state = owner.getState()
+        const payloadReads = parse.mock.calls.filter(
+            ([value]) => typeof value === 'string' && value.startsWith('{"value":')
+        ).length
+        parse.mockRestore()
+        expect(Object.keys(state.featureFlags)).toHaveLength(count)
+        expect(state.featureFlagPayloads['flag-0']).toEqual({ value: 0 })
+        expect(payloadReads).toBeLessThanOrEqual(count * 3)
+    })
     it.each(['capture', 'identify'] as const)(
         'accepts %s after more than 100 repeated reads through the real renderer and owner',
         async (operation) => {
@@ -1292,7 +1676,7 @@ describe('main Electron client', () => {
         vi.setSystemTime(Date.now() + 31 * 60 * 1000)
         powerMonitor.emit('resume')
         await vi.waitFor(() => expect(batches).toHaveLength(1))
-        expect(owner.getSessionId()).toBe(session)
+        expect(owner.getState().sessionId).toBe(session)
         expect(batches.map(({ event }) => event)).toEqual(['before-sleep'])
         await owner.capture('real-activity')
         expect(owner.getSessionId()).not.toBe(session)
@@ -1369,6 +1753,35 @@ describe('main-routed autocapture config', () => {
         expect(owner.getState().flagsLoaded).toBe(false)
     })
 
+    it('reuses loaded project config across windows and identity changes, then refreshes an expired kill switch without pausing capture', async () => {
+        const owner = await start({ disableRemoteFeatureFlags: true })
+        mock.fetch.mockImplementation(async () => new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await load(owner)
+        const now = Date.now()
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+        await owner.identify('another-user')
+        await owner.reset()
+        await load(owner, 92)
+        expect(mock.fetch).toHaveBeenCalledTimes(1)
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: false })
+        clock.mockReturnValue(now + 60001)
+        let resolve!: (response: Response) => void
+        mock.fetch.mockImplementation(
+            () =>
+                new Promise((done) => {
+                    resolve = done
+                })
+        )
+        const refresh = load(owner, 93)
+        await vi.waitFor(() => expect(mock.fetch).toHaveBeenCalledTimes(2))
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: false })
+        resolve(new Response(JSON.stringify({ autocapture_opt_out: true })))
+        await refresh
+        expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
+        mock.fetch.mockImplementation(async () => new Response('{}'))
+        clock.mockRestore()
+    })
+
     it('keeps a persisted project kill switch through reset, restart, malformed response and fetch failure', async () => {
         let owner = await start()
         mock.fetch.mockResolvedValue(new Response(JSON.stringify({ autocapture_opt_out: true })))
@@ -1384,7 +1797,9 @@ describe('main-routed autocapture config', () => {
         await load(owner)
         expect(owner.getState().autocapture).toEqual({ status: 'loaded', autocapture_opt_out: true })
         mock.fetch.mockRejectedValue(new Error('offline'))
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001)
         await load(owner, 92)
+        clock.mockRestore()
         expect(owner.getState().autocapture).toEqual({ status: 'failed', autocapture_opt_out: true })
     })
 

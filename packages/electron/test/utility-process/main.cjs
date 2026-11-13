@@ -14,7 +14,12 @@ const server = createServer(async (request, response) => {
     if (request.url.includes('/flags')) {
         response.setHeader('Content-Type', 'application/json')
         response.end(
-            JSON.stringify({ featureFlags: { test: 'variant' }, featureFlagPayloads: { test: '{"color":"blue"}' } })
+            JSON.stringify({
+                featureFlags: { test: 'variant' },
+                featureFlagPayloads: {
+                    test: '{"color":"blue","constructor":{"prototype":true},"__proto__":{"canary":1}}',
+                },
+            })
         )
     } else {
         events.push(...JSON.parse(body).batch)
@@ -77,7 +82,14 @@ async function run() {
     assert.equal(owner.getDistinctId(), 'utility-user')
     await utility.command('capture', 'utility-work')
     await utility.command('exception')
-    await utility.command('flags')
+    const flags = await utility.command('flags')
+    assert.equal(flags.error, undefined)
+    const burst = await utility.command('burst')
+    assert.equal(burst.error, undefined)
+    assert.equal(
+        events.some((event) => event.event === 'after-rate-window'),
+        true
+    )
     const selected = events.filter((event) =>
         ['utility-work', '$exception', '$feature_flag_called'].includes(event.event)
     )
@@ -142,6 +154,9 @@ async function run() {
             electron: process.versions.electron,
             installed: require.resolve('@posthog/electron/utility'),
             checks: [
+                'idempotent-ready',
+                'rate-window-recovery',
+                'reserved-json-payload-keys',
                 'identity',
                 'consent',
                 'session',

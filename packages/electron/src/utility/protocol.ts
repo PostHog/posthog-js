@@ -15,9 +15,12 @@ export function envelope(message: Record<string, unknown>): Record<string, unkno
 }
 
 // Application messages may share parentPort, but never enter the SDK command path.
-export function readEnvelope(value: unknown): Record<string, unknown> | undefined {
+export function readEnvelope(
+    value: unknown,
+    direction: 'to-main' | 'to-utility' = 'to-main'
+): Record<string, unknown> | undefined {
     if (!isRecord(value) || value.channel !== UTILITY_CHANNEL) return
-    assertJson(value)
+    assertJson(value, 0, direction === 'to-utility')
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_MESSAGE_BYTES) {
         throw new Error('PostHog utility message exceeds 256 KiB')
     }

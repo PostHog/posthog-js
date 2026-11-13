@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline'
 import { writeSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
-import { Binding, failure } from './binding.mjs'
+import { Binding, CompletionError, failure } from './binding.mjs'
 import { mockOrigin } from './network-policy.mjs'
 
 const consumer = process.env.POSTHOG_ELECTRON_CONSUMER
@@ -21,50 +21,63 @@ const binding = new Binding(async (options) => {
     const origin = mockOrigin(options.host)
     // A network permission guard, not a replacement transport: allowed requests
     // still use the installed SDK's Electron session.fetch and the real mock server.
-    session.fromPartition('posthog-electron').webRequest.onBeforeRequest((details, callback) => {
-        const cancel = new URL(details.url).origin !== origin
-        if (cancel) diagnostic(`Blocked non-mock SDK request: ${details.url}`)
-        callback({ cancel })
-    })
+    try {
+        session.fromPartition('posthog-electron').webRequest.onBeforeRequest((details, callback) => {
+            const cancel = new URL(details.url).origin !== origin
+            if (cancel) diagnostic(`Blocked non-mock SDK request: ${details.url}`)
+            callback({ cancel })
+        })
+    } catch (error) {
+        diagnostic(error)
+        throw new CompletionError(failure('blocked_fixture', 'controller-setup', 'SDK network guard setup failed'))
+    }
     owner = init(options)
     await owner.ready()
     if (profile === 'electron-main') return owner
-    const page = join(consumer, 'acceptance-renderer', 'index.html')
-    window = new BrowserWindow({
-        show: false,
-        webPreferences: {
-            preload: require.resolve('@posthog/electron/preload'),
-            sandbox: true,
-            contextIsolation: true,
-            nodeIntegration: false,
-        },
-    })
-    const deregister = owner.registerWindow(window, { allowedUrls: [pathToFileURL(page).href] })
-    window.once('closed', deregister)
-    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    window.webContents.on('will-navigate', (event) => event.preventDefault())
-    await window.loadFile(page)
-    const preferences = window.webContents.getLastWebPreferences()
-    const unprivileged = await window.webContents.executeJavaScript(
-        'typeof process === "undefined" && typeof require === "undefined"'
-    )
-    if (!preferences.sandbox || !preferences.contextIsolation || preferences.nodeIntegration || !unprivileged)
-        throw new Error('Renderer security profile verification failed')
-    diagnostic(
-        JSON.stringify({
-            renderer_security: {
-                sandbox: preferences.sandbox,
-                contextIsolation: preferences.contextIsolation,
-                nodeIntegration: preferences.nodeIntegration,
-                unprivileged,
+    try {
+        const page = join(consumer, 'acceptance-renderer', 'index.html')
+        window = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                preload: require.resolve('@posthog/electron/preload'),
+                sandbox: true,
+                contextIsolation: true,
+                nodeIntegration: false,
             },
         })
-    )
-    // Host-only test controller. No additional preload API or privileged renderer bridge.
-    const initialized = await window.webContents.executeJavaScript('globalThis.acceptance.invoke("/setup", {})')
-    if (initialized.kind !== 'sdk' || initialized.outcome.kind !== 'void')
-        throw new Error('Renderer initialization failed')
-    return owner
+        const deregister = owner.registerWindow(window, { allowedUrls: [pathToFileURL(page).href] })
+        window.once('closed', deregister)
+        window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        window.webContents.on('will-navigate', (event) => event.preventDefault())
+        await window.loadFile(page)
+        const preferences = window.webContents.getLastWebPreferences()
+        const unprivileged = await window.webContents.executeJavaScript(
+            'typeof process === "undefined" && typeof require === "undefined"'
+        )
+        if (!preferences.sandbox || !preferences.contextIsolation || preferences.nodeIntegration || !unprivileged)
+            throw new Error('Renderer security profile verification failed')
+        diagnostic(
+            JSON.stringify({
+                renderer_security: {
+                    sandbox: preferences.sandbox,
+                    contextIsolation: preferences.contextIsolation,
+                    nodeIntegration: preferences.nodeIntegration,
+                    unprivileged,
+                },
+            })
+        )
+        // Host-only test controller. No additional preload API or privileged renderer bridge.
+        const initialized = await window.webContents.executeJavaScript('globalThis.acceptance.invoke("/setup", {})')
+        if (initialized.kind === 'harness' || (initialized.kind === 'sdk' && initialized.outcome.kind === 'thrown'))
+            throw new CompletionError(initialized)
+        if (initialized.kind !== 'sdk' || initialized.outcome.kind !== 'void')
+            throw new Error('Renderer initialization failed')
+        return owner
+    } catch (error) {
+        if (error instanceof CompletionError) throw error
+        diagnostic(error)
+        throw new CompletionError(failure('blocked_fixture', 'controller-setup', 'Renderer controller setup failed'))
+    }
 }, profile)
 let tail = Promise.resolve()
 createInterface({ input: process.stdin }).on('line', (line) => {
@@ -89,7 +102,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
                 const completion =
                     profile === 'electron-renderer' && route !== '/setup' && window
                         ? await window.webContents.executeJavaScript(
-                              `globalThis.acceptance.invoke(${JSON.stringify(route)}, ${JSON.stringify(args)})`
+                              `globalThis.acceptance.invoke(JSON.parse(${JSON.stringify(JSON.stringify(route))}), JSON.parse(${JSON.stringify(JSON.stringify(args))}))`
                           )
                         : await binding.invoke(route, args)
                 reply({ completion })
