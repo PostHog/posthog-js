@@ -11,6 +11,8 @@ import 'core-js/features/promise'
 // used by uuidv7, in both @posthog/core and @posthog/browser-common
 import 'core-js/features/math/trunc'
 import 'core-js/features/number/is-integer'
+// used by the /flags?v=4 reader, with `Number.isInteger`
+import 'core-js/features/number/is-finite'
 
 if (typeof performance === 'undefined' || typeof performance.now !== 'function') {
     const perf = typeof performance !== 'undefined' ? performance : ({} as any)

@@ -6,7 +6,8 @@ import { isNull, isUndefined } from '@posthog/core'
 import type { FeatureFlagDetail } from '@posthog/types'
 import { PostHogFeatureFlags, type FlagsResponseFormat } from '../src/feature-flags'
 import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '../src/feature-flags-config'
-import { flagsResponseV4, readFlagRecords, typedFlagDetailOf } from '../src/flags-response-v4'
+import type { ParsedFlagRecord } from '../src/flags-response'
+import { flagsResponseV4, readFlagRecordsForStorage, storedParsedFlagRecordOf } from '../src/flags-response-v4'
 import { createTestClient, type TestClient } from './helpers/test-client'
 
 // Reading the /flags?v=4 response, checked against the released wire contract. The contract files
@@ -102,7 +103,11 @@ const envelope = (flags: Record<string, unknown>, extra: Record<string, unknown>
 
 /** The stored rendering of each record of a response body. */
 const read = (body: unknown): Record<string, FeatureFlagDetail> =>
-    readFlagRecords(structuredClone(body) as any).body.flags as Record<string, FeatureFlagDetail>
+    readFlagRecordsForStorage(structuredClone(body) as any).body.flags as Record<string, FeatureFlagDetail>
+
+/** The stored record of a flag, when it has a typed value. Its typed members have their wire names. */
+const typed = (detail: FeatureFlagDetail | undefined): Record<string, any> | undefined =>
+    detail && Object.prototype.hasOwnProperty.call(detail, 'value') ? detail : undefined
 
 const UNREADABLE = { enabled: false, variant: undefined, reason: undefined, metadata: undefined, failed: true }
 
@@ -241,30 +246,39 @@ describe('the /flags?v=4 response', () => {
 
             expect(Object.keys(details).sort()).toEqual(Object.keys(body.flags).sort())
             for (const [key, sent] of Object.entries<any>(body.flags)) {
-                const typed = typedFlagDetailOf(details[key])!
-                expect(typed.value).toEqual(sent.failed ? null : sent.value)
-                expect(typed.failed === true).toBe(sent.failed === true)
-                expect(typed.reason?.code).toBe(sent.reason.code)
-                expect(typed.reason?.condition_index ?? null).toBe(sent.reason.condition_index)
-                const { payload: _payload, ...metadata } = typed.metadata!
-                expect(metadata).toEqual({
+                // The parsed record, as posthog-node keeps it.
+                const record = storedParsedFlagRecordOf(details[key])!
+                expect(record.value).toEqual(sent.value)
+                expect(record.failed).toBe(sent.failed === true)
+                expect(record.unreadableField).toBeUndefined()
+                expect(record.reason?.code).toBe(sent.reason.code)
+                expect(record.reason?.conditionIndex ?? null).toBe(sent.reason.condition_index)
+                expect(record.metadata).toEqual({
                     id: sent.metadata.id,
                     version: sent.metadata.version,
+                    configVersion: sent.metadata.config_version,
                     description: sent.metadata.description ?? undefined,
-                    has_experiment: sent.metadata.has_experiment,
-                    config_version: sent.metadata.config_version,
-                    rule_type: sent.metadata.rule_type,
-                    rule_id: sent.metadata.rule_id,
-                    variant_key: sent.metadata.variant_key,
-                    forced_variant: sent.metadata.forced_variant,
+                    hasExperiment: sent.metadata.has_experiment,
+                    ruleType: sent.metadata.rule_type,
+                    ruleId: sent.metadata.rule_id,
+                    variantKey: sent.metadata.variant_key,
+                    forcedVariant: sent.metadata.forced_variant,
                 })
+                // The same record after it went through storage, which keeps the typed members
+                // under their wire names.
+                const stored = JSON.parse(JSON.stringify(details[key]))
+                expect(stored).toMatchObject({
+                    value: sent.value,
+                    metadata: { config_version: sent.metadata.config_version },
+                })
+                expect(storedParsedFlagRecordOf(stored)).toEqual(JSON.parse(JSON.stringify(record)))
             }
         })
     })
 
     describe('the reader corpus', () => {
         // The reader expectations are what the typed flag API will return, which depends only on
-        // the stored record. This projects a stored record onto them.
+        // the parsed record. This projects the parsed record of a stored flag onto them.
         function readerCells(detail: FeatureFlagDetail | undefined, callerDefault: unknown): Record<string, unknown> {
             if (isUndefined(detail)) {
                 return {
@@ -274,10 +288,10 @@ describe('the /flags?v=4 response', () => {
                     error_code: 'FLAG_NOT_FOUND',
                 }
             }
-            const typed = typedFlagDetailOf(detail)
-            if (isUndefined(typed)) {
+            const record: ParsedFlagRecord | undefined = storedParsedFlagRecordOf(detail)
+            if (isUndefined(record)) {
                 if (detail.failed && isUndefined(detail.metadata) && isUndefined(detail.reason)) {
-                    // A record that could not be read is stored as a failed flag with nothing else.
+                    // A typed record that could not be read is stored as a failed flag with nothing else.
                     return {
                         value: callerDefault,
                         config_version: null,
@@ -293,22 +307,22 @@ describe('the /flags?v=4 response', () => {
                     error_code: detail.failed ? 'GENERAL' : null,
                 }
             }
-            const errorCode = typed.failed
+            const errorCode = record.failed
                 ? 'GENERAL'
-                : typed.reason?.code === 'missing_group_key'
+                : record.reason?.code === 'missing_group_key'
                   ? 'INVALID_CONTEXT'
                   : null
-            const metadata = typed.metadata
+            const { configVersion, ruleType, ruleId, variantKey } = record.metadata
             return {
-                value: !isNull(errorCode) || isNull(typed.value) ? callerDefault : typed.value,
-                config_version: metadata?.config_version ?? null,
+                value: !isNull(errorCode) || isNull(record.value) ? callerDefault : record.value,
+                config_version: configVersion ?? null,
                 experiment_exposure:
                     isNull(errorCode) &&
-                    metadata?.config_version === 2 &&
-                    typed.reason?.code === 'experiment_split' &&
-                    metadata.rule_type === 'experiment' &&
-                    !isUndefined(metadata.rule_id) &&
-                    !isUndefined(metadata.variant_key),
+                    configVersion === 2 &&
+                    record.reason?.code === 'experiment_split' &&
+                    ruleType === 'experiment' &&
+                    !isUndefined(ruleId) &&
+                    !isUndefined(variantKey),
                 error_code: errorCode,
             }
         }
@@ -355,7 +369,7 @@ describe('the /flags?v=4 response', () => {
             const detail = read(envelope({ 'garden-layout': record }))['garden-layout']
 
             expect(detail).toEqual(record)
-            expect(typedFlagDetailOf(detail)).toBeUndefined()
+            expect(typed(detail)).toBeUndefined()
         })
 
         // posthog-js never checked the types of a v2 record, and a server that does not serve v4
@@ -378,23 +392,29 @@ describe('the /flags?v=4 response', () => {
             const typed = envelope({ 'garden-layout': v4Record() })
             const older = envelope({ 'garden-layout': v4Record(), older: olderRecord() })
 
-            expect(readFlagRecords(typed).withoutTypedValues).toBe(false)
-            expect(readFlagRecords(older).withoutTypedValues).toBe(true)
-            expect(readFlagRecords(envelope({})).withoutTypedValues).toBe(false)
+            expect(readFlagRecordsForStorage(typed).withoutTypedValues).toBe(false)
+            expect(readFlagRecordsForStorage(older).withoutTypedValues).toBe(true)
+            expect(readFlagRecordsForStorage(envelope({})).withoutTypedValues).toBe(false)
         })
 
         it.each([
-            ['the oldest response shape', { featureFlags: { 'garden-layout': 'compact' }, featureFlagPayloads: {} }],
-            ['a body without flags', { errorsWhileComputingFlags: false }],
-            ['an empty body', {}],
-        ])('returns %s unchanged', (_name, body) => {
-            expect(readFlagRecords(body as any)).toEqual({ body, withoutTypedValues: false })
+            // A v1 response with flags also comes from a server that does not serve v4.
+            [
+                'the oldest response shape',
+                { featureFlags: { 'garden-layout': 'compact' }, featureFlagPayloads: {} },
+                true,
+            ],
+            ['the oldest response shape without flags', { featureFlags: {}, featureFlagPayloads: {} }, false],
+            ['a body without flags', { errorsWhileComputingFlags: false }, false],
+            ['an empty body', {}, false],
+        ])('returns %s unchanged', (_name, body, withoutTypedValues) => {
+            expect(readFlagRecordsForStorage(body as any)).toEqual({ body, withoutTypedValues })
         })
 
         it.each([[undefined], [null], ['oops'], [[1]]])(
             'returns a body that is not an object (%j) unchanged',
             (body) => {
-                expect(readFlagRecords(body as any)).toEqual({ body, withoutTypedValues: false })
+                expect(readFlagRecordsForStorage(body as any)).toEqual({ body, withoutTypedValues: false })
             }
         )
     })
@@ -402,8 +422,8 @@ describe('the /flags?v=4 response', () => {
     describe('records that cannot be read', () => {
         function expectOnlyThisRecordUnreadable(details: Record<string, FeatureFlagDetail>): void {
             expect(details['garden-layout']).toEqual({ key: 'garden-layout', ...UNREADABLE })
-            expect(typedFlagDetailOf(details['garden-layout'])).toBeUndefined()
-            expect(typedFlagDetailOf(details.sibling)).toMatchObject({
+            expect(typed(details['garden-layout'])).toBeUndefined()
+            expect(typed(details.sibling)).toMatchObject({
                 key: 'sibling',
                 value: 'compact',
                 variant: 'compact',
@@ -462,7 +482,9 @@ describe('the /flags?v=4 response', () => {
             const body = envelope({ 'garden-layout': v4Record({ value: deep }), sibling: v4Record({ key: 'sibling' }) })
 
             // Not through `read`, which copies the body: the copy itself overflows.
-            expectOnlyThisRecordUnreadable(readFlagRecords(body).body.flags as Record<string, FeatureFlagDetail>)
+            expectOnlyThisRecordUnreadable(
+                readFlagRecordsForStorage(body).body.flags as Record<string, FeatureFlagDetail>
+            )
         })
 
         it('reads as a disabled flag with no payload, and leaves the other flags alone', async () => {
@@ -491,7 +513,7 @@ describe('the /flags?v=4 response', () => {
                 envelope({ 'garden-layout': build(RESPONSES, { template: 'error' }).flags['garden-layout'] })
             )
 
-            expect(typedFlagDetailOf(details['garden-layout'])).toMatchObject({
+            expect(typed(details['garden-layout'])).toMatchObject({
                 enabled: false,
                 value: null,
                 failed: true,
@@ -512,7 +534,7 @@ describe('the /flags?v=4 response', () => {
             })
             const { flags, load: loadFlags } = await setup()
 
-            expect(typedFlagDetailOf(read(envelope({ 'garden-layout': record }))['garden-layout'])).toMatchObject({
+            expect(typed(read(envelope({ 'garden-layout': record }))['garden-layout'])).toMatchObject({
                 enabled: false,
                 variant: null,
                 value: null,
@@ -573,14 +595,14 @@ describe('the /flags?v=4 response', () => {
                     envelope({ placeholder: v4Record({ key: '__proto__' }), constructor: v4Record() })
                 ).replace('"placeholder":', '"__proto__":')
             )
-            const details = readFlagRecords(body).body.flags!
+            const details = readFlagRecordsForStorage(body).body.flags!
 
             expect(Object.keys(details).sort()).toEqual(['__proto__', 'constructor'])
-            expect(typedFlagDetailOf(Object.getOwnPropertyDescriptor(details, '__proto__')!.value)).toMatchObject({
+            expect(typed(Object.getOwnPropertyDescriptor(details, '__proto__')!.value)).toMatchObject({
                 key: '__proto__',
                 value: 'compact',
             })
-            expect(typedFlagDetailOf(details.constructor)).toMatchObject({ key: 'constructor', value: 'compact' })
+            expect(typed(details.constructor)).toMatchObject({ key: 'constructor', value: 'compact' })
             expect(Object.getPrototypeOf(details)).toBe(Object.prototype)
         })
 
@@ -592,7 +614,7 @@ describe('the /flags?v=4 response', () => {
                 )
             )
 
-            expect(typedFlagDetailOf(read(body)['garden-layout'])!.metadata!.config_version).toBe(2)
+            expect(typed(read(body)['garden-layout'])!.metadata!.config_version).toBe(2)
         })
 
         it('reads a record without metadata or reason', () => {
@@ -798,9 +820,55 @@ describe('the /flags?v=4 response', () => {
                 ...overrides,
             })
 
+        it('reads a stored record back with the checks of the reader, once per stored object', () => {
+            const stored = JSON.parse(JSON.stringify(read(envelope({ split: split() })).split))
+
+            const record = storedParsedFlagRecordOf(stored)
+            expect(record).toEqual({
+                value: 'arm-b',
+                failed: false,
+                reason: { code: 'experiment_split', conditionIndex: 0, description: 'Matched rule 1' },
+                metadata: {
+                    id: 201,
+                    version: 7,
+                    configVersion: 2,
+                    hasExperiment: false,
+                    ruleType: 'experiment',
+                    ruleId: RULE_ID,
+                    variantKey: 'arm-b',
+                },
+            })
+            expect(storedParsedFlagRecordOf(stored)).toBe(record)
+        })
+
+        it.each([
+            ['metadata.rule_id', 7],
+            ['metadata.variant_key', { nested: true }],
+            ['metadata.config_version', '2'],
+            ['reason.code', ['experiment_split']],
+            ['value', [1]],
+        ])(
+            'reads a stored record whose %s has the wrong type as a record without a typed value',
+            (memberPath, value) => {
+                // Other code, and other SDK versions, write the same storage.
+                const stored = applyOverrides(JSON.parse(JSON.stringify(read(envelope({ split: split() })).split)), {
+                    [memberPath]: value,
+                })
+
+                expect(storedParsedFlagRecordOf(stored as FeatureFlagDetail)).toBeUndefined()
+            }
+        )
+
+        it.each([[undefined], [null], ['compact'], [olderRecord()]])(
+            'reads no parsed record from the stored detail %j',
+            (detail) => {
+                expect(storedParsedFlagRecordOf(detail as any)).toBeUndefined()
+            }
+        )
+
         it('stores the typed record under the existing key, and adds no stored key', async () => {
-            const typed = await setup()
-            await typed.load(envelope({ split: split() }))
+            const opted = await setup()
+            await opted.load(envelope({ split: split() }))
             const older = await setup(null)
             await older.load(envelope({ split: olderRecord({ key: 'split', variant: 'arm-b' }) }))
 
@@ -816,13 +884,13 @@ describe('the /flags?v=4 response', () => {
                     '$minimal_flag_called_events',
                 ].filter((key) => !isUndefined(client.kv.get(key)))
 
-            expect(typedFlagDetailOf(storedDetails(typed.client).split)).toMatchObject({
+            expect(typed(storedDetails(opted.client).split)).toMatchObject({
                 value: 'arm-b',
                 metadata: { config_version: 2, rule_type: 'experiment', rule_id: RULE_ID, variant_key: 'arm-b' },
             })
-            expect(storedKeys(typed.client)).toEqual(storedKeys(older.client))
+            expect(storedKeys(opted.client)).toEqual(storedKeys(older.client))
             for (const key of ['$active_feature_flags', '$enabled_feature_flags', '$feature_flag_payloads']) {
-                expect(typed.client.kv.get(key)).toEqual(older.client.kv.get(key))
+                expect(opted.client.kv.get(key)).toEqual(older.client.kv.get(key))
             }
         })
 
@@ -841,11 +909,11 @@ describe('the /flags?v=4 response', () => {
             )
 
             expect(flags.getFeatureFlag('split', { send_event: false })).toBe('arm-b')
-            expect(typedFlagDetailOf(storedDetails(client).split)).toMatchObject({
+            expect(typed(storedDetails(client).split)).toMatchObject({
                 value: 'arm-b',
                 reason: { code: 'experiment_split' },
             })
-            expect(typedFlagDetailOf(storedDetails(client).other)).toMatchObject({ value: 'wide' })
+            expect(typed(storedDetails(client).other)).toMatchObject({ value: 'wide' })
         })
 
         it('keeps the cached flag of a record that cannot be read, when the response reports errors', async () => {
@@ -855,7 +923,7 @@ describe('the /flags?v=4 response', () => {
             await loadFlags(envelope({ split: split({ 'metadata.rule_id': 3 }) }, { errorsWhileComputingFlags: true }))
 
             expect(flags.getFeatureFlag('split', { send_event: false })).toBe('arm-b')
-            expect(typedFlagDetailOf(storedDetails(client).split)).toMatchObject({ value: 'arm-b' })
+            expect(typed(storedDetails(client).split)).toMatchObject({ value: 'arm-b' })
         })
 
         it('replaces the cached flag with a record that cannot be read, in a complete response', async () => {
@@ -887,9 +955,9 @@ describe('the /flags?v=4 response', () => {
 
             expect(flags.getFlagVariants()).toEqual({ split: 'arm-b', other: true, survey: true })
             expect(flags.getFlagPayloads()).toEqual({ split: null, other: '12.5', survey: null })
-            expect(typedFlagDetailOf(storedDetails(client).split)).toMatchObject({ value: 'arm-b' })
-            expect(typedFlagDetailOf(storedDetails(client).other)).toMatchObject({ value: 12.5 })
-            expect(typedFlagDetailOf(storedDetails(client).survey)).toMatchObject({ value: true })
+            expect(typed(storedDetails(client).split)).toMatchObject({ value: 'arm-b' })
+            expect(typed(storedDetails(client).other)).toMatchObject({ value: 12.5 })
+            expect(typed(storedDetails(client).survey)).toMatchObject({ value: true })
         })
 
         it('replaces the typed records with those of the next complete response', async () => {
@@ -899,7 +967,7 @@ describe('the /flags?v=4 response', () => {
             await loadFlags(envelope({ split: olderRecord({ key: 'split', variant: 'arm-b' }) }))
 
             expect(Object.keys(storedDetails(client))).toEqual(['split'])
-            expect(typedFlagDetailOf(storedDetails(client).split)).toBeUndefined()
+            expect(typed(storedDetails(client).split)).toBeUndefined()
         })
 
         it('keeps no typed record of bootstrapped flags', async () => {
@@ -919,8 +987,8 @@ describe('the /flags?v=4 response', () => {
             flags.updateFlags({ other: 'wide' }, undefined, { merge: true })
 
             expect(flags.getFlagVariants()).toEqual({ split: 'arm-b', other: 'wide' })
-            expect(typedFlagDetailOf(storedDetails(client).split)).toBeUndefined()
-            expect(typedFlagDetailOf(storedDetails(client).other)).toBeUndefined()
+            expect(typed(storedDetails(client).split)).toBeUndefined()
+            expect(typed(storedDetails(client).other)).toBeUndefined()
         })
 
         it('leaves the stored record alone when the flag is overridden', async () => {
@@ -950,7 +1018,7 @@ describe('the /flags?v=4 response', () => {
 
             expect(flags.getFeatureFlag('split', { send_event: false })).toBe('arm-b')
             expect(flags.getFeatureFlagDetails('split')).toEqual(record)
-            expect(typedFlagDetailOf(flags.getFeatureFlagDetails('split'))).toBeUndefined()
+            expect(typed(flags.getFeatureFlagDetails('split'))).toBeUndefined()
             expect(client.sentRequests).toEqual([])
         })
     })

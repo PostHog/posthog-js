@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { PostHogFeatureFlags, type FlagsResponseFormat } from '../src/feature-flags'
 import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '../src/feature-flags-config'
 import { ruleAttribution } from '../src/flag-events'
-import { flagsResponseV4, readFlagRecords } from '../src/flags-response-v4'
+import { flagsResponseV4, readFlagRecordsForStorage } from '../src/flags-response-v4'
 import { createTestClient, type TestCapturedEvent, type TestClient } from './helpers/test-client'
 
 // `$experiment_exposure` and the attribution of `$feature_flag_called`. A stored config version 2
@@ -658,7 +658,7 @@ describe('$experiment_exposure', () => {
         })
 
         it('reads the attribution of a stored record whose members have the wrong types as absent', () => {
-            const record = readFlagRecords(response([split()]) as any).body.flags![FLAG] as any
+            const record = readFlagRecordsForStorage(response([split()]) as any).body.flags![FLAG] as any
             record.metadata.rule_id = 7
             record.metadata.variant_key = { nested: true }
             record.reason.code = ['experiment_split']
