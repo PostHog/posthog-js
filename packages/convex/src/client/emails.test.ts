@@ -291,7 +291,7 @@ describe('sending email through the component', () => {
     ])(
       '%s is refused before anything is sent or queued',
       async (_case, email, defaultTemplateKey, refusal, withReactElement?: boolean) => {
-        const refused = { code: refusal, retryable: false }
+        const refused = { code: refusal, retryable: false, name: 'validation_error', fix: expect.any(String) }
         expect(await failureOf(send(email, defaultTemplateKey, withReactElement))).toMatchObject(refused)
 
         const t = initConvexTest()
@@ -327,10 +327,28 @@ describe('sending email through the component', () => {
 
   describe('the error map', () => {
     test.each([
-      ['400', { status: 400, body: { code: 'invalid_input', detail: 'Bad to.', attr: 'to' } }, false, undefined],
-      ['401', { status: 401, body: { code: 'authentication_failed', detail: 'Bad key.' } }, false, undefined],
-      ['403', { status: 403, body: { code: 'permission_denied', detail: 'No scope.' } }, false, undefined],
-      ['404', { status: 404, body: { code: 'not_found', detail: 'No template.' } }, false, undefined],
+      [
+        '400',
+        { status: 400, body: { code: 'invalid_input', detail: 'Bad to.', attr: 'to' } },
+        false,
+        undefined,
+        'validation_error',
+      ],
+      [
+        '401',
+        { status: 401, body: { code: 'authentication_failed', detail: 'Bad key.' } },
+        false,
+        undefined,
+        'missing_api_key',
+      ],
+      [
+        '403',
+        { status: 403, body: { code: 'permission_denied', detail: 'No scope.' } },
+        false,
+        undefined,
+        'invalid_permission',
+      ],
+      ['404', { status: 404, body: { code: 'not_found', detail: 'No template.' } }, false, undefined, 'not_found'],
       [
         '409 in flight',
         {
@@ -340,18 +358,32 @@ describe('sending email through the component', () => {
         },
         true,
         60,
+        'concurrent_idempotent_requests',
       ],
-      ['422', { status: 422, body: { code: 'recipient_suppressed', detail: 'Suppressed.' } }, false, undefined],
-      ['429 quota', { status: 429, body: { code: 'quota_limited', detail: 'Over quota.' } }, false, undefined],
-      ['429 throttled', COOLING_DOWN, true, 60],
+      [
+        '422',
+        { status: 422, body: { code: 'recipient_suppressed', detail: 'Suppressed.' } },
+        false,
+        undefined,
+        'validation_error',
+      ],
+      [
+        '429 quota',
+        { status: 429, body: { code: 'quota_limited', detail: 'Over quota.' } },
+        false,
+        undefined,
+        'monthly_quota_exceeded',
+      ],
+      ['429 throttled', COOLING_DOWN, true, 60, 'rate_limit_exceeded'],
       [
         '503',
         { status: 503, body: { code: 'service_unavailable', detail: 'Try later.' }, headers: { 'Retry-After': '60' } },
         true,
         60,
+        'service_unavailable',
       ],
-      ['500', { status: 500, body: { code: 'error', detail: 'Broke.' } }, false, undefined],
-    ])('%s throws a ConvexError with the contract record', async (_row, reply, retryable, retryAfter) => {
+      ['500', { status: 500, body: { code: 'error', detail: 'Broke.' } }, false, undefined, 'application_error'],
+    ])('%s throws a ConvexError with the contract record', async (_row, reply, retryable, retryAfter, name) => {
       replies.push(reply as Reply)
 
       const data = await failureOf(send(ORDER_SHIPPED))
@@ -361,10 +393,31 @@ describe('sending email through the component', () => {
         code: (reply as { body: { code: string } }).body.code,
         detail: (reply as { body: { detail: string } }).body.detail,
         retryable,
+        name,
       })
       expect(data.attr).toBe((reply as { body: { attr?: string } }).body.attr)
       expect(data.retry_after).toBe(retryAfter)
       expect(requests).toHaveLength(1)
+    })
+
+    test("PostHog's why, fix and docs link reach the app", async () => {
+      replies.push({
+        status: 422,
+        body: {
+          code: 'recipient_suppressed',
+          detail: 'The recipient is suppressed.',
+          why: 'They unsubscribed.',
+          fix: 'Remove them from the send.',
+          docs_url: 'https://posthog.com/docs/workflows/email',
+        },
+      })
+
+      expect(await failureOf(send(ORDER_SHIPPED))).toMatchObject({
+        code: 'recipient_suppressed',
+        why: 'They unsubscribed.',
+        fix: 'Remove them from the send.',
+        docs_url: 'https://posthog.com/docs/workflows/email',
+      })
     })
 
     test('a network error is retryable after the SDK retries it with the same key', async () => {
@@ -373,7 +426,7 @@ describe('sending email through the component', () => {
 
       const data = await failureOf(send(ORDER_SHIPPED))
 
-      expect(data).toMatchObject({ code: 'network_error', retryable: true })
+      expect(data).toMatchObject({ code: 'network_error', retryable: true, name: 'service_unavailable' })
       expect(data).not.toHaveProperty('status')
       expect(requests).toHaveLength(3)
       expect(new Set(requests.map((r) => r.headers['Idempotency-Key'])).size).toBe(1)
