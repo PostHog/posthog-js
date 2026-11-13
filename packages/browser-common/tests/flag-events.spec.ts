@@ -845,6 +845,35 @@ describe('$experiment_exposure', () => {
             expect(eventNames(harness.events)).toEqual([FLAG_CALLED, FLAG_CALLED, EXPOSURE])
         })
 
+        // The deprecated `override(true)` and a mistyped `flags` option store a value that is not a
+        // map of flags. It overrides no flag, and a read must not fail on it.
+        it.each([[true], ['another-flag'], [7]])(
+            'a stored override state that is not an object (%j) overrides nothing',
+            async (stored) => {
+                const harness = await setup()
+                await harness.load(
+                    response([split(), v4Record('condition_match', true, { key: 'legacy', configVersion: 1 })])
+                )
+                harness.client.kv.set({ $override_feature_flags: stored })
+
+                expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
+                expect(harness.flags.getFeatureFlag('legacy')).toBe(true)
+
+                expect(eventNames(harness.events)).toEqual([FLAG_CALLED, EXPOSURE, FLAG_CALLED])
+                expect(attribution(harness.events[0]!.properties)).toEqual(EXPECTED_ATTRIBUTION)
+            }
+        )
+
+        it('an override of another flag leaves the events of this one alone', async () => {
+            const harness = await setup()
+            await harness.load(response([split()]))
+            harness.flags.overrideFeatureFlags({ flags: { 'another-flag': true }, suppressWarning: true })
+
+            harness.flags.getFeatureFlag(FLAG)
+
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED, EXPOSURE])
+        })
+
         it('a payload override keeps the exposure of the value the record supplied', async () => {
             const harness = await setup()
             await harness.load(response([split()]))
@@ -1287,6 +1316,61 @@ describe('$experiment_exposure', () => {
 
             // The call may be sent twice. The exposure is not lost.
             expect(eventNames(harness.events)).toEqual([FLAG_CALLED, FLAG_CALLED, EXPOSURE])
+        })
+
+        it('a read that was held with a bootstrapped value is sent when a record supplies the same value by then', async () => {
+            const client = createTestClient({ canCapture: false })
+            const harness = await setup({ client, config: { bootstrap: { featureFlags: { [FLAG]: 'annual' } } } })
+            expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
+
+            await harness.load(response([split()]))
+            client.canCapture = true
+            harness.flags.sendFlagCallsPendingCapture()
+
+            // The user saw this value, and the record that supplies it now reports the read.
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED, EXPOSURE])
+            expect(attribution(harness.events[0]!.properties)).toEqual(EXPECTED_ATTRIBUTION)
+        })
+
+        it('a read of the flag while its call is captured does not send a second exposure', async () => {
+            const client = createTestClient()
+            const harness = await setup({ client })
+            const capture = client.capture.bind(client)
+            let nested = true
+            vi.spyOn(client, 'capture').mockImplementation((name, properties, options) => {
+                if (name === FLAG_CALLED && nested) {
+                    // A hook that runs while the call is captured reads the flag itself.
+                    nested = false
+                    harness.flags.getFeatureFlag(FLAG)
+                }
+                return capture(name, properties, options)
+            })
+            await harness.load(response([split()]))
+
+            harness.flags.getFeatureFlag(FLAG)
+
+            expect(eventNames(harness.events).sort()).toEqual([EXPOSURE, FLAG_CALLED].sort())
+            expect(storedReports(client)[FLAG]).toEqual([SPLIT_CALLED_KEY, SPLIT_EXPOSURE_KEY])
+        })
+
+        it('an identity change while the call is captured sends no exposure for the earlier identity', async () => {
+            const client = createTestClient()
+            const harness = await setup({ client })
+            const capture = client.capture.bind(client)
+            vi.spyOn(client, 'capture').mockImplementation((name, properties, options) => {
+                const result = capture(name, properties, options)
+                if (name === FLAG_CALLED) {
+                    // A hook that runs while the call is captured identifies the user.
+                    client.distinctId = 'another-visitor'
+                }
+                return result
+            })
+            await harness.load(response([split()]))
+
+            harness.flags.getFeatureFlag(FLAG)
+
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED])
+            expect(storedReports(client)[FLAG]).toEqual([SPLIT_CALLED_KEY])
         })
 
         it('a config version 1 call whose capture throws keeps its mark, as before', async () => {

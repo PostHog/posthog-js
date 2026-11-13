@@ -41,8 +41,10 @@ import {
 } from './constants'
 
 import {
+    hasOwnProperty,
     isUndefined,
     isArray,
+    isObject,
     getEnabledFromValue,
     getVariantFromValue,
     parsePayload,
@@ -371,6 +373,8 @@ type FlagCallContext = {
 /** A flag read that is not reported yet. */
 type PendingFlagCall = {
     value: string
+    /** The dedupe key of the read's config version 2 `$feature_flag_called`, when it has one. */
+    calledKey: string | undefined
     context: FlagCallContext
 }
 
@@ -1151,10 +1155,11 @@ export class PostHogFeatureFlags implements Extension {
                 }
                 // An exposure must not be reported outside the context of its read, or with a value the user did not
                 // see. Check the context for each read, because a capture listener can call identify() during this loop.
+                const calledKey = this._configVersion2FlagEvents(key, flagVariants[key])?.calledKey
                 if (
-                    pending.value !==
-                        (this._configVersion2FlagEvents(key, flagVariants[key])?.calledKey ??
-                            String(flagVariants[key])) ||
+                    pending.value !== String(flagVariants[key]) ||
+                    // The value is the same, and the config version 2 assignment behind it is not.
+                    (pending.calledKey && calledKey && pending.calledKey !== calledKey) ||
                     !isSameFlagCallContext(pending.context, this._flagCallContext())
                 ) {
                     this._flagCallsPendingCapture.delete(key)
@@ -1530,6 +1535,7 @@ export class PostHogFeatureFlags implements Extension {
             // or the dedupe key of a config version 2 call.
             const reportKey = flagEvents ? flagEvents.calledKey : flagReportValue
             const exposureKey = flagEvents?.exposureKey
+            const hold = (): void => this._holdFlagCall(key, flagReportValue, flagEvents?.calledKey)
             if (canCapture) {
                 this._flagCallsPendingCapture.delete(key)
             } else {
@@ -1546,7 +1552,7 @@ export class PostHogFeatureFlags implements Extension {
                     !flagCallReported[key]?.includes(reportKey) ||
                     (exposureKey && !flagCallReported[key]?.includes(exposureKey))
                 ) {
-                    this._holdFlagCall(key, reportKey)
+                    hold()
                 }
             }
             const callIsNew = !flagCallReported[key]?.includes(reportKey)
@@ -1564,12 +1570,15 @@ export class PostHogFeatureFlags implements Extension {
                 const events = flagEvents.build(
                     this._flagCalledProperties(key, flagValue, payload, requestId, evaluatedAt)
                 )
+                const context = this._flagCallContext()
                 // Each event is attempted on its own, so a failed capture of one does not stop the other.
                 if (callIsNew) {
-                    this._captureFlagEventOnce(key, reportKey, reportKey, events.called)
+                    this._captureFlagEventOnce(key, reportKey, events.called, hold)
                 }
-                if (exposureIsNew && events.exposure) {
-                    this._captureFlagEventOnce(key, exposureKey, reportKey, events.exposure)
+                // Application code that runs while the call is captured can change who reads the flag. The
+                // exposure belongs to the read's own context, like a read that is held.
+                if (exposureIsNew && events.exposure && isSameFlagCallContext(context, this._flagCallContext())) {
+                    this._captureFlagEventOnce(key, exposureKey, events.exposure, hold)
                 }
             } else if (canCapture && callIsNew) {
                 if (isArray(flagCallReported[key])) {
@@ -1586,7 +1595,7 @@ export class PostHogFeatureFlags implements Extension {
                 if (!this._captureFeatureFlagCalled(properties)) {
                     // The client rate limit dropped the event. Remove the mark so the next capture sends the exposure.
                     this._unmarkFlagCallReported(key, flagReportValue)
-                    this._holdFlagCall(key, flagReportValue)
+                    hold()
                 }
             } else if (sessionIdToPersist) {
                 this._set({
@@ -1687,8 +1696,13 @@ export class PostHogFeatureFlags implements Extension {
         flagValue: string | boolean | undefined
     ): ConfigVersion2FlagEvents | undefined {
         const flagEvents = this._responseFormat.flagEvents
-        const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        if (!flagEvents || isUndefined(flagValue) || (overriddenFlags && key in overriddenFlags)) {
+        // The stored overrides can be anything a caller passed, and only an object overrides flags by key.
+        const overriddenFlags: unknown = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        if (
+            !flagEvents ||
+            isUndefined(flagValue) ||
+            (isObject(overriddenFlags) && hasOwnProperty.call(overriddenFlags, key))
+        ) {
             return undefined
         }
         return flagEvents({
@@ -1710,8 +1724,12 @@ export class PostHogFeatureFlags implements Extension {
      * discards keeps its key: the application chose to drop it, and later reads would be dropped
      * the same way. A failure is logged and never reaches the read.
      */
-    private _captureFlagEventOnce(key: string, dedupeKey: string, reportKey: string, flagEvent: FlagEvent): void {
+    private _captureFlagEventOnce(key: string, dedupeKey: string, flagEvent: FlagEvent, hold: () => void): void {
         const reported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        // A read that ran while the read's other event was captured can have sent this event already.
+        if (reported[key]?.includes(dedupeKey)) {
+            return
+        }
         this._set({ [FLAG_CALL_REPORTED]: { ...reported, [key]: [...(reported[key] || []), dedupeKey] } })
         let failed = false
         this._flagEventCaptures.set(flagEvent.properties, {
@@ -1725,7 +1743,7 @@ export class PostHogFeatureFlags implements Extension {
             handled =
                 this._client?.capture(flagEvent.event, flagEvent.properties) !== false && !!this._client?.canCapture
             if (!handled) {
-                this._holdFlagCall(key, reportKey)
+                hold()
             }
         } catch (error) {
             this._logger.error('Failed to capture ' + flagEvent.event, error)
@@ -1756,8 +1774,8 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _holdFlagCall(key: string, value: string): void {
-        this._flagCallsPendingCapture.set(key, { value, context: this._flagCallContext() })
+    private _holdFlagCall(key: string, value: string, calledKey?: string): void {
+        this._flagCallsPendingCapture.set(key, { value, calledKey, context: this._flagCallContext() })
     }
 
     private _flagCallContext(): FlagCallContext {
