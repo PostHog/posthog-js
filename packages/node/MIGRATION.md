@@ -289,13 +289,13 @@ Each event is built in this order. Each step fills only the properties and optio
    - `options.process_person_profile = false` for an event without a distinct ID
 5. `before_send`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
 
-A property set to `undefined` counts as unset. A `null` or `undefined` option counts as unset, so a later step can fill it.
+A property set to `undefined` counts as unset, and one set to `null` counts as set. A `null` or `undefined` option counts as unset, so a later step can fill it.
 
 A `$lib` or `$lib_version` counts as unset unless it's a non-empty string.
 
 `$set`, `$set_once`, `$groups`, and `$group_set` fill one level deep. When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
 
-For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`.
+For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`. A `$set` in `register()` or a context sets those person properties on every event it reaches.
 
 The call's `groups` merges into its own `$groups` property key by key, and `groups` wins for a key both set. 5.x.x replaced the `$groups` property with `groups`.
 
