@@ -358,6 +358,213 @@ describe.each(['main', 'renderer'] as const)('%s public contracts through the ma
 })
 
 describe('main Electron client', () => {
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'snapshots ready main %s properties at invocation',
+        async (operation) => {
+            const owner = await start()
+            const properties = { nested: { value: 'original' } }
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Home', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            properties.nested.value = 'changed'
+            await pending
+            await owner.flush()
+            const event = batches.find(({ event }) => event === (operation === 'screen' ? '$screen' : '$set'))!
+            expect(
+                operation === 'screen' ? event.properties : event.properties[operation === 'set' ? '$set' : '$set_once']
+            ).toMatchObject({ nested: { value: 'original' } })
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'does not inspect %s properties behind a queued opt-out',
+        async (operation) => {
+            const owner = await start()
+            const inspect = vi.fn(() => {
+                throw new Error('queued opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            const optingOut = owner.optOut()
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Private', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            await Promise.all([optingOut, pending])
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'restores persisted consent before inspecting early %s properties',
+        async (operation) => {
+            const previous = await start()
+            await previous.optOut()
+            await previous.shutdown(50)
+            client = undefined
+            const inspect = vi.fn(() => {
+                throw new Error('persisted opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            client = init({
+                projectToken: 'test-token',
+                storageDirectory: directory,
+                captureAppLifecycleEvents: false,
+                preloadFeatureFlags: false,
+                flushInterval: 0,
+            })
+            if (operation === 'screen') await client.screen('Private', properties)
+            else if (operation === 'set') await client.setPersonProperties(properties)
+            else await client.setPersonProperties(undefined, properties)
+            expect(client.optedOut).toBe(true)
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    describe.each(['main', 'renderer'] as const)('%s flag-context admission', (process) => {
+        const helpers = [
+            { type: 'setPersonPropertiesForFlags', properties: { plan: 'new' }, reloadFeatureFlags: true },
+            { type: 'setGroupPropertiesForFlags', properties: { company: { tier: 'new' } }, reloadFeatureFlags: true },
+            { type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: true },
+            { type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: true },
+        ] as const
+        describe.each(helpers)('$type', (command) => {
+            if (process === 'renderer') {
+                it.each(['identity', 'navigation'] as const)(
+                    'rechecks queued context %s authorization',
+                    async (change) => {
+                        const owner = await start()
+                        await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                        await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                        const page = renderer(owner, 1)
+                        await page.send({ type: 'hello' })
+                        let release!: () => void
+                        vi.spyOn(ElectronStorage.prototype, 'flush').mockImplementationOnce(
+                            () =>
+                                new Promise<void>((resolve) => {
+                                    release = resolve
+                                })
+                        )
+                        const registering = owner.register({ workspace: 'one' })
+                        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                        const identifying = change === 'identity' ? owner.identify('next-user') : Promise.resolve()
+                        const pending = page.send(structuredClone(command))
+                        await Promise.resolve()
+                        if (change === 'navigation') page.contents.mainFrame.url = 'file:///not-allowed.html'
+                        release()
+                        await Promise.all([registering, identifying])
+                        expect(await pending).toMatchObject({
+                            ok: false,
+                            error: expect.stringContaining(change === 'identity' ? 'Stale' : 'navigated'),
+                        })
+                        await owner.reloadFeatureFlags()
+                        expect(JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+                            person_properties: { plan: 'old' },
+                            group_properties: { company: { tier: 'old' } },
+                        })
+                    }
+                )
+            }
+            it.each(['identify', 'reset', 'optOut'] as const)(
+                'does not block %s on its flag response',
+                async (change) => {
+                    const owner = await start()
+                    await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                    await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                    const page = renderer(owner, 1)
+                    await page.send({ type: 'hello' })
+                    let release!: (response: Response) => void
+                    mock.fetch.mockImplementationOnce(
+                        () =>
+                            new Promise<Response>((resolve) => {
+                                release = resolve
+                            })
+                    )
+                    let helperFinished = false
+                    const helper = (
+                        process === 'renderer'
+                            ? page.send(structuredClone(command)).then((response) => {
+                                  expect(response.ok).toBe(true)
+                              })
+                            : command.type === 'setPersonPropertiesForFlags'
+                              ? owner.setPersonPropertiesForFlags(command.properties)
+                              : command.type === 'setGroupPropertiesForFlags'
+                                ? owner.setGroupPropertiesForFlags(command.properties)
+                                : command.type === 'resetPersonPropertiesForFlags'
+                                  ? owner.resetPersonPropertiesForFlags(true)
+                                  : owner.resetGroupPropertiesForFlags(true)
+                    ).then(() => {
+                        helperFinished = true
+                    })
+                    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                    const request = JSON.parse(mock.fetch.mock.calls[0][1]!.body as string)
+                    expect(request.person_properties).toEqual(
+                        command.type === 'resetPersonPropertiesForFlags'
+                            ? {}
+                            : { plan: command.type === 'setPersonPropertiesForFlags' ? 'new' : 'old' }
+                    )
+                    expect(request.group_properties).toEqual(
+                        command.type === 'resetGroupPropertiesForFlags'
+                            ? {}
+                            : { company: { tier: command.type === 'setGroupPropertiesForFlags' ? 'new' : 'old' } }
+                    )
+                    let mutationFinished = false
+                    const mutation = (
+                        change === 'identify'
+                            ? owner.identify('next-user')
+                            : change === 'reset'
+                              ? owner.reset()
+                              : owner.optOut()
+                    ).then(() => {
+                        mutationFinished = true
+                    })
+                    try {
+                        await vi.waitFor(() => expect(mutationFinished).toBe(true), { timeout: 300 })
+                        expect(helperFinished).toBe(false)
+                        if (change === 'identify') expect(owner.getDistinctId()).toBe('next-user')
+                        if (change === 'optOut') expect(owner.optedOut).toBe(true)
+                    } finally {
+                        release(new Response(JSON.stringify({ featureFlags: { stale_context: true } })))
+                        await Promise.all([helper, mutation])
+                    }
+                    if (change !== 'optOut') {
+                        const snapshots = page.contents.mainFrame.send.mock.calls.map(([, state]) => state as State)
+                        expect(snapshots.some((state) => state.featureFlags.stale_context)).toBe(false)
+                        expect(owner.getState().featureFlags).not.toHaveProperty('stale_context')
+                    }
+                }
+            )
+        })
+    })
+
+    it.each([4, 8])('normalizes all %i flag payloads with linear parse work', async (count) => {
+        const owner = await start()
+        const raw = Array.from({ length: count }, (_, i) => JSON.stringify({ index: i }))
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: Object.fromEntries(
+                        raw.map((payload, i) => [
+                            `flag-${i}`,
+                            { key: `flag-${i}`, enabled: true, metadata: { payload } },
+                        ])
+                    ),
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await owner.flush()
+        const parse = vi.spyOn(JSON, 'parse')
+        const results = owner.getAllFeatureFlags()
+        const payloadParses = parse.mock.calls.filter(([value]) => raw.includes(value)).length
+        expect(results.map(({ payload }) => payload)).toEqual(Array.from({ length: count }, (_, index) => ({ index })))
+        expect(payloadParses).toBeLessThanOrEqual(3 * count)
+    })
+
     it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
         const captures: Promise<void>[] = []
         const onError = vi.fn((error: unknown) => {
