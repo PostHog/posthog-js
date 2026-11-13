@@ -2656,7 +2656,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         errorsWhileComputing = Boolean((details as any).errorsWhileComputingFlags)
         quotaLimited = Array.isArray(details.quotaLimited) && details.quotaLimited.includes('feature_flags')
         for (const [key, detail] of Object.entries(details.flags)) {
-          if (locallyEvaluatedKeys.has(key)) {
+          if (locallyEvaluatedKeys.has(key) || detail.failed) {
             continue
           }
           let parsedPayload: JsonType | undefined = undefined

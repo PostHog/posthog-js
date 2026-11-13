@@ -1,4 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
+import { waitForPromises } from './utils'
 
 const failed = {
   key: 'failed',
@@ -95,6 +96,72 @@ describe('failed Node flag records', () => {
       featureFlagPayloads: {},
     })
   })
+
+  it.each(
+    [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
+      [true, false].flatMap((variantPlaceholder) =>
+        [true, false].map((withLocal) => ({ errorsWhileComputingFlags, variantPlaceholder, withLocal }))
+      )
+    )
+  )(
+    'evaluateFlags excludes failed remote records (%j)',
+    async ({ errorsWhileComputingFlags, variantPlaceholder, withLocal }) => {
+      setup(errorsWhileComputingFlags, withLocal, variantPlaceholder)
+      if (withLocal) {
+        await posthog.featureFlagsPoller!.loadFeatureFlags()
+      }
+      const localEvaluation = posthog.featureFlagsPoller
+        ? vi.spyOn(posthog.featureFlagsPoller, 'getAllFlagsAndPayloads')
+        : undefined
+      const capture = vi.spyOn(posthog, 'capture')
+      const captured = vi.fn()
+      posthog.on('capture', captured)
+      const snapshot = await posthog.evaluateFlags('user')
+
+      expect
+        .soft(snapshot.keys.sort())
+        .toEqual(withLocal ? ['disabled', 'local-0', 'local-1', 'local-2'] : ['disabled'])
+      expect.soft(snapshot.getFlag('failed', { sendFeatureFlagEvents: false })).toBeUndefined()
+      expect.soft(snapshot.getFlagPayload('failed')).toBeUndefined()
+      expect.soft(snapshot.isEnabled('failed', { sendFeatureFlagEvents: false })).toBe(false)
+      expect.soft(snapshot.isEnabled('failed', { defaultValue: true })).toBe(true)
+      expect(snapshot.getFlag('disabled')).toBe(false)
+      expect(snapshot.isEnabled('disabled', { defaultValue: true })).toBe(false)
+      expect(snapshot.unresolvedFlags).toEqual(withLocal ? { failed: 'experience_continuity' } : {})
+
+      if (withLocal) {
+        expect(snapshot.getFlag('local-0')).toBe(true)
+        expect(snapshot.getFlagPayload('local-0')).toEqual({ local: true })
+        expect(snapshot.getFlag('local-1')).toBe(false)
+        expect(snapshot.getFlag('local-2')).toBe('blue')
+        expect(snapshot.getFlagPayload('local-2')).toEqual({ local: true })
+        expect(localEvaluation).toHaveBeenCalledTimes(1)
+      }
+      const flagError = withLocal ? 'local_evaluation_inconclusive' : 'flag_missing'
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$feature_flag_called',
+          properties: expect.objectContaining({
+            $feature_flag: 'failed',
+            $feature_flag_response: undefined,
+            $feature_flag_error: errorsWhileComputingFlags ? `errors_while_computing_flags,${flagError}` : flagError,
+          }),
+        })
+      )
+
+      posthog.capture({ distinctId: 'user', event: 'snapshot used', flags: snapshot })
+      await waitForPromises()
+      const [event] = captured.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.event === 'snapshot used')
+      expect(event).toMatchObject({ properties: { '$feature/disabled': false } })
+      expect(event.properties).not.toHaveProperty('$feature/failed')
+      expect(event.properties.$active_feature_flags).toEqual(withLocal ? ['local-0', 'local-2'] : undefined)
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=2'))
+      ).toHaveLength(1)
+    }
+  )
 
   it.each([true, false, undefined])(
     'preserves successful local true/false/variant pairs with global errors %s',
