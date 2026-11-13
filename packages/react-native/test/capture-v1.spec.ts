@@ -81,6 +81,16 @@ describe('React Native capture v1 delivery', () => {
     expect(sentEvents()).toEqual([['kept'], ['kept']])
   })
 
+  it('leaves redirects to the platform, so react-native-web follows a 307 or 308', async () => {
+    posthog.capture('event')
+    await posthog.flush()
+
+    const captureCall = ((globalThis as any).window.fetch as vi.Mock).mock.calls.find(([url]) =>
+      String(url).includes(CAPTURE_PATH)
+    )
+    expect(captureCall?.[1]).not.toHaveProperty('redirect')
+  })
+
   it('logs why events are kept, so a proxy without the capture route shows up in debug mode', async () => {
     const info = vi.spyOn((posthog as any)._logger, 'info')
     respond = () => ({ status: 404 })

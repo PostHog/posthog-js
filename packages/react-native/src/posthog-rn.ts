@@ -1002,7 +1002,9 @@ export class PostHog extends PostHogCore {
         isDebug: this.isDebug,
       },
       {
-        fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+        // The platform follows redirects. On react-native-web, `redirect: 'manual'` would hide a 307/308
+        // behind status 0 and the batch would be dropped.
+        fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
         onError: (error, summary) => {
           this._logger.warn(summary)
           this._events.emit('error', error)
