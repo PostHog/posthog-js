@@ -62,7 +62,7 @@ describe('Electron bridge protocol', () => {
     })
     it.each(['%7E', '%7e'])('matches Windows file paths with %s tilde encoding in either direction', (encoding) => {
         const path = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\fixture\\app.asar\\index.html'
-        const configured = pathToFileURL(path, { windows: true }).href.replace('%7E', encoding)
+        const configured = pathToFileURL(path, { windows: true }).href.replaceAll('%7E', encoding)
         const loaded = format({ protocol: 'file:', slashes: true, pathname: path.replaceAll('\\', '/') })
         expect(configured).toContain(encoding)
         expect(loaded).toContain('RUNNER~1')
