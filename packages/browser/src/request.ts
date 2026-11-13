@@ -140,10 +140,13 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(jsonStringify(data))
-        const encodedBody = encodeToDataString(b64data)
+        // /i/v0/e/ rejects form-urlencoded bodies, so beacons post the bare base64 as
+        // text/plain, which is still CORS-simple
+        const isBeacon = options.transport === 'sendBeacon'
+        const encodedBody = isBeacon ? b64data : encodeToDataString(b64data)
 
         return {
-            contentType: CONTENT_TYPE_FORM,
+            contentType: isBeacon ? CONTENT_TYPE_PLAIN : CONTENT_TYPE_FORM,
             body: encodedBody,
             estimatedSize: new Blob([encodedBody]).size,
         }
@@ -160,7 +163,7 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
         // beacon bodies must keep a CORS-simple content type even on the gzip-failure
-        // fallback — uncompressed application/json preflights, base64 form data does not
+        // fallback — uncompressed application/json preflights, base64 text/plain does not
         if (options.transport === 'sendBeacon') {
             return {
                 url: extendURLParams(options.url, { compression: Compression.Base64 }),
