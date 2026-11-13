@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import { EventCapture, fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog, textOf } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 describe('Basic Server Test', () => {
@@ -41,7 +41,7 @@ describe('Basic Server Test', () => {
 
       expect(result).toBeDefined()
       expect(result.content).toBeDefined()
-      expect(result.content[0].text).toContain('Added todo')
+      expect(textOf(result)).toContain('Added todo')
     } finally {
       await cleanup()
     }
@@ -186,7 +186,7 @@ describe('Basic Server Test', () => {
       )
 
       expect(result).toBeDefined()
-      expect(result.content[0].text).toContain('test data')
+      expect(textOf(result)).toContain('test data')
     } finally {
       await cleanup()
     }
@@ -250,7 +250,7 @@ describe('Basic Server Test', () => {
       )
 
       expect(result).toBeDefined()
-      expect(result.content[0].text).toBe('8')
+      expect(textOf(result)).toBe('8')
     } finally {
       await cleanup()
     }
@@ -481,7 +481,7 @@ describe('Basic Server Test', () => {
       )
 
       expect(addResult).toBeDefined()
-      expect(addResult.content[0].text).toBe('8')
+      expect(textOf(addResult)).toBe('8')
 
       const calcResult = await client.request(
         {
@@ -500,7 +500,7 @@ describe('Basic Server Test', () => {
       )
 
       expect(calcResult).toBeDefined()
-      expect(calcResult.content[0].text).toBe('28')
+      expect(textOf(calcResult)).toBe('28')
     } finally {
       await clientTransport.close?.()
       await serverTransport.close?.()

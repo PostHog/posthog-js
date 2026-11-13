@@ -23,7 +23,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     duration: 150,
     isError: false,
     ...overrides,
-  }
+  } as Event
 }
 
 function findEvent(events: PostHogCaptureEvent[], eventName: string): PostHogCaptureEvent | undefined {

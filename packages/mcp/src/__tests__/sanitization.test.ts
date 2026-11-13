@@ -1,5 +1,6 @@
 import { sanitizeEvent } from '../extensions/sanitization'
 import type { Event } from '../types'
+import type { LooseEvent } from './test-utils'
 
 function makeLargeBase64(sizeInChars = 12_000): string {
   return `${'A'.repeat(sizeInChars - 1)}=`
@@ -19,14 +20,14 @@ function makeLargeNonBase64(sizeInChars = 12_000): string {
   return 'Hello, world! This is NOT base64. '.repeat(Math.ceil(sizeInChars / 34))
 }
 
-function makeEvent(overrides: Partial<Event>): Event {
+function makeEvent(overrides: Partial<Event>): LooseEvent {
   return {
     id: 'evt_1',
     sessionId: 'ses_1',
     eventType: 'mcp:tools/call',
     timestamp: new Date(),
     ...overrides,
-  } as Event
+  } as LooseEvent
 }
 
 describe('sanitizeEvent - response content blocks', () => {
@@ -495,7 +496,10 @@ describe('sanitizeEvent - resource name', () => {
   it.each(['mcp:resources/read', 'identify', '$exception'])(
     'redacts credentials from a %s resource name',
     (eventType) => {
-      const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
+      const event = makeEvent({
+        eventType: eventType as Event['eventType'],
+        resourceName: 'https://fakeuser:fakepass@example.com/guide',
+      })
 
       expect(sanitizeEvent(event).resourceName).toBe('https://%5Bredacted%5D@example.com/guide')
     }
@@ -570,9 +574,7 @@ describe('sanitizeEvent - intent PII redaction', () => {
     expect(result.userIntent).toBe('Enriching the profile for [redacted] from the CRM.')
     // Structured tool data keeps the same shapes: they are often legitimate here.
     expect(result.parameters).toEqual({ email: 'dave@example.com', ip: '203.0.113.42' })
-    expect((result.response as { content: { text: string }[] }).content[0].text).toBe(
-      'Matched dave@example.com at 203.0.113.42.'
-    )
+    expect(result.response.content[0].text).toBe('Matched dave@example.com at 203.0.113.42.')
   })
 
   it('does not mutate the original intent string', () => {
@@ -590,7 +592,6 @@ describe('sanitizeEvent - integration', () => {
     const largeBase64 = makeLargeBase64()
 
     const event = makeEvent({
-      apiKey: 'proj_1',
       resourceName: 'my-tool',
       parameters: {
         imageData: largeBase64,
@@ -620,7 +621,6 @@ describe('sanitizeEvent - integration', () => {
 
     expect(result.id).toBe('evt_1')
     expect(result.sessionId).toBe('ses_1')
-    expect(result.apiKey).toBe('proj_1')
     expect(result.resourceName).toBe('my-tool')
   })
 

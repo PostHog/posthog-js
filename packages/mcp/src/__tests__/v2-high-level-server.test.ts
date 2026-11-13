@@ -34,8 +34,13 @@ import { EventCapture, fakePostHog } from './test-utils'
 
 type ToolHandler = (args: unknown, ctx: unknown) => Promise<unknown>
 
-interface V2RegisteredTool extends RegisteredTool {
+interface V2RegisteredTool {
+  description?: string
+  inputSchema?: unknown
+  handler: ToolHandler
   executor: ToolHandler
+  enabled: boolean
+  update: (updates: { handler?: ToolHandler }) => void
 }
 
 /** v2 builds `executor` from `handler` at registration time, not per call. */
@@ -66,7 +71,7 @@ class V2McpServerDouble {
         }
       },
     } as unknown as V2RegisteredTool
-    this._registeredTools[name] = tool
+    this._registeredTools[name] = tool as unknown as RegisteredTool
   }
 }
 

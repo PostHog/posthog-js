@@ -1,6 +1,7 @@
 import { sanitizeEvent } from '../extensions/sanitization'
 import { MAX_EVENT_BYTES, normalize, truncateEvent } from '../extensions/truncation'
 import type { Event, StackFrame } from '../types'
+import type { LooseEvent } from './test-utils'
 
 describe('normalize - string truncation', () => {
   it('should leave short strings unchanged', () => {
@@ -196,14 +197,14 @@ function chainOf(levels: number, text: string): Record<string, unknown> {
 
 // --- truncateEvent tests ---
 
-function makeEvent(overrides: Partial<Event> = {}): Event {
+function makeEvent(overrides: Partial<Event> = {}): LooseEvent {
   return {
     id: 'evt_1',
     sessionId: 'ses_1',
     eventType: 'mcp:tools/call',
     timestamp: new Date('2025-01-15T12:00:00Z'),
     ...overrides,
-  } as Event
+  } as LooseEvent
 }
 
 describe('truncateEvent - field-level string limits', () => {
@@ -332,8 +333,9 @@ describe('truncateEvent - response content text truncation', () => {
       },
     })
     const result = truncateEvent(event)
-    expect(result.response.content[0].text.length).toBe(32_768 + 3)
-    expect(result.response.content[0].text.endsWith('...')).toBe(true)
+    const text = result.response.content[0].text as unknown as string
+    expect(text.length).toBe(32_768 + 3)
+    expect(text.endsWith('...')).toBe(true)
     expect(result.response.content[1].text).toBe('short')
   })
 })
@@ -531,7 +533,6 @@ describe('truncateEvent - edge cases', () => {
     const event = makeEvent({
       id: 'evt_abc123',
       sessionId: 'ses_xyz789',
-      apiKey: 'proj_test',
       eventType: 'mcp:tools/call',
       timestamp: ts,
       duration: 342,
@@ -543,7 +544,6 @@ describe('truncateEvent - edge cases', () => {
     const result = truncateEvent(event)
     expect(result.id).toBe('evt_abc123')
     expect(result.sessionId).toBe('ses_xyz789')
-    expect(result.apiKey).toBe('proj_test')
     expect(result.eventType).toBe('mcp:tools/call')
     expect(result.timestamp).toBe(ts)
     expect(result.duration).toBe(342)

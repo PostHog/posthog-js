@@ -7,6 +7,7 @@ import { instrument } from '../index'
 import { getAnalyticsParameterOwnership } from '../extensions/analytics-parameters'
 import {
   MCP_INSTRUCTIONS_KEY,
+  type OutputInstructionsInjectableTool,
   addInstructionsToOutputSchema,
   addInstructionsToOutputSchemas,
   canDeclareOutputInstructions,
@@ -150,7 +151,7 @@ describe('_mcp_instructions output schema declaration', () => {
       const withSchema = { name: 'get_issue', outputSchema: objectSchema() }
       const withoutSchema = { name: 'list_issues' }
 
-      const [a, b] = addInstructionsToOutputSchemas([withSchema, withoutSchema])
+      const [a, b] = addInstructionsToOutputSchemas<OutputInstructionsInjectableTool>([withSchema, withoutSchema])
 
       expect((a.outputSchema as any).properties[MCP_INSTRUCTIONS_KEY]).toBeDefined()
       expect(b).toBe(withoutSchema)

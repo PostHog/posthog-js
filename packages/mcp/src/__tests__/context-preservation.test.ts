@@ -1,10 +1,17 @@
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
-import { addContextParameterToTool } from '../extensions/context-parameters'
+import { addContextParameterToTool, type ContextInjectableTool } from '../extensions/context-parameters'
 import type { RegisteredTool } from '../types'
+
+type InjectableRegisteredTool = RegisteredTool & ContextInjectableTool
+
+/** A tool that is known to carry a `context` parameter after injection. */
+interface ToolWithContext {
+  inputSchema: { properties: { context: { description: string } } }
+}
 
 describe('Context Parameter Preservation', () => {
   it('should preserve existing context parameter with custom description', () => {
-    const toolWithCustomContext: RegisteredTool = {
+    const toolWithCustomContext: InjectableRegisteredTool = {
       description: 'Test tool',
       inputSchema: {
         type: 'object',
@@ -19,7 +26,7 @@ describe('Context Parameter Preservation', () => {
       callback: async () => ({ content: [] }),
     }
 
-    const result = addContextParameterToTool(toolWithCustomContext)
+    const result = addContextParameterToTool(toolWithCustomContext) as ToolWithContext
 
     // The custom context description should be preserved
     expect(result.inputSchema.properties.context.description).toBe(
@@ -31,7 +38,7 @@ describe('Context Parameter Preservation', () => {
   })
 
   it("should add context parameter when it doesn't exist", () => {
-    const toolWithoutContext: RegisteredTool = {
+    const toolWithoutContext: InjectableRegisteredTool = {
       description: 'Test tool',
       inputSchema: {
         type: 'object',
@@ -43,7 +50,7 @@ describe('Context Parameter Preservation', () => {
       callback: async () => ({ content: [] }),
     }
 
-    const result = addContextParameterToTool(toolWithoutContext)
+    const result = addContextParameterToTool(toolWithoutContext) as ToolWithContext
 
     // Context should be added with default description
     expect(result.inputSchema.properties.context).toBeDefined()

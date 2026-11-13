@@ -24,7 +24,7 @@ describe('instrumentMutator', () => {
 
     // Mirror the nest-mcp shape: mutate a bare server, then register handlers after.
     const server = new McpServer({ name: 'mutator', version: '1.0.0' }, { capabilities: { tools: {} } })
-    const instrumented = instrumentMutator(fakePostHog())(server)
+    const instrumented = instrumentMutator<McpServer>(fakePostHog())(server)
 
     instrumented.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
