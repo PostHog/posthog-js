@@ -7,7 +7,7 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
   },
 }))
 
-import { PostHogRNStorage, createEventsStorage } from '../src/storage'
+import { PostHogRNStorage, createAiMemoryStorage, createEventsStorage } from '../src/storage'
 import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
@@ -401,5 +401,17 @@ describe('PostHog React Native', () => {
         vi.useRealTimers()
       }
     })
+  })
+
+  it('keeps one copy of in-memory data, without serializing it on persist', () => {
+    const storage = createAiMemoryStorage()
+    const stringify = vi.spyOn(JSON, 'stringify')
+
+    storage.setItem('queue', [{ event: '$ai_generation' }])
+    storage.persist()
+
+    expect(stringify).not.toHaveBeenCalled()
+    expect(storage.getItem('queue')).toEqual([{ event: '$ai_generation' }])
+    stringify.mockRestore()
   })
 })
