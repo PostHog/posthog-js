@@ -21,7 +21,16 @@ export interface FeatureFlagsOptions {
 export interface FeatureFlagsReadOptions {
     /** Emit a deduplicated $feature_flag_called event. Defaults to true. */
     sendFeatureFlagEvent?: boolean
-    /** Only return a value after remote evaluation has loaded. Does not force or await a reload; stale-cache refresh still applies. */
+    /**
+     * Return undefined until this SDK instance has loaded flags from the server,
+     * instead of using persisted or bootstrapped values.
+     *
+     * Use this to avoid showing a previously enabled feature that has since
+     * been disabled on the server while the initial flag request is pending.
+     *
+     * After remote flags load, reads use local values normally. This option
+     * does not force or wait for a reload.
+     */
     fresh?: boolean
 }
 
