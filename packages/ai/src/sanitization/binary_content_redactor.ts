@@ -3,15 +3,19 @@ import { MediaTypeContext } from './media_type_context'
 
 const STRONG_CONTEXT_MIN_LENGTH = 64
 const WEAK_CONTEXT_MIN_LENGTH = 1024
+const MAX_NODES = 10_000
+const TRUNCATED = '[Truncated]'
 
 export class BinaryContentRedactor {
-  private visited: WeakSet<object> = new WeakSet()
+  private ancestors: WeakSet<object> = new WeakSet()
+  private remainingNodes = MAX_NODES
 
   constructor(private readonly recognizer: Base64Recognizer = new Base64Recognizer()) {}
 
   redact<T>(value: T, mediaType?: string): T
   redact(value: unknown, mediaType?: string): unknown {
-    this.visited = new WeakSet()
+    this.ancestors = new WeakSet()
+    this.remainingNodes = MAX_NODES
     return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
 
@@ -30,24 +34,30 @@ export class BinaryContentRedactor {
       return this.redactLeaf(value, ctx)
     }
 
-    if (this.visited.has(value)) return null
-    this.visited.add(value)
+    if (this.ancestors.has(value)) return null
+    // Shared references are walked once per path, so the unfolded tree can be exponentially larger than the input.
+    if (this.remainingNodes <= 0) return TRUNCATED
+    this.remainingNodes--
+    this.ancestors.add(value)
+    try {
+      if (Array.isArray(value)) {
+        return value.map((item) => this.walk(item, ctx))
+      }
 
-    if (Array.isArray(value)) {
-      return value.map((item) => this.walk(item, ctx))
+      const obj = value as Record<string, unknown>
+      const out: Record<string, unknown> = {}
+      for (const k of Object.keys(obj)) {
+        Object.defineProperty(out, k, {
+          value: this.walk(obj[k], new MediaTypeContext(obj, k)),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        })
+      }
+      return out
+    } finally {
+      this.ancestors.delete(value)
     }
-
-    const obj = value as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const k of Object.keys(obj)) {
-      Object.defineProperty(out, k, {
-        value: this.walk(obj[k], new MediaTypeContext(obj, k)),
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      })
-    }
-    return out
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {

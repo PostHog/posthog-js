@@ -273,11 +273,39 @@ describe('redactBinaryContent', () => {
   })
 
   describe('cycle guard', () => {
-    it('does not stack overflow on circular references', () => {
+    it('replaces only the back reference of a cycle with null', () => {
       const a: any = { name: 'a' }
       const b: any = { name: 'b', back: a }
       a.forward = b
-      expect(() => redactBinaryContent(a)).not.toThrow()
+      expect(redactBinaryContent(a)).toEqual({ name: 'a', forward: { name: 'b', back: null } })
+    })
+
+    it('keeps an object that two parents share', () => {
+      const block = { type: 'text', text: 'shared' }
+      const input = [
+        { role: 'user', content: [block] },
+        { role: 'user', content: [block] },
+      ]
+      expect(redactBinaryContent(input)).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'shared' }] },
+        { role: 'user', content: [{ type: 'text', text: 'shared' }] },
+      ])
+    })
+
+    it('bounds the walk when shared references fan out exponentially', () => {
+      let node: any = { leaf: true }
+      for (let i = 0; i < 40; i++) node = { a: node, b: node }
+      const start = Date.now()
+      expect(JSON.stringify(redactBinaryContent(node))).toContain('[Truncated]')
+      expect(Date.now() - start).toBeLessThan(2000)
+    })
+
+    it('keeps an object that appears twice in the same array and redacts it both times', () => {
+      const image = { type: 'image', data: 'A'.repeat(2000) }
+      expect(redactBinaryContent([image, image])).toEqual([
+        { type: 'image', data: placeholder('image') },
+        { type: 'image', data: placeholder('image') },
+      ])
     })
   })
 
