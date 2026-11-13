@@ -344,7 +344,7 @@ export async function startClient(
 }
 
 /** What every legacy reader returns for each key, without sending flag events. */
-function quietReads(posthog: PostHog, keys: string[]): Record<string, unknown> {
+export function quietReads(posthog: PostHog, keys: string[]): Record<string, unknown> {
     const outputs: Record<string, unknown> = {}
     for (const key of keys) {
         outputs[`getFeatureFlag:${key}`] = plain(posthog.getFeatureFlag(key, { send_event: false }))
@@ -359,7 +359,7 @@ function quietReads(posthog: PostHog, keys: string[]): Record<string, unknown> {
 }
 
 /** Reads each key with every getter that sends `$feature_flag_called`. */
-function trackedReads(posthog: PostHog, keys: string[]): Record<string, unknown> {
+export function trackedReads(posthog: PostHog, keys: string[]): Record<string, unknown> {
     const outputs: Record<string, unknown> = {}
     for (const key of keys) {
         outputs[`getFeatureFlag:${key}`] = plain(posthog.getFeatureFlag(key))

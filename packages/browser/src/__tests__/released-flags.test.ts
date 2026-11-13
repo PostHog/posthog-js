@@ -1,7 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { runAll, type Shape } from './released-flags-scenarios'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { typedFlagDetailOf } from '@posthog/browser-common/flags-response-v4'
+import { PARITY_FLAGS, quietReads, runAll, startClient, trackedReads, type Shape } from './released-flags-scenarios'
 
 // Flag results, events and stored state pinned to what posthog-js 1.448.0 returned, sent and
 // stored, from the v2 response it requests. `released-flags-scenarios.ts` says how the recording
@@ -154,3 +156,56 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
         )
     }
 )
+
+describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.0 stored', () => {
+    const released: Results = existsSync(RECORDING) ? JSON.parse(readFileSync(RECORDING, 'utf8')).results : {}
+
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.spyOn(console, 'info').mockImplementation(() => {})
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.useRealTimers()
+    })
+
+    // The page that 1.448.0 loaded stored its flags and reported some reads. The next page loads
+    // this source, which reads that state before its own response arrives.
+    it('is read as 1.448.0 read it, with no typed record and no request', async () => {
+        const recorded = released.getters
+        const { $flag_call_reported: _reported, ...storedFlags } = recorded.stored
+        const persistenceName = `released-flags-${uuidv7()}`
+        window.localStorage.setItem(`ph_${persistenceName}`, JSON.stringify(storedFlags))
+        const keys = [...PARITY_FLAGS.map((flag) => flag.key), 'missing']
+
+        const client = await startClient({}, persistenceName)
+        const reads = quietReads(client.posthog, keys)
+        const tracked = trackedReads(client.posthog, keys)
+
+        for (const name of Object.keys(reads)) {
+            expect([name, reads[name]]).toEqual([name, recorded[name]])
+        }
+        expect(tracked).toEqual(recorded.tracked)
+        // The reads send the events that 1.448.0 sent for the same stored flags.
+        expect(client.events).toEqual(
+            recorded.events
+                .filter(([event]: [string]) => event === '$feature_flag_called')
+                .map(([event, properties]: [string, Record<string, unknown>]) => [
+                    event,
+                    // The page has not loaded flags itself yet.
+                    { ...properties, $used_bootstrap_value: true },
+                ])
+        )
+        const details = client.stored().$feature_flag_details as Record<string, any>
+        expect(Object.keys(details)).toEqual(Object.keys(recorded.stored.$feature_flag_details))
+        expect(Object.values(details).map((detail) => typedFlagDetailOf(detail))).toEqual(
+            Object.values(details).map(() => undefined)
+        )
+        expect(client.requests).toEqual([])
+        await client.close()
+    })
+})
