@@ -41,7 +41,6 @@ const emailArgs = {
   tracking: v.optional(tracking),
 }
 
-/** Workpool stores these until the job runs, so a field added later stays optional for jobs queued before it. */
 const queuedEmailArgs = { ...emailArgs, idempotencyKey: v.string() }
 
 type EmailArgs = ObjectType<typeof emailArgs>
@@ -105,7 +104,7 @@ function sentOrThrown({ data, error }: SendEmailResponse): SentEmail {
 }
 
 function cooldown(error: EmailError): number | undefined {
-  return isRetryable(error) && error.retryAfterMs ? error.retryAfterMs : undefined
+  return isRetryableLikePostHogNode(error) && error.retryAfterMs ? error.retryAfterMs : undefined
 }
 
 function sleep(ms: number): Promise<void> {
@@ -119,7 +118,7 @@ function sendFailure(
   const failure: EmailSendFailure = {
     code: error.code,
     detail: error.message,
-    retryable: isRetryable(error),
+    retryable: isRetryableLikePostHogNode(error),
     ...(error.statusCode !== undefined && { status: error.statusCode }),
     ...(error.field !== undefined && { attr: error.field }),
     ...(error.retryAfterMs !== undefined && { retry_after: Math.ceil(error.retryAfterMs / 1000) }),
@@ -130,13 +129,12 @@ function sendFailure(
   const message =
     queueStopsFor === undefined
       ? failure.detail
-      : `${failure.detail} PostHog asked to wait ${failure.retry_after}s, longer than a queued send waits, so the ` +
-        `queue stopped. Send the email again after that, with idempotencyKey ${queueStopsFor}.`
+      : `${failure.detail} PostHog asked to wait ${failure.retry_after}s, which ends more than five minutes after ` +
+        `this attempt began, so the queue stopped. Send the email again after that, with idempotencyKey ${queueStopsFor}.`
   return new ConvexError({ ...failure, [WORKPOOL_NON_RETRYABLE]: true, message })
 }
 
-/** posthog-node's own retry rule, which it keeps private: change both together. */
-function isRetryable(error: EmailError): boolean {
+function isRetryableLikePostHogNode(error: EmailError): boolean {
   if (error.statusCode === undefined) {
     return error.code === 'network_error'
   }
