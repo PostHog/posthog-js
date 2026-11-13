@@ -20,7 +20,7 @@ import type { RequestClient } from './client-conversation'
 import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
-import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import { carriesNoSession, decodeSessionId, readMcpSessionHeader } from './session-token'
 import type { SessionTokenPayload } from './session-token'
 
 /**
@@ -309,10 +309,14 @@ function getSessionIdFromMemory(data: MCPAnalyticsData): string {
 export function getSessionInfo(
   server: MCPServerLike,
   data: MCPAnalyticsData | undefined,
-  sessionId?: string
+  sessionId?: string,
+  extra?: CompatibleRequestHandlerExtra
 ): SessionInfo {
+  const instanceIdentifiesClient = !carriesNoSession(extra)
   let clientInfo: ServerClientInfoLike | undefined
-  if (data?.sessionInfo.clientName) {
+  if (!instanceIdentifiesClient) {
+    clientInfo = undefined
+  } else if (data?.sessionInfo.clientName) {
     clientInfo = {
       name: data.sessionInfo.clientName,
       version: data.sessionInfo.clientVersion,
@@ -333,7 +337,7 @@ export function getSessionInfo(
     clientVersion: clientInfo?.version,
     // No SDK getter for this (unlike getClientVersion) — the MCP SDK never
     // retains the negotiated version, so it lives only where we stored it.
-    protocolVersion: data?.sessionInfo.protocolVersion,
+    protocolVersion: instanceIdentifiesClient ? data?.sessionInfo.protocolVersion : undefined,
     identifyActorGivenId: actorInfo?.distinctId,
     identifyActorData: actorInfo?.properties || {},
     identifyActorGroups: actorInfo?.groups,

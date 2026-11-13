@@ -202,7 +202,8 @@ describe('concurrent request attribution', () => {
     await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
 
     // A legacy-era call: nothing in `_meta`, no envelope, no protocol header.
-    const callRequest = invokeTool(server, 'A', { requestInfo: { headers: {} } })
+    // On a transport session, so the handshake is the request's own.
+    const callRequest = invokeTool(server, 'A', { sessionId: 'conn-1', requestInfo: { headers: {} } })
     await identifyCallStarted.promise
 
     // client-b handshakes on the same instance while the identify callback is still
@@ -357,7 +358,8 @@ describe('concurrent request attribution', () => {
     await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
 
     // A legacy-era listing: nothing in `_meta`, no envelope, no protocol header.
-    const listRequest = invokeListTools(server, { requestInfo: { headers: {} } })
+    // On a transport session, so the handshake is the request's own.
+    const listRequest = invokeListTools(server, { sessionId: 'conn-1', requestInfo: { headers: {} } })
     await identifyListStarted.promise
 
     // client-b handshakes on the same instance while the identify callback is still
@@ -670,6 +672,101 @@ describe('concurrent request attribution', () => {
     expect(toolCall.properties).toMatchObject({
       $session_id: 'ses_b',
       $mcp_input_keys: ['requestLabel'],
+    })
+  })
+})
+
+/**
+ * The spec's "Client and server identity": the `initialize` handshake identifies
+ * a request only when it is bound to that request's transport session. A shared
+ * HTTP instance serves every client, so a request that carries no session must
+ * not borrow another client's handshake or token.
+ */
+describe('client identity on a request that carries no session', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const unbound = (): CompatibleRequestHandlerExtra =>
+    ({ requestInfo: { headers: {} } }) as CompatibleRequestHandlerExtra
+  const otherClientsToken = (): CompatibleRequestHandlerExtra =>
+    ({
+      requestInfo: {
+        headers: {
+          'mcp-session-id': encodeSessionId({
+            sessionId: 'ses_a',
+            clientName: 'client-a',
+            clientVersion: '1.0.0',
+            protocolVersion: '2025-06-18',
+          }),
+        },
+      },
+    }) as CompatibleRequestHandlerExtra
+
+  const afterHandshake = (server: MCPServerLike) => invokeInitialize(server, handshake('client-a', '1.0.0'), unbound())
+  const afterTokenRequest = (server: MCPServerLike) => invokeTool(server, 'A', otherClientsToken())
+
+  it.each([
+    [
+      'tools/call',
+      'a handshake',
+      afterHandshake,
+      '$mcp_tool_call',
+      (s: MCPServerLike) => invokeTool(s, 'B', unbound()),
+    ],
+    [
+      'tools/call',
+      "another request's token",
+      afterTokenRequest,
+      '$mcp_tool_call',
+      (s: MCPServerLike) => invokeTool(s, 'B', unbound()),
+    ],
+    [
+      'tools/list',
+      'a handshake',
+      afterHandshake,
+      '$mcp_tools_list',
+      (s: MCPServerLike) => invokeListTools(s, unbound()),
+    ],
+    [
+      'tools/list',
+      "another request's token",
+      afterTokenRequest,
+      '$mcp_tools_list',
+      (s: MCPServerLike) => invokeListTools(s, unbound()),
+    ],
+  ])('leaves %s unidentified after %s on the same instance', async (_method, _prior, prime, eventName, request) => {
+    const server = createServer({})
+    await prime(server)
+    await request(server)
+    await flushCaptures()
+
+    const events = capture.findCapturesByEvent(eventName)
+    const last = events[events.length - 1].properties
+    expect(last.$mcp_client_name).toBeUndefined()
+    expect(last.$mcp_client_version).toBeUndefined()
+    expect(last.$mcp_protocol_version).toBeUndefined()
+  })
+
+  it.each([
+    ['a stateful transport session', { sessionId: 'conn-1', requestInfo: { headers: {} } }],
+    ['a one-client connection (stdio)', undefined],
+  ])('still takes the handshake on %s', async (_case, extra) => {
+    const server = createServer({})
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), extra as CompatibleRequestHandlerExtra | undefined)
+    await invokeTool(server, 'B', extra as CompatibleRequestHandlerExtra | undefined)
+    await flushCaptures()
+
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[0].properties).toMatchObject({
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
     })
   })
 })

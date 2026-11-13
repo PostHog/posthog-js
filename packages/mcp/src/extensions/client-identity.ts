@@ -3,6 +3,7 @@ import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from '
 import { readHeaderValue } from './headers'
 import { getServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
+import { carriesNoSession } from './session-token'
 
 /**
  * Client identity — who is calling, and which spec revision they speak.
@@ -185,7 +186,7 @@ export function resolveClientIdentity({ request, extra, server }: ClientIdentity
     readEnvelopeClientInfo(extra),
     readMetaClientInfo(request),
     readHeaderProtocolVersion(extra),
-    readServerClientIdentity(server),
+    carriesNoSession(extra) ? undefined : readServerClientIdentity(server),
   ]
   const result: MetaClientInfo = {}
   for (const source of chain) {
