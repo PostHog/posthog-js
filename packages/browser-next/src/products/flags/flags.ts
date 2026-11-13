@@ -11,6 +11,7 @@ import { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 export { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 export type {
     FeatureFlagsOptions,
+    FeatureFlagsReadOptions,
     FeatureFlagsCallback,
     FeatureFlagResult,
     FeatureFlagsReloadResult,
@@ -34,6 +35,7 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
     }
     let client: IPostHogInternal | undefined
     let disposed = false
+    let notifyingReloadStart = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
@@ -91,18 +93,58 @@ export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags =
             shared.setPersonPropertiesForFlags({ ...value.initialPersonProperties }, false)
             shared.ensureFlagsLoaded()
         },
-        getFeatureFlag: (key) => {
+        getFeatureFlag: (key, options) => {
             if (disposed) return undefined
             try {
-                return shared.getFeatureFlagResult(key)
+                return shared.getFeatureFlagResult(key, {
+                    send_event: options?.sendFeatureFlagEvent ?? true,
+                    fresh: options?.fresh ?? false,
+                })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
             }
         },
+        getAllFeatureFlags: () => {
+            if (disposed) return []
+            try {
+                return shared.getAllFeatureFlags().map((result) => ({
+                    ...result,
+                    enabled: result.variant === '' ? false : result.enabled,
+                    payload: result.payload === undefined ? undefined : JSON.parse(JSON.stringify(result.payload)),
+                }))
+            } catch (error) {
+                client?.logger.error('Feature flags snapshot failed', error)
+                return []
+            }
+        },
+        onReloading: (callback) => {
+            if (!disposed) {
+                try {
+                    const unsubscribe = shared.onReloading(() => {
+                        if (disposed) return
+                        notifyingReloadStart = true
+                        try {
+                            callback()
+                        } finally {
+                            notifyingReloadStart = false
+                        }
+                    })
+                    return { dispose: unsubscribe }
+                } catch (error) {
+                    client?.logger.error('Feature flags reloading subscription failed', error)
+                }
+            }
+            return { dispose() {} }
+        },
         reloadFeatureFlags: async () => {
             if (disposed) return { status: 'cancelled' }
             try {
+                if (notifyingReloadStart) {
+                    // Shared reload installs its debounce after notifying listeners.
+                    await Promise.resolve()
+                    if (disposed) return { status: 'cancelled' }
+                }
                 return await shared.reloadFeatureFlagsAsync()
             } catch (error) {
                 client?.logger.error('Feature flags reload failed', error)

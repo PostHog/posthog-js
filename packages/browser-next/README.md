@@ -202,7 +202,9 @@ subscription?.dispose()
 
 `FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `resolveExtension(FeatureFlagsExtension)` resolves to undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
-Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+Pass `getFeatureFlag(key, { sendFeatureFlagEvent: false })` for a read without an exposure event. Omitted or undefined `sendFeatureFlagEvent` defaults to sending. `getAllFeatureFlags()` returns a synchronous snapshot of all known structured results, including disabled flags and payloads, without exposure events. Changing the snapshot or its JSON payloads does not change stored flags.
+
+`getFeatureFlag(key, { fresh: true })` returns undefined until remote evaluation has loaded, ignoring bootstrap and persisted values before then. The `fresh` option does not itself force or await a reload; ordinary stale-cache auto-refresh still applies. Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
 
 ```ts
 if (featureFlags) {
@@ -214,6 +216,8 @@ if (featureFlags) {
 ```
 
 The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled or unavailable), or `cancelled` (reset or disposal). It does not reject on request failures. Calls made before a request starts share that evaluation; calls during an active request wait for a follow-up evaluation. Cached values and `updateFlags()` do not complete a reload. `onFeatureFlags` remains a subscription to value changes, separate from reload completion.
+
+`onReloading(callback)` observes automatic and explicit reload starts, before the debounced request. It does not replay an earlier start. Its returned `Disposable` stops that subscription; disposing the client stops all reload notifications.
 
 For static inclusion, import the factory explicitly and pass the same configuration:
 

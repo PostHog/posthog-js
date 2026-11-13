@@ -43,6 +43,7 @@ export type {
 
 export type {
     FeatureFlagsOptions,
+    FeatureFlagsReadOptions,
     FeatureFlagsConfiguration,
     FeatureFlagsCallback,
     FeatureFlagResult,
