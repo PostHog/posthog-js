@@ -148,9 +148,12 @@ export function trustedUrl(url: string, allowedUrls: readonly string[]): boolean
     try {
         const target = new URL(url)
         target.hash = ''
+        // Windows pathToFileURL escapes tildes in short paths, while Electron loadFile leaves them literal.
+        if (target.protocol === 'file:') target.pathname = target.pathname.replace(/%7e/gi, '~')
         return allowedUrls.some((allowed) => {
             const candidate = new URL(allowed)
             candidate.hash = ''
+            if (candidate.protocol === 'file:') candidate.pathname = candidate.pathname.replace(/%7e/gi, '~')
             return candidate.href === target.href
         })
     } catch {
