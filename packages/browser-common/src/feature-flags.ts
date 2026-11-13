@@ -137,6 +137,22 @@ const filterFailedFlagValues = <T>(
     return filtered
 }
 
+const withoutFailedDetails = (
+    details: Record<string, FeatureFlagDetail>,
+    evaluatedKeys: string[]
+): Record<string, FeatureFlagDetail> => {
+    const remainingDetails = { ...details }
+    evaluatedKeys.forEach((key) => {
+        if (remainingDetails[key]?.failed) {
+            delete remainingDetails[key]
+        }
+    })
+    return remainingDetails
+}
+
+const mergesIntoCurrentState = (response: Partial<FlagsResponse>, options?: { partialResponse?: boolean }): boolean =>
+    !!options?.partialResponse || !!response.errorsWhileComputingFlags
+
 /** Converts an array of flag names to a Record where each flag is set to true. */
 const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
     const flagsObj: Record<string, true> = {}
@@ -185,16 +201,10 @@ export const parseFlagsResponse = (
                 $enabled_feature_flags[featureFlags[i]] = true
             }
         }
-        const newFeatureFlagDetails = { ...currentFlagDetails }
-        featureFlags.forEach((key) => {
-            if (newFeatureFlagDetails[key]?.failed) {
-                delete newFeatureFlagDetails[key]
-            }
-        })
         return {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
             [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
-            [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails,
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: withoutFailedDetails(currentFlagDetails, featureFlags),
             // A recovered key must not inherit a failed placeholder's payload.
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: filterFailedFlagValues(currentFlagPayloads, currentFlagDetails),
             // Legacy responses never carry the gate — fail safe to full events.
@@ -206,7 +216,7 @@ export const parseFlagsResponse = (
     let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
-    if (options?.partialResponse || response.errorsWhileComputingFlags) {
+    if (mergesIntoCurrentState(response, options)) {
         // Only partial or response-wide errored refreshes retain prior successful values.
         // Normalization has already removed failed values and payloads from the incoming maps.
         const evaluatedFlagKeys = Object.keys(newFeatureFlags)
@@ -220,21 +230,16 @@ export const parseFlagsResponse = (
                 }
             })
         }
-        newFeatureFlagDetails = {
-            ...currentFlagDetails,
-            ...Object.fromEntries(
-                Object.entries(flagDetails || {}).filter(
-                    ([key, detail]) => !detail.failed || isUndefined(currentFlags[key])
-                )
-            ),
-        }
-        if (!flagDetails) {
-            evaluatedFlagKeys.forEach((key) => {
-                if (newFeatureFlagDetails?.[key]?.failed) {
-                    delete newFeatureFlagDetails[key]
-                }
-            })
-        }
+        newFeatureFlagDetails = flagDetails
+            ? {
+                  ...currentFlagDetails,
+                  ...Object.fromEntries(
+                      Object.entries(flagDetails).filter(
+                          ([key, detail]) => !detail.failed || isUndefined(currentFlags[key])
+                      )
+                  ),
+              }
+            : withoutFailedDetails(currentFlagDetails, evaluatedFlagKeys)
     }
 
     return {
@@ -1302,6 +1307,10 @@ export class PostHogFeatureFlags implements Extension {
         )
     }
 
+    private _flagsNotLoaded(key: string): boolean {
+        return !this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed
+    }
+
     /**
      * Get feature flag's value for user.
      *
@@ -1333,7 +1342,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('getFeatureFlag for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1406,7 +1415,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('getFeatureFlagResult for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1692,7 +1701,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return options.defaultValue
         }
-        if (!this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('isFeatureEnabled for key "' + key + FLAG_TIMEOUT_MSG)
             return options.defaultValue
         }
@@ -1726,7 +1735,7 @@ export class PostHogFeatureFlags implements Extension {
         }
         this._hasLoadedFlags = true
 
-        if (options?.persist !== false && (options?.partialResponse || response.errorsWhileComputingFlags)) {
+        if (options?.persist !== false && mergesIntoCurrentState(response, options)) {
             // Reconcile before deriving writes: failed diagnostics or placeholder cleanup must not
             // claim ownership over an unobserved successful sibling value.
             if (this._crossTabPersistence?.reconcileFeatureFlagsBeforeMerge?.()) {
@@ -1734,7 +1743,7 @@ export class PostHogFeatureFlags implements Extension {
             }
         }
         const currentFlags = this.getFlagVariants()
-        // Legacy arrays retain prior metadata/payloads, not their locally overridden projections.
+        // Legacy array responses merge against the raw stored payloads and details, not the override-applied getters.
         const isLegacyArrayResponse = !response.flags && isArray(response.featureFlags)
         const currentFlagPayloads = isLegacyArrayResponse
             ? this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}

@@ -248,11 +248,15 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
     it.each(
         [false, true].flatMap((preFixCache) =>
-            [false, true].map((partialResponse) => ({ preFixCache, partialResponse }))
+            [
+                { responseShape: 'failed', partialResponse: false },
+                { responseShape: 'failed', partialResponse: true },
+                { responseShape: 'v1 error', partialResponse: false },
+            ].map((mode) => ({ preFixCache, ...mode }))
         )
     )(
-        'preserves unseen sibling success across failed merge and reopen %j',
-        async ({ preFixCache, partialResponse }) => {
+        'preserves unseen sibling success across $responseShape merge and reopen (pre-fix cache: $preFixCache, partial: $partialResponse)',
+        async ({ preFixCache, partialResponse, responseShape }) => {
             const persistenceName = `cross-tab-failed-merge-${uuidv7()}`
             const config = {
                 advanced_disable_feature_flags: true,
@@ -280,24 +284,50 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'sibling' } },
                 })
                 posthog.featureFlags.receivedFeatureFlags(
-                    { flags: { flag: failed }, errorsWhileComputingFlags: !partialResponse },
+                    responseShape === 'v1 error'
+                        ? { featureFlags: { healthy: false }, errorsWhileComputingFlags: true }
+                        : { flags: { flag: failed }, errorsWhileComputingFlags: !partialResponse },
                     undefined,
                     { partialResponse }
                 )
                 const stored = JSON.parse(window.localStorage.getItem(`ph_${persistenceName}`) || '{}')
-                expect(stored[ENABLED_FEATURE_FLAGS]).toEqual({ flag: 'sibling-success' })
+                expect(stored[ENABLED_FEATURE_FLAGS]).toEqual(
+                    responseShape === 'v1 error'
+                        ? { flag: 'sibling-success', healthy: false }
+                        : { flag: 'sibling-success' }
+                )
                 expect(stored[PERSISTENCE_FEATURE_FLAG_DETAILS].flag).toMatchObject({ variant: 'sibling-success' })
                 expect(stored[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({ flag: { source: 'sibling' } })
                 expect(posthog.getFeatureFlagResult('flag', { send_event: false })).toMatchObject({
                     variant: 'sibling-success',
                     payload: { source: 'sibling' },
                 })
+                expect(posthog.featureFlags.getFeatureFlagDetails('flag')).toEqual({
+                    key: 'flag',
+                    enabled: true,
+                    variant: 'sibling-success',
+                    metadata: {},
+                })
+                if (responseShape === 'v1 error') {
+                    expect(posthog.isFeatureEnabled('healthy', { send_event: false, defaultValue: true })).toBe(false)
+                }
                 const reopened = await createPosthogInstance(uuidv7(), config)
                 try {
                     expect(reopened.getFeatureFlagResult('flag', { send_event: false })).toMatchObject({
                         variant: 'sibling-success',
                         payload: { source: 'sibling' },
                     })
+                    expect(reopened.featureFlags.getFeatureFlagDetails('flag')).toEqual({
+                        key: 'flag',
+                        enabled: true,
+                        variant: 'sibling-success',
+                        metadata: {},
+                    })
+                    if (responseShape === 'v1 error') {
+                        expect(reopened.isFeatureEnabled('healthy', { send_event: false, defaultValue: true })).toBe(
+                            false
+                        )
+                    }
                 } finally {
                     await reopened.shutdown()
                 }
