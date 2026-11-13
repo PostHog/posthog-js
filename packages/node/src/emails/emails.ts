@@ -377,12 +377,18 @@ export class EmailSender implements Emails {
 
   private rememberUnconfirmedMove(messageId: string, instant: string): void {
     const now = Date.now()
-    for (const [email, move] of this.unconfirmedMoveByEmail) {
-      if (move.refusedUntil <= now) {
-        this.unconfirmedMoveByEmail.delete(email)
-      }
-    }
+    this.forgetLapsedGuardsOldestFirst(now)
+    this.unconfirmedMoveByEmail.delete(messageId)
     this.unconfirmedMoveByEmail.set(messageId, { instant, refusedUntil: now + UNCONFIRMED_MOVE_GUARD_MS })
+  }
+
+  private forgetLapsedGuardsOldestFirst(now: number): void {
+    for (const [email, move] of this.unconfirmedMoveByEmail) {
+      if (move.refusedUntil > now) {
+        return
+      }
+      this.unconfirmedMoveByEmail.delete(email)
+    }
   }
 
   private async cancelUntracked(id: string): Promise<CancelEmailResponse> {

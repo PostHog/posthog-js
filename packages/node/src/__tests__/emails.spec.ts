@@ -1926,6 +1926,28 @@ describe('emails', () => {
         expect(fetch).toHaveBeenCalledTimes(2)
       })
 
+      it('keeps refusing moves of a later unconfirmed email after an earlier guard lapses', async () => {
+        const start = Date.now()
+        onTestFinished(() => vi.setSystemTime(start))
+        const [laterId, latestId] = ['1', '2'].map((digit) => MESSAGE_ID.replace(/.$/, digit))
+        const moveAnswered503 = async (id: string): Promise<void> => {
+          fetch.mockImplementationOnce(async () => fakeReply(503, null))
+          expect((await update({ id, scheduledAt: FIRST_TIME })).error?.statusCode).toBe(503)
+        }
+        await moveWithoutAnswer()
+        vi.setSystemTime(Date.now() + 10 * 24 * 60 * 60 * 1_000)
+        await moveAnswered503(laterId)
+        vi.setSystemTime(Date.now() + 22 * 24 * 60 * 60 * 1_000)
+        await moveAnswered503(latestId)
+
+        const later = await update({ id: laterId, scheduledAt: OTHER_TIME })
+        const earliest = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(later.error?.code).toBe('move_unconfirmed')
+        expect(earliest.data?.scheduledAt).toBe(OTHER_TIME)
+        expect(fetch).toHaveBeenCalledTimes(4)
+      })
+
       it.each([
         ['refuses', 30, 'move_unconfirmed', 1],
         ['sends', 31, undefined, 2],
