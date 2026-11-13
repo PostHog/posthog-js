@@ -1,3 +1,4 @@
+import type { FeatureFlagDetail } from '@posthog/core'
 import { PostHog } from '@/entrypoints/index.node'
 import { waitForPromises } from './utils'
 
@@ -37,8 +38,13 @@ describe('failed Node flag records', () => {
     vi.restoreAllMocks()
   })
 
-  function setup(errorsWhileComputingFlags: boolean | undefined, withLocal = false, variantPlaceholder = true): void {
-    const flags = {
+  function setup(
+    errorsWhileComputingFlags: boolean | undefined,
+    withLocal = false,
+    variantPlaceholder = true,
+    typedValue = false
+  ): void {
+    const flags: Record<string, FeatureFlagDetail> = {
       failed: variantPlaceholder ? failed : { ...failed, enabled: false, variant: undefined },
       disabled: { key: 'disabled', enabled: false, failed: false, metadata: {} },
       ...Object.fromEntries(localFlags.map(({ key }) => [key, { ...failed, key }])),
@@ -50,7 +56,23 @@ describe('failed Node flag records', () => {
           json: async () =>
             String(url).includes('/flags/definitions')
               ? { flags: [...localFlags, inconclusive], group_type_mapping: {}, cohorts: {} }
-              : { flags, errorsWhileComputingFlags },
+              : {
+                  flags: typedValue
+                    ? Object.fromEntries(
+                        Object.entries(flags).map(([key, detail]) => [
+                          key,
+                          {
+                            key,
+                            value: detail.variant ?? detail.enabled,
+                            failed: detail.failed,
+                            reason: detail.reason,
+                            metadata: { ...detail.metadata, config_version: 2 },
+                          },
+                        ])
+                      )
+                    : flags,
+                  errorsWhileComputingFlags,
+                },
           text: async () => 'ok',
         }) as Response
     )
@@ -100,20 +122,21 @@ describe('failed Node flag records', () => {
   it.each(
     [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
       [true, false].flatMap((variantPlaceholder) =>
-        [true, false].map((withLocal) => ({ errorsWhileComputingFlags, variantPlaceholder, withLocal }))
+        [true, false].flatMap((withLocal) =>
+          [true, false].map((typedValue) => ({ errorsWhileComputingFlags, variantPlaceholder, withLocal, typedValue }))
+        )
       )
     )
   )(
     'evaluateFlags excludes failed remote records (%j)',
-    async ({ errorsWhileComputingFlags, variantPlaceholder, withLocal }) => {
-      setup(errorsWhileComputingFlags, withLocal, variantPlaceholder)
+    async ({ errorsWhileComputingFlags, variantPlaceholder, withLocal, typedValue }) => {
+      setup(errorsWhileComputingFlags, withLocal, variantPlaceholder, typedValue)
       if (withLocal) {
         await posthog.featureFlagsPoller!.loadFeatureFlags()
       }
       const localEvaluation = posthog.featureFlagsPoller
         ? vi.spyOn(posthog.featureFlagsPoller, 'getAllFlagsAndPayloads')
         : undefined
-      const capture = vi.spyOn(posthog, 'capture')
       const captured = vi.fn()
       posthog.on('capture', captured)
       const snapshot = await posthog.evaluateFlags('user')
@@ -137,17 +160,25 @@ describe('failed Node flag records', () => {
         expect(snapshot.getFlagPayload('local-2')).toEqual({ local: true })
         expect(localEvaluation).toHaveBeenCalledTimes(1)
       }
-      const flagError = withLocal ? 'local_evaluation_inconclusive' : 'flag_missing'
-      expect(capture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          event: '$feature_flag_called',
-          properties: expect.objectContaining({
-            $feature_flag: 'failed',
-            $feature_flag_response: undefined,
-            $feature_flag_error: errorsWhileComputingFlags ? `errors_while_computing_flags,${flagError}` : flagError,
-          }),
-        })
+      const flagError = withLocal ? 'evaluation_failed,local_evaluation_inconclusive' : 'evaluation_failed'
+      await waitForPromises()
+      const failedCalls = captured.mock.calls.filter(
+        ([message]) => message.event === '$feature_flag_called' && message.properties.$feature_flag === 'failed'
       )
+      expect(failedCalls).toHaveLength(1)
+      expect(failedCalls[0][0].properties.$feature_flag_response).toBeUndefined()
+      expect(failedCalls[0][0]).toMatchObject({
+        event: '$feature_flag_called',
+        properties: {
+          $feature_flag: 'failed',
+          $feature_flag_id: 42,
+          $feature_flag_version: 3,
+          ...(typedValue
+            ? { $feature_flag_config_version: 2, $feature_flag_reason_code: 'dependency_error' }
+            : { $feature_flag_reason: 'dependency_error' }),
+          $feature_flag_error: errorsWhileComputingFlags ? `errors_while_computing_flags,${flagError}` : flagError,
+        },
+      })
 
       posthog.capture({ distinctId: 'user', event: 'snapshot used', flags: snapshot })
       await waitForPromises()
@@ -158,10 +189,44 @@ describe('failed Node flag records', () => {
       expect(event.properties).not.toHaveProperty('$feature/failed')
       expect(event.properties.$active_feature_flags).toEqual(withLocal ? ['local-0', 'local-2'] : undefined)
       expect(
-        vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=2'))
+        vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=4'))
       ).toHaveLength(1)
     }
   )
+
+  it.each(['only', 'onlyAccessed'] as const)('retains selected failed diagnostics through %s', async (filter) => {
+    setup(false, false, true, true)
+    const captured = vi.fn()
+    posthog.on('capture', captured)
+    const snapshot = await posthog.evaluateFlags('user')
+    snapshot.getFlag('failed', { sendFeatureFlagEvents: false })
+    snapshot.getFlagPayload('local-0')
+    const filtered = filter === 'only' ? snapshot.only(['failed']) : snapshot.onlyAccessed()
+    expect(captured).not.toHaveBeenCalled()
+    expect(filtered.keys).toEqual([])
+    expect(filtered.unresolvedFlags).toEqual({})
+    expect(filtered.getFlagPayload('failed')).toBeUndefined()
+    expect(filtered.isEnabled('failed', { defaultValue: true })).toBe(true)
+    expect(filtered.getFlag('failed')).toBeUndefined()
+    expect(filtered.getFlag('local-0')).toBeUndefined()
+    await waitForPromises()
+    expect(captured).toHaveBeenCalledTimes(1)
+    expect(captured.mock.calls[0][0].properties.$feature_flag_response).toBeUndefined()
+    expect(captured.mock.calls[0][0]).toMatchObject({
+      event: '$feature_flag_called',
+      properties: {
+        $feature_flag: 'failed',
+        $feature_flag_error: 'evaluation_failed',
+        $feature_flag_id: 42,
+        $feature_flag_config_version: 2,
+        $feature_flag_reason_code: 'dependency_error',
+      },
+    })
+    expect(filtered._getEventProperties()).toEqual({})
+    expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=4'))).toHaveLength(
+      1
+    )
+  })
 
   it.each([true, false, undefined])(
     'preserves successful local true/false/variant pairs with global errors %s',

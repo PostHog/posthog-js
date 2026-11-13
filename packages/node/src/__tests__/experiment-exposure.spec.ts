@@ -49,8 +49,12 @@ const EXPOSURE_LEAVES_OUT = [
 const ajv = new Ajv2020({ strict: false, allErrors: true })
 ajv.addFormat('uuid', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
-function contractSchema(name: string): (properties: Record<string, any>) => void {
+function contractSchema(name: string, allowUnevaluated = false): (properties: Record<string, any>) => void {
   const schema = load(name)
+  if (allowUnevaluated) {
+    delete schema.$id
+    schema.required = schema.required.filter((key: string) => key !== '$feature_flag_response')
+  }
   const validate = ajv.compile(schema)
   const declared = new Set(Object.keys(schema.properties))
   return (properties) => {
@@ -64,6 +68,8 @@ function contractSchema(name: string): (properties: Record<string, any>) => void
 }
 
 const checkFlagCalled = contractSchema('feature_flag_called_context.schema.json')
+// Spec211 omits an unevaluated response; all other pinned schema constraints still apply.
+const checkUnevaluatedFlagCalled = contractSchema('feature_flag_called_context.schema.json', true)
 const checkExposure = contractSchema('experiment_exposure_properties.schema.json')
 
 // --- Responses ------------------------------------------------------------------------------
@@ -423,11 +429,20 @@ describe('$experiment_exposure', () => {
     it.each(ATTRIBUTION_CASES.flatMap(([source, expected]) => TWO_PATHS.map((path) => [source, path, expected])))(
       '%s through %s',
       async (source, path, expected) => {
-        const events = await readEvents(path as string, [readerResponse(source as string)], { key: 'garden-layout' })
+        const body = readerResponse(source as string)
+        const events = await readEvents(path as string, [body], { key: 'garden-layout' })
 
         const [called] = named(events, FLAG_CALLED, 'garden-layout')
         expect(attribution(called.properties)).toEqual(expected)
-        checkFlagCalled(called.properties)
+        if (body.flags['garden-layout'].failed === true) {
+          expect(called.properties.$feature_flag_response).toBeUndefined()
+          expect(called.properties.$feature_flag_error).toBe(
+            body.errorsWhileComputingFlags ? 'errors_while_computing_flags,evaluation_failed' : 'evaluation_failed'
+          )
+          checkUnevaluatedFlagCalled(called.properties)
+        } else {
+          checkFlagCalled(called.properties)
+        }
         expect(named(events, EXPOSURE, 'garden-layout')).toHaveLength(
           '$feature_flag_variant_key' in (expected as object) ? 1 : 0
         )
@@ -469,7 +484,11 @@ describe('$experiment_exposure', () => {
           $feature_flag_reason_code: code,
         })
         expect(named(events, EXPOSURE)).toEqual([])
-        if (validOutcome) {
+        if (record.failed === true) {
+          expect(called.properties.$feature_flag_response).toBeUndefined()
+          expect(called.properties.$feature_flag_error).toBe('evaluation_failed')
+          checkUnevaluatedFlagCalled(called.properties)
+        } else if (validOutcome) {
           checkFlagCalled(called.properties)
         }
       }

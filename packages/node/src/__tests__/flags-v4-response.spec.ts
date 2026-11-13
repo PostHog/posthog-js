@@ -417,7 +417,7 @@ describe('the /flags?v=4 response', () => {
       const response = read(body)
 
       expect(parsedFlagRecordOf(response.flags['garden-layout']).value).toBeNull()
-      expect(response.featureFlags['garden-layout']).toBe(false)
+      expect(response.featureFlags).not.toHaveProperty('garden-layout')
     })
 
     it.each([
@@ -433,9 +433,9 @@ describe('the /flags?v=4 response', () => {
       const { client } = createClient([body])
 
       expect(read(body).featureFlagPayloads).not.toHaveProperty('garden-layout')
-      expect(await client.getFeatureFlagPayload('garden-layout', 'user-1')).toBeNull()
+      expect(await client.getFeatureFlagPayload('garden-layout', 'user-1')).toBeUndefined()
       const snapshot = await client.evaluateFlags('user-1')
-      expect(snapshot.getFlagPayload('garden-layout')).toBeNull()
+      expect(snapshot.getFlagPayload('garden-layout')).toBeUndefined()
       await client.shutdown()
     })
   })
@@ -582,7 +582,7 @@ describe('the /flags?v=4 response', () => {
           flags: outcome.omitted ? {} : { [outcome.key]: v4RecordForV1Outcome(outcome) },
         }
         const expected = {
-          featureFlags: v1Maps.featureFlags,
+          featureFlags: outcome.failed ? {} : v1Maps.featureFlags,
           featureFlagPayloads: Object.fromEntries(
             Object.entries<string>(v1Maps.featureFlagPayloads).map(([key, payload]) => [key, JSON.parse(payload)])
           ),
