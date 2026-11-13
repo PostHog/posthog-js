@@ -566,6 +566,24 @@ describe('the /flags?v=4 response', () => {
             expect(read(envelope({ 'garden-layout': record }))['garden-layout']!.key).toBe('garden-layout')
         })
 
+        it('reads a flag whose key is the name of an object member like any other', async () => {
+            // JSON.parse defines `__proto__` as an own key, as it does for every flag key.
+            const body = JSON.parse(
+                JSON.stringify(
+                    envelope({ placeholder: v4Record({ key: '__proto__' }), constructor: v4Record() })
+                ).replace('"placeholder":', '"__proto__":')
+            )
+            const details = readFlagRecords(body).body.flags!
+
+            expect(Object.keys(details).sort()).toEqual(['__proto__', 'constructor'])
+            expect(typedFlagDetailOf(Object.getOwnPropertyDescriptor(details, '__proto__')!.value)).toMatchObject({
+                key: '__proto__',
+                value: 'compact',
+            })
+            expect(typedFlagDetailOf(details.constructor)).toMatchObject({ key: 'constructor', value: 'compact' })
+            expect(Object.getPrototypeOf(details)).toBe(Object.prototype)
+        })
+
         it('reads integral JSON numbers as integers', () => {
             const body = JSON.parse(
                 JSON.stringify(envelope({ 'garden-layout': v4Record() })).replace(
