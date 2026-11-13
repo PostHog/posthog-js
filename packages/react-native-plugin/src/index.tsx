@@ -76,15 +76,6 @@ export function setup(
   return PosthogReactNativePlugin.setup(sessionId, sdkOptions, pluginConfig)
 }
 
-export function start(
-  sessionId: string,
-  sdkOptions: PostHogReactNativePluginMap,
-  sdkReplayConfig: PostHogReactNativePluginMap,
-  decideReplayConfig: PostHogReactNativePluginMap
-): Promise<void> {
-  return PosthogReactNativePlugin.start(sessionId, sdkOptions, sdkReplayConfig, decideReplayConfig)
-}
-
 export function startSession(sessionId: string): Promise<void> {
   return PosthogReactNativePlugin.startSession(sessionId)
 }
@@ -176,6 +167,23 @@ export function getSessionReplayDebugProperties(): Promise<PostHogReactNativePlu
   return PosthogReactNativePlugin.getSessionReplayDebugProperties()
 }
 
+/**
+ * Sets the language the app displays, which the native SDK sends as `$app_language` on the
+ * events it captures itself, such as crashes and push opens. Pass `null` to clear it.
+ *
+ * The plugin turns off the native SDK's own detection, since React Native apps usually translate
+ * in JS, so native events carry no `$app_language` until this is called.
+ *
+ * @internal Used by `posthog-react-native`'s `setAppLanguage()`. Not part of the public API.
+ */
+export function setAppLanguage(language: string | null): Promise<void> {
+  // An OTA-updated JS bundle can run on a native build that predates this method.
+  if (typeof PosthogReactNativePlugin.setAppLanguage !== 'function') {
+    return Promise.resolve()
+  }
+  return PosthogReactNativePlugin.setAppLanguage(language)
+}
+
 export function registerPushNotificationToken(deviceToken: string, appId: string | null): Promise<void> {
   return PosthogReactNativePlugin.registerPushNotificationToken(deviceToken, appId)
 }
@@ -248,16 +256,6 @@ export interface PostHogReactNativePluginModule {
     pluginConfig?: PostHogReactNativePluginConfig
   ) => Promise<void>
 
-  /**
-   * Legacy session replay setup entrypoint. Prefer setup() for new native features.
-   */
-  start: (
-    sessionId: string,
-    sdkOptions: PostHogReactNativePluginMap,
-    sdkReplayConfig: PostHogReactNativePluginMap,
-    decideReplayConfig: PostHogReactNativePluginMap
-  ) => Promise<void>
-
   startSession: (sessionId: string) => Promise<void>
 
   endSession: () => Promise<void>
@@ -284,6 +282,8 @@ export interface PostHogReactNativePluginModule {
 
   getSessionReplayDebugProperties: () => Promise<PostHogReactNativePluginMap>
 
+  setAppLanguage: (language: string | null) => Promise<void>
+
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
 
   unregisterPushNotificationToken: () => Promise<void>
@@ -297,7 +297,6 @@ export interface PostHogReactNativePluginModule {
 
 const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   setup,
-  start,
   startSession,
   endSession,
   isEnabled,
@@ -309,6 +308,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   captureFatalException,
   markFatalExceptionHandled,
   getSessionReplayDebugProperties,
+  setAppLanguage,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
   setOptOut,

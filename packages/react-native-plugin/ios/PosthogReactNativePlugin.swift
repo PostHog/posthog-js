@@ -225,9 +225,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         /// Runs at launch, before JS config exists, so the Info.plist key is the only way to skip it.
         @objc static func prewarmPushNotificationOpenCapture() {
             guard plistCapturePushNotificationOpened else { return }
-            if #available(iOS 14.0, *) {
-                PostHogSDK.prewarmPushNotificationOpenCapture()
-            }
+            PostHogSDK.prewarmPushNotificationOpenCapture()
         }
     #endif
 
@@ -253,7 +251,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         let exceptionStepsConfig = errorTrackingConfig["exceptionSteps"] as? [String: Any] ?? [:]
 
         setupNativeSdk(
-            method: "setup",
             sessionId: sessionId,
             sdkOptions: sdkOptions,
             sessionReplayEnabled: sessionReplayConfig["enabled"] as? Bool ?? false,
@@ -268,30 +265,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         )
     }
 
-    @objc(start:withSdkOptions:withSdkReplayConfig:withDecideReplayConfig:withResolver:withRejecter:)
-    func start(
-        sessionId: String, sdkOptions: [String: Any], sdkReplayConfig: [String: Any],
-        decideReplayConfig: [String: Any], resolve: RCTPromiseResolveBlock,
-        reject _: RCTPromiseRejectBlock
-    ) {
-        setupNativeSdk(
-            method: "start",
-            sessionId: sessionId,
-            sdkOptions: sdkOptions,
-            sessionReplayEnabled: true,
-            sdkReplayConfig: sdkReplayConfig,
-            decideReplayConfig: decideReplayConfig,
-            nativeErrorTrackingAutocapture: false,
-            fatalExceptionMarker: false,
-            exceptionStepsConfig: [:],
-            pushConfig: [:],
-            rageClickConfig: [:],
-            resolve: resolve
-        )
-    }
-
     private func setupNativeSdk(
-        method _: String,
         sessionId: String,
         sdkOptions: [String: Any],
         sessionReplayEnabled: Bool,
@@ -374,12 +348,11 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             // as the thread-local keeps anything else posthog-ios emits on this thread during
             // the call from having this event's properties written over it.
             if event.event == "$exception", let jsProperties = jsFatalCaptureProperties {
-                // `buildProperties` keeps its own value on a key clash (`{ current, _ in
-                // current }`), so native's enrichment silently wins over what JS decided —
+                // posthog-ios 4.0 lets caller properties win over its own values, so this
+                // re-applies what JS already sent. It keeps what JS decided final —
                 // `$process_person_profile` from `personProfiles: 'never'`, or any value the
-                // app's `before_send` rewrote. Put the JS-approved values back. On Android,
-                // caller properties already win apart from SDK debug properties, so the
-                // module there only restores `$process_person_profile` and `$is_identified`.
+                // app's `before_send` rewrote.
+                // On Android, the module restores only `$process_person_profile` and `$is_identified`.
                 for (key, value) in jsProperties {
                     event.properties[key] = value
                 }
@@ -399,15 +372,18 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
         // don't exist on macOS. macOS gets error tracking only.
         #if os(iOS)
-            if #available(iOS 15.0, *) {
-                config.surveys = false
+            // Surveys render in JS, so turn off native surveys whenever posthog-ios was built with them.
+            // `config.surveys` exists only when posthog-ios's `Surveys` trait is on. SwiftPM turns the
+            // trait on if any package in the app asks for posthog-ios's default traits, even though
+            // Package.swift leaves it out, so check for the setter at runtime.
+            if config.responds(to: NSSelectorFromString("setSurveys:")) {
+                config.setValue(false, forKey: "surveys")
             }
 
             // Always apply the session replay configuration so that recording started later
-            // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+            // (e.g. startRecording or a linked feature flag) uses the right masking;
             // sessionReplayEnabled only controls whether recording starts at setup.
             config.sessionReplay = sessionReplayEnabled
-            config.sessionReplayConfig.screenshotMode = true
             config.sessionReplayConfig.captureTouches = sdkReplayConfig["captureTouches"] as? Bool ?? true
 
             let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
@@ -419,11 +395,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
             config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
 
-            // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
-            let throttleDelayMs =
-                (sdkReplayConfig["throttleDelayMs"] as? Int)
-                    ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
-                    ?? 1000
+            let throttleDelayMs = sdkReplayConfig["throttleDelayMs"] as? Int ?? 1000
 
             let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
             config.sessionReplayConfig.throttleDelay = timeInterval
@@ -457,6 +429,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
         // has no remoteConfig switch to mirror — it deprecated the option and always loads.
         config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
+        // React Native apps usually translate in JS, so the bundle's localization is often just the
+        // development region. JS reports the language it displays through setAppLanguage instead.
+        config.detectAppLanguage = false
 
         // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
         // attaches them to the requests it sends directly (session replay, crash uploads).
@@ -470,8 +445,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             postHogVersion = sdkVersion
         }
 
-        // Only set when present: the legacy start() path predates push, and there the
-        // native defaults (both true) must win, matching posthog-ios on its own.
+        // Only set when present: setup() from a posthog-react-native that predates push sends
+        // no push config, and there the native defaults (both true) must win, matching posthog-ios.
         if let capturePushSubscriptions = pushConfig["capturePushNotificationSubscriptions"] as? Bool {
             config.capturePushNotificationSubscriptions = capturePushSubscriptions
         }
@@ -511,6 +486,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         }
 
+        // Set before setup so the push open setup captures on a cold launch carries it. The shared
+        // instance keeps it across setup, and nil clears a value an earlier JS client left.
+        PostHogSDK.shared.setAppLanguage(sdkOptions["appLanguage"] as? String)
         PostHogSDK.shared.setup(config)
 
         self.config = config
@@ -717,6 +695,14 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         } catch {
             reject(fatalCaptureErrorCode, "markFatalExceptionHandled: \(error.localizedDescription)", error)
         }
+    }
+
+    @objc(setAppLanguage:withResolver:withRejecter:)
+    func setAppLanguage(
+        language: String?, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        PostHogSDK.shared.setAppLanguage(language)
+        resolve(nil)
     }
 
     @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)

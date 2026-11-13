@@ -1,12 +1,11 @@
 require "json"
 
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
-folly_compiler_flags = '-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 -Wno-comma -Wno-shorten-64-to-32'
 
 # Single source of truth for the posthog-ios native dependency version.
-# Used by both the SPM and CocoaPods resolution paths below; bump this
-# line when picking up a new posthog-ios release.
-posthog_ios_version = '3.92.7'
+# Used by the `spm_dependency` call below and must match the floor in
+# ios/Package.swift; bump this line when picking up a new posthog-ios release.
+posthog_ios_version = '4.0.0'
 
 Pod::Spec.new do |s|
   s.name         = "posthog-react-native-plugin"
@@ -16,54 +15,98 @@ Pod::Spec.new do |s|
   s.license      = package["license"]
   s.authors      = package["author"]
 
-  s.platforms    = { :ios => min_ios_version_supported, :osx => '10.15' }
+  s.platforms    = { :ios => '15.0', :osx => '11.0' }
   s.source       = { :git => "https://github.com/PostHog/posthog-js.git", :tag => "@posthog/react-native-plugin@#{s.version}" }
 
   s.source_files = "ios/PosthogReactNativePlugin.{swift,h,hpp,m,mm,c,cpp}"
 
-  # Default: resolve posthog-ios via CocoaPods trunk.
-  # Opt-in: set `posthog.useSpm` to `"true"` in the consumer's
-  # `ios/Podfile.properties.json` to resolve posthog-ios via Swift Package
-  # Manager using the React Native `spm_dependency` helper (RN >= 0.75).
-  # The SPM path requires `use_frameworks! :linkage => :dynamic` in the Podfile.
-  podfile_properties_path = File.join(Pod::Config.instance.installation_root.to_s, 'Podfile.properties.json')
-  podfile_properties = File.exist?(podfile_properties_path) ? (JSON.parse(File.read(podfile_properties_path)) rescue {}) : {}
-  posthog_use_spm = podfile_properties['posthog.useSpm'].to_s == 'true'
-
-  if posthog_use_spm && respond_to?(:spm_dependency, true)
-    spm_dependency(s,
-      url: 'https://github.com/PostHog/posthog-ios.git',
-      requirement: { kind: 'upToNextMinorVersion', minimumVersion: posthog_ios_version },
-      products: ['PostHog']
-    )
-  else
-    s.dependency 'PostHog', "~> #{posthog_ios_version}"
+  # posthog-ios 4.x is published only as a Swift package, not on CocoaPods
+  # trunk, so resolve it with React Native's `spm_dependency` helper
+  # (react-native and react-native-macos 0.75+).
+  unless respond_to?(:spm_dependency, true)
+    raise "#{s.name} requires React Native 0.75 or later: it resolves posthog-ios through Swift Package Manager with `spm_dependency`"
   end
-  s.ios.deployment_target = '13.0'
-  s.osx.deployment_target = '10.15'
-  s.swift_versions = "5.3"
-
-
-  # Use install_modules_dependencies helper to install the dependencies if React Native version >=0.71.0.
-  # See https://github.com/facebook/react-native/blob/febf6b7f33fdb4904669f99d795eba4c0f95d7bf/scripts/cocoapods/new_architecture.rb#L79.
-  if respond_to?(:install_modules_dependencies, true)
-    install_modules_dependencies(s)
-  else
-    s.dependency "React-Core"
-
-    # Don't install the dependencies when we run `pod install` in the old architecture.
-    if ENV['RCT_NEW_ARCH_ENABLED'] == '1' then
-      s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
-      s.pod_target_xcconfig    = {
-          "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
-          "OTHER_CPLUSPLUSFLAGS" => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
-          "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
-      }
-      s.dependency "React-Codegen"
-      s.dependency "RCT-Folly"
-      s.dependency "RCTRequired"
-      s.dependency "RCTTypeSafety"
-      s.dependency "ReactCommon/turbomodule/core"
+  # `spm_dependency` only looks for a target named exactly after this pod in the
+  # main Pods project, so it can't find it when CocoaPods splits pods into
+  # separate projects or scopes target names (`posthog-react-native-plugin-Pods-App`,
+  # `posthog-react-native-plugin-iOS15.1`).
+  # Read the Podfile only once CocoaPods has loaded it: autolinking evaluates this
+  # podspec while the Podfile is still loading, and `Pod::Config#podfile` would
+  # load it again. `pod install` re-evaluates this `:path` podspec afterwards, so
+  # the check still runs.
+  podfile = Pod::Config.instance.instance_variable_get(:@podfile) rescue nil
+  if podfile
+    install_options = Pod::Installer::InstallationOptions.from_podfile(podfile)
+    if install_options.generate_multiple_pod_projects
+      raise "#{s.name} doesn't support `generate_multiple_pod_projects`: React Native's `spm_dependency` can't add posthog-ios to a pod in a separate project. Remove that option from your Podfile's `install!` line."
+    end
+    unless install_options.deduplicate_targets
+      raise "#{s.name} doesn't support `deduplicate_targets => false`: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Remove that option from your Podfile's `install!` line."
+    end
+    # Targets with different platforms or linkage each get their own scoped pod target.
+    # Like CocoaPods' resolver, this counts abstract targets that have a platform.
+    plugin_targets = podfile.target_definition_list.select do |target|
+      target.dependencies.any? { |dependency| dependency.root_name == s.name }
+    end
+    targets = plugin_targets.select(&:platform)
+    if targets.map { |target| [target.platform, target.build_type.to_hash] }.uniq.length > 1
+      raise "#{s.name} doesn't support targets with different platforms or `use_frameworks!` linkage: React Native's `spm_dependency` can't add posthog-ios to a scoped pod target. Give #{targets.map(&:name).join(', ')} the same `platform` and `use_frameworks!` in your Podfile."
+    end
+    # posthog-ios 3.x from CocoaPods defines the same `PostHog` module as the
+    # posthog-ios Swift package, so `pod install` passes but the Xcode build of a
+    # target that has both fails. Targets without the plugin build separately.
+    conflict_fixes = {
+      'posthog-react-native-session-replay' => "#{s.name} replaces it: uninstall posthog-react-native-session-replay and run `pod install` again.",
+      'PostHog' => "Remove `pod 'PostHog'` from your Podfile. If your own native code imports PostHog, add posthog-ios to that target as a Swift package instead."
+    }
+    conflict = plugin_targets.flat_map(&:dependencies).map(&:root_name).find { |name| conflict_fixes.key?(name) }
+    if conflict
+      raise "#{s.name} can't be installed with the `#{conflict}` pod: it brings posthog-ios 3.x, whose `PostHog` module clashes with the posthog-ios 4.x Swift package that #{s.name} uses, and the Xcode build fails with `Redefinition of module 'PostHog'`. #{conflict_fixes[conflict]}"
     end
   end
+  spm_dependency(s,
+    url: 'https://github.com/PostHog/posthog-ios.git',
+    requirement: { kind: 'upToNextMinorVersion', minimumVersion: posthog_ios_version },
+    products: ['PostHog']
+  )
+  # React Native 0.87 and 0.88 build a static `spm_dependency` pod into the shared
+  # products dir and point the app's `-fmodule-map-file` flags at
+  # `<pod>.modulemap`, but the module map is named after the module
+  # (`posthog_react_native_plugin`), not the pod, so the flags keep the old
+  # `<pod>/<module>.modulemap` path and the build fails with "module map file not
+  # found". Rewrite the path with the module name too. React Native fixed this in
+  # 0.89 (https://github.com/facebook/react-native/pull/59182), where there's
+  # nothing left to rewrite.
+  if defined?(::SPMManager) && ::SPMManager.private_method_defined?(:rewrite_aggregate_modulemap_references) &&
+     !defined?(::PostHogReactNativePluginModuleMapFix)
+    module ::PostHogReactNativePluginModuleMapFix
+      private
+
+      def rewrite_aggregate_modulemap_references(installer, pod_names)
+        super
+        pod = installer.pod_targets.find { |target| target.pod_name == 'posthog-react-native-plugin' }
+        return unless pod && pod_names.include?(pod.label)
+
+        old_path = "${PODS_CONFIGURATION_BUILD_DIR}/#{pod.label}/#{pod.product_module_name}.modulemap"
+        new_path = "${PODS_CONFIGURATION_BUILD_DIR}/#{pod.product_module_name}.modulemap"
+        installer.aggregate_targets.each do |aggregate_target|
+          aggregate_target.xcconfigs.each do |config_name, config_file|
+            changed = false
+            %w[OTHER_CFLAGS OTHER_SWIFT_FLAGS].each do |key|
+              value = config_file.attributes[key]
+              next unless value&.include?(old_path)
+
+              config_file.attributes[key] = value.gsub(old_path, new_path)
+              changed = true
+            end
+            config_file.save_as(aggregate_target.xcconfig_path(config_name)) if changed
+          end
+        end
+      end
+    end
+    ::SPMManager.prepend(::PostHogReactNativePluginModuleMapFix)
+  end
+  s.swift_versions = "5.3"
+
+  install_modules_dependencies(s)
 end

@@ -9,13 +9,6 @@ RCT_EXTERN_METHOD(setup:(NSString)sessionId
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(start:(NSString)sessionId
-                 withSdkOptions:(NSDictionary)sdkOptions
-                 withSdkReplayConfig:(NSDictionary)sdkReplayConfig
-                 withDecideReplayConfig:(NSDictionary)decideReplayConfig
-                 withResolver:(RCTPromiseResolveBlock)resolve
-                 withRejecter:(RCTPromiseRejectBlock)reject)
-
 RCT_EXTERN_METHOD(startSession:(NSString)sessionId
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
@@ -53,6 +46,10 @@ RCT_EXTERN_METHOD(captureFatalException:(NSString)distinctId
                   withRejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(markFatalExceptionHandled:(NSString)message
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(setAppLanguage:(NSString)language
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
 

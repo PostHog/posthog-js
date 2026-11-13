@@ -71,7 +71,6 @@ class PosthogReactNativePluginModule(
     val errorTrackingConfig = getMap(pluginConfig, "errorTracking")
 
     setupNativeSdk(
-      method = "setup",
       sessionId = sessionId,
       sdkOptions = sdkOptions,
       sessionReplayEnabled = getBoolean(sessionReplayConfig, "enabled", false),
@@ -86,32 +85,7 @@ class PosthogReactNativePluginModule(
     )
   }
 
-  @ReactMethod
-  fun start(
-    sessionId: String,
-    sdkOptions: ReadableMap,
-    sdkReplayConfig: ReadableMap,
-    decideReplayConfig: ReadableMap,
-    promise: Promise,
-  ) {
-    setupNativeSdk(
-      method = "start",
-      sessionId = sessionId,
-      sdkOptions = sdkOptions,
-      sessionReplayEnabled = true,
-      sdkReplayConfig = sdkReplayConfig,
-      decideReplayConfig = decideReplayConfig,
-      nativeErrorTrackingAutocapture = false,
-      androidNdkCrashes = false,
-      fatalExceptionMarker = false,
-      exceptionStepsConfig = null,
-      pushConfig = null,
-      promise = promise,
-    )
-  }
-
   private fun setupNativeSdk(
-    method: String,
     sessionId: String,
     sdkOptions: ReadableMap,
     sessionReplayEnabled: Boolean,
@@ -131,7 +105,7 @@ class PosthogReactNativePluginModule(
           PostHogSessionManager.setSessionId(uuid)
 
           val context = this.reactApplicationContext
-          val apiKey = getString(sdkOptions, "apiKey", "")
+          val projectToken = getString(sdkOptions, "projectToken", "").ifEmpty { getString(sdkOptions, "apiKey", "") }
           val host = getString(sdkOptions, "host", PostHogConfig.DEFAULT_HOST)
           val debugValue = getBoolean(sdkOptions, "debug", false)
           val distinctId = getString(sdkOptions, "distinctId", "")
@@ -151,13 +125,16 @@ class PosthogReactNativePluginModule(
               ?.mapValues { it.value as String }
 
           val config =
-            PostHogAndroidConfig(apiKey, host).apply {
+            PostHogAndroidConfig(projectToken, host).apply {
               debug = debugValue
               optOut = theOptOut
               // JS owns consent: posthog-js core keeps its own store, so the value above is the
               // answer, not a default the SDK may override from its own persisted copy.
               persistOptOut = false
               preloadFeatureFlags = thePreloadFeatureFlags
+              // React Native apps usually translate in JS, so the resources' locale often isn't
+              // the language on screen. JS reports the language it displays through setAppLanguage.
+              detectAppLanguage = false
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
               captureScreenViews = false
@@ -184,25 +161,15 @@ class PosthogReactNativePluginModule(
               addBeforeSend { restoreJsFatalCaptureProperties(it) }
 
               // Always apply the session replay configuration so that recording started later
-              // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+              // (e.g. startRecording or a linked feature flag) uses the right masking;
               // sessionReplayEnabled only controls whether recording starts at setup.
               val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
               val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
               val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
 
-              // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
-              val throttleDelayMs =
-                when {
-                  hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  hasKey(
-                    sdkReplayConfig,
-                    "androidDebouncerDelayMs",
-                  ) -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  else -> DEFAULT_THROTTLE_DELAY_MS
-                }
+              val throttleDelayMs = getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
 
               sessionReplay = sessionReplayEnabled
-              sessionReplayConfig.screenshot = true
               sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
@@ -218,8 +185,8 @@ class PosthogReactNativePluginModule(
                 snapshotEndpoint = endpoint
               }
 
-              // Only set when present: the legacy start() path predates push, and there the
-              // native defaults (both true) must win, matching posthog-android on its own.
+              // Only set when present: setup() from a posthog-react-native that predates push sends
+              // no push config, and there the native defaults (both true) must win, matching posthog-android.
               if (hasKey(pushConfig, "capturePushNotificationSubscriptions")) {
                 capturePushNotificationSubscriptions =
                   getBoolean(pushConfig, "capturePushNotificationSubscriptions", true)
@@ -242,13 +209,16 @@ class PosthogReactNativePluginModule(
                 sdkVersion = theSdkVersion
               }
             }
+          // Set before setup so the cold-start push open captured below carries it. The shared
+          // instance keeps it across setup, and an empty value clears one an earlier JS client left.
+          PostHog.setAppLanguage(getString(sdkOptions, "appLanguage", ""))
           PostHogAndroid.setup(context, config)
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
 
           captureColdStartPushOpenIfNeeded(config)
         } catch (e: Throwable) {
-          logError(method, e)
+          logError("setup", e)
         } finally {
           promise.resolve(null)
         }
@@ -369,6 +339,20 @@ class PosthogReactNativePluginModule(
       }
     } catch (e: Throwable) {
       logError("setOptOut", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
+  @ReactMethod
+  fun setAppLanguage(
+    language: String?,
+    promise: Promise,
+  ) {
+    try {
+      PostHog.setAppLanguage(language)
+    } catch (e: Throwable) {
+      logError("setAppLanguage", e)
     } finally {
       promise.resolve(null)
     }
@@ -755,9 +739,9 @@ class PosthogReactNativePluginModule(
 }
 
 // posthog-android computes these from its own state, which JS never syncs (the app's
-// `personProfiles` mode, identify, person processing started by `group()` and friends), and
-// newer versions no longer let caller properties override them. JS decided them for its fatal
-// crash, so its values stand.
+// `personProfiles` mode, identify, person processing started by `group()` and friends). 4.0 lets
+// caller properties override them, so this re-applies what JS sent. JS decided them for its
+// fatal crash, so its values stand.
 private val JS_OWNED_FATAL_CAPTURE_KEYS = listOf("\$process_person_profile", "\$is_identified")
 
 // Set only while the JS layer's own fatal capture runs; posthog-android runs `beforeSend`

@@ -24,7 +24,7 @@
     "lib",
     "android",
     "ios",
-    "cpp",
+    "MIGRATION.md",
     "*.podspec",
     "!ios/build",
     "!android/build",
@@ -79,7 +79,7 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": ">=0.75"
   },
   "react-native-builder-bob": {
     "source": "src",
