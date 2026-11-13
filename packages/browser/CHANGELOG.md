@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.449.1
+
+### Patch Changes
+
+- Updated dependencies [[`ec79e8a`](https://github.com/PostHog/posthog-js/commit/ec79e8a47db0bff6de7f3fbcb3ef7bcd24991097)]:
+  - @posthog/browser-common@0.11.0
+
 ## 1.449.0
 
 ### Minor Changes
