@@ -3,13 +3,22 @@ const { writeFile } = require('node:fs/promises')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { setTimeout: delay } = require('node:timers/promises')
-const { app, BrowserWindow, session } = require('electron')
+const { app, BrowserWindow, ipcMain, session } = require('electron')
 const { init } = require('@posthog/electron/main')
 
 app.setPath('userData', process.env.FIXTURE_USER_DATA)
 app.commandLine.appendSwitch('disable-background-networking')
 app.commandLine.appendSwitch('disable-component-update')
 const enabled = process.env.FIXTURE_ENABLED === 'true'
+const disabled = process.env.FIXTURE_DISABLED === 'true'
+let exceptionRequests = 0
+const handle = ipcMain.handle
+ipcMain.handle = function (channel, listener) {
+    return handle.call(this, channel, (event, request) => {
+        if (channel === 'posthog:command:v1' && request.command.type === 'exception') exceptionRequests++
+        return listener(event, request)
+    })
+}
 const hostEvents = []
 const warnings = []
 process.on('warning', (warning) => warnings.push(warning.name))
@@ -28,6 +37,7 @@ const posthog = init({
     host: process.env.FIXTURE_HOST,
     storageDirectory: join(process.env.FIXTURE_USER_DATA, 'analytics'),
     enableExceptionAutocapture: enabled,
+    disabled,
     captureAppLifecycleEvents: false,
     preloadFeatureFlags: false,
     disableRemoteFeatureFlags: true,
@@ -36,6 +46,7 @@ const posthog = init({
     disableCompression: true,
     fetchRetryCount: 0,
 })
+ipcMain.handle = handle
 
 async function waitFor(label, check) {
     const deadline = Date.now() + 10000
@@ -75,7 +86,7 @@ app.whenReady()
         assert.equal(app.quit, originals.quit)
         assert.equal(
             process.rawListeners('uncaughtExceptionMonitor').length,
-            originals.monitors.length + Number(enabled)
+            originals.monitors.length + Number(enabled && !disabled)
         )
         assert.equal(
             originals.rejection.length,
@@ -96,6 +107,10 @@ app.whenReady()
         posthog.registerWindow(window, { allowedUrls: [pathToFileURL(page).href + `?enabled=${enabled}`] })
         await window.loadFile(page, { query: { enabled: String(enabled) } })
         await window.webContents.executeJavaScript('window.fixtureReady')
+        assert.equal(posthog.getState().disabled, disabled)
+        assert.equal(posthog.optedOut, false)
+        assert.equal(await evaluate(window, (fixture) => fixture.posthog.getState().disabled), disabled)
+        assert.equal(await evaluate(window, (fixture) => fixture.posthog.optedOut), false)
         assert.equal(await evaluate(window, () => typeof require), 'undefined')
         const preferences = window.webContents.getLastWebPreferences()
         assert.equal(preferences.sandbox, true)
@@ -149,6 +164,29 @@ app.whenReady()
             ['uncaughtException', 'uncaughtException']
         )
         assert.deepEqual(warnings, Array(4).fill('UnhandledPromiseRejectionWarning'))
+        if (disabled) {
+            const getterReads = await evaluate(window, async (fixture) => {
+                let reads = 0
+                const get = () => {
+                    reads++
+                    return new Error('disabled private error')
+                }
+                const event = new ErrorEvent('error', { message: 'disabled getter probe' })
+                Object.defineProperty(event, 'error', { get })
+                window.dispatchEvent(event)
+                await fixture.posthog.captureException(Object.defineProperty({}, 'message', { get }), {
+                    get privateProperty() {
+                        reads++
+                        return 'private value'
+                    },
+                })
+                await fixture.posthog.flush()
+                return reads
+            })
+            assert.equal(exceptionRequests, 0, 'disabled renderer must not send exception IPC')
+            assert.equal(getterReads, 0, 'disabled renderer must not inspect errors or custom properties')
+            assert.equal(await evaluate(window, (fixture) => fixture.posthog.optedOut), false)
+        }
         await posthog.shutdown(2000)
         assert.deepEqual(process.rawListeners('uncaughtExceptionMonitor'), originals.monitors)
         assert.deepEqual(process.rawListeners('uncaughtException'), originals.uncaught)
@@ -158,7 +196,7 @@ app.whenReady()
         assert.deepEqual(unexpectedNetwork, [])
         await writeFile(
             process.env.FIXTURE_REPORT,
-            JSON.stringify({ enabled, hostEvents, warnings, renderer, unexpectedNetwork })
+            JSON.stringify({ enabled, disabled, exceptionRequests, hostEvents, warnings, renderer, unexpectedNetwork })
         )
         window.destroy()
         app.quit()

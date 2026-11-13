@@ -14,7 +14,8 @@ const ipc = [],
     received = [],
     paths = [],
     network = [],
-    errors = []
+    errors = [],
+    queuedDisk = []
 const handle = ipcMain.handle.bind(ipcMain)
 ipcMain.handle = (channel, listener) =>
     handle(channel, (event, request) => {
@@ -141,7 +142,17 @@ app.whenReady()
         hold = false
         pending.splice(0).forEach((reply) => reply())
         await poll(() => js('posthog.getState().autocapture.status === "loaded"'), 'loaded config')
-        await js('interact(); privateInteractions(); document.querySelector("#drop").click(); posthog.flush()')
+        await js(
+            'interact(); privateInteractions(); composedPrivateInteractions(); document.querySelector("#drop").click()'
+        )
+        await poll(() => captures().length >= 3, 'queued interactions')
+        await owner._core.persist()
+        for (const file of (await readdir(directory, { recursive: true })).filter((file) =>
+            file.endsWith('state.json')
+        )) {
+            queuedDisk.push(await readFile(join(directory, file), 'utf8'))
+        }
+        await js('posthog.flush()')
         const accepted = events().filter((event) => event.event === '$autocapture')
         for (const type of ['click', 'change', 'submit'])
             assert(
@@ -163,6 +174,22 @@ app.whenReady()
             !captures().some(({ command }) => command.properties.$elements_chain.includes('blocked')),
             'no-capture marker'
         )
+
+        const firstWindow = window
+        const configBeforeSecond = paths.filter((path) => path === '/array/test-token/config').length
+        await open(host, { autocapture: true })
+        await js('posthog.flush()')
+        assert.equal(
+            paths.filter((path) => path === '/array/test-token/config').length,
+            configBeforeSecond,
+            'new window reuses loaded config'
+        )
+        const beforeTwoWindows = captures().length
+        await js('document.querySelector("#safe").click(); posthog.flush()')
+        await firstWindow.webContents.executeJavaScript('document.querySelector("#safe").click(); posthog.flush()')
+        assert.equal(captures().length, beforeTwoWindows + 2, 'both windows continue capturing')
+        window.destroy()
+        window = firstWindow
 
         const beforeOut = captures().length
         await js(`(async () => {
@@ -191,6 +218,15 @@ app.whenReady()
         assert.equal(captures().at(-1).generation, generation)
 
         config = { autocapture_opt_out: true, elementsChainAsString: true }
+        hold = true
+        const refresh = owner._core.loadAutocaptureConfig(true)
+        await poll(() => pending.length === 1, 'explicit warm refresh')
+        const beforeRefresh = captures().length
+        await js('document.querySelector("#safe").click(); posthog.flush()')
+        assert.equal(captures().length, beforeRefresh + 1, 'warm refresh does not pause existing capture')
+        hold = false
+        pending.splice(0).forEach((reply) => reply())
+        await refresh
         await js('posthog.reset()')
         await poll(() => js('posthog.getState().autocapture.autocapture_opt_out === true'), 'project kill switch')
         const beforeKill = captures().length
@@ -212,16 +248,24 @@ app.whenReady()
         await poll(() => js('posthog.getState().autocapture.status === "failed"'), 'failed config')
         await js('interact(); posthog.flush()')
         assert.equal(captures().length, beforeKill)
+        const retryGeneration = await js('posthog.getState().generation')
+        fail = false
+        config = { autocapture_opt_out: false, elementsChainAsString: true }
+        await poll(() => js('posthog.getState().autocapture.status === "loaded"'), 'same-generation config retry')
+        assert.equal(await js('posthog.getState().generation'), retryGeneration)
+        await js('document.querySelector("#safe").click(); posthog.flush()')
+        assert.equal(captures().length, beforeKill + 1, 'connectivity recovery enables capture without reset')
         window.destroy()
         await owner.shutdown(1000)
 
         // Main explicitly disabling remote config is the only local-only bypass.
         const requestsBeforeBypass = paths.filter((path) => path === '/array/test-token/config').length
+        const beforeBypass = captures().length
         await start('local-only', { disableRemoteConfig: true })
         await open(host, { autocapture: { maskAllText: true, maskAllElementAttributes: true } })
         await js('interact(); posthog.flush()')
         assert.equal(paths.filter((path) => path === '/array/test-token/config').length, requestsBeforeBypass)
-        const masked = captures().slice(beforeKill)
+        const masked = captures().slice(beforeBypass)
         assert.equal(masked.length, 3)
         assert(!JSON.stringify(masked).includes('Save'))
         assert(!JSON.stringify(masked).includes('attr__id'))
@@ -232,8 +276,18 @@ app.whenReady()
         window.destroy()
         await owner.shutdown(1000)
 
+        assert(queuedDisk.join('\n').includes('Save'), 'disk privacy proof includes queued captures before delivery')
         const serialized = ipc.join('\n') + received.join('\n')
         assert(!serialized.includes(canary), 'sensitive canary must never enter IPC or received bytes')
+        assert.deepEqual(
+            {
+                ipc: ipc.join('\n').includes('ELECTRON_COMPOSED_PRIVATE_CANARY'),
+                network: received.join('\n').includes('ELECTRON_COMPOSED_PRIVATE_CANARY'),
+                disk: queuedDisk.join('\n').includes('ELECTRON_COMPOSED_PRIVATE_CANARY'),
+            },
+            { ipc: false, network: false, disk: false },
+            'composed-tree privacy across process and persistence boundaries'
+        )
         assert(!serialized.includes('private@example.com'), 'sensitive email must never enter IPC or received bytes')
         assert(!serialized.includes('$input_value'), 'input values are excluded by default')
         assert(!serialized.includes('$snapshot'), 'no recorder events')
@@ -246,7 +300,9 @@ app.whenReady()
         for (const file of files.filter((file) => file.endsWith('state.json'))) {
             const disk = await readFile(join(directory, file), 'utf8')
             assert(
-                !disk.includes(canary) && !disk.includes('UNSUPPORTED_CONFIG_CANARY'),
+                !disk.includes(canary) &&
+                    !disk.includes('UNSUPPORTED_CONFIG_CANARY') &&
+                    !disk.includes('ELECTRON_COMPOSED_PRIVATE_CANARY'),
                 'private/unsupported data on disk'
             )
             assert(!disk.includes('sessionRecording') && !disk.includes('$snapshot'), 'no recorder state')
@@ -260,6 +316,8 @@ app.whenReady()
                 configRequests: paths.filter((path) => path === '/array/test-token/config').length,
                 ipcRequests: ipc.length,
                 sensitiveCanaryInIpcOrReceivedBytes: false,
+                composedCanaryInIpcNetworkOrDisk: false,
+                queuedDiskSnapshots: queuedDisk.length,
                 recorderRequests: 0,
                 expectedConfigFailures: errors.length,
             })

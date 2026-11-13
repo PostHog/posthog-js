@@ -24,7 +24,7 @@ const AUTOCAPTURE_CONFIG_KEYS = [
 export type AutocaptureConfig = Partial<Pick<SharedAutocaptureConfig, (typeof AUTOCAPTURE_CONFIG_KEYS)[number]>>
 
 interface AutocaptureHost {
-    getState(): State
+    getState(): Pick<State, 'generation' | 'distinctId' | 'optedOut' | 'autocapture'>
     capture(event: string, properties?: Properties): Promise<void>
     loadConfig(): Promise<void>
     onError(error: unknown): void
@@ -59,6 +59,10 @@ export class RendererAutocapture {
     private generation?: number
     private requestedGeneration?: number
     private disposed = false
+    private active = false
+    private loading = false
+    private retryTimer?: ReturnType<typeof setTimeout>
+    private retryDelay = 1000
 
     constructor(
         private host: AutocaptureHost,
@@ -70,6 +74,7 @@ export class RendererAutocapture {
         const state = this.host.getState()
         if (paused || state.optedOut || state.generation !== this.generation) this.stop()
         if (paused || state.optedOut) return
+        this.active = true
         this.generation = state.generation
         if (!this.extension) {
             const kv = new AutocaptureStore()
@@ -120,13 +125,54 @@ export class RendererAutocapture {
             this.remoteListener?.(remote.status === 'loaded' ? { ok: true, config: remote } : { ok: false })
         }
         if (remote?.status === 'disabled') this.extension?.startIfEnabled()
-        if (this.requestedGeneration !== state.generation && remote?.status !== 'disabled') {
-            this.requestedGeneration = state.generation
-            void this.host.loadConfig().catch((error) => this.host.onError(error))
+        if (remote?.status === 'loaded' || remote?.status === 'disabled') {
+            clearTimeout(this.retryTimer)
+            this.retryTimer = undefined
+            this.retryDelay = 1000
         }
+        if (this.requestedGeneration !== state.generation && remote?.status !== 'disabled') this.loadConfig()
+        else if (remote?.status === 'failed') this.scheduleRetry()
+    }
+
+    private loadConfig(): void {
+        if (this.disposed || !this.active || this.loading) return
+        this.loading = true
+        this.requestedGeneration = this.host.getState().generation
+        void this.host
+            .loadConfig()
+            .catch((error) => this.host.onError(error))
+            .finally(() => {
+                this.loading = false
+                if (this.disposed || !this.active) return
+                if (this.requestedGeneration !== this.host.getState().generation) this.update(false)
+                else this.scheduleRetry()
+            })
+    }
+
+    private scheduleRetry(): void {
+        const status = this.host.getState().autocapture?.status
+        if (
+            this.disposed ||
+            !this.active ||
+            this.loading ||
+            this.retryTimer ||
+            status === 'loaded' ||
+            status === 'disabled'
+        )
+            return
+        this.retryTimer = setTimeout(() => {
+            this.retryTimer = undefined
+            this.loadConfig()
+        }, this.retryDelay)
+        this.retryDelay = Math.min(this.retryDelay * 2, 60_000)
     }
 
     private stop(): void {
+        this.active = false
+        clearTimeout(this.retryTimer)
+        this.retryTimer = undefined
+        this.retryDelay = 1000
+        this.requestedGeneration = undefined
         this.extension?.dispose()
         this.extension = undefined
         this.remoteListener = undefined
