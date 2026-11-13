@@ -1902,6 +1902,47 @@ describe('emails', () => {
 
         expect(data?.scheduledAt).toBe(OTHER_TIME)
       })
+
+      it("lets PostHog answer a move once the email is canceled, which a late move can't undo", async () => {
+        await moveWithoutAnswer()
+        fetch.mockImplementationOnce(async () => fakeReply(200, { id: MESSAGE_ID, status: 'canceled' }))
+        expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+        fetch.mockImplementationOnce(async () => fakeReply(409, rejected(409, 'canceled').body))
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+        expect(fetch).toHaveBeenCalledTimes(3)
+      })
+
+      it('refuses a move to another time after PostHog refused the cancel', async () => {
+        await moveWithoutAnswer()
+        fetch.mockImplementationOnce(async () => fakeReply(409, rejected(409, 'already_sending').body))
+        expect((await posthog.emails.cancel(MESSAGE_ID)).error?.code).toBe('already_sending')
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it.each([
+        ['refuses', 30, 'move_unconfirmed', 1],
+        ['sends', 31, undefined, 2],
+      ])(
+        '%s a move to another time %i days after the move PostHog may still apply',
+        async (_verb, days, code, requests) => {
+          const start = Date.now()
+          onTestFinished(() => vi.setSystemTime(start))
+          await moveWithoutAnswer()
+          vi.setSystemTime(Date.now() + days * 24 * 60 * 60 * 1_000)
+
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error?.code).toBe(code)
+          expect(fetch).toHaveBeenCalledTimes(requests)
+        }
+      )
     })
 
     it('moves different emails without waiting for each other', async () => {

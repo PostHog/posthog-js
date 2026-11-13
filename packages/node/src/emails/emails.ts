@@ -64,6 +64,9 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const MOVE_FAILED = 'Moving the email failed unexpectedly.'
+const DAY_MS = 24 * 60 * 60 * 1_000
+const LONGEST_POSTHOG_HOLDS_AN_EMAIL_MS = 30 * DAY_MS
+const UNCONFIRMED_MOVE_GUARD_MS = LONGEST_POSTHOG_HOLDS_AN_EMAIL_MS + DAY_MS
 const SCHEDULING_UNSUPPORTED: EmailWarning = {
   code: 'scheduling_unsupported',
   message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
@@ -164,6 +167,11 @@ interface PreparedMove {
   instant: string
 }
 
+interface UnconfirmedMove {
+  instant: string
+  refusedUntil: number
+}
+
 interface Upload {
   url: string
   headers: Record<string, string>
@@ -188,7 +196,7 @@ export class EmailSender implements Emails {
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
-  private readonly unconfirmedMoveInstantByEmail = new Map<string, string>()
+  private readonly unconfirmedMoveByEmail = new Map<string, UnconfirmedMove>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -330,7 +338,7 @@ export class EmailSender implements Emails {
   }
 
   private async sendMove({ messageId, url, headers, body, instant }: PreparedMove): Promise<UpdateEmailResponse> {
-    const unconfirmedInstant = this.unconfirmedMoveInstantByEmail.get(messageId)
+    const unconfirmedInstant = this.unconfirmedInstantOf(messageId)
     if (unconfirmedInstant !== undefined && unconfirmedInstant !== instant) {
       return {
         data: null,
@@ -348,11 +356,11 @@ export class EmailSender implements Emails {
         try {
           reply = await this.request(url, 'PATCH', headers, body)
         } catch (error) {
-          this.unconfirmedMoveInstantByEmail.set(messageId, instant)
+          this.rememberUnconfirmedMove(messageId, instant)
           throw error
         }
         if (mayStillApplyLater(reply)) {
-          this.unconfirmedMoveInstantByEmail.set(messageId, instant)
+          this.rememberUnconfirmedMove(messageId, instant)
         }
         return parseUpdateReply(reply)
       })
@@ -360,6 +368,21 @@ export class EmailSender implements Emails {
     } catch (error) {
       return { data: null, error: asEmailError(error, MOVE_FAILED) }
     }
+  }
+
+  private unconfirmedInstantOf(messageId: string): string | undefined {
+    const move = this.unconfirmedMoveByEmail.get(messageId)
+    return move !== undefined && Date.now() < move.refusedUntil ? move.instant : undefined
+  }
+
+  private rememberUnconfirmedMove(messageId: string, instant: string): void {
+    const now = Date.now()
+    for (const [email, move] of this.unconfirmedMoveByEmail) {
+      if (move.refusedUntil <= now) {
+        this.unconfirmedMoveByEmail.delete(email)
+      }
+    }
+    this.unconfirmedMoveByEmail.set(messageId, { instant, refusedUntil: now + UNCONFIRMED_MOVE_GUARD_MS })
   }
 
   private async cancelUntracked(id: string): Promise<CancelEmailResponse> {
@@ -374,6 +397,7 @@ export class EmailSender implements Emails {
       const result = await this.withRetries(this.config.maxRetries, async () =>
         parseCancelReply(await this.request(url, 'POST', headers))
       )
+      this.unconfirmedMoveByEmail.delete(messageId)
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Canceling the email failed unexpectedly.') }

@@ -391,10 +391,11 @@ export interface Emails {
    * in call order.
    *
    * A move that wasn't confirmed, such as after a timeout or a server error, may still reach
-   * PostHog later. So from then on, this client refuses to move that email to another time, with the error
-   * code `move_unconfirmed` and without a request; a move to the same time still goes out. To move
-   * it, cancel the email, which a late move can't undo, and send it again. Moves from another
-   * client aren't ordered with this client's.
+   * PostHog later. So until this client cancels the email, or 31 days pass and it has gone out, this
+   * client refuses to move that email to another time, with the error code `move_unconfirmed` and
+   * without a request; a move to the same time still goes out. To move it, cancel the email, which a
+   * late move can't undo, and send it again. Moves from another client aren't ordered with this
+   * client's.
    */
   update(options: UpdateEmailOptions): Promise<UpdateEmailResponse>
 
