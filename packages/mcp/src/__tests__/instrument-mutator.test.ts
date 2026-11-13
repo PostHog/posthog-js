@@ -24,7 +24,7 @@ describe('instrumentMutator', () => {
 
     // Mirror the nest-mcp shape: mutate a bare server, then register handlers after.
     const server = new McpServer({ name: 'mutator', version: '1.0.0' }, { capabilities: { tools: {} } })
-    const instrumented = instrumentMutator<McpServer>(fakePostHog())(server)
+    const instrumented = instrumentMutator(fakePostHog())(server)
 
     instrumented.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -58,5 +58,14 @@ describe('instrumentMutator', () => {
       await serverTransport.close?.()
       await eventCapture.stop()
     }
+  })
+
+  // Compile-time: the mutator keeps the server's type whether it is typed by the
+  // hook it is passed to (nest-mcp's `serverMutator`) or by an explicit argument.
+  it('fits a typed serverMutator hook and an explicit server type', () => {
+    const server = new McpServer({ name: 'mutator', version: '1.0.0' })
+    const serverMutator: (server: McpServer) => McpServer = instrumentMutator(fakePostHog())
+    const explicit: McpServer = instrumentMutator<McpServer>(fakePostHog())(server)
+    expect(serverMutator(explicit)).toBe(server)
   })
 })
