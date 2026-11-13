@@ -10,7 +10,9 @@
  * The token is unsigned: it holds only what the client already self-reports.
  */
 
+import type { CompatibleRequestHandlerExtra } from '../types'
 import { readHeaderValue } from './headers'
+import { getRequestHeaders } from './request-headers'
 
 export const MCP_SESSION_HEADER = 'mcp-session-id'
 
@@ -108,6 +110,16 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
  */
 export function readMcpSessionHeader(headers: unknown): string | undefined {
   return readHeaderValue(headers, MCP_SESSION_HEADER)
+}
+
+/**
+ * Whether this is an HTTP request that carries no session: neither a transport
+ * session id nor one of our tokens. Its instance may serve other clients too, so
+ * nothing the instance remembers (a handshake, another request's token) identifies it.
+ */
+export function carriesNoSession(extra: CompatibleRequestHandlerExtra | undefined): boolean {
+  const headers = getRequestHeaders(extra)
+  return headers !== undefined && !extra?.sessionId && !decodeSessionId(readMcpSessionHeader(headers))
 }
 
 type SendFn = (message: unknown, options?: unknown) => unknown
