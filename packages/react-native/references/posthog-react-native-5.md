@@ -496,6 +496,51 @@ posthog.alias('distinct_id')
 
 ## Capture AI
 
+### `PostHog.captureAi`
+
+> **captureAi**(`event`, `properties?`, `options?`): `string` \| `undefined`
+
+Captures an AI observability event, such as `$ai_generation`, `$ai_span`, `$ai_trace` or
+`$ai_embedding`, and sends it to PostHog's AI endpoint (`/i/v1/ai/events`), which accepts much
+larger events than PostHog.capture.
+
+Takes the same arguments as `capture()` and goes through the same `before_send`. The event is
+queued separately from other events and sent unchanged: the SDK doesn't redact or truncate
+prompts, outputs or media. An event over `captureAiMaxEventBytes` (8 MiB plus 64 KiB by default)
+is dropped. PostHog drops an event sent here whose name doesn't start with `$ai_`. `capture()`
+never sends events here, even ones named `$ai_*`.
+
+AI events use `flushAt`, `maxBatchSize` and `flushInterval` like other events, and
+`captureAiCompression`, `captureAiMaxQueueSize` and `captureAiRequestTimeoutMs` instead of the analytics
+settings. Requests carry up to about 5 MiB of events, and the SDK sends as soon as that much is
+queued. Up to 50 MiB of AI events are kept; beyond that, the oldest are dropped.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `event` | `string` | The AI event name, such as `$ai_generation` |
+| `properties?` | `PostHogEventProperties` | Properties attached only to this event |
+| `options?` | `PostHogCaptureOptions` | Same options as `capture()` |
+
+#### Returns
+
+`string` \| `undefined`
+
+The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled or opted out,
+the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
+finishes initializing it returns the UUID, and those checks run once initialization completes.
+
+#### Example
+
+```js
+posthog.captureAi('$ai_generation', {
+  $ai_trace_id: traceId,
+  $ai_model: 'gpt-4o',
+  $ai_provider: 'openai',
+})
+```
+
 ### `PostHog.captureTraceFeedback`
 
 > **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
@@ -2987,6 +3032,10 @@ Props for the PostHogMaskView component.
 | `bootstrap.featureFlagPayloads?` | `Record`\<`string`, `JsonType`\> | - | - |
 | `bootstrap.featureFlags?` | `Record`\<`string`, `FeatureFlagValue`\> | - | - |
 | `bootstrap.isIdentifiedId?` | `boolean` | - | - |
+| <a id="property-captureaicompression"></a> `captureAiCompression?` | `"gzip"` \| `"none"` | How PostHog.captureAi request bodies are compressed, separately from `disableCompression`. `'gzip'` is used only where the runtime provides `CompressionStream`; elsewhere bodies are sent uncompressed. **Default** `'gzip'` | - |
+| <a id="property-captureaimaxeventbytes"></a> `captureAiMaxEventBytes?` | `number` | Maximum size, in bytes, of a serialized PostHog.captureAi event. The SDK drops a larger event and `captureAi()` returns `undefined`. Use it to lower the limit: PostHog drops AI events whose properties are over 8 MiB, so a larger value, or a value of `0` or less, uses the default. **Default** `8454144 (8 MiB plus 64 KiB for the rest of the event)` | - |
+| <a id="property-captureaimaxqueuesize"></a> `captureAiMaxQueueSize?` | `number` | Maximum number of PostHog.captureAi events kept in their queue before the oldest are dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default. **Default** `100` | - |
+| <a id="property-captureairequesttimeoutms"></a> `captureAiRequestTimeoutMs?` | `number` | Timeout, in milliseconds, of a PostHog.captureAi request. AI requests can carry several MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default. **Default** `60000` | - |
 | <a id="property-captureapplifecycleevents"></a> `captureAppLifecycleEvents?` | `boolean` | Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded. Application Installed and Application Updated events are not supported with persistence set to 'memory'. **Default** `true` | - |
 | <a id="property-capturepushnotificationopened"></a> `capturePushNotificationOpened?` | `boolean` | Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`. Fires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call PostHog.capturePushNotificationOpened for the taps it misses. The native SDK builds and sends this event, so JS `before_send` never sees it. On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to catch a tap that cold-launches the app. Two switches gate automatic capture there, and `false` on either one means the SDK sends no `$push_notification_opened` of its own (an explicit PostHog.capturePushNotificationOpened call still captures): - This option set to `false` turns capture off when `setup()` runs and releases the launch hook, dropping the tap it was holding. The hook is still installed for the window between launch and `setup()`. - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist` (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your JS runs, and forces capture off at `setup()` even when this option is `true`. It is the same key posthog-flutter reads. Not supported on web. **Default** `true` | - |
 | <a id="property-capturepushnotificationsubscriptions"></a> `capturePushNotificationSubscriptions?` | `boolean` | Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`. Your app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to PostHog.registerPushNotificationToken yourself. Not supported on web or macOS. **Default** `true` | - |

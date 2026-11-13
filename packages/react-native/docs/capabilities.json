@@ -3,6 +3,7 @@
   "PostHog.alias": "alias",
   "PostHog.autocapture": "autocapture",
   "PostHog.capture": "capture",
+  "PostHog.captureAi": "capture-ai",
   "PostHog.captureException": "capture-exception",
   "PostHog.captureLog": "logs",
   "PostHog.captureTraceFeedback": "capture-ai",
@@ -98,5 +99,5 @@
     "PostHog.projectToken",
     "PostHog.setPersistedProperty"
   ],
-  "next": []
+  "next": ["PostHog.captureAi"]
 }
