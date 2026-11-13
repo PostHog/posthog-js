@@ -167,7 +167,7 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
 
 test('native optional-feature CI keeps merged fixtures on one pinned macOS runtime without publishing privileges', () => {
     const workflow = readFileSync('.github/workflows/electron-features.yml', 'utf8')
-    assert.match(workflow, /runs-on: macos-14/)
+    assert.match(workflow, /runs-on: macos-15/)
     assert.match(workflow, /timeout-minutes: 25/)
     assert.match(workflow, /permissions: \{\}/)
     assert.match(workflow, /contents: read/)

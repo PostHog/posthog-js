@@ -17,7 +17,7 @@ concurrency:
 jobs:
     native-features:
         # One pinned native runtime is regression evidence, not a cross-OS support claim.
-        runs-on: macos-14
+        runs-on: macos-15
         timeout-minutes: 25
         permissions:
             contents: read
