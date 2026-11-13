@@ -156,6 +156,36 @@ describe('Stateless session minting', () => {
     expect(transport.sessionId).toBeUndefined()
   })
 
+  // JSON-RPC ids are per-client counters, so on a shared transport another client's response can reuse the id.
+  it.each([
+    { case: 'was cancelled', cancel: true },
+    { case: 'is still in flight', cancel: false },
+  ])('sends no token on a same-id response while an initialize $case', async ({ cancel }) => {
+    let releaseInitialize = (): void => undefined
+    const initializeHeld = new Promise<void>((resolve) => (releaseInitialize = resolve))
+    const { server } = createPod('pod-same-id', {
+      eventProperties: async (request) => {
+        if (request.method === 'initialize') {
+          await initializeHeld
+        }
+        return null
+      },
+    })
+    const transport = new RecordingTransport()
+    await server.connect(transport)
+
+    void transport.request({ id: 1, method: 'initialize', params: INITIALIZE_REQUEST.params })
+    if (cancel) {
+      transport.onmessage?.({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } })
+      releaseInitialize()
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    const otherClient = await transport.request({ id: 1, method: 'tools/list' })
+    releaseInitialize()
+
+    expect(otherClient.sessionId).toBeUndefined()
+  })
+
   describe('mint guards', () => {
     const HTTP_REQUEST = { headers: {} }
 

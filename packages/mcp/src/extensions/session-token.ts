@@ -115,32 +115,48 @@ type SendFn = (message: unknown, options?: unknown) => unknown
 const tokensAwaitingResponse = new WeakMap<object, Map<unknown, string>>()
 
 /**
- * Sends `token` as the `Mcp-Session-Id` header of the response to `requestId`
- * only. The transport builds that header from its `sessionId` while sending, so
- * the token is put there for the response's synchronous send and taken off
- * again. Leaving it on would break a stateless transport reused across clients
- * (SDK v2 before 2.3): it rejects the next `initialize` and echoes the token to
- * every client. Returns whether the transport can carry the token; never throws.
+ * Whether `transport` can put a session id in a response's `Mcp-Session-Id`
+ * header: it has a settable `sessionId` and a `send` to hand it to. Probes with
+ * a write it takes back at once; never throws.
  */
-export function sendSessionTokenWithResponse(transport: unknown, requestId: unknown, token: string): boolean {
-  if (requestId === undefined || !transport || typeof transport !== 'object') {
-    return false
-  }
-  const carried = writeSessionIdToTransport(transport, token)
+export function canCarrySessionId(transport: unknown): boolean {
+  const carried = writeSessionIdToTransport(transport, 'probe')
   writeSessionIdToTransport(transport, undefined)
-  if (!carried) {
-    return false
+  return carried && typeof (transport as { send?: unknown }).send === 'function'
+}
+
+/**
+ * Sends `token` as the `Mcp-Session-Id` header of the `initialize` result for
+ * `requestId`, and nowhere else. The transport builds that header from its
+ * `sessionId` while sending, so the token is put there for that synchronous
+ * send and taken off again. Leaving it on would break a stateless transport
+ * reused across clients (SDK v2 before 2.3): it rejects the next `initialize`
+ * and echoes the token to every client.
+ *
+ * Call it once the handler has returned: the SDK sends the result within the
+ * same macrotask, so the token is dropped on the next one. That keeps a
+ * cancelled `initialize`, whose result is never sent, from leaving the token
+ * for another client's response that reuses the id. Never throws.
+ */
+export function sendSessionTokenWithResponse(transport: unknown, requestId: unknown, token: string): void {
+  if (requestId === undefined || !transport || typeof transport !== 'object') {
+    return
   }
   let tokens = tokensAwaitingResponse.get(transport)
   if (!tokens) {
     tokens = new Map()
     if (!wrapSend(transport, tokens)) {
-      return false
+      return
     }
     tokensAwaitingResponse.set(transport, tokens)
   }
-  tokens.set(requestId, token)
-  return true
+  const awaiting = tokens
+  awaiting.set(requestId, token)
+  setTimeout(() => {
+    if (awaiting.get(requestId) === token) {
+      awaiting.delete(requestId)
+    }
+  }, 0)
 }
 
 function wrapSend(transport: object, tokens: Map<unknown, string>): boolean {
@@ -151,7 +167,7 @@ function wrapSend(transport: object, tokens: Map<unknown, string>): boolean {
   }
   try {
     target.send = (message, options) => {
-      const id = readResponseId(message)
+      const id = readInitializeResultId(message)
       const token = tokens.get(id)
       if (token === undefined) {
         return send.call(transport, message, options)
@@ -170,10 +186,10 @@ function wrapSend(transport: object, tokens: Map<unknown, string>): boolean {
   return target.send !== send
 }
 
-/** The id of a JSON-RPC response; undefined for requests and notifications, whose ids are not the client's. */
-function readResponseId(message: unknown): unknown {
-  const response = message as { id?: unknown; result?: unknown; error?: unknown } | null
-  return response && ('result' in response || 'error' in response) ? response.id : undefined
+/** The id of an `initialize` result, which alone names `serverInfo`; undefined for any other message. */
+function readInitializeResultId(message: unknown): unknown {
+  const response = message as { id?: unknown; result?: { serverInfo?: unknown } } | null
+  return response?.result?.serverInfo ? response.id : undefined
 }
 
 /**
