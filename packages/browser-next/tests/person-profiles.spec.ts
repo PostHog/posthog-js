@@ -676,7 +676,7 @@ describe('analytics person profiles', () => {
             const observed = vi.fn()
             product.onEvent(observed)
             product.registerDynamicEventProperties(() => ({ $process_person_profile: true }))
-            await product[method]('anonymous', { toJSON: () => ({ $process_person_profile: true }) })
+            await product[method]('anonymous', { $process_person_profile: { toJSON: () => true } })
             await client.flush()
             expect(observed).toHaveBeenCalledWith(
                 expect.objectContaining({

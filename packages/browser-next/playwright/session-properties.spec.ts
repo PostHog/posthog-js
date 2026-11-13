@@ -70,6 +70,22 @@ test('independent tabs isolate session properties and copied tabs inherit then d
     expect(await latest(separate)).toMatchObject({ owner: 'separate' })
 })
 
+test('fresh session registration survives idle rotation with native tab storage', async ({ page }) => {
+    await page.goto('/')
+    await page.evaluate(async () => {
+        await window.consentHarness.registerForSession({ old_scope: true })
+        await window.consentHarness.capture('before')
+        await window.consentHarness.flush()
+        const advanced = Date.now() + 1_800_001
+        Date.now = () => advanced
+        await window.consentHarness.registerForSession({ flow: 'checkout' })
+        await window.consentHarness.capture('checkout_started')
+        await window.consentHarness.flush()
+    })
+    expect(await latest(page)).toMatchObject({ flow: 'checkout' })
+    expect(await latest(page)).not.toHaveProperty('old_scope')
+})
+
 test('the first idle-rotated event and adopted session exclude prior session properties', async ({ page, context }) => {
     await page.goto('/')
     await page.evaluate(async () => {
