@@ -28,6 +28,13 @@ const workpoolTest = (await importShippedAsSource('@convex-dev/workpool/test')).
 const components = componentsGeneric() as unknown as { posthog: ComponentApi; workpool: WorkpoolComponent }
 const pool = new Workpool(components.workpool, { maxParallelism: 1, logLevel: 'ERROR' })
 
+const finishedEmails: { workId: string; result: { kind: string; error?: string } }[] = []
+
+const reportingPool: Pick<typeof pool, 'enqueueAction'> = {
+  enqueueAction: (ctx, fn, args, options) =>
+    pool.enqueueAction(ctx, fn, args, { ...options, onComplete: anyApi.emails.emailFinished, context: null }),
+}
+
 const WELCOME_ELEMENT = { $$typeof: Symbol.for('react.transitional.element'), type: 'p', props: {} }
 
 const appArgs = {
@@ -53,9 +60,15 @@ const app = {
     handler: (ctx, args) =>
       new PostHog(components.posthog, { emails: { defaultTemplateKey: args.defaultTemplateKey } }).enqueueEmail(
         ctx,
-        pool,
+        reportingPool,
         madeInTheApp(args)
       ),
+  }),
+  emailFinished: mutationGeneric({
+    args: { workId: v.string(), context: v.any(), result: v.any() },
+    handler: (_ctx, { workId, result }) => {
+      finishedEmails.push({ workId, result })
+    },
   }),
   sendQueuedDirectly: actionGeneric({
     args: { email: v.any() },
@@ -130,6 +143,7 @@ describe('sending email through the component', () => {
     vi.stubEnv('POSTHOG_PROJECT_TOKEN', 'phc_test')
     vi.stubEnv('POSTHOG_SECRET_KEY', 'phs_test_secret')
     replies = []
+    finishedEmails.length = 0
     answer = undefined
     requests = []
     vi.stubGlobal(
@@ -434,11 +448,17 @@ describe('sending email through the component', () => {
         accepted()
       )
       const t = initConvexTest()
+      const enqueuedAt = Date.now()
 
       const workId = await t.mutation(anyApi.emails.enqueue, { email: ORDER_SHIPPED })
 
       await expect(runQueue(t, workId)).resolves.toEqual({ state: 'finished' })
+      expect(Date.now() - enqueuedAt).toBeLessThan(60_000)
       expect(requests).toHaveLength(1)
+      expect(finishedEmails).toEqual([{ workId, result: { kind: 'failed', error: expect.any(String) } }])
+      const { error } = finishedEmails[0].result
+      expect(error).toContain('PostHog asked to wait 1800s, which ends more than five minutes after this attempt began')
+      expect(error).toContain(`idempotencyKey ${requests[0].headers['Idempotency-Key']}`)
     })
 
     test('the queued action refuses an email without an idempotency key, so no retry can send it twice', async () => {
