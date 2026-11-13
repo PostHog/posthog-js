@@ -6,8 +6,8 @@ import Ajv2020 from 'ajv/dist/2020'
 import { isUndefined } from '@posthog/core'
 import { PostHogFeatureFlags, type FlagsResponseFormat } from '../src/feature-flags'
 import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '../src/feature-flags-config'
-import { applyFlagEventCapture, minimizeConfigVersion2FlagCalledProperties } from '../src/flag-events'
-import { flagsResponseV4 } from '../src/flags-response-v4'
+import { ruleAttribution } from '../src/flag-events'
+import { flagsResponseV4, readFlagRecordsForStorage } from '../src/flags-response-v4'
 import { createTestClient, type TestCapturedEvent, type TestClient } from './helpers/test-client'
 
 // `$experiment_exposure` and the attribution of `$feature_flag_called`. A stored config version 2
@@ -302,10 +302,9 @@ const EXPECTED_EXPOSURE = {
     $feature_flag_evaluated_at: EVALUATED_AT,
 }
 
-// The dedupe keys of the split, as they are stored: the keys posthog-node builds, with the
-// exposure's under its event name, because both live in the reported calls of the flag.
-const SPLIT_CALLED_KEY = JSON.stringify([FLAG, 'annual', [], 2, 'experiment_split', RULE, 'experiment', 'annual-first'])
-const SPLIT_EXPOSURE_KEY = EXPOSURE + JSON.stringify([FLAG, [], 2, RULE, 'annual-first'])
+// The dedupe keys of the split, as they are stored.
+const SPLIT_CALLED_KEY = JSON.stringify(['annual', [], 2, 'experiment_split', RULE, 'experiment', 'annual-first'])
+const SPLIT_EXPOSURE_KEY = JSON.stringify(['$experiment_exposure', [], 2, RULE, 'annual-first'])
 
 beforeEach(() => {
     vi.useFakeTimers()
@@ -658,23 +657,18 @@ describe('$experiment_exposure', () => {
             }
         })
 
-        it.each([
-            ['metadata.rule_id', 7],
-            ['metadata.variant_key', { nested: true }],
-            ['reason.code', ['experiment_split']],
-        ])('a stored record whose %s has the wrong type sends the call as before', async (memberPath, value) => {
-            const harness = await setup()
-            await harness.load(response([split()]))
-            // Other code, and other SDK versions, write the same storage.
-            const stored = JSON.parse(JSON.stringify(harness.client.kv.get('$feature_flag_details')))
-            const tokens = memberPath.split('.')
-            stored[FLAG][tokens[0]!][tokens[1]!] = value
-            harness.client.kv.set({ $feature_flag_details: stored })
+        it('reads the attribution of a stored record whose members have the wrong types as absent', () => {
+            const record = readFlagRecordsForStorage(response([split()]) as any).body.flags![FLAG] as any
+            record.metadata.rule_id = 7
+            record.metadata.variant_key = { nested: true }
+            record.reason.code = ['experiment_split']
 
-            expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
-
-            expect(eventNames(harness.events)).toEqual([FLAG_CALLED])
-            expect(attribution(harness.events[0]!.properties)).toEqual({})
+            expect(ruleAttribution(record)).toEqual({
+                reasonCode: undefined,
+                ruleId: undefined,
+                ruleType: undefined,
+                variantKey: undefined,
+            })
         })
     })
 
@@ -1087,8 +1081,8 @@ describe('$experiment_exposure', () => {
                 ['team', 'growth'],
             ]
             expect(storedReports(client)[FLAG]!.slice(0, 2)).toEqual([
-                JSON.stringify([FLAG, 'annual', groups, 2, 'experiment_split', RULE, 'experiment', 'annual-first']),
-                EXPOSURE + JSON.stringify([FLAG, groups, 2, RULE, 'annual-first']),
+                JSON.stringify(['annual', groups, 2, 'experiment_split', RULE, 'experiment', 'annual-first']),
+                JSON.stringify(['$experiment_exposure', groups, 2, RULE, 'annual-first']),
             ])
         })
 
@@ -1420,22 +1414,14 @@ describe('$experiment_exposure', () => {
     })
 
     describe('how the client captures each event', () => {
-        // posthog-node passes these to its capture as options. The browser's capture asks the
-        // extension for them, by the properties object it was given.
-        it('hands the client the capture rules of each event, for the properties object it is captured with', async () => {
+        it('names what each event never carries, for the properties object it is captured with', async () => {
             const client = createTestClient()
             const captures: unknown[] = []
             const harness = await setup({ client })
             const capture = client.capture.bind(client)
             vi.spyOn(client, 'capture').mockImplementation((name, properties, options) => {
-                const captureOptions = harness.flags.flagEventCaptureOptions(properties)
-                captures.push([
-                    name,
-                    captureOptions && {
-                        removed: [...captureOptions.flagEvent.removed].sort(),
-                        pinned: captureOptions.flagEvent.pinned,
-                    },
-                ])
+                const flagEvent = harness.flags.flagEventCapture(properties)
+                captures.push([name, flagEvent && { omit: flagEvent.omit, keep: flagEvent.keep }])
                 return capture(name, properties, options)
             })
             await harness.load(
@@ -1446,91 +1432,49 @@ describe('$experiment_exposure', () => {
             harness.flags.getFeatureFlag('no-rule')
             harness.flags.getFeatureFlag('older')
 
-            const calledNeverCarries = [
-                ...ATTRIBUTION_PROPERTIES,
-                '$feature_flag_reason',
-                '$feature_flag_forced_variant',
-                '$feature_flag_experiment_id',
-            ].sort()
             expect(captures).toEqual([
-                [FLAG_CALLED, { removed: calledNeverCarries, pinned: EXPECTED_ATTRIBUTION }],
+                [
+                    FLAG_CALLED,
+                    {
+                        // The split reports its whole attribution, so only the other names are left.
+                        omit: ['$feature_flag_reason', '$feature_flag_forced_variant', '$feature_flag_experiment_id'],
+                        keep: ATTRIBUTION_PROPERTIES,
+                    },
+                ],
                 [
                     EXPOSURE,
                     {
-                        removed: [
+                        omit: [
                             '$feature_flag_config_version',
                             '$feature_flag_reason_code',
                             '$feature_flag_rule_type',
                             '$experiment_exposure_source',
                             '$feature_flag_experiment_id',
                             '$feature_flag_forced_variant',
-                        ].sort(),
-                        pinned: {
-                            $feature_flag: FLAG,
-                            $feature_flag_response: 'annual',
-                            $feature_flag_variant_key: 'annual-first',
-                            $feature_flag_rule_id: RULE,
-                            locally_evaluated: false,
-                        },
+                        ],
+                        keep: [],
                     },
                 ],
                 [
                     FLAG_CALLED,
                     {
                         // A record that names no rule must not get one from a super property.
-                        removed: calledNeverCarries,
-                        pinned: { $feature_flag_config_version: 2, $feature_flag_reason_code: 'no_rule_match' },
+                        omit: [
+                            '$feature_flag_rule_id',
+                            '$feature_flag_rule_type',
+                            '$feature_flag_variant_key',
+                            '$feature_flag_reason',
+                            '$feature_flag_forced_variant',
+                            '$feature_flag_experiment_id',
+                        ],
+                        keep: ATTRIBUTION_PROPERTIES,
                     },
                 ],
                 // A config version 1 call is captured as before.
                 [FLAG_CALLED, undefined],
             ])
-            expect(harness.flags.flagEventCaptureOptions({})).toBeUndefined()
-            expect(harness.flags.flagEventCaptureOptions(null)).toBeUndefined()
-        })
-
-        it('a registered property can neither change the attribution nor add what the event never carries', async () => {
-            const harness = await setup()
-            await harness.load(response([v4Record('no_rule_match', false)]))
-            let captureOptions: ReturnType<typeof harness.flags.flagEventCaptureOptions>
-            const capture = harness.client.capture.bind(harness.client)
-            vi.spyOn(harness.client, 'capture').mockImplementation((name, properties, options) => {
-                captureOptions = harness.flags.flagEventCaptureOptions(properties)
-                return capture(name, properties, options)
-            })
-            harness.flags.getFeatureFlag(FLAG)
-
-            // What the client does after it merged its super properties into the event.
-            const merged = {
-                ...harness.events[0]!.properties,
-                plan: 'scale',
-                $feature_flag_config_version: 1,
-                $feature_flag_rule_id: RULE,
-                $feature_flag_reason: 'registered',
-                $feature_flag_experiment_id: 301,
-            }
-            const applied = applyFlagEventCapture(merged, captureOptions!.flagEvent)
-
-            expect(applied).toMatchObject({
-                plan: 'scale',
-                $feature_flag_config_version: 2,
-                $feature_flag_reason_code: 'no_rule_match',
-            })
-            for (const name of ['$feature_flag_rule_id', '$feature_flag_reason', '$feature_flag_experiment_id']) {
-                expect(applied).not.toHaveProperty(name)
-            }
-            // A minimal call keeps the attribution on top of the shared allowlist.
-            expect(minimizeConfigVersion2FlagCalledProperties(applied)).toEqual({
-                $feature_flag: FLAG,
-                $feature_flag_response: false,
-                $feature_flag_has_experiment: false,
-                $feature_flag_id: 77,
-                $feature_flag_version: 3,
-                $feature_flag_request_id: REQUEST_ID,
-                $feature_flag_evaluated_at: EVALUATED_AT,
-                $feature_flag_config_version: 2,
-                $feature_flag_reason_code: 'no_rule_match',
-            })
+            expect(harness.flags.flagEventCapture({})).toBeUndefined()
+            expect(harness.flags.flagEventCapture(null)).toBeUndefined()
         })
 
         it('a hook that throws while the event is captured keeps no key', async () => {
@@ -1542,7 +1486,7 @@ describe('$experiment_exposure', () => {
                 if (name === EXPOSURE && failures > 0) {
                     failures--
                     // The client catches the error of a hook, drops the event, and reports the failure.
-                    harness.flags.flagEventCaptureOptions(properties)?.onCaptureFailed()
+                    harness.flags.flagEventCapture(properties)?.failed?.()
                     return true
                 }
                 return capture(name, properties, options)

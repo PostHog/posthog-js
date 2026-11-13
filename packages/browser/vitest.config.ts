@@ -27,10 +27,6 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
             {
-                find: '@posthog/browser-common/flag-events',
-                replacement: fromRoot('../browser-common/src/flag-events.ts'),
-            },
-            {
                 find: '@posthog/browser-common/flags-response-v4',
                 replacement: fromRoot('../browser-common/src/flags-response-v4.ts'),
             },

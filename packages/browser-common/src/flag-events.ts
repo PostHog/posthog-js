@@ -1,26 +1,21 @@
-/* oxlint-disable posthog-js/no-direct-undefined-check -- the code below is posthog-node's, unchanged */
-import { minimizeFlagCalledEventProperties, type FeatureFlagValue } from '@posthog/core'
-
-import type { ParsedFlagRecord } from './flags-response'
-
-// This file mirrors `packages/node/src/flag-events.ts`: the same functions, with the same names
-// and bodies, so that both can move to `@posthog/core` unchanged. Keep the two in step until
-// then. Only the type import differs. What the browser does differently is in
-// `flags-response-v4.ts` and in the tracker of `feature-flags.ts`.
+import { hasOwnProperty, isString, isUndefined } from '@posthog/core'
+import type { FeatureFlagDetail } from '@posthog/types'
+import type { ConfigVersion2FlagEvents, FlagEvent } from './feature-flags'
+import { legacyValueOf, typedFlagDetailOf } from './typed-flag-detail'
 
 /**
  * The flag events of one flag read: `$feature_flag_called` and, for a config version 2 experiment
  * split, `$experiment_exposure`.
  *
- * {@link buildConfigVersion2FlagEvents} builds both events and their dedupe keys in one step, from
- * the parsed `/flags` record that supplied the read's value and the read's `$feature_flag_called`
- * properties. It never reads the value the read returned, and it never evaluates or fetches flags.
- * A read whose record is not a readable config version 2 record gets no events from it, and the
- * client sends its `$feature_flag_called` event exactly as before.
+ * {@link configVersion2FlagEvents} builds both events and their dedupe keys in one step, from the
+ * stored `/flags` record that supplied the read's value and the read's `$feature_flag_called`
+ * properties. It never evaluates or fetches flags. A read whose record is not a readable config
+ * version 2 record gets no events from it, and the client sends its `$feature_flag_called` event
+ * exactly as before.
  */
 
-export const FEATURE_FLAG_CALLED_EVENT = '$feature_flag_called'
-export const EXPERIMENT_EXPOSURE_EVENT = '$experiment_exposure'
+const FEATURE_FLAG_CALLED_EVENT = '$feature_flag_called'
+const EXPERIMENT_EXPOSURE_EVENT = '$experiment_exposure'
 
 // The reason code and rule type of the one outcome that sends `$experiment_exposure`: a variant
 // assigned by an experiment rule.
@@ -30,42 +25,43 @@ const EXPERIMENT_RULE_TYPE = 'experiment'
 // The reason codes of a config version 2 record that report the rule that produced the result,
 // and the rule types each one allows. Any other reason code, and any failed record, reports no
 // rule, even when the record names one.
-const RULE_TYPES_BY_REASON_CODE: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-    ['targeting_match', new Set(['targeted_release', 'percentage_rollout'])],
-    [EXPERIMENT_SPLIT_REASON, new Set([EXPERIMENT_RULE_TYPE])],
-    ['rollout_miss', new Set(['percentage_rollout', EXPERIMENT_RULE_TYPE])],
-    ['experiment_paused', new Set([EXPERIMENT_RULE_TYPE])],
-    ['holdout', new Set([EXPERIMENT_RULE_TYPE])],
-])
+const RULE_TYPES_BY_REASON_CODE: Record<string, readonly string[]> = {
+    targeting_match: ['targeted_release', 'percentage_rollout'],
+    [EXPERIMENT_SPLIT_REASON]: [EXPERIMENT_RULE_TYPE],
+    rollout_miss: ['percentage_rollout', EXPERIMENT_RULE_TYPE],
+    experiment_paused: [EXPERIMENT_RULE_TYPE],
+    holdout: [EXPERIMENT_RULE_TYPE],
+}
+
+const CONFIG_VERSION = '$feature_flag_config_version'
+const REASON_CODE = '$feature_flag_reason_code'
+const RULE_ID = '$feature_flag_rule_id'
+const RULE_TYPE = '$feature_flag_rule_type'
+const VARIANT_KEY = '$feature_flag_variant_key'
+const EXPERIMENT_ID = '$feature_flag_experiment_id'
+const FORCED_VARIANT = '$feature_flag_forced_variant'
 
 /** The attribution a config version 2 `$feature_flag_called` carries, and keeps when minimized. */
-export const CONFIG_VERSION_2_ATTRIBUTION_PROPERTIES: readonly string[] = [
-    '$feature_flag_config_version',
-    '$feature_flag_reason_code',
-    '$feature_flag_rule_id',
-    '$feature_flag_rule_type',
-    '$feature_flag_variant_key',
+const ATTRIBUTION_PROPERTIES: readonly string[] = [CONFIG_VERSION, REASON_CODE, RULE_ID, RULE_TYPE, VARIANT_KEY]
+
+// Properties a super property must not add to a config version 2 `$feature_flag_called`: the
+// attribution the record does not report, and the fields such an event never carries.
+const FLAG_CALLED_NEVER_CARRIES: readonly string[] = [
+    ...ATTRIBUTION_PROPERTIES,
+    '$feature_flag_reason',
+    FORCED_VARIANT,
+    EXPERIMENT_ID,
 ]
 
-// Properties a super or context property must not add to, or change on, a config version 2
-// `$feature_flag_called`: the attribution, which is set again from the record, and the fields such
-// an event never carries.
-const CONFIG_VERSION_2_FLAG_CALLED_REMOVED: ReadonlySet<string> = new Set([
-    ...CONFIG_VERSION_2_ATTRIBUTION_PROPERTIES,
-    '$feature_flag_reason',
-    '$feature_flag_forced_variant',
-    '$feature_flag_experiment_id',
-])
-
-// Properties an `$experiment_exposure` never carries, even from a super or context property.
-const EXPOSURE_REMOVED: ReadonlySet<string> = new Set([
-    '$feature_flag_config_version',
-    '$feature_flag_reason_code',
-    '$feature_flag_rule_type',
+// Properties an `$experiment_exposure` never carries, even from a super property.
+const EXPOSURE_NEVER_CARRIES: readonly string[] = [
+    CONFIG_VERSION,
+    REASON_CODE,
+    RULE_TYPE,
     '$experiment_exposure_source',
-    '$feature_flag_experiment_id',
-    '$feature_flag_forced_variant',
-])
+    EXPERIMENT_ID,
+    FORCED_VARIANT,
+]
 
 // `$experiment_exposure` copies these from the `$feature_flag_called` of the same read, when it has
 // them.
@@ -77,13 +73,11 @@ const EXPOSURE_PROPERTIES_FROM_FLAG_CALLED = [
 ]
 
 // The rule ID's wire format: a hyphenated UUID, as the contract's event schemas require.
-const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/**
- * What a config version 2 flag record reports on its flag events.
- *
- * @internal
- */
+const stringOf = (value: unknown): string | undefined => (isString(value) ? value : undefined)
+
+/** What a config version 2 flag record reports on its flag events. */
 export type RuleAttribution = {
     readonly reasonCode: string | undefined
     readonly ruleId: string | undefined
@@ -93,10 +87,11 @@ export type RuleAttribution = {
 }
 
 /**
- * Reads the event attribution of a config version 2 flag record.
+ * Reads the event attribution of a stored config version 2 flag record.
  *
- * Returns `undefined` for anything else: no record, an unreadable record, a config version 1
- * record, or a record from a server without typed values.
+ * Returns `undefined` for anything else: no record, a record that could not be read, a config
+ * version 1 record, or a record without a typed value, which a server that does not serve v4 and
+ * an older SDK version store.
  *
  * The config version and reason code are always reported. The rule ID and rule type are reported
  * together or not at all, only for a targeting match, a rollout miss, a paused experiment, a
@@ -109,183 +104,140 @@ export type RuleAttribution = {
  * including an empty one). A split without all of them is malformed: it reports its reason but no
  * rule ID, rule type or variant, and sends no exposure. The SDK never guesses the missing fields
  * from the value, the flag key or an earlier result.
- *
- * @internal
  */
-export function ruleAttribution(record: ParsedFlagRecord | undefined): RuleAttribution | undefined {
-    if (record === undefined || record.unreadableField !== undefined || record.metadata.configVersion !== 2) {
+export const ruleAttribution = (record: FeatureFlagDetail | undefined): RuleAttribution | undefined => {
+    const typed = typedFlagDetailOf(record)
+    const metadata = typed?.metadata
+    if (!typed || metadata?.config_version !== 2) {
         return undefined
     }
-    const reasonCode = record.reason?.code || undefined
-    const noRule: RuleAttribution = { reasonCode, ruleId: undefined, ruleType: undefined, variantKey: undefined }
-    const allowedRuleTypes = reasonCode === undefined ? undefined : RULE_TYPES_BY_REASON_CODE.get(reasonCode)
-    if (record.failed || allowedRuleTypes === undefined) {
-        return noRule
-    }
-    const { ruleId, ruleType, variantKey } = record.metadata
+    const reasonCode = stringOf(typed.reason?.code) || undefined
+    let ruleId: string | undefined
+    let ruleType: string | undefined
+    let variantKey: string | undefined
+    const allowedRuleTypes =
+        reasonCode && hasOwnProperty.call(RULE_TYPES_BY_REASON_CODE, reasonCode)
+            ? RULE_TYPES_BY_REASON_CODE[reasonCode]
+            : undefined
+    const sentRuleId = stringOf(metadata.rule_id)
+    const sentRuleType = stringOf(metadata.rule_type)
     if (
-        ruleId === undefined ||
-        !UUID_PATTERN.test(ruleId) ||
-        ruleType === undefined ||
-        !allowedRuleTypes.has(ruleType)
+        !typed.failed &&
+        allowedRuleTypes &&
+        sentRuleId &&
+        UUID_PATTERN.test(sentRuleId) &&
+        sentRuleType &&
+        allowedRuleTypes.indexOf(sentRuleType) !== -1
     ) {
-        return noRule
-    }
-    if (reasonCode !== EXPERIMENT_SPLIT_REASON) {
-        // Only an experiment split assigns a variant.
-        return { ...noRule, ruleId, ruleType }
-    }
-    if (variantKey === undefined) {
-        return noRule
+        if (reasonCode !== EXPERIMENT_SPLIT_REASON) {
+            // Only an experiment split assigns a variant.
+            ruleId = sentRuleId
+            ruleType = sentRuleType
+        } else if (isString(metadata.variant_key)) {
+            ruleId = sentRuleId
+            ruleType = sentRuleType
+            variantKey = metadata.variant_key
+        }
     }
     return { reasonCode, ruleId, ruleType, variantKey }
 }
 
 /**
- * How the client captures a config version 2 flag event, after super and context properties are
- * merged: `removed` names are dropped, then `pinned` properties are set. A super property can
- * therefore neither change the event's attribution nor add a field the event never carries.
- *
- * @internal
- */
-export type FlagEventCapture = {
-    readonly removed: ReadonlySet<string>
-    readonly pinned: Readonly<Record<string, unknown>>
-}
-
-/** @internal */
-export function applyFlagEventCapture(properties: Record<string, any>, capture: FlagEventCapture): Record<string, any> {
-    const kept = Object.fromEntries(Object.entries(properties).filter(([name]) => !capture.removed.has(name)))
-    return { ...kept, ...capture.pinned }
-}
-
-/**
- * The minimal property set of a config version 2 `$feature_flag_called`: the shared allowlist plus
- * the config version 2 attribution. A config version 1 event keeps the shared allowlist alone.
- *
- * @internal
- */
-export function minimizeConfigVersion2FlagCalledProperties(properties: Record<string, any>): Record<string, any> {
-    const minimal = minimizeFlagCalledEventProperties(properties)
-    for (const name of CONFIG_VERSION_2_ATTRIBUTION_PROPERTIES) {
-        if (properties[name] !== undefined) {
-            minimal[name] = properties[name]
-        }
-    }
-    return minimal
-}
-
-/**
- * One flag event of a read, sent once per key in its own dedupe namespace.
- *
- * @internal
- */
-export type FlagEvent = {
-    readonly event: typeof FEATURE_FLAG_CALLED_EVENT | typeof EXPERIMENT_EXPOSURE_EVENT
-    readonly dedupeKey: string
-    readonly properties: Record<string, any>
-    readonly capture: FlagEventCapture
-}
-
-/** @internal */
-export type ConfigVersion2FlagEvents = {
-    readonly flagCalled: FlagEvent
-    /** Present only for a complete experiment split whose record supplied the read's value. */
-    readonly exposure: FlagEvent | undefined
-}
-
-/**
- * Builds the flag events of a read whose value a config version 2 record supplied.
+ * Builds the flag events of a read whose value a stored config version 2 record supplied.
  *
  * Returns `undefined` when `record` has no config version 2 attribution (see
- * {@link ruleAttribution}), including when it is absent because the value came from local
- * evaluation, an override or no flag at all. The caller then sends its `$feature_flag_called` as
- * before.
+ * {@link ruleAttribution}), or when it did not supply `response`. The stored flag values and the
+ * stored records are separate properties, and other code can write the one without the other, so
+ * a record supplied a value only when the legacy rendering of its typed value is that value. The
+ * caller then sends its `$feature_flag_called` as before.
  *
  * `$feature_flag_called` gets the record's attribution in place of the human-readable
- * `$feature_flag_reason`. Its dedupe key is the flag key, the response, the groups, the config
- * version and the attribution, so equal-valued A/A variants, successive experiments of one flag
- * and a holdout followed by a split of the same rule are each reported. `$experiment_exposure`
- * is built for a complete experiment split only. Its dedupe key is the groups, the flag key, the
- * config version, the rule ID and the variant key, so one assignment sends one exposure however
- * often it is read. The value, request ID and evaluation time are left out of it.
- *
- * @internal
+ * `$feature_flag_reason`. Its dedupe key is the response, the groups, the config version and the
+ * attribution, so equal-valued A/A variants, successive experiments of one flag and a holdout
+ * followed by a split of the same rule are each reported. `$experiment_exposure` is built for a
+ * complete experiment split only. Its dedupe key is the event name, the groups, the config
+ * version, the rule ID and the variant key, so one assignment sends one exposure however often it
+ * is read. The value, request ID and evaluation time are left out of it. Both keys are stored per
+ * flag key, next to the values that config version 1 calls are deduped by.
  */
-export function buildConfigVersion2FlagEvents(params: {
+export const configVersion2FlagEvents = (params: {
     key: string
-    response: FeatureFlagValue | undefined
-    groups: Record<string, string | number> | undefined
-    properties: Record<string, any>
-    record: ParsedFlagRecord | undefined
-}): ConfigVersion2FlagEvents | undefined {
-    const { key, response, groups, record } = params
+    response: string | boolean
+    groups: Readonly<Record<string, string>>
+    record: FeatureFlagDetail | undefined
+}): ConfigVersion2FlagEvents | undefined => {
+    const { key, response, record } = params
     const attribution = ruleAttribution(record)
-    if (attribution === undefined) {
+    if (!attribution || legacyValueOf(typedFlagDetailOf(record)!.value) !== response) {
         return undefined
     }
     const { reasonCode, ruleId, ruleType, variantKey } = attribution
-    // Sorted by group type, as the `$feature_flag_called` tracker normalizes groups.
-    const groupEntries = Object.entries(groups ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    // Sorted by group type, so the order the groups were set in does not make a new key.
+    const groups = Object.keys(params.groups)
+        .sort()
+        .map((type) => [type, params.groups[type]])
 
-    const attributionProperties: Record<string, unknown> = { $feature_flag_config_version: 2 }
-    if (reasonCode !== undefined) {
-        attributionProperties.$feature_flag_reason_code = reasonCode
+    const attributionProperties: Record<string, unknown> = { [CONFIG_VERSION]: 2 }
+    if (reasonCode) {
+        attributionProperties[REASON_CODE] = reasonCode
     }
-    if (ruleId !== undefined) {
-        attributionProperties.$feature_flag_rule_id = ruleId
-        attributionProperties.$feature_flag_rule_type = ruleType
+    if (ruleId) {
+        attributionProperties[RULE_ID] = ruleId
+        attributionProperties[RULE_TYPE] = ruleType
     }
-    if (variantKey !== undefined) {
-        attributionProperties.$feature_flag_variant_key = variantKey
+    const isSplit = isString(variantKey)
+    if (isSplit) {
+        attributionProperties[VARIANT_KEY] = variantKey
     }
-    const { $feature_flag_reason: _reason, ...flagCalledProperties } = params.properties
-    Object.assign(flagCalledProperties, attributionProperties)
-
-    // A JSON array cannot equal a config version 1 key, which starts with the flag key, so the two
-    // kinds of key never collide in one tracker. `null` stands for an absent field.
-    const flagCalled: FlagEvent = {
-        event: FEATURE_FLAG_CALLED_EVENT,
-        dedupeKey: JSON.stringify([
-            key,
-            response ?? null,
-            groupEntries,
-            2,
-            reasonCode ?? null,
-            ruleId ?? null,
-            ruleType ?? null,
-            variantKey ?? null,
-        ]),
-        properties: flagCalledProperties,
-        capture: { removed: CONFIG_VERSION_2_FLAG_CALLED_REMOVED, pinned: attributionProperties },
-    }
-
-    if (variantKey === undefined) {
-        return { flagCalled, exposure: undefined }
-    }
-
-    const exposureIdentity: Record<string, unknown> = {
-        $feature_flag: key,
-        $feature_flag_response: response,
-        $feature_flag_variant_key: variantKey,
-        $feature_flag_rule_id: ruleId,
-        locally_evaluated: flagCalledProperties.locally_evaluated === true,
-    }
-    const exposureProperties: Record<string, any> = {}
-    for (const name of EXPOSURE_PROPERTIES_FROM_FLAG_CALLED) {
-        if (flagCalledProperties[name] !== undefined) {
-            exposureProperties[name] = flagCalledProperties[name]
-        }
-    }
-    Object.assign(exposureProperties, exposureIdentity)
 
     return {
-        flagCalled,
-        exposure: {
-            event: EXPERIMENT_EXPOSURE_EVENT,
-            dedupeKey: JSON.stringify([key, groupEntries, 2, ruleId, variantKey]),
-            properties: exposureProperties,
-            capture: { removed: EXPOSURE_REMOVED, pinned: exposureIdentity },
+        // A JSON array cannot equal a config version 1 entry, which is the response as a string.
+        // `null` stands for an absent field.
+        calledKey: JSON.stringify([
+            response,
+            groups,
+            2,
+            reasonCode || null,
+            ruleId || null,
+            ruleType || null,
+            isSplit ? variantKey : null,
+        ]),
+        // The event name keeps this key apart from every `$feature_flag_called` key.
+        exposureKey: isSplit ? JSON.stringify([EXPERIMENT_EXPOSURE_EVENT, groups, 2, ruleId, variantKey]) : undefined,
+        build: (flagCalledProperties) => {
+            const calledProperties: Record<string, unknown> = { ...flagCalledProperties, ...attributionProperties }
+            delete calledProperties.$feature_flag_reason
+            const called: FlagEvent = {
+                event: FEATURE_FLAG_CALLED_EVENT,
+                properties: calledProperties,
+                capture: {
+                    omit: FLAG_CALLED_NEVER_CARRIES.filter((name) => !(name in calledProperties)),
+                    keep: ATTRIBUTION_PROPERTIES,
+                },
+            }
+            if (!isSplit) {
+                return { called, exposure: undefined }
+            }
+            const exposureProperties: Record<string, unknown> = {}
+            for (const name of EXPOSURE_PROPERTIES_FROM_FLAG_CALLED) {
+                if (!isUndefined(calledProperties[name])) {
+                    exposureProperties[name] = calledProperties[name]
+                }
+            }
+            exposureProperties.$feature_flag = key
+            exposureProperties.$feature_flag_response = response
+            exposureProperties[VARIANT_KEY] = variantKey
+            exposureProperties[RULE_ID] = ruleId
+            // The flags service evaluated the flag, as it does for every flag this SDK reads.
+            exposureProperties.locally_evaluated = false
+            return {
+                called,
+                exposure: {
+                    event: EXPERIMENT_EXPOSURE_EVENT,
+                    properties: exposureProperties,
+                    capture: { omit: EXPOSURE_NEVER_CARRIES, keep: [] },
+                },
+            }
         },
     }
 }
