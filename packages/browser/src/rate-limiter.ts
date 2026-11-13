@@ -38,26 +38,21 @@ export class RateLimiter {
         )
     }
 
+    /**
+     * Whether the client rate limit drops an event captured now.
+     * Unlike `clientRateLimitContext(true)`, it changes no state, so it does not hold back the next warning.
+     */
+    get isClientRateLimited(): boolean {
+        return this._refilledBucket().tokens < 1
+    }
+
     public clientRateLimitContext(checkOnly = false): {
         isRateLimited: boolean
         remainingTokens: number
     } {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
-        const { captureEventsBurstLimit, captureEventsPerSecond } = this
-        const now = new Date().getTime()
-        const bucket = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
-            tokens: captureEventsBurstLimit,
-            last: now,
-        }
-
-        bucket.tokens += (Math.max(0, now - bucket.last) / 1000) * captureEventsPerSecond
-        bucket.last = Math.max(bucket.last, now)
-
-        if (bucket.tokens > captureEventsBurstLimit) {
-            bucket.tokens = captureEventsBurstLimit
-        }
-
+        const bucket = this._refilledBucket()
         const isRateLimited = bucket.tokens < 1
 
         if (!isRateLimited && !checkOnly) {
@@ -86,6 +81,21 @@ export class RateLimiter {
             isRateLimited,
             remainingTokens: bucket.tokens,
         }
+    }
+
+    private _refilledBucket(): { tokens: number; last: number; dropped?: number } {
+        const { captureEventsBurstLimit, captureEventsPerSecond } = this
+        const now = new Date().getTime()
+        const stored = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT)
+        const bucket = stored ? { ...stored } : { tokens: captureEventsBurstLimit, last: now }
+
+        bucket.tokens += (Math.max(0, now - bucket.last) / 1000) * captureEventsPerSecond
+        bucket.last = Math.max(bucket.last, now)
+
+        if (bucket.tokens > captureEventsBurstLimit) {
+            bucket.tokens = captureEventsBurstLimit
+        }
+        return bucket
     }
 
     private _isPropertyAllowed(property: string): boolean {

@@ -230,6 +230,8 @@ type MetaIdentifierChannel = {
     unregister: () => void
 }
 
+type SentMetaIdentifier = { channel: MetaIdentifierChannel; value: string }
+
 // The pixel's _fbc carries the true click time: it wins for a click the URL or the store holds, or for a newer one.
 const fbcCookieWins = (
     cookieFbc: string,
@@ -484,6 +486,7 @@ export class PostHog implements PostHogInterface {
     __loaded: boolean
     config: PostHogConfig
     _originalUserConfig?: Partial<PostHogConfig>
+    private _botFilterWarned: boolean = false
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -553,6 +556,7 @@ export class PostHog implements PostHogInterface {
     private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
+    private _hasWarnedAboutMissingHistoryAutocapture = false
     private _isConsentTransition = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
@@ -585,6 +589,44 @@ export class PostHog implements PostHogInterface {
     // its events from person pages and the session tab. Warn once, when person processing is first requested,
     // unless a stable ID is supplied.
     // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
+    // Bundles without default extensions (module.slim) only create HistoryAutocapture when it is passed via
+    // __extensionClasses. Without it, a history-based capture_pageview captures the first pageview of each
+    // page load and drops every SPA navigation. The first pageview still arrives, so the setup looks healthy.
+    // Warn once, and only when the app set capture_pageview itself: the 'history_change' that comes from
+    // `defaults` is also what multi-page sites get, and they lose nothing without the extension.
+    private _warnIfHistoryAutocaptureMissing(): void {
+        if (this._hasWarnedAboutMissingHistoryAutocapture) {
+            return
+        }
+        if (!this._originalUserConfig || !('capture_pageview' in this._originalUserConfig)) {
+            return
+        }
+        const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
+        if (ext.historyAutocapture) {
+            return
+        }
+        // Mirrors HistoryAutocapture.isEnabled
+        const capturePageview = this.config.capture_pageview
+        const tracksHistory =
+            capturePageview === 'history_change' ||
+            (isObject(capturePageview) &&
+                !!(
+                    capturePageview.path ||
+                    capturePageview.search ||
+                    (capturePageview.hash && !this.config.disable_capture_url_hashes)
+                ))
+        if (!tracksHistory) {
+            return
+        }
+        this._hasWarnedAboutMissingHistoryAutocapture = true
+        logger.warn(
+            'capture_pageview is set to capture history changes, but the history autocapture extension is not ' +
+                'loaded, so only the first pageview of each page load is captured. With the slim bundle, pass ' +
+                "__extensionClasses: { historyAutocapture: AnalyticsExtensions.historyAutocapture } from 'posthog-js/dist/extension-bundles', " +
+                'or set capture_pageview: true to capture page loads only.'
+        )
+    }
+
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._hasWarnedAboutVolatileIdentity) {
             return
@@ -1231,6 +1273,7 @@ export class PostHog implements PostHogInterface {
         if (ext.historyAutocapture) {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
+        this._warnIfHistoryAutocaptureMissing()
         if (ext.tracingHeaders) {
             this._extensions.push((this.tracingHeaders = new ext.tracingHeaders(this)))
         }
@@ -1670,7 +1713,6 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookClickIdChannel
-        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
@@ -1719,7 +1761,6 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookBrowserIdChannel
-        this.persistence.refreshMetaIdentifiers()
         const stored = this._getPersistedMetaIdentifier(channel)
 
         // As for $fbc, an unset applies to this event only.
@@ -1744,15 +1785,22 @@ export class PostHog implements PostHogInterface {
         return stored ? { value: stored.value, pending: !stored.delivered } : undefined
     }
 
-    private _markMetaIdentifierDelivered(channel: MetaIdentifierChannel, value: string): void {
+    private _markMetaIdentifiersDelivered(sent: SentMetaIdentifier[]): void {
         if (!this.persistence) {
             return
         }
-        this.persistence.refreshMetaIdentifiers()
-        const stored = this._getPersistedMetaIdentifier(channel)
-        if (stored?.value === value && !stored.delivered) {
-            channel.register(value, true)
+        const awaitingDelivery = ({ channel, value }: SentMetaIdentifier) => {
+            const stored = this._getPersistedMetaIdentifier(channel)
+            return stored?.value === value && !stored.delivered
         }
+        // Later callbacks in a batch find the value already delivered and skip the refresh.
+        const toConfirm = sent.filter(awaitingDelivery)
+        if (!toConfirm.length) {
+            return
+        }
+        // A sibling may have stored a newer value since this request was sent.
+        this.persistence.refreshMetaIdentifiers()
+        toConfirm.filter(awaitingDelivery).forEach(({ channel, value }) => channel.register(value, true))
     }
 
     /**
@@ -1816,6 +1864,16 @@ export class PostHog implements PostHogInterface {
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
         if (shouldDropBotEvent) {
+            if (!this._botFilterWarned) {
+                this._botFilterWarned = true
+                // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
+                // oxlint-disable-next-line no-console
+                console.warn(
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
+                        event_name +
+                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                )
+            }
             logger.info(
                 `Event "${event_name}" was not captured because the user agent looks like a bot. Set \`opt_out_useragent_filter: true\` to capture it.`
             )
@@ -1912,6 +1970,7 @@ export class PostHog implements PostHogInterface {
                 unset: propertyUnset.indexOf(property) !== -1 || optionUnset.indexOf(property) !== -1,
             }
         }
+        this.persistence.refreshMetaIdentifiersBeforeCapture()
         const fbcCallerValue = callerValueFor(FACEBOOK_CLICK_ID)
         const fbpCallerValue = callerValueFor(FACEBOOK_BROWSER_ID)
         const metaIdentifiers = [
@@ -2034,11 +2093,14 @@ export class PostHog implements PostHogInterface {
             setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
         }
 
-        const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
+        const metaIdentifiersToConfirm: SentMetaIdentifier[] = []
+        metaIdentifiers.forEach(({ channel, update }) => {
             const finalValue =
                 data.$set?.[channel.property] ??
                 (isObject(data.properties?.$set) ? data.properties.$set[channel.property] : undefined)
-            return update?.pending && finalValue === update.value
+            if (update?.pending && finalValue === update.value) {
+                metaIdentifiersToConfirm.push({ channel, value: update.value })
+            }
         })
 
         this._internalEventEmitter.emit('eventCaptured', data)
@@ -2066,9 +2128,7 @@ export class PostHog implements PostHogInterface {
                       fireCallbackOnDrop: true,
                       callback: (response) => {
                           if (response.statusCode >= 200 && response.statusCode < 300) {
-                              for (const { channel, update } of metaIdentifiersToConfirm) {
-                                  this._markMetaIdentifierDelivered(channel, update!.value)
-                              }
+                              this._markMetaIdentifiersDelivered(metaIdentifiersToConfirm)
                           }
                       },
                   }
@@ -2092,6 +2152,10 @@ export class PostHog implements PostHogInterface {
             }
             this._send_retriable_request(requestOptions, transportOverride)
         }
+
+        // Consent can be granted without opt_in_capturing(), for example in another tab or by a consent manager cookie.
+        // Sending after this event keeps its rate limit token, and applies any identity change it picked up first.
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         return data
     }
@@ -4560,6 +4624,9 @@ export class PostHog implements PostHogInterface {
     /**
      * Capture a log entry and send it to the PostHog logs endpoint.
      *
+     * Note: logs are not subject to the user agent (bot) filter that drops events,
+     * so they are still sent from sessions whose events are dropped.
+     *
      * {@label Logs}
      *
      * @public
@@ -4865,7 +4932,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Enables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
-     * By default, captures an `$opt_in` event unless disabled.
+     * By default, captures an `$opt_in` event unless disabled. The event is only captured when the user was not
+     * already opted in, so calling this on every page load (for example from a consent tool callback that re-applies
+     * stored consent) sends it once per user rather than once per page.
      *
      * @example
      * ```js
@@ -4933,6 +5002,13 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const wasAlreadyGranted = this.consent.consent === ConsentStatus.GRANTED
+        if (wasAlreadyGranted) {
+            // Consent granted in another tab leaves this tab holding the cookieless sentinel, and no $opt_in capture
+            // will heal it below. Adopt the shared identity before re-enabling persistence saves the stale one over it.
+            this._syncCookielessIdentity()
+        }
+
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
@@ -4951,10 +5027,17 @@ export class PostHog implements PostHogInterface {
             this.conversations?.loadIfEnabled()
         }
 
-        // Don't capture if captureEventName is null or false
-        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+        // Don't capture if captureEventName is null or false, or if consent was already granted. Consent tools
+        // often re-apply stored consent on every page load, which would otherwise send one event per page.
+        if (!wasAlreadyGranted && (isUndefined(options?.captureEventName) || options?.captureEventName)) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
+
+        // Covers an opt in that captures no event. Adopt a sibling subdomain's identity first, so that a read made
+        // under the previous identity is dropped instead of reported under the new one.
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
+        this.featureFlags?.sendFlagCallsPendingCapture()
 
         if (this.config.capture_pageview) {
             this._captureInitialPageview()

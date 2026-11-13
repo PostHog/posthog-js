@@ -76,7 +76,7 @@ function isInputValueEligible(target: Element, config: Readonly<AutocaptureConfi
     return true
 }
 
-const logger = createLogger('[AutoCapture]')
+const logger = /* @__PURE__ */ createLogger('[AutoCapture]')
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {

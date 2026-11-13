@@ -4,6 +4,9 @@ import {
   Mirror,
   getInputType,
   stringifyStylesheet,
+  rememberStyleRuleSource,
+  rememberStylesheetSource,
+  invalidateStyleRuleSource,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -12,10 +15,13 @@ import {
   on,
   callAllSafely,
   hookSetter,
+  getDeferral,
   getWindowScroll,
   getWindowHeight,
   getWindowWidth,
   isBlocked,
+  isBlockedIncludingShadowHosts,
+  inDom,
   legacy_isTouchEvent,
   StyleSheetMirror,
   nowTimestamp,
@@ -52,7 +58,7 @@ import type {
   selectionCallback,
   customElementCallback,
 } from '@posthog/rrweb-types';
-import MutationBuffer from './mutation';
+import MutationBuffer, { registerSelectMutationObserver } from './mutation';
 import { callbackWrapper } from './error-handler';
 import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
 
@@ -429,6 +435,12 @@ export function findAndRemoveIframeBuffer(
 
 export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+let lastSelectInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
+
+export function resetSelectInputDeduplication(): void {
+  lastSelectInputValueMap = new WeakMap();
+}
+
 function initInputObserver({
   inputCb,
   doc,
@@ -442,26 +454,47 @@ function initInputObserver({
   sampling,
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
-  function eventHandler(event: Event) {
-    let target = getEventTarget(event) as HTMLElement | null;
-    const userTriggered = event.isTrusted;
+  let active = true;
+  const pendingSelects = new Map<HTMLElement, boolean>();
+  let selectFlushScheduled = false;
+
+  function getInputTarget(target: HTMLElement | null): HTMLElement | null {
     // Reading a native accessor (tagName/value/checked/type) on a non-native
     // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
-    // through the hooked setter's mock event — throws 'Illegal invocation'.
+    // through a hooked setter — throws 'Illegal invocation'.
     // Bail out unless the target is a genuine element in this document's realm.
     const view = doc.defaultView;
     if (target && view && !(target instanceof view.HTMLElement)) {
-      return;
+      return null;
     }
-    const tagName = target && target.tagName;
-
-    /**
-     * If a site changes the value 'selected' of an option element, the value of its parent element, usually a select element, will be changed as well.
-     * We can treat this change as a value change of the select element the current target belongs to.
-     */
-    if (target && tagName === 'OPTION') {
+    if (target && target.tagName === 'OPTION') {
       target = dom.parentElement(target);
+      if (target && target.tagName === 'OPTGROUP') {
+        target = dom.parentElement(target);
+      }
     }
+    return target;
+  }
+
+  function eventHandler(event: Event) {
+    processInput(
+      getInputTarget(getEventTarget(event) as HTMLElement | null),
+      event.isTrusted,
+    );
+  }
+
+  function getSelectedOptions(select: HTMLSelectElement) {
+    return Array.from(select.selectedOptions).filter(
+      (option) => !isBlocked(option, blockClass, blockSelector, true),
+    );
+  }
+
+  function processInput(
+    target: HTMLElement | null,
+    userTriggered: boolean,
+    deferred = false,
+  ) {
+    const tagName = target && target.tagName;
     if (
       !target ||
       !tagName ||
@@ -477,16 +510,47 @@ function initInputObserver({
     ) {
       return;
     }
-    let text = (target as HTMLInputElement).value;
-    let isChecked = false;
     const type: Lowercase<string> = getInputType(target) || '';
+    const shouldMaskInput =
+      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
+      maskInputOptions[type as keyof MaskInputOptions];
+    let selectedOptions =
+      tagName === 'SELECT'
+        ? getSelectedOptions(target as HTMLSelectElement)
+        : undefined;
+    if (
+      selectedOptions &&
+      (mirror.getId(target) <= 0 ||
+        selectedOptions.some((option) => mirror.getId(option) <= 0))
+    ) {
+      // Input normally unfreezes mutations at emission, too late for ID lookup.
+      if (mutationBuffers[0]?.isFrozen()) {
+        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        if (!active) return;
+        // Emission callbacks can change the selection or its blocking rules.
+        selectedOptions = getSelectedOptions(target as HTMLSelectElement);
+      }
+      if (!deferred) {
+        queueSelect(target, userTriggered);
+        return;
+      }
+      // Scalar masked events need the select ID, but do not transmit option IDs.
+      if (
+        mirror.getId(target) <= 0 ||
+        (!shouldMaskInput &&
+          selectedOptions.some((option) => mirror.getId(option) <= 0))
+      )
+        return;
+    }
+    let text = selectedOptions
+      ? selectedOptions[0]?.value || ''
+      : (target as HTMLInputElement).value;
+    let isChecked = false;
+    let selectedOptionIds: number[] | undefined;
 
     if (type === 'radio' || type === 'checkbox') {
       isChecked = (target as HTMLInputElement).checked;
-    } else if (
-      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
-      maskInputOptions[type as keyof MaskInputOptions]
-    ) {
+    } else if (shouldMaskInput) {
       text = maskInputValue({
         element: target,
         maskInputOptions,
@@ -495,13 +559,13 @@ function initInputObserver({
         value: text,
         maskInputFn,
       });
+    } else if (selectedOptions) {
+      selectedOptionIds = selectedOptions.map((option) => mirror.getId(option));
     }
-    cbWithDedup(
-      target,
-      userTriggeredOnInput
-        ? { text, isChecked, userTriggered }
-        : { text, isChecked },
-    );
+    const value: inputValue = { text, isChecked };
+    if (selectedOptionIds) value.selectedOptionIds = selectedOptionIds;
+    if (userTriggeredOnInput) value.userTriggered = userTriggered;
+    cbWithDedup(target, value);
     // if a radio was checked
     // the other radios with the same name attribute will be unchecked.
     const name: string | undefined = (target as HTMLInputElement).name;
@@ -521,14 +585,45 @@ function initInputObserver({
         });
     }
   }
+  function queueSelect(select: HTMLElement, userTriggered: boolean) {
+    pendingSelects.set(
+      select,
+      userTriggered || pendingSelects.get(select) || false,
+    );
+    if (!selectFlushScheduled) {
+      selectFlushScheduled = true;
+      // Mutation delivery and already-deferred setter callbacks finish first.
+      defer(flushPendingSelects);
+    }
+  }
+
+  function flushPendingSelects() {
+    selectFlushScheduled = false;
+    const selects = Array.from(pendingSelects);
+    pendingSelects.clear();
+    callAllSafely(
+      selects.map(([select, userTriggered]) => () => {
+        if (active) callbackWrapper(processInput)(select, userTriggered, true);
+      }),
+    );
+  }
+
   function cbWithDedup(target: EventTarget, v: inputValue) {
-    const lastInputValue = lastInputValueMap.get(target);
+    const values =
+      (target as HTMLElement).tagName === 'SELECT'
+        ? lastSelectInputValueMap
+        : lastInputValueMap;
+    const lastInputValue = values.get(target);
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
-      lastInputValue.isChecked !== v.isChecked
+      lastInputValue.isChecked !== v.isChecked ||
+      lastInputValue.selectedOptionIds?.length !== v.selectedOptionIds?.length ||
+      v.selectedOptionIds?.some(
+        (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
+      )
     ) {
-      lastInputValueMap.set(target, v);
+      values.set(target, v);
       const id = mirror.getId(target as Node);
       callbackWrapper(inputCb)({
         ...v,
@@ -546,6 +641,7 @@ function initInputObserver({
       handlers.forEach((h) => h());
     };
   }
+  const defer = getDeferral(currentWindow);
   const propertyDescriptor = currentWindow.Object.getOwnPropertyDescriptor(
     currentWindow.HTMLInputElement.prototype,
     'value',
@@ -567,11 +663,14 @@ function initInputObserver({
           p[1],
           {
             set() {
-              // mock to a normal event
-              callbackWrapper(eventHandler)({
-                target: this as EventTarget,
-                isTrusted: false, // userTriggered to false as this could well be programmatic
-              } as Event);
+              if (!active) return;
+              const target = callbackWrapper(getInputTarget)(this);
+              if (!target) return;
+              if (target.tagName === 'SELECT') {
+                queueSelect(target, false);
+              } else {
+                callbackWrapper(processInput)(target, false);
+              }
             },
           },
           false,
@@ -580,7 +679,25 @@ function initInputObserver({
       ),
     );
   }
+  handlers.unshift(
+    registerSelectMutationObserver(
+      doc,
+      callbackWrapper((select) => {
+        if (
+          mirror.getId(select) <= 0 ||
+          !inDom(select) ||
+          isBlockedIncludingShadowHosts(select, blockClass, blockSelector)
+        )
+          return;
+        processInput(select, false);
+      }),
+    ),
+  );
   return callbackWrapper(() => {
+    // Flush while the select and option IDs are still in the mirror.
+    callAllSafely([flushPendingSelects]);
+    active = false;
+    pendingSelects.clear();
     // the hook resetters below restore shared DOM prototype accessors through a
     // bare `Object.defineProperty`, which throws if the page made one of them
     // non-configurable after we hooked it. Run them all: a leaked hook keeps
@@ -785,6 +902,7 @@ function initStyleSheetObserver(
         const [rule] = argumentsList;
 
         const insertedIndex = target.apply(thisArg, argumentsList);
+        rememberStyleRuleSource(thisArg.cssRules[insertedIndex], rule);
 
         // A pending budget-deferred inlining of this sheet must not emit its
         // defer-time text over the successful mutation.
@@ -889,46 +1007,52 @@ function initStyleSheetObserver(
               return result;
             }
 
-            stylesheetManager.onCssomSheetMutation(thisArg);
+            const revision = stylesheetManager.onCssomSheetMutation(thisArg);
             const { id, styleId } = getIdAndStyleId(
               thisArg,
               mirror,
               stylesheetManager.styleMirror,
             );
-            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
-              return result;
-            }
-
-            const completeMutation = mutationQueue.queuePendingMutation(
-              thisArg,
-              () =>
-                styleSheetRuleCb({
-                  id,
-                  styleId,
-                  replace: text,
-                }),
-              () => {
-                const lateStyleSheetText = stringifyStylesheet(thisArg);
-                if (lateStyleSheetText !== null) {
-                  styleSheetRuleCb({
-                    id,
-                    styleId,
-                    replace: lateStyleSheetText,
-                  });
-                }
-              },
-            );
+            const tracked = (id && id !== -1) || (styleId && styleId !== -1);
+            const completeMutation = tracked
+              ? mutationQueue.queuePendingMutation(
+                  thisArg,
+                  () =>
+                    styleSheetRuleCb({
+                      id,
+                      styleId,
+                      replace: text,
+                    }),
+                  () => {
+                    const lateStyleSheetText = stringifyStylesheet(thisArg);
+                    if (lateStyleSheetText !== null) {
+                      styleSheetRuleCb({
+                        id,
+                        styleId,
+                        replace: lateStyleSheetText,
+                      });
+                    }
+                  },
+                )
+              : undefined;
             try {
               // Observing fulfillment requires a rejection handler; omitting it
               // creates a second unhandled rejection even when the caller handles
               // the original promise. Prefer not to introduce a new host error.
               void then.call(
                 result,
-                () => completeMutation(true),
-                () => completeMutation(false),
+                () => {
+                  if (
+                    stylesheetManager.isCurrentCssomMutation(thisArg, revision)
+                  ) {
+                    rememberStylesheetSource(thisArg, text);
+                  }
+                  completeMutation?.(true);
+                },
+                () => completeMutation?.(false),
               );
             } catch {
-              completeMutation(false);
+              completeMutation?.(false);
             }
           } catch {
             // Recorder errors must not affect the native promise result.
@@ -952,6 +1076,7 @@ function initStyleSheetObserver(
         ) => {
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
+          rememberStylesheetSource(thisArg, text);
 
           stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
@@ -1022,6 +1147,10 @@ function initStyleSheetObserver(
             const [rule] = argumentsList;
 
             const insertedIndex = target.apply(thisArg, argumentsList);
+            rememberStyleRuleSource(
+              (thisArg as CSSGroupingRule).cssRules[insertedIndex],
+              rule,
+            );
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1066,6 +1195,7 @@ function initStyleSheetObserver(
             const [index] = argumentsList;
 
             const result = target.apply(thisArg, argumentsList);
+            invalidateStyleRuleSource(thisArg);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -1111,6 +1241,22 @@ function initStyleSheetObserver(
   });
 }
 
+// Setter results are ignored by assignments but propagate through chained hooks.
+const REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT = Symbol.for(
+  'rrweb.adoptedStyleSheets.rejected',
+);
+
+type AdoptedStyleSheetObserver = {
+  stylesheetManager: observerParam['stylesheetManager'] | undefined;
+  previousDescriptor: PropertyDescriptor | undefined;
+  get: PropertyDescriptor['get'];
+};
+
+const adoptedStyleSheetObservers = new WeakMap<
+  NonNullable<PropertyDescriptor['set']>,
+  AdoptedStyleSheetObserver
+>();
+
 export function initAdoptedStyleSheetObserver(
   {
     mirror,
@@ -1128,25 +1274,37 @@ export function initAdoptedStyleSheetObserver(
     host.nodeName === '#document'
       ? (host as Document).defaultView?.Document
       : host.ownerDocument?.defaultView?.ShadowRoot;
-  const originalPropertyDescriptor = patchTarget?.prototype
-    ? Object.getOwnPropertyDescriptor(
-        patchTarget?.prototype,
-        'adoptedStyleSheets',
-      )
-    : undefined;
+  const ownPropertyDescriptor = Object.getOwnPropertyDescriptor(
+    host,
+    'adoptedStyleSheets',
+  );
+  const originalPropertyDescriptor =
+    ownPropertyDescriptor ??
+    (patchTarget?.prototype
+      ? Object.getOwnPropertyDescriptor(
+          patchTarget.prototype,
+          'adoptedStyleSheets',
+        )
+      : undefined);
   if (
     hostId === null ||
     hostId === -1 ||
     !patchTarget ||
-    !originalPropertyDescriptor
+    ownPropertyDescriptor?.configurable === false ||
+    !originalPropertyDescriptor?.get ||
+    !originalPropertyDescriptor?.set
   )
     return () => {
       //
     };
 
-  // Patch adoptedStyleSheets by overriding the original one.
-  Object.defineProperty(host, 'adoptedStyleSheets', {
-    configurable: originalPropertyDescriptor.configurable,
+  const observer: AdoptedStyleSheetObserver = {
+    stylesheetManager,
+    previousDescriptor: ownPropertyDescriptor,
+    get: undefined,
+  };
+  const patchedPropertyDescriptor: PropertyDescriptor = {
+    configurable: true,
     enumerable: originalPropertyDescriptor.enumerable,
     get(): CSSStyleSheet[] {
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
@@ -1163,7 +1321,7 @@ export function initAdoptedStyleSheetObserver(
         // operation, but because our patched setter sits on the call stack
         // the exception would otherwise be attributed to the recorder and
         // churn fingerprints in error tracking. The browser rejects the
-        // assignment atomically, so recording simply degrades (we skip the
+        // stylesheet, so recording simply degrades (we skip the
         // adoption below). Contain only this specific, unactionable case;
         // re-throw everything else so genuine host-page failures are
         // preserved (mirrors `callSafely` in ../utils).
@@ -1180,28 +1338,63 @@ export function initAdoptedStyleSheetObserver(
           typeof e === 'object' &&
           (e as { name?: unknown }).name === 'NotAllowedError'
         ) {
-          return;
+          return REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT;
         }
         throw e;
       }
-      if (hostId !== null && hostId !== -1) {
+      if (result === REJECTED_ADOPTED_STYLESHEET_ASSIGNMENT) return result;
+      if (observer.stylesheetManager && hostId !== null && hostId !== -1) {
         try {
-          stylesheetManager.adoptStyleSheets(sheets, hostId);
+          observer.stylesheetManager.adoptStyleSheets(sheets, hostId);
         } catch (e) {
           // for safety
         }
       }
       return result;
     },
-  });
+  };
+  try {
+    Object.defineProperty(
+      host,
+      'adoptedStyleSheets',
+      patchedPropertyDescriptor,
+    );
+  } catch {
+    return () => {};
+  }
+
+  observer.get = patchedPropertyDescriptor.get;
+  adoptedStyleSheetObservers.set(patchedPropertyDescriptor.set!, observer);
 
   return callbackWrapper(() => {
-    Object.defineProperty(host, 'adoptedStyleSheets', {
-      configurable: originalPropertyDescriptor.configurable,
-      enumerable: originalPropertyDescriptor.enumerable,
-      get: originalPropertyDescriptor.get,
-      set: originalPropertyDescriptor.set,
-    });
+    observer.stylesheetManager = undefined;
+    const current = Object.getOwnPropertyDescriptor(host, 'adoptedStyleSheets');
+    // A later recorder or polyfill may have replaced or locked our hook.
+    if (
+      !current?.configurable ||
+      current.get !== patchedPropertyDescriptor.get ||
+      current.set !== patchedPropertyDescriptor.set
+    )
+      return;
+    let previousDescriptor = ownPropertyDescriptor;
+    while (previousDescriptor?.set) {
+      const previousObserver = adoptedStyleSheetObservers.get(
+        previousDescriptor.set,
+      );
+      if (
+        !previousObserver ||
+        previousObserver.stylesheetManager ||
+        previousObserver.get !== previousDescriptor.get
+      )
+        break;
+      previousDescriptor = previousObserver.previousDescriptor;
+    }
+    if (previousDescriptor) {
+      Object.defineProperty(host, 'adoptedStyleSheets', previousDescriptor);
+    } else {
+      delete (host as { adoptedStyleSheets?: CSSStyleSheet[] })
+        .adoptedStyleSheets;
+    }
   });
 }
 
@@ -1228,6 +1421,7 @@ function initStyleDeclarationObserver(
         const [property, value, priority] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
@@ -1272,6 +1466,7 @@ function initStyleDeclarationObserver(
         const [property] = argumentsList;
 
         const result = target.apply(thisArg, argumentsList);
+        invalidateStyleRuleSource(thisArg.parentRule);
 
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {

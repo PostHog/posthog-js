@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testWorkerBundles } from './otel-bundlers.mjs'
 
 const tests = dirname(fileURLToPath(import.meta.url))
 const root = resolve(tests, '../../..')
@@ -20,7 +21,8 @@ function run(command, args, cwd, log) {
 }
 
 function pnpm(args, cwd, log) {
-  return run(pnpmEntry ? process.execPath : 'pnpm', pnpmEntry ? [pnpmEntry, ...args] : args, cwd, log)
+  const script = pnpmEntry && /\.[cm]?js$/.test(pnpmEntry)
+  return run(script ? process.execPath : pnpmEntry || 'pnpm', script ? [pnpmEntry, ...args] : args, cwd, log)
 }
 
 const dependencies = {}
@@ -78,23 +80,26 @@ new BatchSpanProcessor(${sdk === '0.200.0' ? 'exporter' : '{ exporter }'})
 `
   for (const extension of ['mts', 'cts']) {
     writeFileSync(join(consumer, `consumer.${extension}`), source)
-    run(
-      process.execPath,
-      [
-        join(consumer, 'node_modules/typescript/bin/tsc'),
-        '--noEmit',
-        '--strict',
-        '--skipLibCheck',
-        'false',
-        '--target',
-        'ES2022',
-        '--module',
-        'NodeNext',
-        `consumer.${extension}`,
-      ],
-      consumer,
-      `types-${sdk}-${extension}.log`
-    )
+    for (const condition of ['node', 'browser']) {
+      run(
+        process.execPath,
+        [
+          join(consumer, 'node_modules/typescript/bin/tsc'),
+          '--noEmit',
+          '--strict',
+          '--skipLibCheck',
+          'false',
+          '--target',
+          'ES2022',
+          '--module',
+          'NodeNext',
+          ...(condition === 'browser' ? ['--customConditions', 'browser'] : []),
+          `consumer.${extension}`,
+        ],
+        consumer,
+        `types-${sdk}-${extension}-${condition}.log`
+      )
+    }
   }
 
   // Observe the real upstream processor's export boundary without sending network traffic.
@@ -106,6 +111,7 @@ const { NodeSDK } = require('@opentelemetry/sdk-node')
 const { trace } = require('@opentelemetry/api')
 const resolveFromAi = createRequire(require.resolve('@posthog/ai/otel'))
 ${sdk === '0.220.0' ? '' : `assert.throws(() => resolveFromAi.resolve('${absentPackage}'), { code: 'MODULE_NOT_FOUND' })`}
+process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '2'
 const exported = []
 OTLPTraceExporter.prototype.export = function (spans, callback) {
   exported.push(...spans)
@@ -121,9 +127,12 @@ await processor.forceFlush()
 assert.equal(exported.length, 1)
 assert.equal(exported[0].name, 'gen_ai.compat')
 assert.equal(exported[0].attributes['gen_ai.prompt'], '[base64 image/png redacted]')
+tracer.startSpan('gen_ai.full_batch.1').end()
+tracer.startSpan('gen_ai.full_batch.2').end()
+assert.equal(exported.length, 3, 'Node batch size environment setting must take effect before forceFlush')
 tracer.startSpan('gen_ai.shutdown').end()
 await sdk.shutdown()
-assert.deepEqual(exported.map(span => span.name), ['gen_ai.compat', 'gen_ai.shutdown'])
+assert.deepEqual(exported.map(span => span.name), ['gen_ai.compat', 'gen_ai.full_batch.1', 'gen_ai.full_batch.2', 'gen_ai.shutdown'])
 console.log('${sdk}: types, loading, upstream batching, filtering, redaction, flush and shutdown passed')
 `
   for (const format of ['cjs', 'esm']) {
@@ -135,4 +144,6 @@ console.log('${sdk}: types, loading, upstream batching, filtering, redaction, fl
     writeFileSync(join(consumer, filename), script)
     console.log(run(process.execPath, [filename], consumer, `runtime-${sdk}-${format}.log`).trim())
   }
+
+  await testWorkerBundles(consumer, sdk, tracePackage)
 }

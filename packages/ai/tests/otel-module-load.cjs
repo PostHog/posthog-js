@@ -1,14 +1,5 @@
 const { execFileSync } = require('node:child_process')
-const {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} = require('node:fs')
+const { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { dirname, join } = require('node:path')
 
@@ -58,13 +49,9 @@ try {
   linkDependency('@opentelemetry/api')
   linkDependency('@opentelemetry/exporter-trace-otlp-http')
 
-  for (const tracePackage of ['@opentelemetry/sdk-trace-base', '@opentelemetry/sdk-trace']) {
-    linkDependency(tracePackage)
-    const absentPackage =
-      tracePackage === '@opentelemetry/sdk-trace' ? '@opentelemetry/sdk-trace-base' : '@opentelemetry/sdk-trace'
-    const assertStrictLayout = ['@opentelemetry/core', absentPackage]
-      .map(
-        (name) => `
+  const assertStrictLayout = ['@opentelemetry/core', '@opentelemetry/sdk-trace-base', '@opentelemetry/sdk-trace']
+    .map(
+      (name) => `
       try {
         require.resolve('${name}')
         throw new Error('${name} unexpectedly resolved from the fixture root')
@@ -72,28 +59,26 @@ try {
         if (error.code !== 'MODULE_NOT_FOUND') throw error
       }
     `
-      )
-      .join('\n')
+    )
+    .join('\n')
 
-    execFileSync(
-      process.execPath,
-      [
-        '--eval',
-        `${assertStrictLayout}\nconst { PostHogSpanProcessor } = require('@posthog/ai/otel'); new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown().catch(error => { console.error(error); process.exitCode = 1 })`,
-      ],
-      { cwd: fixtureRoot, stdio: 'inherit' }
-    )
-    execFileSync(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `const { PostHogSpanProcessor } = await import('@posthog/ai/otel'); await new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown()`,
-      ],
-      { cwd: fixtureRoot, stdio: 'inherit' }
-    )
-    unlinkSync(join(fixtureRoot, 'node_modules', ...tracePackage.split('/')))
-  }
+  execFileSync(
+    process.execPath,
+    [
+      '--eval',
+      `${assertStrictLayout}\nconst { PostHogSpanProcessor } = require('@posthog/ai/otel'); new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown().catch(error => { console.error(error); process.exitCode = 1 })`,
+    ],
+    { cwd: fixtureRoot, stdio: 'inherit' }
+  )
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `const { PostHogSpanProcessor } = await import('@posthog/ai/otel'); await new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown()`,
+    ],
+    { cwd: fixtureRoot, stdio: 'inherit' }
+  )
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true })
 }

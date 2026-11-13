@@ -1,8 +1,9 @@
-import { isFunction } from '@posthog/core'
+import { isFunction, isNull } from '@posthog/core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { assignableWindow } from '../utils/globals'
 import { createPostHogStub } from '../utils/loader-stub'
+import { getCoreIntegrity } from '../utils/loader-script'
 
 const logger = createLogger('[Loader bootstrap]')
 
@@ -16,6 +17,11 @@ function bootstrap(): void {
         return
     }
     if (assignableWindow.posthog?.__SV || isFunction(assignableWindow.posthog?.init)) {
+        return
+    }
+    const coreIntegrity = getCoreIntegrity(script)
+    if (isNull(coreIntegrity)) {
+        logger.critical('data-core-integrity must be a SHA-384 integrity hash')
         return
     }
     const source = script.getAttribute('data-asset-host')?.trim()
@@ -57,6 +63,9 @@ function bootstrap(): void {
     core.src = url.href
     core.async = true
     core.crossOrigin = 'anonymous'
+    if (coreIntegrity) {
+        core.integrity = coreIntegrity
+    }
     core.nonce = script.nonce
     core.onerror = () => logger.critical('Failed to load the PostHog SDK')
     script.parentNode?.insertBefore(core, script.nextSibling)

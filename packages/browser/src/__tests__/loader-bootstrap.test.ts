@@ -35,6 +35,7 @@ describe('local loader bootstrap', () => {
         expect(downloads).toEqual(['https://us-assets.i.posthog.com/static/array.js'])
         expect(injectedCore().async).toBe(true)
         expect(injectedCore().crossOrigin).toBe('anonymous')
+        expect(injectedCore().integrity).toBeUndefined()
     })
 
     it.each([
@@ -133,6 +134,39 @@ describe('local loader bootstrap', () => {
         ])
         expect(secondary.slice()).toEqual([['capture', 'named event']])
         expect(secondary.people.slice()).toEqual([['set_once', { plan: 'paid' }]])
+    })
+
+    it.each(['sha384-' + 'A'.repeat(64), '  sha384-' + 'B'.repeat(64) + '  '])(
+        'applies approved core integrity %j to the SDK download',
+        async (integrity) => {
+            script.setAttribute('data-core-integrity', integrity)
+            script.setAttribute('data-sdk-version', '1.441.2')
+            await bootstrap()
+            expect(injectedCore().integrity).toBe(integrity.trim())
+            expect(injectedCore().crossOrigin).toBe('anonymous')
+            expect(injectedCore().src).toBe('https://us-assets.i.posthog.com/static/1.441.2/array.js')
+            expect(console.error).not.toHaveBeenCalled()
+        }
+    )
+
+    it.each([
+        '',
+        ' ',
+        'not-a-hash',
+        'sha384-short',
+        'sha384-' + 'A'.repeat(63),
+        'sha384-' + '!'.repeat(64),
+        'sha256-' + 'A'.repeat(64),
+        'sha384-' + 'A'.repeat(64) + ' sha384-' + 'B'.repeat(64),
+    ])('rejects invalid core integrity %j before creating a queue or downloading the SDK', async (integrity) => {
+        script.setAttribute('data-core-integrity', integrity)
+        await bootstrap()
+        expect(console.error).toHaveBeenCalledWith(
+            expect.any(String),
+            'data-core-integrity must be a SHA-384 integrity hash'
+        )
+        expect(loaderWindow.posthog).toBeUndefined()
+        expect(document.querySelectorAll('script')).toHaveLength(1)
     })
 
     it('passes the CSP nonce to the asynchronous SDK download', async () => {

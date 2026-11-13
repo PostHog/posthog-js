@@ -1,5 +1,6 @@
 import type {
   CaptureMetricOptions,
+  HistogramOptions,
   MetricAttributes,
   MetricSample,
   MetricType,
@@ -36,6 +37,7 @@ interface ExemplarState {
 }
 
 interface HistogramState {
+  bounds: number[]
   count: number
   sum: number
   min: number
@@ -88,6 +90,8 @@ export class PostHogMetrics {
   // Serializes flushes — a manual flush() during an in-flight timer flush
   // queues behind it instead of racing it for the same window.
   private _flushPromise: Promise<void> | null = null
+  // The one flush `flushCoalesced()` has queued but not yet started.
+  private _queuedFlush: Promise<void> | null = null
   // One cardinality warning per window, however many series get dropped.
   private _seriesCapWarned = false
   // Type seen per metric name this window; reusing a name with a different
@@ -95,6 +99,14 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
+  // Bounds per histogram (name and unit), fixed by its first sample. They
+  // outlive the flush window because buckets from two windows with different
+  // bounds cannot be merged. Only reset() clears them. The map holds at most
+  // maxSeriesPerFlush histograms.
+  private _boundsByHistogram = new Map<string, number[]>()
+  // Histograms warned about conflicting bounds this window.
+  private _boundsConflictWarned = new Set<string>()
+  private _boundsCapWarned = false
   private _retryAfter = new RetryAfterWindow()
   private _consecutiveFlushFailures = 0
   private _flushJitter = NO_JITTER
@@ -117,8 +129,16 @@ export class PostHogMetrics {
     this._capture({ name, type: 'gauge', value, unit: options?.unit, attributes: options?.attributes })
   }
 
-  histogram(name: string, value: number, options?: CaptureMetricOptions): void {
-    this._capture({ name, type: 'histogram', value, unit: options?.unit, attributes: options?.attributes })
+  histogram(name: string, value: number, options?: HistogramOptions): void {
+    this._capture({
+      name,
+      type: 'histogram',
+      value,
+      unit: options?.unit,
+      attributes: options?.attributes,
+      // The copy keeps a beforeSend that edits the bounds in place from changing the caller's array.
+      bounds: isArray(options?.bounds) ? options.bounds.slice() : options?.bounds,
+    })
   }
 
   /** Sends everything aggregated so far without waiting for the flush interval. */
@@ -140,6 +160,33 @@ export class PostHogMetrics {
   }
 
   /**
+   * A flush for callers that ask once per unit of work (a served request, say) rather than once per window.
+   * Callers share one queued flush, so at most one send is in flight and one waits behind it however often
+   * this is called, and every sample captured before the call is in one of them. While a failed send is
+   * backing off it starts nothing and the retry timer owns the next send.
+   */
+  flushCoalesced(): Promise<void> {
+    if (this._isBackingOff()) {
+      return this._flushPromise ?? Promise.resolve()
+    }
+    if (!this._queuedFlush) {
+      // Starts after any send in flight, so samples captured while it runs are in this one.
+      this._queuedFlush = (this._flushPromise ?? Promise.resolve())
+        .catch(() => {})
+        .then(() => {
+          this._queuedFlush = null
+          // The send it waited behind may have failed and started a backoff.
+          return this._isBackingOff() ? undefined : this.flush()
+        })
+    }
+    return this._queuedFlush
+  }
+
+  private _isBackingOff(): boolean {
+    return this._consecutiveFlushFailures > 0 || this._retryAfter.remainingMs() > 0
+  }
+
+  /**
    * Synchronously snapshots the current window into an OTLP payload and
    * resets it, bypassing the flush serializer entirely — for unload-time
    * drains where the host must hand the payload to a synchronous transport
@@ -151,10 +198,7 @@ export class PostHogMetrics {
       return null
     }
     const window = this._series
-    this._series = new Map()
-    this._seriesCapWarned = false
-    this._typeByName = new Map()
-    this._typeCollisionWarned = new Set()
+    this._startWindow()
     return this._buildPayload(window)
   }
 
@@ -165,11 +209,20 @@ export class PostHogMetrics {
     this._consecutiveFlushFailures = 0
     this._flushJitter = NO_JITTER
     this._flushTimer.clear()
-    this._series = new Map()
     this._flushPromise = null
+    this._queuedFlush = null
+    this._startWindow()
+    this._boundsByHistogram = new Map()
+    this._boundsCapWarned = false
+  }
+
+  /** Clears the state that lives for one flush window. */
+  private _startWindow(): void {
+    this._series = new Map()
     this._seriesCapWarned = false
     this._typeByName = new Map()
     this._typeCollisionWarned = new Set()
+    this._boundsConflictWarned = new Set()
   }
 
   private _capture(sample: MetricSample): void {
@@ -188,6 +241,10 @@ export class PostHogMetrics {
     }
     if (typeof filtered.value !== 'number' || !Number.isFinite(filtered.value)) {
       this._logger.warn(`Dropping metric '${filtered.name}': value must be a finite number`)
+      return
+    }
+    if (filtered.type !== 'count' && filtered.type !== 'gauge' && filtered.type !== 'histogram') {
+      this._logger.warn(`Dropping metric '${filtered.name}': unknown type '${String(filtered.type)}'`)
       return
     }
     // Checked after beforeSend so a hook can't turn a count negative either.
@@ -211,16 +268,26 @@ export class PostHogMetrics {
     }
 
     let state = this._series.get(key)
-    if (!state) {
-      if (!this._admitNewSeries()) {
+    if (!state && !this._admitNewSeries()) {
+      return
+    }
+
+    let bounds: number[] | undefined
+    if (filtered.type === 'histogram') {
+      bounds = this._histogramBounds(filtered.name, filtered.unit, filtered.bounds)
+      if (!bounds) {
         return
       }
+    }
+
+    if (!state) {
       state = {
         name: filtered.name,
         type: filtered.type,
         unit: filtered.unit,
         attributes,
         windowStartMs: Date.now(),
+        hist: bounds && emptyHistogram(bounds),
       }
       this._series.set(key, state)
     }
@@ -280,6 +347,68 @@ export class PostHogMetrics {
     return false
   }
 
+  /**
+   * The bounds a histogram sample folds into: the ones its histogram already
+   * has, or the requested bounds (default when absent) for a new histogram.
+   * A histogram past the bounds limit has no map entry and gets only the
+   * default bounds. Returns `undefined` when the sample must be dropped.
+   */
+  private _histogramBounds(
+    name: string,
+    unit: string | undefined,
+    requested: number[] | undefined
+  ): number[] | undefined {
+    if (requested !== undefined && !isValidBounds(requested)) {
+      this._logger.warn(
+        `Dropping histogram '${name}': bounds must be a non-empty array of finite, strictly increasing numbers`
+      )
+      return undefined
+    }
+    const histogramKey = seriesKey('histogram', name, unit, undefined)
+    const fixed = this._boundsByHistogram.get(histogramKey)
+    if (fixed) {
+      this._warnOnBoundsConflict(name, histogramKey, fixed, requested)
+      return fixed
+    }
+    // The limit keeps histogram names with interpolated IDs from growing the
+    // map without bound. The backend stores one set of bounds per series. A
+    // histogram that is not in the map therefore sends only the default bounds,
+    // and a sample that asks for other bounds is dropped. Otherwise this client
+    // could send other bounds than earlier windows or other clients sent.
+    if (this._boundsByHistogram.size >= this._config.maxSeriesPerFlush) {
+      if (!this._boundsCapWarned) {
+        this._boundsCapWarned = true
+        this._logger.warn(
+          `Histogram bounds limit reached (${this._config.maxSeriesPerFlush} distinct histograms); ` +
+            `new histograms that pass custom bounds are dropped. Reduce histogram name cardinality.`
+        )
+      }
+      if (requested && !sameBounds(requested, DEFAULT_HISTOGRAM_BOUNDS)) {
+        return undefined
+      }
+      return DEFAULT_HISTOGRAM_BOUNDS
+    }
+    const bounds = requested ? requested.slice() : DEFAULT_HISTOGRAM_BOUNDS
+    this._boundsByHistogram.set(histogramKey, bounds)
+    return bounds
+  }
+
+  private _warnOnBoundsConflict(
+    name: string,
+    histogramKey: string,
+    fixed: number[],
+    requested: number[] | undefined
+  ): void {
+    if (sameBounds(fixed, requested ?? DEFAULT_HISTOGRAM_BOUNDS) || this._boundsConflictWarned.has(histogramKey)) {
+      return
+    }
+    this._boundsConflictWarned.add(histogramKey)
+    this._logger.warn(
+      `Histogram '${name}' already uses the bounds [${fixed.join(', ')}]; ` +
+        `samples that pass different bounds are recorded in those buckets.`
+    )
+  }
+
   private _fold(state: SeriesState, value: number): void {
     switch (state.type) {
       case 'count':
@@ -289,21 +418,12 @@ export class PostHogMetrics {
         state.last = value
         break
       case 'histogram': {
-        if (!state.hist) {
-          state.hist = {
-            count: 0,
-            sum: 0,
-            min: value,
-            max: value,
-            bucketCounts: new Array(DEFAULT_HISTOGRAM_BOUNDS.length + 1).fill(0),
-          }
-        }
-        const hist = state.hist
+        const hist = state.hist!
         hist.count += 1
         hist.sum += value
         hist.min = Math.min(hist.min, value)
         hist.max = Math.max(hist.max, value)
-        hist.bucketCounts[bucketIndexFor(value, DEFAULT_HISTOGRAM_BOUNDS)] += 1
+        hist.bucketCounts[bucketIndexFor(value, hist.bounds)] += 1
         break
       }
     }
@@ -368,10 +488,7 @@ export class PostHogMetrics {
     // Snapshot and reset the window; samples captured while the send is in
     // flight fold into a fresh window instead of the one being sent.
     const window = this._series
-    this._series = new Map()
-    this._seriesCapWarned = false
-    this._typeByName = new Map()
-    this._typeCollisionWarned = new Set()
+    this._startWindow()
 
     const generation = this._generation
     const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
@@ -467,17 +584,18 @@ export class PostHogMetrics {
           ...exemplars,
         }
         metric.gauge!.dataPoints.push(dp)
-      } else if (state.hist) {
+      } else {
+        const hist = state.hist!
         const dp: OtlpHistogramDataPoint = {
           attributes,
           startTimeUnixNano: startNano,
           timeUnixNano: nowNano,
-          count: state.hist.count,
-          sum: state.hist.sum,
-          min: state.hist.min,
-          max: state.hist.max,
-          bucketCounts: state.hist.bucketCounts,
-          explicitBounds: DEFAULT_HISTOGRAM_BOUNDS,
+          count: hist.count,
+          sum: hist.sum,
+          min: hist.min,
+          max: hist.max,
+          bucketCounts: hist.bucketCounts,
+          explicitBounds: hist.bounds,
           ...exemplars,
         }
         metric.histogram!.dataPoints.push(dp)
@@ -509,24 +627,52 @@ export class PostHogMetrics {
         case 'gauge':
           // The live window's value is newer — keep it.
           break
-        case 'histogram':
-          if (old.hist) {
-            if (!current.hist) {
-              current.hist = old.hist
-            } else {
-              current.hist.count += old.hist.count
-              current.hist.sum += old.hist.sum
-              current.hist.min = Math.min(current.hist.min, old.hist.min)
-              current.hist.max = Math.max(current.hist.max, old.hist.max)
-              for (let i = 0; i < current.hist.bucketCounts.length; i++) {
-                current.hist.bucketCounts[i] += old.hist.bucketCounts[i]
-              }
-            }
+        case 'histogram': {
+          const hist = current.hist!
+          const oldHist = old.hist!
+          hist.count += oldHist.count
+          hist.sum += oldHist.sum
+          hist.min = Math.min(hist.min, oldHist.min)
+          hist.max = Math.max(hist.max, oldHist.max)
+          for (let i = 0; i < hist.bucketCounts.length; i++) {
+            hist.bucketCounts[i] += oldHist.bucketCounts[i]
           }
           break
+        }
       }
     }
   }
+}
+
+function isValidBounds(bounds: unknown): bounds is number[] {
+  if (!isArray(bounds) || bounds.length === 0) {
+    return false
+  }
+  for (let i = 0; i < bounds.length; i++) {
+    if (!Number.isFinite(bounds[i]) || (i > 0 && bounds[i] <= bounds[i - 1])) {
+      return false
+    }
+  }
+  return true
+}
+
+function sameBounds(a: number[], b: number[]): boolean {
+  if (a === b) {
+    return true
+  }
+  if (a.length !== b.length) {
+    return false
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+function emptyHistogram(bounds: number[]): HistogramState {
+  return { bounds, count: 0, sum: 0, min: Infinity, max: -Infinity, bucketCounts: new Array(bounds.length + 1).fill(0) }
 }
 
 // Spread into the data point, so a point without an exemplar keeps its exact

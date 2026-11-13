@@ -196,6 +196,22 @@ describe('Tool Handling Tests', () => {
       ])
     })
 
+    it('should keep the refusal of a refused Responses API request', () => {
+      const response = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'refusal', refusal: "I can't help with that" }],
+          },
+        ],
+      }
+
+      expect(formatResponseOpenAI(response)).toEqual([
+        { role: 'assistant', content: [{ type: 'refusal', refusal: "I can't help with that" }] },
+      ])
+    })
+
     it('should format response with only tool calls', () => {
       const response = {
         choices: [

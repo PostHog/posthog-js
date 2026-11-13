@@ -66,8 +66,6 @@ jobs:
           pnpm test:rrweb-package-exports
           pnpm test:rrweb-consumers
 
-      - run: pnpm test:docs-scripts
-
       - name: Test development watchers
         timeout-minutes: 10
         run: pnpm test:dev-watch
@@ -85,6 +83,31 @@ jobs:
 
       - name: Node edge runtime tests
         run: pnpm --filter=posthog-node test:edge-compat
+
+  ai-otel-consumers:
+    permissions:
+      contents: read
+    name: AI OTel consumers (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          node_version: ${{ matrix.node-version }}
+          build: false
+
+      - name: Build AI SDK and dependencies
+        run: pnpm turbo run build --filter=@posthog/ai
+
+      - name: Test installed OTel consumers and Workers bundles
+        run: pnpm --filter @posthog/ai test:otel-consumers
 
   integration:
     permissions:
@@ -524,20 +547,6 @@ jobs:
         run: pnpm install --lockfile=false
         working-directory: examples/example-next-app-router
 
-      - name: Restore Next.js build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            examples/example-next-app-router/.next/cache
-            examples/example-nextjs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-
-            ${{ runner.os }}-nextjs-
-
-      - name: Initialize Next.js build cache directories
-        run: mkdir -p examples/example-next-app-router/.next/cache examples/example-nextjs/.next/cache
-
       - name: Build Next.js App Router example
         run: pnpm build
         working-directory: examples/example-next-app-router
@@ -580,10 +589,8 @@ jobs:
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
 
   generate-references:
-    # Runs the same api-extractor pipeline the release workflow uses to bump
-    # versions, so type-extraction breakages (e.g. unresolved DOM globals in
-    # `@posthog/core` types when extracted from a non-DOM tsconfig) surface
-    # on the PR instead of blocking the release.
+    # Runs the generator the release workflow uses, so a doc comment or type that breaks it
+    # surfaces on the PR instead of blocking the release.
     name: Generate references
     runs-on: ubuntu-22.04
     permissions:
@@ -594,8 +601,12 @@ jobs:
         uses: ./.github/actions/setup
         with:
           build: false
-      - name: Generate public API references
-        run: pnpm generate-references
+      - name: Generate Markdown SDK references
+        env:
+          SDK_SPECS: ${{ runner.temp }}/sdk-specs
+        run: |
+          scripts/fetch-sdk-specs.sh "$SDK_SPECS"
+          pnpm generate-references
 
       - name: Check public API references
         run: pnpm check:public-api

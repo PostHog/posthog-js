@@ -10,7 +10,7 @@ import { log, type LoggerFn } from './logger'
  * vendor metadata, while other harnesses inject the model id into the system
  * prompt so the agent can state it like intent through the `context` parameter.
  *
- * This module injects a required `llm_model` string parameter into every tool
+ * This module injects an optional `llm_model` string parameter into every tool
  * (mirroring `context-parameters.ts`), strips it before the tool runs, and
  * captures the best available value as `$mcp_llm_model`. Client metadata wins
  * over self-report, and `$mcp_llm_model_source` preserves that provenance.
@@ -54,6 +54,7 @@ export function addModelParameterToTool<TTool extends ModelInjectableTool>(
     'llm_model',
     modelDescriptionOverride || DEFAULT_MODEL_PARAMETER_DESCRIPTION,
     'model',
+    false,
     logger
   )
 }

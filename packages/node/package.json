@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.61.2",
+  "version": "5.71.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -16,13 +16,13 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
+    "test:benchmarks": "node --expose-gc --test --test-isolation=none benchmarks/controls.mjs",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
     "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -52,21 +52,29 @@
     "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog/types": "workspace:^",
+    "@react-email/render": "^2.1.1",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "@types/react": "catalog:",
     "esbuild": "^0.25.0",
     "@vitest/coverage-v8": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "rxjs": "^7.8.0",
     "typescript": "catalog:native",
     "vitest": "catalog:"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.2.0",
+    "@react-email/render": "^2.1.0",
     "rxjs": "^7.0.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "@react-email/render": {
       "optional": true
     },
     "rxjs": {
@@ -91,6 +99,11 @@
         "import": "./dist/entrypoints/index.node.mjs",
         "require": "./dist/entrypoints/index.node.js",
         "default": "./dist/entrypoints/index.node.js"
+      },
+      "convex": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "edge-light": {
         "import": "./dist/entrypoints/index.edge.mjs",

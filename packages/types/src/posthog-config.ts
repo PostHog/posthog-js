@@ -588,6 +588,7 @@ export interface MaskInputOptions {
     textarea?: boolean
     select?: boolean
     password?: boolean
+    hidden?: boolean
 }
 
 /**
@@ -678,7 +679,7 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
-     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * value of every input, except `file` inputs, whose values are recorded
      * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
      * Set it to `false` to record input values, which is not recommended
      * for apps that handle sensitive data. A `session_recording` masking option set in
@@ -1297,7 +1298,11 @@ export interface MetricsConfig {
      * are folded into per-series aggregates in memory between flushes — one
      * data point per series per window, no matter how many calls.
      *
-     * @default 10000
+     * The browser SDK defaults to 60000: every tab of an app writes to the
+     * same series, so a longer window keeps busy series under the backend's
+     * per-series point limit.
+     *
+     * @default 10000 (60000 in the browser)
      */
     flushIntervalMs?: number
     /**
@@ -1323,14 +1328,32 @@ export interface MetricsConfig {
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
-     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
-     * with other protocols are not recorded. Each transport is measured to the
+     * a histogram. `true` uses the defaults. Requests to PostHog itself, URLs
+     * with other protocols, and server-sent event streams (`text/event-stream`
+     * responses) are not recorded. Long-polling requests look like ordinary
+     * requests; skip them with a `name` function that returns `null`. Each transport is measured to the
      * boundary its API exposes: a `fetch` to its response headers, an
      * `XMLHttpRequest` to the end of its response body.
      *
      * @default undefined
      */
     network?: boolean | NetworkMetricsConfig
+    /**
+     * EXPERIMENTAL: Record the round trip of every `/flags` HTTP attempt as the
+     * histogram `posthog.flags.request.duration`, in milliseconds. Each retry is a
+     * separate sample. The timer starts when the SDK hands the request to the
+     * transport, so the duration includes compressing the request body. Samples
+     * carry the server host, the response status or error type, and the browser's
+     * IANA timezone as `client.timezone`. Requests that the SDK drops before they
+     * reach the network are not recorded.
+     *
+     * This option, the metric name, and its attributes may change or be removed
+     * in any release.
+     *
+     * @default undefined
+     * @experimental
+     */
+    flags?: boolean
 }
 
 /**
@@ -1586,6 +1609,9 @@ export interface PostHogConfig {
      * - `false`: Don't capture any pageviews
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
+     *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
@@ -1889,6 +1915,10 @@ export interface PostHogConfig {
      * Determines if users should be opted out of user agent filtering such as googlebot or other bots.
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
+     *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
      *
      * @default false
      */

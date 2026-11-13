@@ -15,6 +15,7 @@ import {
   initObservers,
   mutationBuffers,
   findAndRemoveIframeBuffer,
+  resetSelectInputDeduplication,
 } from './observer';
 import {
   type IdleDeadline,
@@ -45,6 +46,7 @@ import {
   type fullscreenEventPayload,
   IncrementalSource,
   type listenerHandler,
+  type IWindow,
   type mutationCallbackParam,
   type scrollCallback,
   type canvasMutationParam,
@@ -52,6 +54,11 @@ import {
 } from '@posthog/rrweb-types';
 import type { CrossOriginIframeMessageEventContent } from '../types';
 import { IframeManager } from './iframe-manager';
+import {
+  StyleRuleSourceSession,
+  registerStyleRuleSourceSession,
+  withStyleRuleSourceHandoff as handoffStyleRuleSources,
+} from './stylesheet-source-observer';
 import { ShadowDomManager } from './shadow-dom-manager';
 import { CanvasManager } from './observers/canvas/canvas-manager';
 import { StylesheetManager } from './stylesheet-manager';
@@ -425,6 +432,7 @@ function record<T = eventWithTime>(
           textarea: true,
           select: true,
           password: true,
+          hidden: true,
         }
       : _maskInputOptions !== undefined
       ? _maskInputOptions
@@ -785,6 +793,8 @@ function record<T = eventWithTime>(
         return console.warn('Failed to snapshot the document');
       }
 
+      // The snapshot replaces replay's select state, even without input events.
+      resetSelectInputDeduplication();
       wrappedEmit(
         {
           type: EventType.FullSnapshot,
@@ -832,8 +842,10 @@ function record<T = eventWithTime>(
     }
   };
 
+  const handlers: listenerHandler[] = [];
+  let sourceSession: StyleRuleSourceSession | undefined;
   try {
-    const handlers: listenerHandler[] = [];
+    sourceSession = new StyleRuleSourceSession(window as IWindow, recordDOM);
 
     // pagehide is the last event a dying page can rely on; flush the deferred
     // CSS synchronously so it reaches the emitted stream while the SDK's own
@@ -875,6 +887,7 @@ function record<T = eventWithTime>(
     };
 
     cleanupDetachedIframeObservers = () => {
+      sourceSession?.prune();
       for (const [iframeId] of iframeObserverCleanups) {
         const iframe = mirror.getNode(iframeId) as HTMLIFrameElement | null;
         if (!iframe) {
@@ -891,7 +904,7 @@ function record<T = eventWithTime>(
       }
     };
 
-    const observe = (doc: Document) => {
+    const observeEvents = (doc: Document) => {
       return callbackWrapper(initObservers)(
         {
           mutationCb: wrappedMutationEmit,
@@ -1031,11 +1044,69 @@ function record<T = eventWithTime>(
       );
     };
 
-    const loadListener = (iframeEl: HTMLIFrameElement) => {
+    const observe = (doc: Document) => {
+      const releaseSource = doc.defaultView
+        ? sourceSession?.observe(doc.defaultView as IWindow)
+        : undefined;
       try {
+        const cleanup = observeEvents(doc);
+        return () =>
+          callAllSafely([() => cleanup?.(), () => releaseSource?.()]);
+      } catch (error) {
+        releaseSource?.();
+        throw error;
+      }
+    };
+
+    const observedIframeDocuments = new WeakMap<Document, () => boolean>();
+    const pendingIframeCleanups = new WeakMap<
+      HTMLIFrameElement,
+      listenerHandler
+    >();
+    const loadListener = (iframeEl: HTMLIFrameElement) => {
+      sourceSession?.prune();
+      try {
+        const doc = iframeEl.contentDocument;
         const iframeId = mirror.getId(iframeEl);
-        const cleanup = observe(iframeEl.contentDocument!);
-        if (typeof cleanup === 'function') {
+        if (!doc) return;
+        // Replace observers installed before the iframe had a cleanup id.
+        const pendingCleanup = pendingIframeCleanups.get(iframeEl);
+        if (pendingCleanup) {
+          pendingIframeCleanups.delete(iframeEl);
+          callSafely(pendingCleanup);
+          const idx = handlers.indexOf(pendingCleanup);
+          if (idx !== -1) handlers.splice(idx, 1);
+        }
+        const isObserved = observedIframeDocuments.get(doc);
+        if (iframeId !== -1 && isObserved) {
+          if (isObserved()) return;
+          runAndDetachIframeCleanup?.(iframeId);
+        }
+        const stopObserving = observe(doc);
+        if (typeof stopObserving === 'function') {
+          // document.open() keeps the Document but clears its event listeners.
+          let listening = false;
+          const stopChecking = on(
+            'rrweb-check-iframe-observers',
+            () => {
+              listening = true;
+            },
+            doc,
+          );
+          if (iframeId !== -1) {
+            observedIframeDocuments.set(doc, () => {
+              listening = false;
+              const event = doc.createEvent('Event');
+              event.initEvent('rrweb-check-iframe-observers', false, false);
+              doc.dispatchEvent(event);
+              return listening;
+            });
+          }
+          const cleanup = () => {
+            observedIframeDocuments.delete(doc);
+            stopChecking();
+            stopObserving();
+          };
           handlers.push(cleanup);
           // Accumulate cleanups across iframe navigations.
           if (iframeId !== -1) {
@@ -1045,6 +1116,8 @@ function record<T = eventWithTime>(
               iframeObserverCleanups.set(iframeId, bucket);
             }
             bucket.add(cleanup);
+          } else {
+            pendingIframeCleanups.set(iframeEl, cleanup);
           }
         }
       } catch (error) {
@@ -1122,6 +1195,7 @@ function record<T = eventWithTime>(
       handlers.push(on('mozfullscreenchange', emitFullscreenChange));
       handlers.push(on('MSFullscreenChange', emitFullscreenChange));
       recording = true;
+      if (sourceSession) sourceSession.ready = true;
     };
     if (['interactive', 'complete'].includes(document.readyState)) {
       init();
@@ -1151,7 +1225,9 @@ function record<T = eventWithTime>(
         ),
       );
     }
-    return () => {
+    const stop = () => {
+      sourceSession?.beforeStop();
+      if (stopped) return;
       // set before any teardown, so a deferred-start callback that is mid-dispatch
       // bails out instead of resuming into init() once this returns
       stopped = true;
@@ -1176,8 +1252,14 @@ function record<T = eventWithTime>(
       mirror.reset();
       recording = false;
       unregisterErrorHandler();
+      sourceSession?.stop();
     };
+    if (sourceSession) registerStyleRuleSourceSession(stop, sourceSession);
+    return stop;
   } catch (error) {
+    stopped = true;
+    callAllSafely(handlers);
+    sourceSession?.stop();
     // TODO: handle internal error
     console.warn(error);
   }
@@ -1190,8 +1272,14 @@ declare namespace record {
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
   var isRecording: () => boolean;
+  var withStyleRuleSourceHandoff: (
+    stop: listenerHandler,
+    restart: (cancel: listenerHandler) => void,
+  ) => void;
   var mirror: Mirror;
 }
+
+record.withStyleRuleSourceHandoff = handoffStyleRuleSources;
 
 record.addCustomEvent = (<T>(tag: string, payload: T) => {
   if (!recording) {

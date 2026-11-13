@@ -79,15 +79,30 @@ describe('ErrorPropertiesBuilder', () => {
       })
     })
 
-    it('should use keys in objects', async () => {
+    it.each([
+      ['all keys when they fit', { foo: 'Foo value', bar: 'Bar value' }, 'bar, foo'],
+      [
+        'the longest key prefix that fits',
+        Object.fromEntries(['golf', 'alpha', 'echo', 'bravo', 'foxtrot', 'delta', 'charlie'].map((k) => [k, 1])),
+        'alpha, bravo, charlie, delta, echo',
+      ],
+      ['nothing when the first key is too long', { ['x'.repeat(41)]: 1 }, ''],
+    ])('should use %s in objects', (_case, errorObject, keys) => {
       const syntheticError = new Error()
-      const errorObject = { foo: 'Foo value', bar: 'Bar value' }
       const exception = coerceInput(errorObject, syntheticError)
       expect(exception).toMatchObject({
         type: 'Error',
-        value: 'Object captured as exception with keys: bar, foo',
+        value: `Object captured as exception with keys: ${keys}`,
         stack: syntheticError.stack,
       })
+    })
+
+    it('should summarize the keys of a very wide object quickly', () => {
+      const errorObject = Object.fromEntries(Array.from({ length: 30_000 }, (_, i) => [`k${i}`, i]))
+      const start = process.hrtime.bigint()
+      const exception = coerceInput(errorObject, new Error())
+      expect(Number(process.hrtime.bigint() - start) / 1e6).toBeLessThan(1000)
+      expect(exception.value).toBe('Object captured as exception with keys: k0, k1, k10, k100, k1000, k10000, k10001')
     })
 
     it('should handle object with an error property', () => {
