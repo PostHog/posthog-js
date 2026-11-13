@@ -96,6 +96,7 @@ import {
     safewrapClass,
 } from '@posthog/browser-common/utils/general-utils'
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
+import { applyFlagEventCapture, minimizeConfigVersion2FlagCalledProperties } from '@posthog/browser-common/flag-events'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
@@ -1931,14 +1932,12 @@ export class PostHog implements PostHogInterface {
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
         }
 
-        // A config version 2 flag event never carries some properties, and the flags extension names
-        // them for the event it is capturing. They are dropped here, after the super properties are
-        // merged, so a registered property cannot add them.
-        const flagEventCapture = this.featureFlags?.flagEventCapture?.(properties)
-        if (flagEventCapture) {
-            each(flagEventCapture.omit, (name) => {
-                delete data.properties[name]
-            })
+        // A config version 2 flag event fixes its attribution after the super properties are merged,
+        // so a registered property can neither change it nor add a field the event never carries.
+        // The flags extension says how, for the event it is capturing.
+        const flagEventOptions = this.featureFlags?.flagEventCaptureOptions?.(properties)
+        if (flagEventOptions) {
+            data.properties = applyFlagEventCapture(data.properties, flagEventOptions.flagEvent)
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2051,11 +2050,9 @@ export class PostHog implements PostHogInterface {
         if (shouldSendMinimalFlagCalledEvent) {
             // A config version 2 call also keeps its attribution. A config version 1 call keeps the
             // shared allowlist alone, even when a super property is named like the attribution.
-            data.properties = minimizeFlagCalledEventProperties(
-                data.properties,
-                flagEventCapture
-                    ? FLAG_CALLED_TRANSPORT_PROPERTY_KEYS.concat(flagEventCapture.keep)
-                    : FLAG_CALLED_TRANSPORT_PROPERTY_KEYS
+            data.properties = extend(
+                minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS),
+                flagEventOptions ? minimizeConfigVersion2FlagCalledProperties(data.properties) : {}
             )
         }
 
@@ -2096,7 +2093,7 @@ export class PostHog implements PostHogInterface {
 
         if (!isNullish(this.config.before_send)) {
             // A hook that throws is a failed capture of a flag event, not a discard.
-            const beforeSendResult = this._runBeforeSend(data, flagEventCapture?.failed)
+            const beforeSendResult = this._runBeforeSend(data, flagEventOptions?.onCaptureFailed)
             if (!beforeSendResult) {
                 return
             } else {

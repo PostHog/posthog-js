@@ -283,21 +283,21 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
                     return
                 }
                 // The calls of config version 1 flags, and of the missing flag, are stored by value as before.
-                const called = (response: unknown, ...attribution: (string | null)[]): string =>
-                    JSON.stringify([response, [], 2, ...attribution])
+                const called = (key: string, response: unknown, ...attribution: (string | null)[]): string =>
+                    JSON.stringify([key, response, [], 2, ...attribution])
                 expect(reported).toEqual({
                     ...recorded,
-                    'v2-string': [called('compact', 'targeting_match', RULE_ID, 'targeted_release', null)],
+                    'v2-string': [called('v2-string', 'compact', 'targeting_match', RULE_ID, 'targeted_release', null)],
                     'v2-split': [
-                        called('arm-b', 'experiment_split', RULE_ID, 'experiment', 'arm-b'),
-                        JSON.stringify(['$experiment_exposure', [], 2, RULE_ID, 'arm-b']),
+                        called('v2-split', 'arm-b', 'experiment_split', RULE_ID, 'experiment', 'arm-b'),
+                        '$experiment_exposure' + JSON.stringify(['v2-split', [], 2, RULE_ID, 'arm-b']),
                     ],
-                    'v2-false': [called(false, 'no_rule_match', null, null, null)],
-                    'v2-null': [called(false, 'no_rule_match', null, null, null)],
-                    'v2-number': [called(true, 'targeting_match', null, null, null)],
-                    'v2-zero': [called(true, 'targeting_match', null, null, null)],
-                    'v2-object': [called(true, 'targeting_match', null, null, null)],
-                    'v2-empty-object': [called(true, 'targeting_match', null, null, null)],
+                    'v2-false': [called('v2-false', false, 'no_rule_match', null, null, null)],
+                    'v2-null': [called('v2-null', false, 'no_rule_match', null, null, null)],
+                    'v2-number': [called('v2-number', true, 'targeting_match', null, null, null)],
+                    'v2-zero': [called('v2-zero', true, 'targeting_match', null, null, null)],
+                    'v2-object': [called('v2-object', true, 'targeting_match', null, null, null)],
+                    'v2-empty-object': [called('v2-empty-object', true, 'targeting_match', null, null, null)],
                 })
             }
         )

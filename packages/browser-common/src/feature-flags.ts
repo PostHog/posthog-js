@@ -20,6 +20,7 @@ import type {
     FeatureFlagOverrideOptions,
 } from '@posthog/types'
 import type { FeatureFlagsConfigSource } from './feature-flags-config'
+import type { ConfigVersion2FlagEvents, FlagEvent, FlagEventCapture } from './flag-events'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -307,58 +308,29 @@ export interface FlagsResponseFormat {
     /**
      * Builds the config version 2 flag events of a read from the stored record of the flag, or
      * returns `undefined` when that record is not a config version 2 record or did not supply
-     * `response`. A format without it sends `$feature_flag_called` as before.
+     * `response`. `properties` builds the properties of the read's `$feature_flag_called`. A
+     * format without it sends `$feature_flag_called` as before.
      */
     readonly flagEvents?: (params: {
         key: string
         response: string | boolean
         groups: Readonly<Record<string, string>>
-        record: FeatureFlagDetail | undefined
+        properties: () => Record<string, any>
+        detail: FeatureFlagDetail | undefined
     }) => ConfigVersion2FlagEvents | undefined
 }
 
 /**
- * How the client captures a config version 2 flag event, after its own and the super properties
- * are merged: it drops the `omit` names, so a super property cannot add a field the event never
- * carries, and a minimal `$feature_flag_called` keeps the `keep` names on top of the shared
- * allowlist.
+ * How the client captures one config version 2 flag event: the two options that posthog-node's
+ * capture takes for such an event, under the same names.
  *
  * @internal
  */
-export type FlagEventCapture = {
-    readonly omit: readonly string[]
-    readonly keep: readonly string[]
-    /** The client calls it when application code that runs during capture throws and the event is dropped. */
-    readonly failed?: () => void
-}
-
-/**
- * One flag event of a read.
- *
- * @internal
- */
-export type FlagEvent = {
-    readonly event: string
-    readonly properties: Record<string, unknown>
-    readonly capture: FlagEventCapture
-}
-
-/**
- * The config version 2 flag events of a read: `$feature_flag_called` and, for a complete
- * experiment split, `$experiment_exposure`. Each is sent once per dedupe key. `build` makes both
- * events from the properties the read's `$feature_flag_called` carries, and is called only when
- * one of them is sent.
- *
- * @internal
- */
-export type ConfigVersion2FlagEvents = {
-    readonly calledKey: string
-    /** Present only for a complete experiment split. */
-    readonly exposureKey: string | undefined
-    readonly build: (flagCalledProperties: Record<string, unknown>) => {
-        called: FlagEvent
-        exposure: FlagEvent | undefined
-    }
+export type FlagEventCaptureOptions = {
+    /** How the event fixes its properties after the super properties are merged; see `flag-events.ts`. */
+    readonly flagEvent: FlagEventCapture
+    /** Called when a `before_send` hook throws. Not called when a hook discards the event. */
+    readonly onCaptureFailed: () => void
 }
 
 const FLAGS_RESPONSE_V2: FlagsResponseFormat = { version: 2 }
@@ -428,7 +400,7 @@ export class PostHogFeatureFlags implements Extension {
     private _loggedResponseWithoutTypedValues: boolean = false
     // How the client captures each config version 2 flag event that is on its way through capture,
     // by the properties object the event was captured with.
-    private _flagEventCaptures = new WeakMap<object, FlagEventCapture>()
+    private _flagEventCaptures = new WeakMap<object, FlagEventCaptureOptions>()
     // How often the capture of each config version 2 flag event threw since the page loaded or the
     // identity changed, by flag key and dedupe key.
     private _flagEventCaptureThrows = new Map<string, number>()
@@ -1159,7 +1131,7 @@ export class PostHogFeatureFlags implements Extension {
                 }
                 // An exposure must not be reported outside the context of its read, or with a value the user did not
                 // see. Check the context for each read, because a capture listener can call identify() during this loop.
-                const calledKey = this._configVersion2FlagEvents(key, flagVariants[key])?.calledKey
+                const calledKey = this._configVersion2FlagEvents(key, flagVariants[key])?.flagCalled.dedupeKey
                 if (
                     pending.value !== String(flagVariants[key]) ||
                     // The value is the same, and the config version 2 assignment behind it is not.
@@ -1537,9 +1509,10 @@ export class PostHogFeatureFlags implements Extension {
             const flagEvents = this._configVersion2FlagEvents(key, flagValue)
             // What stands for this read's `$feature_flag_called` among the reported calls of the flag: its value,
             // or the dedupe key of a config version 2 call.
-            const reportKey = flagEvents ? flagEvents.calledKey : flagReportValue
-            const exposureKey = flagEvents?.exposureKey
-            const hold = (): void => this._holdFlagCall(key, flagReportValue, flagEvents?.calledKey)
+            const reportKey = flagEvents ? flagEvents.flagCalled.dedupeKey : flagReportValue
+            // The reported calls hold both kinds of key, so the exposure's key is stored under its event name.
+            const exposureKey = flagEvents?.exposure && flagEvents.exposure.event + flagEvents.exposure.dedupeKey
+            const hold = (): void => this._holdFlagCall(key, flagReportValue, flagEvents?.flagCalled.dedupeKey)
             if (canCapture) {
                 this._flagCallsPendingCapture.delete(key)
             } else {
@@ -1571,18 +1544,15 @@ export class PostHogFeatureFlags implements Extension {
                         [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist,
                     })
                 }
-                const events = flagEvents.build(
-                    this._flagCalledProperties(key, flagValue, payload, requestId, evaluatedAt)
-                )
                 const context = this._flagCallContext()
                 // Each event is attempted on its own, so a failed capture of one does not stop the other.
                 if (callIsNew) {
-                    this._captureFlagEventOnce(key, reportKey, events.called, hold)
+                    this._captureFlagEventOnce(key, reportKey, flagEvents.flagCalled, hold)
                 }
                 // Application code that runs while the call is captured can change who reads the flag. The
                 // exposure belongs to the read's own context, like a read that is held.
-                if (exposureIsNew && events.exposure && isSameFlagCallContext(context, this._flagCallContext())) {
-                    this._captureFlagEventOnce(key, exposureKey, events.exposure, hold)
+                if (exposureIsNew && flagEvents.exposure && isSameFlagCallContext(context, this._flagCallContext())) {
+                    this._captureFlagEventOnce(key, exposureKey, flagEvents.exposure, hold)
                 }
             } else if (canCapture && callIsNew) {
                 if (isArray(flagCallReported[key])) {
@@ -1713,7 +1683,15 @@ export class PostHogFeatureFlags implements Extension {
             key,
             response: flagValue,
             groups: this._client?.groups ?? {},
-            record: this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key],
+            properties: () =>
+                this._flagCalledProperties(
+                    key,
+                    flagValue,
+                    this.getFlagPayloads()[key],
+                    this._prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined,
+                    this._prop(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
+                ),
+            detail: this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key],
         })
     }
 
@@ -1742,8 +1720,8 @@ export class PostHogFeatureFlags implements Extension {
         this._set({ [FLAG_CALL_REPORTED]: { ...reported, [key]: [...(reported[key] || []), dedupeKey] } })
         let threw = false
         this._flagEventCaptures.set(flagEvent.properties, {
-            ...flagEvent.capture,
-            failed: () => {
+            flagEvent: flagEvent.capture,
+            onCaptureFailed: () => {
                 threw = true
             },
         })
@@ -1773,7 +1751,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * @internal
      */
-    flagEventCapture(properties: object | null | undefined): FlagEventCapture | undefined {
+    flagEventCaptureOptions(properties: object | null | undefined): FlagEventCaptureOptions | undefined {
         return properties ? this._flagEventCaptures.get(properties) : undefined
     }
 

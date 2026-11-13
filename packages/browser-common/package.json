@@ -45,6 +45,9 @@
             "feature-flags-config": [
                 "dist/feature-flags-config.d.ts"
             ],
+            "flag-events": [
+                "dist/flag-events.d.ts"
+            ],
             "flags-response-v4": [
                 "dist/flags-response-v4.d.ts"
             ],
@@ -149,6 +152,11 @@
             "types": "./dist/feature-flags-config.d.ts",
             "require": "./dist/feature-flags-config.js",
             "import": "./dist/feature-flags-config.mjs"
+        },
+        "./flag-events": {
+            "types": "./dist/flag-events.d.ts",
+            "require": "./dist/flag-events.js",
+            "import": "./dist/flag-events.mjs"
         },
         "./flags-response-v4": {
             "types": "./dist/flags-response-v4.d.ts",

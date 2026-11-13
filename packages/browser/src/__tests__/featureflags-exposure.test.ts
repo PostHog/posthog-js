@@ -177,8 +177,8 @@ describe('config version 2 flag events in posthog-js', () => {
 
         expect(client.reported()).toEqual({
             [FLAG]: [
-                JSON.stringify(['annual', [], 2, 'experiment_split', RULE, 'experiment', 'annual-first']),
-                JSON.stringify(['$experiment_exposure', [], 2, RULE, 'annual-first']),
+                JSON.stringify([FLAG, 'annual', [], 2, 'experiment_split', RULE, 'experiment', 'annual-first']),
+                EXPOSURE + JSON.stringify([FLAG, [], 2, RULE, 'annual-first']),
             ],
         })
 
@@ -403,7 +403,7 @@ describe('config version 2 flag events in posthog-js', () => {
             // The exposure was dropped, so its key is not kept.
             expect(flagEventNames(client.events)).toEqual([FLAG_CALLED])
             expect(client.reported()[FLAG] ?? []).not.toContain(
-                JSON.stringify(['$experiment_exposure', [], 2, RULE, 'annual-first'])
+                EXPOSURE + JSON.stringify([FLAG, [], 2, RULE, 'annual-first'])
             )
 
             client.posthog.opt_in_capturing({ captureEventName: false })
