@@ -1,4 +1,9 @@
-import { isPlainObject, type JsonType, type PostHogEventProperties } from '@posthog/core'
+import {
+  EVENT_OPTION_LEGACY_PROPERTIES,
+  isPlainObject,
+  type JsonType,
+  type PostHogEventProperties,
+} from '@posthog/core'
 
 /** Properties that a default fills one level deep when the event's value and the default are both objects. */
 const NESTED_FILL_PROPERTIES: ReadonlySet<string> = new Set(['$set', '$set_once', '$groups', '$group_set'])
@@ -88,6 +93,53 @@ export function fillOptions(options: Record<string, JsonType>, layers: readonly 
         options[key] = value as JsonType
       }
     }
+  }
+}
+
+/** Events that create or change a person or group, so a personless default would lose them. */
+const IDENTIFY_STYLE_EVENTS: ReadonlySet<string> = new Set([
+  '$identify',
+  '$create_alias',
+  '$merge_dangerously',
+  '$groupidentify',
+  '$set',
+  '$set_once',
+])
+
+/**
+ * Set `process_person_profile` on an identify-style event from the call alone, so no layered
+ * `false` makes it personless: the call's option, else its legacy `$process_person_profile`, else
+ * `true` unless the distinct id is SDK-generated. Read `callerLegacyValue` before any layer fills
+ * properties, since a filled value looks like the caller's.
+ */
+export function fillIdentifyStylePersonProfile(
+  event: string,
+  options: Record<string, JsonType>,
+  callerLegacyValue: JsonType | undefined,
+  hasDistinctId: boolean
+): void {
+  if (!IDENTIFY_STYLE_EVENTS.has(event) || !isUnsetOption(options, 'process_person_profile')) {
+    return
+  }
+  if (callerLegacyValue !== undefined && callerLegacyValue !== null) {
+    options.process_person_profile = callerLegacyValue
+  } else if (hasDistinctId) {
+    options.process_person_profile = true
+  }
+}
+
+/**
+ * Remove `$process_person_profile` from an identify-style event whose option is set, after every
+ * fill. The option already wins when the event is sent, and a `before_send` hook that drops
+ * `options` must not bring back a layered `false`.
+ */
+export function dropIdentifyStyleLegacyPersonProfile(
+  event: string,
+  options: Record<string, JsonType>,
+  properties: PostHogEventProperties
+): void {
+  if (IDENTIFY_STYLE_EVENTS.has(event) && !isUnsetOption(options, 'process_person_profile')) {
+    delete properties[EVENT_OPTION_LEGACY_PROPERTIES.process_person_profile]
   }
 }
 

@@ -52,7 +52,12 @@ describe('per-event capture options', () => {
       future_option: { nested: 'no' },
     }
 
-    it.each<[string, (client: PostHog, options: Record<string, JsonType>) => unknown, string]>([
+    // Identify-style emitters also get the person default, since OPTIONS leaves it unset.
+    const PERSON = { process_person_profile: true }
+
+    it.each<
+      [string, (client: PostHog, options: Record<string, JsonType>) => unknown, string, Record<string, JsonType>?]
+    >([
       ['capture', (c, options) => c.capture({ distinctId: 'u', event: 'e', options }), ANALYTICS_CAPTURE_PATH],
       [
         'captureImmediate',
@@ -69,42 +74,49 @@ describe('per-event capture options', () => {
         'identify',
         (c, options) => c.identify({ distinctId: 'u', properties: { a: 1 }, options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
       [
         'identifyImmediate',
         (c, options) => c.identifyImmediate({ distinctId: 'u', properties: { a: 1 }, options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
-      ['alias', (c, options) => c.alias({ distinctId: 'u', alias: 'anon', options }), ANALYTICS_CAPTURE_PATH],
+      ['alias', (c, options) => c.alias({ distinctId: 'u', alias: 'anon', options }), ANALYTICS_CAPTURE_PATH, PERSON],
       [
         'aliasImmediate',
         (c, options) => c.aliasImmediate({ distinctId: 'u', alias: 'anon', options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
       [
         'groupIdentify',
         (c, options) => c.groupIdentify({ groupType: 'company', groupKey: 'acme', options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
       [
         'groupIdentifyImmediate',
         (c, options) => c.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme', options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
       [
         'setPersonProperties',
         (c, options) => c.setPersonProperties({ distinctId: 'u', properties: { plan: 'pro' }, options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
       [
         'unsetPersonProperties',
         (c, options) => c.unsetPersonProperties({ distinctId: 'u', properties: ['plan'], options }),
         ANALYTICS_CAPTURE_PATH,
+        PERSON,
       ],
-    ])('%s', async (_method, send, path) => {
+    ])('%s', async (_method, send, path, added = {}) => {
       const event = await sendOne((client) => send(client, OPTIONS), undefined, path)
 
-      expect(event.options).toStrictEqual(OPTIONS)
+      expect(event.options).toStrictEqual({ ...OPTIONS, ...added })
     })
   })
 
@@ -192,6 +204,397 @@ describe('per-event capture options', () => {
       const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }))
 
       expect(event.options).toStrictEqual({})
+    })
+  })
+
+  describe('identify-style events', () => {
+    const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    const IDENTIFY_STYLE_EVENTS = [
+      '$identify',
+      '$create_alias',
+      '$merge_dangerously',
+      '$groupidentify',
+      '$set',
+      '$set_once',
+    ]
+
+    /** The call's own options and properties; dedicated methods take only options. */
+    type Call = { distinctId?: string; options?: Record<string, JsonType>; properties?: Record<string, JsonType> }
+    type Emitter = [string, (client: PostHog, call: Call) => unknown, string]
+
+    /** Every layer that can carry `process_person_profile`, as an option or as the legacy property. */
+    type Layers = {
+      registerOptions?: Record<string, JsonType>
+      register?: Record<string, JsonType>
+      contextOptions?: Record<string, JsonType>
+      contextProperties?: Record<string, JsonType>
+      contextDistinctId?: string
+    }
+
+    const DEDICATED_EMITTERS: Emitter[] = [
+      ['identify', (c, { distinctId = 'u', options }) => c.identify({ distinctId, properties: { a: 1 }, options })],
+      [
+        'identifyImmediate',
+        (c, { distinctId = 'u', options }) => c.identifyImmediate({ distinctId, properties: { a: 1 }, options }),
+      ],
+      ['alias', (c, { distinctId = 'u', options }) => c.alias({ distinctId, alias: 'anon', options })],
+      [
+        'aliasImmediate',
+        (c, { distinctId = 'u', options }) => c.aliasImmediate({ distinctId, alias: 'anon', options }),
+      ],
+      [
+        'groupIdentify',
+        (c, { distinctId, options }) =>
+          c.groupIdentify({ groupType: 'company', groupKey: 'acme', distinctId, options }),
+      ],
+      [
+        'groupIdentifyImmediate',
+        (c, { distinctId, options }) =>
+          c.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme', distinctId, options }),
+      ],
+      [
+        'setPersonProperties',
+        (c, { distinctId = 'u', options }) =>
+          c.setPersonProperties({ distinctId, properties: { plan: 'pro' }, options }),
+      ],
+      [
+        'unsetPersonProperties',
+        (c, { distinctId = 'u', options }) => c.unsetPersonProperties({ distinctId, properties: ['plan'], options }),
+      ],
+    ].map(([name, send]) => [name, send, ANALYTICS_CAPTURE_PATH] as Emitter)
+
+    /** Generic capture calls, which also take the legacy `$process_person_profile` property. */
+    const PROPERTY_EMITTERS: Emitter[] = [
+      ...IDENTIFY_STYLE_EVENTS.flatMap((event): Emitter[] => [
+        [`capture ${event}`, (c, call) => c.capture({ distinctId: 'u', ...call, event }), ANALYTICS_CAPTURE_PATH],
+        [
+          `captureImmediate ${event}`,
+          (c, call) => c.captureImmediate({ distinctId: 'u', ...call, event }),
+          ANALYTICS_CAPTURE_PATH,
+        ],
+      ]),
+      [
+        'captureAi $identify',
+        (c, call) => c.captureAi({ distinctId: 'u', ...call, event: '$identify' }),
+        AI_CAPTURE_PATH,
+      ],
+      [
+        'captureAiImmediate $identify',
+        (c, call) => c.captureAiImmediate({ distinctId: 'u', ...call, event: '$identify' }),
+        AI_CAPTURE_PATH,
+      ],
+    ]
+
+    const EMITTERS: Emitter[] = [...DEDICATED_EMITTERS, ...PROPERTY_EMITTERS]
+
+    const LAYERED_FALSE: Layers = {
+      registerOptions: { process_person_profile: false },
+      register: { $process_person_profile: false },
+      contextOptions: { process_person_profile: false },
+      contextProperties: { $process_person_profile: false },
+    }
+    const LAYERED_TRUE: Layers = {
+      registerOptions: { process_person_profile: true },
+      register: { $process_person_profile: true },
+      contextOptions: { process_person_profile: true },
+      contextProperties: { $process_person_profile: true },
+    }
+
+    /** Sends one call under `layers` and returns the wire event plus what `before_send` saw. */
+    const sendWithLayers = async (
+      send: (client: PostHog) => unknown,
+      layers: Layers,
+      path: string,
+      hook: (message: EventMessage) => EventMessage = (message) => message
+    ): Promise<{ event: any; hookSaw: EventMessage }> => {
+      const seen: EventMessage[] = []
+      const event = await sendOne(
+        async (client) => {
+          if (layers.registerOptions) {
+            await client.registerOptions(layers.registerOptions)
+          }
+          if (layers.register) {
+            await client.register(layers.register)
+          }
+          const context = {
+            distinctId: layers.contextDistinctId,
+            options: layers.contextOptions,
+            properties: layers.contextProperties,
+          }
+          return client.withContext(context, () => send(client))
+        },
+        {
+          before_send: (message) => {
+            seen.push(structuredClone(message!))
+            return hook(message!)
+          },
+        },
+        path
+      )
+      expect(seen).toHaveLength(1)
+      return { event, hookSaw: seen[0] }
+    }
+
+    describe.each(EMITTERS)('%s', (_name, emit, path) => {
+      it.each<[string, Call, Layers, JsonType]>([
+        ['defaults to true with no call value and no layer', {}, {}, true],
+        ['defaults to true over every layered false', {}, LAYERED_FALSE, true],
+        [
+          'defaults to true over a layered false option alone',
+          {},
+          { registerOptions: { process_person_profile: false } },
+          true,
+        ],
+        [
+          'defaults to true over a context false option alone',
+          {},
+          { contextOptions: { process_person_profile: false } },
+          true,
+        ],
+        [
+          'defaults to true over a register() false property alone',
+          {},
+          { register: { $process_person_profile: false } },
+          true,
+        ],
+        [
+          'defaults to true over a context false property alone',
+          {},
+          { contextProperties: { $process_person_profile: false } },
+          true,
+        ],
+        [
+          'keeps a call option false over every layered true',
+          { options: { process_person_profile: false } },
+          LAYERED_TRUE,
+          false,
+        ],
+        [
+          'keeps a call option true over every layered false',
+          { options: { process_person_profile: true } },
+          LAYERED_FALSE,
+          true,
+        ],
+        ['treats a null call option as unset', { options: { process_person_profile: null } }, LAYERED_FALSE, true],
+        [
+          'defaults to true with a context distinct id',
+          { distinctId: '' },
+          { ...LAYERED_FALSE, contextDistinctId: 'ctx' },
+          true,
+        ],
+      ])('%s', async (_label, call, layers, expected) => {
+        const { event, hookSaw } = await sendWithLayers((client) => emit(client, call), layers, path)
+
+        expect(hookSaw.options!.process_person_profile).toBe(expected)
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+        expect(event.options.process_person_profile).toBe(expected)
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+    })
+
+    describe.each(PROPERTY_EMITTERS)('%s with the legacy property', (_name, emit, path) => {
+      it.each<[string, Call, Layers, JsonType]>([
+        [
+          'a call false moves into the option, over every layered true',
+          { properties: { $process_person_profile: false } },
+          LAYERED_TRUE,
+          false,
+        ],
+        [
+          'a call false moves into the option with no layer',
+          { properties: { $process_person_profile: false } },
+          {},
+          false,
+        ],
+        [
+          'a call true moves into the option, over every layered false',
+          { properties: { $process_person_profile: true } },
+          LAYERED_FALSE,
+          true,
+        ],
+        [
+          'a non-boolean call value moves into the option as is',
+          { properties: { $process_person_profile: 'yes' } },
+          {},
+          'yes',
+        ],
+      ])('%s', async (_label, call, layers, expected) => {
+        const { event, hookSaw } = await sendWithLayers((client) => emit(client, call), layers, path)
+
+        expect(hookSaw.options!.process_person_profile).toBe(expected)
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+        expect(event.options.process_person_profile).toBe(expected)
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+
+      it('a call option beats the call legacy property, which is removed before before_send', async () => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) =>
+            emit(client, { options: { process_person_profile: false }, properties: { $process_person_profile: true } }),
+          {},
+          path
+        )
+
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+        expect(event.options.process_person_profile).toBe(false)
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+
+      it('treats a null call property as unset, and removes it before before_send', async () => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => emit(client, { properties: { $process_person_profile: null } }),
+          LAYERED_FALSE,
+          path
+        )
+
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+        expect(hookSaw.options!.process_person_profile).toBe(true)
+        expect(event.options.process_person_profile).toBe(true)
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+    })
+
+    describe('a layered legacy false', () => {
+      const LAYERED_LEGACY_FALSE: [string, Layers][] = [
+        ['register()', { register: { $process_person_profile: false } }],
+        ['context', { contextProperties: { $process_person_profile: false } }],
+      ]
+      const dropOptions = ({ options: _options, ...message }: EventMessage): EventMessage => message
+
+      it.each(LAYERED_LEGACY_FALSE)(
+        'from %s is removed before before_send sees the option',
+        async (_source, layers) => {
+          const { event, hookSaw } = await sendWithLayers(
+            (client) => client.identify({ distinctId: 'u' }),
+            layers,
+            ANALYTICS_CAPTURE_PATH
+          )
+
+          expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+          expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+          expect(event.options).toStrictEqual({ process_person_profile: true })
+          expect(event.properties).not.toHaveProperty('$process_person_profile')
+        }
+      )
+
+      it.each(LAYERED_LEGACY_FALSE)(
+        'from %s is not sent when before_send drops the options',
+        async (_source, layers) => {
+          const { event } = await sendWithLayers(
+            (client) => client.identify({ distinctId: 'u' }),
+            layers,
+            ANALYTICS_CAPTURE_PATH,
+            dropOptions
+          )
+
+          expect(event.options).toStrictEqual({})
+          expect(event.properties).not.toHaveProperty('$process_person_profile')
+        }
+      )
+
+      it.each(LAYERED_LEGACY_FALSE)('from %s stays on other events and is sent', async (_source, layers) => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+          layers,
+          ANALYTICS_CAPTURE_PATH,
+          dropOptions
+        )
+
+        expect(hookSaw.properties!.$process_person_profile).toBe(false)
+        expect(event.options).toStrictEqual({ process_person_profile: false })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+      it('stays on other events whose option is set, and the option is sent', async () => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+          { registerOptions: { process_person_profile: true }, register: { $process_person_profile: false } },
+          ANALYTICS_CAPTURE_PATH
+        )
+
+        expect(hookSaw.properties!.$process_person_profile).toBe(false)
+        expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+        expect(event.options).toStrictEqual({ process_person_profile: true })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+    })
+
+    describe('an SDK-generated distinct id', () => {
+      it.each<[string, (client: PostHog) => unknown, string]>([
+        ['identify', (c) => c.identify({ distinctId: '' }), ANALYTICS_CAPTURE_PATH],
+        ['alias', (c) => c.alias({ distinctId: ' ', alias: 'anon' }), ANALYTICS_CAPTURE_PATH],
+        [
+          'setPersonProperties',
+          (c) => c.setPersonProperties({ distinctId: undefined as unknown as string, properties: { plan: 'pro' } }),
+          ANALYTICS_CAPTURE_PATH,
+        ],
+        ...IDENTIFY_STYLE_EVENTS.map((event): [string, (client: PostHog) => unknown, string] => [
+          `capture ${event}`,
+          (c) => c.capture({ event }),
+          ANALYTICS_CAPTURE_PATH,
+        ]),
+        ['captureAi $identify', (c) => c.captureAi({ event: '$identify' }), AI_CAPTURE_PATH],
+      ])('keeps the personless false on %s', async (_name, send, path) => {
+        const event = await sendOne(send, undefined, path)
+
+        expect(event.distinct_id).toMatch(UUID_V7)
+        expect(event.options).toStrictEqual({ process_person_profile: false })
+      })
+
+      it.each([true, false])('takes a call legacy %s, which beats the personless default', async (value) => {
+        const event = await sendOne((client) =>
+          client.capture({ event: '$identify', properties: { $process_person_profile: value } })
+        )
+
+        expect(event.distinct_id).toMatch(UUID_V7)
+        expect(event.options).toStrictEqual({ process_person_profile: value })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
+    })
+
+    it('before_send sees true and can set false, which is sent', async () => {
+      const { event, hookSaw } = await sendWithLayers(
+        (client) => client.identify({ distinctId: 'u' }),
+        {},
+        ANALYTICS_CAPTURE_PATH,
+        (message) => ({ ...message, options: { ...message.options, process_person_profile: false } })
+      )
+
+      expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+    })
+
+    it.each<[string, Layers]>([
+      ['option', { registerOptions: { process_person_profile: false } }],
+      ['property', { register: { $process_person_profile: false } }],
+    ])('leaves a layered false %s on other events', async (_label, layers) => {
+      const { event } = await sendWithLayers(
+        (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+        layers,
+        ANALYTICS_CAPTURE_PATH
+      )
+
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+    })
+
+    it('gives no default to an event before_send renames to $identify', async () => {
+      const { event } = await sendWithLayers(
+        (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
+        { registerOptions: { process_person_profile: false } },
+        ANALYTICS_CAPTURE_PATH,
+        (message) => ({ ...message, event: '$identify' })
+      )
+
+      expect(event.event).toBe('$identify')
+      expect(event.options).toStrictEqual({ process_person_profile: false })
+    })
+
+    it('prepareEventMessage returns the default', async () => {
+      const client = makeClient()
+      await client.registerOptions({ process_person_profile: false })
+
+      const message = await client.prepareEventMessage({ distinctId: 'u', event: '$identify' })
+
+      expect(message.options).toStrictEqual({ process_person_profile: true })
     })
   })
 

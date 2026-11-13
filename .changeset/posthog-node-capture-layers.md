@@ -2,7 +2,7 @@
 'posthog-node': major
 ---
 
-Values set on the event, in context or with `register()` / the new `registerOptions()` now win over the values the SDK adds (`$is_server`, `$geoip_disable`, feature flag properties, trace ids), and `before_send` sees and can change all of them; context and registered properties and options, including the new context `options`, also reach identify, alias and group identify events.
+Values set on the event, in context or with `register()` / the new `registerOptions()` now win over the values the SDK adds (`$is_server`, `$geoip_disable`, feature flag properties, trace ids), and `before_send` sees and can change all of them; context and registered properties and options, including the new context `options`, also reach identify, alias and group identify events, but they do not set `process_person_profile` on `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events whose distinct id the SDK did not generate, which default to `true` unless the call sets it.
 An empty or whitespace distinct id counts as missing, and `$groupidentify` without a distinct id uses the context id, then `$<type>_<key>`.
 `$geoip_disable` and `$groups` are filled before `before_send`, so a hook that changes the message's `disableGeoip` or `groups` field has no effect: edit the properties instead.
 Reserved exception properties such as `$exception_level` passed in `captureException()` properties are now ignored, so the SDK's value is sent.
