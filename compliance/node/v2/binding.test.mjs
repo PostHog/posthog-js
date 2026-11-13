@@ -20,6 +20,7 @@ async function spies(run, captureMode = 'v0') {
         alias: undefined,
         groupIdentify: undefined,
         captureException: undefined,
+        optOut: undefined,
         flush: undefined,
         getFeatureFlag: undefined,
         reloadFeatureFlags: undefined,
@@ -241,6 +242,11 @@ test('captureException constructs a native fixture and preserves positional argu
                 [{ error, distinct_id: 'user', properties }, ['user', properties]],
                 [{ error, properties }, [undefined, properties]],
                 [{ error, distinct_id: null, properties: null }, [null, null]],
+                [{ error, uuid: 'test-uuid' }, [undefined, undefined, 'test-uuid']],
+                [{ error, uuid: null }, [undefined, undefined, null]],
+                [{ error, flags: null }, [undefined, undefined, undefined, null]],
+                [{ error, flags: { key: true } }, [undefined, undefined, undefined, { key: true }]],
+                [{ error, distinct_id: '', properties: {}, uuid: null, flags: false }, ['', {}, null, false]],
             ]) {
                 const before = structuredClone(args)
                 assert.deepEqual(await binding.invoke('/capture_exception', args), {
@@ -272,6 +278,80 @@ test('captureException constructs a native fixture and preserves positional argu
     }
 })
 
+test('exception guard setup preserves an explicitly disabled or enabled SDK', async () => {
+    for (const disabled of [false, true]) {
+        await spies(async (binding, calls) => {
+            assert.deepEqual(
+                await binding.invoke('/setup', {
+                    project_token: 'test-token',
+                    config: { disabled, flush_interval_ms: 0 },
+                }),
+                { kind: 'sdk', outcome: { kind: 'void' } }
+            )
+            assert.deepEqual(calls, [['constructor', ['test-token', { disabled, flushInterval: 0 }]]])
+        })
+    }
+})
+
+test('optOut calls the public method without implicit capture or flush', async () => {
+    await spies(async (binding, calls, results) => {
+        await setup(binding)
+        assert.deepEqual(await binding.invoke('/opt_out', {}), { kind: 'sdk', outcome: { kind: 'void' } })
+        assert.deepEqual(calls.at(-1), ['optOut', []])
+        results.optOut = new Error('opt-out failure')
+        assert.equal((await binding.invoke('/opt_out', {})).outcome.kind, 'thrown')
+        assert.equal(calls.filter(([name]) => name === 'flush').length, 0)
+    })
+})
+
+test('captureException preserves native causes, aggregate members, supplied stacks and raw JSON inputs', async () => {
+    await spies(async (binding, calls) => {
+        await setup(binding)
+        const stack = 'TypeError: boom\n    at original (/fixture.js:40:2)'
+        const descriptor = {
+            type: 'AggregateError',
+            message: 'group',
+            cause: { type: 'Error', message: 'root' },
+            errors: [{ type: 'TypeError', message: 'boom', stack }],
+        }
+        assert.equal((await binding.invoke('/capture_exception', { error: descriptor })).kind, 'sdk')
+        const error = calls.at(-1)[1][0]
+        assert.ok(error instanceof AggregateError)
+        assert.ok(error.cause instanceof Error)
+        assert.equal(error.cause.message, 'root')
+        assert.ok(error.errors[0] instanceof TypeError)
+        assert.equal(error.errors[0].stack, stack)
+        const recursive = {
+            type: 'Error',
+            message: 'wrapper',
+            cause: {
+                type: 'AggregateError',
+                message: 'members',
+                errors: [
+                    { type: 'RangeError', message: 'range', cause: { value: null } },
+                    { value: 0 },
+                    { value: false },
+                ],
+            },
+        }
+        const before = structuredClone(recursive)
+        assert.equal((await binding.invoke('/capture_exception', { error: recursive })).kind, 'sdk')
+        const wrapper = calls.at(-1)[1][0]
+        assert.ok(wrapper instanceof Error)
+        assert.ok(wrapper.cause instanceof AggregateError)
+        assert.ok(wrapper.cause.errors[0] instanceof RangeError)
+        assert.equal(wrapper.cause.errors[0].cause, null)
+        assert.deepEqual(wrapper.cause.errors.slice(1), [0, false])
+        assert.deepEqual(recursive, before)
+        for (const value of ['thrown string', 0, false, null, { name: 'CustomError', message: 'object', stack }]) {
+            const before = structuredClone(value)
+            assert.equal((await binding.invoke('/capture_exception', { error: { value } })).kind, 'sdk')
+            assert.deepEqual(calls.at(-1)[1], [value])
+            assert.deepEqual(value, before)
+        }
+    })
+})
+
 test('captureException reports unsupported or unrepresentable fixture arguments without invoking the SDK', async () => {
     await spies(async (binding, calls) => {
         await setup(binding)
@@ -280,8 +360,14 @@ test('captureException reports unsupported or unrepresentable fixture arguments 
             null,
             false,
             {},
-            { type: 'Error', message: 'boom' },
+            { type: 'UnknownError', message: 'boom' },
+            { type: ['Error'], message: 'boom' },
+            { type: { toString: null }, message: 'boom' },
             { type: 'TypeError', message: 0 },
+            { type: 'Error', message: 'boom', stack: null },
+            { type: 'Error', message: 'boom', cause: {} },
+            { type: 'Error', message: 'boom', errors: [] },
+            { type: 'AggregateError', message: 'boom' },
         ]) {
             const completion = await binding.invoke('/capture_exception', { error })
             assert.equal(completion.kind, 'harness')
@@ -289,8 +375,9 @@ test('captureException reports unsupported or unrepresentable fixture arguments 
             assert.equal(completion.failure.code, 'exception-fixture')
         }
         for (const args of [
-            { error: { type: 'TypeError', message: 'boom', stack: 'invented' } },
-            { error: { type: 'TypeError', message: 'boom' }, uuid: 'unsupported' },
+            { error: { type: 'TypeError', message: 'boom', frames: [] } },
+            { error: { type: 'TypeError', message: 'boom' }, unexpected: 'unsupported' },
+            { error: { value: null, type: 'Error' } },
         ]) {
             const completion = await binding.invoke('/capture_exception', args)
             assert.equal(completion.failure.kind, 'unsupported_binding')
