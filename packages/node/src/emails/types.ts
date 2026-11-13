@@ -323,11 +323,11 @@ export interface Emails {
    * which means the email is going out. Moves of one email from this client run one after another,
    * in call order.
    *
-   * A move that got no answer, such as on a timeout, may still reach PostHog later. So from then
-   * on, this client refuses to move that email to another time, with the error code
-   * `move_unconfirmed` and without a request; a move to the same time still goes out. To move it,
-   * cancel the email, which a late move can't undo, and send it again. Moves from another client
-   * aren't ordered with this client's.
+   * A move that got no clear answer, such as a timeout or a server error, may still reach PostHog
+   * later. So from then on, this client refuses to move that email to another time, with the error
+   * code `move_unconfirmed` and without a request; a move to the same time still goes out. To move
+   * it, cancel the email, which a late move can't undo, and send it again. Moves from another
+   * client aren't ordered with this client's.
    */
   update(options: UpdateEmailOptions): Promise<UpdateEmailResponse>
 

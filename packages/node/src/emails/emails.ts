@@ -142,6 +142,8 @@ interface PreparedMove {
   url: string
   headers: Record<string, string>
   body: string
+  /** The new time as an instant, so two spellings of one time compare equal. */
+  instant: string
 }
 
 interface Reply {
@@ -161,8 +163,8 @@ export class EmailSender implements Emails {
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
-  /** The body of a move that got no answer, by email: PostHog may still apply it at any later time. */
-  private readonly unansweredMoveByEmail = new Map<string, string>()
+  /** The time of a move without a clear answer, by email: PostHog may still apply it at any later time. */
+  private readonly unconfirmedMoveByEmail = new Map<string, string>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -272,7 +274,8 @@ export class EmailSender implements Emails {
   private prepareMove(options: UpdateEmailOptions): PreparedMove {
     const update: { [Field in keyof UpdateEmailOptions]?: unknown } = options ?? {}
     const messageId = messageIdOf(update.id)
-    const body = safeJsonStringify({ scheduled_at: scheduledTime(update.scheduledAt, 'Nothing was changed.') })
+    const time = scheduledTime(update.scheduledAt, 'Nothing was changed.')
+    const body = safeJsonStringify({ scheduled_at: time })
     const otherChange = Object.entries(update).find(
       ([name, value]) => value !== undefined && name !== 'id' && name !== 'scheduledAt'
     )?.[0]
@@ -293,19 +296,20 @@ export class EmailSender implements Emails {
       url: appHost + STATUS_PATH.replace('{messageId}', messageId),
       headers: this.headers(secretKey, { 'Content-Type': 'application/json' }),
       body,
+      instant: instantOf(time),
     }
   }
 
-  private async sendMove({ messageId, url, headers, body }: PreparedMove): Promise<UpdateEmailResponse> {
-    const unanswered = this.unansweredMoveByEmail.get(messageId)
-    if (unanswered !== undefined && unanswered !== body) {
+  private async sendMove({ messageId, url, headers, body, instant }: PreparedMove): Promise<UpdateEmailResponse> {
+    const unconfirmed = this.unconfirmedMoveByEmail.get(messageId)
+    if (unconfirmed !== undefined && unconfirmed !== instant) {
       // The late move would undo this one, and only the server could order the two.
       return {
         data: null,
         error: new EmailError({
           code: 'move_unconfirmed',
           message:
-            'An earlier move of this email to another time got no answer, so PostHog may still apply it after this one. Nothing was changed.',
+            'An earlier move of this email to another time got no clear answer, so PostHog may still apply it after this one. Nothing was changed.',
           fix: "To move the email, cancel it, which a late move can't undo, and send it again at the new time.",
         }),
       }
@@ -316,8 +320,12 @@ export class EmailSender implements Emails {
         try {
           reply = await this.request(url, 'PATCH', headers, body)
         } catch (error) {
-          this.unansweredMoveByEmail.set(messageId, body)
+          this.unconfirmedMoveByEmail.set(messageId, instant)
           throw error
+        }
+        if (reply.status >= 500) {
+          // A gateway answers 5xx when it gives up, and PostHog behind it may still apply the move.
+          this.unconfirmedMoveByEmail.set(messageId, instant)
         }
         return parseUpdateReply(reply)
       })
@@ -563,6 +571,12 @@ function scheduledTime(value: unknown, nothingDone: string): string {
     field: 'scheduledAt',
     fix: 'Pass a Date, or add an offset such as Z or +02:00 to the time.',
   })
+}
+
+/** The instant a valid scheduled time names, to the digit: Date keeps milliseconds, PostHog keeps microseconds. */
+function instantOf(time: string): string {
+  const subMillisecond = (/\.\d{3}(\d+)/.exec(time)?.[1] ?? '').replace(/0+$/, '')
+  return `${Date.parse(time)}${subMillisecond ? `.${subMillisecond}` : ''}`
 }
 
 function isCalendarDate(isoDate: string): boolean {

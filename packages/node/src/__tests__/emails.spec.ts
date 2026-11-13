@@ -1013,7 +1013,7 @@ describe('emails', () => {
 
     it('runs a second move of the same email after the first move and its retries', async () => {
       replies = [
-        rejected(503),
+        rejected(429, 'throttled'),
         moved({ scheduled_at: '2026-12-02T09:00:00Z' }),
         moved({ scheduled_at: '2026-12-03T09:00:00Z' }),
       ]
@@ -1073,14 +1073,50 @@ describe('emails', () => {
         expect(fetch).toHaveBeenCalledTimes(1)
       })
 
-      it('sends a move to the same time, which the late move cannot undo', async () => {
+      it.each([
+        ['the same text', FIRST_TIME],
+        ['a Date', new Date(FIRST_TIME)],
+        ['another offset', '2026-12-02T10:00:00.000+01:00'],
+      ])('sends a move to the same time as %s, which the late move cannot undo', async (_name, sameTime) => {
         await moveWithoutAnswer()
 
-        const { data } = await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        const { data, error } = await update({ id: MESSAGE_ID, scheduledAt: sameTime })
         reachPostHogLate()
 
-        expect(data?.scheduledAt).toBe(FIRST_TIME)
-        expect(timeAtPostHog).toBe(FIRST_TIME)
+        expect(error).toBeNull()
+        expect(Date.parse(data!.scheduledAt)).toBe(Date.parse(FIRST_TIME))
+        expect(Date.parse(timeAtPostHog)).toBe(Date.parse(FIRST_TIME))
+      })
+
+      it('refuses a move to a time a microsecond away', async () => {
+        await moveWithoutAnswer()
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00.000001Z' })
+
+        expect(error?.code).toBe('move_unconfirmed')
+      })
+
+      it.each([500, 502, 503, 504])(
+        'refuses a move to another time after a %s, which a gateway can answer while PostHog still applies the move',
+        async (status) => {
+          fetch.mockImplementationOnce(async () => fakeReply(status, null))
+          const first = await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          expect(first.error?.statusCode).toBe(status)
+
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error?.code).toBe('move_unconfirmed')
+          expect(fetch).toHaveBeenCalledTimes(1)
+        }
+      )
+
+      it('sends a move to another time after PostHog refused the earlier move', async () => {
+        fetch.mockImplementationOnce(async () => fakeReply(400, { code: 'invalid_scheduled_at', detail: 'Nope.' }))
+        expect((await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })).error?.statusCode).toBe(400)
+
+        const { data } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(data?.scheduledAt).toBe(OTHER_TIME)
       })
 
       it('refuses a move to another time queued behind the move that got no answer', async () => {
@@ -1403,7 +1439,7 @@ describe('emails', () => {
       status: 200,
       body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: scheduledAt },
     })
-    replies = [rejected(503), moved('2026-12-02T09:00:00Z'), moved('2026-12-03T09:00:00Z')]
+    replies = [rejected(429, 'throttled'), moved('2026-12-02T09:00:00Z'), moved('2026-12-03T09:00:00Z')]
 
     const first = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
     const second = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-03T09:00:00Z' })
