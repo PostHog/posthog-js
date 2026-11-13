@@ -218,11 +218,11 @@ The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled o
 For static inclusion, import the factory explicitly and pass the same configuration:
 
 ```ts
-import { flags } from '@posthog/browser/flags'
+import { featureFlags } from '@posthog/browser/flags'
 
 const posthog = await createPostHog({
     projectToken: '<project-token>',
-    extensions: [flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
+    extensions: [featureFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
 })
 ```
 

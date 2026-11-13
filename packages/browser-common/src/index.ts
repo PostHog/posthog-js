@@ -18,6 +18,7 @@ export {
 export type { Extension } from './extension'
 export type { ExtensionToken } from './token'
 export { FeatureFlagsCommonExtension } from './extension-tokens'
+export type { IFeatureFlagsCommon, FeatureFlagsReloadResult } from './feature-flags-types'
 export * from './types'
 export { createDisposable, type Disposable } from './disposable'
 export type { Listener } from './pubsub'

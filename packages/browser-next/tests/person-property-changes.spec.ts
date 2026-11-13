@@ -2,8 +2,8 @@ import type { CaptureOptions, IPostHogInternal } from '../src/composition/npm/co
 import { createPostHog } from '../src/composition/npm/core'
 import { analytics } from '../src/products/analytics/analytics'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
-import { flags } from '../src/products/flags/flags'
-import type { FlagsExtension } from '../src/products/flags/flags-internal'
+import { featureFlags } from '../src/products/flags/flags'
+import type { IFeatureFlagsInternal } from '../src/products/flags/flags-internal'
 import { BrowserState } from '../src/core/state/state'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 
@@ -20,7 +20,7 @@ const create = async () => {
         fetch: createFetch(requests),
         extensions: [
             analytics({ flushAt: 100, flushInterval: 0 }),
-            flags({ featureFlagEvaluation: false }),
+            featureFlags({ featureFlagEvaluation: false }),
             {
                 name: 'observer',
                 setup: (value) => {
@@ -30,7 +30,7 @@ const create = async () => {
         ],
     })
     clients.push(client)
-    const context = requireInstalledExtension(await client.resolveExtension<FlagsExtension>('featureFlags'))
+    const context = requireInstalledExtension(await client.resolveExtension<IFeatureFlagsInternal>('featureFlags'))
     return { client, product: requireInstalledExtension(client.analytics), context, scoped, requests }
 }
 const events = (requests: SentRequest[]) =>

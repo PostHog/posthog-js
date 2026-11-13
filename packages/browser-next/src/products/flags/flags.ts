@@ -4,16 +4,21 @@ import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { IPostHogInternal } from '../../core/context/browser-client'
-import type { FlagsExtension } from './flags-internal'
-import type { FlagsOptions } from './flags-options'
-import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
+import type { IFeatureFlagsInternal } from './flags-internal'
+import type { FeatureFlagsOptions } from './flags-options'
+import { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
 
-export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { FlagsOptions, FlagsCallback, FeatureFlagResult, FeatureFlagsReloadResult } from './flags-options'
+export { FeatureFlagsExtension, type IFeatureFlags } from './flags-token'
+export type {
+    FeatureFlagsOptions,
+    FeatureFlagsCallback,
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+} from './flags-options'
 
 /** Statically include feature flags, bypassing the default runtime module load. */
-export const flags = (options: FlagsOptions = {}): FeatureFlags => {
-    const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
+export const featureFlags = (options: FeatureFlagsOptions = {}): IFeatureFlags => {
+    const snapshot = JSON.parse(JSON.stringify(options)) as FeatureFlagsOptions
     const config: FeatureFlagsConfig = {
         bootstrap: snapshot.bootstrap ?? {},
         remoteRequestsDisabled: false,
@@ -32,7 +37,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
-    const extension: FlagsExtension = {
+    const extension: IFeatureFlagsInternal = {
         name: FeatureFlagsExtension,
         bindings: { featureFlags: shared, [FeatureFlagsCommonExtension]: shared },
         getSurveyContext: () => ({

@@ -1,7 +1,7 @@
 import { requireInstalledExtension } from './helpers'
-import type { Client } from '@posthog/browser-common'
+import type { Client, IFeatureFlagsCommon } from '@posthog/browser-common'
 import { ExtensionRegistry } from '../src/core/extensions/registry'
-import { flags } from '../src/products/flags/flags'
+import { featureFlags } from '../src/products/flags/flags'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { IPostHogInternal } from '../src/core/context/browser-client'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
@@ -101,8 +101,8 @@ describe('extension flushing', () => {
 
 describe('extension lookup bindings', () => {
     it('keeps browser namespaces separate from shared implementation lookup', async () => {
-        const facade = flags({ featureFlagEvaluation: false })
-        let shared: PostHogFeatureFlags | undefined
+        const facade = featureFlags({ featureFlagEvaluation: false })
+        let shared: IFeatureFlagsCommon | undefined
         let scoped!: IPostHogInternal
         const setup = vi.spyOn(PostHogFeatureFlags.prototype, 'setup')
         const dispose = vi.spyOn(PostHogFeatureFlags.prototype, 'dispose')
@@ -128,7 +128,7 @@ describe('extension lookup bindings', () => {
         expect(scoped.featureFlags).toBe(facade)
         expect('getExtension' in client).toBe(false)
         expect('getExtension' in scoped).toBe(false)
-        expect(scoped.sharedClient.getExtension<PostHogFeatureFlags>('featureFlags')).toBe(shared)
+        expect(scoped.sharedClient.getExtension<IFeatureFlagsCommon>('featureFlags')).toBe(shared)
         expect(await client.resolveExtension('featureFlags')).toBe(facade)
         expect(shared).toBeInstanceOf(PostHogFeatureFlags)
         const subscription = requireInstalledExtension(scoped.featureFlags).onFeatureFlags(vi.fn())
@@ -166,7 +166,7 @@ describe('extension lookup bindings', () => {
                     },
                 ],
             })
-            const facade = flags({ featureFlagEvaluation: false })
+            const facade = featureFlags({ featureFlagEvaluation: false })
             const shared = facade.bindings![FeatureFlagsCommonExtension] as PostHogFeatureFlags
             const setup = vi.spyOn(shared, 'setup')
             const dispose = vi.spyOn(shared, 'dispose')

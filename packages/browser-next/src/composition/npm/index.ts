@@ -14,7 +14,7 @@ export const createPostHog = async (options: PostHogOptions): Promise<IPostHog> 
 
 export type { IAnalytics } from '../../products/analytics/analytics-api'
 export { version } from '../../primitives/version'
-export { FeatureFlagsExtension, type FeatureFlags } from '../../products/flags/flags-token'
+export { FeatureFlagsExtension, type IFeatureFlags } from '../../products/flags/flags-token'
 export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from '../../core/context/browser-client'
 export type {
     AnalyticsConfiguration,
@@ -42,9 +42,9 @@ export type {
 } from '../../core/types'
 
 export type {
-    FlagsOptions,
-    FlagsConfiguration,
-    FlagsCallback,
+    FeatureFlagsOptions,
+    FeatureFlagsConfiguration,
+    FeatureFlagsCallback,
     FeatureFlagResult,
     FeatureFlagsReloadResult,
 } from '../../products/flags/flags-options'

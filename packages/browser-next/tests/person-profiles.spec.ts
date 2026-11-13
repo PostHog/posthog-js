@@ -1,6 +1,6 @@
 import { analytics, type AnalyticsOptions } from '../src/products/analytics/analytics'
-import { flags } from '../src/products/flags/flags'
-import type { FlagsExtension } from '../src/products/flags/flags-internal'
+import { featureFlags } from '../src/products/flags/flags'
+import type { IFeatureFlagsInternal } from '../src/products/flags/flags-internal'
 import { createPostHog } from '../src/composition/npm/core'
 import { createPostHog as createRootPostHog } from '../src/composition/npm'
 import { BrowserState } from '../src/core/state/state'
@@ -264,7 +264,7 @@ describe('analytics person profiles', () => {
     })
 
     it('mirrors set, set-once and unset into local flag context without changing identity', async () => {
-        const flagsExtension = flags({ featureFlagEvaluation: false })
+        const flagsExtension = featureFlags({ featureFlagEvaluation: false })
         const requests: SentRequest[] = []
         const client = await createPostHog({
             ...options,
@@ -276,7 +276,7 @@ describe('analytics person profiles', () => {
         const identity = client.distinctId
         product.setPersonProperties({ plan: 'paid' }, { plan: 'free', first_seen: 'today' })
         product.setPersonProperties(undefined, { plan: 'other', first_seen: 'later' })
-        const context = await client.resolveExtension<FlagsExtension>('featureFlags')
+        const context = await client.resolveExtension<IFeatureFlagsInternal>('featureFlags')
         expect(context?.getSurveyContext().personProperties).toEqual({ plan: 'paid', first_seen: 'today' })
         product.unsetPersonProperties(['plan', '', 'first_seen'])
         expect(context?.getSurveyContext().personProperties).toEqual({})
@@ -694,7 +694,7 @@ describe('analytics person profiles', () => {
     )
 
     it('updates local flags under denied capture without caching the denied property event', async () => {
-        const extension = flags({ featureFlagEvaluation: false })
+        const extension = featureFlags({ featureFlagEvaluation: false })
         const requests: SentRequest[] = []
         const client = await createPostHog({
             ...options,
@@ -704,7 +704,7 @@ describe('analytics person profiles', () => {
         })
         clients.push(client)
         const product = requireInstalledExtension(client.analytics)
-        const context = requireInstalledExtension(await client.resolveExtension<FlagsExtension>('featureFlags'))
+        const context = requireInstalledExtension(await client.resolveExtension<IFeatureFlagsInternal>('featureFlags'))
         const anonymousId = client.distinctId
         product.setPersonProperties({ plan: 'paid' })
         expect(context.getSurveyContext().personProperties).toEqual({ plan: 'paid' })
@@ -733,12 +733,12 @@ describe('analytics person profiles', () => {
             fetch: false,
             extensions: [
                 analytics({ personProfiles: 'never', flushInterval: 0 }),
-                flags({ featureFlagEvaluation: false }),
+                featureFlags({ featureFlagEvaluation: false }),
             ],
         })
         clients.push(client)
         const product = requireInstalledExtension(client.analytics)
-        const context = requireInstalledExtension(await client.resolveExtension<FlagsExtension>('featureFlags'))
+        const context = requireInstalledExtension(await client.resolveExtension<IFeatureFlagsInternal>('featureFlags'))
         const before = context.getSurveyContext().personProperties
         const identified = vi.fn()
         const grouped = vi.fn()

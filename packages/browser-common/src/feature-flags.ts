@@ -1,7 +1,8 @@
 import { addEventListener, eachArray, entries, extend } from './utils/general-utils'
 import type { ApiResponse, Client, SendRequestInit } from './client'
 import type { Disposable } from './disposable'
-import type { Extension } from './extension'
+import type { FeatureFlagsReloadResult, IFeatureFlagsCommon } from './feature-flags-types'
+export type { FeatureFlagsReloadResult, IFeatureFlagsCommon } from './feature-flags-types'
 import type { FlagsResponse } from './types/feature-flags'
 import type {
     FeatureFlagsCallback,
@@ -283,11 +284,6 @@ export const QuotaLimitedResource = {
 } as const
 export type QuotaLimitedResource = (typeof QuotaLimitedResource)[keyof typeof QuotaLimitedResource]
 
-export interface FeatureFlagsReloadResult {
-    /** loaded: evaluation completed; error: request/evaluation failed; skipped: evaluation unavailable; cancelled: reset/disposal. */
-    status: 'loaded' | 'error' | 'skipped' | 'cancelled'
-}
-
 type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
 
 /** Who read a flag, and where. An exposure is reported only in the context of its read. */
@@ -311,7 +307,7 @@ const haveSameGroups = (a: Readonly<Record<string, string>>, b: Readonly<Record<
 const isSameFlagCallContext = (a: FlagCallContext, b: FlagCallContext): boolean =>
     a.distinctId === b.distinctId && a.sessionId === b.sessionId && haveSameGroups(a.groups, b.groups)
 
-export class PostHogFeatureFlags implements Extension {
+export class PostHogFeatureFlags implements IFeatureFlagsCommon {
     readonly name: string = 'featureFlags'
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[] = []

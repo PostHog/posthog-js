@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe('automatic flags module loading', () => {
     it('waits for the dynamic module and extension setup before returning the client', async () => {
-        let loaded!: (module: { flags: () => Extension }) => void
+        let loaded!: (module: { featureFlags: () => Extension }) => void
         let setupFinished!: () => void
         const setupGate = new Promise<void>((resolve) => {
             setupFinished = resolve
@@ -42,7 +42,7 @@ describe('automatic flags module loading', () => {
         expect(finished).not.toHaveBeenCalled()
         configuration.bootstrap.featureFlags.test = 'mutated'
         const factory = vi.fn(() => ({ name: 'featureFlags', setup }))
-        loaded({ flags: factory })
+        loaded({ featureFlags: factory })
         await vi.waitFor(() => expect(setup).toHaveBeenCalledOnce())
         expect(finished).not.toHaveBeenCalled()
         expect(factory).toHaveBeenCalledWith({ bootstrap: { featureFlags: { test: 'original' } } })

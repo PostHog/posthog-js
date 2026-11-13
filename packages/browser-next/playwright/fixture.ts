@@ -8,7 +8,7 @@ import { surveysHarness } from './surveys-fixture'
 window.surveysHarness = surveysHarness
 import { logs } from '../src/products/logs/logs'
 import type { IPostHog } from '../src/core/types'
-import { flags } from '../src/products/flags/flags'
+import { featureFlags } from '../src/products/flags/flags'
 import { analytics } from '../src/products/analytics/analytics'
 import { createPostHog, type CaptureSummary, type SessionContext } from '../src/composition/npm/core'
 
@@ -101,7 +101,7 @@ const client = createPostHog({
     },
     extensions: [
         analytics({ flushAt: 100, flushInterval: 0 }),
-        flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
+        featureFlags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
     ],
     remoteConfig: {
         supportedCompression: ['gzip-js'],
@@ -176,7 +176,7 @@ window.consentHarness = {
             navigator: false,
             extensions: [
                 analytics({ flushAt: 100, flushInterval: 0 }),
-                flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
+                featureFlags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
             ],
         })
         for (const event of events) {

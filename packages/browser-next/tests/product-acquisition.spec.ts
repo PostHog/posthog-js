@@ -3,7 +3,7 @@ import { createPostHog as createCore } from '../src/composition/npm/core'
 import { createPostHogCore } from '../src/core/posthog'
 import { createPostHog } from '../src/composition/npm'
 import { analytics } from '../src/products/analytics/analytics'
-import { flags } from '../src/products/flags/flags'
+import { featureFlags } from '../src/products/flags/flags'
 import { localRemoteConfig } from './helpers'
 
 const base = {
@@ -66,7 +66,7 @@ it('prefers an explicitly composed analytics instance to disabled automatic load
 })
 
 it('acquires analytics before exposing a product whose shared implementation captures synchronously', async () => {
-    const extension = flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
+    const extension = featureFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
     const client = await createPostHog({ ...base, extensions: [extension] })
     clients.push(client)
     expect(client.analytics).toBeDefined()
@@ -90,7 +90,7 @@ it('initializes automatic flags and their analytics dependency before root readi
 })
 
 it('keeps flags usable with analytics explicitly disabled, without loading a capture product', async () => {
-    const extension = flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
+    const extension = featureFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
     const client = await createPostHog({ ...base, analytics: false, extensions: [extension] })
     clients.push(client)
     expect(client.analytics).toBeUndefined()
@@ -99,7 +99,7 @@ it('keeps flags usable with analytics explicitly disabled, without loading a cap
 })
 
 it('reuses an explicitly supplied dependency even when another product resolves it first', async () => {
-    const extension = flags({ featureFlagEvaluation: false })
+    const extension = featureFlags({ featureFlagEvaluation: false })
     const setup = vi.spyOn(extension, 'setup')
     let dependency: unknown
     const client = await createPostHog({

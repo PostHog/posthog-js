@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '../products/flags/flags-options'
+import type { FeatureFlagsConfiguration } from '../products/flags/flags-options'
 import type { ICoreCapabilities, BrowserExtensionAccess, BrowserExtension as Extension } from './context/browser-client'
 import type { LogsConfiguration } from '../products/logs/logs-options'
 import type { SurveysConfiguration } from '../products/surveys/surveys-options'
@@ -85,7 +85,7 @@ export interface PostHogOptions {
     /** Acquire DOM autocapture from saved/fresh signals, or during initialization when configured explicitly. */
     autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
-    flags?: FlagsConfiguration
+    flags?: FeatureFlagsConfiguration
     /** Acquire surveys from saved/fresh enablement signals, or during initialization when configured explicitly. */
     surveys?: SurveysConfiguration
     /** Acquire logs from saved/fresh console signals, or during initialization when configured explicitly. */

@@ -5,7 +5,7 @@ import { createPostHogCore } from '../../core/posthog'
 export const createPostHog = async (options: CorePostHogOptions): Promise<IPostHog> => createPostHogCore(options)
 
 export { version } from '../../primitives/version'
-export { FeatureFlagsExtension, type FeatureFlags } from '../../products/flags/flags-token'
+export { FeatureFlagsExtension, type IFeatureFlags } from '../../products/flags/flags-token'
 export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from '../../core/context/browser-client'
 export type { IAnalytics } from '../../products/analytics/analytics-api'
 export type {
