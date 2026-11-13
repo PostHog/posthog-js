@@ -105,7 +105,7 @@ Apps on React Native's full Swift Package Manager integration, with no CocoaPods
 
 #### `posthog-android` 4.0
 
-If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md).
+If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.0, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md).
 
 ### API changes
 
@@ -162,7 +162,7 @@ Native uploads, such as session replay and native crash reports, pause while the
 
 #### Retries wait at most 30 seconds
 
-Session replay and native event uploads wait at most 30 seconds when PostHog answers with `Retry-After`. After a failed upload, the wait doubles from 1 second up to 30 seconds, with some random jitter. 2.x had no cap on `Retry-After` and added 1 second per failure.
+Session replay and native event uploads wait at most 30 seconds when PostHog answers with `Retry-After`. After a failed upload, the wait doubles from 1 second up to 30 seconds, with some random jitter. 2.x had no cap on `Retry-After`. Its wait after a failure grew by 1 second each time on iOS, and doubled without jitter on Android.
 
 #### Native crashes recorded while opted out are dropped
 
@@ -181,7 +181,7 @@ A native crash that happens while the user is opted out is no longer sent after 
 - These events report `$locale` as the device's preferred language, as a full language tag such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below). On iOS, 2.x reported the language your app bundle resolved, so an English-only app on a French device now sends `fr-FR` instead of `en`. A language picked for your app in iOS Settings still counts. On Android, 2.x reported `Locale.getDefault()`, so a per-app language or `Locale.setDefault()` no longer changes it.
 - On Android, `$locale` uses the current codes `he`, `id` and `yi` instead of the legacy `iw`, `in` and `ji`, so a value such as `in-ID` becomes `id-ID`. Update filters that match those.
 
-See [Capture v1](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#capture-v1) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-ios` migration guide, and [Endpoints](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#endpoints) and [`$locale` and `$app_language`](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#locale-and-app_language) in the `posthog-android` one.
+See [Prepare your proxy](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#prepare-your-proxy) and [Update locale filters](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#update-locale-filters) in the `posthog-ios` migration guide, and [Prepare your proxy](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#prepare-your-proxy) and [Check locale properties](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#check-locale-properties) in the `posthog-android` one.
 
 **If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `401`, `403` or `405`, drop them.
 
@@ -200,6 +200,10 @@ If your app creates PostHog clients for more than one project, native events tak
 #### Native surveys are left out of full Swift Package Manager apps
 
 Apps on React Native's full Swift Package Manager integration no longer bundle the native surveys from `posthog-ios`, unless another package in the app depends on `posthog-ios` with its default traits. The plugin doesn't use them, because surveys render in JavaScript, and it keeps them turned off when they are bundled. The CocoaPods path still includes the full SDK.
+
+### Rolling back to 2.x
+
+If you ship 3.0 and then go back to 2.x, 2.x sends the native crash reports and fatal JavaScript errors that 3.0 queued on the device, through `/batch`. It doesn't read capture v1 options, so a crash that 3.0 marked as personless is processed as a person event.
 
 ### New in 3.0
 
