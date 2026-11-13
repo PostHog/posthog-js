@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.72.0
+
+### Minor Changes
+
+- [#5514](https://github.com/PostHog/posthog-js/pull/5514) [`4a2cbe7`](https://github.com/PostHog/posthog-js/commit/4a2cbe7d8344a3acbe613cce68be217e84df1a55) Thanks [@Silthus](https://github.com/Silthus)! - Send cc, bcc and attachments with email from code. The SDK uploads each file PostHog doesn't have yet, then sends the email with the files' hashes. An email carries at most 10 files and 40 MB after Base64 encoding, about 29 MB of files.
+  (2026-11-13)
+
 ## 5.71.0
 
 ### Minor Changes
