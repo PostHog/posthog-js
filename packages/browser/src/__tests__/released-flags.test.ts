@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { typedFlagDetailOf } from '@posthog/browser-common/flags-response-v4'
+import { storedParsedFlagRecordOf } from '@posthog/browser-common/flags-response-v4'
 import { PARITY_FLAGS, quietReads, runAll, startClient, trackedReads, type Shape } from './released-flags-scenarios'
 
 // Flag results, events and stored state pinned to what posthog-js 1.448.0 returned, sent and
@@ -202,7 +202,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.
         )
         const details = client.stored().$feature_flag_details as Record<string, any>
         expect(Object.keys(details)).toEqual(Object.keys(recorded.stored.$feature_flag_details))
-        expect(Object.values(details).map((detail) => typedFlagDetailOf(detail))).toEqual(
+        expect(Object.values(details).map((detail) => storedParsedFlagRecordOf(detail))).toEqual(
             Object.values(details).map(() => undefined)
         )
         expect(client.requests).toEqual([])
