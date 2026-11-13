@@ -113,13 +113,19 @@ export function readMcpSessionHeader(headers: unknown): string | undefined {
 }
 
 /**
- * Whether this is an HTTP request that carries no session: neither a transport
- * session id nor one of our tokens. Its instance may serve other clients too, so
- * nothing the instance remembers (a handshake, another request's token) identifies it.
+ * Whether the instance's `initialize` handshake was this request's own client's.
+ * True on a one-client connection (no HTTP request) and on a transport session,
+ * unless that session id is a token of ours the request does not itself present.
+ * Otherwise the instance may serve other clients, and what it remembers names one of them.
  */
-export function carriesNoSession(extra: CompatibleRequestHandlerExtra | undefined): boolean {
+export function isHandshakeBound(extra: CompatibleRequestHandlerExtra | undefined): boolean {
   const headers = getRequestHeaders(extra)
-  return headers !== undefined && !extra?.sessionId && !decodeSessionId(readMcpSessionHeader(headers))
+  const transportSession = extra?.sessionId
+  return (
+    headers === undefined ||
+    (transportSession !== undefined &&
+      (decodeSessionId(transportSession) === null || readMcpSessionHeader(headers) === transportSession))
+  )
 }
 
 type SendFn = (message: unknown, options?: unknown) => unknown

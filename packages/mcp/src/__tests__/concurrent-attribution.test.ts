@@ -756,6 +756,47 @@ describe('client identity on a request that carries no session', () => {
   })
 
   it.each([
+    [
+      'tools/call',
+      '$mcp_tool_call',
+      (s: MCPServerLike, extra: CompatibleRequestHandlerExtra) => invokeTool(s, 'B', extra),
+    ],
+    [
+      'tools/list',
+      '$mcp_tools_list',
+      (s: MCPServerLike, extra: CompatibleRequestHandlerExtra) => invokeListTools(s, extra),
+    ],
+  ])(
+    "takes %s's identity from its own token, not another client's later handshake",
+    async (_method, eventName, request) => {
+      const server = createServer({})
+      await invokeInitialize(server, handshake('client-b', '2.0.0'), unbound())
+      await request(server, otherClientsToken())
+      await flushCaptures()
+
+      const events = capture.findCapturesByEvent(eventName)
+      expect(events[events.length - 1].properties).toMatchObject({
+        $mcp_client_name: 'client-a',
+        $mcp_client_version: '1.0.0',
+        $mcp_protocol_version: '2025-06-18',
+      })
+    }
+  )
+
+  it("keeps the bound client's identity after an unbound request in between", async () => {
+    const server = createServer({})
+    const bound = { sessionId: 'conn-1', requestInfo: { headers: {} } } as CompatibleRequestHandlerExtra
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), bound)
+    await invokeTool(server, 'B', unbound())
+    await invokeTool(server, 'C', bound)
+    await flushCaptures()
+
+    const calls = capture.findCapturesByEvent('$mcp_tool_call').map((e) => e.properties)
+    expect(calls.map((p) => p.$mcp_client_name)).toEqual([undefined, 'client-a'])
+    expect(calls[1].$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it.each([
     ['a stateful transport session', { sessionId: 'conn-1', requestInfo: { headers: {} } }],
     ['a one-client connection (stdio)', undefined],
   ])('still takes the handshake on %s', async (_case, extra) => {
