@@ -1,5 +1,5 @@
 import type { FunctionArgs, Scheduler } from 'convex/server'
-import { ConvexError } from 'convex/values'
+import { ConvexError, getConvexSize } from 'convex/values'
 import type { ComponentApi } from '../component/_generated/component.js'
 import type { EmailSendFailure, SentEmail } from '../component/emails.js'
 import {
@@ -101,6 +101,8 @@ type ComponentEmailArgs = FunctionArgs<ComponentApi['emails']['send']>
 
 const TEMPLATE_KEY = /^[a-zA-Z0-9_-]{1,400}$/
 const INTEGRATION_NAME = 'convex'
+/** A queue keeps a job's arguments in one Convex document, which holds 1 MiB; Workpool allows 1,000,000 bytes. */
+const MAX_QUEUED_EMAIL_BYTES = 1_000_000
 
 /** The email can't be sent as asked, so nothing was sent or queued. */
 const refusal = (code: string, detail: string, fix: string): ConvexError<EmailSendFailure> =>
@@ -177,17 +179,22 @@ export class PostHog {
    * attempt reuses it and a retry never sends twice. Retryable failures retry; others stop. When PostHog
    * asks to wait, the attempt waits it out, holding its slot in the queue, so give emails a pool of their
    * own when other work shares it. A wait that ends more than five minutes after the attempt began stops
-   * the job, and its error names the wait and the key to send the email again with.
+   * the job, and its error names the wait and the key to send the email again with. The queue stores the
+   * email, attachments included, in one document, so a queued email holds at most 1,000,000 bytes; send a
+   * larger one with `sendEmail` from an action.
    */
   async enqueueEmail<Ctx, WorkId>(ctx: Ctx, queue: EmailQueue<Ctx, WorkId>, email: SendEmailArgs): Promise<WorkId> {
     const send = this.emailSend(email)
-    const idempotencyKey = send.idempotencyKey ?? crypto.randomUUID()
-    return await queue.enqueueAction(
-      ctx,
-      this.component.emails.sendQueued,
-      { ...send, idempotencyKey },
-      { retry: true }
-    )
+    const queued = { ...send, idempotencyKey: send.idempotencyKey ?? crypto.randomUUID() }
+    const size = getConvexSize(queued)
+    if (size > MAX_QUEUED_EMAIL_BYTES) {
+      throw refusal(
+        'queued_email_too_large',
+        `The email takes ${size} bytes, and a queued email holds at most ${MAX_QUEUED_EMAIL_BYTES}.`,
+        'Send it with sendEmail from an action, or link to large files from the email body.'
+      )
+    }
+    return await queue.enqueueAction(ctx, this.component.emails.sendQueued, queued, { retry: true })
   }
 
   private emailSend(email: SendEmailArgs): ComponentEmailArgs {
