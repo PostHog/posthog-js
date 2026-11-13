@@ -9,14 +9,14 @@ You need to change code or configuration if your app does any of these:
 
 - sends events through a reverse proxy, or to a self-hosted PostHog (see [Reverse proxies and self-hosted PostHog](#reverse-proxies-and-self-hosted-posthog))
 - uses session replay or another native feature with `posthog-react-native-session-replay`, or with `@posthog/react-native-plugin` older than 3.0 (see [Session replay and the native plugin](#session-replay-and-the-native-plugin))
-- passes `apiKey` to `PostHogProvider`, or sets `evaluationEnvironments`, `disableRemoteConfig`, `sessionReplayConfig.iOSdebouncerDelayMs`, `sessionReplayConfig.androidDebouncerDelayMs`, `sessionReplayConfig.screenshotModeBackgroundCapture` or `autocapture.navigationRef` (see [Removed options](#removed-options))
+- passes `apiKey` to `PostHogProvider`, or sets `evaluationEnvironments`, `disableRemoteConfig`, `sessionReplayConfig.iOSdebouncerDelayMs`, `sessionReplayConfig.androidDebouncerDelayMs` or `autocapture.navigationRef` (see [Removed options](#removed-options))
 - calls `useNavigationTracker()` with a `navigationRef` argument
 - calls `onFeatureFlags()` (see [`onFeatureFlags`](#onfeatureflags))
 - calls `getFeatureFlagPayload()`, `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`, `onFeatureFlag()` or `overrideFeatureFlag()` (see [Removed feature flag methods](#removed-feature-flag-methods))
 - uses the `useFeatureFlag()`, `useFeatureFlags()` or `useFeatureFlagWithPayload()` hooks (see [Feature flag hooks](#feature-flag-hooks))
 - passes `sendEvent` to `getFeatureFlag()`, `getFeatureFlagResult()` or `isFeatureEnabled()`
 - reads a feature flag payload that isn't valid JSON
-- sets `Authorization` or `User-Agent` in `requestHeaders` and expects capture requests to carry it
+- sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header in `requestHeaders` and expects capture requests to carry it
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events (see [AI events](#ai-events))
 
@@ -37,7 +37,7 @@ An endpoint that isn't served keeps events queued: the SDK resends them with bac
 If you send events through your own reverse proxy, update it before you upgrade:
 
 - Forward `/i/v1/analytics/events` and `/i/v1/ai/events` to PostHog.
-- Pass `Authorization` through unchanged when it starts with `Bearer phc_`. The project token is no longer in the request body, and PostHog answers `401` without it.
+- Pass `Authorization` through unchanged when it starts with `Bearer phc_`, or is `Bearer <your project token>` for a token older than the `phc_` prefix. The project token is no longer in the request body, and PostHog answers `401` without it.
 - Pass every `PostHog-*` header, `Content-Type`, `Content-Encoding` and `User-Agent` through unchanged. PostHog answers `400` without them.
 - Accept request bodies up to 20 MB. Analytics requests carry up to 5 MiB of events, and a single AI event can be over 8 MiB.
 
@@ -45,7 +45,7 @@ PostHog's managed reverse proxy already does all of this. See the [proxy guides]
 
 ## Session replay and the native plugin
 
-5.0 loads session replay and other native features only from `@posthog/react-native-plugin` 3.0 or later.
+5.0 needs `@posthog/react-native-plugin` 3.0 or later (a peer dependency) for session replay and other native features.
 It no longer falls back to `posthog-react-native-session-replay`.
 
 ```sh
@@ -55,7 +55,7 @@ npm install @posthog/react-native-plugin@^3
 
 `@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](../react-native-plugin/MIGRATION.md) for its own steps.
 
-Without the plugin, session replay, native crash capture and push notification capture stay off, and the SDK only logs it in debug mode.
+Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
 
 ## Removed options
 
@@ -65,7 +65,6 @@ Without the plugin, session replay, native crash capture and push notification c
 | `evaluationEnvironments`                                                                 | `evaluationContexts`                                                                                                                                                                                                                                                                   |
 | `disableRemoteConfig`                                                                    | Remove it. It had no effect.                                                                                                                                                                                                                                                           |
 | `sessionReplayConfig.iOSdebouncerDelayMs`, `sessionReplayConfig.androidDebouncerDelayMs` | `sessionReplayConfig.throttleDelayMs`, which applies to both platforms. Without it, 4.x used the larger of the two, so set it to that value to keep the same timing.                                                                                                                   |
-| `sessionReplayConfig.screenshotModeBackgroundCapture`                                    | Remove it. `@posthog/react-native-plugin` 3.0 ignores it.                                                                                                                                                                                                                              |
 | `autocapture.navigationRef`, the `PostHogNavigationRef` type                             | Remove it. With `captureScreens`, put `PostHogProvider` inside the `NavigationContainer` (`@react-navigation/native` v6 and below), or capture screens manually with `screen()`. See [capturing screen views](https://posthog.com/docs/libraries/react-native#capturing-screen-views). |
 | `useNavigationTracker(options, navigationRef, client)`                                   | `useNavigationTracker(options, client)`. In JavaScript, a three-argument call reads the ref as the client, so remove it.                                                                                                                                                               |
 
@@ -89,7 +88,7 @@ posthog.onFeatureFlags(({ flags, variants, errorsLoading }) => {
 
 - `flags` lists the keys of enabled flags. Disabled flags are left out; read them with `getFeatureFlagResult(key)`.
 - `variants` maps each enabled flag to `true` or its variant.
-- `errorsLoading` is `true` when the latest load failed. `flags` and `variants` then hold the last known values, which are empty if none were cached. In 4.x the callback didn't run for a failed first load.
+- `errorsLoading` is `true` when the latest load failed. `flags` and `variants` then hold the last known values, which are empty if none were cached.
 
 A callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags()` returns.
 If your 4.x code read flags both in the callback and right after registering it, that work now runs twice, so keep callbacks idempotent.
@@ -100,16 +99,18 @@ If your 4.x code read flags both in the callback and right after registering it,
 | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `getFeatureFlagPayload(key)`                                                                 | `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`                                                                                                             |
 | `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                  |
-| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => cb(posthog.getFeatureFlagResult(key)))`                                                                                                                     |
+| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const value = posthog.getFeatureFlag(key); if (value !== undefined) cb(value) })`                                                                         |
 | `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade. |
-| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. In JavaScript, `sendEvent` is ignored without an error, so `$feature_flag_called` is sent again.                                               |
+| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
 
 To build the 4.x maps from `getAllFeatureFlags()`:
 
 ```ts
 const results = posthog.getAllFeatureFlags()
 const flags = Object.fromEntries(results.map((r) => [r.key, r.variant ?? r.enabled]))
-const payloads = Object.fromEntries(results.map((r) => [r.key, r.payload]))
+const payloads = Object.fromEntries(
+  results.filter((r) => r.enabled && r.payload !== null).map((r) => [r.key, r.payload])
+)
 ```
 
 ### Payloads
@@ -122,12 +123,12 @@ Valid JSON payloads, including `"text"` with quotes, `false`, `0` and `null`, re
 
 The hooks match `@posthog/react`:
 
-| 4.x                                 | 5.0                                                                                |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `useFeatureFlag(key)` for the value | `useFeatureFlagVariantKey(key)`                                                    |
-| `useFeatureFlag(key)` for on/off    | `useFeatureFlagEnabled(key)`                                                       |
-| `useFeatureFlags()`                 | `useActiveFeatureFlags()` for the enabled flag keys                                |
-| `useFeatureFlagWithPayload(key)`    | `useFeatureFlagResult(key)`, or `useFeatureFlagPayload(key)` for the payload alone |
+| 4.x                                 | 5.0                                                                                                                                                                                                                                          |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useFeatureFlag(key)` for the value | `useFeatureFlagVariantKey(key)`                                                                                                                                                                                                              |
+| `useFeatureFlag(key)` for on/off    | `useFeatureFlagEnabled(key)`                                                                                                                                                                                                                 |
+| `useFeatureFlags()`                 | `useActiveFeatureFlags()` for the enabled flag keys                                                                                                                                                                                          |
+| `useFeatureFlagWithPayload(key)`    | `useFeatureFlagResult(key)`, which returns `{ key, enabled, variant, payload }` (or `undefined`) instead of a `[value, payload]` tuple, or `useFeatureFlagPayload(key)` for the payload alone. The `FeatureFlagWithPayload` type is removed. |
 
 For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `useFeatureFlagEnabled()` return `undefined`, or the default you pass to `useFeatureFlagEnabled()`, where `useFeatureFlag()` returned `false`. Check for a falsy value instead of `=== false`.
 
@@ -135,8 +136,8 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 ## Event delivery
 
-- `Authorization` and `User-Agent` in `requestHeaders` no longer reach capture requests. Other `requestHeaders` still do, and feature flag requests still get all of them.
-- Events stay queued when a send gets no response, a `404`, `408`, `429`, `500`, `502`, `503` or `504`, or a `retry` result. They're sent again after a wait of 1 second doubling to 30 seconds, or the server's `Retry-After`, with no attempt limit. `fetchRetryCount` and `fetchRetryDelay` no longer apply to events.
+- `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; the SDK sets its own. Other `requestHeaders` still do, and feature flag requests still get all of them.
+- Events stay queued when a send gets no response, a `404`, `408`, `429`, `500`, `502`, `503` or `504`, or a `retry` result. They're sent again after a wait of about 1 second doubling to 30 seconds, longer if the server's `Retry-After` asks (up to 30 seconds), with no attempt limit. `fetchRetryCount` and `fetchRetryDelay` no longer apply to events.
 - `flush()` and `shutdown()` no longer reject when events stay queued for a later send.
 - `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued. It still fires for dropped events, with a different error: it carries `drops` (each dropped event's `uuid` and reason), `requestId`, `retryExhausted` and `cause`, and has no `response`.
 
@@ -166,12 +167,12 @@ posthog.captureAi('$ai_generation', { $ai_model: 'gpt-4o', $ai_trace_id: traceId
 
 AI events have their own queue and options:
 
-| Option                      | Default                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `captureAiCompression`      | `'gzip'` (bodies go uncompressed where the runtime has no `CompressionStream`, such as Hermes)          |
-| `captureAiMaxQueueSize`     | `100` events, and at most 50 MiB; the oldest are dropped first                                          |
-| `captureAiRequestTimeoutMs` | `60000`, in milliseconds. The native SDKs' `captureAiTimeout` is in seconds, so don't copy their value. |
-| `captureAiMaxEventBytes`    | 8 MiB plus 64 KiB; a larger event is dropped and `captureAi()` returns `undefined`                      |
+| Option                      | Default                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `captureAiCompression`      | `'gzip'` (bodies go uncompressed where the runtime has no `CompressionStream`, such as Hermes)                                                                           |
+| `captureAiMaxQueueSize`     | `100` events, and at most 50 MiB; the oldest are dropped first                                                                                                           |
+| `captureAiRequestTimeoutMs` | `60000`, in milliseconds. The native SDKs' `captureAiTimeout` is in seconds, so don't copy their value.                                                                  |
+| `captureAiMaxEventBytes`    | 8 MiB plus 64 KiB; a larger event is dropped and `captureAi()` returns `undefined` (before the SDK finishes initializing, it returns the UUID and drops the event later) |
 
 `flushAt`, `maxBatchSize` and `flushInterval` apply to both queues. `disableCompression` doesn't affect AI events.
 
