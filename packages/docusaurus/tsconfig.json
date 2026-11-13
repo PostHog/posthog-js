@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "strict": true,
+        "target": "ES2015",
+        "module": "commonjs",
+        "types": ["node"]
+    },
+    "include": ["src/**/*.js", "types/**/*.d.ts"]
+}

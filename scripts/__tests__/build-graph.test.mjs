@@ -295,7 +295,12 @@ test('root tests schedule leaf suites once, including every existing rrweb suite
         )
         assert.ok(prerequisites(tasks, id).has(`${pkg.name}#build`), id)
     }
-    for (const id of ['posthog-js#test:unit', 'posthog-js#test:functional', '@posthog/browser#test:built']) {
+    for (const id of [
+        'posthog-js#test:unit',
+        'posthog-js#test:functional',
+        '@posthog/browser#test:built',
+        'posthog-docusaurus#test:unit',
+    ]) {
         assert.ok(
             executable(tasks).some((task) => task.taskId === id),
             id

@@ -48,6 +48,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
+| `docusaurus/`                | `posthog-docusaurus`                 | Docusaurus analytics plugin                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
 | `node/`                      | `posthog-node`                       | Node.js backend SDK (see its `engines.node` requirement) |
 | `mcp/`                       | `@posthog/mcp`                       | MCP server analytics                                     |
@@ -65,6 +66,8 @@ The repository contains the following top-level packages in `./packages/`:
 | `webpack-plugin/`            | `@posthog/webpack-plugin`            | Webpack sourcemap upload plugin                          |
 
 Vendored recording/replay packages live under `packages/rrweb/`.
+
+`posthog-docusaurus` publishes its JavaScript source directly, so it has no build step. Its type checks, unit tests, linting, and tarball packaging run through the standard workspace commands. See the [Docusaurus example](examples/example-docusaurus/README.md) for installed-package browser checks.
 
 ### Package-specific guides
 

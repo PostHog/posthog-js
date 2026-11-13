@@ -18,6 +18,7 @@ _Please describe._
 - [ ] posthog-js (web)
 - [ ] posthog-js-lite (web lite)
 - [ ] posthog-node
+- [ ] posthog-docusaurus
 - [ ] posthog-react-native
 - [ ] @posthog/react
 - [ ] @posthog/ai

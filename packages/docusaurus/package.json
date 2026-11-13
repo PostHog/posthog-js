@@ -1,0 +1,39 @@
+{
+    "name": "posthog-docusaurus",
+    "version": "2.0.5",
+    "description": "🦔 PostHog plugin for Docusaurus",
+    "main": "./src/index.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/docusaurus"
+    },
+    "homepage": "https://posthog.com/docs/libraries/docusaurus",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=10.15.1"
+    },
+    "scripts": {
+        "check-types": "tsc --noEmit",
+        "lint": "oxlint --report-unused-disable-directives-severity error src test",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src test --fix",
+        "test": "node --test test/*.test.js",
+        "test:unit": "node --test test/*.test.js",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "devDependencies": {
+        "@types/node": "^22.19.1",
+        "typescript": "catalog:native"
+    },
+    "files": [
+        "src",
+        "LICENSE",
+        "README.md"
+    ]
+}
