@@ -1,6 +1,5 @@
 ---
-'@posthog/electron': minor
 '@posthog/browser-common': patch
 ---
 
-Add opt-in privacy-aware DOM autocapture for trusted Electron renderers.
+Expose a narrow autocapture client type for shared renderer integrations.

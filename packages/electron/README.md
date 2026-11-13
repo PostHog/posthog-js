@@ -4,6 +4,8 @@ Coordinated PostHog analytics and client feature flags for Electron. One main-pr
 
 This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
+**Release status:** private and unpublished until the final alpha-release PR. Use local tarballs while developing; merging this PR does not enable npm publication.
+
 ## Setup
 
 Install `@posthog/electron` alongside your application's Electron development dependency. Electron 41+ is the initial experimental runtime range; validate your packaged application on every OS/runtime you ship. Do not bundle Electron into your application JavaScript.
