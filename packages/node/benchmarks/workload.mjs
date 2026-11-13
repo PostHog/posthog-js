@@ -48,7 +48,7 @@ export function transport(payloadBytes = 0, capacity = 1000) {
         state.definitions++
         return { status: 200, headers: new Headers(), json: async () => JSON.parse(serializedDefinitions) }
       }
-      if (path === '/batch/' && options.method === 'POST') {
+      if (path === '/i/v1/analytics/events' && options.method === 'POST') {
         const { batch } = JSON.parse(options.body)
         assert.ok(Array.isArray(batch))
         state.requests++
@@ -71,7 +71,11 @@ export function transport(payloadBytes = 0, capacity = 1000) {
             deliveredByUser[event.distinct_id]++
           }
         }
-        return { status: 200, text: async () => 'ok', json: async () => ({ status: 1 }) }
+        // Capture v1 reports a result per event uuid; anything else is an unreadable response to the SDK.
+        const body = JSON.stringify({
+          results: Object.fromEntries(batch.map((event) => [event.uuid, { result: 'ok' }])),
+        })
+        return { status: 200, headers: new Headers(), text: async () => body, json: async () => JSON.parse(body) }
       }
       state.unexpected.push(path)
       throw new Error(`Unexpected benchmark request: ${path}`)

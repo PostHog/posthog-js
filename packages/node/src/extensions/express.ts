@@ -5,7 +5,7 @@ import {
   addProperty,
   getFirstHeaderValue,
   getPostHogCookieReadOptions,
-  getPostHogTracingHeaderValues,
+  readPostHogTracingHeaders,
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
@@ -40,7 +40,7 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const headers = getPostHogTracingHeaderValues(req.headers, getPostHogCookieReadOptions(posthog))
+  const headers = readPostHogTracingHeaders(posthog.options, req.headers, getPostHogCookieReadOptions(posthog))
   const context = posthog.getContext()
   const sessionId = context?.sessionId ?? headers.sessionId
   const distinctId = context?.distinctId ?? headers.distinctId
@@ -135,6 +135,7 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
           hint,
           contextData.distinctId,
           additionalProperties,
+          undefined,
           posthog.getContext()
         ),
         // Downstream error handlers can choose a different status, even asynchronously.

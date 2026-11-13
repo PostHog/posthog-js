@@ -226,6 +226,39 @@ const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN,
 Omit `serverBuild` when the deployment does not provide a reliable value.
 `PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
 
+### Per-event options (`eventOptions`)
+
+`eventOptions` sets posthog-node per-event options, such as `process_person_profile`, on MCP events.
+Give `instrument()` a callback for every auto-captured event, or pass `eventOptions` per call to
+`analytics.capture()` and to the `PostHogMCP` capture methods. The callback runs only for
+auto-captured events, since `analytics.capture()` has no request to pass it. A failed call's
+`$exception` event gets the same options.
+
+```ts
+const analytics = instrument(server, posthog, {
+  // Process persons for anonymous sessions too
+  eventOptions: (request, extra) => ({ process_person_profile: true }),
+})
+
+await analytics.capture({ event: 'report_exported', eventOptions: { process_person_profile: false } })
+
+posthogMCP.captureToolCall({
+  toolName: 'search_docs',
+  sessionId,
+  eventOptions: { process_person_profile: true },
+})
+```
+
+Events from a session with no resolved identity are personless by default: they carry the
+`process_person_profile: false` option. An explicit `process_person_profile` in `eventOptions` wins
+over that default.
+
+`beforeSend` receives the options as `event.options` and can change them; the SDK sends what it
+returns. On posthog-node 6, the client's own `before_send` sees them too. posthog-node 5 has no
+per-event options, so the SDK sends the known options the way that version reads them and drops
+other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
+`options` field instead of `eventOptions`.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
@@ -401,6 +434,15 @@ Whether the workaround costs you anything depends on your stack: instrumenting t
 skips the high-level tool registry, so tool descriptions and callback-level wrapping come only from
 what is advertised over `tools/list`. If your framework never calls `registerTool()` — `@rekog/mcp-nest`
 does not — the registry is empty and the two calls behave the same.
+
+## Library identity (`$lib`)
+
+`instrument()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
+
+- Give MCP analytics its own `PostHog` client if your app also captures other events.
+- With posthog-node 6, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5, an event captured just before `instrument()` can get the MCP label too.
+- With posthog-node 6, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
+- To find MCP traffic, filter on `$mcp_*` events or `$mcp_source = 'posthog_mcp_analytics'` rather than `$lib`.
 
 ## Developing locally
 

@@ -1,4 +1,5 @@
 import type {
+  ErrorTracking,
   PostHogCoreOptions,
   ExceptionRateLimiterConfig,
   FeatureFlagValue,
@@ -8,6 +9,7 @@ import type {
   PostHogLogsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogEventProperties,
   PostHogFlagsAndPayloadsResponse,
   Properties,
   Span,
@@ -24,17 +26,38 @@ export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
+  /**
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type SetPersonPropertiesMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   propertiesOnce?: Record<string | number, any>
+  /**
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type UnsetPersonPropertiesMessage = {
   distinctId: string
   properties: string | string[]
+  /**
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type SendFeatureFlagsOptions = {
@@ -45,7 +68,11 @@ export type SendFeatureFlagsOptions = {
 }
 
 export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
-  distinctId?: string // Optional - can be provided via context
+  /**
+   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
+   * is used; without one, the event gets a generated id and `options.process_person_profile: false`.
+   */
+  distinctId?: string
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
   /**
@@ -72,12 +99,61 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   _originatedFromCaptureException?: boolean
 }
 
+/** Options for `captureException()` and `captureExceptionImmediate()`. */
+export type CaptureExceptionOptions = {
+  /** The event's distinct id. Without one, the context distinct id is used, else a personless id. */
+  distinctId?: string
+  /**
+   * Properties to add to the event. Exception properties the SDK or PostHog owns, such as
+   * `$exception_list` and `$exception_level`, are ignored: use `level` to set the level.
+   */
+  properties?: Record<string | number, any>
+  /** Per-event options, as in `capture()`. */
+  options?: Record<string, JsonType>
+  /** Overrides the generated event UUID. Must be a valid UUID. */
+  uuid?: string
+  /** A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events. */
+  flags?: FeatureFlagEvaluations
+  /**
+   * The exception's severity, sent as `$exception_level`. An unknown value is ignored.
+   *
+   * @default 'error'
+   */
+  level?: ErrorTracking.SeverityLevel
+}
+
+/**
+ * An event as `prepareEventMessage()` builds it: the shape of `EventMessage`, with the distinct id
+ * resolved and the properties and options filled from every layer, after `before_send`.
+ */
+export type PreparedEventMessage = {
+  distinctId: string
+  event: string
+  properties: PostHogEventProperties
+  /** The event's options, sent to capture unchanged. */
+  options?: Record<string, JsonType>
+  uuid?: string
+  timestamp?: Date
+  disableGeoip?: boolean
+}
+
 export type GroupIdentifyMessage = {
   groupType: string
   groupKey: string // Unique identifier for the group
   properties?: Record<string | number, any>
-  distinctId?: string // optional distinctId to associate message with a person
+  /**
+   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
+   * is used, then `$<groupType>_<groupKey>`.
+   */
+  distinctId?: string
   disableGeoip?: boolean
+  /**
+   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
+   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
+   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
+   * reports the drop through the `'error'` event.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type PropertyGroup = {
@@ -168,8 +244,27 @@ export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
 export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
+export type PostHogOptions = Omit<
+  PostHogCoreOptions,
+  | 'before_send'
+  | 'disableGeoip'
+  | 'flushInterval'
+  | 'maxQueueSize'
+  | 'fetchRetryCount'
+  | 'fetchRetryDelay'
+  | 'disableCompression'
+  | 'requestTimeout'
+> & {
   persistence?: 'memory'
+  /**
+   * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
+   * gets `$geoip_disable: true` unless the event, its context or `register()` sets
+   * `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's
+   * own `$geoip_disable` property.
+   *
+   * @default true
+   */
+  disableGeoip?: boolean
   /**
    * The interval in milliseconds between periodic flushes
    *
@@ -177,13 +272,88 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   flushInterval?: number
   /**
-   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   * The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`).
+   * When the queue is full, the oldest event is dropped and reported through the `'error'` event.
+   * `captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit.
    *
    * @default 10000
    */
   maxQueueSize?: number
   /**
-   * Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the
+   * Whether the Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and
+   * `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id
+   * you pass explicitly always wins over these headers, and they are never used for authentication.
+   * Turning it off does not turn off `readPostHogCookie`. To stop all request linking, set
+   * `captureTracingHeaders: false` and leave `readPostHogCookie` off (its default).
+   *
+   * @default true
+   */
+  captureTracingHeaders?: boolean
+  /**
+   * How many times a capture request is retried after its first attempt, on both capture lanes.
+   * Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After`
+   * header can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried.
+   * When not set, `fetchRetryCount` is used.
+   *
+   * @default 3
+   */
+  captureMaxRetries?: number
+  /**
+   * How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set.
+   *
+   * @default 3
+   */
+  fetchRetryCount?: number
+  /**
+   * The delay between HTTP request retries in milliseconds. Capture requests do not use it:
+   * see `captureMaxRetries` for their retry waits.
+   *
+   * @default 3000
+   */
+  fetchRetryDelay?: number
+  /**
+   * How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs
+   * Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set,
+   * `disableCompression: true` means `'none'`.
+   *
+   * @default 'gzip'
+   */
+  captureCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * How `captureAi` requests compress their body, with the same values as `captureCompression`.
+   * It does not read `captureCompression` or `disableCompression`.
+   *
+   * @default 'gzip'
+   */
+  captureAiCompression?: 'none' | 'gzip' | 'deflate' | 'zstd'
+  /**
+   * Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`.
+   *
+   * @default 10000
+   */
+  requestTimeout?: number
+  /**
+   * The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is
+   * full, the oldest AI event is dropped and reported through the `'error'` event.
+   *
+   * @default 1000
+   */
+  captureAiMaxQueueSize?: number
+  /**
+   * Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`.
+   *
+   * @default 30000
+   */
+  captureAiRequestTimeoutMs?: number
+  /**
+   * Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it
+   * is set, and `captureAi` requests use `captureAiCompression`.
+   *
+   * @default false
+   */
+  disableCompression?: boolean
+  /**
+   * Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the
    * posthog-js cookie when a request has neither tracing header.
    *
    * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server
@@ -195,7 +365,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie
    * counts as opted out. A request sent right
    * after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a
-   * short delay.
+   * short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls
+   * back to the cookie. To stop all request linking, also leave this option off.
    *
    * @default false
    */
@@ -344,6 +515,14 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
    * If a function returns null, the event will be dropped.
+   *
+   * @remarks
+   * The hook gets a copy of the finished event: the event's own values, then the values filled
+   * from context, `register()` and `registerOptions()`, then the values the SDK adds (such as
+   * `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`).
+   * It has the final say: it can change or remove any of them, and nothing is added after it.
+   * Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields
+   * are already applied to the properties it sees.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
   /**
@@ -444,7 +623,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * react-native events. Set this to `false` when running the SDK as a
    * client/CLI so the event is attributed to the device OS normally instead of
    * being marked as a server event. When `false`, the `$is_server` property is
-   * omitted entirely.
+   * omitted entirely. A `$is_server` value set on the event, in context or with
+   * `register()` wins over this setting.
    *
    * @default true
    * @example
@@ -581,32 +761,16 @@ export interface IPostHog {
   /**
    * @description Capture an exception as a $exception event.
    * @param error The error to capture.
-   * @param distinctId Optional user distinct ID.
-   * @param additionalProperties Optional additional properties to include.
-   * @param uuid Optional event UUID.
-   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   * @param options Optional distinct id, properties, options, uuid, flags snapshot and level.
    */
-  captureException(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid'],
-    flags?: FeatureFlagEvaluations
-  ): void
+  captureException(error: unknown, options?: CaptureExceptionOptions): void
 
   /**
    * @description Capture an exception as a $exception event immediately.
    * @param error The error to capture.
-   * @param distinctId Optional user distinct ID.
-   * @param additionalProperties Optional additional properties to include.
-   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   * @param options Optional distinct id, properties, options, uuid, flags snapshot and level.
    */
-  captureExceptionImmediate(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    flags?: FeatureFlagEvaluations
-  ): Promise<void>
+  captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
 
   /**
    * @description Capture an AI event on the dedicated AI capture endpoint.
@@ -683,7 +847,7 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  alias(data: { distinctId: string; alias: string }): void
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
@@ -691,7 +855,12 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  aliasImmediate(data: { distinctId: string; alias: string }): Promise<void>
+  aliasImmediate(data: {
+    distinctId: string
+    alias: string
+    disableGeoip?: boolean
+    options?: Record<string, JsonType>
+  }): Promise<void>
 
   /**
    * @description PostHog feature flags (https://posthog.com/docs/features/feature-flags)
@@ -938,7 +1107,7 @@ export interface IPostHog {
 
   /**
    * @description Run a function with specific context that will be applied to all events captured within that context.
-   * @param data Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param data Context data to apply (sessionId, distinctId, properties, options)
    * @param fn Function to run with the context
    * @param options Context options (fresh)
    * @returns The return value of the function
@@ -949,7 +1118,7 @@ export interface IPostHog {
    * @description Set context without a callback wrapper. Must be called in the same
    * async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
    * code in a callback.
-   * @param data Context data to apply (distinctId, sessionId, properties)
+   * @param data Context data to apply (distinctId, sessionId, properties, options)
    * @param options Context options (fresh)
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void

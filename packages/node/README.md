@@ -2,6 +2,8 @@
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 
+Upgrading from 5.x? See [MIGRATION.md](./MIGRATION.md).
+
 SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
 ## Documentation

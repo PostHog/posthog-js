@@ -1,13 +1,19 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
+import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue, type JsonType } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { formatAiError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
 import { redactMcpToolCredentials } from './mcpCredentials'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
-import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
+import {
+  captureAiEvent,
+  captureAiEventImmediate,
+  eventOptionFields,
+  isPostHogNode6,
+  userDistinctId,
+} from './captureAiEvent'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -50,6 +56,11 @@ export interface CaptureAiGenerationOptions {
   properties?: Record<string, unknown>
   /** Mapping of group type to group id, matching `EventMessage.groups`. */
   groups?: Record<string, string | number>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`. An event with
+   * no `distinctId` always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   privacyMode?: boolean
 
   /**
@@ -88,6 +99,29 @@ export interface CaptureAiGenerationOptions {
   captureImmediate?: boolean
   /** Invoked when generation telemetry cannot be captured. Errors thrown by this callback are ignored. */
   onError?: (error: unknown) => void
+}
+
+/**
+ * posthog-node 6 takes an options object; 5.x, which has no `registerOptions`, takes positional
+ * arguments. The 6.x positional fallback works too, but logs a deprecation error in the app.
+ */
+const captureAiException = (
+  client: PostHog,
+  error: unknown,
+  properties: Record<string, unknown>,
+  uuid: string
+): void => {
+  if (isPostHogNode6(client)) {
+    client.captureException(error, { properties, uuid })
+    return
+  }
+  const captureLegacy = client.captureException as (
+    error: unknown,
+    distinctId?: string,
+    properties?: Record<string, unknown>,
+    uuid?: string
+  ) => void
+  captureLegacy.call(client, error, undefined, properties, uuid)
 }
 
 /**
@@ -151,7 +185,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
         // so the global and framework handlers skip the rethrown error too.
         if (!shouldRedact) {
           exceptionId = uuidv7()
-          client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
+          captureAiException(client, options.error, { $ai_trace_id: traceId }, exceptionId)
         }
         if (typeof options.error === 'object') {
           ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
@@ -208,6 +242,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
     }
 
+    const distinctId = userDistinctId(options.distinctId)
+
     const properties: Record<string, unknown> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -227,7 +263,6 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(options.baseURL === null ? {} : { $ai_base_url: options.baseURL ?? '' }),
       ...options.properties,
       $ai_tokens_source: getTokensSource(options.properties),
-      ...(options.distinctId ? {} : { $process_person_profile: false }),
       ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
       ...(options.tools ? { $ai_tools: redactMcpToolCredentials(options.tools) } : {}),
       ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
@@ -239,9 +274,9 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
 
     const event: EventMessage = {
-      distinctId: options.distinctId ?? traceId,
+      distinctId: distinctId ?? traceId,
       event: eventType,
-      properties,
+      ...eventOptionFields(client, properties, options.options, !distinctId),
       groups: options.groups,
     }
 

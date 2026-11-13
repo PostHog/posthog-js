@@ -98,6 +98,7 @@ export function captureEvent(
     errorStatus: eventInput.errorStatus,
     conversationId: eventInput.conversationId,
     properties: eventInput.properties,
+    eventOptions: eventInput.eventOptions,
   }
 
   return sink.capture(fullEvent, {

@@ -7,7 +7,7 @@ import {
   addProperty,
   getFirstHeaderValue,
   getPostHogCookieReadOptions,
-  getPostHogTracingHeaderValues,
+  readPostHogTracingHeaders,
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import { notifyContextListeners } from './context/listeners'
@@ -104,7 +104,11 @@ export class PostHogInterceptor implements NestInterceptor {
     const response = httpHost.getResponse()
 
     const headers = (request?.headers ?? {}) as IncomingHttpHeaders
-    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers, getPostHogCookieReadOptions(this.posthog))
+    const { sessionId, distinctId } = readPostHogTracingHeaders(
+      this.posthog.options,
+      headers,
+      getPostHogCookieReadOptions(this.posthog)
+    )
 
     const properties: Record<string, any> = {}
     const disableCaptureUrlHashes = this.posthog.options.disable_capture_url_hashes === true
@@ -162,11 +166,11 @@ export class PostHogInterceptor implements NestInterceptor {
                   return throwError(() => exception)
                 }
                 const responseStatus = status ?? response?.statusCode
-                const additionalProperties: Record<string, any> | undefined =
+                const properties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
                 // A copied distinct ID that the app already ended must not label this exception.
                 const exceptionDistinctId = copiesDistinctId && signal?.aborted ? undefined : requestDistinctId
-                this.posthog.captureException(exception, exceptionDistinctId, additionalProperties)
+                this.posthog.captureException(exception, { distinctId: exceptionDistinctId, properties })
                 return throwError(() => exception)
               })
             )

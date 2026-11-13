@@ -1,4 +1,5 @@
 import { ErrorTracking, isArray, isFunction, isNull, isUndefined, removeTrailingSlash } from '@posthog/core'
+import type { PostHog } from 'posthog-node'
 import { cookieStoreFromHeader, isOptedOut, readPostHogCookie } from '../shared/cookie.js'
 import type { PostHogCookieState } from '../shared/cookie.js'
 import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
@@ -22,7 +23,8 @@ interface PostHogExceptionCaptureClient {
         properties?: Record<string, unknown>
         _originatedFromCaptureException?: boolean
     }): Promise<void>
-    getErrorPropertiesBuilder(): ErrorTracking.ErrorPropertiesBuilder
+    // posthog-node's own builder type: it can come from a different @posthog/core copy than this package's.
+    getErrorPropertiesBuilder(): ReturnType<PostHog['getErrorPropertiesBuilder']>
 }
 
 type ServerOptions = NonNullable<OnRequestErrorOptions['serverOptions']>

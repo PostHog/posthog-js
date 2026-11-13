@@ -121,7 +121,7 @@ describe('exception trace context', () => {
     client.on('capture', (event) => events.push(event))
 
     await withSpan({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }, async () => {
-      client.captureException(new Error('boom'), 'user-1')
+      client.captureException(new Error('boom'), { distinctId: 'user-1' })
       await client.flush()
     })
 

@@ -242,7 +242,7 @@ describe('PostHog Node.js logs', () => {
 
     const shutdown = posthog.shutdown(1000)
     await vi.advanceTimersByTimeAsync(10)
-    const eventCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/batch'))
+    const eventCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/i/v1/analytics/events'))
     expect(eventCalls).toHaveLength(1)
 
     releaseLogs()

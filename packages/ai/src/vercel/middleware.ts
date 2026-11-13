@@ -10,6 +10,7 @@ import type {
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
 } from '@ai-sdk/provider'
+import type { JsonType } from '@posthog/core'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
 import {
@@ -62,6 +63,11 @@ interface ClientOptions {
   posthogProviderOverride?: string
   posthogCostOverride?: CostOverride
   posthogCaptureImmediate?: boolean
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`. An event with
+   * no `posthogDistinctId` always has person processing turned off.
+   */
+  posthogOptions?: Record<string, JsonType>
 }
 
 interface PostHogInput {
@@ -561,6 +567,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     traceId,
     properties: mergedOptions.posthogProperties,
     groups: mergedOptions.posthogGroups,
+    options: mergedOptions.posthogOptions,
     privacyMode,
     modelOverride: mergedOptions.posthogModelOverride,
     providerOverride: mergedOptions.posthogProviderOverride,

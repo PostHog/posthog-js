@@ -21,6 +21,26 @@ For OpenTelemetry, pass `privacyMode: true` to `PostHogTraceExporter`, or to `Po
 
 Remote MCP tool `headers` and `authorization` values are always replaced with `[REDACTED]`.
 
+## Event options
+
+Pass posthog-node per-event options with `posthogOptions` on a wrapped provider call or on `withTracing()`, or with `options` on the LangChain callback handler and the OpenAI Agents, Claude Agent SDK, Google ADK and Genkit integrations.
+
+```ts
+await openai.responses.create({
+  model: 'gpt-5-mini',
+  input: 'Hello',
+  posthogDistinctId: 'user_123',
+  posthogOptions: { process_person_profile: false },
+})
+
+const handler = new LangChainCallbackHandler({ client: posthog, options: { process_person_profile: false } })
+```
+
+- Per-call options beat options from `registerOptions()` and `withContext()`.
+- An event with no distinct id always has person processing turned off, whatever its options say.
+- posthog-node 5 has no per-event options. `@posthog/ai` sends each option 5.x knows in the form 5.x reads, and drops other keys.
+- An `options` value that is not an object is logged and ignored. The event is still sent.
+
 ## Gemini Interactions
 
 `PostHogGoogleGenAI.interactions.create` traces foreground model calls with `@google/genai` 2.18 or later in the 2.x series.

@@ -10,7 +10,7 @@ const consumer = process.env.POSTHOG_NODE_CONSUMER
 if (!consumer) throw new Error('Set POSTHOG_NODE_CONSUMER to an installed consumer')
 const value = (data) => ({ kind: 'value', value: data })
 
-for (const mode of ['v0', 'v1'])
+for (const mode of ['v1'])
     for (const format of ['cjs', 'esm']) {
         test(`installed public snapshot HTTP: ${mode}/${format}`, async (t) => {
             const traffic = []
@@ -35,7 +35,7 @@ for (const mode of ['v0', 'v1'])
             })
             mock.listen(0, '127.0.0.1')
             await once(mock, 'listening')
-            const adapter = await startServer({ consumer, mode, format, port: 0 })
+            const adapter = await startServer({ consumer, format, port: 0 })
             t.after(async () => {
                 await adapter.close()
                 mock.closeAllConnections()
@@ -55,7 +55,7 @@ for (const mode of ['v0', 'v1'])
                 await post('fixtures/allocate', {
                     fixture_id: id,
                     case_id: 'snapshot',
-                    profile_id: mode === 'v0' ? 'node-legacy' : 'node-analytics-v1',
+                    profile_id: 'node-analytics-v1',
                     timeout_ms: 5000,
                 })
                 await invoke(id, '/setup', {

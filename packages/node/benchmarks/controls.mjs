@@ -552,7 +552,7 @@ test('receiver accepts reordered delivery and rejects balanced duplication, inva
     properties: { payload: 'x'.repeat(32), plan: 'pro', sequence },
   }))
   const send = (network, batch) =>
-    network.fetch('http://benchmark.invalid/batch/', {
+    network.fetch('http://benchmark.invalid/i/v1/analytics/events', {
       method: 'POST',
       body: JSON.stringify({ batch }),
     })

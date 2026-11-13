@@ -1,4 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
+import { anyCaptureUrl, lastSentBatch, v1Response } from '../utils'
 import {
   PostHogSentryIntegration,
   sentryIntegration,
@@ -10,17 +11,8 @@ vi.mock('../../version', () => ({ version: '1.2.3' }))
 const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const getLastBatchEvents = (): any[] | undefined => {
-  expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
-
-  // reverse mock calls array to get the last call
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) {
-    return undefined
-  }
-  return JSON.parse((call[1] as any).body as any).batch
+  expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
+  return lastSentBatch(mockedFetch)
 }
 
 const createMockSentryException = (): any => ({
@@ -79,14 +71,7 @@ describe('PostHogSentryIntegration', () => {
 
     posthogSentry = new PostHogSentryIntegration(posthog)
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () =>
-        Promise.resolve({
-          status: 'ok',
-        }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {

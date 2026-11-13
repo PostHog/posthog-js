@@ -7,5 +7,5 @@ const posthog = new PostHog(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_API_KEY!, {
 })
 
 export async function captureServerError() {
-    await posthog.captureExceptionImmediate(new Error('Server Exception'), 'distinct_id')
+    await posthog.captureExceptionImmediate(new Error('Server Exception'), { distinctId: 'distinct_id' })
 }

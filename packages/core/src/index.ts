@@ -109,8 +109,9 @@ export type {
   StartSpanOptions,
   TracesConfig,
 } from './traces/types'
-export { uuidv7 } from './vendor/uuidv7'
+export { uuidv7, V7Generator } from './vendor/uuidv7'
 export * from './cookie'
+export * from './event-options'
 export * from './posthog-core'
 export * from './posthog-core-stateless'
 export * from './privacy'

@@ -10,7 +10,7 @@ const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-no
 
 // Observe the genuine packaged public constructor and replace only its public
 // methods. The binding never receives a different SDK-shaped implementation.
-async function spies(run, captureMode = 'v0') {
+async function spies(run) {
     const originals = new Map()
     const calls = []
     const results = {
@@ -43,7 +43,7 @@ async function spies(run, captureMode = 'v0') {
         },
     })
     try {
-        await run(new Binding(NativeConstructor, captureMode), calls, results)
+        await run(new Binding(NativeConstructor), calls, results)
     } finally {
         for (const [name, descriptor] of originals) {
             if (descriptor) Object.defineProperty(PostHog.prototype, name, descriptor)
@@ -105,7 +105,7 @@ test('local reload calls its public method with native arguments and results', a
 })
 
 test('AI capture invokes its public method once and preserves native results and timestamp input', async () => {
-    for (const mode of ['v0', 'v1']) {
+    {
         await spies(async (binding, calls, results) => {
             await setup(binding)
             const args = {
@@ -159,12 +159,12 @@ test('AI capture invokes its public method once and preserves native results and
             assert.equal(calls.filter(([name]) => name === 'capture' || name === 'flush').length, 0)
             results.captureAi = new Error('native AI failure')
             assert.equal((await binding.invoke('/capture_ai', {})).outcome.kind, 'thrown')
-        }, mode)
+        })
     }
 })
 
 test('identify and alias preserve exact public arguments, omission, native void and failures', async () => {
-    for (const mode of ['v0', 'v1']) {
+    {
         await spies(async (binding, calls, results) => {
             for (const route of ['/identify', '/alias']) {
                 assert.equal((await binding.invoke(route, {})).failure.code, 'before-setup')
@@ -224,12 +224,12 @@ test('identify and alias preserve exact public arguments, omission, native void 
                 assert.deepEqual(await binding.invoke(`/${name}`, {}), thrown)
             }
             assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
-        }, mode)
+        })
     }
 })
 
 test('captureException constructs a native fixture and preserves positional arguments and outcomes', async () => {
-    for (const mode of ['v0', 'v1']) {
+    {
         await spies(async (binding, calls, results) => {
             assert.equal((await binding.invoke('/capture_exception', {})).failure.code, 'before-setup')
             await setup(binding)
@@ -268,7 +268,7 @@ test('captureException constructs a native fixture and preserves positional argu
             assert.equal(thrown.outcome.kind, 'thrown')
             assert.deepEqual(await binding.invoke('/capture_exception', { error }), thrown)
             assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
-        }, mode)
+        })
     }
 })
 
@@ -300,7 +300,7 @@ test('captureException reports unsupported or unrepresentable fixture arguments 
 })
 
 test('groupIdentify preserves public arguments, omission and native outcomes', async () => {
-    for (const mode of ['v0', 'v1']) {
+    {
         await spies(async (binding, calls, results) => {
             assert.equal((await binding.invoke('/group_identify', {})).failure.code, 'before-setup')
             await setup(binding)
@@ -360,7 +360,7 @@ test('groupIdentify preserves public arguments, omission and native outcomes', a
             assert.equal(thrown.outcome.error.kind, 'exception')
             assert.deepEqual(await binding.invoke('/group_identify', {}), thrown)
             assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
-        }, mode)
+        })
     }
 })
 
@@ -512,7 +512,6 @@ test('unsupported supplied fields remain attributed gaps before native work', as
         await setup(binding)
         for (const [route, args] of [
             ['/capture', { event: 'event', set: null }],
-            ['/capture', { options: {} }],
             ['/capture', { send_feature_flags: { device_id: 'd' } }],
             ['/flush', { timeout_ms: 0 }],
             ['/get_feature_flag', { key: 'f', fresh: false }],
@@ -595,4 +594,4 @@ test('analytics-v1 options translate to native input properties without coercion
         ])
             assert.equal((await binding.invoke('/capture', args)).failure.kind, kind)
         assert.equal(calls.length, 4)
-    }, 'v1'))
+    }))

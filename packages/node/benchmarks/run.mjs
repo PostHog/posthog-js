@@ -19,7 +19,7 @@ export async function runWorker(sdkDirectory, spec, pass, timeoutMs = 120000) {
   return new Promise((resolveResult) => {
     const child = fork(worker, [sdkDirectory, JSON.stringify(spec), pass], {
       execArgv: ['--expose-gc', `--max-old-space-size=${heapLimitMb}`],
-      env: { ...process.env, NODE_OPTIONS: '', POSTHOG_CAPTURE_MODE: 'v0' },
+      env: { ...process.env, NODE_OPTIONS: '' },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     let stderr = ''

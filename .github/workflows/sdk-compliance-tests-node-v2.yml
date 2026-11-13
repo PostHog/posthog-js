@@ -46,18 +46,13 @@ jobs:
         continue-on-error: true
         permissions:
             contents: read
-        strategy:
-            fail-fast: false
-            matrix:
-                mode: [v0, v1]
         defaults:
             run:
                 shell: bash
         env:
             NODE_IMAGE: node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-            # Harness release 1.19.0; pin the published multi-platform image index.
-            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:c1e36d011ec4dec0102fb52b5e6fd3b156b0de9251e0d6b735385876d9a897b4
-            CAPTURE_MODE: ${{ matrix.mode }}
+            # Harness release 1.26.0; pin the published multi-platform image index.
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:74dae248b19cc6030d803e2904b08d3bd1036b5c215414636a42d090ac27cba0
         steps:
             # Test the PR head or the triggering commit for push/manual runs.
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,28 +70,34 @@ jobs:
                   mkdir -p "$RUNNER_TEMP/node-compliance"
                   bash compliance/node/v2/prepare-ci.sh "$RUNNER_TEMP/node-compliance" \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/prepare.log"
+            - name: Run isolated compliance profile
+              if: steps.prepare.outcome == 'success'
+              continue-on-error: true
+              timeout-minutes: 35
+              run: |
+                  bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
+                    "$RUNNER_TEMP/node-compliance/reports" \
+                    2>&1 | tee "$RUNNER_TEMP/node-compliance/run.log"
             - name: Run isolated acceptance profile
               if: steps.prepare.outcome == 'success'
               continue-on-error: true
-              timeout-minutes: 60
-              env:
-                  SDK_COMPLIANCE_RUN_TIMEOUT_MS: '2400000'
+              timeout-minutes: 25
               run: |
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
-                    "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/acceptance" \
+                    "$RUNNER_TEMP/node-compliance/acceptance" acceptance \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/acceptance-run.log"
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               if: always()
               continue-on-error: true
               timeout-minutes: 3
               with:
-                  name: node-v2-${{ matrix.mode }}
+                  name: node-v2-v1
                   path: ${{ runner.temp }}/node-compliance
                   if-no-files-found: error
                   retention-days: 14
 
     report:
-        name: Acceptance results (advisory)
+        name: Compliance results (advisory)
         needs: compliance
         if: always()
         concurrency:
@@ -112,8 +113,9 @@ jobs:
             - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               continue-on-error: true
               with:
-                  pattern: node-v2-*
-                  path: ${{ runner.temp }}/node-compliance-results
+                  # A download by name extracts into `path` itself, so name the folder the report reads.
+                  name: node-v2-v1
+                  path: ${{ runner.temp }}/node-compliance-results/node-v2-v1
             # No checkout or execution of code from the tested revision in this job.
             - name: Summarize results and update PR comment
               continue-on-error: true
@@ -155,14 +157,13 @@ jobs:
                       const json = value => escape(JSON.stringify(value, (key, item) =>
                           /^(api[_-]?key|personal[_-]?api[_-]?key|authorization|cookie|password|secret|token|headers|wire_requests|body_decompressed)$/i.test(key)
                               ? '[redacted]' : item), 1200);
-                      const lines = [marker, '# Node SDK acceptance v2', '',
+                      const lines = [marker, '# Node SDK compliance v2', '',
                           `Commit: ${sha}`, `[Workflow run and artifacts](${runUrl})`, ''];
-                      for (const [mode, profile] of [
-                          ['v0', 'node-legacy'],
-                          ['v1', 'node-analytics-v1'],
+                      for (const [mode, profile, suite, reports] of [
+                          ['v1', 'node-analytics-v1', 'acceptance', 'acceptance'],
+                          ['v1', 'node-analytics-v1', 'migration', 'reports'],
                       ]) {
-                          const reports = 'acceptance';
-                          lines.push(`## Capture ${mode}`, '');
+                          lines.push(`## Capture ${mode} — ${suite}`, '');
                           try {
                               const root = path.join(process.env.REPORT_ROOT, `node-v2-${mode}`);
                               const read = file => {

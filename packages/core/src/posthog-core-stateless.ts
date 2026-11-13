@@ -544,7 +544,9 @@ export abstract class PostHogCoreStateless {
     this.removeDebugCallback?.()
 
     if (enabled) {
-      const removeDebugCallback = this.on('*', (event, payload) => this._logger.info(event, payload))
+      const removeDebugCallback = this.on('*', (event, payload) =>
+        this._logger.info(event, this.describeDebugPayload(payload))
+      )
       this.removeDebugCallback = () => {
         removeDebugCallback()
         this.removeDebugCallback = undefined
@@ -554,6 +556,11 @@ export abstract class PostHogCoreStateless {
 
   get isDebug(): boolean {
     return !!this.removeDebugCallback
+  }
+
+  /** What debug mode logs for an emitted event's payload. SDKs whose events can carry sensitive data log a summary instead. */
+  protected describeDebugPayload(payload: any): any {
+    return payload
   }
 
   get isDisabled(): boolean {
@@ -1352,7 +1359,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
     // Top-level `type` is deprecated and a no-op for batch ingestion.
     // Top-level `library` and `library_version` are deprecated; `$lib` and
     // `$lib_version` in properties are the canonical SDK metadata fields.

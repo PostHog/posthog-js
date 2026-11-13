@@ -1,5 +1,7 @@
 import { PostHog } from '@/entrypoints/index.node'
 
+import { captureCalls, captureRequests, sentEventsOf, v1Response } from './utils'
+
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
@@ -7,13 +9,11 @@ const DEBOUNCE_MS = 50
 const HALF_DEBOUNCE_MS = DEBOUNCE_MS / 2
 
 function getFlushedBatches(): any[][] {
-  return mockedFetch.mock.calls
-    .filter((c) => (c[0] as string).includes('/batch/'))
-    .map((c) => JSON.parse((c[1] as any).body).batch)
+  return captureRequests(mockedFetch).map(sentEventsOf)
 }
 
 describe('flush combines events and spans', () => {
-  it('waits for the span export even when the event flush rejects', async () => {
+  it('waits for the span export even when the event delivery fails', async () => {
     // `Promise.all` settled on the event rejection, so a serverless host could
     // freeze the invocation with the span request still open.
     vi.useRealTimers()
@@ -25,7 +25,7 @@ describe('flush combines events and spans', () => {
         order.push('traces-done')
         return { status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) } as any
       }
-      throw new Error('events endpoint down')
+      return new Response('events endpoint down', { status: 400 })
     })
     const posthog = new PostHog('key', {
       host: 'http://example.com',
@@ -34,17 +34,23 @@ describe('flush combines events and spans', () => {
       traces: { serviceName: 'svc' },
       disableCompression: true,
     })
-    posthog.capture({ distinctId: 'u', event: 'e' })
-    posthog.startSpan('s').end()
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    try {
+      posthog.capture({ distinctId: 'u', event: 'e' })
+      posthog.startSpan('s').end()
 
-    await expect(posthog.flush()).rejects.toThrow()
-    order.push('flush-returned')
+      await expect(posthog.flush()).resolves.toBeUndefined()
+      order.push('flush-returned')
 
-    // Exact, not an index comparison: before the fix `traces-done` is absent
-    // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
-    expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
-    await posthog.shutdown()
-    vi.useFakeTimers()
+      // Exact, not an index comparison: before the fix `traces-done` is absent
+      // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
+      expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
+      expect(errors).toEqual([expect.objectContaining({ name: 'CaptureError', retryExhausted: [expect.any(String)] })])
+    } finally {
+      await posthog.shutdown()
+      vi.useFakeTimers()
+    }
   })
 })
 
@@ -68,15 +74,12 @@ describe('waitUntil debounced flush', () => {
         flushInterval: 60000, // Long interval so timer doesn't trigger
         fetchRetryCount: 0,
         disableCompression: true,
+        captureAiCompression: 'none',
         waitUntil: mockWaitUntil,
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -89,6 +92,28 @@ describe('waitUntil debounced flush', () => {
 
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
       expect(mockWaitUntil).toHaveBeenCalledWith(expect.any(Promise))
+    })
+
+    it('schedules a waitUntil flush for an event dropped while its properties are read', async () => {
+      const errors: unknown[] = []
+      posthog.on('error', (error) => errors.push(error))
+      const properties = Object.defineProperty({}, 'value', {
+        enumerable: true,
+        get: () => {
+          throw new Error('getter failed')
+        },
+      })
+
+      posthog.capture({ distinctId: 'user-1', event: 'unreadable', properties })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockWaitUntil).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await expect(mockWaitUntil.mock.calls[0][0]).resolves.toBeUndefined()
+      expect(errors).toEqual([
+        expect.objectContaining({ name: 'CaptureError', message: expect.stringContaining('could not be serialized') }),
+      ])
+      expect(mockedFetch).not.toHaveBeenCalled()
     })
 
     it('does not call waitUntil again on subsequent captures in same batch', async () => {
@@ -142,7 +167,7 @@ describe('waitUntil debounced flush', () => {
       })
       mockedFetch.mockImplementationOnce(async () => {
         await delivery
-        return { status: 200, text: async () => 'ok', json: async () => ({ status: 'ok' }) } as any
+        return v1Response()
       })
 
       try {
@@ -164,6 +189,30 @@ describe('waitUntil debounced flush', () => {
       } finally {
         completeDelivery()
       }
+    })
+
+    it('drains both capture lanes before resolving the waitUntil promise', async () => {
+      let releaseAi!: () => void
+      mockedFetch.mockImplementation((url: any) =>
+        String(url).includes('/i/v1/ai/events')
+          ? new Promise((resolve) => (releaseAi = () => resolve(v1Response())))
+          : Promise.resolve(v1Response())
+      )
+      const settled = vi.fn()
+
+      posthog.capture({ distinctId: 'user-1', event: 'analytics_event' })
+      posthog.captureAi({ distinctId: 'user-1', event: '$ai_generation' })
+      await vi.advanceTimersByTimeAsync(0)
+      const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+      void waitUntilPromise.then(settled)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+
+      expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['analytics_event']])
+      expect(captureCalls(mockedFetch, '/i/v1/ai/events')).toHaveLength(1)
+      expect(settled).not.toHaveBeenCalled()
+
+      releaseAi()
+      await expect(waitUntilPromise).resolves.toBeUndefined()
     })
 
     it('does not activate debounced flush when no waitUntil in options', async () => {
@@ -248,11 +297,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilMaxWaitMs: MAX_DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -332,11 +377,7 @@ describe('waitUntil debounced flush', () => {
         waitUntil: mockWaitUntil,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {
@@ -570,11 +611,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
@@ -606,11 +643,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
@@ -642,11 +675,7 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: 200,
       })
 
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
+      mockedFetch.mockResolvedValue(v1Response())
     })
 
     afterEach(async () => {

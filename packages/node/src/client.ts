@@ -2,11 +2,10 @@ import { version } from './version'
 
 import {
   allSettled,
+  ErrorTracking as CoreErrorTracking,
   FeatureFlagValue,
-  getEventUuid,
   isBlockedUA,
   isPlainObject,
-  isPostHogFetchContentTooLargeError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
@@ -27,11 +26,9 @@ import {
   resolveMetricsConfig,
   resolveTracesConfig,
   runWithActiveSpan,
-  RetriableOptions,
   raceWithTimeout,
   safeSetTimeout,
   SyncSpanContextManager,
-  uuidv7,
 } from '@posthog/core'
 import type {
   Metrics,
@@ -44,6 +41,7 @@ import type {
 } from '@posthog/core'
 import {
   AllFlagsOptions,
+  CaptureExceptionOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
@@ -56,6 +54,7 @@ import {
   IPostHog,
   OverrideFeatureFlagsOptions,
   PostHogOptions,
+  PreparedEventMessage,
   SendFeatureFlagsOptions,
   SetPersonPropertiesMessage,
   UnsetPersonPropertiesMessage,
@@ -76,13 +75,19 @@ import ErrorTracking from './extensions/error-tracking'
 import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
+import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
+import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
+import type { CaptureError } from './capture-v1/errors'
+import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
+import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
+import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
+import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
+import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
+import { readEventOptions } from './capture-v1/transform'
+import { fillLibraryProperties, fillOptions, fillProperties, isUnsetProperty, snapshotLayer } from './event-defaults'
+import { AI_CAPTURE_ROUTE } from './ai-capture/routing'
 import { notifyContextListeners } from './extensions/context/listeners'
 import { getEventContext } from './extensions/context/event-context'
-import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
-import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
-import { V1CaptureSender } from './capture-v1/sender'
-import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
-import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
 import type { Emails } from './emails/types'
 import { resolveNodeLogsConfig } from './logs-config'
@@ -101,12 +106,12 @@ const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
 const _emittedDeprecations = new Set<string>()
 
-function emitDeprecationWarningOnce(id: string, message: string): void {
+function emitDeprecationWarningOnce(id: string, message: string, log: (message: string) => void = console.warn): void {
   if (_emittedDeprecations.has(id)) {
     return
   }
   _emittedDeprecations.add(id)
-  console.warn(`[PostHog] ${message}`)
+  log(`[PostHog] ${message}`)
 }
 
 /**
@@ -120,14 +125,201 @@ function normalizeApiKey(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/** Why a project API key disables the client, or undefined when it is usable. Never includes the key. */
+function apiKeyProblem(apiKey: string): string | undefined {
+  if (!apiKey) {
+    return 'No project API key was passed'
+  }
+  if (apiKey.startsWith('phx_')) {
+    return 'A personal API key ("phx_...") was passed where the project API key ("phc_...") belongs'
+  }
+  return undefined
+}
+
+/** A content-free summary of an emitted event's payload for debug logs: names, uuids and counts only. */
+function summarizeForDebugLog(payload: unknown): unknown {
+  if (Array.isArray(payload)) {
+    return `${payload.length} item(s)`
+  }
+  if (payload instanceof Error) {
+    return `${payload.name}: ${payload.message}`
+  }
+  if (payload && typeof payload === 'object' && typeof (payload as { event?: unknown }).event === 'string') {
+    const { event, uuid } = payload as { event: string; uuid?: unknown }
+    return uuid === undefined ? { event } : { event, uuid }
+  }
+  return undefined
+}
+
 function normalizePersonalApiKey(value?: unknown): string | undefined {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || undefined
 }
 
+/** Capture options plus a flag that the caller's uuid was already replaced, with its one warning. */
+type LaneCaptureOptions = PostHogCaptureOptions & { _invalidUuidWarned?: boolean }
+
+function isUnsetUuid(uuid: unknown): boolean {
+  return uuid === undefined || uuid === null || uuid === ''
+}
+
+function isInvalidUuid(uuid: unknown): boolean {
+  return !isUnsetUuid(uuid) && (typeof uuid !== 'string' || canonicalizeUuid(uuid) === undefined)
+}
+
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+/** Properties that set an option or a session field, kept on a minimal `$feature_flag_called` event. */
+const FLAG_CALLED_OPTION_SOURCE_PROPERTIES = [
+  '$cookieless_mode',
+  '$ignore_sent_at',
+  '$product_tour_id',
+  '$process_person_profile',
+  '$session_id',
+  '$window_id',
+]
+
+/**
+ * The options of a `captureException()` or `captureExceptionImmediate()` call. A string second
+ * argument, or extra arguments after one that is not an object, is the 5.x positional form
+ * `(error, distinctId, properties, uuid, flags)` (no `uuid` for the immediate variant): it still
+ * works and logs one deprecation error per process.
+ */
+function readCaptureExceptionArgs(
+  method: string,
+  second: unknown,
+  rest: unknown[],
+  legacyHasUuid: boolean
+): CaptureExceptionOptions {
+  if (typeof second !== 'string' && (rest.length === 0 || isPlainObject(second))) {
+    if (rest.length > 0) {
+      emitDeprecationWarningOnce(
+        `${method} extra arguments`,
+        `${method}(error, options) ignores the arguments after the options object.`
+      )
+    }
+    return isPlainObject(second) ? (second as CaptureExceptionOptions) : {}
+  }
+  emitDeprecationWarningOnce(
+    `${method} positional arguments`,
+    `${method}(error, distinctId, properties) is deprecated: pass an object instead, e.g. ` +
+      `${method}(error, { distinctId, properties }). The old form will be removed in the next major version.`,
+    console.error
+  )
+  const [properties, ...tail] = rest
+  const [uuid, flags] = legacyHasUuid ? tail : [undefined, tail[0]]
+  return {
+    distinctId: (second ?? undefined) as string | undefined,
+    properties: properties as CaptureExceptionOptions['properties'],
+    uuid: uuid as string | undefined,
+    flags: flags as FeatureFlagEvaluations | undefined,
+  }
+}
+
+/**
+ * A caller value threw while the client read the event, so the event is dropped as
+ * `unserializable`. `original` only lets `prepareEventMessage()` reject as it did before; the drop
+ * report never uses it, because its message can hold event data.
+ */
+class UnreadableEventError extends Error {
+  constructor(readonly original: unknown) {
+    super('A value in the event threw while it was read')
+  }
+}
+
+/** Runs `read` over caller values; a throw becomes an `UnreadableEventError`. */
+function readCallerValues<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (error) {
+    throw new UnreadableEventError(error)
+  }
+}
+
+/**
+ * A copy of the event for `before_send`, so a hook that mutates it cannot change the caller's
+ * objects or the `register()` and context defaults. Plain objects and arrays are copied all the
+ * way down; class instances (`Date`, `Buffer`, custom classes) stay shared. The hook always gets
+ * an `options` object it can write to.
+ */
+function isolateForBeforeSend(eventMessage: EventMessage): EventMessage {
+  const isolated = copyPlainValues(eventMessage, new WeakMap()) as EventMessage
+  isolated.options ??= {}
+  return isolated
+}
+
+/** Only objects with no prototype or `Object.prototype`: a copy keeps no class or `toJSON` method. */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+// `seen` keeps a circular value circular, so it serializes as it would without a hook.
+function copyPlainValues(value: unknown, seen: WeakMap<object, unknown>): unknown {
+  if (!Array.isArray(value) && !isPlainRecord(value)) {
+    return value
+  }
+  const known = seen.get(value)
+  if (known !== undefined) {
+    return known
+  }
+  if (Array.isArray(value)) {
+    const copy: unknown[] = new Array(value.length)
+    seen.set(value, copy)
+    value.forEach((item, index) => {
+      copy[index] = copyPlainValues(item, seen)
+    })
+    return copy
+  }
+  const copy: Record<string, unknown> = Object.getPrototypeOf(value) === null ? Object.create(null) : {}
+  seen.set(value, copy)
+  for (const key of Object.keys(value)) {
+    copy[key] = copyPlainValues(value[key], seen)
+  }
+  return copy
+}
+
+/**
+ * The `$identify` properties: `$set` is the caller's `$set`, or every other property when there is
+ * none; `$set_once` only when the caller gave one.
+ */
+function identifyEventProperties(properties: Record<string | number, any>): PostHogEventProperties {
+  const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+  return {
+    $set: $set || rest,
+    ...($set_once !== undefined && $set_once !== null ? { $set_once } : {}),
+    $anon_distinct_id: $anon_distinct_id ?? undefined,
+  }
+}
+
+/** How one message type resolves identity and which layers may set which keys. */
+type PrepareEventOptions = {
+  /** The distinct id when neither the call nor the context gives one; otherwise a personless id is generated. */
+  fallbackDistinctId?: string
+  /** Whether the context session id fills `$session_id`. */
+  contextSession?: boolean
+  /** Properties that only the call sets: no layer fills them. */
+  callOnlyProperties?: readonly string[]
+  /** Set the `distinct_id` property to the resolved distinct id. */
+  distinctIdProperty?: boolean
+}
+
+/** `alias` never takes its target from a context or default, and reports the resolved id. */
+const ALIAS_PREPARE_OPTIONS: PrepareEventOptions = { callOnlyProperties: ['alias'], distinctIdProperty: true }
+
+/** The id, or undefined when it is missing, empty or only whitespace. */
+function presentDistinctId(value: unknown): string | undefined {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+    return undefined
+  }
+  // Stringified before before_send, so a hook that leaves the id alone never sends a non-string.
+  return typeof value === 'string' ? value : String(value)
 }
 
 function positiveNumberOr(value: unknown, fallback: number): number {
@@ -183,15 +375,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _serviceName?: string | null
   private _spanContext?: SpanContextManager
 
-  private readonly captureMode: CaptureMode
-  private _v1Sender?: V1CaptureSender
+  // Created on first use, so a client that never calls captureAi has no AI lane.
+  private readonly _captureLanes = new Map<CaptureEndpoint, CaptureLane>()
+  private readonly _captureSettings: CaptureSettings
   private _emails?: EmailSender
   private _isShutdown = false
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
   /** Whether PostHog AI integrations redact content: see `privacyMode` in `PostHogOptions`. */
   public readonly privacyMode: boolean
-  private _aiCaptureRouteActive = false
+
+  // Options from registerOptions(). Replaced, never mutated, so an event can keep the object it read.
+  private _globalOptions: Record<string, JsonType> = {}
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -259,8 +454,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
     const normalizedApiKey = normalizeApiKey(apiKey)
+    const keyProblem = apiKeyProblem(normalizedApiKey)
     const normalizedOptions = {
       ...options,
+      disabled: options.disabled || keyProblem !== undefined,
       // Node's default is higher than the shared core default (1000) because backend
       // workloads are more likely to burst-enqueue synchronously ahead of a flush.
       // Applied after the spread with a nullish fallback so a wrapper forwarding
@@ -274,7 +471,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
-    this.captureMode = resolveCaptureMode()
+    if (keyProblem) {
+      // console.error, not this._logger: the logger only prints in debug mode, and the client sends nothing.
+      console.error(`[PostHog] ${keyProblem}, so the client is disabled.`)
+    }
+    this.warnIfCaptureModeSet()
+    // console.error, not this._logger: the logger only prints in debug mode, and a bad option changes delivery.
+    this._captureSettings = resolveCaptureSettings(normalizedOptions, (message) =>
+      console.error(`[PostHog] ${message}`)
+    )
     this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
     this.privacyMode = normalizedOptions.privacyMode === true
     this.context = this.initializeContext()
@@ -333,14 +538,83 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
+  /** Queues the event on its capture lane instead of the core queue. */
   protected override enqueue(
     type: string,
     message: any,
     options?: PostHogCaptureOptions,
     explicitRoute?: string
   ): void {
-    super.enqueue(type, message, options, explicitRoute)
+    this.wrap(() => {
+      if (this.optedOut) {
+        this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
+        return
+      }
+      const prepared = this._prepareLaneMessage(message, options)
+      if (prepared === null) {
+        return
+      }
+      this._captureLane(explicitRoute).enqueue(prepared)
+      this._events.emit(type, prepared)
+    })
     this.scheduleDebouncedFlush()
+  }
+
+  /** Sends the event through its capture lane's sender, without queueing it. */
+  protected override async sendImmediate(
+    type: string,
+    message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): Promise<void> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return
+    }
+    if (!this._isInitialized) {
+      await this._initPromise
+    }
+    if (this.optedOut) {
+      this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
+      return
+    }
+    const prepared = this._prepareLaneMessage(message, options)
+    if (prepared === null) {
+      return
+    }
+    try {
+      await this._captureLane(explicitRoute).sendImmediate(prepared)
+    } catch (err) {
+      this._events.emit('error', err)
+    }
+  }
+
+  private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
+    const { _invalidUuidWarned, ...captureOptions } = (options ?? {}) as LaneCaptureOptions
+    // before_send already ran, so this is the hook's uuid; check it again, warning at most once per call.
+    // A missing uuid is generated here, not by core's generator.
+    const uuid = this._canonicalEventUuid(captureOptions.uuid, !_invalidUuidWarned) ?? eventUuidv7()
+    const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...captureOptions, uuid }))
+    return prepared === null ? null : this.normalizeMessage(prepared)
+  }
+
+  /**
+   * The canonical form of a caller's event uuid, or undefined when there is none to keep. An
+   * invalid uuid is replaced with a generated one and a warning that never repeats the value.
+   */
+  private _canonicalEventUuid(uuid: unknown, warnIfInvalid = true): string | undefined {
+    if (isUnsetUuid(uuid)) {
+      return undefined
+    }
+    const canonical = typeof uuid === 'string' ? canonicalizeUuid(uuid) : undefined
+    if (canonical !== undefined) {
+      return canonical
+    }
+    if (warnIfInvalid) {
+      // console.warn, not this._logger: the logger only prints in debug mode, and the event loses its uuid.
+      console.warn('[PostHog] Replaced an invalid event uuid with a generated one; uuids must be RFC 4122 strings')
+    }
+    return eventUuidv7()
   }
 
   /**
@@ -349,7 +623,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * callers already treat `flush()` as safe to leave unwrapped.
    */
   private _flushEventsAndSpans(skipThrottledSpans = false): Promise<void> {
-    const events = this.flushWithPendingPromises()
+    // Pending captures land on their lanes first, so this flush sends them too.
+    const events = this.flushWithPendingPromises().then(() => this._flushCaptureLanes())
     const others: Promise<unknown>[] = []
     if (this._traces && !(skipThrottledSpans && this._traces.throttled)) {
       others.push(this._traces.flush().catch(() => {}))
@@ -373,20 +648,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
-  protected override flushAutomatic(): Promise<void> {
-    // The events timer must not drag spans through a `Retry-After` window the
-    // traces queue is honouring; its own timer picks them up when it closes.
-    return this._flushKeepingRuntimeAlive(true)
-  }
-
+  /**
+   * Sends all queued events and spans, and resolves when every send has finished.
+   * It does not reject when delivery fails: those failures arrive on the `'error'` event.
+   */
   override async flush(): Promise<void> {
     // An app's crash handler often flushes and exits before the end of the turn, when autocapture would capture.
     this.errorTracking.capturePendingExceptions()
-    return this._flushKeepingRuntimeAlive(false)
+    return this._keepRuntimeAlive(this._flushEventsAndSpans())
   }
 
-  private _flushKeepingRuntimeAlive(skipThrottledSpans: boolean): Promise<void> {
-    const flushPromise = this._flushEventsAndSpans(skipThrottledSpans)
+  /** Every lane flushes concurrently, so a slow lane only delays this promise, not the other lanes' sends. */
+  private _flushCaptureLanes(): Promise<void> {
+    return Promise.all([...this._captureLanes.values()].map((lane) => lane.flush())).then(() => {})
+  }
+
+  /** A flush a lane started on its own, from its timer or `flushAt`. */
+  private _onLaneBackgroundFlush(laneFlush: Promise<void>): void {
+    // Spans ride along, except while the traces queue is honouring a `Retry-After`
+    // window; its own timer picks them up when the window closes.
+    const traces = this._traces
+    const flush =
+      traces && !traces.throttled ? allSettled([laneFlush, traces.flush().catch(() => {})]).then(() => {}) : laneFlush
+    void this._keepRuntimeAlive(flush)
+  }
+
+  private _keepRuntimeAlive(flushPromise: Promise<void>): Promise<void> {
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -557,127 +844,96 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this.options.fetch ? this.options.fetch(url, options) : fetch(url, options)
   }
 
-  /**
-   * Route an event to its queue. In v1 mode `$ai_*` events go to the isolated {@link AI_ROUTE}
-   * (legacy transport) and everything else to {@link ANALYTICS_ROUTE} (Capture V1); in v0 mode
-   * every event stays on {@link ANALYTICS_ROUTE}, which maps to the historical queue. Routing runs
-   * on the post-`before_send`, normalized event name (core calls this after `processBeforeEnqueue`).
-   */
-  protected getQueueRouteKey(message: PostHogEventProperties): string {
-    return this.captureMode === 'v1' && isLegacyOnlyEvent(message) ? AI_ROUTE : ANALYTICS_ROUTE
-  }
-
-  protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
-    if (route === AI_CAPTURE_ROUTE) {
-      return PostHogPersistedProperty.AiCaptureQueue
-    }
-    return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
-  }
-
-  protected getActiveQueueRoutes(): string[] {
-    const routes = this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
-    if (this._aiCaptureRouteActive) {
-      routes.push(AI_CAPTURE_ROUTE)
-    }
-    return routes
-  }
-
-  protected getBatchEndpointPath(route: string): string {
-    return route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT_PATH : super.getBatchEndpointPath(route)
-  }
-
-  /**
-   * Capture submission seam shared by the batched (`_flush`) and immediate (`sendImmediate`)
-   * paths. Events are routed to homogeneous per-route queues at enqueue time, so a batch here is
-   * never mixed: the {@link AI_ROUTE} (and all of v0 mode) uses the legacy `/batch/` transport,
-   * which throws so `_flush` can shrink/persist/retry its own queue; the {@link ANALYTICS_ROUTE}
-   * in v1 mode uses the Capture V1 endpoint. Because the routes flush independently, a v0/AI leg
-   * failure can never re-send analytics events already accepted on the V1 leg.
-   */
-  protected async sendBatch(
-    batchMessages: (PostHogEventProperties | undefined)[],
-    retryOptions?: Partial<RetriableOptions>,
-    route: string = ANALYTICS_ROUTE
-  ): Promise<void> {
-    if (route === AI_CAPTURE_ROUTE) {
-      return this.sendAiCaptureBatch(batchMessages, retryOptions)
-    }
-
-    if (this.captureMode !== 'v1' || route === AI_ROUTE) {
-      return super.sendBatch(batchMessages, retryOptions, route)
-    }
-
-    // Analytics route in v1 mode: homogeneous (no `$ai_*`, routed away at enqueue) and never
-    // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
-    const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
-    await this.getV1Sender().sendV1Batch(v1Events)
-  }
-
-  private async sendAiCaptureBatch(
-    batchMessages: (PostHogEventProperties | undefined)[],
-    retryOptions?: Partial<RetriableOptions>
-  ): Promise<void> {
-    const { batches, dropped } = partitionAiBatch(batchMessages)
-    for (const { event, bytes } of dropped) {
-      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
-      this._logger.error(message)
-      this._events.emit('error', new Error(message))
-    }
-    for (const batch of batches) {
-      await this.sendAiSubBatch(batch, retryOptions)
-    }
-  }
-
-  // A single-event 413 means the server's cap is below that event's size, so no split can save it.
-  private async sendAiSubBatch(
-    batch: PostHogEventProperties[],
-    retryOptions?: Partial<RetriableOptions>
-  ): Promise<void> {
-    try {
-      await super.sendBatch(batch, retryOptions, AI_CAPTURE_ROUTE)
-    } catch (err) {
-      if (!isPostHogFetchContentTooLargeError(err)) {
-        throw err
-      }
-      if (batch.length === 1) {
-        const [event] = batch
-        const eventName = typeof event.event === 'string' ? event.event : 'unknown'
-        const message = `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
-        this._logger.error(message)
-        this._events.emit('error', new Error(message))
-        return
-      }
-      const mid = Math.ceil(batch.length / 2)
-      await this.sendAiSubBatch(batch.slice(0, mid), retryOptions)
-      await this.sendAiSubBatch(batch.slice(mid), retryOptions)
-    }
-  }
-
-  private getV1Sender(): V1CaptureSender {
-    if (!this._v1Sender) {
-      this._v1Sender = new V1CaptureSender(
-        {
-          host: this.host,
-          apiKey: this.apiKey,
-          libraryId: this.getLibraryId(),
-          libraryVersion: this.getLibraryVersion(),
-          userAgent: this.getCustomUserAgent() || undefined,
-          historicalMigration: this.historicalMigration,
-          compressionEnabled: !this.disableCompression,
-          requestTimeoutMs: this.requestTimeout,
-          // Reuse the existing v0 retry knobs: 1 initial attempt + fetchRetryCount retries.
-          maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
-          initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
-          isDebug: this.isDebug,
-        },
-        {
+  /** The lane for `route`; `captureAi` events use the AI lane, every other event the analytics lane. */
+  private _captureLane(route?: string): CaptureLane {
+    const endpoint = route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT : ANALYTICS_CAPTURE_ENDPOINT
+    let lane = this._captureLanes.get(endpoint)
+    if (!lane) {
+      const compressor = this.captureCompressor()
+      lane = new CaptureLane(this._captureLaneConfig(endpoint), {
+        sender: new V1CaptureSender(this.captureSenderConfig(endpoint, compressor), {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
-          onError: (error) => this._events.emit('error', error),
-          compress: (payload) => this.compressPayload(payload),
-        }
-      )
+          onError: (error, summary) => this._reportCaptureLoss([error], summary),
+          compress: (payload, codec) => compressor.compress(payload, codec),
+        }),
+        onLocalDrops: (errors, summary) => this._reportCaptureLoss(errors, summary),
+        onError: (error) => this._events.emit('error', error),
+        onFlush: (messages) => this._events.emit('flush', messages),
+        onBackgroundFlush: (flush) => this._onLaneBackgroundFlush(flush),
+        logger: this._logger,
+      })
+      this._captureLanes.set(endpoint, lane)
     }
-    return this._v1Sender
+    return lane
+  }
+
+  private _captureLaneConfig(endpoint: CaptureEndpoint): CaptureLaneConfig {
+    const isAi = endpoint === AI_CAPTURE_ENDPOINT
+    // The AI queue cap bounds memory for large events, so it is kept as set and the AI lane flushes no later than when
+    // its queue is full. The analytics queue keeps its floor at flushAt, so the flushAt trigger can always fire.
+    const flushAt = isAi ? Math.min(this.flushAt, this._captureSettings.ai.maxQueueSize) : this.flushAt
+    return {
+      endpoint,
+      flushAt,
+      flushIntervalMs: this.options.flushInterval ?? 5000,
+      maxBatchSize: Math.max(flushAt, this.options.maxBatchSize ?? 100),
+      maxQueueSize: isAi
+        ? this._captureSettings.ai.maxQueueSize
+        : Math.max(this.flushAt, this.options.maxQueueSize ?? 10000),
+      targetBatchBytes: CAPTURE_BATCH_TARGET_BYTES,
+      maxEventBytes: isAi ? AI_MAX_PROPERTIES_BYTES : ANALYTICS_MAX_EVENT_BYTES,
+      maxEventBytesOf: isAi ? 'properties' : 'event',
+    }
+  }
+
+  /** Emits each error; with no `'error'` listener, logs `summary` once instead, since the events are lost. */
+  private _reportCaptureLoss(errors: CaptureError[], summary: string): void {
+    const errorListeners = this._events.events['error']?.length ?? 0
+    for (const error of errors) {
+      this._events.emit('error', error)
+    }
+    if (errorListeners === 0) {
+      // console.warn, not this._logger: the logger only prints in debug mode.
+      console.warn(`[PostHog] ${summary}`)
+    }
+  }
+
+  /**
+   * Compresses capture request bodies. The edge build uses CompressionStream; the Node
+   * entrypoint overrides this with node:zlib.
+   *
+   * @internal
+   */
+  protected captureCompressor(): CaptureCompressor {
+    return webCompressor
+  }
+
+  private captureSenderConfig(path: CaptureEndpoint, compressor: CaptureCompressor): V1CaptureSenderConfig {
+    const laneSettings = path === AI_CAPTURE_ENDPOINT ? this._captureSettings.ai : this._captureSettings.analytics
+    const compression = resolveCaptureCodec(laneSettings.compression, compressor, (fallback) =>
+      this._logger.debug(`zstd compression is not available in this runtime; ${path} uses ${fallback} instead`)
+    )
+    return {
+      host: this.host,
+      path,
+      apiKey: this.apiKey,
+      libraryId: this.getLibraryId(),
+      libraryVersion: this.getLibraryVersion(),
+      userAgent: this.getCustomUserAgent() || undefined,
+      historicalMigration: this.historicalMigration,
+      compression,
+      requestTimeoutMs: laneSettings.requestTimeoutMs,
+      maxRetries: this._captureSettings.maxRetries,
+      isDebug: this.isDebug,
+    }
+  }
+
+  private warnIfCaptureModeSet(): void {
+    const captureMode = typeof process !== 'undefined' ? process.env?.POSTHOG_CAPTURE_MODE : undefined
+    if (captureMode !== undefined) {
+      // console.warn, not this._logger: the logger only prints in debug mode, which cannot be on yet.
+      console.warn('[PostHog] POSTHOG_CAPTURE_MODE is no longer read. Capture always uses capture v1.')
+    }
   }
 
   /**
@@ -1056,32 +1312,85 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Returns the common properties attached to every captured event.
-   *
-   * @remarks
-   * Extends the shared core properties (`$lib`, `$lib_version`) with
-   * `$is_server: true` so that events emitted from the server-side SDKs
-   * (posthog-node and posthog-edge, which both extend this class) are
-   * distinguishable from browser and react-native events. Browser and
-   * react-native clients do not extend `PostHogBackendClient`, so they
-   * never receive this property.
-   *
-   * This is controlled by the `isServer` option, which defaults to `true`.
-   * When `isServer` is `false` (e.g. when using the SDK as a client/CLI), the
-   * `$is_server` property is omitted entirely so the device OS is attributed
-   * normally.
-   *
-   * @returns The common event properties, including `$is_server: true` when
-   * the `isServer` option is enabled.
+   * The properties the SDK adds to an event: `$is_server` (unless the `isServer` option is
+   * `false`), `$geoip_disable` (when the `disableGeoip` option is on), feature flag properties,
+   * and for `$exception` events the active OpenTelemetry trace ids and the injected release id.
+   * They fill only the keys every other layer left unset.
    */
-  protected override getCommonEventProperties(): PostHogEventProperties {
-    const commonProperties = super.getCommonEventProperties()
-
+  private async _sdkEventProperties(
+    event: string,
+    properties: PostHogEventProperties,
+    distinctId: string,
+    flagInputs: Pick<EventMessage, 'groups' | 'flags' | 'sendFeatureFlags' | 'disableGeoip'>
+  ): Promise<PostHogEventProperties> {
+    const sdkProperties: PostHogEventProperties = {
+      ...this._serviceNameProperties(),
+      ...(await this._flagEventProperties(distinctId, flagInputs)),
+    }
     if (this.options.isServer ?? true) {
-      commonProperties.$is_server = true
+      sdkProperties.$is_server = true
+    }
+    if (this.options.disableGeoip ?? true) {
+      sdkProperties.$geoip_disable = true
+    }
+    if (event === '$exception') {
+      // Both ids or neither, so a trace id is never paired with another trace's span id.
+      if (isUnsetProperty(properties, '$trace_id') && isUnsetProperty(properties, '$span_id')) {
+        Object.assign(sdkProperties, await getActiveTraceProperties())
+      }
+      const releaseId = CoreErrorTracking.getInjectedReleaseId()
+      if (releaseId) {
+        sdkProperties.$release_id = releaseId
+      }
+    }
+    return sdkProperties
+  }
+
+  /**
+   * `$feature/<key>` and `$active_feature_flags` from a `flags` snapshot or, when there is none,
+   * from `sendFeatureFlags`. Any failure gives no flag properties, and the event is still sent.
+   */
+  private async _flagEventProperties(
+    distinctId: string,
+    {
+      groups,
+      flags,
+      sendFeatureFlags,
+      disableGeoip,
+    }: Pick<EventMessage, 'groups' | 'flags' | 'sendFeatureFlags' | 'disableGeoip'>
+  ): Promise<PostHogEventProperties> {
+    try {
+      // An explicit `flags` snapshot always wins: the event carries the values the code branched
+      // on, with no additional network call.
+      if (flags) {
+        if (sendFeatureFlags) {
+          console.warn(
+            '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
+          )
+        }
+        return flags._getEventProperties()
+      }
+
+      if (sendFeatureFlags) {
+        emitDeprecationWarningOnce(
+          'sendFeatureFlags',
+          '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
+            'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
+            'second `/flags` request per capture and guarantees the event carries the exact ' +
+            'flag values your code branched on.'
+        )
+        // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
+        const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
+        const flagValues = await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
+        return buildFlagEventProperties(flagValues)
+      }
+    } catch {
+      return {}
     }
 
-    return commonProperties
+    // $feature_flag_called events are not enriched with cached flags — the flags
+    // on that event should reflect the specific call, not a potentially stale snapshot.
+    return {}
   }
 
   /**
@@ -1144,6 +1453,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  protected describeDebugPayload(payload: unknown): unknown {
+    return summarizeForDebugLog(payload)
+  }
+
   private _warnIfInvalidCapture(
     props: EventMessage,
     stringArgumentWarning: string,
@@ -1161,35 +1474,55 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     type: string,
     props: EventMessage,
     immediate: boolean,
-    prepareOptions?: { includeContextProperties?: boolean },
+    prepareOptions?: PrepareEventOptions,
     explicitRoute?: string
   ): Promise<void> {
+    const invalidUuidWarned = isInvalidUuid(props.uuid)
+    const uuid = this._canonicalEventUuid(props.uuid)
+    if (uuid !== props.uuid) {
+      props = { ...props, uuid }
+    }
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
-        .then(({ distinctId, event, properties, options }) => {
-          const captureOptions: PostHogCaptureOptions = {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
+        .then(({ distinctId, event, properties, options, uuid, timestamp }) => {
+          const captureOptions: LaneCaptureOptions = {
+            timestamp,
+            // `$geoip_disable` is already set before before_send; core must not add it after.
+            disableGeoip: false,
+            uuid,
+            _invalidUuidWarned: invalidUuidWarned,
           }
           const message = {
-            distinctId,
+            // Set directly, not as `distinctId`: core drops a falsy `distinctId`, which would hide what before_send left.
+            distinct_id: distinctId,
             event,
-            properties: {
-              ...properties,
-              ...this.getCommonEventProperties(),
-            },
+            properties,
+            ...(options !== undefined ? { options } : {}),
           }
           return immediate
             ? this.sendImmediate(type, message, captureOptions, explicitRoute)
             : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
-          if (err) {
+          // Only a caller value that threw is a local drop; anything else is an SDK failure.
+          if (err instanceof UnreadableEventError) {
+            this._dropUnreadableEvent(uuid, immediate, explicitRoute)
+          } else if (err) {
             console.error(err)
           }
         })
     )
+  }
+
+  private _dropUnreadableEvent(uuid: string | undefined, immediate: boolean, explicitRoute?: string): void {
+    if (this.disabled || this.optedOut) {
+      return
+    }
+    this._captureLane(explicitRoute).dropUnserializable(uuid, immediate)
+    if (!immediate) {
+      // The next flush reports the drop, so a serverless host must stay alive for it.
+      this.scheduleDebouncedFlush()
+    }
   }
 
   _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
@@ -1291,7 +1624,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = getEventUuid(props.uuid, uuidv7)
+    const uuid = this._canonicalEventUuid(props.uuid) ?? eventUuidv7()
     void this._sendPreparedAiEvent({ ...props, uuid }, false)
     return uuid
   }
@@ -1310,7 +1643,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.disabled) {
       return undefined
     }
-    const uuid = getEventUuid(props.uuid, uuidv7)
+    const uuid = this._canonicalEventUuid(props.uuid) ?? eventUuidv7()
     await this._sendPreparedAiEvent({ ...props, uuid }, true)
     return uuid
   }
@@ -1319,7 +1652,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (typeof props?.event === 'string' && !props.event.startsWith('$ai_')) {
       this._logger.debug(`captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
     }
-    this._aiCaptureRouteActive = true
     return this._sendPreparedEvent('capture', props, immediate, undefined, AI_CAPTURE_ROUTE)
   }
 
@@ -1356,22 +1688,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The identify data containing distinctId and properties
    */
-  identify({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): void {
-    // Catch properties passed as $set and move them to the top level
-    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    // if no $set is provided we assume all rest properties are $set
-    const setProps = $set || rest
-    const setOnceProps = $set_once || {}
-    const eventProperties = {
-      $set: setProps,
-      $set_once: setOnceProps,
-      $anon_distinct_id: $anon_distinct_id ?? undefined,
-    }
+  identify({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): void {
+    const eventProperties = identifyEventProperties(properties)
     this._sendPreparedEvent(
       'identify',
-      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
-      false,
-      { includeContextProperties: false }
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
+      false
     )
   }
 
@@ -1395,22 +1717,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    * @returns Promise that resolves when the identify is processed
    */
-  async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
-    // Catch properties passed as $set and move them to the top level
-    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    // if no $set is provided we assume all rest properties are $set
-    const setProps = $set || rest
-    const setOnceProps = $set_once || {}
-    const eventProperties = {
-      $set: setProps,
-      $set_once: setOnceProps,
-      $anon_distinct_id: $anon_distinct_id ?? undefined,
-    }
+  async identifyImmediate({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): Promise<void> {
+    const eventProperties = identifyEventProperties(properties)
     await this._sendPreparedEvent(
       'identify',
-      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
-      true,
-      { includeContextProperties: false }
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip, options },
+      true
     )
   }
 
@@ -1430,7 +1742,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and properties to set
    */
-  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {} }: SetPersonPropertiesMessage): void {
+  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {}, options }: SetPersonPropertiesMessage): void {
     if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
       return
     }
@@ -1447,6 +1759,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId,
       event: '$set',
       properties: eventProperties,
+      options,
     })
   }
 
@@ -1465,13 +1778,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and property names to unset
    */
-  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void {
+  unsetPersonProperties({ distinctId, properties, options }: UnsetPersonPropertiesMessage): void {
     const propertyNames = normalizeUnsetPersonProperties(properties)
     if (propertyNames.length === 0) {
       return
     }
 
-    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames } })
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames }, options })
   }
 
   /**
@@ -1490,17 +1803,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The alias data containing distinctId and alias
    */
-  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void {
     this._sendPreparedEvent(
       'alias',
       {
         distinctId: data.distinctId,
         event: '$create_alias',
-        properties: { distinct_id: data.distinctId, alias: data.alias },
+        properties: { alias: data.alias },
         disableGeoip: data.disableGeoip,
+        options: data.options,
       },
       false,
-      { includeContextProperties: false }
+      ALIAS_PREPARE_OPTIONS
     )
   }
 
@@ -1521,17 +1835,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    * @returns Promise that resolves when the alias is processed
    */
-  async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
+  async aliasImmediate(data: {
+    distinctId: string
+    alias: string
+    disableGeoip?: boolean
+    options?: Record<string, JsonType>
+  }): Promise<void> {
     await this._sendPreparedEvent(
       'alias',
       {
         distinctId: data.distinctId,
         event: '$create_alias',
-        properties: { distinct_id: data.distinctId, alias: data.alias },
+        properties: { alias: data.alias },
         disableGeoip: data.disableGeoip,
+        options: data.options,
       },
       true,
-      { includeContextProperties: false }
+      ALIAS_PREPARE_OPTIONS
     )
   }
 
@@ -2864,11 +3184,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The group identify data
    */
-  groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
+  groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip, options }: GroupIdentifyMessage): void {
     this._sendPreparedEvent(
       'capture',
       {
-        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        distinctId,
         event: '$groupidentify',
         properties: {
           $group_type: groupType,
@@ -2876,9 +3196,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           $group_set: properties || {},
         },
         disableGeoip,
+        options,
       },
       false,
-      { includeContextProperties: false }
+      { fallbackDistinctId: `$${groupType}_${groupKey}`, contextSession: false }
     )
   }
 
@@ -2910,11 +3231,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties,
     distinctId,
     disableGeoip,
+    options,
   }: GroupIdentifyMessage): Promise<void> {
     await this._sendPreparedEvent(
       'capture',
       {
-        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        distinctId,
         event: '$groupidentify',
         properties: {
           $group_type: groupType,
@@ -2922,9 +3244,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           $group_set: properties || {},
         },
         disableGeoip,
+        options,
       },
       true,
-      { includeContextProperties: false }
+      { fallbackDistinctId: `$${groupType}_${groupKey}`, contextSession: false }
     )
   }
 
@@ -3063,6 +3386,79 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return false
   }
 
+  /**
+   * Register properties that every event sent by this client carries.
+   *
+   * @remarks
+   * Each event fills the keys it left unset in this order: the event's own values, then context
+   * properties, then these, then the values the SDK adds (such as `$is_server` and
+   * `$geoip_disable`). `before_send` sees the result and can change it.
+   *
+   * @example
+   * ```ts
+   * await client.register({ service: 'billing' })
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param properties - The properties to add to every event
+   */
+  override register(properties: PostHogEventProperties): Promise<void> {
+    return super.register(properties)
+  }
+
+  /**
+   * Remove a property added with `register()`.
+   *
+   * {@label Capture}
+   *
+   * @param property - The property name to remove
+   */
+  override unregister(property: string): Promise<void> {
+    return super.unregister(property)
+  }
+
+  /**
+   * Register options that every event sent by this client carries.
+   *
+   * @remarks
+   * Each event fills the options it left unset (missing or `null`) in this order: the event's own
+   * `options`, then context options, then these, then the options the SDK adds (such as
+   * `process_person_profile: false` for an event with no distinct id). `before_send` sees the
+   * result and can change it. Values are sent to capture unchanged. Capture drops an event whose
+   * option value it cannot read, so a bad value registered here drops every event.
+   *
+   * @example
+   * ```ts
+   * await client.registerOptions({ cookieless_mode: true })
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param options - The options to add to every event
+   */
+  async registerOptions(options: Record<string, JsonType>): Promise<void> {
+    if (!isPlainObject(options)) {
+      // console.error, not this._logger: the logger only prints in debug mode, and the options are lost.
+      console.error('[PostHog] registerOptions takes an object; ignoring the value')
+      return
+    }
+    this._globalOptions = { ...this._globalOptions, ...options }
+  }
+
+  /**
+   * Remove an option added with `registerOptions()`.
+   *
+   * {@label Capture}
+   *
+   * @param key - The option name to remove
+   */
+  async unregisterOptions(key: string): Promise<void> {
+    const remaining = { ...this._globalOptions }
+    delete remaining[key]
+    this._globalOptions = remaining
+  }
+
   protected abstract initializeContext(): IPostHogContext | undefined
 
   /**
@@ -3070,6 +3466,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * It propagates the context to all subsequent calls down the call stack.
    * Context properties like tags and sessionId will be automatically attached to all events.
    * By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.
+   *
+   * @remarks
+   * Context `properties` and `options` fill only what an event left unset: the event's own values
+   * win, and context values beat `register()` and `registerOptions()` values and the values the SDK
+   * adds. `before_send` sees the result and can change it.
    *
    * @example
    * ```ts
@@ -3080,7 +3481,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Context}
    *
-   * @param data - Context data to apply (sessionId, distinctId, properties, enableExceptionAutocapture)
+   * @param data - Context data to apply (sessionId, distinctId, properties, options)
    * @param fn - Function to run with the context
    * @param options - Context options (fresh: true to start with clean context instead of inheriting)
    * @returns The return value of the function
@@ -3132,7 +3533,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * across unrelated work. Prefer `withContext()` when you can wrap code
    * in a callback — it creates an isolated scope that cleans up automatically.
    *
-   * @param data - Context data to apply (distinctId, sessionId, properties)
+   * @param data - Context data to apply (distinctId, sessionId, properties, options)
    * @param options - Context options (fresh: true to start with clean context instead of inheriting)
    */
   enterContext(data: Partial<ContextData>, options?: ContextOptions): void {
@@ -3215,13 +3616,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Wait for the email sends next to the core flush, not before it, so a slow send can't use up the budget for events.
     const emailsSettled = emailsDrained ? raceWithTimeout(emailsDrained, remainingMs) : undefined
     try {
-      return await super._shutdown(remainingMs)
+      // The core shutdown waits for pending captures to land on their lanes; the lanes drain meanwhile,
+      // then once more for whatever those captures added.
+      await Promise.all([super._shutdown(remainingMs), this._drainCaptureLanes(shutdownDeadlineMs)])
+      await this._drainCaptureLanes(shutdownDeadlineMs)
     } finally {
+      for (const lane of this._captureLanes.values()) {
+        lane.finishShutdown()
+      }
       await emailsSettled
       await logsDrained
       this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
+  }
+
+  private _drainCaptureLanes(deadlineMs: number): Promise<void> {
+    return Promise.all([...this._captureLanes.values()].map((lane) => lane.drain(deadlineMs))).then(() => {})
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {
@@ -3406,6 +3817,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Capture an error exception as an event.
    *
+   * @remarks
+   * The 5.x positional form `captureException(error, distinctId, properties, uuid, flags)` still
+   * works in 6.x but logs a deprecation error once per process, and will be removed in the next
+   * major version.
+   *
    * @example
    * ```ts
    * // Capture an error with user ID
@@ -3413,20 +3829,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   // Some risky operation
    *   riskyOperation()
    * } catch (error) {
-   *   client.captureException(error, 'user_123')
+   *   client.captureException(error, { distinctId: 'user_123' })
    * }
    * ```
    *
    * @example
    * ```ts
-   * // Capture with additional properties
+   * // Capture with additional properties and a level
    * try {
    *   apiCall()
    * } catch (error) {
-   *   client.captureException(error, 'user_123', {
-   *     endpoint: '/api/users',
-   *     method: 'POST',
-   *     status_code: 500
+   *   client.captureException(error, {
+   *     distinctId: 'user_123',
+   *     properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },
+   *     level: 'warning',
    *   })
    * }
    * ```
@@ -3434,35 +3850,28 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Error tracking}
    *
    * @param error - The error to capture
-   * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include
-   * @param uuid - Optional event UUID
-   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
+   * @param options - Optional distinct id, properties, options, uuid, flags snapshot and level
    */
-  captureException(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid'],
-    flags?: FeatureFlagEvaluations
-  ): void {
+  captureException(error: unknown, options?: CaptureExceptionOptions): void
+  captureException(error: unknown, options?: unknown, ...legacyArgs: unknown[]): void {
+    const exceptionOptions = readCaptureExceptionArgs('captureException', options, legacyArgs, true)
     if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(
-          this.getErrorPropertiesBuilder(),
-          error,
-          { syntheticException },
-          distinctId,
-          additionalProperties,
-          this.getContext()
-        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
+        this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) =>
+          this._capturePreparedEvent(msg, false)
+        )
       )
     }
   }
 
   /**
    * Capture an error exception as an event immediately (synchronously).
+   *
+   * @remarks
+   * The 5.x positional form `captureExceptionImmediate(error, distinctId, properties, flags)` still
+   * works in 6.x but logs a deprecation error once per process, and will be removed in the next
+   * major version.
    *
    * @example
    * ```ts
@@ -3471,7 +3880,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   // Some risky operation
    *   riskyOperation()
    * } catch (error) {
-   *   await client.captureExceptionImmediate(error, 'user_123')
+   *   await client.captureExceptionImmediate(error, { distinctId: 'user_123' })
    * }
    * ```
    *
@@ -3481,10 +3890,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * try {
    *   apiCall()
    * } catch (error) {
-   *   await client.captureExceptionImmediate(error, 'user_123', {
-   *     endpoint: '/api/users',
-   *     method: 'POST',
-   *     status_code: 500
+   *   await client.captureExceptionImmediate(error, {
+   *     distinctId: 'user_123',
+   *     properties: { endpoint: '/api/users', method: 'POST', status_code: 500 },
    *   })
    * }
    * ```
@@ -3492,39 +3900,35 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Error tracking}
    *
    * @param error - The error to capture
-   * @param distinctId - Optional user distinct ID
-   * @param additionalProperties - Optional additional properties to include
-   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
+   * @param options - Optional distinct id, properties, options, uuid, flags snapshot and level
    * @returns Promise that resolves when the error is captured
    */
-  async captureExceptionImmediate(
-    error: unknown,
-    distinctId?: string,
-    additionalProperties?: Record<string | number, any>,
-    flags?: FeatureFlagEvaluations
-  ): Promise<void> {
+  captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
+  async captureExceptionImmediate(error: unknown, options?: unknown, ...legacyArgs: unknown[]): Promise<void> {
+    const exceptionOptions = readCaptureExceptionArgs('captureExceptionImmediate', options, legacyArgs, false)
     if (!ErrorTracking.isPreviouslyCapturedError(error) && this.errorTracking.claimExplicitCapture(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(
-          this.getErrorPropertiesBuilder(),
-          error,
-          { syntheticException },
-          distinctId,
-          additionalProperties,
-          this.getContext()
-        ).then((msg) => this.captureImmediate({ ...msg, flags }))
+        this._buildExceptionEvent(error, syntheticException, exceptionOptions).then((msg) => this.captureImmediate(msg))
       )
     }
   }
 
-  public async prepareEventMessage(props: EventMessage): Promise<{
-    distinctId: string
-    event: string
-    properties: PostHogEventProperties
-    options: PostHogCaptureOptions
-  }> {
-    return this._prepareEventMessage(props)
+  private async _buildExceptionEvent(
+    error: unknown,
+    syntheticException: Error,
+    { distinctId, properties, options, uuid, flags, level }: CaptureExceptionOptions
+  ): Promise<EventMessage> {
+    const msg = await ErrorTracking.buildEventMessage(
+      this.getErrorPropertiesBuilder(),
+      error,
+      { syntheticException },
+      distinctId,
+      properties,
+      level,
+      this.getContext()
+    )
+    return { ...msg, options, uuid, flags }
   }
 
   /**
@@ -3554,15 +3958,43 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._serviceName
   }
 
+  /**
+   * Build an event as `capture()` would send it, without sending it.
+   *
+   * @remarks
+   * The result has the same shape as the message passed in: `options` holds the event's options
+   * after every layer filled them, and `uuid`, `timestamp` and `disableGeoip` are top-level fields.
+   * Rejects with `null` when `before_send` drops the event.
+   *
+   * @example
+   * ```ts
+   * const message = await client.prepareEventMessage({ distinctId: 'user_123', event: 'button_clicked' })
+   * console.log(message.properties.$is_server, message.options)
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param props - The event to build
+   * @returns The event with its properties and options filled, after `before_send`
+   */
+  public async prepareEventMessage(props: EventMessage): Promise<PreparedEventMessage> {
+    try {
+      return await this._prepareEventMessage(props)
+    } catch (error) {
+      throw error instanceof UnreadableEventError ? error.original : error
+    }
+  }
+
+  /**
+   * Build an event in the canonical order: identity, the call's own values, then the values it left
+   * unset from context, then `register()` / `registerOptions()`, then the SDK, then the SDK's own
+   * `$lib` / `$lib_version`, then the minimal `$feature_flag_called` allowlist, then `before_send`,
+   * which has the final say.
+   */
   private async _prepareEventMessage(
     props: EventMessage,
-    options: { includeContextProperties?: boolean } = {}
-  ): Promise<{
-    distinctId: string
-    event: string
-    properties: PostHogEventProperties
-    options: PostHogCaptureOptions
-  }> {
+    prepareOptions: PrepareEventOptions = {}
+  ): Promise<PreparedEventMessage> {
     const {
       distinctId,
       event,
@@ -3574,46 +4006,81 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip,
       uuid,
     }: EventMessage = props
+    const callOptions = readEventOptions(props.options)
 
+    // Read every layer now, before the first await, so later changes never reach this event.
     const contextData = getEventContext(props, this.context?.get())
-    const includeContextProperties = options.includeContextProperties ?? true
+    const contextProperties = snapshotLayer(contextData?.properties)
+    const contextOptions = snapshotLayer(contextData?.options)
+    const globalProperties = snapshotLayer(this.props)
+    const globalOptions = this._globalOptions
+    // A relabel after capture(), such as `@posthog/mcp`'s `instrument()`, does not reach this event.
+    // captureException() gets here only after building its event, so a relabel in between does.
+    const libraryId = this.getLibraryId()
+    const libraryVersion = this.getLibraryVersion()
 
-    let mergedDistinctId = distinctId || contextData?.distinctId
+    const resolvedDistinctId =
+      presentDistinctId(distinctId) ?? presentDistinctId(contextData?.distinctId) ?? prepareOptions.fallbackDistinctId
+    const eventDistinctId = resolvedDistinctId ?? eventUuidv7()
 
-    const mergedProperties = includeContextProperties
-      ? {
-          ...this._serviceNameProperties(),
-          ...this.props,
-          ...(contextData?.properties || {}),
-          ...(properties || {}),
-        }
-      : { ...this._serviceNameProperties(), ...(properties || {}) }
-
-    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
-      Object.assign(mergedProperties, await getActiveTraceProperties())
+    const eventProperties: PostHogEventProperties = readCallerValues(() => ({ ...(properties || {}) }))
+    if (prepareOptions.distinctIdProperty) {
+      eventProperties.distinct_id = eventDistinctId
+    }
+    if (
+      (prepareOptions.contextSession ?? true) &&
+      contextData?.sessionId &&
+      isUnsetProperty(eventProperties, '$session_id')
+    ) {
+      eventProperties.$session_id = contextData.sessionId
+    }
+    if (isPlainObject(groups) && Object.keys(groups).length > 0) {
+      const existingGroups = eventProperties.$groups
+      eventProperties.$groups = isPlainObject(existingGroups) ? { ...existingGroups, ...groups } : { ...groups }
+    }
+    if (disableGeoip !== undefined && disableGeoip !== null) {
+      fillProperties(eventProperties, [{ $geoip_disable: disableGeoip }])
     }
 
-    if (!mergedDistinctId) {
-      mergedDistinctId = uuidv7()
-      mergedProperties.$process_person_profile = false
+    fillProperties(eventProperties, [contextProperties, globalProperties], prepareOptions.callOnlyProperties)
+    fillProperties(eventProperties, [
+      await this._sdkEventProperties(event, eventProperties, eventDistinctId, {
+        groups,
+        flags,
+        sendFeatureFlags,
+        disableGeoip,
+      }),
+    ])
+    fillLibraryProperties(eventProperties, libraryId, libraryVersion)
+
+    const filledOptions: Record<string, JsonType> = { ...callOptions }
+    fillOptions(filledOptions, [
+      contextOptions,
+      globalOptions,
+      resolvedDistinctId !== undefined ? undefined : { process_person_profile: false },
+    ])
+    const eventOptions = callOptions !== undefined || Object.keys(filledOptions).length > 0 ? filledOptions : undefined
+
+    // Runs after every fill and before before_send, so no default can re-add a stripped property
+    // but a hook still can.
+    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, eventProperties)
+      ? minimizeFlagCalledEventProperties(eventProperties, FLAG_CALLED_OPTION_SOURCE_PROPERTIES)
+      : eventProperties
+
+    let finalEvent = event
+    if (
+      event === '$pageview' &&
+      this.options.__preview_capture_bot_pageviews &&
+      typeof finalProperties.$raw_user_agent === 'string' &&
+      isBlockedUA(finalProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])
+    ) {
+      finalEvent = '$bot_pageview'
+      finalProperties.$browser_type = 'bot'
     }
 
-    if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
-      mergedProperties.$session_id = contextData.sessionId
-    }
-
-    // Minimal $feature_flag_called events: rebuild from the strict allowlist before before_send
-    // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
-    // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
-    // allowlisted — no SDK enrichment may reintroduce stripped properties.
-    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, mergedProperties)
-      ? minimizeFlagCalledEventProperties(mergedProperties)
-      : mergedProperties
-
-    // Run before_send if configured
     const eventMessage = this._runBeforeSend({
-      distinctId: mergedDistinctId,
-      event,
+      distinctId: eventDistinctId,
+      event: finalEvent,
       properties: finalProperties,
       groups,
       flags,
@@ -3621,91 +4088,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       timestamp,
       disableGeoip,
       uuid,
+      options: eventOptions,
     })
 
     if (!eventMessage) {
       return Promise.reject(null)
     }
 
-    // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
-    const eventProperties = await Promise.resolve()
-      .then(async () => {
-        // Precedence: an explicit `flags` snapshot always wins, regardless of
-        // `sendFeatureFlags`. The snapshot guarantees the event carries the same
-        // values the developer branched on with no additional network call. The
-        // `sendFeatureFlags` path only runs when no snapshot is provided.
-        if (flags) {
-          if (sendFeatureFlags) {
-            console.warn(
-              '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
-            )
-          }
-          return flags._getEventProperties()
-        }
-
-        if (sendFeatureFlags) {
-          emitDeprecationWarningOnce(
-            'sendFeatureFlags',
-            '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
-              'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
-              'second `/flags` request per capture and guarantees the event carries the exact ' +
-              'flag values your code branched on.'
-          )
-          // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
-          const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          const flagValues = await this.getFeatureFlagsForEvent(
-            eventMessage.distinctId!,
-            groups,
-            disableGeoip,
-            sendFeatureFlagsOptions
-          )
-          return buildFlagEventProperties(flagValues)
-        }
-
-        // $feature_flag_called events are not enriched with cached flags — the flags
-        // on that event should reflect the specific call, not a potentially stale snapshot.
-        return {}
-      })
-      .catch(() => {
-        // Something went wrong getting the flag info - we should capture the event anyways
-        return {}
-      })
-      .then((additionalProperties): PostHogEventProperties => {
-        // No matter what - capture the event
-        const resolvedGroups = eventMessage.groups || groups
-
-        return {
-          ...additionalProperties,
-          ...(eventMessage.properties || {}),
-          // Only stamp $groups from the top-level `groups` when present — otherwise a
-          // caller-provided properties.$groups would be clobbered with undefined (#3888).
-          ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
-            ? { $groups: resolvedGroups }
-            : {}),
-        }
-      })
-
-    // Handle bot pageview collection based on preview flag
-    if (
-      eventMessage.event === '$pageview' &&
-      this.options.__preview_capture_bot_pageviews &&
-      typeof eventProperties.$raw_user_agent === 'string'
-    ) {
-      if (isBlockedUA(eventProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])) {
-        eventMessage.event = '$bot_pageview'
-        eventProperties.$browser_type = 'bot'
-      }
-    }
-
     return {
       distinctId: eventMessage.distinctId!,
       event: eventMessage.event,
-      properties: eventProperties,
-      options: {
-        timestamp: eventMessage.timestamp,
-        disableGeoip: eventMessage.disableGeoip,
-        uuid: eventMessage.uuid,
-      },
+      properties: eventMessage.properties || {},
+      options: eventMessage.options,
+      uuid: eventMessage.uuid,
+      timestamp: eventMessage.timestamp,
+      disableGeoip: eventMessage.disableGeoip,
     }
   }
 
@@ -3716,7 +4113,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
-    let result: EventMessage | null = eventMessage
+    let result: EventMessage | null = readCallerValues(() => isolateForBeforeSend(eventMessage))
 
     for (const fn of fns) {
       try {
@@ -3730,7 +4127,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           this._logger.warn(message)
         }
       } catch (error) {
-        this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
+        // The error's message can carry the data the hook was redacting, so only its type is logged.
+        const errorType = error instanceof Error ? error.name : typeof error
+        // console.error, not this._logger: the logger only prints in debug mode, and the event is lost.
+        console.error(`[PostHog] Error in before_send function for event '${eventMessage.event}' (${errorType})`)
         return null
       }
     }

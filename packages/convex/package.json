@@ -65,7 +65,7 @@
   "module": "./dist/client/index.js",
   "dependencies": {
     "@posthog/core": "workspace:^",
-    "posthog-node": "workspace:^"
+    "posthog-node": "^5.56.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

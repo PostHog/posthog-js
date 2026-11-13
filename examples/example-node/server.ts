@@ -1,4 +1,3 @@
-
 import express from 'express'
 import { PostHog, setupExpressErrorHandler } from 'posthog-node'
 // import undici from 'undici'
@@ -37,7 +36,7 @@ app.get('/unhandled-error', () => {
 
 app.get('/error', (req, res) => {
     const error = new Error('example error')
-    posthog.captureException(error, 'EXAMPLE_APP_GLOBAL')
+    posthog.captureException(error, { distinctId: 'EXAMPLE_APP_GLOBAL' })
     res.send({ status: 'error!!' })
 })
 

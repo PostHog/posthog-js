@@ -47,7 +47,7 @@ function parseRequest(body) {
 }
 
 class Fixture {
-    constructor(consumer, mode, format) {
+    constructor(consumer, format) {
         const worker = new URL('./worker.mjs', import.meta.url).href
         const load =
             format === 'esm'
@@ -62,7 +62,6 @@ class Fixture {
             ],
             {
                 cwd: consumer,
-                env: { ...process.env, POSTHOG_CAPTURE_MODE: mode },
                 stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
             }
         )
@@ -128,17 +127,15 @@ class Fixture {
     }
 }
 
-export async function startServer({ consumer, mode = 'v0', format = 'cjs', host = '127.0.0.1', port = 8080 }) {
-    requireRequest(['v0', 'v1'].includes(mode), 'Invalid POSTHOG_CAPTURE_MODE')
+export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1', port = 8080 }) {
     requireRequest(['cjs', 'esm'].includes(format), 'Invalid POSTHOG_NODE_MODULE')
     requireRequest(typeof consumer === 'string' && consumer.length > 0, 'POSTHOG_NODE_CONSUMER required')
     requireRequest(Number.isInteger(port) && port >= 0 && port <= 65535, 'Invalid PORT')
     const profile = {
-        id: mode === 'v0' ? 'node-legacy' : 'node-analytics-v1',
+        id: 'node-analytics-v1',
         sdk_type: 'server',
         sdk_capabilities: [
-            ...(mode === 'v0' ? ['capture_v0', 'capture_v0_batch'] : ['capture_v1']),
-            'capture_ai_v0',
+            'capture_v1',
             'encoding_gzip',
             'flags_v2',
             'flags_getter_remote_uncached',
@@ -172,7 +169,7 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
             identifier(data.case_id)
             requireRequest(data.profile_id === profile.id, 'Unknown profile')
             requireRequest(!fixtures.has(id), 'Duplicate fixture_id')
-            const fixture = new Fixture(resolve(consumer), mode, format)
+            const fixture = new Fixture(resolve(consumer), format)
             fixtures.set(id, fixture)
             const ready = await fixture.exchange(null, milliseconds)
             requireRequest(ready.ready === true, 'SDK process not ready')
@@ -249,7 +246,6 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
     const adapter = await startServer({
         consumer: process.env.POSTHOG_NODE_CONSUMER,
-        mode: process.env.POSTHOG_CAPTURE_MODE ?? 'v0',
         format: process.env.POSTHOG_NODE_MODULE ?? 'cjs',
         host: process.env.HOST ?? '127.0.0.1',
         port: Number(process.env.PORT ?? 8080),

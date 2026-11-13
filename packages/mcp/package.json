@@ -79,7 +79,7 @@
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",
     "@modelcontextprotocol/server": ">=2.0.0",
-    "posthog-node": "^5.0.0"
+    "posthog-node": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {
