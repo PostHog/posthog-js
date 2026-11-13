@@ -155,6 +155,7 @@ describe('a tools/call for a tool the server does not have', () => {
       $mcp_tool_name: 'no_such_tool',
       $mcp_server_name: expect.any(String),
       $session_id: expect.stringMatching(/.+/),
+      $mcp_session_source: 'conversation',
     })
   })
 
