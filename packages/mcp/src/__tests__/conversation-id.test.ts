@@ -4,6 +4,7 @@ import {
   addConversationIdToTools,
   buildConversationIdPromptBack,
   CONVERSATION_ID_PARAM_NAME,
+  type ConversationIdInjectableTool,
   extractConversationId,
   injectConversationIdPromptBack,
   resolveConversationId,
@@ -20,7 +21,7 @@ const AGENT_ECHOED_ON_ERROR = '019fd2b0-2222-7222-8222-222222222222'
 describe('conversation-id', () => {
   describe('addConversationIdToTool', () => {
     it('adds an optional conversation_id property to a bare tool', () => {
-      const result = addConversationIdToTool({
+      const result = addConversationIdToTool<ConversationIdInjectableTool>({
         name: 'tool',
         description: 'test',
       })
@@ -140,7 +141,7 @@ describe('conversation-id', () => {
         { name: 'get_more_tools', description: 'report missing' },
         { name: 'other_tool', description: 'fine' },
       ]
-      const result = addConversationIdToTools(tools)
+      const result = addConversationIdToTools<ConversationIdInjectableTool>(tools)
       expect(
         (result[0].inputSchema as { properties?: Record<string, unknown> }).properties?.conversation_id
       ).toBeDefined()
@@ -170,7 +171,7 @@ describe('conversation-id', () => {
   })
 
   describe('resolveConversationId', () => {
-    const resolve = (args: unknown) => resolveConversationId(true, args, 'a_tool')
+    const resolve = (args: unknown) => resolveConversationId(true, args)
 
     it('echoes a handle shaped like one we minted', () => {
       expect(resolve({ conversation_id: AGENT_ECHOED })).toEqual({
@@ -214,7 +215,7 @@ describe('conversation-id', () => {
     })
 
     it('returns nothing when the feature is off', () => {
-      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED }, 'a_tool')).toEqual({
+      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED })).toEqual({
         minted: false,
         conversationId: undefined,
       })
@@ -293,7 +294,7 @@ describe('conversation_id tool parameter', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
   })
@@ -372,7 +373,8 @@ describe('conversation_id tool parameter', () => {
       )
 
       const promptBack = result.content.find(
-        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
+        (c: { type: string; text?: unknown }) =>
+          c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
       )
       expect(promptBack).toBeDefined()
     })
@@ -439,7 +441,8 @@ describe('conversation_id tool parameter', () => {
       // A tool that fails on the first call is exactly when the agent needs the
       // session handle, or its retry starts a different conversation.
       const hasPromptBack = (result.content ?? []).some(
-        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
+        (c: { type: string; text?: unknown }) =>
+          c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
       )
       expect(hasPromptBack).toBe(true)
     })
@@ -533,7 +536,7 @@ describe('conversation_id edge cases', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
   })
@@ -709,7 +712,7 @@ describe('enableConversationId and reportMissing are independent', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
   })

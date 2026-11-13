@@ -77,7 +77,7 @@ describe('MCP analytics defaults', () => {
     expect(calls[0].properties.$mcp_llm_model).toBe('model-a')
     expect(calls[0].properties.$session_id).toBe(calls[1].properties.$session_id)
     // A fresh instance cannot prove it owns the analytics arguments, so it strips none of them.
-    expect(first.received.mock.calls[0][0].params.arguments).toEqual({
+    expect(first.received.mock.calls[0][0].params?.arguments).toEqual({
       value: 'first',
       context: 'intent',
       llm_model: 'model-a',

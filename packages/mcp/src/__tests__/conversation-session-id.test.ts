@@ -26,7 +26,7 @@ describe('conversation_id as the session anchor', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
     capture = new EventCapture()
@@ -54,7 +54,7 @@ describe('conversation_id as the session anchor', () => {
     await new Promise((r) => setTimeout(r, 50))
   }
 
-  function toolCallSessionIds(): string[] {
+  function toolCallSessionIds(): (string | undefined)[] {
     return capture
       .getEvents()
       .filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall && e.resourceName === 'add_todo')
@@ -159,7 +159,7 @@ describe('conversation_id as the session anchor', () => {
 
       try {
         const fromA = getSessionId(server.server as MCPServerLike, undefined, 'shared-conversation')
-        const fromB = getSessionId(other.server.server as MCPServerLike, undefined, 'shared-conversation')
+        const fromB = getSessionId(other.server.server as unknown as MCPServerLike, undefined, 'shared-conversation')
 
         // The cross-pod property: two processes that never met agree on the session.
         expect(fromA).toBe(fromB)

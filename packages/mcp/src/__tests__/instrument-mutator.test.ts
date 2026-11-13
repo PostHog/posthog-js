@@ -59,4 +59,13 @@ describe('instrumentMutator', () => {
       await eventCapture.stop()
     }
   })
+
+  // Compile-time: the mutator keeps the server's type whether it is typed by the
+  // hook it is passed to (nest-mcp's `serverMutator`) or by an explicit argument.
+  it('fits a typed serverMutator hook and an explicit server type', () => {
+    const server = new McpServer({ name: 'mutator', version: '1.0.0' })
+    const serverMutator: (server: McpServer) => McpServer = instrumentMutator(fakePostHog())
+    const explicit: McpServer = instrumentMutator<McpServer>(fakePostHog())(server)
+    expect(serverMutator(explicit)).toBe(server)
+  })
 })

@@ -294,7 +294,14 @@ describe('high-level reserved analytics arguments', () => {
 })
 
 describe('low-level reserved analytics arguments on a fresh instance', () => {
-  const STRICT_SCHEMAS: Record<string, { safeParse: z.ZodTypeAny['safeParse'] }> = {
+  /** The part of Zod 3 and Zod 4 schemas the handlers below read; their `safeParse` types are not mutually assignable. */
+  interface SafeParsable {
+    safeParse(
+      data: unknown
+    ): { success: true; data: unknown } | { success: false; error: { issues: { message: string }[] } }
+  }
+
+  const STRICT_SCHEMAS: Record<string, SafeParsable> = {
     strict_schema: z.object({ value: z.string() }).strict(),
     declares_context: z.object({ context: z.string(), value: z.string() }).strict(),
     union_schema: z.union([z.object({ value: z.string() }).strict(), z.object({ other: z.string() }).strict()]),

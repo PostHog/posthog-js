@@ -8,6 +8,7 @@ import { getServerTrackingData } from '../extensions/internal'
 import { createLogger } from '../extensions/logger'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 import { fakePostHog } from './test-utils'
+import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
 
 function failingPostHog(marker: string): any {
   return {
@@ -63,8 +64,8 @@ describe('per-server logger isolation', () => {
       await Promise.all([callTool(setupA.client, 'from-a'), callTool(setupB.client, 'from-b')])
       await flushSinkLogging()
 
-      const sessionA = getServerTrackingData(setupA.server.server)?.sessionId
-      const sessionB = getServerTrackingData(setupB.server.server)?.sessionId
+      const sessionA = getServerTrackingData(setupA.server.server as unknown as MCPServerLike)?.sessionId
+      const sessionB = getServerTrackingData(setupB.server.server as unknown as MCPServerLike)?.sessionId
       expect(sessionA).toBeDefined()
       expect(sessionB).toBeDefined()
 
@@ -92,8 +93,8 @@ describe('per-server logger isolation', () => {
     const logger = createLogger((message) => logs.push(message))
 
     try {
-      captureEvent(setup.server.server, { eventType: MCPAnalyticsEventType.custom }, logger)
-      instrumentHighLevelServer(setup.server, logger)
+      captureEvent(setup.server.server as unknown as MCPServerLike, { eventType: MCPAnalyticsEventType.custom }, logger)
+      instrumentHighLevelServer(setup.server as unknown as HighLevelMCPServerLike, logger)
       await callTool(setup.client, 'missing-tracking-data')
 
       expect(logs).toContain('Warning: Server tracking data not found. Event will not be published.')

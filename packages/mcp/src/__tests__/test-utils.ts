@@ -1,6 +1,21 @@
+import type { CallToolResult, JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import type { Event, McpEvent } from '../types'
 import { McpEventSink, type McpCaptureOptions, processMcpEvent } from '../extensions/sink'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
+
+/** A value the tests probe into freely (`event.response.content[0].text`) without narrowing each step. */
+export type Dynamic = { [key: string]: Dynamic }
+
+/** `Event` whose `unknown` payloads are probe-able. */
+export type LooseEvent = Event & { response: Dynamic; parameters: Dynamic }
+
+/** `McpEvent` whose `unknown` payloads are probe-able. */
+export type LooseMcpEvent = McpEvent & { response: Dynamic; parameters: Dynamic }
+
+/** `PostHogCaptureEvent` whose captured payload properties are probe-able. */
+export type LooseCaptureEvent = Omit<PostHogCaptureEvent, 'properties'> & {
+  properties: PostHogCaptureEvent['properties'] & { $mcp_parameters: Dynamic; $mcp_response: Dynamic }
+}
 
 /**
  * Intercepts events at the sink boundary so tests can assert on what actually
@@ -54,13 +69,13 @@ export class EventCapture {
   }
 
   /** Post-pipeline SDK events, one per `capture()` call. */
-  getEvents(): McpEvent[] {
-    return [...this.capturedEvents]
+  getEvents(): LooseMcpEvent[] {
+    return [...this.capturedEvents] as LooseMcpEvent[]
   }
 
   /** PostHog payloads as handed to `posthog.capture()` (after fan-out). */
-  getCaptures(): PostHogCaptureEvent[] {
-    return [...this.capturedPayloads]
+  getCaptures(): LooseCaptureEvent[] {
+    return [...this.capturedPayloads] as LooseCaptureEvent[]
   }
 
   clear(): void {
@@ -77,9 +92,18 @@ export class EventCapture {
   }
 
   /** PostHog payloads filtered by event name, e.g. `$mcp_tool_call`. */
-  findCapturesByEvent(eventName: string): PostHogCaptureEvent[] {
-    return this.capturedPayloads.filter((c) => c.event === eventName)
+  findCapturesByEvent(eventName: string): LooseCaptureEvent[] {
+    return this.capturedPayloads.filter((c) => c.event === eventName) as LooseCaptureEvent[]
   }
+}
+
+/** The text of a tool result's `index`th content block, which must be a text block. */
+export function textOf(result: Pick<CallToolResult, 'content'>, index = 0): string {
+  const block = result.content[index]
+  if (block?.type !== 'text') {
+    throw new Error(`expected a text block at content[${index}], got ${block?.type}`)
+  }
+  return block.text
 }
 
 /**
@@ -119,7 +143,7 @@ export class RecordingTransport {
 
   async close(): Promise<void> {}
 
-  async send(message: SentMessage['message']): Promise<void> {
+  async send(message: JSONRPCMessage & SentMessage['message']): Promise<void> {
     const sent = { message, sessionId: this.sessionId }
     this.waiting.get(message.id)?.(sent)
     this.waiting.delete(message.id)
