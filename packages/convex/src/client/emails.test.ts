@@ -304,6 +304,35 @@ describe('sending email through the component', () => {
     )
   })
 
+  describe('a field @posthog/convex does not send', () => {
+    // An email built in a typed variable can carry extra fields: TypeScript checks extra fields only on literals.
+    test.each([
+      ['a top-level field', { ...ORDER_SHIPPED, maxRetries: 3 }, 'maxRetries'],
+      [
+        'a field of an attachment',
+        { ...INVOICE_ATTACHED, attachments: [{ ...INVOICE_ATTACHED.attachments[0], disposition: 'inline' }] },
+        'attachments[0].disposition',
+      ],
+      ['a field of tracking', { ...ORDER_SHIPPED, tracking: { opens: true, bounces: true } }, 'tracking.bounces'],
+    ])('%s is refused before anything is sent or queued', async (_case, email, field) => {
+      const refused = {
+        code: 'invalid_field',
+        name: 'validation_error',
+        attr: field,
+        retryable: false,
+        fix: expect.stringContaining(field),
+      }
+      expect(await failureOf(send(email))).toMatchObject(refused)
+
+      const t = initConvexTest()
+      expect(await failureOf(t.mutation(anyApi.emails.enqueue, { email }))).toMatchObject(refused)
+      await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+      expect(requests).toHaveLength(0)
+      expect(finishedEmails).toHaveLength(0)
+    })
+  })
+
   describe('a self-hosted or proxied PostHog', () => {
     test('sends to POSTHOG_APP_HOST', async () => {
       vi.stubEnv('POSTHOG_HOST', 'https://ingest.example.com')
