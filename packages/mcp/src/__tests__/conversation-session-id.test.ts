@@ -1,4 +1,5 @@
-import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
@@ -294,5 +295,53 @@ describe('conversation_id as the session anchor', () => {
       const expected = deriveSessionIdFromConversation(minted!)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
+  })
+})
+
+describe('a minted handle the agent never received', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  it.each([
+    [
+      'the tool throws',
+      async () => {
+        throw new Error('tool failed')
+      },
+    ],
+    // No `content` array means no prompt-back, and no output schema means no mirror.
+    ['the result has no content array', async () => ({ structuredContent: { ok: true } })],
+  ])('keeps the connection session when %s', async (_case, toolHandler) => {
+    const server = new Server({ name: 'undelivered-handle', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: 'echo', inputSchema: { type: 'object' as const } }],
+    }))
+    const lowLevel = server as unknown as MCPServerLike
+    // Set after `setRequestHandler` so the SDK's result validation can't add a `content` array.
+    lowLevel._requestHandlers.set('tools/call', toolHandler)
+    instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+
+    await lowLevel._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, {} as never)
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      {} as never
+    ).catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const listed = capture.findCapturesByEvent('$mcp_tools_list')[0].properties
+    const called = capture.findCapturesByEvent('$mcp_tool_call')[0].properties
+    expect(called).toMatchObject({
+      $session_id: listed.$session_id,
+      $mcp_session_source: 'generated',
+    })
+    expect(called.$mcp_conversation_id).toBeUndefined()
   })
 })
