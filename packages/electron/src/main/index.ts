@@ -349,6 +349,10 @@ export class PostHog {
         return this._run(() => this._identify(distinctId, properties))
     }
     private _identify(distinctId: string, properties?: Properties): void {
+        if (!this._core.canIdentify()) {
+            this._core.identify(distinctId, properties)
+            return
+        }
         if (distinctId !== this._core.getDistinctId()) {
             this._generation++
             this._core.invalidateIdentity()
@@ -413,7 +417,7 @@ export class PostHog {
         return this._core.optedOut
     }
     getSessionId(): string {
-        return this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
+        return this._core.isDisabled ? '' : this._core.getSessionId()
     }
     getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
         return this._core.getFeatureFlag(key, { sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent })
@@ -505,10 +509,12 @@ export class PostHog {
     }
 
     getState(): State {
-        const flags = this._core.getFeatureFlags() ?? {}
-        const payloads: Record<string, JsonType> = {}
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        const flags = details?.featureFlags ?? {}
+        const payloads: Record<string, JsonType> = Object.create(null)
         for (const key of Object.keys(flags)) {
-            const payload = this.getFeatureFlagPayload(key)
+            const payload = this._decodeFlagPayload(key, details)
             if (payload !== undefined) payloads[key] = payload
         }
         return structuredClone({
@@ -516,10 +522,10 @@ export class PostHog {
             generation: this._generation,
             distinctId: this._core.getDistinctId(),
             anonymousId: this._core.getAnonymousId(),
-            sessionId: this.getSessionId(),
+            sessionId: this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? '',
             optedOut: this._core.optedOut,
             featureFlags: flags,
-            flagsLoaded: this._core.getFeatureFlags() !== undefined,
+            flagsLoaded: details !== undefined,
             flagRevision: this._flagRevision,
             featureFlagPayloads: payloads,
         })

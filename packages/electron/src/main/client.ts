@@ -28,6 +28,7 @@ export class ElectronCore extends PostHogCore {
     private _eventContext: PostHogEventProperties = {}
     private _appBuild?: string
     private _maxQueueAgeMs: number
+    private _flagsResponseTimeoutMs: number
 
     constructor(
         token: string,
@@ -39,6 +40,7 @@ export class ElectronCore extends PostHogCore {
         super(token, { ...options, flushInterval: 0, disableSurveys: true })
         this._appBuild = options.appBuild
         this._maxQueueAgeMs = options.maxQueueAgeMs ?? 7 * 24 * 60 * 60 * 1000
+        this._flagsResponseTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 10000
         this._isInitialized = false
         this._initialization = this._initPromise = this._storage.load().then(() => {
             if (this._stopped) return
@@ -57,6 +59,10 @@ export class ElectronCore extends PostHogCore {
 
     ready(): Promise<void> {
         return this._initialization
+    }
+
+    canIdentify(): boolean {
+        return !this.isDisabled && this._personProfiles !== 'never'
     }
 
     getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
@@ -154,15 +160,20 @@ export class ElectronCore extends PostHogCore {
         }
         const flagsRequest = target.pathname.endsWith('/flags/') || target.pathname.endsWith('/flags')
         const epoch = this._identityEpoch
+        const started = Date.now()
         const controller = new AbortController()
+        let responseTimer: ReturnType<typeof setTimeout> | undefined
         const abort = (): void => controller.abort(options.signal?.reason)
         options.signal?.addEventListener('abort', abort, { once: true })
         if (options.signal?.aborted) abort()
         this._controllers.add(controller)
         const cleanup = (): void => {
+            clearTimeout(responseTimer)
             options.signal?.removeEventListener('abort', abort)
+            controller.signal.removeEventListener('abort', cleanup)
             this._controllers.delete(controller)
         }
+        controller.signal.addEventListener('abort', cleanup, { once: true })
         try {
             await app.whenReady()
             if (this._stopped || controller.signal.aborted) throw new Error('PostHog request cancelled')
@@ -172,8 +183,22 @@ export class ElectronCore extends PostHogCore {
                 body: options.body,
                 signal: controller.signal,
                 credentials: 'omit',
+                redirect: 'error',
             })
             if (!response.body) cleanup()
+            else if (response.status < 200 || response.status >= 300) {
+                // Core permits lazy diagnostics until this attempt's deadline, not until shutdown.
+                const timeout = flagsRequest ? this._flagsResponseTimeoutMs : this.requestTimeout
+                responseTimer = setTimeout(
+                    () => {
+                        controller.abort(new Error('PostHog error response body deadline exceeded'))
+                        void response.body?.cancel().catch(() => {})
+                        cleanup()
+                    },
+                    Math.max(0, timeout - (Date.now() - started)) + 1
+                )
+                responseTimer.unref()
+            }
             return {
                 status: response.status,
                 headers: response.headers,
