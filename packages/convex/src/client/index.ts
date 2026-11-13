@@ -69,10 +69,28 @@ export type SendEmailArgs = {
   templateKey?: string
   /** Covers retries outside this call too. `enqueueEmail` makes one when you pass none. */
   idempotencyKey?: string
-  captureEngagement?: boolean
+  /**
+   * Marks an email that carries login links, reset tokens or codes: PostHog keeps its links as they are
+   * unless `tracking` turns clicks on, and keeps its subject and content out of events and logs.
+   */
+  sensitive?: boolean
+  /** `false` turns off all tracking, `true` turns on opens, clicks and engagement events, or set each kind. */
+  tracking?: boolean | EmailTracking
   /** PostHog templates can't be sent from Convex: render the email in your code. */
   templateId?: never
+  /** A React element can't cross into a Convex action: send `html: await render(<Email />)` from `@react-email/render`. */
+  react?: never
 } & ({ html: string; text?: string } | { html?: string; text: string })
+
+/** Which kinds of tracking an email turns on. A kind you leave out keeps PostHog's default. */
+export type EmailTracking = {
+  /** Counts opens with PostHog's open pixel. */
+  opens?: boolean
+  /** Sends the email's links through PostHog's click tracking. Needs `opens`. */
+  clicks?: boolean
+  /** Captures sent, delivered, opened, clicked and bounced as events of the recipient. */
+  engagement?: boolean
+}
 
 /** A queue that retries a failed action, such as a `Workpool` from `@convex-dev/workpool`. */
 export type EmailQueue<Ctx, WorkId> = {
@@ -154,22 +172,32 @@ export class PostHog {
 
   /**
    * Queue one email on a retrying queue, such as a Workpool. Makes the idempotency key now, so every
-   * attempt reuses it and a retry never sends twice. Retryable failures retry; others stop.
+   * attempt reuses it and a retry never sends twice. Retryable failures retry, after the wait PostHog
+   * asks for; others stop.
    */
   async enqueueEmail<Ctx, WorkId>(ctx: Ctx, queue: EmailQueue<Ctx, WorkId>, email: SendEmailArgs): Promise<WorkId> {
     const send = this.emailSend(email)
     const idempotencyKey = send.idempotencyKey ?? crypto.randomUUID()
-    return await queue.enqueueAction(ctx, this.component.emails.send, { ...send, idempotencyKey }, { retry: true })
+    return await queue.enqueueAction(
+      ctx,
+      this.component.emails.sendQueued,
+      { ...send, idempotencyKey },
+      { retry: true }
+    )
   }
 
   private emailSend(email: SendEmailArgs) {
     if (email.templateId !== undefined) {
       throw refusal('template_unsupported', 'Render the email in your code and send its html.')
     }
-    if (email.templateKey !== undefined && !TEMPLATE_KEY.test(email.templateKey)) {
+    if (email.react !== undefined) {
+      throw refusal('react_unsupported', 'Render the element with render() from @react-email/render and send its html.')
+    }
+    const templateKey = email.templateKey ?? this.defaultTemplateKey
+    if (!TEMPLATE_KEY.test(templateKey)) {
       throw refusal('invalid_template_key', 'Use letters, digits, - and _, at most 400.')
     }
-    return { ...email, templateKey: email.templateKey ?? this.defaultTemplateKey }
+    return { ...email, templateKey }
   }
 
   /**

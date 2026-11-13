@@ -35,17 +35,49 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             filename: string;
           }>;
           bcc?: string | Array<string>;
-          captureEngagement?: boolean;
           cc?: string | Array<string>;
           distinctId?: string;
           from?: string;
           html?: string;
           idempotencyKey?: string;
           replyTo?: string | Array<string>;
+          sensitive?: boolean;
           subject: string;
           templateKey: string;
           text?: string;
           to: string;
+          tracking?:
+            | boolean
+            | { clicks?: boolean; engagement?: boolean; opens?: boolean };
+        },
+        { message_id: string; replayed: boolean },
+        Name
+      >;
+      sendQueued: FunctionReference<
+        "action",
+        "internal",
+        {
+          attachments?: Array<{
+            content: string;
+            contentId?: string;
+            contentType?: string;
+            filename: string;
+          }>;
+          bcc?: string | Array<string>;
+          cc?: string | Array<string>;
+          distinctId?: string;
+          from?: string;
+          html?: string;
+          idempotencyKey?: string;
+          replyTo?: string | Array<string>;
+          sensitive?: boolean;
+          subject: string;
+          templateKey: string;
+          text?: string;
+          to: string;
+          tracking?:
+            | boolean
+            | { clicks?: boolean; engagement?: boolean; opens?: boolean };
         },
         { message_id: string; replayed: boolean },
         Name

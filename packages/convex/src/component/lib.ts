@@ -52,30 +52,39 @@ function readConfig(): { projectToken: string; host: string; personalApiKey: str
  * a fresh client per call (and tearing it down with `shutdown()`) is wasted work — the client
  * carries no per-invocation state once `flush()` has drained its queue.
  *
- * Keyed by `projectToken|host|secretKey` so a deployment that rotates its env vars (via `npx convex env set`)
+ * Keyed by every option it was built with, so a deployment that rotates its env vars (via `npx convex env set`)
  * picks up the new client without restarting the isolate.
  */
 const clientCache = new Map<string, PostHog>()
 
-function getClient(projectToken: string, host: string, secretKey = ''): PostHog {
-  const key = `${projectToken}|${host}|${secretKey}`
+function getClient(projectToken: string, host: string, email?: { secretKey: string; appHost: string }): PostHog {
+  const key = JSON.stringify([projectToken, host, email?.secretKey, email?.appHost])
   let client = clientCache.get(key)
   if (!client) {
     client = new PostHog(projectToken, {
       host,
       flushAt: 1,
       flushInterval: 0,
-      ...(secretKey ? { secretKey, enableLocalEvaluation: false } : {}),
+      ...(email && {
+        secretKey: email.secretKey,
+        enableLocalEvaluation: false,
+        ...(email.appHost && { appHost: email.appHost }),
+      }),
     })
     clientCache.set(key, client)
   }
   return client
 }
 
-/** A client that can send email: the configured client, with `POSTHOG_SECRET_KEY` and no flag polling. */
+/**
+ * A client that can send email: the configured client, with `POSTHOG_SECRET_KEY`, `POSTHOG_APP_HOST` and no
+ * flag polling.
+ */
 export function getEmailClient(): PostHog {
   const { projectToken, host } = readConfig()
-  return getClient(projectToken, host, (env.POSTHOG_SECRET_KEY ?? '').trim())
+  const secretKey = (env.POSTHOG_SECRET_KEY ?? '').trim()
+  const appHost = (env.POSTHOG_APP_HOST ?? '').trim()
+  return getClient(projectToken, host, { secretKey, appHost })
 }
 
 /** Properties are JSON-serialized to bypass Convex's restriction on `$`-prefixed field names. */

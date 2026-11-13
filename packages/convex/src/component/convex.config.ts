@@ -19,6 +19,11 @@ export default defineComponent('posthog', {
      */
     POSTHOG_SECRET_KEY: v.optional(v.string()),
     /**
+     * Your PostHog app host, such as `https://posthog.example.com`, when `POSTHOG_HOST` is a self-hosted
+     * instance or a proxy. Optional; PostHog Cloud hosts need none.
+     */
+    POSTHOG_APP_HOST: v.optional(v.string()),
+    /**
      * Polling interval for the local-evaluation refresh, in whole seconds. Optional (defaults
      * to 60). Convex component env vars are string-typed on the wire and only forwarded at
      * runtime, so it's read by the self-rescheduling refresh loop in `lib.ts` rather than at

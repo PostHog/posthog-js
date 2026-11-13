@@ -1,12 +1,47 @@
-import { EmailError, type SendCodeEmailOptions } from 'posthog-node/edge'
-import { ConvexError, v, type Infer } from 'convex/values'
+import { EmailError, type SendCodeEmailOptions, type SendEmailResponse } from 'posthog-node/edge'
+import { ConvexError, v, type Infer, type ObjectType } from 'convex/values'
 import { action } from './_generated/server.js'
 import { getEmailClient } from './lib.js'
 import { version } from './version.js'
 
 const WORKPOOL_NON_RETRYABLE = '__convexWorkpoolNonRetryable'
+const COOLDOWN_BUDGET_MS = 5 * 60_000
+const INTEGRATION = `convex/${version}`
 
 const addresses = v.union(v.string(), v.array(v.string()))
+
+const tracking = v.union(
+  v.boolean(),
+  v.object({ opens: v.optional(v.boolean()), clicks: v.optional(v.boolean()), engagement: v.optional(v.boolean()) })
+)
+
+const emailArgs = {
+  to: v.string(),
+  subject: v.string(),
+  templateKey: v.string(),
+  html: v.optional(v.string()),
+  text: v.optional(v.string()),
+  from: v.optional(v.string()),
+  replyTo: v.optional(addresses),
+  cc: v.optional(addresses),
+  bcc: v.optional(addresses),
+  attachments: v.optional(
+    v.array(
+      v.object({
+        filename: v.string(),
+        content: v.string(),
+        contentType: v.optional(v.string()),
+        contentId: v.optional(v.string()),
+      })
+    )
+  ),
+  distinctId: v.optional(v.string()),
+  idempotencyKey: v.optional(v.string()),
+  sensitive: v.optional(v.boolean()),
+  tracking: v.optional(tracking),
+}
+
+type EmailArgs = ObjectType<typeof emailArgs>
 
 const sentEmail = v.object({ message_id: v.string(), replayed: v.boolean() })
 
@@ -22,41 +57,54 @@ export type EmailSendFailure = {
   retry_after?: number
 }
 
+/** Sends the email once. A failure throws at once, with `retry_after` when PostHog asked to wait. */
 export const send = action({
-  args: {
-    to: v.string(),
-    subject: v.string(),
-    templateKey: v.string(),
-    html: v.optional(v.string()),
-    text: v.optional(v.string()),
-    from: v.optional(v.string()),
-    replyTo: v.optional(addresses),
-    cc: v.optional(addresses),
-    bcc: v.optional(addresses),
-    attachments: v.optional(
-      v.array(
-        v.object({
-          filename: v.string(),
-          content: v.string(),
-          contentType: v.optional(v.string()),
-          contentId: v.optional(v.string()),
-        })
-      )
-    ),
-    distinctId: v.optional(v.string()),
-    idempotencyKey: v.optional(v.string()),
-    captureEngagement: v.optional(v.boolean()),
-  },
+  args: emailArgs,
+  returns: sentEmail,
+  handler: async (_ctx, email) => sentOrThrown(await sendToPostHog(email)),
+})
+
+/**
+ * Sends the email for a retrying queue. When PostHog asks to wait, waits it out and sends again with the same
+ * key, for up to five minutes, so the queue's own short backoff doesn't spend its attempts during the wait.
+ */
+export const sendQueued = action({
+  args: emailArgs,
   returns: sentEmail,
   handler: async (_ctx, email) => {
-    const htmlOrTextCheckedBySdk = { ...email, integration: `convex/${version}` }
-    const { data, error } = await getEmailClient().emails.send(htmlOrTextCheckedBySdk as SendCodeEmailOptions)
-    if (error) {
-      throw sendFailure(error)
+    const deadline = Date.now() + COOLDOWN_BUDGET_MS
+    let reply = await sendToPostHog(email)
+    for (let wait = cooldownLeft(reply, deadline); wait !== undefined; wait = cooldownLeft(reply, deadline)) {
+      await sleep(wait)
+      reply = await sendToPostHog(email)
     }
-    return { message_id: data.id, replayed: data.replayed }
+    return sentOrThrown(reply)
   },
 })
+
+function sendToPostHog(email: EmailArgs): Promise<SendEmailResponse> {
+  const htmlOrTextCheckedBySdk = { ...email, integration: INTEGRATION }
+  return getEmailClient().emails.send(htmlOrTextCheckedBySdk as SendCodeEmailOptions)
+}
+
+function sentOrThrown({ data, error }: SendEmailResponse): SentEmail {
+  if (error) {
+    throw sendFailure(error)
+  }
+  return { message_id: data.id, replayed: data.replayed }
+}
+
+function cooldownLeft({ error }: SendEmailResponse, deadline: number): number | undefined {
+  const left = deadline - Date.now()
+  if (!error || !isRetryable(error) || !error.retryAfterMs || left <= 0) {
+    return undefined
+  }
+  return Math.min(error.retryAfterMs, left)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function sendFailure(error: EmailError): ConvexError<EmailSendFailure> {
   const failure: EmailSendFailure = {
