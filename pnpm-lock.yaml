@@ -705,6 +705,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@edge-runtime/vm@5.0.0)(@types/node@20.19.9)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2))
+      mcp-server-v2-0:
+        specifier: npm:@modelcontextprotocol/server@2.0.0
+        version: '@modelcontextprotocol/server@2.0.0'
       posthog-node:
         specifier: workspace:^
         version: link:../node
@@ -5581,6 +5584,10 @@ packages:
     peerDependencies:
       '@mikro-orm/core': ^6.0.0
 
+  '@modelcontextprotocol/core@2.0.0':
+    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
+    engines: {node: '>=20'}
+
   '@modelcontextprotocol/core@2.3.1':
     resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
     engines: {node: '>=20'}
@@ -5614,6 +5621,10 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/server@2.0.0':
+    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+    engines: {node: '>=20'}
 
   '@modelcontextprotocol/server@2.3.1':
     resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==}
@@ -16186,6 +16197,7 @@ packages:
 
   posthog-react-native-session-replay@1.6.0:
     resolution: {integrity: sha512-OCaei77mtgg7JT+TgHSCgpWeKq2XXENUOPNxGbjhXZa/aJpptOW5VsBqjtH4BPzM2c1veS1DK4/Fb/uV4Rb3cg==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -24674,6 +24686,10 @@ snapshots:
       globby: 11.1.0
       ts-morph: 27.0.2
 
+  '@modelcontextprotocol/core@2.0.0':
+    dependencies:
+      zod: 4.6.6
+
   '@modelcontextprotocol/core@2.3.1':
     dependencies:
       zod: 4.6.6
@@ -24782,6 +24798,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
     optional: true
+
+  '@modelcontextprotocol/server@2.0.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0
+      zod: 4.6.6
 
   '@modelcontextprotocol/server@2.3.1':
     dependencies:

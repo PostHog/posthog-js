@@ -8,7 +8,7 @@ import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId } from '../extensions/session-token'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
-import { EventCapture, fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog, RecordingTransport } from './test-utils'
 
 /**
  * Stateless / multi-pod coverage: `initialize` mints an `Mcp-Session-Id` token,
@@ -119,6 +119,32 @@ describe('Stateless session minting', () => {
     const decoded = decodeSessionId(inner.sessionId)
     expect(decoded).not.toBeNull()
     expect(getServerTrackingData(lowLevel)?.sessionId).toBe(decoded?.sessionId)
+  })
+
+  // SDK v2 before 2.3 lets a host reuse one stateless transport for every client.
+  it('gives each client on a shared transport its own token, and leaves none on the transport', async () => {
+    const { server } = createPod('pod-shared-transport')
+    const transport = new RecordingTransport()
+    await server.connect(transport)
+    const initialize = (name: string) =>
+      transport.request({
+        id: 1,
+        method: 'initialize',
+        params: { ...INITIALIZE_REQUEST.params, clientInfo: { name, version: '1.0.0' } },
+      })
+
+    const responses = [
+      await initialize('client-a'),
+      await initialize('client-b'),
+      await transport.request({ id: 2, method: 'tools/list' }),
+    ]
+
+    expect(responses.map((response) => decodeSessionId(response.sessionId)?.clientName)).toEqual([
+      'client-a',
+      'client-b',
+      undefined,
+    ])
+    expect(transport.sessionId).toBeUndefined()
   })
 
   describe('mint guards', () => {
