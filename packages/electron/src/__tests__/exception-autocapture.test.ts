@@ -40,7 +40,7 @@ afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
 })
-function harness(options: RendererOptions = {}) {
+function harness(options: RendererOptions = {}, initialState: Partial<State> = {}) {
     let state: State = {
         revision: 1,
         generation: 0,
@@ -51,6 +51,7 @@ function harness(options: RendererOptions = {}) {
         optedOut: false,
         featureFlags: {},
         featureFlagPayloads: {},
+        ...initialState,
     }
     let notify: (state: State) => void = () => {}
     const bridge: Bridge = {
@@ -67,6 +68,10 @@ function harness(options: RendererOptions = {}) {
         bridge,
         consent: (optedOut: boolean) => {
             state = { ...state, revision: state.revision + 1, optedOut }
+            notify(state)
+        },
+        disable: () => {
+            state = { ...state, revision: state.revision + 1, disabled: true }
             notify(state)
         },
         commands: () =>
@@ -206,6 +211,54 @@ describe('renderer exception autocapture', () => {
         target.dispatchEvent(new TestErrorEvent(new Error('allowed')))
         await client.flush()
         expect(commands()).toHaveLength(1)
+    })
+
+    it('does not inspect or serialize disabled errors while preserving consent and utility commands', async () => {
+        const { client, bridge, commands } = harness({ enableExceptionAutocapture: true }, { disabled: true })
+        const host = vi.fn()
+        target.addEventListener('error', host)
+        await client.ready()
+        const getter = vi.fn(() => new Error('private error'))
+        const event = new TestErrorEvent()
+        Object.defineProperty(event, 'error', { get: getter })
+        const rejection = new TestRejectionEvent(null)
+        Object.defineProperty(rejection, 'reason', { get: getter })
+        expect(target.dispatchEvent(event)).toBe(true)
+        expect(target.dispatchEvent(rejection)).toBe(true)
+        await client.captureException(Object.defineProperty({}, 'message', { get: getter }), {
+            get privateProperty() {
+                return getter().message
+            },
+        })
+        await Promise.resolve()
+        expect(getter).not.toHaveBeenCalled()
+        expect(commands()).toEqual([])
+        expect(bridge.request).toHaveBeenCalledTimes(1)
+        expect(host).toHaveBeenCalledTimes(1)
+        expect(event.defaultPrevented).toBe(false)
+        expect(rejection.defaultPrevented).toBe(false)
+        expect(client.optedOut).toBe(false)
+        expect(client.hasOptedOutCapturing()).toBe(false)
+        expect(client.getState()).toMatchObject({ disabled: true, optedOut: false })
+        await client.optIn()
+        await client.captureException(new Error('still disabled'))
+        await client.flush()
+        expect(commands()).toEqual([])
+        expect(vi.mocked(bridge.request).mock.calls.map(([request]) => request.command.type)).toEqual([
+            'hello',
+            'optIn',
+            'flush',
+        ])
+    })
+
+    it('rechecks disabled state before dispatching queued exception IPC', async () => {
+        const { client, bridge, disable } = harness({ enableExceptionAutocapture: true })
+        await client.ready()
+        target.dispatchEvent(new TestErrorEvent(new Error('allowed at observation')))
+        disable()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(bridge.request).toHaveBeenCalledTimes(1)
     })
 
     it('rechecks consent before dispatching queued exception IPC', async () => {

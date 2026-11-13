@@ -97,7 +97,11 @@ try {
     }
 
     const reports = []
-    for (const enabled of [false, true]) {
+    for (const [enabled, disabled] of [
+        [false, false],
+        [true, false],
+        [true, true],
+    ]) {
         const events = [],
             paths = [],
             receiverErrors = []
@@ -120,8 +124,8 @@ try {
         })
         await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
         const host = `http://127.0.0.1:${server.address().port}`
-        const reportPath = join(directory, `report-${enabled}.json`)
-        const userData = join(directory, `user-data-${enabled}`)
+        const reportPath = join(directory, `report-${enabled}-${disabled}.json`)
+        const userData = join(directory, `user-data-${enabled}-${disabled}`)
         try {
             await new Promise((resolve, reject) => {
                 const child = spawn(electron, [directory], {
@@ -131,6 +135,7 @@ try {
                         ...env,
                         FIXTURE_HOST: host,
                         FIXTURE_ENABLED: String(enabled),
+                        FIXTURE_DISABLED: String(disabled),
                         FIXTURE_REPORT: reportPath,
                         FIXTURE_USER_DATA: userData,
                     },
@@ -159,7 +164,7 @@ try {
                     if (timedOut || code !== 0)
                         reject(
                             new Error(
-                                `Electron enabled=${enabled}: exit ${code}/${signal}, timeout=${timedOut}\n${output}`
+                                `Electron enabled=${enabled}, disabled=${disabled}: exit ${code}/${signal}, timeout=${timedOut}\n${output}`
                             )
                         )
                     else resolve()
@@ -169,13 +174,16 @@ try {
             const report = JSON.parse(await readFile(reportPath, 'utf8'))
             reports.push(report)
             assert.deepEqual(report.unexpectedNetwork, [])
-            assert.ok(paths.length > 0)
+            if (disabled) {
+                assert.deepEqual(paths, [])
+                assert.equal(report.exceptionRequests, 0)
+            } else assert.ok(paths.length > 0)
             assert.deepEqual(
                 events.filter((event) => event.event !== '$exception').map((event) => event.event),
-                ['$identify']
+                disabled ? [] : ['$identify']
             )
             const exceptionEvents = events.filter((event) => event.event === '$exception')
-            assert.equal(exceptionEvents.length, enabled ? 7 : 2)
+            assert.equal(exceptionEvents.length, disabled ? 0 : enabled ? 7 : 2)
             const expected = [
                 ['main manual', 'main', 'generic', undefined, 'SyntaxError'],
                 ['renderer manual', 'renderer', 'generic', undefined, 'SyntaxError'],
@@ -213,7 +221,7 @@ try {
                       ]
                     : []),
             ]
-            for (const [message, processType, mechanism, source, type] of expected) {
+            for (const [message, processType, mechanism, source, type] of disabled ? [] : expected) {
                 const matching = exceptionEvents.filter(
                     (event) => event.properties.$exception_list[0].value === message
                 )
@@ -240,15 +248,18 @@ try {
                     )
                 }
             }
-            assert.equal(new Set(exceptionEvents.map((event) => event.properties.$session_id)).size, 1)
+            assert.equal(new Set(exceptionEvents.map((event) => event.properties.$session_id)).size, disabled ? 0 : 1)
             console.log(
-                `Installed Electron enabled=${enabled}: ${exceptionEvents.length} wire exceptions; real sandboxed JS throws/rejections, consent, disposal and reinit passed.`
+                `Installed Electron enabled=${enabled}, disabled=${disabled}: ${exceptionEvents.length} wire exceptions; real sandboxed JS throws/rejections, consent, disposal and reinit passed.`
             )
         } finally {
             await new Promise((resolve) => server.close(resolve))
         }
     }
-    const [baseline, observed] = reports
+    const [baseline, observed, disabled] = reports
+    assert.deepEqual(disabled.hostEvents, observed.hostEvents, 'disabled main handlers see identical real events')
+    assert.deepEqual(disabled.warnings, observed.warnings, 'disabled native warnings remain unchanged')
+    assert.deepEqual(disabled.renderer, observed.renderer, 'disabled renderer handlers see identical real events')
     assert.deepEqual(baseline.hostEvents, observed.hostEvents, 'main app handlers see identical real events')
     assert.deepEqual(baseline.warnings, observed.warnings, 'native Electron warnings remain unchanged')
     assert.deepEqual(

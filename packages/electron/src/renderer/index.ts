@@ -52,6 +52,7 @@ export class PostHog {
     private _state?: State
     private _ready?: Promise<void>
     private _reportedFlags = new Set<string>()
+    private _ready?: Promise<void>
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
     private _unsubscribe: () => void
@@ -76,7 +77,16 @@ export class PostHog {
         if (_options.autocapture) {
             this._autocapture = new RendererAutocapture(
                 {
-                    getState: () => this.getState(),
+                    getState: () => {
+                        const state = this._state
+                        if (!state) throw new Error('PostHog renderer is not ready')
+                        return {
+                            generation: state.generation,
+                            distinctId: state.distinctId,
+                            optedOut: state.optedOut,
+                            autocapture: state.autocapture,
+                        }
+                    },
                     capture: (event, properties) => this.capture(event, properties),
                     loadConfig: () => this._send({ type: 'loadAutocaptureConfig' }),
                     onError: (error) => {
@@ -113,21 +123,33 @@ export class PostHog {
     private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
         const snapshot: Command = JSON.parse(JSON.stringify(structuredClone(command)))
-        const operation = this._tail.then(async () => {
+        const dispatched = this._tail.then(() => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
-            if (command.type === 'exception' && this.hasOptedOutCapturing()) return
+            if (command.type === 'exception' && !this._canCaptureException()) return { response: undefined }
             const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
             bridgeSequences.set(this._bridge, sequence)
-            const response = await this._bridge.request({
-                version: PROTOCOL_VERSION,
-                sequence,
-                generation,
-                command: snapshot,
-            })
+            return {
+                response: this._bridge.request({
+                    version: PROTOCOL_VERSION,
+                    sequence,
+                    generation,
+                    command: snapshot,
+                }),
+            }
+        })
+        const operation = dispatched.then(async ({ response: pending }) => {
+            if (!pending) return
+            const response = await pending
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
         })
-        this._tail = operation.catch(() => {})
+        this._tail = (
+            command.type === 'flush' ||
+            command.type === 'reloadFeatureFlags' ||
+            command.type === 'loadAutocaptureConfig'
+                ? dispatched
+                : operation
+        ).catch(() => {})
         return operation
     }
 
@@ -153,7 +175,7 @@ export class PostHog {
             typeof window !== 'undefined'
         ) {
             this._stopExceptionAutocapture = startRendererExceptionAutocapture(
-                () => !this._disposed && !this.hasOptedOutCapturing(),
+                () => this._canCaptureException(),
                 (error, properties, hint) => this._captureException(error, properties, hint)
             )
         }
@@ -228,8 +250,11 @@ export class PostHog {
     captureException(error: unknown, properties?: Properties): Promise<void> {
         return this._captureException(error, properties)
     }
+    private _canCaptureException(): boolean {
+        return !this._disposed && !this._state?.disabled && !this.hasOptedOutCapturing()
+    }
     protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
-        if (this._disposed || this.hasOptedOutCapturing()) return Promise.resolve()
+        if (!this._canCaptureException()) return Promise.resolve()
         try {
             const exception = this._builder.buildFromUnknown(error, hint)
             return this._send({
