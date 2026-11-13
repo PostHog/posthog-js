@@ -1,5 +1,5 @@
 import { requireInstalledExtension } from './helpers'
-import type { Client } from '@posthog/browser-common'
+import type { IPostHogInternal } from '../src/core/context/browser-client'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { logs } from '../src/products/logs/logs'
@@ -364,7 +364,7 @@ describe('logs', () => {
     })
 
     it('allows consented requests during shutdown without treating shutdown as a transport gate', async () => {
-        let ordinary!: Client
+        let ordinary!: IPostHogInternal
         const fetch = vi.fn(async (_url: RequestInfo | URL) => new Response('{}'))
         const client = await create({
             fetch,
@@ -372,15 +372,15 @@ describe('logs', () => {
                 {
                     name: 'ordinary',
                     setup: (value) => {
-                        ordinary = value.sharedClient
+                        ordinary = value
                     },
                 },
             ],
         })
         getLogs(client).captureLog({ body: 'before closing' })
         const closing = client.shutdown(10)
-        expect((await client.sendRequest('/ordinary')).statusCode).toBe(200)
         expect((await ordinary.sendRequest('/ordinary')).statusCode).toBe(200)
+        expect((await ordinary.sharedClient.sendRequest('/ordinary')).statusCode).toBe(200)
         await closing
         expect(fetch.mock.calls.some(([url]) => String(url).includes('/i/v1/logs'))).toBe(true)
         expect(vi.getTimerCount()).toBe(0)

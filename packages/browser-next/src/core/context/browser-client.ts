@@ -58,7 +58,7 @@ export type BrowserExtensionAccess<Products extends BrowserProducts = BrowserPro
 /** Shared Core capabilities, without application administration or product controls. */
 export interface ICoreCapabilities extends Omit<
     Client,
-    'getExtension' | 'capture' | 'registerDynamicEventProperties' | 'isRateLimited' | 'onEvent'
+    'getExtension' | 'capture' | 'registerDynamicEventProperties' | 'isRateLimited' | 'onEvent' | 'sendRequest'
 > {
     /** Fires when consent changes, including changes observed from another tab. Does not replay. */
     readonly onConsentChange: Listener<ConsentChangeInfo>
@@ -75,6 +75,8 @@ export interface ICoreCapabilities extends Omit<
 /** SDK-internal scoped view; shared implementations receive a separate Client adapter. */
 export interface IPostHogInternal extends ICoreCapabilities, BrowserExtensionAccess<InternalBrowserProducts> {
     readonly sharedClient: Client
+    /** Internal transport for extension-owned requests. */
+    readonly sendRequest: Client['sendRequest']
     /** Local person-property changes, independently of capture consent. Does not replay. */
     readonly onChangeProperties: Listener<ChangePropertiesInfo>
     readonly onEvent: Client['onEvent']

@@ -11,15 +11,7 @@ import type {
     PersonProfileMode,
 } from '../products/analytics/analytics-options'
 
-import type {
-    ApiResponse,
-    CaptureOptions,
-    Disposable,
-    Listener,
-    RemoteConfig,
-    SendRequestInit,
-    SessionContext,
-} from '@posthog/browser-common'
+import type { CaptureOptions, Disposable, Listener, RemoteConfig, SessionContext } from '@posthog/browser-common'
 
 export interface StorageLike {
     getItem(key: string): string | null
@@ -138,11 +130,9 @@ export type {
     AutomaticAnalyticsOptions,
     LoadStrategy,
     PersonProfileMode,
-    ApiResponse,
     CaptureOptions,
     Disposable,
     Extension,
     RemoteConfig,
-    SendRequestInit,
     SessionContext,
 }

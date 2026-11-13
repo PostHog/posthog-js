@@ -20,5 +20,11 @@ export interface FeatureFlagsOptions {
 
 export type FeatureFlagsConfiguration = false | FeatureFlagsOptions
 export type FeatureFlagsCallback = (flags: FeatureFlagResult[], errorsLoading: boolean) => void
-export type { FeatureFlagResult, JsonType }
+export type {
+    FeatureFlagResult,
+    JsonType,
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
+} from '@posthog/types'
 export type { FeatureFlagsReloadResult } from '@posthog/browser-common'

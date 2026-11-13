@@ -6,9 +6,33 @@ import type {
     NewSessionReason,
     PersonProfileMode,
 } from '@posthog/browser'
-import type { PersonProfileMode as CorePersonProfileMode } from '@posthog/browser/core'
+import type { PersonProfileMode as CorePersonProfileMode, IPostHog as CoreIPostHog } from '@posthog/browser/core'
+import type { ApiResponse, SendRequestInit } from '@posthog/browser-common'
+// @ts-expect-error Raw transport response types belong to SDK plumbing.
+import type { ApiResponse as PublicApiResponse } from '@posthog/browser'
+// @ts-expect-error Raw transport options belong to SDK plumbing.
+import type { SendRequestInit as PublicSendRequestInit } from '@posthog/browser'
+// @ts-expect-error Raw transport response types belong to SDK plumbing.
+import type { ApiResponse as CoreApiResponse } from '@posthog/browser/core'
+// @ts-expect-error Raw transport options belong to SDK plumbing.
+import type { SendRequestInit as CoreSendRequestInit } from '@posthog/browser/core'
 import { analytics, type PersonProfileMode as AnalyticsPersonProfileMode } from '@posthog/browser/analytics'
 import type { Extension as SharedExtension, ExtensionToken } from '@posthog/browser-common'
+
+export type TransportExportBoundary = [PublicApiResponse, PublicSendRequestInit, CoreApiResponse, CoreSendRequestInit]
+export const internalTransport = async (
+    publicClient: IPostHog,
+    coreClient: CoreIPostHog,
+    host: IPostHogInternal
+): Promise<ApiResponse> => {
+    // @ts-expect-error Requests are not application controls.
+    publicClient.sendRequest('/internal/')
+    // @ts-expect-error Requests are not application controls.
+    coreClient.sendRequest('/internal/')
+    const init: SendRequestInit = { allowWhileOptedOut: true }
+    await host.sharedClient.sendRequest('/internal/', init)
+    return host.sendRequest('/internal/', init)
+}
 
 const personProfiles: PersonProfileMode = 'identified_only'
 const corePersonProfiles: CorePersonProfileMode = personProfiles

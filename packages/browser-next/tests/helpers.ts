@@ -1,7 +1,44 @@
 import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
 import { createPostHog as createRootPostHog } from '../src/composition/npm'
 import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
-import type { BrowserFetch, CorePostHogOptions, PostHogOptions, RemoteConfig, StorageLike } from '../src/core/types'
+import type {
+    BrowserFetch,
+    CorePostHogOptions,
+    IPostHog,
+    PostHogOptions,
+    RemoteConfig,
+    StorageLike,
+} from '../src/core/types'
+import type { IPostHogInternal } from '../src/core/context/browser-client'
+
+const internalHosts = new WeakMap<IPostHog, IPostHogInternal>()
+
+/** Install a probe extension to exercise transport only through its scoped setup capability. */
+export const withInternalHost =
+    <Options extends CorePostHogOptions>(create: (options: Options) => Promise<IPostHog>) =>
+    async (options: Options): Promise<IPostHog> => {
+        let host: IPostHogInternal | undefined
+        const client = await create({
+            ...options,
+            extensions: [
+                ...(options?.extensions ?? []),
+                {
+                    name: 'request-probe',
+                    setup: (scopedHost) => {
+                        host = scopedHost
+                    },
+                },
+            ],
+        })
+        if (host) internalHosts.set(client, host)
+        return client
+    }
+
+export const internalHost = (client: IPostHog): IPostHogInternal => {
+    const host = internalHosts.get(client)
+    if (!host) throw new Error('Expected request-probe setup to provide an internal host')
+    return host
+}
 
 /** Explicit buffer-only composition for state tests that do not exercise delivery or product selection. */
 export const withBufferedAnalytics = (options: PostHogOptions): PostHogOptions => {

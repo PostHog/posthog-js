@@ -1943,6 +1943,7 @@ export class PostHogFeatureFlags implements IFeatureFlagsCommon {
                     target: 'api',
                     method: 'GET',
                     sentAt: 'query',
+                    allowWhileOptedOut: true,
                 }
             )
             if (!response.json) {

@@ -1,4 +1,5 @@
 import { requireInstalledExtension } from './helpers'
+import type { IPostHogInternal } from '../src/core/context/browser-client'
 import { createPostHog as createRoot } from '../src/composition/npm'
 import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/composition/npm/core'
 import { localRemoteConfig, withBufferedAnalytics } from './helpers'
@@ -105,6 +106,7 @@ describe.each([
     it('loads and publishes under denial while extension requests remain gated', async () => {
         const fetch = vi.fn(async () => response())
         const observed = vi.fn()
+        let host!: IPostHogInternal
         const posthog = await create({
             ...options,
             fetch,
@@ -113,6 +115,7 @@ describe.each([
                 {
                     name: 'subscriber',
                     setup(client) {
+                        host = client
                         client.onRemoteConfig(observed)
                     },
                 },
@@ -120,7 +123,7 @@ describe.each([
         })
         await posthog.getRemoteConfig()
         expect(observed).toHaveBeenCalledWith({ ok: true, config: localRemoteConfig })
-        expect((await posthog.sendRequest('/flags/')).statusCode).toBe(0)
+        expect((await host.sendRequest('/flags/')).statusCode).toBe(0)
         expect(fetch).toHaveBeenCalledTimes(1)
         await posthog.dispose()
     })

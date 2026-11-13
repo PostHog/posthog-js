@@ -1,4 +1,5 @@
-import { createBufferedPostHog as createPostHog } from './helpers'
+import { createBufferedPostHog, internalHost, withInternalHost } from './helpers'
+
 import { requireInstalledExtension } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
@@ -20,6 +21,7 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
 const captureEvent = (request: SentRequest | undefined): Record<string, unknown> | undefined =>
     (request?.body?.batch as Record<string, unknown>[] | undefined)?.[0]
 
+const createPostHog = withInternalHost(createBufferedPostHog)
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
 const immediateAnalytics = analytics
 const createPostHogWithAnalytics = (options: CorePostHogOptions) =>
@@ -37,7 +39,7 @@ describe('@posthog/browser core', () => {
         for (const client of clients) {
             expect(client.canCapture).toBe(false)
             expect(() => client.analytics?.capture('disabled')).not.toThrow()
-            expect(await client.sendRequest('/test')).toMatchObject({ statusCode: 0 })
+            expect('sendRequest' in client).toBe(false)
             client.optIn()
             expect(client.canCapture).toBe(false)
             await client.shutdown()
@@ -847,7 +849,7 @@ describe('@posthog/browser core', () => {
             navigator: { sendBeacon: () => false },
         })
 
-        const response = await posthog.sendRequest('/e/', {
+        const response = await internalHost(posthog).sendRequest('/e/', {
             method: 'POST',
             body: { event: 'unload' },
             transport: 'sendBeacon',
@@ -867,9 +869,15 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await expect(posthog.sendRequest('https://example.com/collect')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(posthog.sendRequest('//example.com/collect')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(posthog.sendRequest('/\\example.com/collect')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(internalHost(posthog).sendRequest('https://example.com/collect')).resolves.toMatchObject({
+            statusCode: 0,
+        })
+        await expect(internalHost(posthog).sendRequest('//example.com/collect')).resolves.toMatchObject({
+            statusCode: 0,
+        })
+        await expect(internalHost(posthog).sendRequest('/\\example.com/collect')).resolves.toMatchObject({
+            statusCode: 0,
+        })
         expect(requests).toHaveLength(0)
     })
 
@@ -886,8 +894,8 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await posthog.sendRequest('/decide/', { target: 'flags' })
-        await posthog.sendRequest('/static/extension.js', { target: 'assets' })
+        await internalHost(posthog).sendRequest('/decide/', { target: 'flags' })
+        await internalHost(posthog).sendRequest('/static/extension.js', { target: 'assets' })
         await requireInstalledExtension(posthog.analytics).capture('host-normalization')
         await posthog.flush()
 
@@ -1385,7 +1393,7 @@ describe('@posthog/browser core', () => {
             },
         })
 
-        const response = await posthog.sendRequest('/e/', {
+        const response = await internalHost(posthog).sendRequest('/e/', {
             method: 'POST',
             body: { event: 'unload' },
             transport: 'sendBeacon',

@@ -312,7 +312,9 @@ describe('@posthog/browser extensions', () => {
             extensions: [analytics(), { name: 'denied', setup: deniedSetup }],
         })
 
-        await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(requireInstalledExtension(deniedClient).sendRequest('/flags/')).resolves.toMatchObject({
+            statusCode: 0,
+        })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
         expect(await denied.resolveExtension('denied')).toBeDefined()
         expect(configResponse).toHaveBeenCalledTimes(1)
@@ -332,7 +334,9 @@ describe('@posthog/browser extensions', () => {
 
     it('runs extensions and exposes inline remote config for bots while blocking network outputs', async () => {
         const blockedRequests: SentRequest[] = []
+        let blockedClient: IPostHogInternal | undefined
         const blockedSetup = vi.fn(async (client: IPostHogInternal) => {
+            blockedClient = client
             await requireInstalledExtension(client.analytics).capture('bot-output')
             await client.sendRequest('/flags/')
         })
@@ -344,7 +348,9 @@ describe('@posthog/browser extensions', () => {
             remoteConfig: createRemoteConfig(),
             extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
-        await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(requireInstalledExtension(blockedClient).sendRequest('/flags/')).resolves.toMatchObject({
+            statusCode: 0,
+        })
         await expect(blocked.getRemoteConfig()).resolves.toEqual(createRemoteConfig())
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(await blocked.resolveExtension('blocked')).toBeDefined()

@@ -1,15 +1,17 @@
-import { createBufferedPostHog as createPostHog } from './helpers'
+import { createBufferedPostHog, internalHost, withInternalHost } from './helpers'
+
 import { requireInstalledExtension } from './helpers'
 import type { Extension } from '../src/core/types'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { Disposable } from '@posthog/browser-common'
+import type { Disposable, SendRequestInit } from '@posthog/browser-common'
 import type { IPostHogInternal } from '../src/core/context/browser-client'
 
 import { analytics as createAnalytics } from '../src/products/analytics/analytics'
-import type { BrowserFetch, RemoteConfig, SendRequestInit, StorageLike } from '../src/composition/npm/core'
+import type { BrowserFetch, RemoteConfig, StorageLike } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
+const createPostHog = withInternalHost(createBufferedPostHog)
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
 const bufferedAnalytics = () => createAnalytics({ flushAt: 100, flushInterval: 0 })
 const DEFAULT_KEY = '__ph_opt_in_out_ph_test'
@@ -195,7 +197,7 @@ describe('portable consent persistence', () => {
             extensions: [{ name: 'blocked-by-consent', setup: extensionSetup }],
         })
         await requireInstalledExtension(posthog.analytics).capture('blocked')
-        await posthog.sendRequest('/flags/')
+        await internalHost(posthog).sendRequest('/flags/')
 
         expect(extensionSetup).toHaveBeenCalledTimes(1)
         expect(await posthog.resolveExtension('blocked-by-consent')).toBeDefined()
@@ -540,7 +542,7 @@ describe('portable consent persistence', () => {
         })
         await requireInstalledExtension(nextGate.analytics).capture('plain-private')
         plain.values.set(DEFAULT_KEY, '0')
-        await expect(nextGate.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(internalHost(nextGate).sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         plain.values.set(DEFAULT_KEY, '1')
         await nextGate.flush()
         expect(plainRequests).toHaveLength(0)
@@ -824,7 +826,7 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 200 })
+        await expect(internalHost(first).sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 200 })
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ 'X-Test': 'value' })
     })
@@ -849,7 +851,7 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 0 })
+        await expect(internalHost(first).sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 0 })
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -871,7 +873,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/flags/')
+        const response = internalHost(first).sendRequest('/flags/')
         second.optOut()
         second.optIn()
         finishFetch?.(new Response('{}', { status: 200 }))
@@ -898,7 +900,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/flags/')
+        const response = internalHost(first).sendRequest('/flags/')
         second.optOut()
         second.optIn()
         failFetch?.(new Error('private transport failure'))
@@ -930,7 +932,7 @@ describe('portable consent persistence', () => {
         }
 
         await expect(
-            first.sendRequest('/flags/', { body: {}, method: 'POST', transport: 'sendBeacon' })
+            internalHost(first).sendRequest('/flags/', { body: {}, method: 'POST', transport: 'sendBeacon' })
         ).resolves.toMatchObject({ statusCode: 202 })
     })
 

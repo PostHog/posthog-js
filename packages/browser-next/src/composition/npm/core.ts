@@ -10,7 +10,6 @@ export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from
 export type { IAnalytics } from '../../products/analytics/analytics-api'
 export type {
     AnalyticsOptions,
-    ApiResponse,
     BrowserFetch,
     BrowserNavigator,
     CaptureOptions,
@@ -24,7 +23,6 @@ export type {
     NewSessionReason,
     IPostHog,
     RemoteConfig,
-    SendRequestInit,
     SessionContext,
     StorageLike,
 } from '../../core/types'

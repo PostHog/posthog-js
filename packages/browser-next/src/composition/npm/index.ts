@@ -19,7 +19,6 @@ export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from
 export type {
     AnalyticsConfiguration,
     AnalyticsOptions,
-    ApiResponse,
     AutomaticAnalyticsOptions,
     BrowserFetch,
     BrowserNavigator,
@@ -36,12 +35,14 @@ export type {
     IPostHog,
     PostHogOptions,
     RemoteConfig,
-    SendRequestInit,
     SessionContext,
     StorageLike,
 } from '../../core/types'
 
 export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     FeatureFlagsOptions,
     FeatureFlagsConfiguration,
     FeatureFlagsCallback,
