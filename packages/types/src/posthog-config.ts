@@ -1353,7 +1353,8 @@ export interface BrowserMetricsConfig extends MetricsConfig {
      * of the response arrives, from the request's Resource Timing entry) and
      * `posthog.flags.request.main_thread_duration` (until the SDK's callback runs).
      * The attempt records them only when the browser reports a Resource Timing entry
-     * that belongs to it within 5 seconds of the callback.
+     * within 5 seconds of the callback that no other `/flags` request from this copy
+     * of the SDK to the same URL can own.
      *
      * This option, the metric names, and their attributes may change or be removed
      * in any release.

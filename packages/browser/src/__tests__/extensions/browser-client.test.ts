@@ -905,23 +905,44 @@ describe('BrowserClientAdapter', () => {
                     statusCode: 200,
                 })
                 expect(recorded(METRIC)).toHaveLength(1)
+                expect(FakePerformanceObserver.latest.disconnected).toBe(true)
             })
 
             it('sends the request when watching for its Resource Timing entry throws', async () => {
-                vi.stubGlobal(
-                    'PerformanceObserver',
-                    class {
-                        constructor() {
-                            throw new Error('boom')
-                        }
-                    }
-                )
+                Object.defineProperty(window, 'PerformanceObserver', {
+                    configurable: true,
+                    get() {
+                        throw new Error('boom')
+                    },
+                })
+                const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
                 const client = createTimedClient({ statusCode: 200 })
 
-                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
-                    statusCode: 200,
+                try {
+                    await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                        statusCode: 200,
+                    })
+                    expect(error).toHaveBeenCalledWith('Failed to watch the /flags request timing', expect.any(Error))
+                    expect(recorded(METRIC)).toHaveLength(1)
+                } finally {
+                    // vi.unstubAllGlobals does not restore a property defined with Object.defineProperty.
+                    delete (window as { PerformanceObserver?: unknown }).PerformanceObserver
+                }
+            })
+
+            it('logs instead of throwing when recording a split that arrives after the callback throws', async () => {
+                const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+                const client = createTimedClient({ statusCode: 200 })
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+                histogram.mockImplementationOnce(() => {
+                    throw new Error('boom')
                 })
-                expect(recorded(METRIC)).toHaveLength(1)
+
+                expect(() => FakePerformanceObserver.latest.deliver(resourceEntry(FLAGS_URL, 112, 300))).not.toThrow()
+                expect(error).toHaveBeenCalledWith(
+                    'Failed to record the /flags request timing split',
+                    expect.any(Error)
+                )
             })
 
             it('stops watching when no response arrives', async () => {

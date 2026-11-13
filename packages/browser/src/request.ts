@@ -441,6 +441,7 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
             signal: aborter?.signal,
             ...options.fetchOptions,
         }
+        options.onSend?.(url)
         const requestSize = estimatedSize ?? (isUndefined(body) ? 0 : undefined)
         // Respect runtime opt-out, but do not let untyped options override the safety budget
         // or beacon-rejection fallback. A replaced body has no trustworthy encoded size.
@@ -456,7 +457,6 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
             reservedBytes = requestSize!
             pendingKeepaliveBytes += reservedBytes
         }
-        options.onSend?.(url)
         // Reserve immediately before dispatch (after async encoding). Fetch resolves at headers:
         // retain bytes through body consumption, including while timeout/abort is still pending.
         // A patched abort that does not terminate fetch must not replenish the budget.

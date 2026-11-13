@@ -221,13 +221,13 @@ describe('watchResourceTiming', () => {
         expect(FakePerformanceObserver.latest.disconnected).toBe(true)
     })
 
-    it('stop disconnects and drops later entries', () => {
+    it('stop disconnects and ignores entries that arrived before it', () => {
         const watch = startWatch(URL_A)!
         const onEntry = vi.fn()
+        FakePerformanceObserver.latest.deliver(resourceEntry(URL_A, 101, 250))
 
         watch.stop()
         watch.take(1000, onEntry)
-        FakePerformanceObserver.latest.deliver(resourceEntry(URL_A, 101, 250))
 
         expect(onEntry).not.toHaveBeenCalled()
         expect(FakePerformanceObserver.latest.disconnected).toBe(true)

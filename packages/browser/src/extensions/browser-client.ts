@@ -56,6 +56,25 @@ const flagsErrorType = (status: number | undefined, error: unknown): string | un
     return (error as Error | undefined)?.name === 'AbortError' ? 'timeout' : '_OTHER'
 }
 
+const flagsAttributes = (endpoint: string, response: ApiResponse): MetricAttributes => {
+    const status = response.statusCode || undefined
+    const attributes: MetricAttributes = {
+        'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
+    }
+    if (status) {
+        attributes['http.response.status_code'] = status
+    }
+    const errorType = flagsErrorType(status, response.error)
+    if (errorType) {
+        attributes['error.type'] = errorType
+    }
+    const timezone = getTimezone()
+    if (timezone) {
+        attributes['client.timezone'] = timezone
+    }
+    return attributes
+}
+
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
 
@@ -300,62 +319,34 @@ export class BrowserClientAdapter implements Client {
                 requestOptions.callback = (response) => {
                     resolve(response)
                     if (isUndefined(dispatchedAt)) {
+                        resourceTiming?.stop()
                         return
                     }
                     const startedAt = dispatchedAt
                     const completedAt = now()
-                    const attributes = this._recordFlagsDuration(endpoint, response, completedAt - startedAt)
                     try {
+                        const attributes = flagsAttributes(endpoint, response)
+                        this._recordFlagsHistogram(
+                            FLAGS_REQUEST_DURATION_METRIC,
+                            completedAt - startedAt,
+                            FLAGS_REQUEST_DURATION_BOUNDS,
+                            attributes
+                        )
                         // Without a response there is no response end to split at.
-                        if (attributes && response.statusCode) {
-                            resourceTiming?.take(completedAt, (entry) =>
+                        if (response.statusCode && resourceTiming) {
+                            resourceTiming.take(completedAt, (entry) =>
                                 this._recordFlagsSplit(entry, startedAt, completedAt, attributes)
                             )
-                        } else {
-                            resourceTiming?.stop()
+                            return
                         }
                     } catch (e) {
-                        resourceTiming?.stop()
-                        logger.error('Failed to read the /flags request timing', e)
+                        logger.error('Failed to record the /flags request timing', e)
                     }
+                    resourceTiming?.stop()
                 }
             }
             this.instance._send_request(requestOptions)
         })
-    }
-
-    private _recordFlagsDuration(
-        endpoint: string,
-        response: ApiResponse,
-        durationMs: number
-    ): MetricAttributes | undefined {
-        try {
-            const status = response.statusCode || undefined
-            const attributes: MetricAttributes = {
-                'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
-            }
-            if (status) {
-                attributes['http.response.status_code'] = status
-            }
-            const errorType = flagsErrorType(status, response.error)
-            if (errorType) {
-                attributes['error.type'] = errorType
-            }
-            const timezone = getTimezone()
-            if (timezone) {
-                attributes['client.timezone'] = timezone
-            }
-            this._recordFlagsHistogram(
-                FLAGS_REQUEST_DURATION_METRIC,
-                durationMs,
-                FLAGS_REQUEST_DURATION_BOUNDS,
-                attributes
-            )
-            return attributes
-        } catch (e) {
-            logger.error('Failed to record the /flags request duration', e)
-            return undefined
-        }
     }
 
     private _recordFlagsSplit(
@@ -364,6 +355,7 @@ export class BrowserClientAdapter implements Client {
         completedAt: number,
         attributes: MetricAttributes
     ): void {
+        // A responseEnd before startTime, such as 0, would make network time negative.
         if (entry.responseEnd < entry.startTime) {
             return
         }
