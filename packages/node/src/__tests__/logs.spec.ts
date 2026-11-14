@@ -166,6 +166,61 @@ describe('PostHog Node.js logs', () => {
     expect(records()).toHaveLength(1)
   })
 
+  it('sends logs captured while the shutdown flush is in flight', async () => {
+    let releaseLogs: () => void = () => {}
+    mockedFetch.mockImplementation((url: any) =>
+      String(url).includes('/i/v1/logs') && logsCalls().length === 1
+        ? new Promise((resolve) => {
+            releaseLogs = () => resolve({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+          })
+        : Promise.resolve({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    )
+    create()
+    posthog.logger.info('before shutdown')
+
+    const shutdown = posthog.shutdown(5000)
+    await vi.advanceTimersByTimeAsync(10)
+    posthog.logger.info('during shutdown')
+    releaseLogs()
+    await vi.advanceTimersByTimeAsync(100)
+    await shutdown
+
+    expect(records().map((record) => record.body.stringValue)).toEqual(['before shutdown', 'during shutdown'])
+  })
+
+  it('stops the shutdown drain when the logs endpoint makes no progress', async () => {
+    mockedFetch.mockImplementation(async (url: any) =>
+      String(url).includes('/i/v1/logs')
+        ? Promise.reject(new Error('network down'))
+        : ({ status: 200, headers: { get: () => null }, text: async () => '' } as any)
+    )
+    create()
+    posthog.logger.info('unsendable')
+
+    const shutdown = posthog.shutdown(5000)
+    await vi.advanceTimersByTimeAsync(100)
+    await shutdown
+
+    expect(logsCalls()).toHaveLength(1)
+  })
+
+  it('ends the shutdown drain at the deadline when every logs request queues another log', async () => {
+    mockedFetch.mockImplementation(async (url: any) => {
+      if (String(url).includes('/i/v1/logs')) {
+        posthog.logger.info('logged by fetch')
+        vi.setSystemTime(Date.now() + 100)
+      }
+      return { status: 200, headers: { get: () => null }, text: async () => '' } as any
+    })
+    create()
+    posthog.logger.info('first')
+
+    await posthog.shutdown(1000)
+
+    expect(logsCalls().length).toBeGreaterThan(1)
+    expect(logsCalls().length).toBeLessThanOrEqual(11)
+  })
+
   it('holds a serverless invocation open for a handler that only logs', async () => {
     const waitUntil = vi.fn()
     create({
