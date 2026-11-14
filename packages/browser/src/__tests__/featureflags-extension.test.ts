@@ -486,7 +486,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         await vi.advanceTimersByTimeAsync(5)
 
         expect(sendRequest).toHaveBeenCalledWith(
-            '/flags/?v=2',
+            '/flags/?v=4',
             expect.objectContaining({
                 body: expect.objectContaining({ evaluation_contexts: ['updated-context'] }),
             })

@@ -78,7 +78,7 @@ export class RemoteConfigLoader {
         }
 
         // Config and flags are loaded separately: config from /array/{token}/config,
-        // flags from /flags/?v=2. Features like surveys, session recording, and product
+        // flags from /flags. Features like surveys, session recording, and product
         // tours reference flags in their config (e.g. survey.linked_flag_key), but this
         // is safe because those flag checks happen lazily at runtime (e.g. when deciding
         // whether to show a survey), not during config processing. By the time a linked

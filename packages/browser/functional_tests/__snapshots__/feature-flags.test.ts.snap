@@ -48,6 +48,6 @@ exports[`FunctionalTests / Feature Flags > snapshots the decoded /flags wire env
     "timezone": "<runtime-timezone>",
     "token": "flags-wire-snapshot-token",
   },
-  "path": "/flags/?v=2",
+  "path": "/flags/?v=4",
 }
 `;

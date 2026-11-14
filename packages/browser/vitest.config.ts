@@ -27,6 +27,10 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
             {
+                find: '@posthog/browser-common/flags-response-v4',
+                replacement: fromRoot('../browser-common/src/flags-response-v4.ts'),
+            },
+            {
                 find: '@posthog/browser-common/autocapture-config',
                 replacement: fromRoot('../browser-common/src/autocapture-config.ts'),
             },

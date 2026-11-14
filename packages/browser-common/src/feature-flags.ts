@@ -251,7 +251,7 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>, responseLogger
     const flagDetails = response['flags']
 
     if (flagDetails) {
-        // This is a /flags?v=2 request.
+        // This is a /flags?v=2 response, or the v2 rendering of a later version's response.
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         const featureFlags = Object.fromEntries(
@@ -289,6 +289,27 @@ export interface FeatureFlagsReloadResult {
 }
 
 type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
+
+/**
+ * The `/flags` response a client requests and how it reads it. `version` is sent as the `v` query
+ * parameter, and `read` reads the response body that version selects into the v2 shape that the
+ * rest of this module reads. The two are one seam, so a client cannot request one version and read
+ * another.
+ *
+ * @internal
+ */
+export interface FlagsResponseFormat {
+    readonly version: 2 | 4
+    /** `withoutTypedValues` says that the body has a record a server that does not serve `version` sends. */
+    readonly read?: (body: Partial<FlagsResponse>) => { body: Partial<FlagsResponse>; withoutTypedValues: boolean }
+    /**
+     * A stored flag record as the public getters return it: without the members that `read` stores
+     * with a record and no public type declares. A format without it stores no such members.
+     */
+    readonly publicDetail?: (detail: FeatureFlagDetail) => FeatureFlagDetail
+}
+
+const FLAGS_RESPONSE_V2: FlagsResponseFormat = { version: 2 }
 
 /** Who read a flag, and where. An exposure is reported only in the context of its read. */
 type FlagCallContext = {
@@ -349,9 +370,21 @@ export class PostHogFeatureFlags implements Extension {
     private _hadUserInteraction: boolean = false
     private _lastRefreshAt: number | undefined
     private readonly _configSource: FeatureFlagsConfigSource
+    // Whether this client has logged that /flags sent records without typed values.
+    private _loggedResponseWithoutTypedValues: boolean = false
 
     constructor(configSource: FeatureFlagsConfigSource) {
         this._configSource = configSource
+    }
+
+    /**
+     * The `/flags` response this client requests and how it reads it. The default requests `v=2`
+     * and reads the body as sent. A client opts in to another version by overriding this, so no
+     * client changes the version it requests without its own change. This is an SDK seam, not a
+     * user option.
+     */
+    protected get _responseFormat(): FlagsResponseFormat {
+        return FLAGS_RESPONSE_V2
     }
 
     /** Host persistence may merge flag snapshots across tabs independently of KV writes. */
@@ -800,6 +833,20 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
+        const details = this._flagsWithDetails()
+        const publicDetail = this._responseFormat.publicDetail
+        if (!publicDetail) {
+            return details
+        }
+        // `Object.fromEntries` defines every key as an own property, whatever the flag is named.
+        return Object.fromEntries(Object.entries(details).map(([key, detail]) => [key, publicDetail(detail)]))
+    }
+
+    /**
+     * The stored flag records with the overrides applied, as stored. A record can have members that
+     * no public type declares, so the code of this module reads it and no public getter returns it.
+     */
+    private _flagsWithDetails(): Record<string, FeatureFlagDetail> {
         const flagDetails = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
 
         const overridenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
@@ -1126,7 +1173,7 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const isPartialFlagsResponse = this._config.onlyEvaluateSurveyFeatureFlags
-        const path = `/flags/?v=2${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
+        const path = `/flags/?v=${this._responseFormat.version}${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
         const requestGeneration = this._requestGeneration
         const completions = this._pendingReloads
         this._pendingReloads = new Set()
@@ -1140,7 +1187,7 @@ export class PostHogFeatureFlags implements Extension {
             }
         }
         const handleResponse = (response: ApiResponse): void => {
-            const json = (response.json ?? {}) as Partial<FlagsResponse> & { quotaLimited?: string[] }
+            const json: Partial<FlagsResponse> & { quotaLimited?: string[] } = this._readFlagsResponse(response.json)
             const errorsLoading = response.statusCode !== 200
             this._requestInFlight = false
             if (requestGeneration !== this._requestGeneration) {
@@ -1263,6 +1310,21 @@ export class PostHogFeatureFlags implements Extension {
         attempt()
     }
 
+    /** Reads a `/flags` response body with the reader of the response version this client requests. */
+    private _readFlagsResponse(json: unknown): Partial<FlagsResponse> {
+        const sent = (json ?? {}) as Partial<FlagsResponse>
+        const read = this._responseFormat.read
+        if (!read) {
+            return sent
+        }
+        const { body, withoutTypedValues } = read(sent)
+        if (withoutTypedValues && !this._loggedResponseWithoutTypedValues) {
+            this._loggedResponseWithoutTypedValues = true
+            this._logger.info('The /flags response has no typed flag values. Its flags are read as before.')
+        }
+        return body
+    }
+
     private _hasStatusZeroCircuitBreakerTripped(): boolean {
         return isStatusZeroFailureCircuitBreakerTripped(
             this._consecutiveStatusZeroFailures,
@@ -1337,8 +1399,9 @@ export class PostHogFeatureFlags implements Extension {
      * @param {String} key Key of the feature flag.
      */
     getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
-        const details = this.getFlagsWithDetails()
-        return details[key]
+        const detail = this._flagsWithDetails()[key]
+        const publicDetail = this._responseFormat.publicDetail
+        return detail && publicDetail ? publicDetail(detail) : detail
     }
 
     /**
@@ -1450,7 +1513,7 @@ export class PostHogFeatureFlags implements Extension {
                     ...(sessionIdToPersist ? { [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist } : {}),
                 })
 
-                const flagDetails = this.getFeatureFlagDetails(key)
+                const flagDetails = this._flagsWithDetails()[key]
                 const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
                 if (isUndefined(flagValue)) {
                     errors.push(FeatureFlagError.FLAG_MISSING)
@@ -1605,6 +1668,8 @@ export class PostHogFeatureFlags implements Extension {
         }
         let payload: JsonType | undefined
         try {
+            // Every client keeps `v=2` here, whatever response format it requests for its flags: this
+            // reads only the top-level `featureFlagPayloads`, not the flag records.
             // Preserve the legacy request's explicit undefined compression field.
             // oxlint-disable-next-line typescript/consistent-type-assertions
             const response = await client.sendRequest('/flags/?v=2', {
@@ -1698,7 +1763,8 @@ export class PostHogFeatureFlags implements Extension {
 
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
-        const currentFlagDetails = this.getFlagsWithDetails()
+        // The stored records, so a response that is merged into them keeps what they hold.
+        const currentFlagDetails = this._flagsWithDetails()
         const statePatch = parseFlagsResponse(
             response,
             currentFlags,
