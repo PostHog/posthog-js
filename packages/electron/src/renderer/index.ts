@@ -107,7 +107,9 @@ export class PostHog {
 
     private async _send(command: Command): Promise<void> {
         const generation = this._state?.generation ?? 0
-        const snapshot: Command = JSON.parse(JSON.stringify(structuredClone(command)))
+        // Reject non-cloneable input as before, but snapshot with JSON semantics so caller toJSON redaction applies.
+        structuredClone(command)
+        const snapshot: Command = JSON.parse(JSON.stringify(command))
         const dispatched = this._tail.then(() => {
             if (this._disposed) throw new Error('PostHog renderer has been disposed')
             const sequence = (bridgeSequences.get(this._bridge) ?? 0) + 1
