@@ -1,7 +1,7 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
 import type { CrossOriginIframeMessageEvent } from '../types';
-import { callSafely, isBlocked, removeEventListenerSafely } from '../utils';
+import { callSafely, removeEventListenerSafely } from '../utils';
 import CrossOriginIframeMirror from './cross-origin-iframe-mirror';
 import { findAndRemoveIframeBuffer } from './observer';
 import { EventType, NodeType, IncrementalSource } from '@posthog/rrweb-types';
@@ -85,7 +85,8 @@ export class IframeManager {
   }
 
   public addIframe(iframeEl: HTMLIFrameElement): void {
-    if (isBlocked(iframeEl, this.blockClass, this.blockSelector, false)) return;
+    if (_isBlockedElement(iframeEl, this.blockClass, this.blockSelector))
+      return;
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);

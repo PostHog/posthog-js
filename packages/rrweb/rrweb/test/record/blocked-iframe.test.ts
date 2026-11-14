@@ -145,4 +145,15 @@ describe('record a blocked iframe', () => {
       }).toEqual({ initialContent: isRecorded, laterContent: isRecorded });
     },
   );
+
+  it.each(['same-origin', 'cross-origin'] as const)(
+    'a %s iframe is in the first snapshot when the block selector is invalid',
+    async (iframeOrigin) => {
+      const recorded = await recordPageWithIframe(iframeOrigin, '', {
+        blockSelector: '[',
+      });
+
+      expect(recorded).toContain(INITIAL_CONTENT);
+    },
+  );
 });
