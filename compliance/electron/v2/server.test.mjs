@@ -69,9 +69,9 @@ test('mockOrigin rejects live hosts, credentials, missing ports and non-HTTP inp
         'http://user@127.0.0.1:8080',
         'http://127.0.0.1:8080/path',
     ])
-        assert.equal(mockOrigin(value), undefined)
+        assert.equal(mockOrigin(value, []), undefined)
     for (const host of ['127.0.0.1', '192.168.10.2', '10.2.3.4', '172.16.2.3', '[::1]'])
-        assert.equal(mockOrigin(`http://${host}:8080`), `http://${host}:8080`)
+        assert.equal(mockOrigin(`http://${host}:8080`, []), `http://${host}:8080`)
 })
 test('server negotiates semantic client profiles without advertising private controls', async () => {
     const adapter = await startServer({ consumer: '/not-used-for-negotiation', port: 0 })
@@ -201,3 +201,46 @@ test('fixture stop is idempotent and never signals an already exited process gro
         kill.mock.restore()
     }
 })
+
+test('mockOrigin restricts private hosts to an explicit allowlist when one is configured', () => {
+    const allowed = ['192.168.97.2']
+    assert.equal(mockOrigin('http://192.168.97.2:41234', allowed), 'http://192.168.97.2:41234')
+    for (const host of ['127.0.0.1', 'localhost', '[::1]', '10.2.3.4', '192.168.97.3'])
+        assert.equal(mockOrigin(`http://${host}:8765`, allowed), undefined, host)
+})
+
+test(
+    'real Electron fixture rejects loopback services outside the runner mock allowlist',
+    { skip: !process.env.POSTHOG_ELECTRON_CONSUMER },
+    async () => {
+        const previous = process.env.POSTHOG_ELECTRON_MOCK_HOSTS
+        process.env.POSTHOG_ELECTRON_MOCK_HOSTS = '10.77.1.2'
+        const adapter = await startServer({ consumer: process.env.POSTHOG_ELECTRON_CONSUMER, port: 0 })
+        const request = async (path, body) =>
+            (
+                await fetch(`http://127.0.0.1:${adapter.address.port}${path}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ protocol, timeout_ms: 15000, ...body }),
+                })
+            ).json()
+        try {
+            await request('/v2/fixtures/allocate', {
+                fixture_id: 'allow',
+                case_id: 'allowlist',
+                profile_id: 'electron-main',
+            })
+            const blocked = await request('/v2/invoke', {
+                fixture_id: 'allow',
+                call_id: 'loopback',
+                route: '/setup',
+                args: { project_token: 'phc_test_key', config: { host: 'http://127.0.0.1:8765' } },
+            })
+            assert.equal(blocked.completion.failure.code, 'mock-host-required')
+            await request('/v2/fixtures/close', { fixture_id: 'allow' })
+        } finally {
+            await adapter.close()
+            if (previous === undefined) delete process.env.POSTHOG_ELECTRON_MOCK_HOSTS
+            else process.env.POSTHOG_ELECTRON_MOCK_HOSTS = previous
+        }
+    }
+)

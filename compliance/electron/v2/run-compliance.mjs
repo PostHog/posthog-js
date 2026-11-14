@@ -1,6 +1,6 @@
 // Native macOS + OrbStack hybrid. This network is deliberately not claimed hermetic.
 import { execFileSync, spawn } from 'node:child_process'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { join, resolve } from 'node:path'
@@ -30,6 +30,10 @@ copyFileSync(join(consumer, 'build.json'), join(output, 'build.json'))
 const identity = randomUUID()
 const network = `electron-compliance-${identity}`
 const container = `${network}-harness`
+const checker = `${network}-check`
+// Pin the harness to a private per-run address so the SDK guard can allow only that mock host.
+const subnet = `10.${randomInt(64, 250)}.${randomInt(0, 255)}`
+const harnessAddress = `${subnet}.2`
 let cancellation, activeCommand, cancelStartup
 for (const [signal, code] of [
     ['SIGINT', 130],
@@ -140,7 +144,7 @@ try {
                     adapter_bind: '127.0.0.1',
                     mock_routing: 'Native OrbStack routes container private IPv4',
                     limitation:
-                        'Not egress-isolated or hermetic; Electron SDK session permits only exact private mock HTTP origin',
+                        'Not egress-isolated or hermetic; Electron SDK session permits only the pinned harness mock address',
                 },
             },
             null,
@@ -148,7 +152,13 @@ try {
         ) + '\n'
     )
     adapter = spawn(process.execPath, [join(directory, 'server.mjs')], {
-        env: { ...process.env, POSTHOG_ELECTRON_CONSUMER: consumer, HOST: '127.0.0.1', PORT: '0' },
+        env: {
+            ...process.env,
+            POSTHOG_ELECTRON_CONSUMER: consumer,
+            POSTHOG_ELECTRON_MOCK_HOSTS: harnessAddress,
+            HOST: '127.0.0.1',
+            PORT: '0',
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
     })
     adapterExited = new Promise((done) => {
@@ -186,7 +196,7 @@ try {
     })
     writeFileSync(join(output, 'startup.json'), JSON.stringify(startup) + '\n')
     networkAttempted = true
-    if ((await command(30000, ['network', 'create', network], 'network-create')) !== 0)
+    if ((await command(30000, ['network', 'create', '--subnet', `${subnet}.0/24`, network], 'network-create')) !== 0)
         throw new Error('Network creation failed')
     // No host ports are published. OrbStack routes native Electron to the per-case
     // private container listener; host.docker.internal routes the reverse direction.
@@ -199,6 +209,8 @@ try {
             container,
             '--network',
             network,
+            '--ip',
+            harnessAddress,
             '--mount',
             `type=bind,src=${specs},dst=/specs,readonly`,
             '--mount',
@@ -207,7 +219,7 @@ try {
             'sh',
             harnessImage,
             '-c',
-            `exec posthog-test-harness-v2 run --specs /specs --all-features --adapter-url http://host.docker.internal:${startup.port} --allow-private-network --mock-bind-host 0.0.0.0 --mock-advertised-host "$(hostname -i)" --profile ${profile} --timeout-ms 15000 --report /reports/report.json`,
+            `exec posthog-test-harness-v2 run --specs /specs --all-features --adapter-url http://host.docker.internal:${startup.port} --allow-private-network --mock-bind-host 0.0.0.0 --mock-advertised-host ${harnessAddress} --profile ${profile} --timeout-ms 15000 --report /reports/report.json`,
         ],
         'run'
     )
@@ -216,6 +228,8 @@ try {
         [
             'run',
             '--rm',
+            '--name',
+            checker,
             '--network',
             'none',
             '--mount',
@@ -266,16 +280,21 @@ try {
         adapter.stderr.destroy()
     }
     if (networkAttempted) {
-        // Only our uniquely named resources; a timed-out run may still own its container.
-        const query = await command(
-            30000,
-            ['ps', '--all', '--quiet', '--filter', `name=^/${container}$`],
-            'container-cleanup-query',
-            true
-        )
-        if (query !== 0) result = 1
-        else if (readFileSync(join(output, 'container-cleanup-query.log'), 'utf8').trim()) {
-            if ((await command(30000, ['rm', '--force', container], 'container-cleanup', true)) !== 0) result = 1
+        // Only our uniquely named resources; a timed-out or cancelled run may still own its containers.
+        for (const [name, log] of [
+            [container, 'container-cleanup'],
+            [checker, 'checker-cleanup'],
+        ]) {
+            const query = await command(
+                30000,
+                ['ps', '--all', '--quiet', '--filter', `name=^/${name}$`],
+                `${log}-query`,
+                true
+            )
+            if (query !== 0) result = 1
+            else if (readFileSync(join(output, `${log}-query.log`), 'utf8').trim()) {
+                if ((await command(30000, ['rm', '--force', name], log, true)) !== 0) result = 1
+            }
         }
         if ((await command(30000, ['network', 'rm', network], 'network-cleanup', true)) !== 0) result = 1
     }

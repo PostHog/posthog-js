@@ -63,7 +63,7 @@ const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(dockerLog)}, JSON.stringify(args) + '\\n');
 if (args[0] === 'network' && args[1] === 'create' && ${JSON.stringify(scenario)} === 'create') setInterval(() => {}, 1000);
 else if (args[0] === 'network' && args[1] === 'create' && ${JSON.stringify(scenario)} === 'oversize') fs.writeSync(1, Buffer.alloc(51 * 1024 * 1024, 'x'));
-else if (args[0] === 'run' && args.includes('--name')) {
+else if (args[0] === 'run' && args.includes('--name') && !args.includes('check-report')) {
     if (['create', 'run'].includes(${JSON.stringify(scenario)})) setInterval(() => {}, 1000);
     else {
         fs.writeFileSync(${JSON.stringify(join(report, 'report.json'))}, JSON.stringify({
@@ -72,7 +72,10 @@ else if (args[0] === 'run' && args.includes('--name')) {
         }));
         process.exitCode = ${scenario === 'run-failed' ? 7 : 0};
     }
-} else if (args.includes('check-report')) process.exitCode = ${scenario === 'strict-failed' ? 9 : 0};
+} else if (args.includes('check-report')) {
+    if (${JSON.stringify(scenario)} === 'check') setInterval(() => {}, 1000);
+    process.exitCode = ${scenario === 'strict-failed' ? 9 : 0};
+}
 else if (args[0] === 'ps') console.log('controlled-container');
 `,
         { mode: 0o755 }
@@ -129,8 +132,8 @@ else if (args[0] === 'ps') console.log('controlled-container');
         async waitCommand() {
             for (let i = 0; i < 200; i++) {
                 try {
-                    if ((await readFile(dockerLog, 'utf8')).includes(scenario === 'create' ? 'create' : '--name'))
-                        return
+                    const marker = { create: 'create', check: 'check-report' }[scenario] ?? '--name'
+                    if ((await readFile(dockerLog, 'utf8')).includes(marker)) return
                 } catch {}
                 await delay(10)
             }
@@ -160,7 +163,7 @@ test(
     }
 )
 
-for (const scenario of ['create', 'run'])
+for (const scenario of ['create', 'run', 'check'])
     for (const [signal, code] of [
         ['SIGINT', 130],
         ['SIGTERM', 143],
@@ -175,18 +178,19 @@ for (const scenario of ['create', 'run'])
                 assert.deepEqual(await run.finished(), [code, null], run.stderr())
                 assert.equal(await readFile(join(run.report, 'wrapper.exit'), 'utf8'), `${code}\n`)
                 const commands = await run.commands()
-                const network = commands.find((args) => args[0] === 'network' && args[1] === 'create')[2]
+                const network = commands.find((args) => args[0] === 'network' && args[1] === 'create').at(-1)
                 assert.match(network, /^electron-compliance-[0-9a-f-]{36}$/)
                 assert.ok(commands.some((args) => args.join(' ') === `network rm ${network}`))
+                const owned = [`${network}-harness`, `${network}-check`]
                 for (const args of commands.filter((args) => args[0] === 'rm'))
-                    assert.deepEqual(args, ['rm', '--force', `${network}-harness`])
-                assert.equal(
-                    await readFile(
-                        join(run.report, `${scenario === 'create' ? 'network-create' : 'run'}.exit`),
-                        'utf8'
-                    ),
-                    `${code}\n`
-                )
+                    assert.ok(args.length === 3 && args[1] === '--force' && owned.includes(args[2]), args.join(' '))
+                if (scenario === 'check') {
+                    const check = commands.find((args) => args.includes('check-report'))
+                    assert.equal(check[check.indexOf('--name') + 1], `${network}-check`)
+                    assert.ok(commands.some((args) => args.join(' ') === `rm --force ${network}-check`))
+                }
+                const step = { create: 'network-create', run: 'run', check: 'check-report' }[scenario]
+                assert.equal(await readFile(join(run.report, `${step}.exit`), 'utf8'), `${code}\n`)
             }
         )
     }

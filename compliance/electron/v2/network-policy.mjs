@@ -1,5 +1,6 @@
 // Native hybrid runs allow only an explicit HTTP mock origin, never a live project host.
-export function mockOrigin(host) {
+// When the runner knows the advertised mock address, other loopback/private services are rejected too.
+export function mockOrigin(host, allowedHosts = mockHostsFromEnvironment()) {
     try {
         const url = new URL(host)
         const parts = url.hostname.split('.').map(Number)
@@ -18,11 +19,19 @@ export function mockOrigin(host) {
             url.pathname !== '/' ||
             url.search ||
             url.hash ||
-            !(privateIPv4 || ['localhost', '[::1]'].includes(url.hostname))
+            !(privateIPv4 || ['localhost', '[::1]'].includes(url.hostname)) ||
+            (allowedHosts.length > 0 && !allowedHosts.includes(url.hostname))
         )
             return undefined
         return url.origin
     } catch {
         return undefined
     }
+}
+
+export function mockHostsFromEnvironment() {
+    return (process.env.POSTHOG_ELECTRON_MOCK_HOSTS ?? '')
+        .split(',')
+        .map((host) => host.trim())
+        .filter(Boolean)
 }

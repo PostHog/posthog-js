@@ -378,6 +378,30 @@ describe('Electron React bindings with a real renderer facade', () => {
         expect(second.flags()).toEqual([])
     })
 
+    it('does not clone renderer state on renders when the state revision is unchanged', async () => {
+        const { client, broadcast } = await harness()
+        const getState = vi.spyOn(client, 'getState')
+        let rerender!: () => void
+        function Parent() {
+            const [, set] = useState(0)
+            rerender = () => set((value) => value + 1)
+            return createElement(PostHogProvider, { client }, createElement(Values))
+        }
+        render(createElement(Parent))
+        getState.mockClear()
+        for (let i = 0; i < 10; i++) act(() => rerender())
+        expect(getState).not.toHaveBeenCalled()
+        act(() => broadcast({ featureFlags: { experiment: 'test' }, flagRevision: 2 }))
+        expect(screen.getByTestId('primary').textContent).toContain('"variant":"test"')
+        const perBroadcast = getState.mock.calls.length
+        getState.mockClear()
+        for (let i = 0; i < 10; i++) act(() => rerender())
+        expect(getState).not.toHaveBeenCalled()
+        // Renderer listener fan-out only: the count must not scale with React renders.
+        act(() => broadcast({ featureFlags: { experiment: 'control' }, flagRevision: 3 }))
+        expect(getState.mock.calls.length).toBe(perBroadcast)
+    })
+
     it('requires an explicit Electron provider', () => {
         expect(() => renderToString(createElement(Values))).toThrow('@posthog/electron/react PostHogProvider')
     })
