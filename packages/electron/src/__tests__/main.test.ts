@@ -6,13 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
     COMMAND_CHANNEL,
+    MAX_MESSAGE_BYTES,
     STATE_CHANNEL,
     type Command,
+    type Properties,
     type Request,
     type Response as BridgeResponse,
     type State,
 } from '../shared/protocol'
-import { PostHog as RendererPostHog } from '../renderer'
 
 const mock = vi.hoisted(() => ({
     handlers: new Map<string, (event: IpcMainInvokeEvent, value: unknown) => Promise<BridgeResponse>>(),
@@ -40,6 +41,7 @@ vi.mock('electron', async () => {
 })
 import { init, type PostHog } from '../main'
 import { ElectronStorage } from '../main/storage'
+import { PostHog as RendererPostHog } from '../renderer'
 
 let directory: string
 let client: PostHog | undefined
@@ -114,7 +116,664 @@ function renderer(owner: PostHog, id: number) {
     }
 }
 
+async function publicClient(owner: PostHog, process: 'main' | 'renderer') {
+    if (process === 'main') return { api: owner, dispose: () => {} }
+    const window = renderer(owner, 1)
+    const api = new RendererPostHog({
+        request: (request) => mock.handlers.get(COMMAND_CHANNEL)!(window.event, request),
+        subscribe: (callback) => {
+            window.contents.mainFrame.send.mockImplementation((_channel, state) => callback(state))
+            return () => window.contents.mainFrame.send.mockReset()
+        },
+    })
+    await api.ready()
+    return { api, dispose: () => api.dispose() }
+}
+
+describe.each(['main', 'renderer'] as const)('%s public contracts through the main boundary', (process) => {
+    it('aliases without switching identity, captures screens and updates the current person through core', async () => {
+        const owner = await start()
+        const { api, dispose } = await publicClient(owner, process)
+        const anonymous = api.getAnonymousId()
+        expect(anonymous).not.toBe('')
+        await api.alias(' ')
+        await api.screen(' ')
+        await api.setPersonProperties()
+        await api.alias('linked-user')
+        expect(api.getDistinctId()).toBe(anonymous)
+        expect(api.getAnonymousId()).toBe(anonymous)
+        await api.screen('Home', {
+            tab: 'main',
+            $screen_name: 'cannot-override',
+            ...(process === 'renderer' ? { $electron_process: 'main', $window_id: 'spoofed' } : {}),
+        })
+        await api.setPersonProperties({ plan: 'pro' }, { source: 'signup' })
+        await api.setPersonProperties({ plan: 'pro' }, { source: 'signup' })
+        await api.identify('alice')
+        expect(api.getAnonymousId()).toBe(anonymous)
+        await api.flush()
+        expect(batches.filter(({ event }) => event === '$create_alias')).toHaveLength(1)
+        expect(batches.filter(({ event }) => event === '$screen')).toHaveLength(1)
+        expect(batches.find(({ event }) => event === '$create_alias')).toMatchObject({
+            distinct_id: anonymous,
+            properties: { alias: 'linked-user', distinct_id: anonymous, $electron_process: process },
+        })
+        expect(batches.find(({ event }) => event === '$screen')).toMatchObject({
+            distinct_id: anonymous,
+            properties: { $screen_name: 'Home', tab: 'main', $electron_process: process },
+        })
+        if (process === 'renderer')
+            expect(batches.find(({ event }) => event === '$screen')?.properties.$window_id).toBe('1')
+        expect(batches.filter(({ event }) => event === '$set')).toHaveLength(1)
+        expect(batches.find(({ event }) => event === '$set')).toMatchObject({
+            distinct_id: anonymous,
+            properties: { $set: { plan: 'pro' }, $set_once: { source: 'signup' }, $electron_process: process },
+        })
+        dispose()
+    })
+
+    it('merges, reloads and resets flag context without analytics events or caller mutation', async () => {
+        const owner = await start()
+        const { api, dispose } = await publicClient(owner, process)
+        const person = { nested: { plan: 'pro' } }
+        const setting = api.setPersonPropertiesForFlags(person, false)
+        person.nested.plan = 'mutated'
+        await setting
+        await api.setPersonPropertiesForFlags({ region: 'eu' }, false)
+        const groups = { company: { tier: 'pro' } }
+        await api.setGroupPropertiesForFlags(groups, false)
+        await api.setGroupPropertiesForFlags({ company: { seats: 10 }, team: { name: 'sdk' } }, false)
+        expect(groups).toEqual({ company: { tier: 'pro' } })
+        expect(mock.fetch).not.toHaveBeenCalled()
+        await api.reloadFeatureFlags()
+        const requestBody = () => JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)
+        expect(requestBody()).toMatchObject({
+            person_properties: { nested: { plan: 'pro' }, region: 'eu' },
+            group_properties: { company: { tier: 'pro', seats: 10 }, team: { name: 'sdk' } },
+        })
+        await api.resetPersonPropertiesForFlags()
+        await api.resetGroupPropertiesForFlags()
+        expect(mock.fetch).toHaveBeenCalledTimes(1)
+        await api.reloadFeatureFlagsAsync()
+        expect(requestBody()).toMatchObject({ person_properties: {}, group_properties: {} })
+        await api.setPersonPropertiesForFlags({ plan: 'enterprise' })
+        expect(requestBody()).toMatchObject({ person_properties: { plan: 'enterprise' } })
+        await api.setGroupPropertiesForFlags({ company: { plan: 'enterprise' } })
+        expect(requestBody()).toMatchObject({ group_properties: { company: { plan: 'enterprise' } } })
+        await api.resetPersonPropertiesForFlags(true)
+        await api.resetGroupPropertiesForFlags(true)
+        expect(requestBody()).toMatchObject({ person_properties: {}, group_properties: {} })
+        await api.flush()
+        expect(batches).toEqual([])
+        dispose()
+    })
+
+    it('reads copied structured results, preserves disabled and empty variants and sends only requested exposures', async () => {
+        const owner = await start()
+        const { api, dispose } = await publicClient(owner, process)
+        expect(api.getFeatureFlagResult('missing', { sendFeatureFlagEvent: false })).toBeUndefined()
+        expect(api.getAllFeatureFlags()).toEqual([])
+        expect(api.isFeatureEnabled('missing', { defaultValue: true, sendFeatureFlagEvent: false })).toBe(true)
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    featureFlags: { experiment: 'blue', off: false, empty: '' },
+                    featureFlagPayloads: { experiment: '{"copy":"new"}' },
+                })
+            )
+        )
+        await api.reloadFeatureFlags()
+        const silent = { sendFeatureFlagEvent: false, sendEvent: true }
+        expect(api.getFeatureFlagResult('experiment', silent)).toEqual({
+            key: 'experiment',
+            enabled: true,
+            variant: 'blue',
+            payload: { copy: 'new' },
+        })
+        expect(api.getFeatureFlagResult('off', silent)).toMatchObject({ key: 'off', enabled: false })
+        expect(api.getFeatureFlagResult('off', silent)?.variant).toBeUndefined()
+        expect(api.getFeatureFlagResult('empty', silent)).toMatchObject({ key: 'empty', enabled: false, variant: '' })
+        expect(api.isFeatureEnabled('empty', { ...silent, defaultValue: true })).toBe(false)
+        expect(api.isFeatureEnabled('off', { ...silent, defaultValue: true })).toBe(false)
+        expect(api.isFeatureEnabled('missing', { ...silent, defaultValue: true })).toBe(true)
+        expect(api.getFeatureFlagResult('missing', silent)).toBeUndefined()
+        expect(api.getFeatureFlag('missing', silent)).toBe(false)
+        const results = api.getAllFeatureFlags()
+        ;(results.find(({ key }) => key === 'experiment')!.payload as { copy: string }).copy = 'mutated'
+        const payload = api.getFeatureFlagPayload('experiment') as { copy: string }
+        payload.copy = 'also-mutated'
+        expect(api.getFeatureFlagPayload('experiment')).toEqual({ copy: 'new' })
+        await api.flush()
+        expect(batches).toEqual([])
+        api.getFeatureFlagResult('experiment')
+        api.isFeatureEnabled('off', { sendFeatureFlagEvent: true, sendEvent: false })
+        api.getFeatureFlag('empty', { sendEvent: false })
+        await api.flush()
+        expect(
+            batches
+                .filter(({ event }) => event === '$feature_flag_called')
+                .map(({ properties }) => properties.$feature_flag)
+        ).toEqual(['experiment', 'off'])
+        dispose()
+    })
+
+    it('keeps valid result values and enabled states when payload decoding fails', async () => {
+        const onError = vi.fn()
+        const owner = await start({ onError })
+        const { api, dispose } = await publicClient(owner, process)
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        experiment: {
+                            key: 'experiment',
+                            enabled: true,
+                            variant: 'blue',
+                            metadata: { payload: '{broken' },
+                        },
+                        off: { key: 'off', enabled: false, metadata: { payload: '' } },
+                        empty: { key: 'empty', enabled: true, variant: '', metadata: { payload: '   ' } },
+                    },
+                })
+            )
+        )
+        await api.reloadFeatureFlags()
+        const silent = { sendFeatureFlagEvent: false }
+        expect(api.getFeatureFlagResult('experiment', silent)).toMatchObject({
+            enabled: true,
+            variant: 'blue',
+            payload: null,
+        })
+        expect(api.getFeatureFlagResult('off', silent)).toMatchObject({ enabled: false, payload: null })
+        expect(api.getFeatureFlagResult('empty', silent)).toMatchObject({ enabled: false, variant: '', payload: null })
+        expect(api.getFeatureFlag('experiment', silent)).toBe('blue')
+        expect(api.isFeatureEnabled('off', silent)).toBe(false)
+        for (const key of ['experiment', 'off', 'empty']) {
+            expect(api.getFeatureFlagPayload(key)).toBeNull()
+            expect(api.getState().featureFlagPayloads[key]).toBeNull()
+            expect(api.getAllFeatureFlags().find((result) => result.key === key)?.payload).toBeNull()
+        }
+        expect(onError).toHaveBeenCalledWith(
+            expect.objectContaining({ message: expect.stringContaining('could not decode payload') })
+        )
+        await api.flush()
+        expect(batches).toEqual([])
+        dispose()
+    })
+
+    it('preserves decoded payload types and legacy string provenance without heuristic reparsing', async () => {
+        const owner = await start()
+        const { api, dispose } = await publicClient(owner, process)
+        const values = [false, 0, null, [], { color: 'blue' }, '', 'false', '{broken']
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: Object.fromEntries(
+                        values.map((value, i) => [
+                            `flag-${i}`,
+                            { key: `flag-${i}`, enabled: true, metadata: { payload: JSON.stringify(value) } },
+                        ])
+                    ),
+                })
+            )
+        )
+        await api.reloadFeatureFlags()
+        for (const [i, value] of values.entries()) {
+            expect(api.getFeatureFlagPayload(`flag-${i}`)).toEqual(value)
+            expect(api.getFeatureFlagResult(`flag-${i}`, { sendFeatureFlagEvent: false })?.payload).toEqual(value)
+        }
+        // Core has already turned malformed legacy bytes into a valid serialized string; provenance is lost.
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    featureFlags: { legacy: true },
+                    featureFlagPayloads: { legacy: '{broken' },
+                })
+            )
+        )
+        await api.reloadFeatureFlags()
+        expect(api.getFeatureFlagPayload('legacy')).toBe('{broken')
+        expect(api.getFeatureFlagResult('legacy', { sendFeatureFlagEvent: false })?.payload).toBe('{broken')
+        await api.flush()
+        expect(batches).toEqual([])
+        dispose()
+    })
+
+    it('gates new event helpers on consent and person-profile configuration', async () => {
+        const owner = await start({ personProfiles: 'never' })
+        const { api, dispose } = await publicClient(owner, process)
+        await api.alias('no-person')
+        await api.setPersonProperties({ email: 'no-person' })
+        await api.optOut()
+        expect(api.optedOut).toBe(true)
+        expect(api.hasOptedOutCapturing()).toBe(true)
+        mock.fetch.mockClear()
+        await api.alias('secret')
+        await api.screen('secret')
+        await api.setPersonProperties({ email: 'secret' })
+        await api.flush()
+        expect(mock.fetch).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+        dispose()
+    })
+})
+
 describe('main Electron client', () => {
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'snapshots ready main %s properties at invocation',
+        async (operation) => {
+            const owner = await start()
+            const properties = { nested: { value: 'original' } }
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Home', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            properties.nested.value = 'changed'
+            await pending
+            await owner.flush()
+            const event = batches.find(({ event }) => event === (operation === 'screen' ? '$screen' : '$set'))!
+            expect(
+                operation === 'screen' ? event.properties : event.properties[operation === 'set' ? '$set' : '$set_once']
+            ).toMatchObject({ nested: { value: 'original' } })
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce', 'flags'] as const)(
+        'applies toJSON redaction when snapshotting main %s properties',
+        async (operation) => {
+            const owner = await start()
+            class Profile {
+                constructor(
+                    public email: string,
+                    public secret: string
+                ) {}
+                toJSON() {
+                    return { email: this.email }
+                }
+            }
+            const properties = { profile: new Profile('main@example.com', 'do-not-send') } as unknown as Properties
+            if (operation === 'screen') await owner.screen('Home', properties)
+            else if (operation === 'set') await owner.setPersonProperties(properties)
+            else if (operation === 'setOnce') await owner.setPersonProperties(undefined, properties)
+            else await owner.setPersonPropertiesForFlags(properties)
+            await owner.flush()
+            const sent = JSON.stringify(mock.fetch.mock.calls.map(([, options]) => options?.body))
+            expect(sent).toContain('main@example.com')
+            expect(sent).not.toContain('do-not-send')
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'does not inspect %s properties behind a queued opt-out',
+        async (operation) => {
+            const owner = await start()
+            const inspect = vi.fn(() => {
+                throw new Error('queued opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            const optingOut = owner.optOut()
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Private', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            await Promise.all([optingOut, pending])
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
+        'restores persisted consent before inspecting early %s properties',
+        async (operation) => {
+            const previous = await start()
+            await previous.optOut()
+            await previous.shutdown(50)
+            client = undefined
+            const inspect = vi.fn(() => {
+                throw new Error('persisted opt-out must gate inspection')
+            })
+            const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+            client = init({
+                projectToken: 'test-token',
+                storageDirectory: directory,
+                captureAppLifecycleEvents: false,
+                preloadFeatureFlags: false,
+                flushInterval: 0,
+            })
+            if (operation === 'screen') await client.screen('Private', properties)
+            else if (operation === 'set') await client.setPersonProperties(properties)
+            else await client.setPersonProperties(undefined, properties)
+            expect(client.optedOut).toBe(true)
+            expect(inspect).not.toHaveBeenCalled()
+        }
+    )
+
+    describe.each(['main', 'renderer'] as const)('%s flag-context admission', (process) => {
+        const helpers = [
+            { type: 'setPersonPropertiesForFlags', properties: { plan: 'new' }, reloadFeatureFlags: true },
+            { type: 'setGroupPropertiesForFlags', properties: { company: { tier: 'new' } }, reloadFeatureFlags: true },
+            { type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: true },
+            { type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: true },
+        ] as const
+        describe.each(helpers)('$type', (command) => {
+            if (process === 'renderer') {
+                it.each(['identity', 'navigation'] as const)(
+                    'rechecks queued context %s authorization',
+                    async (change) => {
+                        const owner = await start()
+                        await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                        await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                        const page = renderer(owner, 1)
+                        await page.send({ type: 'hello' })
+                        let release!: () => void
+                        vi.spyOn(ElectronStorage.prototype, 'flush').mockImplementationOnce(
+                            () =>
+                                new Promise<void>((resolve) => {
+                                    release = resolve
+                                })
+                        )
+                        const registering = owner.register({ workspace: 'one' })
+                        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                        const identifying = change === 'identity' ? owner.identify('next-user') : Promise.resolve()
+                        const pending = page.send(structuredClone(command))
+                        await Promise.resolve()
+                        if (change === 'navigation') page.contents.mainFrame.url = 'file:///not-allowed.html'
+                        release()
+                        await Promise.all([registering, identifying])
+                        expect(await pending).toMatchObject({
+                            ok: false,
+                            error: expect.stringContaining(change === 'identity' ? 'Stale' : 'navigated'),
+                        })
+                        await owner.reloadFeatureFlags()
+                        expect(JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+                            person_properties: { plan: 'old' },
+                            group_properties: { company: { tier: 'old' } },
+                        })
+                    }
+                )
+            }
+            it.each(['identify', 'reset', 'optOut'] as const)(
+                'does not block %s on its flag response',
+                async (change) => {
+                    const owner = await start()
+                    await owner.setPersonPropertiesForFlags({ plan: 'old' }, false)
+                    await owner.setGroupPropertiesForFlags({ company: { tier: 'old' } }, false)
+                    const page = renderer(owner, 1)
+                    await page.send({ type: 'hello' })
+                    let release!: (response: Response) => void
+                    mock.fetch.mockImplementationOnce(
+                        () =>
+                            new Promise<Response>((resolve) => {
+                                release = resolve
+                            })
+                    )
+                    let helperFinished = false
+                    const helper = (
+                        process === 'renderer'
+                            ? page.send(structuredClone(command)).then((response) => {
+                                  expect(response.ok).toBe(true)
+                              })
+                            : command.type === 'setPersonPropertiesForFlags'
+                              ? owner.setPersonPropertiesForFlags(command.properties)
+                              : command.type === 'setGroupPropertiesForFlags'
+                                ? owner.setGroupPropertiesForFlags(command.properties)
+                                : command.type === 'resetPersonPropertiesForFlags'
+                                  ? owner.resetPersonPropertiesForFlags(true)
+                                  : owner.resetGroupPropertiesForFlags(true)
+                    ).then(() => {
+                        helperFinished = true
+                    })
+                    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+                    const request = JSON.parse(mock.fetch.mock.calls[0][1]!.body as string)
+                    expect(request.person_properties).toEqual(
+                        command.type === 'resetPersonPropertiesForFlags'
+                            ? {}
+                            : { plan: command.type === 'setPersonPropertiesForFlags' ? 'new' : 'old' }
+                    )
+                    expect(request.group_properties).toEqual(
+                        command.type === 'resetGroupPropertiesForFlags'
+                            ? {}
+                            : { company: { tier: command.type === 'setGroupPropertiesForFlags' ? 'new' : 'old' } }
+                    )
+                    let mutationFinished = false
+                    const mutation = (
+                        change === 'identify'
+                            ? owner.identify('next-user')
+                            : change === 'reset'
+                              ? owner.reset()
+                              : owner.optOut()
+                    ).then(() => {
+                        mutationFinished = true
+                    })
+                    try {
+                        await vi.waitFor(() => expect(mutationFinished).toBe(true), { timeout: 300 })
+                        expect(helperFinished).toBe(false)
+                        if (change === 'identify') expect(owner.getDistinctId()).toBe('next-user')
+                        if (change === 'optOut') expect(owner.optedOut).toBe(true)
+                    } finally {
+                        release(new Response(JSON.stringify({ featureFlags: { stale_context: true } })))
+                        await Promise.all([helper, mutation])
+                    }
+                    if (change !== 'optOut') {
+                        const snapshots = page.contents.mainFrame.send.mock.calls.map(([, state]) => state as State)
+                        expect(snapshots.some((state) => state.featureFlags.stale_context)).toBe(false)
+                        expect(owner.getState().featureFlags).not.toHaveProperty('stale_context')
+                    }
+                }
+            )
+        })
+    })
+
+    it.each([4, 8])('normalizes all %i flag payloads with linear parse work', async (count) => {
+        const owner = await start()
+        const raw = Array.from({ length: count }, (_, i) => JSON.stringify({ index: i }))
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: Object.fromEntries(
+                        raw.map((payload, i) => [
+                            `flag-${i}`,
+                            { key: `flag-${i}`, enabled: true, metadata: { payload } },
+                        ])
+                    ),
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await owner.flush()
+        const parse = vi.spyOn(JSON, 'parse')
+        const results = owner.getAllFeatureFlags()
+        const payloadParses = parse.mock.calls.filter(([value]) => raw.includes(value)).length
+        expect(results.map(({ payload }) => payload)).toEqual(Array.from({ length: count }, (_, index) => ({ index })))
+        expect(payloadParses).toBeLessThanOrEqual(3 * count)
+    })
+
+    it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
+        const captures: Promise<void>[] = []
+        const onError = vi.fn((error: unknown) => {
+            // Finite guard proves recursive reporting without risking an unbounded test loop.
+            if (onError.mock.calls.length <= 3) captures.push(owner.captureException(error))
+        })
+        const owner = await start({ onError })
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, variant: 'blue', metadata: { payload: '{broken' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await Promise.all(captures)
+        await owner.flush()
+        expect(owner.getFeatureFlagPayload('broken')).toBeNull()
+        expect(owner.getFeatureFlagResult('broken', { sendFeatureFlagEvent: false })).toMatchObject({
+            variant: 'blue',
+            payload: null,
+        })
+        owner.getState()
+        owner.getState()
+        await owner.flush()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(batches.filter(({ event }) => event === '$exception')).toHaveLength(1)
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, metadata: { payload: '{different' } },
+                        another: { key: 'another', enabled: false, metadata: { payload: ' ' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        await Promise.all(captures)
+        await owner.flush()
+        expect(onError).toHaveBeenCalledTimes(3)
+        mock.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ flags: {} })))
+        await owner.reloadFeatureFlags()
+        expect(owner.getFeatureFlagPayload('broken')).toBeNull()
+        mock.fetch.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    flags: {
+                        broken: { key: 'broken', enabled: true, metadata: { payload: '{different' } },
+                    },
+                })
+            )
+        )
+        await owner.reloadFeatureFlags()
+        expect(onError).toHaveBeenCalledTimes(4)
+    })
+
+    it.each(['screen', 'set', 'setOnce'] as const)('does not inspect opted-out %s properties', async (operation) => {
+        const owner = await start()
+        await owner.optOut()
+        const inspect = vi.fn(() => {
+            throw new Error('opted-out properties must not be inspected')
+        })
+        const properties = Object.defineProperty({}, 'secret', { get: inspect, enumerable: true })
+        if (operation === 'screen') await owner.screen('Private', properties)
+        else if (operation === 'set') await owner.setPersonProperties(properties)
+        else await owner.setPersonProperties(undefined, properties)
+        expect(inspect).not.toHaveBeenCalled()
+    })
+
+    it('awaits readiness for early helpers and keeps identity getters local before initialization', async () => {
+        let release!: () => void
+        const load = ElectronStorage.prototype.load
+        vi.spyOn(ElectronStorage.prototype, 'load').mockImplementationOnce(async function (this: ElectronStorage) {
+            await new Promise<void>((resolve) => {
+                release = resolve
+            })
+            await load.call(this)
+        })
+        client = init({
+            projectToken: 'test-token',
+            storageDirectory: directory,
+            captureAppLifecycleEvents: false,
+            preloadFeatureFlags: false,
+            disableCompression: true,
+            flushInterval: 0,
+        })
+        expect(client.getAnonymousId()).toBe('')
+        expect(client.getDistinctId()).toBe('')
+        let completed = false
+        const aliasing = client.alias('known-user').then(() => {
+            completed = true
+        })
+        await Promise.resolve()
+        expect(completed).toBe(false)
+        expect(mock.fetch).not.toHaveBeenCalled()
+        release()
+        await aliasing
+        const anonymous = client.getAnonymousId()
+        expect(anonymous).not.toBe('')
+        await client.flush()
+        expect(batches).toMatchObject([
+            { event: '$create_alias', distinct_id: anonymous, properties: { alias: 'known-user' } },
+        ])
+    })
+
+    it('waits for earlier mutations before reloading flags without blocking later identity changes', async () => {
+        const owner = await start()
+        let release!: () => void
+        vi.spyOn(ElectronStorage.prototype, 'flush').mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    release = resolve
+                })
+        )
+        const registering = owner.register({ workspace: 'one' })
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        const identifying = owner.identify('alice')
+        const reloading = owner.reloadFeatureFlags()
+        await Promise.resolve()
+        expect(mock.fetch).not.toHaveBeenCalled()
+        release()
+        await Promise.all([registering, identifying, reloading])
+        expect(mock.fetch.mock.calls.length).toBeGreaterThan(0)
+        for (const [, options] of mock.fetch.mock.calls) {
+            expect(JSON.parse(options!.body as string).distinct_id).toBe('alice')
+        }
+    })
+
+    it.each(['identity', 'navigation'] as const)('rechecks queued renderer reload %s authorization', async (change) => {
+        const owner = await start()
+        const window = renderer(owner, 1)
+        await window.send({ type: 'hello' })
+        let release!: () => void
+        vi.spyOn(ElectronStorage.prototype, 'flush').mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    release = resolve
+                })
+        )
+        const registering = owner.register({ workspace: 'one' })
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        const reloading = window.send({ type: 'reloadFeatureFlags' })
+        await Promise.resolve()
+        if (change === 'navigation') window.contents.mainFrame.url = 'file:///not-allowed.html'
+        const identifying = change === 'identity' ? owner.identify('bob') : Promise.resolve()
+        release()
+        await Promise.all([registering, identifying])
+        expect(await reloading).toMatchObject({
+            ok: false,
+            error: expect.stringContaining(change === 'identity' ? 'Stale' : 'navigated'),
+        })
+    })
+
+    it('applies sender/frame, size, generation and rate limits to new helper commands', async () => {
+        const owner = await start()
+        const window = renderer(owner, 1)
+        await window.send({ type: 'hello' })
+        expect(
+            await window.send({ type: 'screen', name: 'Home', properties: { huge: 'x'.repeat(MAX_MESSAGE_BYTES) } })
+        ).toMatchObject({ ok: false, error: expect.stringContaining('256 KiB') })
+        const subframe = {
+            ...window.event,
+            senderFrame: { routingId: 999, url: 'file:///app/index.html' },
+        } as unknown as IpcMainInvokeEvent
+        expect(await window.send({ type: 'alias', alias: 'bad' }, 0, subframe)).toMatchObject({
+            ok: false,
+            error: expect.stringContaining('Unauthorized'),
+        })
+        const generation = owner.getState().generation
+        await owner.reset()
+        expect(
+            await window.send({ type: 'setPersonProperties', properties: { private: true } }, generation)
+        ).toMatchObject({ ok: false, error: expect.stringContaining('Stale') })
+        let response: BridgeResponse | undefined
+        for (let i = 0; i < 100; i++)
+            response = await window.send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: false })
+        expect(response).toMatchObject({ ok: false, error: expect.stringContaining('rate limit') })
+        await owner.flush()
+        expect(batches).toEqual([])
+    })
     it('acknowledges an in-flight capture only after its state rename even when shutdown times out', async () => {
         const { promises: fs } = await import('node:fs')
         const { dirname } = await import('node:path')
@@ -481,12 +1140,13 @@ describe('main Electron client', () => {
 
     it('does not bootstrap or persist identity after startup exceeds the shutdown budget', async () => {
         let release!: () => void
-        vi.spyOn(ElectronStorage.prototype, 'load').mockImplementationOnce(
-            () =>
-                new Promise<void>((resolve) => {
-                    release = resolve
-                })
-        )
+        const load = ElectronStorage.prototype.load
+        vi.spyOn(ElectronStorage.prototype, 'load').mockImplementationOnce(async function (this: ElectronStorage) {
+            await new Promise<void>((resolve) => {
+                release = resolve
+            })
+            await load.call(this)
+        })
         const set = vi.spyOn(ElectronStorage.prototype, 'set')
         client = init({
             projectToken: 'test-token',
