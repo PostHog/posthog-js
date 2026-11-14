@@ -1,6 +1,5 @@
 {
     "name": "@posthog/electron",
-    "private": true,
     "version": "0.1.0-alpha.0",
     "description": "PostHog analytics and feature flags for Electron applications",
     "license": "MIT",
@@ -15,6 +14,7 @@
     "files": [
         "dist",
         "README.md",
+        "MIGRATION.md",
         "LICENSE"
     ],
     "main": "dist/main.cjs",
@@ -72,6 +72,11 @@
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/browser-common": "workspace:^"
+    },
+    "publishConfig": {
+        "access": "public",
+        "tag": "alpha",
+        "registry": "https://registry.npmjs.org"
     },
     "peerDependencies": {
         "electron": ">=41",

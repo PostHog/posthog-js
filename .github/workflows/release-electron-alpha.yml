@@ -1,0 +1,143 @@
+name: Electron alpha release
+
+permissions: {}
+
+on:
+    workflow_dispatch:
+        inputs:
+            source_sha:
+                description: 'Reviewed full main dispatch-head SHA; must equal this workflow run SHA'
+                required: true
+                type: string
+            version:
+                description: 'Exact reviewed version, e.g. 0.1.0-alpha.0'
+                required: true
+                type: string
+            publish:
+                description: 'Publish only after release gates and protected-environment approval (default: validation only)'
+                default: false
+                required: true
+                type: boolean
+
+concurrency:
+    group: electron-alpha-release
+    cancel-in-progress: false
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Require trusted dispatch
+              env:
+                  REPOSITORY: ${{ github.repository }}
+                  REF: ${{ github.ref }}
+              run: |
+                  test "$REPOSITORY" = PostHog/posthog-js
+                  test "$REF" = refs/heads/main
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+            - name: Validate immutable source, version and absent tag
+              env:
+                  SOURCE_SHA: ${{ inputs.source_sha }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  test "$SOURCE_SHA" = "$GITHUB_SHA"
+                  node scripts/electron-alpha-release.mjs source "$SOURCE_SHA" "$VERSION"
+
+    build:
+        needs: validate
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        outputs:
+            sha256: ${{ steps.digest.outputs.sha256 }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ inputs.source_sha }}
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+            - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+              with:
+                  version: 11.7.0
+                  cache: false
+                  install: false
+            - name: Install and test without publishing credentials
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 'true'
+                  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+              run: |
+                  pnpm install --filter @posthog/electron... --frozen-lockfile --ignore-scripts
+                  pnpm test:electron-alpha-release
+                  pnpm test:dependency-cooldown
+                  pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
+                  mkdir -p target/electron-alpha
+                  pnpm --filter=@posthog/electron pack --out "$PWD/target/electron-alpha/electron.tgz"
+                  pnpm check:package-tarballs target/electron-alpha
+            - name: Verify real registry lower bounds and installed declarations
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: node scripts/electron-alpha-release.mjs consumer target/electron-alpha/electron.tgz "$VERSION"
+            - name: Record reviewed artifact digest
+              id: digest
+              env:
+                  SOURCE_SHA: ${{ inputs.source_sha }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  digest=$(sha256sum target/electron-alpha/electron.tgz | cut -d ' ' -f 1)
+                  echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+                  echo "Electron alpha: SHA $SOURCE_SHA; version $VERSION; tag alpha; registry https://registry.npmjs.org; tarball SHA-256 $digest" >> "$GITHUB_STEP_SUMMARY"
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: electron-alpha
+                  path: target/electron-alpha/electron.tgz
+                  if-no-files-found: error
+                  retention-days: 30
+
+    publish:
+        needs: [validate, build]
+        if: inputs.publish == true
+        runs-on: ubuntu-latest
+        # Must have required independent reviewers, prevent self-review, and main-only deployment rules.
+        environment: Electron Alpha NPM
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            # Use trusted workflow tooling, not code selected by dispatch inputs.
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.sha }}
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: electron-alpha
+                  path: artifact
+            - name: Revalidate immutable source and exact artifact
+              env:
+                  SOURCE_SHA: ${{ inputs.source_sha }}
+                  VERSION: ${{ inputs.version }}
+                  SHA256: ${{ needs.build.outputs.sha256 }}
+              run: |
+                  test "$SOURCE_SHA" = "$GITHUB_SHA"
+                  node scripts/electron-alpha-release.mjs source "$SOURCE_SHA" "$VERSION"
+                  printf '%s  artifact/electron.tgz\n' "$SHA256" | sha256sum --check
+                  node scripts/electron-alpha-release.mjs package artifact/electron.tgz "$VERSION"
+            - name: Publish only the verified Electron alpha tarball via npm OIDC
+              run: npm publish artifact/electron.tgz --ignore-scripts --access public --tag alpha --registry https://registry.npmjs.org --provenance
