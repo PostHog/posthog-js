@@ -140,7 +140,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             ...normalizedBootstrapFeatureFlagDetails.flags,
             ...Object.fromEntries(
               Object.entries(currentFeatureFlagDetails.flags).filter(
-                ([key, detail]) => !detail.failed || !normalizedBootstrapFeatureFlagDetails.flags[key]
+                ([key, detail]) =>
+                  !detail.failed ||
+                  !Object.prototype.hasOwnProperty.call(normalizedBootstrapFeatureFlagDetails.flags, key)
               )
             ),
           },

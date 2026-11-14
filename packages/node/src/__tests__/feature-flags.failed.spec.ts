@@ -84,6 +84,34 @@ describe('failed Node flag records', () => {
     })
   }
 
+  it.each(['toString', 'constructor'])(
+    'treats absent object-prototype names as missing snapshot keys (%s)',
+    async (key) => {
+      setup(false)
+      const captured = vi.fn()
+      posthog.on('capture', captured)
+      const snapshot = await posthog.evaluateFlags('user')
+      expect(snapshot.keys).not.toContain(key)
+      expect(snapshot.getFlagPayload(key)).toBeUndefined()
+      expect(snapshot.getFlag(key, { sendFeatureFlagEvents: false })).toBeUndefined()
+      expect(captured).not.toHaveBeenCalled()
+      expect(snapshot.getFlag(key)).toBeUndefined()
+      await waitForPromises()
+      expect(captured).toHaveBeenCalledTimes(1)
+      expect(captured.mock.calls[0][0]).toMatchObject({
+        event: '$feature_flag_called',
+        properties: { $feature_flag: key, $feature_flag_error: 'flag_missing', locally_evaluated: false },
+      })
+      expect(captured.mock.calls[0][0].properties.$feature_flag_response).toBeUndefined()
+      expect(snapshot.getFlag(key)).toBeUndefined()
+      await waitForPromises()
+      expect(captured).toHaveBeenCalledTimes(1)
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=4'))
+      ).toHaveLength(1)
+    }
+  )
+
   it.each(
     [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
       [true, false].map((variantPlaceholder) => ({ errorsWhileComputingFlags, variantPlaceholder }))

@@ -68,7 +68,8 @@ function contractSchema(name: string, allowUnevaluated = false): (properties: Re
 }
 
 const checkFlagCalled = contractSchema('feature_flag_called_context.schema.json')
-// Spec211 omits an unevaluated response; all other pinned schema constraints still apply.
+// A failed record's $feature_flag_called omits $feature_flag_response (sdk-specs#211).
+// This validator drops only that requirement from the pinned schema.
 const checkUnevaluatedFlagCalled = contractSchema('feature_flag_called_context.schema.json', true)
 const checkExposure = contractSchema('experiment_exposure_properties.schema.json')
 

@@ -8,4 +8,4 @@
 'posthog-js-lite': patch
 ---
 
-Treat failed feature flag evaluations as unavailable without exposing their values or payloads.
+Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.

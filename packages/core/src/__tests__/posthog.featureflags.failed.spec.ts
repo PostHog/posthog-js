@@ -222,6 +222,48 @@ describe('failed client flag records', () => {
     }
   })
 
+  it.each(
+    ['constructor', 'toString'].flatMap((key) => [false, true].map((bootstrapOwnsKey) => ({ key, bootstrapOwnsKey })))
+  )('bootstrap replaces failed provenance only for its own keys (%j)', async ({ key, bootstrapOwnsKey }) => {
+    const failedRecord = { ...failed, key }
+    const cache = {
+      [PostHogPersistedProperty.FeatureFlagDetails]: { flags: { [key]: failedRecord } },
+    }
+    for (let reopen = 0; reopen < 2; reopen++) {
+      const [posthog, mocks] = createTestClient(
+        'token',
+        {
+          bootstrap: {
+            featureFlags: bootstrapOwnsKey ? { [key]: false } : { healthy: true },
+            featureFlagPayloads: bootstrapOwnsKey ? { [key]: { bootstrap: true } } : {},
+          },
+        },
+        undefined,
+        cache
+      )
+      try {
+        const capture = vi.spyOn(posthog, 'capture')
+        if (bootstrapOwnsKey) {
+          expect(posthog.getFeatureFlagResult(key, { sendEvent: false })).toMatchObject({
+            enabled: false,
+            payload: { bootstrap: true },
+          })
+          expect(cache[PostHogPersistedProperty.FeatureFlagDetails].flags[key].failed).not.toBe(true)
+        } else {
+          expect(cache[PostHogPersistedProperty.FeatureFlagDetails].flags[key]).toEqual(failedRecord)
+          expect(posthog.getFeatureFlagDetails()?.flags[key]).toEqual(failedRecord)
+          expect(posthog.getFeatureFlagResult(key, { sendEvent: false })).toBeUndefined()
+          expect(posthog.getAllFeatureFlags().map(({ key }) => key)).toEqual(['healthy'])
+          expect(Object.keys(posthog.getFeatureFlagPayloads())).not.toContain(key)
+        }
+        expect(capture).not.toHaveBeenCalled()
+        expect(mocks.fetch).not.toHaveBeenCalled()
+      } finally {
+        await posthog.shutdown()
+      }
+    }
+  })
+
   it.each([true, false, 'cached'])(
     'uses same-key bootstrap only over failed persisted decisions, including reopen (healthy %s)',
     async (healthyValue) => {
@@ -293,11 +335,23 @@ describe('failed client flag records', () => {
     await posthog.shutdown()
   })
 
-  it.each([true, false, undefined])(
-    'retains successful pairs only on response-wide error refresh (%s)',
-    async (errorsWhileComputingFlags) => {
+  it.each(
+    [true, false, undefined].flatMap((errorsWhileComputingFlags) =>
+      ['local', false].map((cachedValue) => ({ errorsWhileComputingFlags, cachedValue }))
+    )
+  )(
+    'retains successful pairs only on response-wide error refresh (%j)',
+    async ({ errorsWhileComputingFlags, cachedValue }) => {
       const [posthog, mocks] = createTestClient('token')
-      let flags = { failed: { ...failed, failed: false, variant: 'local', metadata: { payload: '{"old":true}' } } }
+      let flags = {
+        failed: {
+          ...failed,
+          failed: false,
+          enabled: cachedValue !== false,
+          variant: typeof cachedValue === 'string' ? cachedValue : undefined,
+          metadata: { payload: '{"old":true}' },
+        },
+      }
       mocks.fetch.mockImplementation(async () => ({
         status: 200,
         json: async () => ({ flags, errorsWhileComputingFlags }),
@@ -307,7 +361,12 @@ describe('failed client flag records', () => {
       await posthog.reloadFeatureFlagsAsync()
       const capture = vi.spyOn(posthog, 'capture')
       if (errorsWhileComputingFlags) {
-        expect(posthog.getFeatureFlagResult('failed')).toMatchObject({ variant: 'local', payload: { old: true } })
+        expect(posthog.getFeatureFlagResult('failed')).toMatchObject({
+          enabled: cachedValue !== false,
+          variant: typeof cachedValue === 'string' ? cachedValue : undefined,
+          payload: { old: true },
+        })
+        expect(posthog.isFeatureEnabled('failed', { defaultValue: true, sendEvent: false })).toBe(cachedValue !== false)
         expect(capture).toHaveBeenCalledWith(
           '$feature_flag_called',
           expect.objectContaining({ $feature_flag_error: 'errors_while_computing_flags' })

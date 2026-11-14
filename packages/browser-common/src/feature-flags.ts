@@ -217,6 +217,8 @@ export const parseFlagsResponse = (
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
     if (mergesIntoCurrentState(response, options)) {
+        const hasOwnCachedValue = (key: string): boolean =>
+            Object.prototype.hasOwnProperty.call(currentFlags, key) && !isUndefined(currentFlags[key])
         // Only partial or response-wide errored refreshes retain prior successful values.
         // Normalization has already removed failed values and payloads from the incoming maps.
         const evaluatedFlagKeys = Object.keys(newFeatureFlags)
@@ -234,12 +236,7 @@ export const parseFlagsResponse = (
             ? {
                   ...currentFlagDetails,
                   ...Object.fromEntries(
-                      Object.entries(flagDetails).filter(
-                          ([key, detail]) =>
-                              !detail.failed ||
-                              !Object.prototype.hasOwnProperty.call(currentFlags, key) ||
-                              isUndefined(currentFlags[key])
-                      )
+                      Object.entries(flagDetails).filter(([key, detail]) => !detail.failed || !hasOwnCachedValue(key))
                   ),
               }
             : withoutFailedDetails(currentFlagDetails, evaluatedFlagKeys)
@@ -1427,19 +1424,18 @@ export class PostHogFeatureFlags implements Extension {
             return undefined
         }
 
-        const storedFlags = this._prop(ENABLED_FEATURE_FLAGS)
         const failed = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key]?.failed
+        const storedFlags = failed ? undefined : this._prop(ENABLED_FEATURE_FLAGS)
+        const storedPayloads = failed ? undefined : this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         const hasOverride = !!overriddenFlags && Object.prototype.hasOwnProperty.call(overriddenFlags, key)
-        const flagExists = hasOverride || (!failed && !!storedFlags && key in storedFlags)
-        const flagValue = hasOverride ? overriddenFlags[key] : failed ? undefined : storedFlags?.[key]
+        const flagExists = hasOverride || (!!storedFlags && key in storedFlags)
+        const flagValue = hasOverride ? overriddenFlags[key] : storedFlags?.[key]
         const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
         const payload =
             overriddenPayloads && Object.prototype.hasOwnProperty.call(overriddenPayloads, key)
                 ? overriddenPayloads[key]
-                : failed
-                  ? undefined
-                  : this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)?.[key]
+                : storedPayloads?.[key]
         const flagReportValue = String(flagValue)
         const requestId = this._prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._prop(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined

@@ -1930,7 +1930,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           flagReason = flagDetail.reason?.description ?? flagDetail.reason?.code
           flagHasExperiment = flagDetail.metadata?.has_experiment
 
-          if (isServerFailedFlagRecord(parsedFlagRecordOf(flagDetail))) {
+          flagRecord = parsedFlagRecordOf(flagDetail)
+          if (isServerFailedFlagRecord(flagRecord)) {
             errors.push(FeatureFlagError.EVALUATION_FAILED)
           } else {
             // Parse payload once from the API response
@@ -1954,7 +1955,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               reasonCode: flagDetail.reason?.code,
             }
           }
-          flagRecord = parsedFlagRecordOf(flagDetail)
         }
 
         if (flagDetail !== undefined && isUnreadableFlagRecord(flagDetail)) {

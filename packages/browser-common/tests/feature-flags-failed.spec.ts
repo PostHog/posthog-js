@@ -89,6 +89,7 @@ describe('failed browser flag records', () => {
         })
         const flags = setupFlags(client, createConfig({ remoteRequestsDisabled: true }))
         expect(flags.getFlagVariants()).toEqual({ retained: 'cached', disabled: false, legacy: true })
+        expect(flags.getFlagPayloads()).toMatchObject({ retained: '{"cached":true}', legacy: '{"flat":true}' })
         expect(flags.getFeatureFlagResult('retained')).toMatchObject({ variant: 'cached', payload: { cached: true } })
         expect(client.capture).toHaveBeenCalledWith(
             '$feature_flag_called',
