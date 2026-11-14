@@ -373,6 +373,27 @@ describe('renderer facade', () => {
         client.dispose()
     })
 
+    it('snapshots properties with their JSON serialization so toJSON redaction is preserved', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        class Profile {
+            constructor(
+                public email: string,
+                public secret: string
+            ) {}
+            toJSON() {
+                return { email: this.email }
+            }
+        }
+        await client.capture('profile', { profile: new Profile('a@example.com', 'do-not-send') } as any)
+        await client.setPersonProperties({ profile: new Profile('b@example.com', 'do-not-send') } as any)
+        const sent = JSON.stringify(vi.mocked(bridge.request).mock.calls.map(([request]) => request.command))
+        expect(sent).toContain('a@example.com')
+        expect(sent).toContain('b@example.com')
+        expect(sent).not.toContain('do-not-send')
+        client.dispose()
+    })
+
     it('returns public errors as rejected promises and preserves command order after rejection', async () => {
         const { client, bridge } = harness()
         await client.ready()
