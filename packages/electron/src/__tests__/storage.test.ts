@@ -170,6 +170,35 @@ describe('ElectronStorage', () => {
         expect((await diskState()).values).toMatchObject({ distinct_id: 'older', opted_out: true })
     })
 
+    it('does not let an already-submitted older rename replace the final exit snapshot', async () => {
+        const store = await storage()
+        store.set('opted_out', false)
+        await store.flush()
+        const { readFileSync } = await import('node:fs')
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        let afterOlderRename: unknown
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            // Models a rename already queued off-thread that completes after exit listeners run.
+            await release.promise
+            try {
+                await rename(...args)
+            } finally {
+                afterOlderRename = JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values.opted_out
+            }
+        })
+        store.set('distinct_id', 'older')
+        await reached.promise
+        store.set('opted_out', true)
+        store.releaseOnExit()
+        release.resolve()
+        await vi.waitFor(() => expect(afterOlderRename).not.toBeUndefined())
+        expect(afterOlderRename).toBe(true)
+        await store.flush().catch(() => {})
+    })
+
     it('keeps ownership at exit while the initial state read is pending', async () => {
         const reached = deferred(),
             release = deferred()
