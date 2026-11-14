@@ -69,6 +69,7 @@ import {
 } from './feature-flag-evaluations'
 import {
   FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE,
+  isServerFailedFlagRecord,
   isUnreadableFlagRecord,
   ParsedFlagRecord,
   parsedFlagRecordOf,
@@ -1111,7 +1112,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           this._loggedFlagsResponseWithoutTypedValues = true
           this._logger.info(FLAGS_RESPONSE_WITHOUT_TYPED_VALUES_MESSAGE)
         }
-        return shared.read(body)
+        const normalized = shared.read(body)
+        // Parser failures keep their legacy disabled value; only server failures are unevaluated.
+        if (isPlainObject(normalized.flags)) {
+          for (const [key, detail] of Object.entries(normalized.flags)) {
+            if (isUnreadableFlagRecord(detail)) {
+              normalized.featureFlags[key] = false
+            }
+          }
+        }
+        return normalized
       },
     }
   }
@@ -1840,8 +1850,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
     let flagHasExperiment: boolean | undefined = undefined
-    // The parsed /flags record when it supplied the result. Only such a read can carry config
-    // version 2 attribution and send $experiment_exposure.
+    // The parsed record supplies the value or failure diagnostics. Only a successful
+    // experiment split sends $experiment_exposure.
     let flagRecord: ParsedFlagRecord | undefined = undefined
 
     // Try local evaluation first
@@ -1920,27 +1930,31 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           flagReason = flagDetail.reason?.description ?? flagDetail.reason?.code
           flagHasExperiment = flagDetail.metadata?.has_experiment
 
-          // Parse payload once from the API response
-          let parsedPayload: JsonType | undefined = undefined
-          if (flagDetail.metadata?.payload !== undefined) {
-            try {
-              parsedPayload = JSON.parse(flagDetail.metadata.payload)
-            } catch {
-              // If parsing fails, return the raw string (matches parsePayload behavior)
-              parsedPayload = flagDetail.metadata.payload
+          flagRecord = parsedFlagRecordOf(flagDetail)
+          if (isServerFailedFlagRecord(flagRecord)) {
+            errors.push(FeatureFlagError.EVALUATION_FAILED)
+          } else {
+            // Parse payload once from the API response
+            let parsedPayload: JsonType | undefined = undefined
+            if (flagDetail.metadata?.payload !== undefined) {
+              try {
+                parsedPayload = JSON.parse(flagDetail.metadata.payload)
+              } catch {
+                // If parsing fails, return the raw string (matches parsePayload behavior)
+                parsedPayload = flagDetail.metadata.payload
+              }
+            }
+
+            result = {
+              key,
+              enabled: flagDetail.enabled,
+              // The flags API serializes missing variants as null
+              variant: flagDetail.variant ?? undefined,
+              payload: parsedPayload,
+              reason: flagReason,
+              reasonCode: flagDetail.reason?.code,
             }
           }
-
-          result = {
-            key,
-            enabled: flagDetail.enabled,
-            // The flags API serializes missing variants as null
-            variant: flagDetail.variant ?? undefined,
-            payload: parsedPayload,
-            reason: flagReason,
-            reasonCode: flagDetail.reason?.code,
-          }
-          flagRecord = parsedFlagRecordOf(flagDetail)
         }
 
         if (flagDetail !== undefined && isUnreadableFlagRecord(flagDetail)) {
@@ -2737,8 +2751,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           if (locallyEvaluatedKeys.has(key)) {
             continue
           }
+          const parsed = parsedFlagRecordOf(detail)
           let parsedPayload: JsonType | undefined = undefined
-          if (detail.metadata?.payload !== undefined) {
+          if (!isServerFailedFlagRecord(parsed) && detail.metadata?.payload !== undefined) {
             try {
               parsedPayload = JSON.parse(detail.metadata.payload)
             } catch {
@@ -2755,7 +2770,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             reason: detail.reason?.description ?? detail.reason?.code,
             locallyEvaluated: false,
             hasExperiment: detail.metadata?.has_experiment,
-            parsed: parsedFlagRecordOf(detail),
+            parsed,
           }
         }
       }
@@ -2804,7 +2819,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // A flag a remote fallback or override resolved has a value, so it is not unresolved.
     const unresolvedFlags: Record<string, UnresolvedFlagReason> = {}
     for (const [key, reason] of Object.entries(localResult?.unresolved ?? {})) {
-      if (!Object.prototype.hasOwnProperty.call(records, key)) {
+      const parsed = records[key]?.parsed
+      if (!Object.prototype.hasOwnProperty.call(records, key) || (parsed && isServerFailedFlagRecord(parsed))) {
         unresolvedFlags[key] = reason
       }
     }

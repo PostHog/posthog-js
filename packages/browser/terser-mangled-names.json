@@ -264,6 +264,7 @@
         "_flagListenerCleanup",
         "_flagToExperiments",
         "_flagsLoadedFromRemote",
+        "_flagsNotLoaded",
         "_flush",
         "_flushBuffer",
         "_flushBufferTimer",

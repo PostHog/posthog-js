@@ -134,9 +134,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         const currentFeatureFlagDetails = this.getKnownFeatureFlagDetails() || { flags: {}, requestId: undefined }
         const newFeatureFlagDetails = {
+          ...this.getStoredFlagDetails(),
+          requestError: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
-            ...currentFeatureFlagDetails.flags,
+            ...Object.fromEntries(
+              Object.entries(currentFeatureFlagDetails.flags).filter(
+                ([key, detail]) =>
+                  !detail.failed ||
+                  !Object.prototype.hasOwnProperty.call(normalizedBootstrapFeatureFlagDetails.flags, key)
+              )
+            ),
           },
           requestId: normalizedBootstrapFeatureFlagDetails.requestId,
         }
@@ -895,7 +903,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
             const filteredFlags: Record<string, FeatureFlagDetail> = {}
             for (const key in res.flags) {
-              if (!res.flags[key].failed) {
+              // A failed record carries diagnostics, but cannot replace a successful cached value.
+              if (!res.flags[key].failed || getFeatureFlagValue(currentFlagDetails?.flags[key]) === undefined) {
                 filteredFlags[key] = res.flags[key]
               }
             }
@@ -1097,6 +1106,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
+      if (flagValue === undefined && featureFlag?.failed) {
+        errors.push(FeatureFlagError.EVALUATION_FAILED)
+      }
+
       const bootstrappedResponse = this.getBootstrappedFeatureFlags()?.[key]
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
@@ -1131,7 +1144,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         case 'getFeatureFlagPayload':
           return details ? { key, enabled: false, payload: null } : undefined
         case 'getFeatureFlag':
-          return details && Object.keys(details.flags).length ? { key, enabled: false, payload: null } : undefined
+          return details && Object.keys(details.featureFlags).length
+            ? { key, enabled: false, payload: null }
+            : undefined
         case undefined:
           return undefined
       }
@@ -1360,7 +1375,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const existingPayloads: Record<string, JsonType> = {}
       for (const key in existingDetails) {
         const storedPayload = existingDetails[key].metadata?.payload
-        if (storedPayload !== undefined) {
+        if (!existingDetails[key].failed && storedPayload !== undefined) {
           existingPayloads[key] = parsePayload(storedPayload)
         }
       }

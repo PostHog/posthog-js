@@ -149,16 +149,58 @@ test('Replay normalizes near-origin Firefox navigation phases without masking in
         'connectStart',
         'connectEnd',
         'requestStart',
+        'responseStart',
+        'responseEnd',
+        'endTime',
     ]) {
-        for (const value of [-2, -1, 0]) assert.equal(result(field, value), '<network-clock-ms>', field)
-        for (const value of [-3, '-1', null, false, NaN, Infinity])
+        for (const value of [-4, -3, -2, -1, 0]) assert.equal(result(field, value), '<network-clock-ms>', field)
+        for (const value of [-5, '-1', null, false, NaN, Infinity])
             assert.equal(result(field, value), value, `${field}: ${value}`)
         assert.equal(result(field, -1, 'resource', true), -1, field)
         assert.equal(result(field, -1, 'resource', false), -1, field)
         assert.equal(result(field, -1, 'navigation', false), -1, field)
     }
-    for (const field of ['startTime', 'endTime', 'duration', 'timestamp', 'timeOrigin', 'applicationClock'])
+    for (const field of ['startTime', 'duration', 'timestamp', 'timeOrigin', 'applicationClock'])
         assert.equal(result(field, -1), -1, field)
+})
+
+test('Replay compares observed Firefox initial-navigation clocks equally in wire and decoded snapshots', () => {
+    const request = {
+        name: `${context.origin}/`,
+        entryType: 'navigation',
+        isInitial: true,
+        startTime: 0,
+        fetchStart: -4,
+        responseStart: -2,
+        responseEnd: -2,
+        endTime: -2,
+        duration: 56,
+        timeOrigin: 1704067199845,
+        timestamp: 1704067199845,
+        responseStatus: 200,
+        contentType: 'text/html',
+        decodedBodySize: 517,
+    }
+    const source = (record) => {
+        const event = { type: 6, data: { plugin: 'rrweb/network@1', payload: { requests: [record] } } }
+        const snapshot = { properties: { $snapshot_data: [event] } }
+        return { network: { snapshots: [snapshot], requests: [{ path: '/s', body: snapshot }] } }
+    }
+    const first = normalize(source(request), context)
+    const repeated = normalize(
+        source({ ...request, fetchStart: 0, responseStart: 1, responseEnd: 2, endTime: 2, duration: 54 }),
+        context
+    )
+    assert.deepEqual(first, repeated)
+    for (const bucket of [first.network.snapshots[0], first.network.requests[0].body]) {
+        const record = bucket.properties.$snapshot_data[0].data.payload.requests[0]
+        assert.equal(record.endTime, '<network-clock-ms>')
+        assert.equal(record.responseStatus, 200)
+        assert.equal(record.contentType, 'text/html')
+        assert.equal(record.decodedBodySize, 517)
+    }
+    assert.notDeepEqual(first, normalize(source({ ...request, responseStatus: 500 }), context))
+    assert.notDeepEqual(first, normalize(source({ ...request, decodedBodySize: 518 }), context))
 })
 
 test('normalize asserts core and CDN replay version roles before replacing only recognized metadata', () => {

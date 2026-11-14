@@ -152,6 +152,11 @@ export function parsedFlagRecordOf(detail: FeatureFlagDetail): ParsedFlagRecord 
   }
 }
 
+/** Whether a readable record reports a server evaluation failure, rather than a parser failure. */
+export function isServerFailedFlagRecord(record: ParsedFlagRecord): boolean {
+  return record.failed && record.unreadableField === undefined
+}
+
 /** Whether a flag's record had a known field with the wrong JSON type, so it could not be read. */
 export function isUnreadableFlagRecord(detail: FeatureFlagDetail): boolean {
   return parsedRecords.get(detail)?.unreadableField !== undefined
@@ -221,7 +226,7 @@ function readTypedRecord(key: string, raw: unknown): ReadRecord {
             description: metadata.description,
             // A number or object value is its own payload; a payload the record also carries
             // is ignored. Other payloads are kept as sent, like a v2 record's. A failed record
-            // reads as disabled, so its payload is null, as a failed v2 record's is.
+            // supplies no value or payload to getters.
             payload: (failed ? null : (payload ?? rawMetadata?.payload)) as string | undefined,
             has_experiment: metadata.hasExperiment,
           }

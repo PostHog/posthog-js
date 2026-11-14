@@ -85,11 +85,47 @@ describe.each<Shape>(['v2', 'v4'])('legacy flag results from the %s response', (
   it.each(['getters', 'getters with a failed flag', 'getters with the unreadable record read as disabled'])(
     'match 5.61.2: %s',
     (scenario) => {
+      const expected = structuredClone(RELEASED[scenario])
+      if (scenario === 'getters with a failed flag') {
+        expect(expected['getFeatureFlag:failed']).toBe(false)
+        expect(expected['isFeatureEnabled:failed']).toBe(false)
+        expect(expected['getFeatureFlagResult:failed']).toMatchObject({ enabled: false })
+        expect(expected['getFeatureFlagPayload:failed']).toBeNull()
+        expect(expected['snapshot.getFlag:failed']).toBe(false)
+        expect(expected['snapshot.getFlagPayload:failed']).toBeNull()
+        for (const reader of [
+          'getFeatureFlag',
+          'isFeatureEnabled',
+          'getFeatureFlagResult',
+          'getFeatureFlagPayload',
+          'snapshot.getFlag',
+          'snapshot.getFlagPayload',
+        ]) {
+          expected[`${reader}:failed`] = '<undefined>'
+        }
+        expect(expected.getAllFlags.failed).toBe(false)
+        delete expected.getAllFlags.failed
+        expect(expected.getAllFlagsAndPayloads.featureFlags.failed).toBe(false)
+        delete expected.getAllFlagsAndPayloads.featureFlags.failed
+        expect(expected['snapshot.keys']).toContain('failed')
+        expected['snapshot.keys'] = expected['snapshot.keys'].filter((key: string) => key !== 'failed')
+        for (const [, , properties] of expected.events) {
+          if (properties.$feature_flag === 'failed') {
+            expect(properties.$feature_flag_response).toBe(false)
+            delete properties.$feature_flag_response
+            expect(properties.$feature_flag_error).toBe('errors_while_computing_flags')
+            properties.$feature_flag_error = 'errors_while_computing_flags,evaluation_failed'
+          }
+          if ('$feature/failed' in properties) {
+            expect(properties['$feature/failed']).toBe(false)
+            delete properties['$feature/failed']
+          }
+        }
+      }
       if (shape === 'v4') {
-        // The only change: config version 2 flag calls report their attribution.
-        expect(canonical(results[scenario])).toEqual(withConfigVersion2Attribution(RELEASED[scenario]))
+        expect(canonical(results[scenario])).toEqual(withConfigVersion2Attribution(expected))
       } else {
-        expect(results[scenario]).toEqual(RELEASED[scenario])
+        expect(results[scenario]).toEqual(expected)
       }
     }
   )
