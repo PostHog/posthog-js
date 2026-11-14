@@ -213,18 +213,20 @@ describe('autocapture input values', () => {
     })
 
     describe.each(['', 'field'])('slotted input values (slot name: "%s")', (slotName) => {
-        it.each<[string, AutocaptureConfig | undefined, boolean]>([
-            ['', undefined, true],
-            ['class="ph-sensitive"', undefined, false],
-            ['class="ph-no-capture"', undefined, false],
-            ['class="ph-no-autocapture"', undefined, false],
-            ['data-ph-no-autocapture', undefined, false],
-            ['class="custom-exclusion"', { css_selector_ignorelist: ['.custom-exclusion'] }, false],
-            ['class="custom-exclusion"', { css_selector_ignorelist: ['.other-exclusion'] }, true],
-            ['class="ph-no-autocapture"', { css_selector_ignorelist: ['.custom-exclusion'] }, true],
-            ['data-ph-no-autocapture', { css_selector_ignorelist: [] }, true],
-            ['class="ph-sensitive"', { css_selector_ignorelist: [] }, false],
-        ])('checks slot wrapper privacy: %s with config %j', (attributes, config, capturesValue) => {
+        // Outcome: 'value' = event with $input_value, 'event' = sanitized event without it,
+        // 'none' = excluded ancestry drops the event, as for light-DOM ancestors.
+        it.each<[string, AutocaptureConfig | undefined, 'value' | 'event' | 'none']>([
+            ['', undefined, 'value'],
+            ['class="ph-sensitive"', undefined, 'event'],
+            ['class="ph-no-capture"', undefined, 'none'],
+            ['class="ph-no-autocapture"', undefined, 'none'],
+            ['data-ph-no-autocapture', undefined, 'none'],
+            ['class="custom-exclusion"', { css_selector_ignorelist: ['.custom-exclusion'] }, 'none'],
+            ['class="custom-exclusion"', { css_selector_ignorelist: ['.other-exclusion'] }, 'value'],
+            ['class="ph-no-autocapture"', { css_selector_ignorelist: ['.custom-exclusion'] }, 'value'],
+            ['data-ph-no-autocapture', { css_selector_ignorelist: [] }, 'value'],
+            ['class="ph-sensitive"', { css_selector_ignorelist: [] }, 'event'],
+        ])('checks slot wrapper privacy: %s with config %j', (attributes, config, outcome) => {
             if (config) configure(config)
             document.body.innerHTML = `<div id="host"><input slot="${slotName}" data-ph-capture-value /></div>`
             const host = document.querySelector('#host')!
@@ -234,8 +236,12 @@ describe('autocapture input values', () => {
             expect(input.assignedSlot).toBe(root.querySelector('slot'))
             input.value = 'private value'
             input.dispatchEvent(new Event('change', { bubbles: true }))
+            if (outcome === 'none') {
+                expect(capture).not.toHaveBeenCalled()
+                return
+            }
             expect(capture).toHaveBeenCalledTimes(1)
-            if (capturesValue) {
+            if (outcome === 'value') {
                 expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', 'private value')
             } else {
                 expect(capture.mock.calls[0][1]).not.toHaveProperty('$input_value')
