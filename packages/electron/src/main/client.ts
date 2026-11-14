@@ -113,11 +113,8 @@ export class ElectronCore extends PostHogCore {
             Date.now() - this._autocaptureLoadedAt < AUTOCAPTURE_CONFIG_MAX_AGE_MS
         )
             return Promise.resolve()
-        // A warm refresh must not pause capture in already-connected windows.
-        if (this._autocaptureStatus !== 'loaded') {
-            this._autocaptureStatus = 'pending'
-            this._notify()
-        }
+        // Status starts 'pending' and only the first request waits on it; a warm refresh or a retry after an
+        // outcome keeps the last known state so already-enabled capture is not paused.
         // These whitelisted project settings are identity-independent, unlike flag responses.
         this._autocaptureLoad = this.getRemoteConfig()
             .then((response) => {
