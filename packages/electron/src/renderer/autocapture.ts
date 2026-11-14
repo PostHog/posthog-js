@@ -121,8 +121,20 @@ export class RendererAutocapture {
             }
         }
         const remote = state.autocapture
-        if (remote?.status === 'loaded' || remote?.status === 'failed') {
-            this.remoteListener?.(remote.status === 'loaded' ? { ok: true, config: remote } : { ok: false })
+        if (remote?.status === 'loaded') this.remoteListener?.({ ok: true, config: remote })
+        if (remote?.status === 'failed') {
+            // Apply only last-known cached settings; a failed fetch itself never changes the opt-out decision.
+            if (remote.elementsChainAsString)
+                this.remoteListener?.({
+                    ok: true,
+                    config: {
+                        elementsChainAsString: remote.elementsChainAsString,
+                        ...(typeof remote.autocapture_opt_out === 'boolean'
+                            ? { autocapture_opt_out: remote.autocapture_opt_out }
+                            : {}),
+                    },
+                })
+            this.remoteListener?.({ ok: false })
         }
         if (remote?.status === 'disabled') this.extension?.startIfEnabled()
         if (remote?.status === 'loaded' || remote?.status === 'disabled') {

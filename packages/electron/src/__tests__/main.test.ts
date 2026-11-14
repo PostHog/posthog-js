@@ -1527,6 +1527,33 @@ describe('main-routed autocapture config', () => {
         expect(owner.getState().autocapture).toEqual({ status: 'failed', autocapture_opt_out: true })
     })
 
+    it('does not pause cached-enabled autocapture while a failed-config retry is in flight', async () => {
+        let owner = await start()
+        mock.fetch.mockResolvedValue(new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await load(owner)
+        await owner.shutdown(50)
+        owner = await start()
+        mock.fetch.mockRejectedValueOnce(new Error('offline'))
+        await load(owner)
+        expect(owner.getState().autocapture).toMatchObject({ status: 'failed', autocapture_opt_out: false })
+        const statuses: string[] = []
+        let release!: (response: Response) => void
+        mock.fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => (release = resolve)))
+        const window = renderer(owner, 93)
+        window.contents.mainFrame.send.mockImplementation((channel: string, state: State) => {
+            if (channel === STATE_CHANNEL && state.autocapture) statuses.push(state.autocapture.status)
+        })
+        await window.send({ type: 'hello' })
+        const retry = window.send({ type: 'loadAutocaptureConfig' })
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(owner.getState().autocapture?.status).toBe('failed')
+        expect(statuses).not.toContain('pending')
+        release(new Response(JSON.stringify({ autocapture_opt_out: false })))
+        await retry
+        expect(owner.getState().autocapture?.status).toBe('loaded')
+    })
+
     it.each([{ defaultOptIn: false }, { disabled: true }, { disableRemoteConfig: true }])(
         'does not fetch when gated by %j',
         async (options) => {

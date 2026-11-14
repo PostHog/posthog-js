@@ -152,6 +152,32 @@ describe('Electron DOM autocapture', () => {
         ).toHaveLength(0)
     })
 
+    it('applies the cached element encoding when config loading fails', async () => {
+        const h = harness(
+            { autocapture: true },
+            { status: 'failed', autocapture_opt_out: false, elementsChainAsString: true }
+        )
+        await h.client.ready()
+        h.click()
+        await h.client.flush()
+        const [capture] = h.captures()
+        expect(capture?.command).toMatchObject({ event: '$autocapture' })
+        const properties = (capture!.command as { properties: Record<string, unknown> }).properties
+        expect(properties.$elements_chain).toEqual(expect.any(String))
+        expect(properties).not.toHaveProperty('$elements')
+    })
+
+    it('keeps a cached server opt-out when a failed config forwards the cached element encoding', async () => {
+        const h = harness(
+            { autocapture: true },
+            { status: 'failed', autocapture_opt_out: true, elementsChainAsString: true }
+        )
+        await h.client.ready()
+        h.click()
+        await h.client.flush()
+        expect(h.captures()).toHaveLength(0)
+    })
+
     it('retries failed config in the same generation with a single capped backoff and recovers', async () => {
         vi.useFakeTimers()
         const h = harness()
