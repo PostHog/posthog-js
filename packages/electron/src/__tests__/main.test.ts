@@ -276,6 +276,17 @@ describe('main Electron client', () => {
         await vi.advanceTimersByTimeAsync(101)
     })
 
+    it('suppresses main-process exposure tracking when sendEvent is false', async () => {
+        const owner = await start()
+        await owner.reloadFeatureFlagsAsync()
+        expect(owner.getFeatureFlag('test', { sendEvent: false })).toBe('variant')
+        await owner.flush()
+        expect(batches.filter(({ event }) => event === '$feature_flag_called')).toEqual([])
+        expect(owner.getFeatureFlag('test')).toBe('variant')
+        await owner.flush()
+        expect(batches.filter(({ event }) => event === '$feature_flag_called')).toHaveLength(1)
+    })
+
     it('normalizes each cached flag payload only linearly when building a state snapshot', async () => {
         const owner = await start()
         const count = 40

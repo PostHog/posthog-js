@@ -307,8 +307,8 @@ export class PostHog {
     getSessionId(): string {
         return this._core.isDisabled ? '' : this._core.getSessionId()
     }
-    getFeatureFlag(key: string): FeatureFlagValue | undefined {
-        return this._core.getFeatureFlag(key)
+    getFeatureFlag(key: string, options?: { sendEvent?: boolean }): FeatureFlagValue | undefined {
+        return this._core.getFeatureFlag(key, { sendEvent: options?.sendEvent })
     }
     getFeatureFlagPayload(key: string): JsonType | undefined {
         return this._core.getFeatureFlagPayload(key)
