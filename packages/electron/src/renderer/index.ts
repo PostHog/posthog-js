@@ -128,13 +128,18 @@ export class PostHog {
             if (!response.ok) throw new Error(response.error)
             this._update(response.state)
         })
-        this._tail = (
+        // Network-bound commands keep their place in main's ordered queue but must not hold later
+        // renderer commands (especially consent) behind a slow response.
+        const networkBound =
             command.type === 'flush' ||
             command.type === 'reloadFeatureFlags' ||
-            command.type === 'loadAutocaptureConfig'
-                ? dispatched
-                : operation
-        ).catch(() => {})
+            command.type === 'loadAutocaptureConfig' ||
+            ((command.type === 'setPersonPropertiesForFlags' ||
+                command.type === 'setGroupPropertiesForFlags' ||
+                command.type === 'resetPersonPropertiesForFlags' ||
+                command.type === 'resetGroupPropertiesForFlags') &&
+                command.reloadFeatureFlags)
+        this._tail = (networkBound ? dispatched : operation).catch(() => {})
         return operation
     }
 
