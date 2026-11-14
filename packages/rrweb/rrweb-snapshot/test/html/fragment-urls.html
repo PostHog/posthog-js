@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>fragment-only css urls</title>
+    <link rel="stylesheet" href="/css/fragment-urls.css" />
+    <style>
+      .from-style-element {
+        clip-path: url(#style-element-clip);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      class="from-stylesheet from-style-element"
+      style="mask: url(#inline-style-mask)"
+    ></div>
+    <div style="filter: url( #padded-inline-style-filter )"></div>
+  </body>
+</html>

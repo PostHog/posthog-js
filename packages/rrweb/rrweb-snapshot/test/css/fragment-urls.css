@@ -1,0 +1,3 @@
+.from-stylesheet {
+  filter: url(#stylesheet-filter);
+}

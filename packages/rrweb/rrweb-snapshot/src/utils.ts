@@ -1068,6 +1068,8 @@ const URL_IN_CSS_REF = /url\((?:(')([^']*)'|(")(.*?)"|([^)]*))\)/gm;
 const URL_PROTOCOL_MATCH = /^(?:[a-z+]+:)?\/\//i;
 const URL_WWW_MATCH = /^www\..*/i;
 const DATA_URI = /^(data:)([^,]*),(.*)/i;
+const BLOB_URI = /^blob:/i;
+const SAME_DOCUMENT_FRAGMENT = /^#/;
 export function absolutifyURLs(cssText: string | null, href: string): string {
   // codeql[js/polynomial-redos] Bounded CSS text; worst case is recorder slowdown, no exploit.
   return (cssText || '').replace(
@@ -1080,7 +1082,7 @@ export function absolutifyURLs(cssText: string | null, href: string): string {
       path2: string,
       path3: string,
     ) => {
-      const filePath = path1 || path2 || path3;
+      const filePath = (path1 || path2 || path3 || '').trim();
       const maybeQuote = quote1 || quote2 || '';
       if (!filePath) {
         return origin;
@@ -1088,7 +1090,11 @@ export function absolutifyURLs(cssText: string | null, href: string): string {
       if (URL_PROTOCOL_MATCH.test(filePath) || URL_WWW_MATCH.test(filePath)) {
         return `url(${maybeQuote}${filePath}${maybeQuote})`;
       }
-      if (DATA_URI.test(filePath)) {
+      if (
+        DATA_URI.test(filePath) ||
+        BLOB_URI.test(filePath) ||
+        SAME_DOCUMENT_FRAGMENT.test(filePath)
+      ) {
         return `url(${maybeQuote}${filePath}${maybeQuote})`;
       }
       if (filePath[0] === '/') {

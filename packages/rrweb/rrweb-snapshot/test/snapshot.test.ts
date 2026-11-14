@@ -200,6 +200,42 @@ describe('absolute url to stylesheet', () => {
   it('can handle empty path', () => {
     expect(absolutifyURLs(`url('')`, href)).toEqual(`url('')`);
   });
+
+  it.each(
+    [
+      { kind: 'a fragment-only reference', url: '#filter' },
+      {
+        kind: 'a blob url',
+        url: 'blob:http://localhost/0d2e6c0c-5b1f-4a39-9d3f-2b5a1b8b7c11',
+      },
+      {
+        kind: 'an uppercase blob url',
+        url: 'BLOB:http://localhost/0d2e6c0c-5b1f-4a39-9d3f-2b5a1b8b7c11',
+      },
+    ].flatMap((urlCase) =>
+      ['', "'", '"'].flatMap((quote) =>
+        ['', ' '].map((padding) => ({ ...urlCase, quote, padding })),
+      ),
+    ),
+  )(
+    'does not resolve $kind against the stylesheet (quote: "$quote", padding: "$padding")',
+    ({ url, quote, padding }) => {
+      const cssText = `fill: url(${quote}${padding}${url}${padding}${quote});`;
+      expect(absolutifyURLs(cssText, href)).toEqual(
+        `fill: url(${quote}${url}${quote});`,
+      );
+    },
+  );
+
+  it.each([
+    { kind: 'a relative path', url: './a.jpg' },
+    { kind: 'an absolute path', url: '/css/a.jpg' },
+    { kind: 'an external url', url: 'http://localhost/css/a.jpg' },
+  ])('ignores whitespace around $kind', ({ url }) => {
+    expect(absolutifyURLs(`url( ${url} )`, href)).toEqual(
+      'url(http://localhost/css/a.jpg)',
+    );
+  });
 });
 
 describe('isBlockedElement()', () => {
