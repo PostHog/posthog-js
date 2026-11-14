@@ -26,6 +26,7 @@ name = "oxfmt (JSON and Markdown)"
 language = "system"
 entry = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern"
 files = '\.(json|md)$'
+exclude = '^packages/(rrweb/|.*/playground/|.*/examples/)'
 stages = ["pre-commit"]
 
 [[repos.hooks]]
