@@ -1538,7 +1538,7 @@ function initMediaInteractionObserver({
         const { currentTime, volume, muted, playbackRate, loop } = target;
         mediaInteractionCb({
           type,
-          id: mirror.getId(target as Node),
+          id: mirror.getId(target),
           currentTime,
           volume,
           muted,
