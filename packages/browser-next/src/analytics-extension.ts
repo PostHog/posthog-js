@@ -25,6 +25,7 @@ import { createId } from './id'
 import { deepFreeze } from './immutable'
 import { ClientRateLimiter } from './rate-limiter'
 import { snapshotCaptureProperties, type CaptureProperties } from './capture-properties'
+import { RegisteredProperties, snapshotRegisteredProperties } from './analytics-properties'
 import {
     personPropertyNames,
     shouldProcessPerson,
@@ -92,6 +93,7 @@ export class Analytics implements IAnalyticsExtension {
     private _isTearingDown = false
     private _failures = 0
     private _kv: KeyValueStore | undefined
+    private _registeredProperties: RegisteredProperties | undefined
     private _lastPersonProperties: string | undefined
     private readonly _personProfiles: PersonProfileMode
     private readonly _rateLimiter: ClientRateLimiter
@@ -149,6 +151,7 @@ export class Analytics implements IAnalyticsExtension {
     readonly setup = (value: IPostHogInternal): void => {
         this._client = value.sharedClient
         this._kv = value.kv
+        this._registeredProperties = new RegisteredProperties(value.kv)
     }
 
     readonly initialize = (host: CaptureHost): void => {
@@ -193,6 +196,7 @@ export class Analytics implements IAnalyticsExtension {
 
     readonly dispose = (): Promise<void> | undefined => {
         this._disposed = true
+        this._registeredProperties = undefined
         this._dynamicEventProperties.splice(0)
         for (const release of this._disposalWaiters) release()
         this._disposalWaiters.clear()
@@ -424,7 +428,7 @@ export class Analytics implements IAnalyticsExtension {
     ): CaptureProperties | undefined {
         const dynamic = this._dynamicProperties()
         try {
-            return snapshotCaptureProperties(dynamic, properties, options)
+            return snapshotCaptureProperties(this._registeredProperties?.values(), dynamic, properties, options)
         } catch (error) {
             this._host?.logger.error('Event properties are not JSON-serializable', error)
             return undefined
@@ -748,6 +752,44 @@ export class Analytics implements IAnalyticsExtension {
         this._host.state.reset()
         this._lastPersonProperties = undefined
         this._host.publishReset(undefined)
+    }
+
+    private _propertyStore(): RegisteredProperties | undefined {
+        const host = this._host
+        if (this._disposed || !host?.canMutate() || !host.state.prepare()) return
+        return this._registeredProperties
+    }
+
+    private _prepareRegistration(
+        properties: Record<string, unknown>
+    ): { store: RegisteredProperties; properties: Record<string, unknown> } | undefined {
+        const store = this._propertyStore()
+        if (!store) return
+        const snapshot = snapshotRegisteredProperties(properties)
+        if (this._propertyStore() !== store) return
+        if (!snapshot) {
+            this._host?.logger.warn('Super properties must serialize to an object')
+            return
+        }
+        return { store, properties: snapshot }
+    }
+
+    readonly register = (properties: Record<string, unknown>): void => {
+        const registration = this._prepareRegistration(properties)
+        registration?.store.register(registration.properties)
+    }
+
+    readonly registerOnce = (properties: Record<string, unknown>, defaultValue: unknown = 'None'): void => {
+        const registration = this._prepareRegistration(properties)
+        registration?.store.registerOnce(registration.properties, defaultValue)
+    }
+
+    readonly unregister = (property: string): void => {
+        this._propertyStore()?.unregister(property)
+    }
+
+    readonly getProperty = (property: string): unknown => {
+        return this._propertyStore()?.get(property)
     }
 
     readonly registerDynamicEventProperties = (producer: () => Record<string, unknown>): Disposable => {
