@@ -1,0 +1,304 @@
+// Native macOS + OrbStack hybrid. This network is deliberately not claimed hermetic.
+import { execFileSync, spawn } from 'node:child_process'
+import { createHash, randomInt, randomUUID } from 'node:crypto'
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createInterface } from 'node:readline'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+const directory = fileURLToPath(new URL('.', import.meta.url))
+export const harnessImage =
+    'ghcr.io/posthog/sdk-test-harness-v2@sha256:c1e36d011ec4dec0102fb52b5e6fd3b156b0de9251e0d6b735385876d9a897b4'
+export const specsRevision = '4a9e0e7005260dbd198cd67c6ab6579c64679913'
+const [profile, scope, destination] = process.argv.slice(2)
+if (
+    !['electron-main', 'electron-renderer'].includes(profile) ||
+    !['published', 'supplemental'].includes(scope) ||
+    !destination ||
+    !process.env.POSTHOG_ELECTRON_CONSUMER
+)
+    throw new Error(
+        'POSTHOG_ELECTRON_CONSUMER=... [SDK_SPECS=...] node run-compliance.mjs electron-main|electron-renderer published|supplemental NEW_REPORT_DIRECTORY'
+    )
+if (process.platform !== 'darwin')
+    throw new Error(
+        'This hybrid runner is verified only on macOS/OrbStack; Linux sandbox/Xvfb runner is not implemented'
+    )
+const consumer = resolve(process.env.POSTHOG_ELECTRON_CONSUMER)
+const output = resolve(destination)
+mkdirSync(output)
+copyFileSync(join(consumer, 'build.json'), join(output, 'build.json'))
+const identity = randomUUID()
+const network = `electron-compliance-${identity}`
+const container = `${network}-harness`
+const checker = `${network}-check`
+// Pin the harness to a private per-run address so the SDK guard can allow only that mock host.
+const subnet = `10.${randomInt(64, 250)}.${randomInt(0, 255)}`
+const harnessAddress = `${subnet}.2`
+let cancellation, activeCommand, cancelStartup
+for (const [signal, code] of [
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+]) {
+    process.on(signal, () => {
+        if (cancellation) return
+        cancellation = code
+        writeFileSync(join(output, 'cancellation.json'), JSON.stringify({ signal, exit: code }) + '\n')
+        cancelStartup?.(new Error(`Runner cancelled by ${signal}`))
+        if (activeCommand?.pid && activeCommand.exitCode === null && activeCommand.signalCode === null)
+            activeCommand.kill(signal)
+    })
+}
+const command = async (milliseconds, args, name, cleanup = false) => {
+    if (cancellation && !cleanup) throw new Error('Runner cancelled')
+    const log = join(output, `${name}.log`)
+    writeFileSync(log, '')
+    let size = 0
+    let overflow = false
+    try {
+        const child = spawn(
+            process.execPath,
+            [join(directory, 'run-command.mjs'), String(milliseconds), 'docker', ...args],
+            { stdio: ['ignore', 'pipe', 'pipe'] }
+        )
+        activeCommand = child
+        const closed = new Promise((done) => child.once('close', done))
+        const record = (data) => {
+            const remaining = Math.max(0, 50 * 1024 * 1024 - size)
+            appendFileSync(log, data.subarray(0, remaining))
+            size += data.length
+            if (size > 50 * 1024 * 1024 && !overflow) {
+                overflow = true
+                process.stderr.write(`Command output limit exceeded: ${name}\n`)
+                if (child.pid && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+            }
+        }
+        child.stdout.on('data', record)
+        child.stderr.on('data', record)
+        const status = await new Promise((done) => {
+            child.once('error', (error) => {
+                appendFileSync(log, `${error.message}\n`)
+                done(1)
+            })
+            child.once('exit', (status) => done(status ?? 1))
+        })
+        let drain
+        await Promise.race([
+            closed,
+            new Promise((done) => {
+                drain = setTimeout(done, 100)
+            }),
+        ])
+        clearTimeout(drain)
+        child.stdout.destroy()
+        child.stderr.destroy()
+        const code = (!cleanup && cancellation) || (overflow ? 1 : status)
+        writeFileSync(join(output, `${name}.exit`), `${code}\n`)
+        return code
+    } finally {
+        activeCommand = undefined
+    }
+}
+let adapter,
+    adapterExited,
+    adapterClosed,
+    lines,
+    networkAttempted = false
+let result = 1
+try {
+    let specs = join(directory, 'features')
+    if (scope === 'published') {
+        if (!process.env.SDK_SPECS) throw new Error('SDK_SPECS checkout with pinned Git object required')
+        specs = join(output, 'specs')
+        mkdirSync(specs)
+        const archive = execFileSync('git', ['-C', process.env.SDK_SPECS, 'archive', specsRevision], {
+            maxBuffer: 100 * 1024 * 1024,
+        })
+        execFileSync('tar', ['-xf', '-', '-C', specs], { input: archive })
+    }
+    writeFileSync(
+        join(output, 'provenance.json'),
+        JSON.stringify(
+            {
+                purpose:
+                    scope === 'published'
+                        ? 'Unchanged published acceptance inventory; strict failures are not suppressed'
+                        : 'SDK-owned supplemental integration, NOT published conformance',
+                specs_revision: scope === 'published' ? specsRevision : null,
+                harness_image: harnessImage,
+                adapter_revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+                adapter_status: execFileSync('git', ['status', '--short'], { encoding: 'utf8' }),
+                adapter_files: Object.fromEntries(
+                    readdirSync(directory, { recursive: true, withFileTypes: true })
+                        .filter((entry) => entry.isFile())
+                        .map((entry) => {
+                            const path = join(entry.parentPath, entry.name)
+                            return [
+                                path.slice(directory.length),
+                                createHash('sha256').update(readFileSync(path)).digest('hex'),
+                            ]
+                        })
+                ),
+                network: {
+                    name: network,
+                    internal: false,
+                    adapter_bind: '127.0.0.1',
+                    mock_routing: 'Native OrbStack routes container private IPv4',
+                    limitation:
+                        'Not egress-isolated or hermetic; Electron SDK session permits only the pinned harness mock address',
+                },
+            },
+            null,
+            2
+        ) + '\n'
+    )
+    adapter = spawn(process.execPath, [join(directory, 'server.mjs')], {
+        env: {
+            ...process.env,
+            POSTHOG_ELECTRON_CONSUMER: consumer,
+            POSTHOG_ELECTRON_MOCK_HOSTS: harnessAddress,
+            HOST: '127.0.0.1',
+            PORT: '0',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    adapterExited = new Promise((done) => {
+        adapter.once('exit', done)
+        adapter.once('error', done)
+    })
+    adapterClosed = new Promise((done) => adapter.once('close', done))
+    writeFileSync(join(output, 'adapter.log'), '')
+    adapter.stdout.on('data', (data) => appendFileSync(join(output, 'adapter.log'), data))
+    adapter.stderr.on('data', (data) => appendFileSync(join(output, 'adapter.log'), data))
+    lines = createInterface({ input: adapter.stdout })
+    const startup = await new Promise((resolveStartup, reject) => {
+        const timer = setTimeout(() => reject(new Error('Adapter startup deadline exceeded')), 5000)
+        const done = (callback) => (value) => {
+            clearTimeout(timer)
+            cancelStartup = undefined
+            callback(value)
+        }
+        cancelStartup = done(reject)
+        lines.once(
+            'line',
+            done((line) => {
+                try {
+                    resolveStartup(JSON.parse(line))
+                } catch (error) {
+                    reject(error)
+                }
+            })
+        )
+        adapter.once('error', done(reject))
+        adapter.once(
+            'exit',
+            done(() => reject(new Error('Adapter exited before startup')))
+        )
+    })
+    writeFileSync(join(output, 'startup.json'), JSON.stringify(startup) + '\n')
+    networkAttempted = true
+    if ((await command(30000, ['network', 'create', '--subnet', `${subnet}.0/24`, network], 'network-create')) !== 0)
+        throw new Error('Network creation failed')
+    // No host ports are published. OrbStack routes native Electron to the per-case
+    // private container listener; host.docker.internal routes the reverse direction.
+    const run = await command(
+        1200000,
+        [
+            'run',
+            '--rm',
+            '--name',
+            container,
+            '--network',
+            network,
+            '--ip',
+            harnessAddress,
+            '--mount',
+            `type=bind,src=${specs},dst=/specs,readonly`,
+            '--mount',
+            `type=bind,src=${output},dst=/reports`,
+            '--entrypoint',
+            'sh',
+            harnessImage,
+            '-c',
+            `exec posthog-test-harness-v2 run --specs /specs --all-features --adapter-url http://host.docker.internal:${startup.port} --allow-private-network --mock-bind-host 0.0.0.0 --mock-advertised-host ${harnessAddress} --profile ${profile} --timeout-ms 15000 --report /reports/report.json`,
+        ],
+        'run'
+    )
+    const check = await command(
+        30000,
+        [
+            'run',
+            '--rm',
+            '--name',
+            checker,
+            '--network',
+            'none',
+            '--mount',
+            `type=bind,src=${output},dst=/reports,readonly`,
+            harnessImage,
+            'check-report',
+            '--report',
+            '/reports/report.json',
+            '--profile',
+            profile,
+        ],
+        'check-report'
+    )
+    const report = JSON.parse(readFileSync(join(output, 'report.json')))
+    const selected = report.inventory.filter((row) => row.selected && row.applicability.kind === 'applicable').length
+    const executed = report.results.filter((row) => row.result.executed).length
+    writeFileSync(
+        join(output, 'counts.json'),
+        JSON.stringify(
+            { selected, executed, inventory: report.inventory.length, results: report.results.length },
+            null,
+            2
+        ) + '\n'
+    )
+    result = run === 0 && check === 0 && selected > 0 && executed > 0 ? 0 : 1
+} catch (error) {
+    process.stderr.write(`${error.stack ?? error}\n`)
+} finally {
+    if (adapter) {
+        const active = () => adapter.pid && adapter.exitCode === null && adapter.signalCode === null
+        if (active()) adapter.kill('SIGTERM')
+        const kill = setTimeout(() => {
+            if (active()) adapter.kill('SIGKILL')
+        }, 5000)
+        await adapterExited
+        clearTimeout(kill)
+        // Descendants can retain these pipes after the owned leader exits. Do not signal a retired identity.
+        let drain
+        await Promise.race([
+            adapterClosed,
+            new Promise((done) => {
+                drain = setTimeout(done, 100)
+            }),
+        ])
+        clearTimeout(drain)
+        lines?.close()
+        adapter.stdout.destroy()
+        adapter.stderr.destroy()
+    }
+    if (networkAttempted) {
+        // Only our uniquely named resources; a timed-out or cancelled run may still own its containers.
+        for (const [name, log] of [
+            [container, 'container-cleanup'],
+            [checker, 'checker-cleanup'],
+        ]) {
+            const query = await command(
+                30000,
+                ['ps', '--all', '--quiet', '--filter', `name=^/${name}$`],
+                `${log}-query`,
+                true
+            )
+            if (query !== 0) result = 1
+            else if (readFileSync(join(output, `${log}-query.log`), 'utf8').trim()) {
+                if ((await command(30000, ['rm', '--force', name], log, true)) !== 0) result = 1
+            }
+        }
+        if ((await command(30000, ['network', 'rm', network], 'network-cleanup', true)) !== 0) result = 1
+    }
+    result = cancellation ?? result
+    writeFileSync(join(output, 'wrapper.exit'), `${result}\n`)
+}
+process.exitCode = result
