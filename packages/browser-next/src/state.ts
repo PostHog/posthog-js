@@ -1,6 +1,7 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
 
 import { createId } from './id'
+import { createKeyValueStore, TabValues } from './key-value-store'
 import type { NewSessionReason, StorageLike } from './types'
 
 export type ConsentState = 'implicit' | 'granted' | 'denied'
@@ -41,14 +42,6 @@ interface PreparedSession {
 
 const emptyRecord = <T>(): Record<string, T> => Object.create(null) as Record<string, T>
 
-const cloneJson = <T>(value: T): T => {
-    const json = JSON.stringify(value)
-    if (json === undefined) {
-        throw new TypeError('The value must be JSON-serializable')
-    }
-    return JSON.parse(json) as T
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -67,6 +60,17 @@ const readGroups = (value: unknown): Record<string, string> => {
 const isTimestamp = (value: unknown): value is number =>
     // oxlint-disable-next-line posthog-js/no-direct-number-check
     typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+const sessionExpiryReason = (
+    session: PersistedSession | undefined,
+    now: number
+): 'idleTimeout' | 'maxLength' | undefined => {
+    if (!session) return undefined
+    const safeNow = isTimestamp(now) ? now : 0
+    if (Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000) return 'idleTimeout'
+    if (Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000) return 'maxLength'
+    return undefined
+}
 
 const readRevision = (value: unknown, fallback?: unknown): string | undefined => {
     if (typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value)) {
@@ -374,6 +378,16 @@ export class BrowserState {
         return { ...this._state.groups }
     }
 
+    get sessionId(): string | undefined {
+        return this._state.session?.sessionId
+    }
+
+    get activeSessionId(): string | undefined {
+        if (this._pendingSessionReason) return undefined
+        const { session } = this._readSessionAuthority()
+        return sessionExpiryReason(session, Date.now()) ? undefined : session?.sessionId
+    }
+
     get session(): SessionContext | undefined {
         const session = this._state.session
         if (!session || !this._windowId) return undefined
@@ -426,25 +440,12 @@ export class BrowserState {
 
     prepareSessionForEvent(now = Date.now()): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
-        const [sharedRead, external] = this._readPersistedState()
-        let session = this._state.session
-        let lastActivityWriteTimestamp = this._lastActivityWriteTimestamp
-        let adoptedAfterReset = false
-        if (sharedRead && external && persistedAuthorityWins(external, this._state)) {
-            session = external.session
-            if (session) {
-                lastActivityWriteTimestamp = session.lastActivityTimestamp
-                adoptedAfterReset = this._pendingSessionReason === 'reset'
-            }
-        }
+        const { external, session, lastActivityWriteTimestamp, adoptedAfterReset } = this._readSessionAuthority()
 
         const pendingReason = this._pendingSessionReason
-        const idle = session ? Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000 : false
-        const maximum = session ? Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000 : false
-        const rotated = !!(pendingReason || !session || idle || maximum)
-        const reason = adoptedAfterReset
-            ? 'reset'
-            : (pendingReason ?? (idle ? 'idleTimeout' : maximum ? 'maxLength' : undefined))
+        const expiry = sessionExpiryReason(session, safeNow)
+        const rotated = !!(pendingReason || !session || expiry)
+        const reason = adoptedAfterReset ? 'reset' : (pendingReason ?? expiry)
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external))
             : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
@@ -540,56 +541,20 @@ export class BrowserState {
     }
 
     keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
-        const values = (): Record<string, unknown> => (this._state.extensionData[namespace] ??= emptyRecord<unknown>())
-        const read = (key: string): unknown => {
-            if (!canAccess()) {
-                return undefined
-            }
-            const value = values()[key]
-            return value === undefined ? undefined : cloneJson(value)
-        }
+        return createKeyValueStore({
+            values: () => (this._state.extensionData[namespace] ??= emptyRecord<unknown>()),
+            save: () => this._save(),
+            canAccess,
+        })
+    }
 
-        return {
-            initialize(): void {},
-            get: (<T = unknown>(keyOrKeys: string | readonly string[]): T | Partial<T> | undefined => {
-                if (typeof keyOrKeys === 'string') {
-                    return read(keyOrKeys) as T | undefined
-                }
-                const entries = emptyRecord<unknown>()
-                for (const key of keyOrKeys) {
-                    const value = read(key)
-                    if (value !== undefined) {
-                        entries[key] = value
-                    }
-                }
-                return entries as Partial<T>
-            }) as KeyValueStore['get'],
-            set: ((keyOrValues: string | Record<string, unknown>, value?: unknown): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
-                const entries = typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues
-                for (const [key, entry] of Object.entries(entries)) {
-                    if (entry === undefined) {
-                        delete namespaceValues[key]
-                    } else {
-                        namespaceValues[key] = cloneJson(entry)
-                    }
-                }
-                this._save()
-            }) as KeyValueStore['set'],
-            remove: (keyOrKeys: string | readonly string[]): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
-                for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
-                    delete namespaceValues[key]
-                }
-                this._save()
-            },
-        }
+    tabKeyValueStore(namespace: string, canAccess: () => boolean): KeyValueStore {
+        const values = new TabValues(`${this._stateKey}_tab_${namespace}`, () => this._tabStorage())
+        return createKeyValueStore({ values: () => values.values(), save: () => values.save(), canAccess })
+    }
+
+    private _tabStorage(): StorageLike | undefined {
+        return this._windowStorage ?? this._windowStorageFactory?.()
     }
 
     private _readPersistedState(): [read: boolean, state?: PersistedState] {
@@ -608,6 +573,24 @@ export class BrowserState {
         }
         const state = parseState(value)
         return state ? [true, state] : [false]
+    }
+
+    private _readSessionAuthority(): {
+        external: PersistedState | undefined
+        session: PersistedSession | undefined
+        lastActivityWriteTimestamp: number
+        adoptedAfterReset: boolean
+    } {
+        const [read, external] = this._readPersistedState()
+        const adopted = read && external !== undefined && persistedAuthorityWins(external, this._state)
+        const session = adopted ? external.session : this._state.session
+        return {
+            external,
+            session,
+            lastActivityWriteTimestamp:
+                adopted && session ? session.lastActivityTimestamp : this._lastActivityWriteTimestamp,
+            adoptedAfterReset: adopted && session !== undefined && this._pendingSessionReason === 'reset',
+        }
     }
 
     private _prepareWindow(rotated: boolean): {

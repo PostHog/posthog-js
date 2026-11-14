@@ -35,6 +35,9 @@ interface ConsentHarness {
     prepareTeardown(events: string[], projectToken: string): Promise<void>
     requests(): number
     remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
+    registerForSession(properties: Record<string, unknown>): Promise<void>
+    unregisterForSession(property: string): Promise<void>
+    delivered(): string | undefined
     reset(): Promise<void>
     session(): Promise<SessionContext | undefined>
     sessionChanges(): readonly string[]
@@ -197,6 +200,13 @@ window.consentHarness = {
         await posthog.dispose()
         return { config, canCapture }
     },
+    async registerForSession(properties) {
+        requireInstalledExtension((await client).analytics).registerForSession(properties)
+    },
+    async unregisterForSession(property) {
+        requireInstalledExtension((await client).analytics).unregisterForSession(property)
+    },
+    delivered: () => lastDelivery?.body,
     async reset() {
         requireInstalledExtension((await client).analytics).reset()
     },

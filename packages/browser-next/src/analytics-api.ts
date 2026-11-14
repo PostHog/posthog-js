@@ -33,6 +33,8 @@ export interface IAnalytics extends BrowserExtension {
     setInternalOrTestUser(): void
     register(properties: Record<string, unknown>): void
     registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void
+    registerForSession(properties: Record<string, unknown>): void
+    unregisterForSession(property: string): void
     unregister(property: string): void
     getProperty(property: string): unknown
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable

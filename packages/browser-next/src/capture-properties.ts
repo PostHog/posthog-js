@@ -3,6 +3,8 @@ import type { CaptureOptions } from '@posthog/browser-common'
 export interface CaptureProperties {
     message: Record<string, unknown>
     observed: Record<string, unknown>
+    /** Explicit caller and dynamic keys that session defaults cannot replace. */
+    overrides: ReadonlySet<string>
     uuid: string | undefined
     timestamp: Date | undefined
 }
@@ -32,8 +34,32 @@ export const snapshotCaptureProperties = (
     const timestamp = options.timestamp
     if (set) supplied['$set'] = set
     if (setOnce) supplied['$set_once'] = setOnce
-    const json = JSON.stringify({ ...registered, ...supplied })
+    const combined = { ...registered, ...supplied }
+    if (typeof combined.toJSON === 'function') delete combined.toJSON
+    const overrides = new Set(Object.keys(supplied))
+    const json = JSON.stringify(combined)
     const message = parseMessageProperties(json)
     const observed: Record<string, unknown> = JSON.parse(json)
-    return { message, observed, uuid, timestamp }
+    return { message, observed, overrides, uuid, timestamp }
 }
+
+/** Session values override persistent defaults, not explicit caller or dynamic values. */
+export const applySessionProperties = (snapshot: CaptureProperties, values: Record<string, unknown>): boolean => {
+    const entries = Object.entries(values).filter(([key]) => !snapshot.overrides.has(key))
+    if (entries.length === 0) return false
+    const session = Object.fromEntries(entries)
+    const message = parseMessageProperties(JSON.stringify(session))
+    for (const [key] of entries) delete snapshot.message[key]
+    snapshot.message = { ...snapshot.message, ...message }
+    snapshot.observed = { ...snapshot.observed, ...session }
+    return true
+}
+
+/** A session layer cannot shrink explicit caller values or protected SDK metadata. */
+export const unavoidableProperties = (
+    snapshot: CaptureProperties,
+    metadata: Record<string, unknown>
+): Record<string, unknown> => ({
+    ...Object.fromEntries(Object.entries(snapshot.message).filter(([key]) => snapshot.overrides.has(key))),
+    ...metadata,
+})

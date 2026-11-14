@@ -100,6 +100,14 @@ export const publicProductViews = async (posthog: IPostHog, internal: IPostHogIn
     internal.analytics?.registerOnce({ initial: true })
     internal.analytics?.unregister('source')
     const internalProperty: unknown = internal.analytics?.getProperty('initial')
+    acquired?.registerForSession({ flow: 'checkout' })
+    acquired?.unregisterForSession('flow')
+    posthog.analytics?.registerForSession({ step: 1 })
+    posthog.analytics?.unregisterForSession('step')
+    internal.analytics?.registerForSession({ source: 'internal' })
+    internal.analytics?.unregisterForSession('source')
+    // @ts-expect-error Session property keys are strings.
+    acquired?.unregisterForSession(42)
     void registered
     void acquiredProperty
     void internalProperty

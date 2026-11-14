@@ -72,7 +72,19 @@ analytics?.unregister('region')
 
 `register(properties)` merges JSON-serializable properties into analytics' Core-owned persistent storage. `registerOnce(properties, defaultValue = 'None')` adds missing keys or replaces existing values strictly equal to the sentinel; other existing values, including `false`, `0`, `''` and `null`, are retained. `getProperty(key)` returns an isolated stored value, or `undefined` for a missing key. Registration inputs and captured events are snapshotted, so later input or stored-property changes do not rewrite queued events.
 
-Persistent properties are overridden by dynamic event-property producers, then caller properties and capture options. SDK identity, group, session, library and person-processing metadata remains authoritative. Registration and removal only change local context, do not emit events, and remain available when capture consent is denied or person processing is disabled. Properties survive reload with persistent storage, until overwritten, unregistered or cleared by full `reset()`; `resetGroups()` retains them.
+Persistent properties are overridden by session properties, then dynamic event-property producers, then caller properties and capture options. SDK identity, group, session, library and person-processing metadata remains authoritative. Registration and removal only change local context, do not emit events, and remain available when capture consent is denied or person processing is disabled. Properties survive reload with persistent storage, until overwritten, unregistered or cleared by full `reset()`; `resetGroups()` retains them.
+
+## Session event properties
+
+```ts
+const analytics = await posthog.resolveExtension('analytics')
+analytics?.registerForSession({ checkoutFlow: 'express' })
+analytics?.unregisterForSession('checkoutFlow')
+```
+
+With default browser storage, session properties use Core-owned per-tab storage, surviving reloads in the same SDK session. Independent tabs are isolated; copied tabs inherit a snapshot and then diverge. With a custom `storage` adapter, `storage: false` or unavailable native session storage, properties remain in per-instance memory. They override persistent defaults, but dynamic producers, caller properties, capture options and protected SDK metadata take precedence.
+
+Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event or after the current session expires remain pending for the next admitted session. Registration does not extend session activity. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
 
 ## Migrating to analytics-owned operations
 
