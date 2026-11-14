@@ -1,5 +1,20 @@
 # @posthog/browser
 
+## 0.3.0
+
+### Minor Changes
+
+- [#5656](https://github.com/PostHog/posthog-js/pull/5656) [`54908e4`](https://github.com/PostHog/posthog-js/commit/54908e402abec6ad46c7a07e0b56b1585fec74f8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add persistent event properties through analytics `register`, `registerOnce`, `unregister`, and `getProperty`, with snapshot isolation and per-event override precedence.
+  (2026-11-14)
+
+- [#5657](https://github.com/PostHog/posthog-js/pull/5657) [`52e926e`](https://github.com/PostHog/posthog-js/commit/52e926e1b069600025b1adfa21758de1a3035298) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add tab-scoped session event properties through `registerForSession` and `unregisterForSession`, with reload persistence and scope transitions tied to admitted Core sessions.
+  (2026-11-14)
+
+### Patch Changes
+
+- [#5657](https://github.com/PostHog/posthog-js/pull/5657) [`52e926e`](https://github.com/PostHog/posthog-js/commit/52e926e1b069600025b1adfa21758de1a3035298) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Keep fresh session properties through expiry and omit root-level event serializer functions.
+  (2026-11-14)
+
 ## 0.2.0
 
 ### Minor Changes

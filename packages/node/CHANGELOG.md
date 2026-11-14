@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.73.1
+
+### Patch Changes
+
+- [#5676](https://github.com/PostHog/posthog-js/pull/5676) [`e8e850a`](https://github.com/PostHog/posthog-js/commit/e8e850af9ffbb8eb57cd3f86eed8fc379c90180a) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(node): `shutdown()` now also sends logs captured while its logs flush was in flight, instead of dropping them
+  (2026-11-14)
+
 ## 5.73.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.449.2
+
+### Patch Changes
+
+- [#5737](https://github.com/PostHog/posthog-js/pull/5737) [`9852049`](https://github.com/PostHog/posthog-js/commit/9852049ec29819e6ac5e3609077a2bdd458f2253) Thanks [@TueHaulund](https://github.com/TueHaulund)! - record: throttle scroll events per element, so a resting scroll offset is no longer dropped when another element scrolls in the same 100ms window (e.g. Silk sheets on Safari before 26.2, which has no `scrollend`).
+  (2026-11-14)
+
 ## 1.449.1
 
 ### Patch Changes
