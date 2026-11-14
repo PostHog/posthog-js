@@ -615,14 +615,17 @@ describe('redactPii', () => {
     )
   })
 
-  it('handles a long pathological string quickly (email pattern is not quadratic)', () => {
-    // A 100k-char run with an `@` but no valid TLD is the worst case for an
-    // unbounded email pattern. With bounded quantifiers this stays linear; a
-    // regression to `+` would blow the default test timeout instead.
+  // Oversized components distinguish finite quantifiers from an open-ended `+`.
+  it.each([
+    ['local part', `${'a'.repeat(65)}@example.com`, 'a[redacted]'],
+    ['domain', `a@${'a'.repeat(256)}.com`, `a@${'a'.repeat(256)}.com`],
+  ])('bounds the email %s', (_component, input, expected) => {
+    expect(redactPii(input)).toBe(expected)
+  })
+
+  it('leaves a long string without a valid email suffix unchanged', () => {
     const pathological = `${'a'.repeat(50_000)}@${'a'.repeat(50_000)}`
-    const start = Date.now()
     expect(redactPii(pathological)).toBe(pathological)
-    expect(Date.now() - start).toBeLessThan(1000)
   })
 
   it.each([
