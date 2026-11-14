@@ -158,6 +158,54 @@ Consent is checked before inspecting error properties or submitting exception da
 
 **Main-process limitations:** monitor-only observation sees rejections only when Node escalates them to an uncaught exception (`throw` mode without a host `unhandledRejection` handler, or `strict` mode). **Electron 42 defaults to warning-only rejections, so main-process rejections are not automatically captured in that default mode.** Host-handled rejections and non-escalating `warn`, `warn-with-error-code` or `none` modes are not automatically captured. No SDK rejection listener is installed, because it would change Node's default behavior. Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
 
+### React renderer (optional)
+
+React 18+ applications can use `@posthog/electron/react`. React is an optional peer dependency: main, preload and non-React renderers do not install or load it. Install React in your renderer app (and `@types/react` if using TypeScript).
+
+Pass an **already initialized Electron renderer client**, not a browser `posthog-js` client or a project token:
+
+```jsx
+import { createRoot } from 'react-dom/client'
+import { init } from '@posthog/electron/renderer'
+import {
+    PostHogProvider,
+    usePostHog,
+    useFeatureFlagEnabled,
+    useFeatureFlagVariantKey,
+    useFeatureFlagPayload,
+} from '@posthog/electron/react'
+
+const posthog = await init()
+
+function App() {
+    const client = usePostHog()
+    const enabled = useFeatureFlagEnabled('new-ui')
+    const variant = useFeatureFlagVariantKey('new-ui')
+    const payload = useFeatureFlagPayload('new-ui')
+
+    return (
+        <button
+            disabled={!enabled}
+            onClick={() =>
+                void client.capture('new_ui_clicked', { variant: variant ?? null, payload: payload ?? null })
+            }
+        >
+            Try the new UI
+        </button>
+    )
+}
+
+createRoot(document.getElementById('root')).render(
+    <PostHogProvider client={posthog}>
+        <App />
+    </PostHogProvider>
+)
+```
+
+Hooks follow the renderer's cached flag semantics: enabled is `boolean | undefined`, variant is `string | boolean | undefined`, and payload is JSON, `null` for a loaded empty payload, or `undefined` while unavailable. Handle loading/unknown values explicitly. Main broadcasts identity, consent and flag changes to every registered window; hooks update from that shared state without a separate browser SDK, identity, session or transport.
+
+Enabled/variant hooks report exposure **after commit**, through main's consent-aware, deduplicating tracker. Payload-only hooks do not report exposure. React 18 is required for stable external-store subscriptions. The provider only manages its subscriptions: unmounting or changing `client` does not dispose your client. Call `posthog.dispose()` yourself when the renderer no longer needs it, after unmounting its provider.
+
 ## Consent and storage
 
 - Capture is opted in by default; configure `defaultOptIn: false` for explicit opt-in. Call `optIn()`/`optOut()` from either process.

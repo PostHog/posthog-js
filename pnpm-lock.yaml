@@ -672,15 +672,33 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@testing-library/dom':
+        specifier: 'catalog:'
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.7(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/node':
         specifier: ^22.19.1
         version: 22.20.5
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ~19.2.0
+        version: 19.2.7(@types/react@19.2.17)
       electron:
         specifier: 42.4.0
         version: 42.4.0
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0
+      react:
+        specifier: 'catalog:'
+        version: 19.2.7
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.7(react@19.2.7)
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@7.0.2)
@@ -8865,6 +8883,11 @@ packages:
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
+
+  '@types/react-dom@19.2.7':
+    resolution: {integrity: sha512-I8bPpDLcHBv1qiIiXDCy71Rt8eQDKJP0sMSWJphDdAcdqiJ1sGpZamavoEIRZmYzjia9LuEb2HlYdDpmoENpvQ==}
+    peerDependencies:
+      '@types/react': ^19.2.0
 
   '@types/react-native@0.69.26':
     resolution: {integrity: sha512-K11OWz8SU3Eill/EUhma54qOeczUjIhTlV1Luv2BODawPsM8nCVJkWaAUCqJaMFrcIKUTH0KIYUzUjqWlRUNfw==}
@@ -28262,6 +28285,16 @@ snapshots:
       '@testing-library/dom': 8.20.1
       preact: 10.29.3
 
+  '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.7(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@babel/runtime': 7.29.10
+      '@testing-library/dom': 10.4.1
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+    optionalDependencies:
+      '@types/react': 19.2.17
+      '@types/react-dom': 19.2.7(@types/react@19.2.17)
+
   '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react@17.0.93)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
     dependencies:
       '@babel/runtime': 7.28.6
@@ -28560,6 +28593,10 @@ snapshots:
   '@types/query-selector-shadow-dom@1.0.4': {}
 
   '@types/range-parser@1.2.7': {}
+
+  '@types/react-dom@19.2.7(@types/react@19.2.17)':
+    dependencies:
+      '@types/react': 19.2.17
 
   '@types/react-native@0.69.26':
     dependencies:
