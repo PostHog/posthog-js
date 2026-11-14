@@ -1,0 +1,12 @@
+{
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "dist",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": ["ES2022", "DOM"],
+        "skipLibCheck": true
+    },
+    "include": ["src/**/*.ts", "tsdown.config.mts", "vitest.config.ts"]
+}

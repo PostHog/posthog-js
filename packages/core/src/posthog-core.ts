@@ -819,6 +819,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
+  protected getFlagsForContext(
+    ...args: Parameters<PostHogCoreStateless['getFlags']>
+  ): ReturnType<PostHogCoreStateless['getFlags']> {
+    return super.getFlags(...args)
+  }
+
   private async _flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
     const fetchConfig = options?.fetchConfig ?? false
@@ -842,7 +848,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
-        const result = await super.getFlags(
+        const result = await this.getFlagsForContext(
           distinctId,
           groups as PostHogGroupProperties,
           personProperties,

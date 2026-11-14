@@ -1686,6 +1686,10 @@ export abstract class PostHogCoreStateless {
     this._events.emit('flush', sentMessages)
   }
 
+  protected shouldRetainBatchOnError(error: unknown): boolean {
+    return error instanceof PostHogFetchNetworkError
+  }
+
   private async _flushRoute(route: string, sentMessages: any[]): Promise<void> {
     const queueKey = this.persistedQueueKeyForRoute(route)
     let queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
@@ -1757,7 +1761,7 @@ export abstract class PostHogCoreStateless {
 
         // depending on the error type, eg a malformed JSON or broken queue, it'll always return an error
         // and this will be an endless loop, in this case, if the error isn't a network issue, we always remove the items from the queue
-        if (!(err instanceof PostHogFetchNetworkError)) {
+        if (!this.shouldRetainBatchOnError(err)) {
           await persistQueueChange()
         }
         this._events.emit('error', err)

@@ -144,6 +144,7 @@
         {
             "files": [
                 "packages/core/**",
+                "packages/electron/**",
                 "packages/mcp/**",
                 "packages/nextjs-config/**",
                 "packages/nuxt/**",
