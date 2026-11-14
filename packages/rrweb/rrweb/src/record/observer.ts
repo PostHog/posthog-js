@@ -1513,6 +1513,19 @@ function initStyleDeclarationObserver(
   });
 }
 
+// Not `instanceof HTMLMediaElement`: that is false for an element in another
+// realm, such as a same-origin iframe.
+function isMediaElement(
+  target: EventTarget | null,
+): target is HTMLMediaElement {
+  const tagName = (target as Partial<Element> | null)?.tagName;
+  if (typeof tagName !== 'string') {
+    return false;
+  }
+  const tagNameLower = toLowerCase(tagName);
+  return tagNameLower === 'video' || tagNameLower === 'audio';
+}
+
 function initMediaInteractionObserver({
   mediaInteractionCb,
   blockClass,
@@ -1526,16 +1539,15 @@ function initMediaInteractionObserver({
       callbackWrapper((event: Event) => {
         const target = getEventTarget(event);
         if (
-          !target ||
-          isBlocked(target as Node, blockClass, blockSelector, true)
+          !isMediaElement(target) ||
+          isBlocked(target, blockClass, blockSelector, true)
         ) {
           return;
         }
-        const { currentTime, volume, muted, playbackRate, loop } =
-          target as HTMLMediaElement;
+        const { currentTime, volume, muted, playbackRate, loop } = target;
         mediaInteractionCb({
           type,
-          id: mirror.getId(target as Node),
+          id: mirror.getId(target),
           currentTime,
           volume,
           muted,
