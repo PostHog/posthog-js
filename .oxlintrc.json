@@ -144,6 +144,7 @@
         {
             "files": [
                 "packages/core/**",
+                "packages/docusaurus/**",
                 "packages/mcp/**",
                 "packages/nextjs-config/**",
                 "packages/nuxt/**",
@@ -177,7 +178,7 @@
             }
         },
         {
-            "files": ["**/*.cjs"],
+            "files": ["**/*.cjs", "packages/docusaurus/src/index.js", "packages/docusaurus/test/**"],
             "rules": {
                 "typescript/no-require-imports": "off"
             }
