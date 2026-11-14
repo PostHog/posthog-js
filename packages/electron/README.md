@@ -2,7 +2,7 @@
 
 Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge.
 
-This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, flush and shutdown. **Session replay, automatic exception interception, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
+This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
 **Release status:** private and unpublished until the final alpha-release PR. Use local tarballs while developing; merging this PR does not enable npm publication.
 
@@ -138,6 +138,26 @@ Enabling autocapture requests only project autocapture config, through main's ex
 
 Main options `disableRemoteConfig: true` explicitly permit local-only autocapture when no cached project kill switch exists; `disableRemoteFeatureFlags` **does not** bypass the project config gate. `remoteConfigRequestTimeoutMs` bounds config fetches. Main `disabled: true` always prevents autocapture. No full browser SDK, recorder, DOM snapshotting or remotely loaded executable code is included.
 
+## JavaScript errors
+
+`captureException(error, properties?)` reports a handled error from main or renderer using core's stack parser and the normal shared identity, consent, queue and transport. Manual reports retain `mechanism.handled: true`.
+
+Automatic capture is **off by default in both processes**. Enable it independently where needed:
+
+```js
+// Main
+const posthog = init({ projectToken: '<ph_project_token>', enableExceptionAutocapture: true })
+
+// Renderer (from @posthog/electron/renderer)
+const posthog = await init({ enableExceptionAutocapture: true })
+```
+
+Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled. Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
+
+Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
+
+**Main-process limitations:** monitor-only observation sees rejections only when Node escalates them to an uncaught exception (`throw` mode without a host `unhandledRejection` handler, or `strict` mode). **Electron 42 defaults to warning-only rejections, so main-process rejections are not automatically captured in that default mode.** Host-handled rejections and non-escalating `warn`, `warn-with-error-code` or `none` modes are not automatically captured. No SDK rejection listener is installed, because it would change Node's default behavior. Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
+
 ## Consent and storage
 
 - Capture is opted in by default; configure `defaultOptIn: false` for explicit opt-in. Call `optIn()`/`optOut()` from either process.
@@ -176,6 +196,8 @@ node packages/electron/node_modules/electron/install.js
 pnpm --filter @posthog/electron test:autocapture
 pnpm --filter @posthog/electron test:transport
 ```
+
+After building, `pnpm --filter @posthog/electron test:errors` packs and installs local SDK tarballs into an isolated consumer and exercises actual main/renderer throws and rejections against a loopback mock receiver in sandboxed Electron. It compares application-handler behavior with autocapture disabled/enabled, tests consent/dispose/reinit, and separately compares native Node fatal exits and warning modes. It needs a runnable Electron binary/display; `ELECTRON_BINARY` can override the installed binary. Fatal Electron termination/delivery is not exercised or guaranteed.
 
 For loopback subprocess delivery/network tests and their real-versus-synthetic coverage limits, see [delivery tests](test/delivery/README.md).
 

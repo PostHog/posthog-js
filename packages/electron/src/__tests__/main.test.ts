@@ -360,6 +360,136 @@ describe.each(['main', 'renderer'] as const)('%s public contracts through the ma
 })
 
 describe('main Electron client', () => {
+    it('opts in to monitor-only exception capture without changing host error handlers', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const uncaught = process.rawListeners('uncaughtException')
+        const rejections = process.rawListeners('unhandledRejection')
+        const owner = await start({ enableExceptionAutocapture: true })
+        await owner.ready()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        // Unit dispatch only; the installed-package fixture raises real asynchronous throws/rejections.
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new TypeError('main throw'),
+            'uncaughtException'
+        )
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new RangeError('main rejection'),
+            'unhandledRejection'
+        )
+        await owner.captureException(new Error('manual'))
+        await owner.flush()
+        expect(batches).toHaveLength(3)
+        expect(batches[0]).toMatchObject({
+            event: '$exception',
+            properties: {
+                $electron_process: 'main',
+                $exception_source: 'node.process_uncaught_exception',
+                $exception_list: [
+                    {
+                        type: 'TypeError',
+                        value: 'main throw',
+                        mechanism: { type: 'onuncaughtexception', handled: false },
+                    },
+                ],
+            },
+        })
+        expect(batches[0].properties.$exception_list[0].stacktrace.frames.length).toBeGreaterThan(0)
+        expect(batches[1]).toMatchObject({
+            properties: {
+                $exception_source: 'node.process_unhandled_rejection',
+                $exception_list: [{ mechanism: { type: 'onunhandledrejection', handled: false } }],
+            },
+        })
+        expect(batches[2]).toMatchObject({
+            properties: { $exception_list: [{ mechanism: { type: 'generic', handled: true } }] },
+        })
+        expect(batches[2].properties).not.toHaveProperty('$exception_source')
+        await owner.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        const replacement = await start({ enableExceptionAutocapture: true })
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        await replacement.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+    })
+
+    it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const owner = await start()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        await owner.shutdown(100)
+        const optedOut = await start({ enableExceptionAutocapture: true, defaultOptIn: false })
+        await optedOut.optOut()
+        const getter = vi.fn(() => {
+            throw new Error('private getter')
+        })
+        const secret = Object.defineProperty(new Error(), 'message', { get: getter })
+        const persist = vi.spyOn(ElectronStorage.prototype, 'flush')
+        persist.mockClear()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', secret, 'uncaughtException')
+        await optedOut.captureException(secret)
+        await Promise.resolve()
+        expect(getter).not.toHaveBeenCalled()
+        expect(persist).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+        await optedOut.optIn()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', new Error('allowed'), 'uncaughtException')
+        await optedOut.flush()
+        expect(batches).toHaveLength(1)
+    })
+
+    it('synchronizes disabled state before renderer exception inspection or IPC without changing consent', async () => {
+        const owner = await start({ disabled: true, enableExceptionAutocapture: true })
+        const window = renderer(owner, 1)
+        const request = vi.fn((request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(window.event, request))
+        const api = new RendererPostHog({ request, subscribe: () => () => {} }, { enableExceptionAutocapture: true })
+        const host = vi.fn()
+        globalThis.window.addEventListener('error', host)
+        try {
+            await api.ready()
+            const getter = vi.fn(() => new Error('disabled private error'))
+            const event = new ErrorEvent('error')
+            Object.defineProperty(event, 'error', { get: getter })
+            globalThis.window.dispatchEvent(event)
+            await api.captureException(new Error('disabled manual error'))
+            await Promise.resolve()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello'])
+            expect(getter).not.toHaveBeenCalled()
+            expect(host).toHaveBeenCalledTimes(1)
+            expect(api.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(owner.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(api.hasOptedOutCapturing()).toBe(false)
+            await api.optIn()
+            await api.captureException(new Error('still disabled'))
+            await api.flush()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello', 'optIn', 'flush'])
+            expect(batches).toEqual([])
+        } finally {
+            api.dispose()
+            globalThis.window.removeEventListener('error', host)
+        }
+    })
+
+    it('checks consent again when queued exception work executes', async () => {
+        const owner = await start({ enableExceptionAutocapture: true })
+        const getter = vi.fn(() => {
+            throw new Error('must not inspect')
+        })
+        const optOut = owner.optOut()
+        const capture = owner.captureException(Object.defineProperty({}, 'message', { get: getter }))
+        await optOut
+        await expect(capture).rejects.toThrow('Stale PostHog identity')
+        expect(getter).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+    })
+
     it.each(['screen', 'set', 'setOnce'] as const)(
         'snapshots ready main %s properties at invocation',
         async (operation) => {
@@ -591,7 +721,6 @@ describe('main Electron client', () => {
         expect(results.map(({ payload }) => payload)).toEqual(Array.from({ length: count }, (_, index) => ({ index })))
         expect(payloadParses).toBeLessThanOrEqual(3 * count)
     })
-
     it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
         const captures: Promise<void>[] = []
         const onError = vi.fn((error: unknown) => {
@@ -650,7 +779,6 @@ describe('main Electron client', () => {
         await owner.reloadFeatureFlags()
         expect(onError).toHaveBeenCalledTimes(4)
     })
-
     it.each(['screen', 'set', 'setOnce'] as const)('does not inspect opted-out %s properties', async (operation) => {
         const owner = await start()
         await owner.optOut()
@@ -1025,7 +1153,6 @@ describe('main Electron client', () => {
         expect(await page.send({ type: 'hello' })).toMatchObject({ ok: true })
         expect(await page.send({ type: 'capture', event: 'after-new-handshake' })).toMatchObject({ ok: true })
     })
-
     it('counts cold start and aggregate focus transitions once across windows', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
         const owner = await start({ captureAppLifecycleEvents: true })
