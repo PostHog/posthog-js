@@ -25,7 +25,6 @@
         "fixtures/**/*",
         "playwright/**/*",
         "playwright.config.ts",
-        "snippet/**/*",
         "playwright.snippet.config.ts"
     ]
 }

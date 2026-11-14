@@ -2,11 +2,11 @@
 import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
-import { autocapture } from '../src/autocapture'
-import { surveys } from '../src/surveys'
-import type { SurveysExtension } from '../src/surveys-internal'
-import type { Survey } from '../src/surveys-options'
-import type { IPostHog, PostHogOptions } from '../src/types'
+import { autocapture } from '../src/products/autocapture/autocapture'
+import { surveys } from '../src/products/surveys/surveys'
+import type { SurveysExtension } from '../src/products/surveys/surveys-internal'
+import type { Survey } from '../src/products/surveys/surveys-options'
+import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { MemoryStorage } from './helpers'
 
 const definition: Survey = {

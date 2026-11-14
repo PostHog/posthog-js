@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { stdout } from 'node:process'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import type { Inspection } from '@posthog-tooling/sdk-mock-server'
-import type { IPostHog } from '../src/types'
+import type { IPostHog } from '../src/core/types'
 
 declare global {
     interface Window {

@@ -1,8 +1,8 @@
-import { createPostHog } from '../src/index'
-import { parseSnippetOptions, startSnippet } from '../snippet/runtime'
-import type { IPostHog } from '../src/types'
+import { createPostHog } from '../src/composition/npm/index'
+import { parseSnippetOptions, startSnippet } from '../src/composition/script/runtime'
+import type { IPostHog } from '../src/core/types'
 
-vi.mock('../src/index', () => ({ createPostHog: vi.fn() }))
+vi.mock('../src/composition/npm/index', () => ({ createPostHog: vi.fn() }))
 const create = vi.mocked(createPostHog)
 const url = 'https://cdn.example/nested/script.js?projectToken=phc_fixture'
 const target = () => new EventTarget() as unknown as Window & { posthog?: unknown }

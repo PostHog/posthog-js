@@ -3,8 +3,8 @@ import {
     shouldProcessPerson,
     snapshotPersonProfileMode,
     snapshotPersonProperties,
-} from '../src/person-processing'
-import type { PersonProfileMode } from '../src/analytics-options'
+} from '../src/products/analytics/properties/person-processing'
+import type { PersonProfileMode } from '../src/products/analytics/analytics-options'
 
 describe('person processing policy', () => {
     it.each([undefined, null, '', 'invalid', 'identified_only'])(

@@ -1,7 +1,7 @@
 import type { ExtensionToken } from '@posthog/browser-common'
-import type { BrowserExtension, IPostHogInternal } from '../src/browser-client'
-import { createPostHogCore } from '../src/posthog'
-import { createPostHog } from '../src/core'
+import type { BrowserExtension, IPostHogInternal } from '../src/core/context/browser-client'
+import { createPostHogCore } from '../src/core/posthog'
+import { createPostHog } from '../src/composition/npm/core'
 import { localRemoteConfig, MemoryStorage } from './helpers'
 
 const options = {

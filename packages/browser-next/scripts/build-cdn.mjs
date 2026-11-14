@@ -9,7 +9,7 @@ const compiler = rspack({
     mode: 'production',
     context: root,
     target: ['web', 'es2022'],
-    entry: { script: './snippet/entry.ts' },
+    entry: { script: './src/composition/script/entry.ts' },
     devtool: 'source-map',
     output: {
         path: `${root}dist-cdn`,

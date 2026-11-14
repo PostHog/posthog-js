@@ -1,10 +1,10 @@
 import { requireInstalledExtension } from '../tests/helpers'
-import { createPostHog } from '../src'
-import { surveys } from '../src/surveys'
-import { analytics } from '../src/analytics'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import type { IPostHog } from '../src/types'
-import type { Survey } from '../src/surveys-options'
+import { createPostHog } from '../src/composition/npm'
+import { surveys } from '../src/products/surveys/surveys'
+import { analytics } from '../src/products/analytics/analytics'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import type { IPostHog } from '../src/core/types'
+import type { Survey } from '../src/products/surveys/surveys-options'
 
 const survey: Survey = {
     id: 'browser-survey',

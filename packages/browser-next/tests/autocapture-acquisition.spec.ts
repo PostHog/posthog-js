@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createPostHog } from '../src'
+import { createPostHog } from '../src/composition/npm'
 import { localRemoteConfig, requireInstalledExtension } from './helpers'
 
 const loading = vi.hoisted(() => {
@@ -14,7 +14,7 @@ const loading = vi.hoisted(() => {
     return { pending, requested, release: () => release(), started: () => started() }
 })
 
-vi.mock('../src/automatic-analytics', async (importOriginal) => {
+vi.mock('../src/products/analytics/automatic-analytics', async (importOriginal) => {
     loading.started()
     await loading.pending
     return importOriginal()

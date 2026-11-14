@@ -1,10 +1,10 @@
-import type { CaptureOptions, IPostHogInternal } from '../src/core'
-import { createPostHog } from '../src/core'
-import { analytics } from '../src/analytics'
-import { EventBuffer } from '../src/event-buffer'
-import { flags } from '../src/flags'
-import type { FlagsExtension } from '../src/flags-internal'
-import { BrowserState } from '../src/state'
+import type { CaptureOptions, IPostHogInternal } from '../src/composition/npm/core'
+import { createPostHog } from '../src/composition/npm/core'
+import { analytics } from '../src/products/analytics/analytics'
+import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
+import { flags } from '../src/products/flags/flags'
+import type { FlagsExtension } from '../src/products/flags/flags-internal'
+import { BrowserState } from '../src/core/state/state'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []

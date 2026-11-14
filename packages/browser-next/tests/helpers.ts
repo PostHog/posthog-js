@@ -1,7 +1,7 @@
-import { createPostHog as createCorePostHog } from '../src/core'
-import { createPostHog as createRootPostHog } from '../src'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import type { BrowserFetch, CorePostHogOptions, PostHogOptions, RemoteConfig, StorageLike } from '../src/types'
+import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
+import { createPostHog as createRootPostHog } from '../src/composition/npm'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import type { BrowserFetch, CorePostHogOptions, PostHogOptions, RemoteConfig, StorageLike } from '../src/core/types'
 
 /** Explicit buffer-only composition for state tests that do not exercise delivery or product selection. */
 export const withBufferedAnalytics = (options: PostHogOptions): PostHogOptions => {

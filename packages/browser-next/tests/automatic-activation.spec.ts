@@ -1,6 +1,6 @@
-import type { BrowserExtension } from '../src/browser-client'
-import type { IPostHog, PostHogOptions, RemoteConfig } from '../src/types'
-import { createPostHog as createCore } from '../src/core'
+import type { BrowserExtension } from '../src/core/context/browser-client'
+import type { IPostHog, PostHogOptions, RemoteConfig } from '../src/core/types'
+import { createPostHog as createCore } from '../src/composition/npm/core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '@posthog/browser-common/constants'
 import { SURVEYS } from '@posthog/browser-common/surveys-config'
 import { MemoryStorage, localRemoteConfig } from './helpers'
@@ -26,7 +26,7 @@ const inactive: RemoteConfig = {
 const products = [
     {
         name: 'logs',
-        module: '../src/logs',
+        module: '../src/products/logs/logs',
         factory: 'logs',
         key: 'consoleCaptureEnabled',
         cached: true,
@@ -34,7 +34,7 @@ const products = [
     },
     {
         name: 'surveys',
-        module: '../src/automatic-surveys',
+        module: '../src/products/surveys/automatic-surveys',
         factory: 'surveys',
         key: SURVEYS,
         cached: [{ id: 'cached' }],
@@ -42,7 +42,7 @@ const products = [
     },
     {
         name: 'autocapture',
-        module: '../src/autocapture',
+        module: '../src/products/autocapture/autocapture',
         factory: 'autocapture',
         key: AUTOCAPTURE_DISABLED_SERVER_SIDE,
         cached: false,
@@ -68,7 +68,7 @@ for (const product of products) {
             return { extension, imported }
         }
         const create = async (options: Partial<PostHogOptions>) => {
-            const { createPostHog } = await import('../src')
+            const { createPostHog } = await import('../src/composition/npm')
             const client = await createPostHog({ ...base, [product.name]: undefined, ...options })
             clients.push(client)
             return client

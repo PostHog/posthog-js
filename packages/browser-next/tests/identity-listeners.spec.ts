@@ -1,6 +1,6 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
-import type { IPostHogInternal, GroupInfo, IdentifyInfo, IPostHog } from '../src/core'
+import type { IPostHogInternal, GroupInfo, IdentifyInfo, IPostHog } from '../src/composition/npm/core'
 import { localRemoteConfig } from './helpers'
 
 const clients: IPostHog[] = []

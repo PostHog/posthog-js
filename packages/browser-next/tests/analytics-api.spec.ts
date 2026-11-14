@@ -1,8 +1,8 @@
 import { requireInstalledExtension } from './helpers'
-import { createPostHog } from '../src/core'
-import { BrowserState } from '../src/state'
-import { EventBuffer } from '../src/event-buffer'
-import { analytics } from '../src/analytics'
+import { createPostHog } from '../src/composition/npm/core'
+import { BrowserState } from '../src/core/state/state'
+import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
+import { analytics } from '../src/products/analytics/analytics'
 import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
 
 const options = {

@@ -1,6 +1,6 @@
-import { analytics, type AnalyticsOptions } from '../src/analytics'
-import { BrowserState } from '../src/state'
-import { createPostHog } from '../src/core'
+import { analytics, type AnalyticsOptions } from '../src/products/analytics/analytics'
+import { BrowserState } from '../src/core/state/state'
+import { createPostHog } from '../src/composition/npm/core'
 import { createFetch, localRemoteConfig, MemoryStorage, requireInstalledExtension, type SentRequest } from './helpers'
 
 const options = {
