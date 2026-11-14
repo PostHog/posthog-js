@@ -69,6 +69,8 @@ async function run() {
         flushInterval: 0,
         flushAt: 1000,
         fetchRetryCount: 0,
+        // Longer than the utility deadline, so the slow-flush case is valid owner work, not a failure.
+        requestTimeout: 20_000,
         disableCompression: true,
     })
     await owner.ready()
@@ -121,6 +123,30 @@ async function run() {
     )
     assert.equal(events.find((event) => event.event === 'after-reset').distinct_id, owner.getDistinctId())
 
+    // A valid owner flush slower than the utility deadline rejects only that call; the
+    // connection stays usable and the owner still completes the original delivery.
+    await owner.capture('slow-owner-work')
+    const slowStarted = new Promise((resolve) => {
+        networkStarted = resolve
+    })
+    const slow = utility.command('slowFlush')
+    await slowStarted
+    const slowResponse = hanging
+    const slowDelivered = new Promise((resolve) =>
+        setTimeout(() => {
+            slowResponse.end('{}')
+            resolve()
+        }, 11_000)
+    )
+    assert.equal((await slow).error, undefined)
+    // Wait for the owner's original slow delivery rather than racing a second flush against it.
+    await slowDelivered
+    await owner.flush()
+    assert.equal(
+        events.some((event) => event.event === 'after-slow-flush'),
+        true
+    )
+
     // A real in-flight flush rejects in the child when main revokes its registration.
     await owner.capture('pending-flush')
     const started = new Promise((resolve) => {
@@ -164,6 +190,7 @@ async function run() {
                 'handled-exception',
                 'flag-dedupe',
                 'reset',
+                'slow-flush-keeps-connection',
                 'pending-close-rejection',
                 'unexpected-exit',
                 'replacement-source',

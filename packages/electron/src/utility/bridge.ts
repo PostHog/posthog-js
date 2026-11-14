@@ -70,10 +70,14 @@ export function createUtilityBridge(port: ParentPort): Bridge {
             await connected
             if (closed) throw new Error('PostHog utility connection closed')
             return new Promise<Response>((resolve, reject) => {
-                const timeout = setTimeout(
-                    () => close(new Error('PostHog utility request timed out')),
-                    UTILITY_TIMEOUT_MS
-                )
+                // Stop waiting, but keep the authenticated channel: the owner may still finish this work
+                // (for example a long multi-batch flush), and later requests must keep working.
+                // Its late response is ignored because it is no longer pending.
+                const timeout = setTimeout(() => {
+                    if (pending.get(request.sequence)?.timer !== timeout) return
+                    pending.delete(request.sequence)
+                    reject(new Error('PostHog utility request timed out'))
+                }, UTILITY_TIMEOUT_MS)
                 pending.set(request.sequence, { resolve, reject, timer: timeout })
                 try {
                     const value = envelope({ kind: 'request', token, request })

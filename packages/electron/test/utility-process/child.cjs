@@ -59,6 +59,18 @@ async function run() {
                     client.getFeatureFlag('test')
                     await client.flush()
                     break
+                case 'slowFlush': {
+                    let timedOut = false
+                    try {
+                        await client.flush()
+                    } catch (error) {
+                        assert.match(error.message, /timed out/)
+                        timedOut = true
+                    }
+                    assert.equal(timedOut, true)
+                    await client.capture('after-slow-flush')
+                    break
+                }
                 case 'pending':
                     port.postMessage({ fixture: 'pending' })
                     await client.flush()
