@@ -14,6 +14,8 @@ const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/em
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
 const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
 const PREFERENCES_URL = 'https://us.posthog.com/api/projects/@current/messaging/preferences/'
+const CANCEL_URL = `${STATUS_URL}cancel/`
+const LIST_URL = 'https://us.posthog.com/api/projects/@current/messaging/emails/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -48,6 +50,7 @@ const SEND_FIELDS = new Set([
   'reply_to',
   'capture_engagement',
   'distinct_id',
+  'scheduled_at',
   'to',
 ])
 
@@ -164,7 +167,7 @@ describe('emails', () => {
     })
 
     expect(error).toBeNull()
-    expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+    expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [], status: 'queued', scheduledAt: null })
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, options] = fetch.mock.calls[0]
     expect(url).toBe(SEND_URL)
@@ -1336,6 +1339,8 @@ describe('emails', () => {
       id: 'msg_1',
       replayed: true,
       warnings: [{ code: 'template_superseded', message: 'Newer.', fix: 'Upload.' }],
+      status: 'queued',
+      scheduledAt: null,
     })
   })
 
@@ -1441,12 +1446,8 @@ describe('emails', () => {
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
       ['template data on a code send', { ...CODE_SEND, templateData: { name: 'Jane' } }, 'templateData'],
-      [
-        "Resend's scheduledAt on the template form",
-        { templateId: TEMPLATE_ID, scheduledAt: 'in 1 hour' },
-        'scheduledAt',
-      ],
-      ["Resend's scheduledAt on a code send", { ...CODE_SEND, scheduledAt: 'in 1 hour' }, 'scheduledAt'],
+      ["Resend's tags on the template form", { templateId: TEMPLATE_ID, tags: [{ name: 'a', value: 'b' }] }, 'tags'],
+      ["Resend's tags on a code send", { ...CODE_SEND, tags: [{ name: 'a', value: 'b' }] }, 'tags'],
     ])('refuses %s before sending', async (_name, form, field) => {
       const { data, error } = await sendForm(form)
 
@@ -1540,12 +1541,7 @@ describe('emails', () => {
         'A send with templateKey takes its content from your code.',
         'Remove templateData, or send a template made in PostHog with templateId.',
       ],
-      [
-        'a field no form takes',
-        { ...CODE_SEND, scheduledAt: 'in 1 hour' },
-        undefined,
-        'Remove scheduledAt and send again.',
-      ],
+      ['a field no form takes', { ...CODE_SEND, tags: [] }, undefined, 'Remove tags and send again.'],
     ])('explains why it refuses %s and how to send it', async (_name, form, why, fix) => {
       const { error } = await sendForm(form)
 
@@ -1566,6 +1562,820 @@ describe('emails', () => {
       expect(fetch).toHaveBeenCalledTimes(requests)
       expect(error?.code ?? null).toBe(requests ? null : 'invalid_form')
     })
+  })
+
+  describe('scheduled sends', () => {
+    const scheduled = (fields: Record<string, unknown> = {}): Reply =>
+      accepted({ status: 'scheduled', scheduled_at: '2026-12-01T09:00:00Z', ...fields })
+
+    it.each([
+      ['a Date as UTC', new Date('2026-12-01T10:00:00+01:00'), '2026-12-01T09:00:00.000Z'],
+      ['a string with Z as given', '2026-12-01T09:00:00Z', '2026-12-01T09:00:00Z'],
+      ['a string with an offset as given', '2026-12-01T10:00:00.250+01:00', '2026-12-01T10:00:00.250+01:00'],
+    ])('schedules a template send with %s', async (_name, scheduledAt, sent) => {
+      replies = [scheduled()]
+
+      const { data, error } = await send({ scheduledAt })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        id: 'msg_1',
+        replayed: false,
+        warnings: [],
+        status: 'scheduled',
+        scheduledAt: '2026-12-01T09:00:00Z',
+      })
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+        template_id: TEMPLATE_ID,
+        message_data: {},
+        to: 'user@example.com',
+        scheduled_at: sent,
+      })
+    })
+
+    it('schedules a send of content from code', async () => {
+      const inbox = deliverToInbox()
+
+      const { error } = await posthog.emails.send({
+        to: 'user@example.com',
+        templateKey: 'trial-ending',
+        subject: 'Your trial ends soon',
+        text: 'Your trial ends in 3 days.',
+        scheduledAt: '2026-12-01T09:00:00Z',
+      })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ template_key: 'trial-ending', scheduled_at: '2026-12-01T09:00:00Z' }),
+      ])
+    })
+
+    it('reads a time at or before now as sent now', async () => {
+      replies = [accepted({ status: 'queued', scheduled_at: null })]
+
+      const { data } = await send({ scheduledAt: '2020-01-01T00:00:00Z' })
+
+      expect(data).toMatchObject({ status: 'queued', scheduledAt: null, warnings: [] })
+    })
+
+    it('warns when a PostHog from before scheduled sends sent the email now', async () => {
+      replies = [accepted()]
+
+      const { data, error } = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+
+      expect(error).toBeNull()
+      expect(data).toMatchObject({
+        status: 'queued',
+        scheduledAt: null,
+        warnings: [expect.objectContaining({ code: 'scheduling_unsupported' })],
+      })
+    })
+
+    it("keeps each send's scheduling warning its own when a caller changes one", async () => {
+      replies = [accepted(), accepted()]
+
+      const first = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+      Object.assign(first.data!.warnings[0], { code: 'changed', message: 'changed', fix: 'changed' })
+      const second = await send({ scheduledAt: '2026-12-01T09:00:00Z' })
+
+      expect(second.data?.warnings).toEqual([
+        {
+          code: 'scheduling_unsupported',
+          message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
+          fix: 'Update PostHog before you schedule emails with it.',
+        },
+      ])
+    })
+
+    it('does not warn about scheduling a send that had no time', async () => {
+      replies = [accepted()]
+
+      const { data } = await send()
+
+      expect(data?.warnings).toEqual([])
+    })
+
+    it.each([
+      ['a time without an offset', '2026-12-01T09:00:00'],
+      ['a date without a time', '2026-12-01'],
+      ["a time in words, as Resend's API takes", 'in 1 hour'],
+      ['a month that does not exist', '2026-13-01T09:00:00Z'],
+      ['a day that does not exist', '2026-02-30T09:00:00Z'],
+      ['an hour that does not exist', '2026-12-01T99:00:00Z'],
+      ['a minute that does not exist', '2026-12-01T09:60:00Z'],
+      ['a second that does not exist', '2026-12-01T09:00:61Z'],
+      ['an offset that does not exist', '2026-12-01T09:00:00+99:99'],
+      ['an invalid Date', new Date('nope')],
+      ['a timestamp in milliseconds', 1_796_115_600_000],
+      ['null', null],
+    ])('refuses %s before sending', async (_name, scheduledAt) => {
+      const { data, error } = await send({ scheduledAt })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_scheduled_at', name: 'validation_error', field: 'scheduledAt' })
+      expect(error?.message).toContain('Nothing was sent.')
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('keeps the code PostHog answers for a time more than 30 days ahead', async () => {
+      replies = [
+        {
+          status: 400,
+          body: {
+            type: 'validation_error',
+            code: 'invalid_scheduled_at',
+            detail: 'scheduled_at is too far ahead.',
+            attr: 'scheduled_at',
+            why: 'scheduled_at is more than 30 days after the email was created.',
+          },
+        },
+      ]
+
+      const { error } = await send({ scheduledAt: '2027-06-01T09:00:00Z' })
+
+      expect(error).toMatchObject({ code: 'invalid_scheduled_at', name: 'validation_error', statusCode: 400 })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('update', () => {
+    const moved = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: '2026-12-02T09:00:00Z', ...fields },
+    })
+
+    const update = (options: Record<string, unknown>): ReturnType<PostHog['emails']['update']> =>
+      posthog.emails.update(options as unknown as Parameters<PostHog['emails']['update']>[0])
+
+    it('moves a scheduled email to a new time', async () => {
+      replies = [moved()]
+
+      const { data, error } = await posthog.emails.update({
+        id: MESSAGE_ID.toUpperCase(),
+        scheduledAt: new Date('2026-12-02T09:00:00Z'),
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: MESSAGE_ID, status: 'scheduled', scheduledAt: '2026-12-02T09:00:00Z' })
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(STATUS_URL)
+      expect(options.method).toBe('PATCH')
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+      expect(JSON.parse(options.body)).toEqual({ scheduled_at: '2026-12-02T09:00:00.000Z' })
+    })
+
+    it.each([
+      ['a network error', new TypeError('fetch failed')],
+      ['503', rejected(503)],
+      ['429 throttled', rejected(429, 'throttled')],
+    ])('retries %s, because the same move twice ends the same', async (_name, firstReply) => {
+      replies = [firstReply, moved()]
+
+      const pending = update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.status).toBe('scheduled')
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('reports already_sending when the retry of a move to now finds the email going out', async () => {
+      replies = [new TypeError('fetch failed'), rejected(409, 'already_sending')]
+
+      const pending = update({ id: MESSAGE_ID, scheduledAt: new Date() })
+      await vi.runAllTimersAsync()
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'already_sending', statusCode: 409 })
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('runs a second move of the same email after the first move and its retries', async () => {
+      replies = [
+        rejected(429, 'throttled'),
+        moved({ scheduled_at: '2026-12-02T09:00:00Z' }),
+        moved({ scheduled_at: '2026-12-03T09:00:00Z' }),
+      ]
+
+      const first = update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+      const second = update({ id: MESSAGE_ID.toUpperCase(), scheduledAt: '2026-12-03T09:00:00Z' })
+      await vi.runAllTimersAsync()
+      const [firstResult, secondResult] = await Promise.all([first, second])
+
+      expect(fetch.mock.calls.map(([, options]) => JSON.parse(options.body).scheduled_at)).toEqual([
+        '2026-12-02T09:00:00Z',
+        '2026-12-02T09:00:00Z',
+        '2026-12-03T09:00:00Z',
+      ])
+      expect(firstResult.data?.scheduledAt).toBe('2026-12-02T09:00:00Z')
+      expect(secondResult.data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
+    })
+
+    describe("after a move that wasn't confirmed", () => {
+      const FIRST_TIME = '2026-12-02T09:00:00Z'
+      const OTHER_TIME = '2026-12-03T09:00:00Z'
+      let timeAtPostHog: string
+      let reachPostHogLate: () => void
+
+      beforeEach(() => {
+        makeClient({ emailRequestTimeoutMs: 1_000, emailRequestMaxRetries: 0 })
+        timeAtPostHog = '2026-12-01T09:00:00Z'
+        fetch.mockImplementation(async (_url: string, options: { body: string }) => {
+          const time = JSON.parse(options.body).scheduled_at
+          if (fetch.mock.calls.length === 1) {
+            // PostHog applies the first move only after the client gave up on it.
+            reachPostHogLate = () => (timeAtPostHog = time)
+            return new Promise(() => {})
+          }
+          timeAtPostHog = time
+          return fakeReply(200, { id: MESSAGE_ID, status: 'scheduled', scheduled_at: time })
+        })
+      })
+
+      const moveWithoutAnswer = async (): Promise<void> => {
+        const pending = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect((await pending).error?.code).toBe('network_error')
+      }
+
+      it('refuses a move to another time, which the late move could undo', async () => {
+        await moveWithoutAnswer()
+
+        const { data, error } = await update({ id: MESSAGE_ID.toUpperCase(), scheduledAt: OTHER_TIME })
+        reachPostHogLate()
+
+        expect(data).toBeNull()
+        expect(error).toMatchObject({ code: 'move_unconfirmed' })
+        expect(error?.message).toBe(
+          "An earlier move of this email to another time wasn't confirmed, so PostHog may still apply it after this one. Nothing was changed."
+        )
+        expect(error?.fix).toContain('cancel')
+        expect(timeAtPostHog).toBe(FIRST_TIME)
+        expect(fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([
+        ['the same text', FIRST_TIME],
+        ['a Date', new Date(FIRST_TIME)],
+        ['another offset', '2026-12-02T10:00:00.000+01:00'],
+      ])('sends a move to the same time as %s, which the late move cannot undo', async (_name, sameTime) => {
+        await moveWithoutAnswer()
+
+        const { data, error } = await update({ id: MESSAGE_ID, scheduledAt: sameTime })
+        reachPostHogLate()
+
+        expect(error).toBeNull()
+        expect(Date.parse(data!.scheduledAt)).toBe(Date.parse(FIRST_TIME))
+        expect(Date.parse(timeAtPostHog)).toBe(Date.parse(FIRST_TIME))
+      })
+
+      it('refuses a move to a time a microsecond away', async () => {
+        await moveWithoutAnswer()
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00.000001Z' })
+
+        expect(error?.code).toBe('move_unconfirmed')
+      })
+
+      it.each([500, 502, 503, 504])(
+        'refuses a move to another time after a %s, which a gateway can answer while PostHog still applies the move',
+        async (status) => {
+          fetch.mockImplementationOnce(async () => fakeReply(status, null))
+          const first = await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          expect(first.error?.statusCode).toBe(status)
+
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error?.code).toBe('move_unconfirmed')
+          expect(fetch).toHaveBeenCalledTimes(1)
+        }
+      )
+
+      it('sends a move to another time after PostHog refused the earlier move', async () => {
+        fetch.mockImplementationOnce(async () => fakeReply(400, { code: 'invalid_scheduled_at', detail: 'Nope.' }))
+        expect((await update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })).error?.statusCode).toBe(400)
+
+        const { data } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(data?.scheduledAt).toBe(OTHER_TIME)
+      })
+
+      it("refuses a move to another time queued behind the move that wasn't confirmed", async () => {
+        const first = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        const second = update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+        await vi.advanceTimersByTimeAsync(1_000)
+
+        expect((await first).error?.code).toBe('network_error')
+        expect((await second).error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([
+        ['a timeout', undefined],
+        ['a 503', 503],
+      ])('refuses a move to another time even when a retry after %s got an answer', async (_name, status) => {
+        makeClient({ emailRequestTimeoutMs: 1_000, emailRequestMaxRetries: 1 })
+        if (status !== undefined) {
+          fetch.mockImplementationOnce(async () => fakeReply(status, null))
+        }
+        const pending = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+        await vi.runAllTimersAsync()
+        expect((await pending).data?.scheduledAt).toBe(FIRST_TIME)
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it('moves other emails as before', async () => {
+        await moveWithoutAnswer()
+        const otherId = MESSAGE_ID.replace(/.$/, MESSAGE_ID.endsWith('0') ? '1' : '0')
+
+        const { data } = await update({ id: otherId, scheduledAt: OTHER_TIME })
+
+        expect(data?.scheduledAt).toBe(OTHER_TIME)
+      })
+
+      it("lets PostHog answer a move once the email is canceled, which a late move can't undo", async () => {
+        await moveWithoutAnswer()
+        fetch.mockImplementationOnce(async () => fakeReply(200, { id: MESSAGE_ID, status: 'canceled' }))
+        expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+        fetch.mockImplementationOnce(async () => fakeReply(409, rejected(409, 'canceled').body))
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+        expect(fetch).toHaveBeenCalledTimes(3)
+      })
+
+      describe('when PostHog confirms a cancel while moves of the email are out or queued', () => {
+        const THIRD_TIME = '2026-12-04T09:00:00Z'
+        const answerMoves = (answerFor: (time: string) => Reply | undefined): void => {
+          fetch.mockImplementation(async (_url: string, options: { method: string; body?: string }) => {
+            if (options.method === 'POST') {
+              return fakeReply(200, { id: MESSAGE_ID, status: 'canceled' })
+            }
+            const reply = answerFor(JSON.parse(options.body!).scheduled_at)
+            return reply === undefined ? new Promise(() => {}) : fakeReply(reply.status, reply.body)
+          })
+        }
+        const canceledAtPostHog = (): Reply => rejected(409, 'canceled')
+
+        it("answers the cancel without waiting for the move that's out, and records nothing from that move", async () => {
+          answerMoves((time) => (time === FIRST_TIME ? undefined : canceledAtPostHog()))
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+          expect(fetch).toHaveBeenCalledTimes(3)
+        })
+
+        it('records nothing from a queued move, whatever PostHog answers it', async () => {
+          answerMoves((time) =>
+            time === FIRST_TIME ? undefined : time === OTHER_TIME ? rejected(503) : canceledAtPostHog()
+          )
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          const queued = update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+          expect((await queued).error?.statusCode).toBe(503)
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: THIRD_TIME })
+
+          expect(error).toMatchObject({ code: 'canceled', statusCode: 409 })
+          expect(fetch).toHaveBeenCalledTimes(4)
+        })
+
+        it('guards a later move again once the moves that were out at the cancel have ended', async () => {
+          answerMoves((time) => (time === FIRST_TIME ? undefined : rejected(503)))
+          const out = update({ id: MESSAGE_ID, scheduledAt: FIRST_TIME })
+          await vi.advanceTimersByTimeAsync(0)
+          expect((await posthog.emails.cancel(MESSAGE_ID)).data?.status).toBe('canceled')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect((await out).error?.code).toBe('network_error')
+
+          expect((await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })).error?.statusCode).toBe(503)
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: THIRD_TIME })
+
+          expect(error?.code).toBe('move_unconfirmed')
+          expect(fetch).toHaveBeenCalledTimes(3)
+        })
+      })
+
+      it('refuses a move to another time after PostHog refused the cancel', async () => {
+        await moveWithoutAnswer()
+        fetch.mockImplementationOnce(async () => fakeReply(409, rejected(409, 'already_sending').body))
+        expect((await posthog.emails.cancel(MESSAGE_ID)).error?.code).toBe('already_sending')
+
+        const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(error?.code).toBe('move_unconfirmed')
+        expect(fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it('keeps refusing moves of a later unconfirmed email after an earlier guard lapses', async () => {
+        const start = Date.now()
+        onTestFinished(() => vi.setSystemTime(start))
+        const [laterId, latestId] = ['1', '2'].map((digit) => MESSAGE_ID.replace(/.$/, digit))
+        const moveAnswered503 = async (id: string): Promise<void> => {
+          fetch.mockImplementationOnce(async () => fakeReply(503, null))
+          expect((await update({ id, scheduledAt: FIRST_TIME })).error?.statusCode).toBe(503)
+        }
+        await moveWithoutAnswer()
+        vi.setSystemTime(Date.now() + 10 * 24 * 60 * 60 * 1_000)
+        await moveAnswered503(laterId)
+        vi.setSystemTime(Date.now() + 22 * 24 * 60 * 60 * 1_000)
+        await moveAnswered503(latestId)
+
+        const later = await update({ id: laterId, scheduledAt: OTHER_TIME })
+        const earliest = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+        expect(later.error?.code).toBe('move_unconfirmed')
+        expect(earliest.data?.scheduledAt).toBe(OTHER_TIME)
+        expect(fetch).toHaveBeenCalledTimes(4)
+      })
+
+      it.each([
+        ['refuses', 30, 'move_unconfirmed', 1],
+        ['sends', 31, undefined, 2],
+      ])(
+        '%s a move to another time %i days after the move PostHog may still apply',
+        async (_verb, days, code, requests) => {
+          const start = Date.now()
+          onTestFinished(() => vi.setSystemTime(start))
+          await moveWithoutAnswer()
+          vi.setSystemTime(Date.now() + days * 24 * 60 * 60 * 1_000)
+
+          const { error } = await update({ id: MESSAGE_ID, scheduledAt: OTHER_TIME })
+
+          expect(error?.code).toBe(code)
+          expect(fetch).toHaveBeenCalledTimes(requests)
+        }
+      )
+    })
+
+    it('moves different emails without waiting for each other', async () => {
+      const otherId = MESSAGE_ID.replace(/.$/, MESSAGE_ID.endsWith('0') ? '1' : '0')
+      replies = [new TypeError('fetch failed'), moved({ id: otherId }), moved()]
+
+      const first = update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+      const second = update({ id: otherId, scheduledAt: '2026-12-02T09:00:00Z' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      await vi.runAllTimersAsync()
+      await Promise.all([first, second])
+    })
+
+    it('refuses a time without an offset without saying an email was sent', async () => {
+      const { error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00' })
+
+      expect(error?.message).toContain('Nothing was changed.')
+      expect(error?.message).not.toContain('sent')
+    })
+
+    it.each([
+      ['an email PostHog has started sending', 409, 'already_sending', 'validation_error'],
+      ['a canceled email', 409, 'canceled', 'validation_error'],
+      ['a time more than 30 days after the send', 400, 'invalid_scheduled_at', 'validation_error'],
+      ['an unknown email', 404, 'not_found', 'not_found'],
+    ])('reports %s without a retry', async (_name, status, code, name) => {
+      replies = [rejected(status, code), moved()]
+
+      const { data, error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ statusCode: status, code, name })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['an ID that is not a UUID', { id: 'msg_1', scheduledAt: '2026-12-02T09:00:00Z' }, 'invalid_message_id', 'id'],
+      ['no time', { id: MESSAGE_ID }, 'invalid_scheduled_at', 'scheduledAt'],
+      [
+        'a time without an offset',
+        { id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00' },
+        'invalid_scheduled_at',
+        'scheduledAt',
+      ],
+      [
+        'a change other than the time',
+        { id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z', subject: 'Hi' },
+        'invalid_form',
+        'subject',
+      ],
+      ['no options', undefined, 'invalid_message_id', 'id'],
+    ])('refuses %s before any request', async (_name, options, code, field) => {
+      const { data, error } = await update(options as Record<string, unknown>)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code, field, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('reports a reply without the new time as api_error', async () => {
+      replies = [moved({ scheduled_at: null })]
+
+      const { error } = await update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+  })
+
+  describe('cancel', () => {
+    const canceled: Reply = { status: 200, body: { id: MESSAGE_ID, status: 'canceled' } }
+
+    it('cancels a scheduled email', async () => {
+      replies = [canceled]
+
+      const { data, error } = await posthog.emails.cancel(MESSAGE_ID.toUpperCase())
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: MESSAGE_ID, status: 'canceled' })
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(CANCEL_URL)
+      expect(options.method).toBe('POST')
+      expect(options.body).toBeUndefined()
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+    })
+
+    it.each([
+      ['a network error', new TypeError('fetch failed')],
+      ['503', rejected(503)],
+    ])('retries %s, because a second cancel answers the same', async (_name, firstReply) => {
+      replies = [firstReply, canceled]
+
+      const pending = posthog.emails.cancel(MESSAGE_ID)
+      await vi.runAllTimersAsync()
+      const { data } = await pending
+
+      expect(data?.status).toBe('canceled')
+      expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it.each([
+      ['an email PostHog has started sending', 409, 'already_sending', 'validation_error'],
+      ['an unknown email', 404, 'not_found', 'not_found'],
+    ])('reports %s without a retry', async (_name, status, code, name) => {
+      replies = [rejected(status, code), canceled]
+
+      const { data, error } = await posthog.emails.cancel(MESSAGE_ID)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ statusCode: status, code, name })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('refuses an ID that is not a UUID before any request', async () => {
+      const { error } = await posthog.emails.cancel('msg_1')
+
+      expect(error).toMatchObject({ code: 'invalid_message_id', field: 'id', name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('reports a reply that is not canceled as api_error', async () => {
+      replies = [{ status: 200, body: { id: MESSAGE_ID, status: 'scheduled' } }]
+
+      const { error } = await posthog.emails.cancel(MESSAGE_ID)
+
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+  })
+
+  describe('list', () => {
+    const page = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: {
+        results: [
+          {
+            id: MESSAGE_ID,
+            scheduled_at: '2026-12-01T09:00:00Z',
+            created_at: '2026-11-12T10:00:00Z',
+          },
+        ],
+        next: 'cursor_2',
+        ...fields,
+      },
+    })
+
+    const list = (options: Record<string, unknown>): ReturnType<PostHog['emails']['list']> =>
+      posthog.emails.list(options as unknown as Parameters<PostHog['emails']['list']>[0])
+
+    it('lists the scheduled emails of one page', async () => {
+      replies = [page()]
+
+      const { data, error } = await posthog.emails.list({ status: 'scheduled', cursor: 'cursor_1', limit: 10 })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        results: [
+          {
+            id: MESSAGE_ID,
+            scheduledAt: '2026-12-01T09:00:00Z',
+            createdAt: '2026-11-12T10:00:00Z',
+          },
+        ],
+        next: 'cursor_2',
+      })
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe(`${LIST_URL}?status=scheduled&cursor=cursor_1&limit=10`)
+      expect(options.method).toBe('GET')
+      expect(options.body).toBeUndefined()
+    })
+
+    it('returns only the ID and the two times of each email, even when PostHog sends more', async () => {
+      replies = [
+        page({
+          results: [
+            {
+              id: MESSAGE_ID,
+              to: 'user@example.com',
+              scheduled_at: '2026-12-01T09:00:00Z',
+              created_at: '2026-11-12T10:00:00Z',
+            },
+          ],
+        }),
+      ]
+
+      const { data } = await posthog.emails.list({ status: 'scheduled' })
+
+      expect(Object.keys(data!.results[0]).sort()).toEqual(['createdAt', 'id', 'scheduledAt'])
+    })
+
+    it.each([
+      ['a malformed cursor', 'not-a-cursor', 'invalid_input'],
+      ['a cursor over 128 characters', 'c'.repeat(129), 'max_length'],
+    ])('reports PostHog refusing %s as a validation error on cursor, without a retry', async (_name, cursor, code) => {
+      replies = [
+        { status: 400, body: { type: 'validation_error', code, detail: 'Bad cursor.', attr: 'cursor' } },
+        page(),
+      ]
+
+      const { data, error } = await list({ status: 'scheduled', cursor })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ statusCode: 400, code, field: 'cursor', name: 'validation_error' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks for the first page without a cursor and reads the last page', async () => {
+      replies = [page({ results: [], next: null })]
+
+      const { data } = await posthog.emails.list({ status: 'scheduled' })
+
+      expect(data).toEqual({ results: [], next: null })
+      expect(fetch.mock.calls[0][0]).toBe(`${LIST_URL}?status=scheduled`)
+    })
+
+    it('encodes a cursor PostHog returned', async () => {
+      replies = [page()]
+
+      await posthog.emails.list({ status: 'scheduled', cursor: 'a+b/c=&d' })
+
+      expect(new URL(fetch.mock.calls[0][0]).searchParams.get('cursor')).toBe('a+b/c=&d')
+    })
+
+    it.each([
+      ['a network error', new TypeError('fetch failed')],
+      ['503', rejected(503)],
+    ])('never retries %s', async (_name, firstReply) => {
+      replies = [firstReply, page()]
+
+      const pending = list({ status: 'scheduled' })
+      await vi.runAllTimersAsync()
+      const { data, error } = await pending
+
+      expect(data).toBeNull()
+      expect(error).toBeInstanceOf(EmailError)
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['another status', { status: 'sent' }, 'status'],
+      ['no status', {}, 'status'],
+      ['no options', undefined, 'status'],
+      ['a limit of 0', { status: 'scheduled', limit: 0 }, 'limit'],
+      ['a limit over 100', { status: 'scheduled', limit: 101 }, 'limit'],
+      ['a limit that is not a whole number', { status: 'scheduled', limit: 1.5 }, 'limit'],
+      ['an empty cursor', { status: 'scheduled', cursor: '' }, 'cursor'],
+    ])('refuses %s before any request', async (_name, options, field) => {
+      const { data, error } = await list(options as Record<string, unknown>)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_list_options', field, name: 'validation_error' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['no results', { results: null }],
+      ['a row without a time', { results: [{ id: MESSAGE_ID, created_at: '2026-11-12T10:00:00Z' }] }],
+      ['a cursor that is not a string', { next: 2 }],
+    ])('reports a reply with %s as api_error', async (_name, fields) => {
+      replies = [page(fields)]
+
+      const { error } = await list({ status: 'scheduled' })
+
+      expect(error).toMatchObject({ code: 'api_error', statusCode: 200 })
+    })
+  })
+
+  describe.each([
+    ['update', (posthog: PostHog) => posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })],
+    ['cancel', (posthog: PostHog) => posthog.emails.cancel(MESSAGE_ID)],
+    ['list', (posthog: PostHog) => posthog.emails.list({ status: 'scheduled' })],
+  ])('%s', (_name, call) => {
+    it.each([
+      ['a disabled client', { disabled: true }, 'client_disabled'],
+      ['no secret key', { secretKey: undefined }, 'missing_secret_key'],
+      ['a custom host without appHost', { host: 'https://ph.example.com' }, 'missing_app_host'],
+    ])('makes no request from %s', async (_label, options, code) => {
+      makeClient(options)
+
+      const { data, error } = await call(posthog)
+
+      expect(data).toBeNull()
+      expect(error?.code).toBe(code)
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('makes no request after shutdown', async () => {
+      await posthog.shutdown()
+
+      const { error } = await call(posthog)
+
+      expect(error?.code).toBe('client_closed')
+      expect(fetch).not.toHaveBeenCalled()
+    })
+  })
+
+  it('waits for a cancel in its retry backoff before shutdown resolves', async () => {
+    replies = [rejected(503), { status: 200, body: { id: MESSAGE_ID, status: 'canceled' } }]
+    const pending = posthog.emails.cancel(MESSAGE_ID)
+    await vi.advanceTimersByTimeAsync(0)
+
+    let shutDown = false
+    const shutdown = posthog.shutdown().then(() => (shutDown = true))
+    await vi.advanceTimersByTimeAsync(500)
+    expect(shutDown).toBe(false)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await shutdown
+
+    expect((await pending).data?.status).toBe('canceled')
+  })
+
+  it('sends every move accepted before shutdown, including one queued behind another move', async () => {
+    const moved = (scheduledAt: string): Reply => ({
+      status: 200,
+      body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: scheduledAt },
+    })
+    replies = [rejected(429, 'throttled'), moved('2026-12-02T09:00:00Z'), moved('2026-12-03T09:00:00Z')]
+
+    const first = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' })
+    const second = posthog.emails.update({ id: MESSAGE_ID, scheduledAt: '2026-12-03T09:00:00Z' })
+    const shutdown = posthog.shutdown()
+    await vi.runAllTimersAsync()
+    await shutdown
+
+    expect((await first).data?.scheduledAt).toBe('2026-12-02T09:00:00Z')
+    expect((await second).data?.scheduledAt).toBe('2026-12-03T09:00:00Z')
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('moves the email to the time it had when update was called, even if the caller changes the options after', async () => {
+    replies = [
+      new TypeError('fetch failed'),
+      { status: 200, body: { id: MESSAGE_ID, status: 'scheduled', scheduled_at: '2026-12-02T09:00:00Z' } },
+    ]
+    const options = { id: MESSAGE_ID, scheduledAt: '2026-12-02T09:00:00Z' }
+
+    const pending = posthog.emails.update(options)
+    options.scheduledAt = '2026-12-09T09:00:00Z'
+    options.id = '01a18356-c56c-0001-e494-7666bc915199'
+    await vi.runAllTimersAsync()
+    await pending
+
+    expect(fetch.mock.calls.map(([url, init]) => [url, JSON.parse(init.body).scheduled_at])).toEqual([
+      [STATUS_URL, '2026-12-02T09:00:00Z'],
+      [STATUS_URL, '2026-12-02T09:00:00Z'],
+    ])
   })
 
   describe('get', () => {
@@ -1603,6 +2413,14 @@ describe('emails', () => {
         Accept: 'application/json',
         'User-Agent': 'posthog-node/1.2.3',
       })
+    })
+
+    it.each(['scheduled', 'canceled'])('reads an email that is %s', async (status) => {
+      replies = [statusReply({ status, reason: null })]
+
+      const { data } = await posthog.emails.get(MESSAGE_ID)
+
+      expect(data).toMatchObject({ status, reason: null })
     })
 
     it('reads a null reason', async () => {
