@@ -81,6 +81,13 @@ interface RegisteredWindow {
 let singleton: PostHog | undefined
 let singletonOptions: Pick<PostHogOptions, 'projectToken' | 'host'> | undefined
 
+// Copy caller data with JSON semantics so a caller's toJSON() redaction applies, matching the renderer.
+// structuredClone still runs first so non-cloneable input keeps rejecting.
+function snapshot<T>(value: T): T {
+    structuredClone(value)
+    return JSON.parse(JSON.stringify(value)) as T
+}
+
 export class PostHog {
     private _core: ElectronCore
     private _ready: Promise<void>
@@ -280,14 +287,14 @@ export class PostHog {
         ) {
             return properties
         }
-        return properties === undefined ? undefined : structuredClone(properties)
+        return properties === undefined ? undefined : snapshot(properties)
     }
     async screen(name: string, properties?: Properties): Promise<void> {
         if (!name?.trim()) return Promise.resolve()
         const copy = this._snapshotEventProperties(properties)
         return this._run(() => {
             if (!this._core.optedOut && !this._core.isDisabled) {
-                this._core.capture('$screen', structuredClone({ ...copy, $screen_name: name }))
+                this._core.capture('$screen', snapshot({ ...copy, $screen_name: name }))
             }
         })
     }
@@ -298,12 +305,12 @@ export class PostHog {
     }
     private _setPersonProperties(properties?: Properties, propertiesOnce?: Properties): void {
         if (this._core.optedOut || this._core.isDisabled) return
-        const set = properties === undefined ? undefined : structuredClone(properties)
-        const once = propertiesOnce === undefined ? undefined : structuredClone(propertiesOnce)
+        const set = properties === undefined ? undefined : snapshot(properties)
+        const once = propertiesOnce === undefined ? undefined : snapshot(propertiesOnce)
         this._core.setPersonProperties(set, once)
     }
     async setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
-        const copy = structuredClone(properties)
+        const copy = snapshot(properties)
         return this._runFlagContext(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
     }
     private async _setPersonPropertiesForFlags(properties: Properties, reload: boolean): Promise<void> {
@@ -312,7 +319,7 @@ export class PostHog {
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
     async setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
-        const copy = structuredClone(properties)
+        const copy = snapshot(properties)
         return this._runFlagContext(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
     }
     private async _setGroupPropertiesForFlags(properties: Record<string, Properties>, reload: boolean): Promise<void> {
