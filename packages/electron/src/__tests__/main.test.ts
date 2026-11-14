@@ -10,6 +10,7 @@ import {
     MAX_MESSAGE_BYTES,
     STATE_CHANNEL,
     type Command,
+    type Properties,
     type Request,
     type Response as BridgeResponse,
     type State,
@@ -507,6 +508,31 @@ describe('main Electron client', () => {
             expect(
                 operation === 'screen' ? event.properties : event.properties[operation === 'set' ? '$set' : '$set_once']
             ).toMatchObject({ nested: { value: 'original' } })
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce', 'flags'] as const)(
+        'applies toJSON redaction when snapshotting main %s properties',
+        async (operation) => {
+            const owner = await start()
+            class Profile {
+                constructor(
+                    public email: string,
+                    public secret: string
+                ) {}
+                toJSON() {
+                    return { email: this.email }
+                }
+            }
+            const properties = { profile: new Profile('main@example.com', 'do-not-send') } as unknown as Properties
+            if (operation === 'screen') await owner.screen('Home', properties)
+            else if (operation === 'set') await owner.setPersonProperties(properties)
+            else if (operation === 'setOnce') await owner.setPersonProperties(undefined, properties)
+            else await owner.setPersonPropertiesForFlags(properties)
+            await owner.flush()
+            const sent = JSON.stringify(mock.fetch.mock.calls.map(([, options]) => options?.body))
+            expect(sent).toContain('main@example.com')
+            expect(sent).not.toContain('do-not-send')
         }
     )
 
