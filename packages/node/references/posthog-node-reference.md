@@ -2175,6 +2175,42 @@ The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
 gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
 periodically. Configure via the `metrics` client option.
 
+### `PostHog.push`
+
+> **get** **push**(): `Push`
+
+The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+
+Needs `secretKey`, a project secret API key with the `transactional_push:write` scope. Sends go
+where `emails` sends go, `appHost` or the PostHog Cloud app host of `host`, and use
+`emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` resolves to `{ data, error }` and
+does not reject. A disabled client sends nothing and returns the error `client_disabled`. After
+`shutdown()`, the client sends nothing and returns the error `client_closed`.
+
+##### Example
+
+```ts
+const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
+const { data, error } = await client.push.send({
+  templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+  distinctId: 'user_123',
+  templateData: { order_id: '1042' },
+  idempotencyKey: 'order-shipped:1042',
+})
+if (error) {
+  console.error(error.code, error.message)
+}
+```
+
+##### Returns
+
+`Push`
+
+#### Description
+
+The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+Needs `secretKey`, a project secret API key with the `transactional_push:write` scope.
+
 ### `PostHog.enterContext`
 
 > **enterContext**(`data`, `options?`): `void`
@@ -2372,6 +2408,46 @@ posthog.withContext({ distinctId: 'user_123' }, () => {
   posthog.capture({ event: 'button clicked' })
 })
 ```
+
+### `PushError`
+
+PostHog did not queue the push notification, or the client could not tell whether it did.
+
+Branch on `code`, PostHog's stable error code, or on `name`, a coarse category of the
+failure. The message never contains the secret key or the request body.
+
+#### Extends
+
+- `Error`
+
+#### Constructors
+
+##### Constructor
+
+> **new PushError**(`params`): `PushError`
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `params` | `EmailErrorParams` |
+
+###### Returns
+
+`PushError`
+
+#### Properties
+
+| Property | Modifier | Type | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="code-1"></a> `code` | `readonly` | `string` | PostHog's error code, such as `transactional_push_paused`, or an SDK code such as `network_error`. | - |
+| <a id="docsurl-1"></a> `docsUrl?` | `readonly` | `string` | - | - |
+| <a id="field-1"></a> `field?` | `readonly` | `string` | The request field the error is about, when PostHog named one. | - |
+| <a id="fix-1"></a> `fix?` | `readonly` | `string` | - | - |
+| <a id="name-2"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
+| <a id="retryafterms-1"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
+| <a id="statuscode-1"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog answered. | - |
+| <a id="why-1"></a> `why?` | `readonly` | `string` | - | - |
 
 ### `FeatureFlagError`
 
@@ -3498,6 +3574,7 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 | ------ | ------ | ------ | ------ |
 | <a id="property-emails"></a> `emails` | `readonly` | `Emails` | **Description** The `posthog.emails` API: sends transactional email from PostHog email templates. Needs `secretKey`, a project secret API key with the `transactional_email:write` scope. |
 | <a id="property-metrics"></a> `metrics` | `readonly` | `Metrics` | **Description** The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option. |
+| <a id="property-push"></a> `push` | `readonly` | `Push` | **Description** The `posthog.push` API: sends transactional push notifications from PostHog push templates. Needs `secretKey`, a project secret API key with the `transactional_push:write` scope. |
 
 #### Methods
 
@@ -4767,7 +4844,7 @@ Supports multiple formats:
 | <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
 | <a id="id"></a> `id` | `number` | - |
 | <a id="key-2"></a> `key` | `string` | - |
-| <a id="name-2"></a> `name` | `string` | - |
+| <a id="name-3"></a> `name` | `string` | - |
 | <a id="rollout_percentage-1"></a> `rollout_percentage` | `null` \| `number` | - |
 
 ### `PostHogFetchBodyBytes`
@@ -4867,11 +4944,11 @@ differently for cellular cost vs tab-suspension behavior).
 | Name | Type | Description |
 | ------ | ------ | ------ |
 | `__preview_capture_bot_pageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
-| `appHost?` | `string` | Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there. Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or `https://eu.posthog.com` from `host`. |
+| `appHost?` | `string` | Your PostHog app host, such as `https://posthog.example.com`. `emails.send` and `push.send` send there. Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or `https://eu.posthog.com` from `host`. |
 | `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. |
 | `custom_blocked_useragents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
-| `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
+| `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` or `push.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` and `push.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |
@@ -4947,6 +5024,38 @@ Common types shared across PostHog SDKs
 ### `PropertyOperator`
 
 > **PropertyOperator** = `PropertyMatchType` \| `"gt"` \| `"lt"`
+
+### `Push`
+
+The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+
+#### Methods
+
+##### send()
+
+> **send**(`options`): `Promise`\<`SendPushResponse`\>
+
+Queue one push notification from a transactional push template, to every device of one person.
+
+Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the notification,
+not that a device received it. Network errors, rate limits, an in-flight idempotency key and an
+unavailable service are retried with the same idempotency key.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `SendPushOptions` |
+
+###### Returns
+
+`Promise`\<`SendPushResponse`\>
+
+### `PushErrorName`
+
+> **PushErrorName** = `EmailErrorName`
+
+A coarse category of the failure, for code that branches on the kind of failure rather than the exact `code`.
 
 ### `RatingSurveyQuestion`
 
@@ -5028,6 +5137,38 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | <a id="groupproperties-1"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> |
 | <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` |
 | <a id="personproperties-1"></a> `personProperties?` | `Properties` |
+
+### `SendPushOptions`
+
+Options for `posthog.push.send()`.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-distinctid-2"></a> `distinctId` | `string` | The distinct ID of the person to notify. The notification goes to every device this person registered for the template's push channels. A person with no registered device gets nothing, and the send shows as skipped in the template's sends. |
+| <a id="property-idempotencykey-1"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the notification is for, such as `order-shipped:1042`, to cover retries outside this call too. |
+| <a id="property-maxretries-1"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
+| <a id="property-templatedata"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. The template can't read the person's properties, so pass everything it needs here. |
+| <a id="property-templateid"></a> `templateId` | `string` | The UUID of a push notification template made transactional in PostHog. |
+
+### `SendPushResponse`
+
+> **SendPushResponse** = \{ `data`: `SendPushResult`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `PushError`; \}
+
+What `posthog.push.send()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
+### `SendPushResult`
+
+The queued push notification. A result means PostHog queued it, not that a device received it.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-id-2"></a> `id` | `string` | The queued send's message ID. |
+| <a id="property-replayed-1"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
 
 ### `SendTemplateEmailOptions`
 
@@ -5587,8 +5728,8 @@ A template made transactional in PostHog, sent by its ID.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-templatedata"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. |
-| <a id="property-templateid"></a> `templateId` | `string` | The UUID of an email template made transactional in PostHog. |
+| <a id="property-templatedata-1"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. |
+| <a id="property-templateid-1"></a> `templateId` | `string` | The UUID of an email template made transactional in PostHog. |
 
 ### `TracesConfig`
 

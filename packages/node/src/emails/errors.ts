@@ -60,7 +60,7 @@ export class EmailError extends Error {
 
 const ATTACHMENT_LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
 
-function emailErrorName(status: number | undefined, code: string): EmailErrorName {
+export function emailErrorName(status: number | undefined, code: string): EmailErrorName {
   if (code === 'missing_secret_key' || status === 401) {
     return 'missing_api_key'
   }

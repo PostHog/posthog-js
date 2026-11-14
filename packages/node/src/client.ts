@@ -100,6 +100,8 @@ import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 import { DEFAULT_EMAIL_REQUEST_MAX_RETRIES, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS, EmailSender } from './emails/emails'
 import type { Emails } from './emails/types'
+import { PushSender } from './push/push'
+import type { Push } from './push/types'
 import { resolveNodeLogsConfig } from './logs-config'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -213,6 +215,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
   private _emails?: EmailSender
+  private _push?: PushSender
   private _isShutdown = false
   /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
   public readonly enableFullAiCapture: boolean
@@ -885,6 +888,42 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Emails}
    */
   public get emails(): Emails {
+    return this.emailSender()
+  }
+
+  /**
+   * The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+   *
+   * Needs `secretKey`, a project secret API key with the `transactional_push:write` scope. Sends go
+   * where `emails` sends go, `appHost` or the PostHog Cloud app host of `host`, and use
+   * `emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` resolves to `{ data, error }` and
+   * does not reject. A disabled client sends nothing and returns the error `client_disabled`. After
+   * `shutdown()`, the client sends nothing and returns the error `client_closed`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...', host: 'https://eu.i.posthog.com' })
+   * const { data, error } = await client.push.send({
+   *   templateId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b',
+   *   distinctId: 'user_123',
+   *   templateData: { order_id: '1042' },
+   *   idempotencyKey: 'order-shipped:1042',
+   * })
+   * if (error) {
+   *   console.error(error.code, error.message)
+   * }
+   * ```
+   *
+   * {@label Push}
+   */
+  public get push(): Push {
+    if (!this._push) {
+      this._push = new PushSender(this.emailSender())
+    }
+    return this._push
+  }
+
+  private emailSender(): EmailSender {
     if (!this._emails) {
       this._emails = new EmailSender(
         {

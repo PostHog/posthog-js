@@ -2,6 +2,7 @@ import {
   type Logger,
   type PostHogFetchOptions,
   type PostHogFetchResponse,
+  allSettled,
   parseRetryAfterMs,
   removeTrailingSlash,
   safeJsonStringify,
@@ -134,6 +135,18 @@ interface PreparedSend {
   maxRetries: number
 }
 
+export interface QueueRequest {
+  /** The send route's path on the app host. */
+  path: string
+  body: string
+  idempotencyKey: string
+  /** Defaults to the sender's `maxRetries`. */
+  maxRetries?: number
+  /** Ends the client error messages, such as `no push notification was sent`. */
+  nothingDone: string
+  missingSecretKey: string
+}
+
 interface Upload {
   url: string
   headers: Record<string, string>
@@ -176,7 +189,11 @@ export class EmailSender implements Emails {
 
   private track<T>(pending: Promise<T>): Promise<T> {
     this.inFlight.add(pending)
-    void pending.finally(() => this.inFlight.delete(pending))
+    const settle = (): void => {
+      this.inFlight.delete(pending)
+    }
+    // `queue` rejects, so a plain `finally` here would leave an unhandled rejection.
+    pending.then(settle, settle)
     return pending
   }
 
@@ -186,7 +203,7 @@ export class EmailSender implements Emails {
    */
   async drain(): Promise<void> {
     while (this.inFlight.size > 0) {
-      await Promise.all(this.inFlight)
+      await allSettled([...this.inFlight])
     }
   }
 
@@ -207,13 +224,7 @@ export class EmailSender implements Emails {
       }
       const attachments = await this.uploadAttachments(prepared, appHost, secretKey)
       const body = safeJsonStringify({ ...content, ...unlessEmpty('attachments', attachments) })
-      const headers = this.headers(secretKey, {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': prepared.idempotencyKey,
-      })
-      const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
-      )
+      const result = await this.post(appHost + SEND_PATH, secretKey, body, prepared.idempotencyKey, prepared.maxRetries)
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
       }
@@ -221,6 +232,37 @@ export class EmailSender implements Emails {
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
     }
+  }
+
+  /**
+   * Queues one message on another messaging send route with this sender's host, key, timeout and
+   * retries. `posthog.push` sends through it, so `flush()` and `shutdown()` wait for its sends too.
+   * Rejects with an `EmailError` when the message is not queued.
+   */
+  queue(request: QueueRequest): Promise<SendEmailResult> {
+    return this.track(this.queueUntracked(request))
+  }
+
+  private async queueUntracked(request: QueueRequest): Promise<SendEmailResult> {
+    const { appHost, secretKey } = this.connect(request.nothingDone, request.missingSecretKey)
+    return this.post(
+      appHost + request.path,
+      secretKey,
+      request.body,
+      request.idempotencyKey,
+      request.maxRetries ?? this.config.maxRetries
+    )
+  }
+
+  private post(
+    url: string,
+    secretKey: string,
+    body: string,
+    idempotencyKey: string,
+    maxRetries: number
+  ): Promise<SendEmailResult> {
+    const headers = this.headers(secretKey, { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey })
+    return this.withRetries(maxRetries, async () => parseSendReply(await this.request(url, 'POST', headers, body)))
   }
 
   private async getUntracked(id: string): Promise<GetEmailResponse> {
@@ -358,8 +400,7 @@ export class EmailSender implements Emails {
       // A custom host is often an ingestion proxy, which must not receive the secret key.
       throw new EmailError({
         code: 'missing_app_host',
-        message:
-          "The client's host is not PostHog Cloud, so the client can't tell where to send email. Set appHost to your PostHog app host on the client.",
+        message: `The client's host is not PostHog Cloud, so the client can't tell where to send requests, and ${nothingDone}. Set appHost to your PostHog app host on the client.`,
       })
     }
     const secretKey = this.config.secretKey?.trim()
@@ -423,7 +464,7 @@ export class EmailSender implements Emails {
     // the deadline settles the send.
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
-        const timeoutError = new Error(`Email request timed out after ${timeoutMs}ms`)
+        const timeoutError = new Error(`PostHog request timed out after ${timeoutMs}ms`)
         timeoutError.name = 'AbortError'
         reject(timeoutError)
         controller.abort(timeoutError)
