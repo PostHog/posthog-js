@@ -406,6 +406,18 @@ exports[`integration tests > [html file]: form-fields.html 1`] = `
   <noscript></noscript></body></html>"
 `;
 
+exports[`integration tests > [html file]: fragment-urls.html 1`] = `
+"<!DOCTYPE html><html lang=\\"en\\"><head>
+    <meta charset=\\"UTF-8\\" />
+    <title>fragment-only css urls</title>
+    <style>.from-stylesheet { filter: url(\\"#stylesheet-filter\\"); }</style>
+    <style>.from-style-element { clip-path: url(\\"#style-element-clip\\"); }</style>
+  </head>
+  <body>
+    <div class=\\"from-stylesheet from-style-element\\" style=\\"mask: url(#inline-style-mask)\\"></div>
+  </body></html>"
+`;
+
 exports[`integration tests > [html file]: hover.html 1`] = `
 "<!DOCTYPE html><html lang=\\"en\\"><head>
   <meta charset=\\"UTF-8\\" />
