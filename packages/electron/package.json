@@ -26,6 +26,11 @@
             "import": "./dist/main.mjs",
             "require": "./dist/main.cjs"
         },
+        "./utility": {
+            "types": "./dist/utility.d.ts",
+            "import": "./dist/utility.mjs",
+            "require": "./dist/utility.cjs"
+        },
         "./renderer": {
             "types": "./dist/renderer.d.ts",
             "import": "./dist/renderer.mjs",
@@ -54,6 +59,7 @@
         "test:unit": "vitest run",
         "test:delivery": "node --test test/delivery/delivery.test.mjs",
         "test:built": "node --test test/exports.test.mjs test/react-exports.test.mjs",
+        "test:utility": "node test/utility-process/run.mjs",
         "test:errors": "node test/error-autocapture.test.mjs",
         "test:transport": "node --test test/transport/transport.test.mjs",
         "lint": "oxlint --report-unused-disable-directives-severity error src",

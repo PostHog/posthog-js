@@ -81,12 +81,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function assertJson(value: unknown, depth = 0): void {
+export function assertJson(value: unknown, depth = 0, allowReservedKeys = false): void {
     if (depth > 20) throw new Error('PostHog payload is too deeply nested')
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return
     if (typeof value === 'number' && Number.isFinite(value)) return
     if (Array.isArray(value)) {
-        for (const item of value) assertJson(item, depth + 1)
+        for (const item of value) assertJson(item, depth + 1, allowReservedKeys)
         return
     }
     if (
@@ -94,8 +94,9 @@ export function assertJson(value: unknown, depth = 0): void {
         (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
     ) {
         for (const [key, item] of Object.entries(value)) {
-            if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Unsafe PostHog property key')
-            assertJson(item, depth + 1)
+            if (!allowReservedKeys && ['__proto__', 'constructor', 'prototype'].includes(key))
+                throw new Error('Unsafe PostHog property key')
+            assertJson(item, depth + 1, allowReservedKeys)
         }
         return
     }

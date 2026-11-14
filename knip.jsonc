@@ -25,6 +25,15 @@
             // tsdown constructs provider entry names dynamically.
             "entry": ["src/*/index.ts", "src/langchain/middleware/index.ts"],
         },
+        "packages/electron": {
+            // Process entrypoints are mapped dynamically by tsdown; fixtures run in Electron.
+            "entry": [
+                "src/{main,renderer,preload,utility}/index.ts",
+                "src/preload/helper.ts",
+                "test/utility-process/*.cjs",
+            ],
+            "ignoreUnresolved": ["^\\.\\./version$"],
+        },
         "packages/react": {
             "entry": ["src/index.ts", "src/slim.ts", "src/surveys/index.ts"],
         },

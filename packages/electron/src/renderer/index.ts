@@ -51,8 +51,8 @@ export class PostHog {
     private _autocapturePauses = 0
     private _pendingOptOuts = 0
     private _state?: State
-    private _reportedFlags = new Set<string>()
     private _ready?: Promise<void>
+    private _reportedFlags = new Set<string>()
     private _tail: Promise<unknown> = Promise.resolve()
     private _listeners = new Set<(state: State) => void>()
     private _unsubscribe: () => void

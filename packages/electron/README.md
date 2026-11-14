@@ -1,6 +1,6 @@
 # @posthog/electron (alpha)
 
-Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge.
+Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge and explicitly registered utility processes use `process.parentPort`.
 
 This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
@@ -138,6 +138,8 @@ Enabling autocapture requests only project autocapture config, through main's ex
 
 Main options `disableRemoteConfig: true` explicitly permit local-only autocapture when no cached project kill switch exists; `disableRemoteFeatureFlags` **does not** bypass the project config gate. `remoteConfigRequestTimeoutMs` bounds config fetches. Main `disabled: true` always prevents autocapture. No full browser SDK, recorder, DOM snapshotting or remotely loaded executable code is included.
 
+Automatic JavaScript exception capture is supported only in main and renderer, not utility processes. Utility reuses the shared facade, whose bundle includes inert optional DOM/error observer definitions; utility exposes no options to enable them and needs no browser globals. A utility facade and its main registration have a single lifetime: after disposal, unregister and create/register a new child rather than reinitializing the facade in the same child.
+
 ## JavaScript errors
 
 `captureException(error, properties?)` reports a handled error from main or renderer using core's stack parser and the normal shared identity, consent, queue and transport. Manual reports retain `mechanism.handled: true`.
@@ -154,7 +156,7 @@ const posthog = await init({ enableExceptionAutocapture: true })
 
 Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled. Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
 
-Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
+Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Renderer same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
 
 **Main-process limitations:** monitor-only observation sees rejections only when Node escalates them to an uncaught exception (`throw` mode without a host `unhandledRejection` handler, or `strict` mode). **Electron 42 defaults to warning-only rejections, so main-process rejections are not automatically captured in that default mode.** Host-handled rejections and non-escalating `warn`, `warn-with-error-code` or `none` modes are not automatically captured. No SDK rejection listener is installed, because it would change Node's default behavior. Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
 
@@ -206,6 +208,43 @@ Hooks follow the renderer's cached flag semantics: enabled is `boolean | undefin
 
 Enabled/variant hooks report exposure **after commit**, through main's consent-aware, deduplicating tracker. Payload-only hooks do not report exposure. React 18 is required for stable external-store subscriptions. The provider only manages its subscriptions: unmounting or changing `client` does not dispose your client. Call `posthog.dispose()` yourself when the renderer no longer needs it, after unmounting its provider.
 
+### Trusted utility processes (opt-in)
+
+Only instrument utility code you own and trust. In main, pass the actual result of Electron's `utilityProcess.fork()` immediately to the owner:
+
+```js
+import { utilityProcess } from 'electron'
+
+// Inside app.whenReady(), with the main PostHog owner already initialized:
+const child = utilityProcess.fork('/absolute/path/to/utility.cjs')
+const unregister = posthog.registerUtilityProcess(child)
+// unregister() revokes this child's SDK connection without killing it.
+```
+
+In `utility.cjs`:
+
+```js
+const { init } = require('@posthog/electron/utility')
+
+async function run() {
+    const posthog = await init()
+    await posthog.capture('background_work_completed', { task: 'thumbnail' })
+    try {
+        throw new Error('Example handled utility error')
+    } catch (error) {
+        await posthog.captureException(error)
+    }
+    await posthog.flush()
+}
+run().catch(console.error)
+```
+
+The utility facade has the same methods as the renderer facade above, including identity, consent, cached flags, `onStateChange()` and `dispose()`. It does not start an independent Node/browser SDK, persist files, or send analytics HTTP requests. Main remains the single authority for identity, consent, queue, session and flag exposure deduplication. Await mutations and handle rejected stale-identity commands as with renderers. Main changes are broadcast to connected children. Each utility request waits at most 10 seconds for main. A timeout rejects only that call and keeps the connection usable; it means the child stopped waiting, not that the work failed. A timed-out `flush()` can still deliver afterwards because main keeps its own retry and timeout policy. Capture and exception events carry protected `$electron_process: 'utility'` and an owner-generated `$utility_process_id` stable for that registration, not a caller-supplied PID.
+
+No preload, window registration, global IPC channel or `ELECTRON_RUN_AS_NODE` is involved. Messages use a dedicated versioned namespace on that child's `parentPort`; unrelated application messages are ignored. Each registration has its own connection token, strictly increasing request sequence, 100 requests/second limit, 100 pending-request cap, 256 KiB JSON message bound and nesting limit. The bridge rejects timed-out requests after 10 seconds. Registration requires a handshake within 10 seconds (including children that never spawn or already exited); register immediately after forking. Exit, unregister and owner shutdown revoke the registration and reject pending child operations. `dispose()` closes the local facade; use one facade lifetime per registration. Do not retry a timed-out mutation blindly: main may already have accepted it.
+
+This is **not** a sandbox or an untrusted-plugin interface: a registered utility can mutate the app's shared identity and consent just like trusted renderer code. Do not register workers running untrusted code. No automatic uncaught-error hooks, native crash reporting, replay, surveys or tours are installed.
+
 ## Consent and storage
 
 - Capture is opted in by default; configure `defaultOptIn: false` for explicit opt-in. Call `optIn()`/`optOut()` from either process.
@@ -244,6 +283,8 @@ node packages/electron/node_modules/electron/install.js
 pnpm --filter @posthog/electron test:autocapture
 pnpm --filter @posthog/electron test:transport
 ```
+
+For the dedicated real utility-process test (after building), run `pnpm --filter @posthog/electron test:utility`. It packs and independently installs the SDK/core/types tarballs into a temporary app, starts the installed Electron binary normally, and forks actual utility processes. It needs a GUI-capable Electron environment (or Xvfb on Linux), but no credentials. The fixture checks coordinated identity/consent/session, handled exceptions, protected context, flag exposure deduplication, reset, a slow owner flush that times out without disconnecting, pending promise rejection on unregister, unexpected exit cleanup and replacement-child attribution. See [the fixture proof](test/utility-process/README.md).
 
 After building, `pnpm --filter @posthog/electron test:errors` packs and installs local SDK tarballs into an isolated consumer and exercises actual main/renderer throws and rejections against a loopback mock receiver in sandboxed Electron. It compares application-handler behavior with autocapture disabled/enabled, tests consent/dispose/reinit, and separately compares native Node fatal exits and warning modes. It needs a runnable Electron binary/display; `ELECTRON_BINARY` can override the installed binary. Fatal Electron termination/delivery is not exercised or guaranteed.
 

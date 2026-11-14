@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent, type UtilityProcess } from 'electron'
 import {
     COMMAND_CHANNEL,
     MAX_MESSAGE_BYTES,
@@ -15,6 +15,7 @@ import {
     type Response as BridgeResponse,
     type State,
 } from '../shared/protocol'
+import { envelope } from '../utility/protocol'
 
 const mock = vi.hoisted(() => ({
     handlers: new Map<string, (event: IpcMainInvokeEvent, value: unknown) => Promise<BridgeResponse>>(),
@@ -116,6 +117,188 @@ function renderer(owner: PostHog, id: number) {
         },
     }
 }
+
+function utility(owner: PostHog) {
+    const replies = new EventEmitter()
+    const child = Object.assign(new EventEmitter(), { postMessage: (message: any) => replies.emit('reply', message) })
+    const dispose = owner.registerUtilityProcess(child as unknown as UtilityProcess)
+    let token: string
+    replies.once('reply', (message) => {
+        token = message.token
+    })
+    child.emit('message', envelope({ kind: 'connect' }))
+    let sequence = 0
+    const send = (command: Command, generation = owner.getState().generation): Promise<BridgeResponse> =>
+        new Promise((resolve) => {
+            const current = ++sequence
+            const listener = (message: any): void => {
+                if (message.kind === 'closed') {
+                    replies.removeListener('reply', listener)
+                    resolve({ ok: false, error: 'closed' })
+                } else if (message.kind === 'response' && message.sequence === current) {
+                    replies.removeListener('reply', listener)
+                    resolve(message.response)
+                }
+            }
+            replies.on('reply', listener)
+            child.emit(
+                'message',
+                envelope({ kind: 'request', token, request: { version: 1, sequence: current, generation, command } })
+            )
+        })
+    return { send, child, dispose }
+}
+
+describe('main utility owner routing', () => {
+    it('routes added API and project-config commands through the same protected owner', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'alias', alias: 'linked' })
+        await child.send({
+            type: 'screen',
+            name: 'Utility',
+            properties: { $screen_name: 'spoof', $electron_process: 'main' },
+        })
+        await child.send({
+            type: 'setPersonProperties',
+            properties: { plan: 'pro' },
+            propertiesOnce: { source: 'utility' },
+        })
+        await child.send({
+            type: 'setPersonPropertiesForFlags',
+            properties: { region: 'eu' },
+            reloadFeatureFlags: false,
+        })
+        await child.send({
+            type: 'setGroupPropertiesForFlags',
+            properties: { company: { tier: 'pro' } },
+            reloadFeatureFlags: false,
+        })
+        await child.send({ type: 'reloadFeatureFlags' })
+        expect(JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+            person_properties: { region: 'eu' },
+            group_properties: { company: { tier: 'pro' } },
+        })
+        await child.send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: false })
+        await child.send({ type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: false })
+        mock.fetch.mockResolvedValueOnce(
+            new Response(JSON.stringify({ autocapture_opt_out: true, surveys: [{ id: 'excluded' }] }))
+        )
+        expect(await child.send({ type: 'loadAutocaptureConfig' })).toMatchObject({
+            ok: true,
+            state: { autocapture: { status: 'loaded', autocapture_opt_out: true } },
+        })
+        await child.send({ type: 'flush' })
+        const screen = batches.find(({ event }) => event === '$screen')!
+        expect(screen.properties).toMatchObject({ $screen_name: 'Utility', $electron_process: 'utility' })
+        expect(screen.properties.$utility_process_id).toBeTypeOf('string')
+        expect(batches.find(({ event }) => event === '$set')?.properties).toMatchObject({
+            $set: { plan: 'pro' },
+            $set_once: { source: 'utility' },
+            $electron_process: 'utility',
+        })
+        expect(batches.some(({ event }) => event === '$create_alias')).toBe(true)
+        expect(JSON.stringify(owner.getState())).not.toContain('excluded')
+    })
+
+    it.each(['renderer', 'utility'] as const)(
+        'does not let an in-flight %s flag reload block later identity changes',
+        async (source) => {
+            const owner = await start()
+            const endpoint = source === 'utility' ? utility(owner) : renderer(owner, 3)
+            await endpoint.send({ type: 'hello' })
+            let resolve!: (response: Response) => void
+            mock.fetch.mockImplementationOnce(
+                () =>
+                    new Promise((done) => {
+                        resolve = done
+                    })
+            )
+            const reloading = endpoint.send({ type: 'reloadFeatureFlags' })
+            await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+            let identified = false
+            const identifying = owner.identify('later-user').then(() => {
+                identified = true
+            })
+            try {
+                await vi.waitFor(() => expect(identified).toBe(true), { timeout: 200 })
+            } finally {
+                resolve(new Response(JSON.stringify({ featureFlags: { obsolete: true } })))
+                await identifying
+                await reloading
+            }
+            expect(owner.getDistinctId()).toBe('later-user')
+            expect(owner.getFeatureFlag('obsolete', { sendEvent: false })).not.toBe(true)
+        }
+    )
+
+    it('shares main identity, consent and session while protecting utility capture and exception attribution', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'identify', distinctId: 'utility-alice' })
+        expect(owner.getDistinctId()).toBe('utility-alice')
+        const properties = { $electron_process: 'renderer', $utility_process_id: 'spoof' }
+        await child.send({ type: 'capture', event: 'utility-work', properties })
+        await child.send({
+            type: 'exception',
+            properties: {
+                ...properties,
+                $exception_list: [{ type: 'Error', value: 'utility handled', mechanism: { handled: true } }],
+            },
+        })
+        await child.send({ type: 'flush' })
+        const events = batches.filter((event) => ['utility-work', '$exception'].includes(event.event))
+        expect(events).toHaveLength(2)
+        for (const event of events) {
+            expect(event.distinct_id).toBe('utility-alice')
+            expect(event.properties.$electron_process).toBe('utility')
+            expect(event.properties.$utility_process_id).not.toBe('spoof')
+            expect(event.properties.$session_id).toBe(owner.getSessionId())
+        }
+        expect(events[0].properties.$utility_process_id).toBe(events[1].properties.$utility_process_id)
+        const generation = owner.getState().generation
+        await owner.optOut()
+        expect((await child.send({ type: 'capture', event: 'stale' }, generation)).ok).toBe(false)
+        await child.send({ type: 'capture', event: 'blocked' })
+        await child.send({ type: 'reset' })
+        expect(owner.optedOut).toBe(true)
+        await owner.flush()
+        expect(batches.some((event) => ['stale', 'blocked'].includes(event.event))).toBe(false)
+    })
+
+    it('checks observed flag revision and identity inside the serialized utility command path', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'reloadFeatureFlags' })
+        const state = owner.getState()
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision - 1 })
+        await owner.flush()
+        expect(batches.filter((event) => event.event === '$feature_flag_called')).toHaveLength(1)
+        expect(batches.find((event) => event.event === '$feature_flag_called')?.properties.$electron_process).toBe(
+            'utility'
+        )
+        await owner.reset()
+        expect((await child.send({ type: 'capture', event: 'old-identity' }, state.generation)).ok).toBe(false)
+    })
+
+    it('revokes queued utility mutations when the child exits', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        const queued = child.send({ type: 'identify', distinctId: 'disconnected' })
+        child.child.emit('exit', 1)
+        expect(await queued).toMatchObject({ ok: false })
+        await owner.flush()
+        expect(owner.getDistinctId()).not.toBe('disconnected')
+        expect(child.child.listenerCount('message')).toBe(0)
+        child.dispose()
+    })
+})
 
 async function publicClient(owner: PostHog, process: 'main' | 'renderer') {
     if (process === 'main') return { api: owner, dispose: () => {} }
