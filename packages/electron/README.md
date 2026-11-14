@@ -2,7 +2,7 @@
 
 Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge.
 
-This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, flush and shutdown. **Session replay, browser autocapture, automatic exception interception, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
+This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, flush and shutdown. **Session replay, automatic exception interception, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
 **Release status:** private and unpublished until the final alpha-release PR. Use local tarballs while developing; merging this PR does not enable npm publication.
 
@@ -69,9 +69,9 @@ await posthog.flush()
 
 Main and renderer mutations return promises. Await identity/reset/consent changes before captures that depend on them. Renderer captures are asynchronous and acknowledge completed file writes in main, **not** server delivery. `flush()` waits for prior commands and main delivery; delivery errors reject it. Cache getters are synchronous after `await init()`.
 
-One identity/session is shared across the app, not one per window. Use `reset()` on logout before identifying a different account. Reset preserves opt-out state, install markers and accepted queued events with their original identities. Stale renderer commands around an account change are rejected rather than assigned to the new user; their promise rejects so the app can decide whether a fresh action is appropriate. Do not blindly replay a rejected capture under another user.
+One identity/session is shared across the app, not one per window. Use `reset()` on logout before identifying a different account. Reset preserves opt-out state, project autocapture settings, install markers and accepted queued events with their original identities. Stale renderer commands around an account change are rejected rather than assigned to the new user; their promise rejects so the app can decide whether a fresh action is appropriate. Do not blindly replay a rejected capture under another user.
 
-`onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions.
+`onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions and DOM autocapture observers.
 
 ## Public API contracts
 
@@ -110,6 +110,34 @@ The published screen spec's canonical prose describes event-only behavior with n
 | Detailed `/flags` metadata with raw serialized JSON                 | Electron decodes once at the main read boundary for payload getters, results, bulk results and renderer snapshots. Malformed/empty/whitespace bytes become `null` and are reported through `onError`; valid JSON preserves strings (including `''`), objects, arrays, `false`, `0` and `null`. Core's lenient raw-string fallback is not exposed here.                                                 |
 | Legacy `featureFlags`/`featureFlagPayloads` responses and bootstrap | Core normalizes these before Electron can read raw metadata. Existing decoded strings must not be decoded again. A malformed legacy payload may already have become a valid serialized string in core; Electron preserves that string because the original provenance cannot be recovered. Full malformed-legacy-payload conformance would require a separate core/ingress change, outside this patch. |
 
+## Opt-in DOM autocapture
+
+Autocapture is **off by default**, configured per trusted renderer:
+
+```js
+const posthog = await init({
+    autocapture: { maskAllText: true, maskAllElementAttributes: true },
+    onError: (error) => console.error('[PostHog renderer]', error),
+})
+// Use autocapture: true for shared browser privacy defaults, or false to leave it off.
+```
+
+`init(options?: RendererOptions)` accepts `autocapture?: boolean | AutocaptureConfig` and `onError?: (error: unknown) => void`. Repeated init returns the same client; the first call's options apply. The config object accepts:
+
+- `maskAllText`, `maskAllElementAttributes`, `disableCaptureUrlHashes`: booleans, default `false`.
+- `url_allowlist`, `url_ignorelist`: arrays of strings or regular expressions.
+- `dom_event_allowlist`: an array of `'click'`, `'change'`, `'submit'`.
+- `element_allowlist`: an array of `'a'`, `'button'`, `'form'`, `'input'`, `'select'`, `'textarea'`, `'label'`.
+- `css_selector_allowlist`, `css_selector_ignorelist`, `element_attribute_ignorelist`: string arrays.
+
+Eligible DOM click/change/submit interactions emit `$autocapture` with `$event_type` and sanitized element hierarchy metadata through the renderer's ordinary `capture()` pipeline. Main owns identity/session context, `before_send`, persistence, batching and delivery. `onError` reports renderer setup/bridge failures without throwing from DOM handlers; main network/storage errors use main's `onError`.
+
+Consent is checked **before inspecting or serializing DOM targets**. Opt-out removes observers; opt-in and identity/reset changes synchronize and restart them without duplicates. Dispose removes all observers. Shared browser sanitization preserves `ph-no-capture`, `ph-sensitive`, password and sensitive-value exclusions. Native input values and clipboard contents are not collected by this integration. Text and safe attributes may still contain application-specific personal data: use masking/ignorelists and main's `before_send` for your privacy policy. Custom selector ignorelists replace the shared defaults (`.ph-no-autocapture`, `[data-ph-no-autocapture]`); include them explicitly if needed. `ph-no-capture` cannot be overridden.
+
+Enabling autocapture requests only project autocapture config, through main's existing authenticated, URL-restricted bridge and core config transport. A cold start waits for the config outcome; unknown/missing opt-out information stays off. Failures retain the last known server setting, including a project kill switch. Only boolean `autocapture_opt_out` and `elementsChainAsString` settings are cached/mirrored; remote config cannot install replay, surveys or other products. `getState().autocapture` exposes these optional booleans and `status: 'pending' | 'loaded' | 'failed' | 'disabled'`.
+
+Main options `disableRemoteConfig: true` explicitly permit local-only autocapture when no cached project kill switch exists; `disableRemoteFeatureFlags` **does not** bypass the project config gate. `remoteConfigRequestTimeoutMs` bounds config fetches. Main `disabled: true` always prevents autocapture. No full browser SDK, recorder, DOM snapshotting or remotely loaded executable code is included.
+
 ## Consent and storage
 
 - Capture is opted in by default; configure `defaultOptIn: false` for explicit opt-in. Call `optIn()`/`optOut()` from either process.
@@ -143,10 +171,12 @@ From the repository root:
 
 ```sh
 pnpm turbo run build check-types test:unit test:built --filter=@posthog/electron
-# After explicitly installing the Electron binary:
+# After installing the Electron binary explicitly (installs use --ignore-scripts):
+node packages/electron/node_modules/electron/install.js
+pnpm --filter @posthog/electron test:autocapture
 pnpm --filter @posthog/electron test:transport
 ```
 
 For loopback subprocess delivery/network tests and their real-versus-synthetic coverage limits, see [delivery tests](test/delivery/README.md).
 
-The example installs tarballs, not source symlinks. No PostHog credentials are needed for its smoke test. The shared browser SDK is unchanged; optional DOM autocapture integration remains a later milestone rather than an advertised alpha feature.
+The example installs tarballs, not source symlinks. No PostHog credentials are needed for its smoke test. The isolated autocapture test uses only local mock endpoints and real sandboxed Electron windows. It checks click/change/submit delivery, delayed config/kill switches, consent/reset/disposal, masking, sensitive-canary exclusion from IPC/network/disk, and absence of recorder requests/artifacts.

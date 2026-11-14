@@ -54,10 +54,12 @@
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "clean": "rimraf dist coverage",
         "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
-        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+        "test:autocapture": "node test/autocapture/run.mjs"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/browser-common": "workspace:^"
     },
     "peerDependencies": {
         "electron": ">=41"
@@ -68,6 +70,7 @@
         "electron": "42.4.0",
         "tsdown": "catalog:",
         "typescript": "catalog:native",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "jsdom": "catalog:"
     }
 }

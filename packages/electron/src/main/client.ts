@@ -14,10 +14,17 @@ import {
 import { version } from '../version'
 import { ElectronStorage } from './storage'
 import { isRecord } from '../shared/protocol'
+import { sanitizeAutocaptureConfig, type AutocaptureState } from '../shared/autocapture'
+
+const AUTOCAPTURE_CONFIG_MAX_AGE_MS = 60_000
 
 class RetryLaterError extends Error {}
 
 export class ElectronCore extends PostHogCore {
+    private _autocaptureStatus: AutocaptureState['status'] = 'pending'
+    private _autocaptureLoad?: Promise<void>
+    private _autocaptureLoadedAt?: number
+    private _disableRemoteConfig: boolean
     private _stopped = false
     private _suspended = false
     private _identityEpoch = 0
@@ -38,6 +45,7 @@ export class ElectronCore extends PostHogCore {
         private _report: (error: unknown) => void
     ) {
         super(token, { ...options, flushInterval: 0, disableSurveys: true })
+        this._disableRemoteConfig = options.disableRemoteConfig ?? false
         this._appBuild = options.appBuild
         this._maxQueueAgeMs = options.maxQueueAgeMs ?? 7 * 24 * 60 * 60 * 1000
         this._flagsResponseTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 10000
@@ -49,6 +57,9 @@ export class ElectronCore extends PostHogCore {
                 return
             }
             this._isInitialized = true
+            const cached = this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)
+            if (cached !== undefined)
+                this.setPersistedProperty(PostHogPersistedProperty.RemoteConfig, sanitizeAutocaptureConfig(cached))
             this.setupBootstrap(options)
             this.resetSessionId()
             this.getDistinctId()
@@ -71,7 +82,10 @@ export class ElectronCore extends PostHogCore {
 
     setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
         if (this._stopped || key === PostHogPersistedProperty.SessionReplay) return
-        this._storage.set(key, value)
+        this._storage.set(
+            key,
+            key === PostHogPersistedProperty.RemoteConfig && value !== null ? sanitizeAutocaptureConfig(value) : value
+        )
         if (
             this._isInitialized &&
             key !== PostHogPersistedProperty.Queue &&
@@ -79,6 +93,50 @@ export class ElectronCore extends PostHogCore {
         ) {
             this._notify()
         }
+    }
+
+    getAutocaptureState(): AutocaptureState {
+        return {
+            ...sanitizeAutocaptureConfig(this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)),
+            status: this._disableRemoteConfig ? 'disabled' : this._autocaptureStatus,
+            ...(this.isDisabled ? { autocapture_opt_out: true } : {}),
+        }
+    }
+
+    loadAutocaptureConfig(forceRefresh = false): Promise<void> {
+        if (this._stopped || this.isDisabled || this.optedOut || this._disableRemoteConfig) return Promise.resolve()
+        if (this._autocaptureLoad) return this._autocaptureLoad
+        if (
+            !forceRefresh &&
+            this._autocaptureStatus === 'loaded' &&
+            this._autocaptureLoadedAt !== undefined &&
+            Date.now() - this._autocaptureLoadedAt < AUTOCAPTURE_CONFIG_MAX_AGE_MS
+        )
+            return Promise.resolve()
+        // Status starts 'pending' and only the first request waits on it; a warm refresh or a retry after an
+        // outcome keeps the last known state so already-enabled capture is not paused.
+        // These whitelisted project settings are identity-independent, unlike flag responses.
+        this._autocaptureLoad = this.getRemoteConfig()
+            .then((response) => {
+                if (this._stopped) return
+                if (this.optedOut || this.isDisabled) {
+                    this._autocaptureStatus = 'failed'
+                    return
+                }
+                this._autocaptureStatus = response ? 'loaded' : 'failed'
+                if (response) {
+                    this._autocaptureLoadedAt = Date.now()
+                    this.setPersistedProperty(PostHogPersistedProperty.RemoteConfig, {
+                        ...sanitizeAutocaptureConfig(this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)),
+                        ...sanitizeAutocaptureConfig(response),
+                    })
+                }
+            })
+            .finally(() => {
+                this._autocaptureLoad = undefined
+                if (!this._stopped) this._notify()
+            })
+        return this._autocaptureLoad
     }
 
     capture(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
@@ -155,7 +213,23 @@ export class ElectronCore extends PostHogCore {
         if (this._stopped || !this._storage.isOwned || this._suspended) throw new Error('PostHog delivery is inactive')
         const target = new URL(url)
         const host = new URL(this.host)
-        if (target.origin !== host.origin || !target.pathname.startsWith(host.pathname.replace(/\/$/, '') + '/')) {
+        const configHost =
+            host.hostname === 'us.i.posthog.com'
+                ? 'us-assets.i.posthog.com'
+                : host.hostname === 'eu.i.posthog.com'
+                  ? 'eu-assets.i.posthog.com'
+                  : undefined
+        const assetConfig =
+            configHost &&
+            host.protocol === 'https:' &&
+            !host.port &&
+            host.pathname === '/' &&
+            target.href === `https://${configHost}/array/${this.projectToken}/config` &&
+            options.method === 'GET'
+        if (
+            !assetConfig &&
+            (target.origin !== host.origin || !target.pathname.startsWith(host.pathname.replace(/\/$/, '') + '/'))
+        ) {
             throw new Error('PostHog request outside configured host')
         }
         const flagsRequest = target.pathname.endsWith('/flags/') || target.pathname.endsWith('/flags')
