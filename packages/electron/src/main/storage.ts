@@ -1,4 +1,4 @@
-import { promises as fs, readFileSync, unlinkSync } from 'node:fs'
+import { promises as fs, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
@@ -80,6 +80,10 @@ export class ElectronStorage {
             this.loaded = true
         })
         await this.loading
+    }
+
+    get isLoaded(): boolean {
+        return this.loaded
     }
 
     get isOwned(): boolean {
@@ -278,7 +282,11 @@ export class ElectronStorage {
 
     /** Final process-exit only: never race asynchronous loading, writing or ownership release. */
     releaseOnExit(): void {
-        if (!this.owned || !this.loaded || this.pending || this.stopping || this.stopped) return
+        if (!this.owned || !this.loaded || this.stopping || this.stopped) return
+        // The SDK never blocks quit, so persist unsaved state (notably consent) with a blocking write.
+        if (this.persistedRevision < this.revision) this.writeOnExit()
+        // An older async rename may still land after this; keep ownership as before.
+        if (this.pending) return
         this.stopped = true
         const lock = join(this.directory, '.owner')
         try {
@@ -340,6 +348,23 @@ export class ElectronStorage {
                 }
             }
         )
+    }
+
+    private writeOnExit(): void {
+        const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
+        try {
+            if (Buffer.byteLength(this.serialized, 'utf8') > this.maxStorageBytes) {
+                throw new RangeError('Electron storage exceeds maxStorageBytes')
+            }
+            writeFileSync(temporary, this.serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+            renameSync(temporary, this.file)
+            this.persistedRevision = this.revision
+        } catch (error) {
+            this.report(error)
+            try {
+                unlinkSync(temporary)
+            } catch {}
+        }
     }
 
     private async write(serialized: string): Promise<void> {

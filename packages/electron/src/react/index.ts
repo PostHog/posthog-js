@@ -27,24 +27,26 @@ export interface PostHogProviderProps {
 export function PostHogProvider({ client, children }: PostHogProviderProps): ReactElement {
     const store = useMemo(() => {
         let snapshot = client.getState()
+        // Accept a received renderer state once; React may read the snapshot many times per render.
+        const accept = (next: State): void => {
+            if (next.revision === snapshot.revision) return
+            // Unrelated SDK updates must not change object/array payload identities.
+            if (
+                next.generation === snapshot.generation &&
+                next.flagRevision === snapshot.flagRevision &&
+                next.flagsLoaded === snapshot.flagsLoaded
+            ) {
+                next.featureFlagPayloads = snapshot.featureFlagPayloads
+            }
+            snapshot = next
+        }
         return {
-            getSnapshot: (): State => {
-                const next = client.getState()
-                // Renderer snapshots are clones: React needs the same object until the revision changes.
-                if (next.revision !== snapshot.revision) {
-                    // Unrelated SDK updates must not change object/array payload identities.
-                    if (
-                        next.generation === snapshot.generation &&
-                        next.flagRevision === snapshot.flagRevision &&
-                        next.flagsLoaded === snapshot.flagsLoaded
-                    ) {
-                        next.featureFlagPayloads = snapshot.featureFlagPayloads
-                    }
-                    snapshot = next
-                }
-                return snapshot
-            },
-            subscribe: (notify: () => void): (() => void) => client.onStateChange(() => notify()),
+            getSnapshot: (): State => snapshot,
+            subscribe: (notify: () => void): (() => void) =>
+                client.onStateChange((next) => {
+                    accept(next)
+                    notify()
+                }),
         }
     }, [client])
     const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)

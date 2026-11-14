@@ -119,6 +119,9 @@ export class PostHog {
     private _tail: Promise<unknown> = Promise.resolve()
     private _readyForSnapshots = false
     private _pendingConsent = 0
+    // Latest consent change requested but not yet applied by the mutation queue.
+    private _requestedConsent?: { optedOut: boolean; token: number }
+    private _consentToken = 0
 
     constructor(private _options: PostHogOptions) {
         if (singleton) throw new Error('PostHog Electron is already initialized; use init()')
@@ -150,7 +153,13 @@ export class PostHog {
             () => this._scheduleState(),
             (error) => this._report(error)
         )
-        const exit = (): void => storage.releaseOnExit()
+        const exit = (): void => {
+            // Quit is never delayed, so a queued consent change is applied before the final blocking write.
+            if (this._requestedConsent && storage.isLoaded) {
+                this._core.setPersistedProperty(PostHogPersistedProperty.OptedOut, this._requestedConsent.optedOut)
+            }
+            storage.releaseOnExit()
+        }
         process.once('exit', exit)
         this._cleanups.push(() => process.removeListener('exit', exit))
         singleton = this
@@ -410,10 +419,19 @@ export class PostHog {
         return this._run(() => this._core.unregister(key))
     }
     optIn(): Promise<void> {
-        return this._run(() => this._core.optIn(), undefined, undefined, true)
+        return this._changeConsent(false)
     }
     optOut(): Promise<void> {
-        return this._run(() => this._optOut(), undefined, undefined, true)
+        return this._changeConsent(true)
+    }
+    private _changeConsent(optedOut: boolean, generation?: number, authorize?: () => void): Promise<void> {
+        const requested = { optedOut, token: ++this._consentToken }
+        if (!this._closing) this._requestedConsent = requested
+        return this._run(() => (optedOut ? this._optOut() : this._core.optIn()), generation, authorize, true).finally(
+            () => {
+                if (this._requestedConsent === requested) this._requestedConsent = undefined
+            }
+        )
     }
     private async _optOut(): Promise<void> {
         this._generation++
@@ -738,6 +756,8 @@ export class PostHog {
         if (command.type === 'hello') return this._run(() => {}, undefined, authorize)
         if (command.type === 'flush') return this._flush(authorize)
         if (command.type === 'reloadFeatureFlags') return this._reloadFeatureFlags(generation, authorize)
+        // Withdrawal from any window must survive an immediate quit, like a main-process optOut().
+        if (command.type === 'optOut') return this._changeConsent(true, undefined, authorize)
         if (command.type === 'loadAutocaptureConfig') {
             await this._ready
             await this._tail
@@ -784,8 +804,6 @@ export class PostHog {
                         return this._core.unregister(command.key)
                     case 'optIn':
                         return this._core.optIn()
-                    case 'optOut':
-                        return this._optOut()
                     case 'flag': {
                         if (
                             command.flagRevision === this._flagRevision &&
@@ -812,12 +830,7 @@ export class PostHog {
         ) {
             return this._runFlagContext(operation, generation, authorize)
         }
-        return this._run(
-            operation,
-            command.type === 'optOut' ? undefined : generation,
-            authorize,
-            command.type === 'optOut' || command.type === 'optIn'
-        )
+        return this._run(operation, generation, authorize, command.type === 'optIn')
     }
 
     shutdown(timeoutMs = 2000): Promise<void> {
