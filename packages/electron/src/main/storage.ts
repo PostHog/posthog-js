@@ -1,4 +1,14 @@
-import { promises as fs, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+    closeSync,
+    ftruncateSync,
+    openSync,
+    promises as fs,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+    writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
@@ -56,6 +66,9 @@ export class ElectronStorage {
     private failure?: { error: unknown }
     private loading?: Promise<void>
     private loaded = false
+    // Temp file whose rename has been submitted and may still land after the final exit write.
+    private renaming?: string
+    private finalized = false
     private readonly maxStorageBytes: number
     private readonly maxQueueAgeMs: number
     private readonly file: string
@@ -326,7 +339,7 @@ export class ElectronStorage {
                 attemptedRevision = this.revision
                 const serialized = this.serialized
                 await this.write(serialized)
-                this.persistedRevision = attemptedRevision
+                this.persistedRevision = Math.max(this.persistedRevision, attemptedRevision)
             }
         })
         this.pending = pending
@@ -351,14 +364,30 @@ export class ElectronStorage {
     }
 
     private writeOnExit(): void {
+        if (Buffer.byteLength(this.serialized, 'utf8') > this.maxStorageBytes) {
+            this.report(new RangeError('Electron storage exceeds maxStorageBytes'))
+            return
+        }
+        // A submitted rename cannot be cancelled. Overwrite its source in place first (never create it):
+        // if it already landed, the rename below replaces it; otherwise it now carries the final state.
+        if (this.renaming) {
+            let fd: number | undefined
+            try {
+                fd = openSync(this.renaming, 'r+')
+                ftruncateSync(fd, 0)
+                writeSync(fd, this.serialized, 0, 'utf8')
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') this.report(error)
+            } finally {
+                if (fd !== undefined) closeSync(fd)
+            }
+        }
         const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
         try {
-            if (Buffer.byteLength(this.serialized, 'utf8') > this.maxStorageBytes) {
-                throw new RangeError('Electron storage exceeds maxStorageBytes')
-            }
             writeFileSync(temporary, this.serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
             renameSync(temporary, this.file)
             this.persistedRevision = this.revision
+            this.finalized = true
         } catch (error) {
             this.report(error)
             try {
@@ -376,9 +405,12 @@ export class ElectronStorage {
         const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
         try {
             await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+            if (this.finalized) return
             // stop() retains ownership until this already-started write settles.
+            this.renaming = temporary
             await fs.rename(temporary, this.file)
         } finally {
+            if (this.renaming === temporary) this.renaming = undefined
             await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => {
                 if (error.code !== 'ENOENT') {
                     this.report(error)
