@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, sep } from 'node:path'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electron from 'electron'
 import { flagKey, mockToken, startMockServer } from './mock-server.mjs'
@@ -29,6 +29,7 @@ try {
             'dist',
             'mock-server.mjs',
             'smoke-driver.mjs',
+            'fixtures',
         ]) {
             await cp(join(directory, name), join(source, name), { recursive: true, dereference: true })
         }
@@ -50,20 +51,47 @@ try {
         application = join(packaged, 'app.asar')
         await createPackage(source, application)
     }
+    let packagedBinary = process.argv.find((argument) => argument.startsWith('--packaged='))?.slice(11)
+    if (packagedBinary) {
+        assert.ok(!packaged, 'choose either --asar or --packaged')
+        packaged = await realpath(await mkdtemp(join(tmpdir(), 'posthog-electron-consumer-')))
+        for (let ancestor = packaged; ; ancestor = dirname(ancestor)) {
+            await assert.rejects(
+                stat(join(ancestor, 'node_modules')),
+                { code: 'ENOENT' },
+                `packaged launch must not have a dependency ancestor: ${ancestor}`
+            )
+            if (dirname(ancestor) === ancestor) break
+        }
+        const root = process.platform === 'darwin' ? dirname(dirname(dirname(packagedBinary))) : dirname(packagedBinary)
+        const isolatedRoot = join(packaged, basename(root))
+        // Preserve relative framework symlinks; dereferencing breaks macOS app bundles.
+        await cp(root, isolatedRoot, { recursive: true, dereference: false, verbatimSymlinks: true })
+        packagedBinary = join(isolatedRoot, relative(root, packagedBinary))
+        console.log(`Isolated packaged consumer: ${packagedBinary}`)
+    }
     const env = {
         ...process.env,
         ELECTRON_EXAMPLE_USER_DATA: userData,
         ELECTRON_EXAMPLE_MOCK_HOST: receiver.host,
     }
     delete env.ELECTRON_RUN_AS_NODE
+    for (const key of Object.keys(env)) {
+        if (key.toUpperCase() === 'NODE_PATH') delete env[key]
+    }
     delete env.POSTHOG_PROJECT_TOKEN
     delete env.POSTHOG_HOST
     await new Promise((resolve, reject) => {
-        const child = spawn(process.env.ELECTRON_BINARY ?? electron, [application, '--smoke-test'], {
-            cwd: directory,
-            env,
-            stdio: 'inherit',
-        })
+        const fixture = process.argv.find((argument) => argument.startsWith('--fixture='))
+        const child = spawn(
+            packagedBinary ?? process.env.ELECTRON_BINARY ?? electron,
+            [...(packagedBinary ? [] : [application]), '--smoke-test', ...(fixture ? [fixture] : [])],
+            {
+                cwd: packagedBinary ? packaged : directory,
+                env,
+                stdio: 'inherit',
+            }
+        )
         let timedOut = false
         let forceKill
         const timeout = setTimeout(() => {
