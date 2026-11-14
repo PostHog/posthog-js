@@ -251,6 +251,39 @@ describe('renderer exception autocapture', () => {
         ])
     })
 
+    it('does not inspect automatic or manual error data while opt-out is pending', async () => {
+        const { client, bridge, commands } = harness({ enableExceptionAutocapture: true })
+        await client.ready()
+        const normal = vi.mocked(bridge.request).getMockImplementation()!
+        let release!: () => void
+        const held = new Promise<void>((resolve) => {
+            release = resolve
+        })
+        vi.mocked(bridge.request).mockImplementationOnce(async (request) => {
+            await held
+            return normal(request)
+        })
+        const withdrawing = client.optOut()
+        const getter = vi.fn(() => new Error('private during withdrawal'))
+        const event = new TestErrorEvent()
+        Object.defineProperty(event, 'error', { get: getter })
+        const rejection = new TestRejectionEvent(null)
+        Object.defineProperty(rejection, 'reason', { get: getter })
+        let manual: Promise<void> | undefined
+        try {
+            target.dispatchEvent(event)
+            target.dispatchEvent(rejection)
+            manual = client.captureException(Object.defineProperty({}, 'message', { get: getter }))
+            await Promise.resolve()
+            expect(getter).not.toHaveBeenCalled()
+        } finally {
+            release()
+            await withdrawing
+            await manual
+        }
+        expect(commands()).toEqual([])
+    })
+
     it('rechecks disabled state before dispatching queued exception IPC', async () => {
         const { client, bridge, disable } = harness({ enableExceptionAutocapture: true })
         await client.ready()

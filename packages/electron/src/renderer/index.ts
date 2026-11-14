@@ -49,6 +49,7 @@ const bridgeSequences = new WeakMap<Bridge, number>()
 export class PostHog {
     private _autocapture?: RendererAutocapture
     private _autocapturePauses = 0
+    private _pendingOptOuts = 0
     private _state?: State
     private _reportedFlags = new Set<string>()
     private _ready?: Promise<void>
@@ -234,7 +235,10 @@ export class PostHog {
         return this._send({ type: 'optIn' })
     }
     optOut(): Promise<void> {
-        return this._pauseAutocapture({ type: 'optOut' })
+        this._pendingOptOuts++
+        return this._pauseAutocapture({ type: 'optOut' }).finally(() => {
+            this._pendingOptOuts--
+        })
     }
     reloadFeatureFlags(): Promise<void> {
         return this._send({ type: 'reloadFeatureFlags' })
@@ -250,7 +254,7 @@ export class PostHog {
         return this._captureException(error, properties)
     }
     private _canCaptureException(): boolean {
-        return !this._disposed && !this._state?.disabled && !this.hasOptedOutCapturing()
+        return !this._disposed && !this._pendingOptOuts && !this._state?.disabled && !this.hasOptedOutCapturing()
     }
     protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
         if (!this._canCaptureException()) return Promise.resolve()
