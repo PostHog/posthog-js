@@ -149,6 +149,27 @@ test(
     }
 )
 
+test(
+    'native quit after a non-awaited optOut keeps the user opted out after relaunch',
+    { timeout: 30000 },
+    async (t) => {
+        const { launch, state } = await setup(t)
+        const target = await ingestion(t)
+        const first = await launch(target.host)
+        assert.equal(first.initial.state.optedOut, false)
+        await first.command('optOutThenQuit')
+        assert.equal(await first.exited, 0)
+        assert.equal((await state()).opted_out, true)
+        const next = await launch(target.host)
+        assert.equal(next.initial.state.optedOut, true)
+        await next.command('capture', 'must-not-send')
+        await next.command('flush')
+        assert.deepEqual(target.received, [])
+        await next.command('quit')
+        assert.equal(await next.exited, 0)
+    }
+)
+
 test('native cancelled quit retains ownership and a usable client', { timeout: 30000 }, async (t) => {
     const { launch, storage } = await setup(t)
     const target = await ingestion(t)

@@ -61,7 +61,12 @@ app.whenReady()
         createInterface({ input: process.stdin }).on('line', async (line) => {
             const { id, command, args = [] } = JSON.parse(line)
             try {
-                if (command === 'quit') {
+                if (command === 'optOutThenQuit') {
+                    // Host does not await consent withdrawal before quitting.
+                    void owner.optOut()
+                    send({ id, state: owner.getState(), errors })
+                    app.quit()
+                } else if (command === 'quit') {
                     send({ id, state: owner.getState(), errors })
                     app.quit()
                 } else if (command === 'cancelQuit') {
