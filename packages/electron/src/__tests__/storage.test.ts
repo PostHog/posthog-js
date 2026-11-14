@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { ElectronStorage } from '../main/storage'
 
@@ -23,9 +23,10 @@ describe('ElectronStorage', () => {
     let directory: string
     const stores: ElectronStorage[] = []
 
-    function storage(options?: ConstructorParameters<typeof ElectronStorage>[1]) {
+    async function storage(options?: ConstructorParameters<typeof ElectronStorage>[1]) {
         const store = new ElectronStorage(directory, options)
         stores.push(store)
+        await store.load()
         return store
     }
 
@@ -40,13 +41,18 @@ describe('ElectronStorage', () => {
 
     afterEach(async () => {
         // Drain background writes before restoring filesystem spies or removing fixtures.
-        await Promise.all(stores.splice(0).map((store) => store.flush().catch(() => {})))
+        await Promise.all(
+            stores.splice(0).map(async (store) => {
+                await store.flush().catch(() => {})
+                await store.stop()
+            })
+        )
         vi.restoreAllMocks()
         await fs.rm(directory, { recursive: true, force: true })
     })
 
     it.each(['nested mutation', 'cycle'] as const)('detaches accepted queue data from caller %s', async (change) => {
-        const store = storage()
+        const store = await storage()
         const nested = { value: 'accepted' }
         const properties: Record<string, unknown> = { nested }
         const item = { message: { ...event('accepted').message, properties } }
@@ -62,7 +68,7 @@ describe('ElectronStorage', () => {
     })
 
     it('keeps the accepted queue intact when a copy is changed before a rejected set', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('queue', [event('accepted')])
         await store.flush()
         const next = store.get<ReturnType<typeof event>[]>('queue') ?? []
@@ -76,7 +82,7 @@ describe('ElectronStorage', () => {
     })
 
     it('does not serialize the store again for unchanged queue reads while still expiring old entries', async () => {
-        const store = storage({ maxQueueAgeMs: 100 })
+        const store = await storage({ maxQueueAgeMs: 100 })
         store.set('queue', [event('accepted')])
         await store.flush()
         const stringify = vi.spyOn(JSON, 'stringify')
@@ -89,7 +95,7 @@ describe('ElectronStorage', () => {
     })
 
     it('loads an absent file without opting out and persists identity and properties across restart', async () => {
-        const store = storage()
+        const store = await storage()
         await store.load()
         expect(store.get('opted_out')).toBeUndefined()
         store.set('anonymous_id', 'anon')
@@ -102,15 +108,184 @@ describe('ElectronStorage', () => {
             version: 1,
             values: { anonymous_id: 'anon', distinct_id: 'identified', props: { plan: 'pro' }, opted_out: false },
         })
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('anonymous_id')).toBe('anon')
         expect(restarted.get('props')).toEqual({ plan: 'pro' })
         expect(restarted.get('opted_out')).toBe(false)
     })
 
+    it('releases idle ownership synchronously at final exit without changing persisted state', async () => {
+        const store = await storage()
+        store.set('distinct_id', 'same-person')
+        await store.flush()
+        const before = await fs.readFile(join(directory, 'state.json'), 'utf8')
+        store.releaseOnExit()
+        store.releaseOnExit()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readFile(join(directory, 'state.json'), 'utf8')).toBe(before)
+        const next = await storage()
+        expect(next.get('distinct_id')).toBe('same-person')
+    })
+
+    it('durably writes an unsaved consent change at final exit before any async write runs', async () => {
+        const store = await storage()
+        store.set('opted_out', false)
+        await store.flush()
+        store.set('opted_out', true)
+        store.releaseOnExit()
+        const { readFileSync } = await import('node:fs')
+        expect(JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values.opted_out).toBe(true)
+        expect(store.isOwned).toBe(true)
+        await store.flush()
+        expect((await diskState()).values.opted_out).toBe(true)
+    })
+
+    it('durably writes the newest state at final exit while an older async write is in flight', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            await rename(...args)
+        })
+        store.set('distinct_id', 'older')
+        await reached.promise
+        store.set('opted_out', true)
+        try {
+            store.releaseOnExit()
+            const { readFileSync } = await import('node:fs')
+            const values = JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values
+            expect(values).toMatchObject({ distinct_id: 'older', opted_out: true })
+            expect(store.isOwned).toBe(true)
+        } finally {
+            release.resolve()
+            await store.flush()
+        }
+        // If the older rename lands later in the same process, the writer still converges to the newest state.
+        expect((await diskState()).values).toMatchObject({ distinct_id: 'older', opted_out: true })
+    })
+
+    it('does not let an already-submitted older rename replace the final exit snapshot', async () => {
+        const store = await storage()
+        store.set('opted_out', false)
+        await store.flush()
+        const { readFileSync } = await import('node:fs')
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        let afterOlderRename: unknown
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            // Models a rename already queued off-thread that completes after exit listeners run.
+            await release.promise
+            try {
+                await rename(...args)
+            } finally {
+                afterOlderRename = JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values.opted_out
+            }
+        })
+        store.set('distinct_id', 'older')
+        await reached.promise
+        store.set('opted_out', true)
+        store.releaseOnExit()
+        release.resolve()
+        await vi.waitFor(() => expect(afterOlderRename).not.toBeUndefined())
+        expect(afterOlderRename).toBe(true)
+        await store.flush().catch(() => {})
+    })
+
+    it('keeps ownership at exit while the initial state read is pending', async () => {
+        const reached = deferred(),
+            release = deferred()
+        const read = fs.readFile.bind(fs)
+        vi.spyOn(fs, 'readFile').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            return read(...args)
+        })
+        const store = new ElectronStorage(directory)
+        stores.push(store)
+        const loading = store.load()
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(store.isOwned).toBe(true)
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await loading
+        }
+    })
+
+    it('keeps ownership at exit while a state write is pending', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            await rename(...args)
+        })
+        store.set('distinct_id', 'pending')
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(store.isOwned).toBe(true)
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await store.flush()
+        }
+    })
+
+    it('never mixes final exit release with an async stop already releasing ownership', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const unlink = fs.unlink.bind(fs)
+        vi.spyOn(fs, 'unlink').mockImplementationOnce(async (path) => {
+            reached.resolve()
+            await release.promise
+            await unlink(path)
+        })
+        const stopping = store.stop()
+        await reached.promise
+        try {
+            store.releaseOnExit()
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        } finally {
+            release.resolve()
+            await stopping
+        }
+        expect(await fs.readdir(directory)).toEqual([])
+    })
+
+    it('does not unlink an owner whose nonce changed before final exit', async () => {
+        const store = await storage()
+        const lock = join(directory, '.owner')
+        const replacement = { ...JSON.parse(await fs.readFile(lock, 'utf8')), token: 'b'.repeat(36) }
+        await fs.writeFile(lock, JSON.stringify(replacement))
+        store.releaseOnExit()
+        expect(JSON.parse(await fs.readFile(lock, 'utf8'))).toEqual(replacement)
+    })
+
+    it('does not release another live instance ownership at exit', async () => {
+        const owner = await storage()
+        const lock = await fs.readFile(join(directory, '.owner'), 'utf8')
+        const denied = await storage()
+        denied.releaseOnExit()
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(lock)
+        expect(owner.isOwned).toBe(true)
+    })
+
     it('removes null values rather than persisting null', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         store.set('distinct_id', null)
         expect(store.get('distinct_id')).toBeUndefined()
@@ -120,14 +295,14 @@ describe('ElectronStorage', () => {
 
     it('coalesces synchronous changes into one atomic write and leaves no temporary files', async () => {
         const rename = vi.spyOn(fs, 'rename')
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'first')
         store.set('distinct_id', 'second')
         store.set('props', { a: 1 })
         await store.flush()
         expect(rename).toHaveBeenCalledTimes(1)
         expect((await diskState()).values.distinct_id).toBe('second')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('serializes a newer write arriving during flush and waits for it', async () => {
@@ -139,7 +314,7 @@ describe('ElectronStorage', () => {
             await releaseRename.promise
             await rename(from, to)
         })
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         const flushing = store.flush()
         await reachedRename.promise
@@ -155,7 +330,7 @@ describe('ElectronStorage', () => {
         const unlink = fs.unlink.bind(fs)
         // Exercise both sides of promise settlement without timers or scheduler sleeps.
         for (let depth = 0; depth < 10; depth++) {
-            const store = storage()
+            const store = await storage()
             const changed = deferred()
             vi.spyOn(fs, 'unlink').mockImplementationOnce(async (path) => {
                 await unlink(path).catch(() => {})
@@ -175,11 +350,12 @@ describe('ElectronStorage', () => {
             await store.flush()
             expect((await diskState()).values.distinct_id).toBe(`new-${depth}`)
             vi.mocked(fs.unlink).mockRestore()
+            await store.stop()
         }
     })
 
     it('keeps the previous complete file visible until rename', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         await store.flush()
         const reachedRename = deferred()
@@ -203,7 +379,7 @@ describe('ElectronStorage', () => {
             return
         }
         await fs.chmod(directory, 0o777)
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'private')
         await store.flush()
         expect((await fs.stat(directory)).mode & 0o777).toBe(0o700)
@@ -211,7 +387,7 @@ describe('ElectronStorage', () => {
     })
 
     it('prunes seven-day-old events using Date and ISO timestamps and preserves the boundary', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('queue', [
             event('expired', new Date(NOW - 7 * DAY - 1)),
             event('boundary', new Date(NOW - 7 * DAY).toISOString()),
@@ -219,7 +395,8 @@ describe('ElectronStorage', () => {
         ])
         expect(store.get('queue')).toEqual([event('boundary', new Date(NOW - 7 * DAY).toISOString()), event('recent')])
         await store.flush()
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('queue')).toEqual((await diskState()).values.queue)
     })
@@ -229,7 +406,7 @@ describe('ElectronStorage', () => {
             join(directory, 'state.json'),
             JSON.stringify({ version: 1, values: { queue: [event('old', new Date(NOW - 101)), event('recent')] } })
         )
-        const store = storage({ maxQueueAgeMs: 100 })
+        const store = await storage({ maxQueueAgeMs: 100 })
         await store.load()
         expect(store.get('queue')).toEqual([event('recent', new Date(NOW).toISOString())])
         vi.mocked(Date.now).mockReturnValue(NOW + 101)
@@ -244,7 +421,7 @@ describe('ElectronStorage', () => {
         const maxStorageBytes = Buffer.byteLength(
             JSON.stringify({ version: 1, values: { distinct_id: 'person', queue: [newest, middle] } })
         )
-        const store = storage({ maxStorageBytes })
+        const store = await storage({ maxStorageBytes })
         store.set('distinct_id', 'person')
         store.set('queue', [newest, oldest, middle])
         expect(store.get('queue')).toEqual([newest, middle])
@@ -254,7 +431,7 @@ describe('ElectronStorage', () => {
     })
 
     it('enforces the default 5 MiB bound and counts multibyte strings in bytes', async () => {
-        const store = storage()
+        const store = await storage()
         const large = event('large')
         large.message.properties = { text: '雪'.repeat(2 * 1024 * 1024) }
         store.set('queue', [large, event('small')])
@@ -267,7 +444,7 @@ describe('ElectronStorage', () => {
 
     it('rejects oversized nonqueue state synchronously without changing the previous state', async () => {
         const onError = vi.fn()
-        const store = storage({ maxStorageBytes: 100, onError })
+        const store = await storage({ maxStorageBytes: 100, onError })
         store.set('distinct_id', 'person')
         expect(() => store.set('props', { text: 'x'.repeat(200) })).toThrow(RangeError)
         expect(store.get('props')).toBeUndefined()
@@ -279,7 +456,7 @@ describe('ElectronStorage', () => {
 
     it('does not silently reject an oversized consent change', async () => {
         const maxStorageBytes = Buffer.byteLength(JSON.stringify({ version: 1, values: { props: '1234567890' } }))
-        const store = storage({ maxStorageBytes })
+        const store = await storage({ maxStorageBytes })
         store.set('props', '1234567890')
         expect(() => store.set('opted_out', true)).toThrow(RangeError)
         await store.flush()
@@ -298,7 +475,7 @@ describe('ElectronStorage', () => {
     ])('fails closed and clears analytics for corrupt state: %s', async (contents) => {
         await fs.writeFile(join(directory, 'state.json'), contents)
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
         await expect(store.load()).resolves.toBeUndefined()
         expect(store.get('opted_out')).toBe(true)
         expect(store.get('distinct_id')).toBeUndefined()
@@ -311,7 +488,7 @@ describe('ElectronStorage', () => {
     it('fails closed for unreadable state and tolerates a throwing error handler', async () => {
         // A directory at the file path produces a real read error, even when tests run as root.
         await fs.mkdir(join(directory, 'state.json'))
-        const store = storage({
+        const store = await storage({
             onError: () => {
                 throw new Error('handler failed')
             },
@@ -322,15 +499,15 @@ describe('ElectronStorage', () => {
     })
 
     it('reports write failures, rejects durability acknowledgments and retries on a later set', async () => {
-        await fs.mkdir(join(directory, 'state.json'))
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
+        await fs.mkdir(join(directory, 'state.json'))
         store.set('distinct_id', 'in-memory')
         await expect(store.flush()).rejects.toBeDefined()
         expect(store.get('distinct_id')).toBe('in-memory')
         expect(onError).toHaveBeenCalledTimes(1)
         await expect(store.flush()).rejects.toBeDefined()
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
         await fs.rm(join(directory, 'state.json'), { recursive: true })
         store.set('props', { recovered: true })
         await store.flush()
@@ -339,7 +516,7 @@ describe('ElectronStorage', () => {
 
     it('reports temporary-file write failures and leaves the old file intact', async () => {
         const onError = vi.fn()
-        const store = storage({ onError })
+        const store = await storage({ onError })
         store.set('distinct_id', 'old')
         await store.flush()
         vi.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('disk full'))
@@ -347,13 +524,13 @@ describe('ElectronStorage', () => {
         await expect(store.flush()).rejects.toThrow('disk full')
         expect(onError).toHaveBeenCalledTimes(1)
         expect((await diskState()).values.distinct_id).toBe('old')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('handles a background write failure even when flush was not called at the time', async () => {
         const failed = deferred()
+        const store = await storage({ onError: failed.resolve })
         await fs.mkdir(join(directory, 'state.json'))
-        const store = storage({ onError: failed.resolve })
         store.set('opted_out', true)
         await failed.promise
         await expect(store.flush()).rejects.toBeDefined()
@@ -361,25 +538,26 @@ describe('ElectronStorage', () => {
     })
 
     it('keeps the previous disk state intact after a failed rename and cleans its temporary file', async () => {
-        const store = storage()
+        const store = await storage()
         store.set('distinct_id', 'old')
         await store.flush()
         vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('disk failure'))
         store.set('distinct_id', 'new')
         await expect(store.flush()).rejects.toThrow('disk failure')
         expect((await diskState()).values.distinct_id).toBe('old')
-        expect(await fs.readdir(directory)).toEqual(['state.json'])
+        expect(await fs.readdir(directory)).toEqual(['.owner', 'state.json'])
     })
 
     it('does not expose inherited keys or invoke prototype setters on set or load', async () => {
-        const store = storage()
+        const store = await storage()
         expect(store.get('constructor')).toBeUndefined()
         expect(store.get('__proto__')).toBeUndefined()
         store.set('__proto__', { polluted: true })
         store.set('constructor', 'own constructor')
         store.set('props', JSON.parse('{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}'))
         await store.flush()
-        const restarted = storage()
+        await store.stop()
+        const restarted = await storage()
         await restarted.load()
         expect(restarted.get('__proto__')).toEqual({ polluted: true })
         expect(restarted.get('constructor')).toBe('own constructor')
@@ -389,7 +567,7 @@ describe('ElectronStorage', () => {
     })
 
     it('rejects nonserializable changes without corrupting memory or disk', async () => {
-        const store = storage()
+        const store = await storage()
         const circular: Record<string, unknown> = {}
         circular.self = circular
         expect(() => store.set('props', circular)).toThrow()
@@ -397,5 +575,90 @@ describe('ElectronStorage', () => {
         store.set('distinct_id', 'valid')
         await store.flush()
         expect((await diskState()).values).toEqual({ distinct_id: 'valid' })
+    })
+    it('refuses a live owner without reading or changing its analytics, even after attempted writes', async () => {
+        const owner = await storage()
+        owner.set('distinct_id', 'owner')
+        owner.set('queue', [event('owned')])
+        await owner.flush()
+        const before = await fs.readFile(join(directory, 'state.json'), 'utf8')
+        const onError = vi.fn()
+        const denied = await storage({ onError })
+        expect(denied.isOwned).toBe(false)
+        expect(denied.get('opted_out')).toBe(true)
+        expect(denied.get('queue')).toBeUndefined()
+        denied.set('opted_out', false)
+        denied.set('distinct_id', 'intruder')
+        await denied.flush()
+        await denied.stop()
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(await fs.readFile(join(directory, 'state.json'), 'utf8')).toBe(before)
+        expect(owner.isOwned).toBe(true)
+    })
+
+    it.each([
+        'partial json',
+        JSON.stringify({ host: 'another-host', pid: 123, token: 'a'.repeat(36) }),
+        JSON.stringify({ host: hostname(), pid: -1, token: 'a'.repeat(36) }),
+        JSON.stringify({ host: hostname(), pid: 123, token: '../outside' }),
+    ])('never steals unverifiable ownership: %s', async (contents) => {
+        await fs.writeFile(join(directory, '.owner'), contents)
+        const onError = vi.fn()
+        const store = await storage({ onError })
+        expect(store.isOwned).toBe(false)
+        expect(onError).toHaveBeenCalledTimes(1)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('never steals ownership when the process probe is denied', async () => {
+        const contents = JSON.stringify({ host: hostname(), pid: 123, token: 'a'.repeat(36) })
+        await fs.writeFile(join(directory, '.owner'), contents)
+        vi.spyOn(process, 'kill').mockImplementation(() => {
+            throw Object.assign(new Error('denied'), { code: 'EPERM' })
+        })
+        const store = await storage()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('fails closed if a dead owner already has a reclamation tombstone', async () => {
+        const token = 'a'.repeat(36)
+        const contents = JSON.stringify({ host: hostname(), pid: 123, token })
+        await fs.writeFile(join(directory, '.owner'), contents)
+        await fs.writeFile(join(directory, `.reclaim-${token}`), '')
+        vi.spyOn(process, 'kill').mockImplementation(() => {
+            throw Object.assign(new Error('dead'), { code: 'ESRCH' })
+        })
+        const store = await storage()
+        expect(store.isOwned).toBe(false)
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toBe(contents)
+    })
+
+    it('commits an already-started write before releasing ownership on stop', async () => {
+        const store = await storage()
+        store.set('distinct_id', 'old')
+        await store.flush()
+        const reachedWrite = deferred(),
+            releaseWrite = deferred()
+        const write = fs.writeFile.bind(fs)
+        vi.spyOn(fs, 'writeFile').mockImplementationOnce(async (...args) => {
+            reachedWrite.resolve()
+            await releaseWrite.promise
+            await write(...args)
+        })
+        store.set('distinct_id', 'new')
+        await reachedWrite.promise
+        const rename = fs.rename.bind(fs)
+        const committed = vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+            await rename(...args)
+        })
+        const stopping = store.stop()
+        expect(await fs.readFile(join(directory, '.owner'), 'utf8')).toContain(String(process.pid))
+        releaseWrite.resolve()
+        await stopping
+        expect(committed).toHaveBeenCalledOnce()
+        expect((await diskState()).values.distinct_id).toBe('new')
+        expect(await fs.readdir(directory)).toEqual(['state.json'])
     })
 })

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
     COMMAND_CHANNEL,
     STATE_CHANNEL,
@@ -29,6 +29,7 @@ vi.mock('electron', async () => {
     })
     return {
         app,
+        powerMonitor: new EventEmitter(),
         ipcMain: {
             handle: (key: string, callback: (event: IpcMainInvokeEvent, value: unknown) => Promise<BridgeResponse>) =>
                 mock.handlers.set(key, callback),
@@ -114,6 +115,43 @@ function renderer(owner: PostHog, id: number) {
 }
 
 describe('main Electron client', () => {
+    it('acknowledges an in-flight capture only after its state rename even when shutdown times out', async () => {
+        const { promises: fs } = await import('node:fs')
+        const { dirname } = await import('node:path')
+        const owner = await start()
+        let release!: () => void
+        const write = fs.writeFile.bind(fs)
+        vi.spyOn(fs, 'writeFile').mockImplementationOnce(async (...args) => {
+            await new Promise<void>((resolve) => {
+                release = resolve
+            })
+            await write(...args)
+        })
+        const rename = fs.rename.bind(fs)
+        let committed = false
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            expect(await fs.readFile(join(dirname(String(args[1])), '.owner'), 'utf8')).toContain(String(process.pid))
+            await rename(...args)
+            committed = true
+        })
+        let acknowledged = false
+        const capture = owner.capture('pending-shutdown').then(() => {
+            acknowledged = true
+        })
+        const flushing = owner.flush()
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        await owner.shutdown(1)
+        expect(acknowledged).toBe(false)
+        expect(committed).toBe(false)
+        release()
+        await Promise.all([capture, flushing])
+        expect(committed).toBe(true)
+        const namespace = (await fs.readdir(directory))[0]
+        const persisted = JSON.parse(await fs.readFile(join(directory, namespace, 'state.json'), 'utf8'))
+        expect(persisted.values.queue.map((item: any) => item.message.event)).toContain('pending-shutdown')
+        await vi.waitFor(async () => expect(await fs.readdir(join(directory, namespace))).toEqual(['state.json']))
+    })
+
     it('reinitializes a disposed renderer on the same bridge without resetting its request sequence', async () => {
         const owner = await start()
         const page = renderer(owner, 1)
@@ -270,7 +308,6 @@ describe('main Electron client', () => {
         expect(state.featureFlagPayloads['flag-0']).toEqual({ value: 0 })
         expect(payloadReads).toBeLessThanOrEqual(count * 3)
     })
-
     it.each(['capture', 'identify'] as const)(
         'accepts %s after more than 100 repeated reads through the real renderer and owner',
         async (operation) => {
@@ -533,7 +570,7 @@ describe('main Electron client', () => {
         const anonymous = owner.getDistinctId()
         mock.fetch.mockResolvedValue(new Response('unavailable', { status: 503 }))
         await expect(owner.flush()).rejects.toThrow()
-        await owner.shutdown(0)
+        await owner.shutdown(50)
         client = undefined
         mock.fetch.mockImplementation(async (_url, options) => {
             batches.push(...JSON.parse(options?.body as string).batch)
@@ -575,5 +612,189 @@ describe('main Electron client', () => {
         expect(owner.shutdown()).toBe(shutdown)
         expect(mock.handlers.has(COMMAND_CHANNEL)).toBe(false)
         await expect(owner.capture('after-shutdown')).rejects.toThrow('shut down')
+    })
+    it('gates opted-out capture before exception/property inspection and disk mutation but permits identify flags', async () => {
+        const owner = await start()
+        await owner.optOut()
+        const set = vi.spyOn(ElectronStorage.prototype, 'set')
+        const inspect = vi.fn(() => {
+            throw new Error('must not inspect analytics')
+        })
+        const properties = Object.defineProperty({}, '$groups', { get: inspect, enumerable: true })
+        const error = Object.defineProperty({}, 'message', { get: inspect })
+        await owner.capture('blocked', properties)
+        await owner.captureException(error, properties)
+        await owner.group('org', 'private', properties)
+        expect(inspect).not.toHaveBeenCalled()
+        expect(set).not.toHaveBeenCalled()
+        await owner.identify('flags-only')
+        await vi.waitFor(() => expect(mock.fetch).toHaveBeenCalled())
+        await owner.flush()
+        expect(batches).toEqual([])
+    })
+
+    it('cancels ready promptly while Electron readiness is deferred, with no late initialization', async () => {
+        let release!: () => void
+        vi.spyOn(app, 'whenReady').mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    release = resolve
+                })
+        )
+        client = init({ projectToken: 'test-token', storageDirectory: directory })
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        // No startup lifecycle, flags, or networking may run after the timeout.
+        await client.shutdown(1)
+        await client.ready()
+        const set = vi.spyOn(ElectronStorage.prototype, 'set')
+        release()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(set).not.toHaveBeenCalled()
+        expect(mock.fetch).not.toHaveBeenCalled()
+    })
+
+    it('bounds shutdown even when ownership acquisition is deferred and releases a late lock', async () => {
+        const { promises: fs } = await import('node:fs')
+        let release!: () => void
+        const mkdir = fs.mkdir.bind(fs)
+        vi.spyOn(fs, 'mkdir').mockImplementationOnce(async (...args) => {
+            await new Promise<void>((resolve) => {
+                release = resolve
+            })
+            return mkdir(...args)
+        })
+        const onError = vi.fn()
+        client = init({ projectToken: 'test-token', storageDirectory: directory, onError })
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+        await client.shutdown(1)
+        await client.ready()
+        expect(onError).toHaveBeenCalledTimes(1)
+        release()
+        await vi.waitFor(async () => {
+            const namespaces = await fs.readdir(directory)
+            expect(namespaces).toHaveLength(1)
+            expect(await fs.readdir(join(directory, namespaces[0]))).toEqual([])
+        })
+        expect(mock.fetch).not.toHaveBeenCalled()
+    })
+
+    it.each(['before', 'after'])('preserves %s-listener will-quit cancellation and client usability', async (order) => {
+        const cancel = (event: Electron.Event) => event.preventDefault()
+        if (order === 'before') app.on('will-quit', cancel)
+        const owner = await start()
+        if (order === 'after') app.on('will-quit', cancel)
+        try {
+            await owner.capture('before-cancelled-quit')
+            const event = {
+                defaultPrevented: false,
+                preventDefault() {
+                    this.defaultPrevented = true
+                },
+            }
+            app.emit('will-quit', event)
+            await Promise.resolve()
+            expect(app.quit).not.toHaveBeenCalled()
+            expect(mock.fetch).not.toHaveBeenCalled()
+            await owner.capture('still-running')
+            await owner.flush()
+            expect(batches.map(({ event }) => event)).toEqual(['before-cancelled-quit', 'still-running'])
+        } finally {
+            app.removeListener('will-quit', cancel)
+        }
+    })
+
+    it('best-effort will-quit flush does not prevent quit, tear down, or install fatal error handlers', async () => {
+        const uncaught = process.listenerCount('uncaughtException')
+        const rejected = process.listenerCount('unhandledRejection')
+        const owner = await start()
+        await owner.capture('best-effort')
+        const event = { defaultPrevented: false, preventDefault: vi.fn() }
+        app.emit('will-quit', event)
+        await vi.waitFor(() => expect(batches).toHaveLength(1))
+        expect(event.preventDefault).not.toHaveBeenCalled()
+        expect(app.quit).not.toHaveBeenCalled()
+        await owner.capture('usable')
+        expect(process.listenerCount('uncaughtException')).toBe(uncaught)
+        expect(process.listenerCount('unhandledRejection')).toBe(rejected)
+    })
+
+    it.each(['main', 'renderer'] as const)(
+        'persists a queued %s opt-out at process exit even while an earlier write is still pending',
+        async (source) => {
+            const { promises: fs, readFileSync } = await import('node:fs')
+            const baseline = new Set(process.listeners('exit'))
+            const owner = await start()
+            const page = renderer(owner, 1)
+            await page.send({ type: 'hello' })
+            const [exit] = process.listeners('exit').filter((listener) => !baseline.has(listener))
+            const rename = fs.rename.bind(fs)
+            let release!: () => void
+            vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+                await new Promise<void>((resolve) => {
+                    release = resolve
+                })
+                await rename(...args)
+            })
+            const earlier = owner.capture('before-withdrawal')
+            await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+            const withdrawal = source === 'main' ? owner.optOut() : page.send({ type: 'optOut' })
+            // Let the IPC handler pass its readiness check; the earlier write is still held.
+            for (let i = 0; i < 5; i++) await Promise.resolve()
+            try {
+                ;(exit as () => void)()
+                const namespace = (await fs.readdir(directory))[0]
+                const values = JSON.parse(readFileSync(join(directory, namespace, 'state.json'), 'utf8')).values
+                expect(values.opted_out).toBe(true)
+            } finally {
+                release()
+                await Promise.allSettled([earlier, withdrawal])
+            }
+        }
+    )
+
+    it('registers exactly one per-SDK exit listener and removes it on each shutdown', async () => {
+        const baseline = process.listeners('exit')
+        for (let i = 0; i < 2; i++) {
+            const owner = await start()
+            expect(init({ projectToken: 'test-token', storageDirectory: directory })).toBe(owner)
+            expect(process.listeners('exit')).toHaveLength(baseline.length + 1)
+            await owner.shutdown(50)
+            await owner.shutdown(50)
+            expect(process.listeners('exit')).toEqual(baseline)
+        }
+    })
+
+    it('suspend pauses delivery and resume flushes without synthetic activity or session renewal', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        const owner = await start()
+        const session = owner.getSessionId()
+        await owner.capture('before-sleep')
+        powerMonitor.emit('suspend')
+        await expect(owner.flush()).rejects.toThrow('paused')
+        expect(mock.fetch).not.toHaveBeenCalled()
+        vi.setSystemTime(Date.now() + 31 * 60 * 1000)
+        powerMonitor.emit('resume')
+        await vi.waitFor(() => expect(batches).toHaveLength(1))
+        expect(owner.getState().sessionId).toBe(session)
+        expect(batches.map(({ event }) => event)).toEqual(['before-sleep'])
+        await owner.capture('real-activity')
+        expect(owner.getSessionId()).not.toBe(session)
+        await owner.shutdown(50)
+        expect(powerMonitor.listenerCount('suspend')).toBe(0)
+        expect(powerMonitor.listenerCount('resume')).toBe(0)
+    })
+
+    it('closing all registered windows backgrounds once but keeps tray delivery active', async () => {
+        const owner = await start({ captureAppLifecycleEvents: true })
+        const window = renderer(owner, 1)
+        window.focus()
+        window.contents.emit('destroyed')
+        app.emit('window-all-closed')
+        await owner.capture('tray-action')
+        await owner.flush()
+        expect(batches.filter(({ event }) => event === 'Application Backgrounded')).toHaveLength(1)
+        expect(batches.filter(({ event }) => event === 'tray-action')).toHaveLength(1)
+        expect(app.quit).not.toHaveBeenCalled()
     })
 })
