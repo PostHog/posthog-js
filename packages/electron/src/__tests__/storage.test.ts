@@ -130,6 +130,46 @@ describe('ElectronStorage', () => {
         expect(next.get('distinct_id')).toBe('same-person')
     })
 
+    it('durably writes an unsaved consent change at final exit before any async write runs', async () => {
+        const store = await storage()
+        store.set('opted_out', false)
+        await store.flush()
+        store.set('opted_out', true)
+        store.releaseOnExit()
+        const { readFileSync } = await import('node:fs')
+        expect(JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values.opted_out).toBe(true)
+        expect(store.isOwned).toBe(true)
+        await store.flush()
+        expect((await diskState()).values.opted_out).toBe(true)
+    })
+
+    it('durably writes the newest state at final exit while an older async write is in flight', async () => {
+        const store = await storage()
+        const reached = deferred(),
+            release = deferred()
+        const rename = fs.rename.bind(fs)
+        vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+            reached.resolve()
+            await release.promise
+            await rename(...args)
+        })
+        store.set('distinct_id', 'older')
+        await reached.promise
+        store.set('opted_out', true)
+        try {
+            store.releaseOnExit()
+            const { readFileSync } = await import('node:fs')
+            const values = JSON.parse(readFileSync(join(directory, 'state.json'), 'utf8')).values
+            expect(values).toMatchObject({ distinct_id: 'older', opted_out: true })
+            expect(store.isOwned).toBe(true)
+        } finally {
+            release.resolve()
+            await store.flush()
+        }
+        // If the older rename lands later in the same process, the writer still converges to the newest state.
+        expect((await diskState()).values).toMatchObject({ distinct_id: 'older', opted_out: true })
+    })
+
     it('keeps ownership at exit while the initial state read is pending', async () => {
         const reached = deferred(),
             release = deferred()

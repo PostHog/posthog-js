@@ -1470,6 +1470,40 @@ describe('main Electron client', () => {
         expect(process.listenerCount('unhandledRejection')).toBe(rejected)
     })
 
+    it.each(['main', 'renderer'] as const)(
+        'persists a queued %s opt-out at process exit even while an earlier write is still pending',
+        async (source) => {
+            const { promises: fs, readFileSync } = await import('node:fs')
+            const baseline = new Set(process.listeners('exit'))
+            const owner = await start()
+            const page = renderer(owner, 1)
+            await page.send({ type: 'hello' })
+            const [exit] = process.listeners('exit').filter((listener) => !baseline.has(listener))
+            const rename = fs.rename.bind(fs)
+            let release!: () => void
+            vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+                await new Promise<void>((resolve) => {
+                    release = resolve
+                })
+                await rename(...args)
+            })
+            const earlier = owner.capture('before-withdrawal')
+            await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+            const withdrawal = source === 'main' ? owner.optOut() : page.send({ type: 'optOut' })
+            // Let the IPC handler pass its readiness check; the earlier write is still held.
+            for (let i = 0; i < 5; i++) await Promise.resolve()
+            try {
+                ;(exit as () => void)()
+                const namespace = (await fs.readdir(directory))[0]
+                const values = JSON.parse(readFileSync(join(directory, namespace, 'state.json'), 'utf8')).values
+                expect(values.opted_out).toBe(true)
+            } finally {
+                release()
+                await Promise.allSettled([earlier, withdrawal])
+            }
+        }
+    )
+
     it('registers exactly one per-SDK exit listener and removes it on each shutdown', async () => {
         const baseline = process.listeners('exit')
         for (let i = 0; i < 2; i++) {
