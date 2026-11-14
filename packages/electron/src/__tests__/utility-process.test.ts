@@ -340,17 +340,50 @@ describe('utilityProcess transport', () => {
         registration.dispose()
     })
 
-    it('bounds an in-flight request and rejects subsequent operations after timeout', async () => {
+    it('rejects only the timed-out request and keeps the connection for later work', async () => {
         vi.useFakeTimers()
         try {
+            let finishFlush!: () => void
             const h = harness(async (command) => {
-                if (command.type === 'capture') await new Promise(() => {})
+                if (command.type === 'flush') await new Promise<void>((resolve) => (finishFlush = resolve))
             })
             await h.client.ready()
-            const capture = expect(h.client.capture('never-completes')).rejects.toThrow('timed out')
+            const flush = expect(h.client.flush()).rejects.toThrow('timed out')
             await vi.advanceTimersByTimeAsync(UTILITY_TIMEOUT_MS)
-            await capture
-            await expect(h.client.flush()).rejects.toThrow('closed')
+            await flush
+            // The owner finishes the original delivery after the caller stopped waiting.
+            finishFlush()
+            await vi.advanceTimersByTimeAsync(0)
+            await expect(h.client.capture('after-slow-flush')).resolves.toBeUndefined()
+            expect(h.removed).not.toHaveBeenCalled()
+            expect(h.contexts).toHaveLength(3)
+            h.client.dispose()
+            h.registration.dispose()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('ignores a late response for a timed-out request', async () => {
+        vi.useFakeTimers()
+        try {
+            let finishCapture!: () => void
+            let first = true
+            const h = harness(async (command) => {
+                if (command.type === 'capture' && first) {
+                    first = false
+                    await new Promise<void>((resolve) => (finishCapture = resolve))
+                }
+            })
+            await h.client.ready()
+            const slow = expect(h.client.capture('slow')).rejects.toThrow('timed out')
+            await vi.advanceTimersByTimeAsync(UTILITY_TIMEOUT_MS)
+            await slow
+            const next = h.client.capture('next')
+            finishCapture()
+            await vi.advanceTimersByTimeAsync(0)
+            await expect(next).resolves.toBeUndefined()
+            expect(h.removed).not.toHaveBeenCalled()
             h.client.dispose()
             h.registration.dispose()
         } finally {

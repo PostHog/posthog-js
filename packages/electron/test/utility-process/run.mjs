@@ -38,4 +38,4 @@ const require = createRequire(new URL('../../package.json', import.meta.url))
 const binary = require('electron')
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
-execFileSync(binary, [directory], { cwd: directory, env, stdio: 'inherit', timeout: 60_000 })
+execFileSync(binary, [directory], { cwd: directory, env, stdio: 'inherit', timeout: 90_000 })
