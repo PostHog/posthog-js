@@ -415,6 +415,7 @@ exports[`integration tests > [html file]: fragment-urls.html 1`] = `
   </head>
   <body>
     <div class=\\"from-stylesheet from-style-element\\" style=\\"mask: url(#inline-style-mask)\\"></div>
+    <div style=\\"filter: url(#padded-inline-style-filter)\\"></div>
   </body></html>"
 `;
 
