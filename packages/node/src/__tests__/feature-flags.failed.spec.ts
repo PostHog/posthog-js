@@ -222,6 +222,43 @@ describe('failed Node flag records', () => {
     }
   )
 
+  it.each([false, true])(
+    'only warns for absent keys, not retained failed records (typed value %s)',
+    async (typedValue) => {
+      setup(false, false, true, typedValue)
+      const warn = vi.spyOn(console, 'warn').mockImplementation()
+      const captured = vi.fn()
+      posthog.on('capture', captured)
+      const snapshot = await posthog.evaluateFlags('user')
+      const failedOnly = snapshot.only(['failed'])
+      expect(warn).not.toHaveBeenCalled()
+      expect(failedOnly.keys).toEqual([])
+      expect(failedOnly.getFlagPayload('failed')).toBeUndefined()
+      expect(failedOnly._getEventProperties()).toEqual({})
+
+      const mixed = snapshot.only(['failed', 'disabled', 'unknown'])
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toContain('unknown')
+      expect(warn.mock.calls[0][0]).not.toContain('failed')
+      expect(warn.mock.calls[0][0]).not.toContain('disabled')
+      expect(mixed.keys).toEqual(['disabled'])
+      expect(mixed._getEventProperties()).toEqual({ '$feature/disabled': false })
+      expect(captured).not.toHaveBeenCalled()
+      expect(mixed.getFlag('disabled', { sendFeatureFlagEvents: false })).toBe(false)
+      expect(mixed.getFlag('failed')).toBeUndefined()
+      await waitForPromises()
+      expect(captured).toHaveBeenCalledTimes(1)
+      expect(captured.mock.calls[0][0]).toMatchObject({
+        event: '$feature_flag_called',
+        properties: { $feature_flag: 'failed', $feature_flag_error: 'evaluation_failed', $feature_flag_id: 42 },
+      })
+      expect(captured.mock.calls[0][0].properties.$feature_flag_response).toBeUndefined()
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/flags/?v=4'))
+      ).toHaveLength(1)
+    }
+  )
+
   it.each(['only', 'onlyAccessed'] as const)('retains selected failed diagnostics through %s', async (filter) => {
     setup(false, false, true, true)
     const captured = vi.fn()

@@ -241,14 +241,11 @@ export class FeatureFlagEvaluations {
     const filtered: Record<string, EvaluatedFlagRecord> = Object.create(null)
     const missing: string[] = []
     for (const key of keys) {
-      const flag = this._flags[key]
+      const flag = this._flags[key] ?? this._failedFlags[key]
       if (flag) {
         filtered[key] = flag
       } else {
         missing.push(key)
-      }
-      if (this._failedFlags[key]) {
-        filtered[key] = this._failedFlags[key]
       }
     }
     if (missing.length > 0) {
