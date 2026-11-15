@@ -461,6 +461,15 @@ function initInputObserver({
   const pendingSelects = new Map<HTMLElement, boolean>();
   let selectFlushScheduled = false;
 
+  function isSelectTarget(target: HTMLElement): boolean {
+    return (
+      target.tagName === 'SELECT' ||
+      (!!selectMaskingFn &&
+        target.localName === 'select' &&
+        target.namespaceURI === 'http://www.w3.org/1999/xhtml')
+    );
+  }
+
   function getInputTarget(target: HTMLElement | null): HTMLElement | null {
     // Reading a native accessor (tagName/value/checked/type) on a non-native
     // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
@@ -469,6 +478,20 @@ function initInputObserver({
     const view = doc.defaultView;
     if (target && view && !(target instanceof view.HTMLElement)) {
       return null;
+    }
+    if (
+      selectMaskingFn &&
+      target?.localName === 'option' &&
+      target.namespaceURI === 'http://www.w3.org/1999/xhtml'
+    ) {
+      let owner = dom.parentElement(target);
+      while (
+        owner &&
+        (owner.localName !== 'select' ||
+          owner.namespaceURI !== 'http://www.w3.org/1999/xhtml')
+      )
+        owner = dom.parentElement(owner);
+      return owner;
     }
     if (target && target.tagName === 'OPTION') {
       target = dom.parentElement(target);
@@ -497,7 +520,8 @@ function initInputObserver({
     userTriggered: boolean,
     deferred = false,
   ) {
-    const tagName = target && target.tagName;
+    const tagName =
+      target && (isSelectTarget(target) ? 'SELECT' : target.tagName);
     if (
       !target ||
       !tagName ||
@@ -514,7 +538,7 @@ function initInputObserver({
       return;
     }
     const type: Lowercase<string> = getInputType(target) || '';
-    const inputMaskOptions = getInputMaskOptions(
+    let inputMaskOptions = getInputMaskOptions(
       target,
       maskInputOptions,
       selectMaskingFn,
@@ -525,7 +549,7 @@ function initInputObserver({
     ) {
       return;
     }
-    const shouldMaskInput =
+    let shouldMaskInput =
       inputMaskOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
       inputMaskOptions[type as keyof MaskInputOptions];
     let selectedOptions =
@@ -541,6 +565,16 @@ function initInputObserver({
       if (mutationBuffers[0]?.isFrozen()) {
         mutationBuffers.forEach((buffer) => buffer.unfreeze());
         if (!active) return;
+        if (selectMaskingFn) {
+          inputMaskOptions = getInputMaskOptions(
+            target,
+            maskInputOptions,
+            selectMaskingFn,
+          );
+          if (!active || isBlocked(target, blockClass, blockSelector, true))
+            return;
+          shouldMaskInput = inputMaskOptions.select;
+        }
         // Emission callbacks can change the selection or its blocking rules.
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);
       }
@@ -625,16 +659,16 @@ function initInputObserver({
   }
 
   function cbWithDedup(target: EventTarget, v: inputValue) {
-    const values =
-      (target as HTMLElement).tagName === 'SELECT'
-        ? lastSelectInputValueMap
-        : lastInputValueMap;
+    const values = isSelectTarget(target as HTMLElement)
+      ? lastSelectInputValueMap
+      : lastInputValueMap;
     const lastInputValue = values.get(target);
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
       lastInputValue.isChecked !== v.isChecked ||
-      lastInputValue.selectedOptionIds?.length !== v.selectedOptionIds?.length ||
+      lastInputValue.selectedOptionIds?.length !==
+        v.selectedOptionIds?.length ||
       v.selectedOptionIds?.some(
         (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
       )
@@ -682,7 +716,7 @@ function initInputObserver({
               if (!active) return;
               const target = callbackWrapper(getInputTarget)(this);
               if (!target) return;
-              if (target.tagName === 'SELECT') {
+              if (isSelectTarget(target)) {
                 queueSelect(target, false);
               } else {
                 callbackWrapper(processInput)(target, false);

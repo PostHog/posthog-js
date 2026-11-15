@@ -7,6 +7,7 @@ import {
   needMaskingText,
   maskInputValue,
   getInputMaskOptions,
+  isMaskedSelectedContent,
   maskAttributeValue,
   Mirror,
   isNativeShadowDom,
@@ -278,11 +279,24 @@ export default class MutationBuffer {
 
   // Queued nodes can become blocked before emission. Check the current tree,
   // including each shadow host: closest()/parentElement do not cross that boundary.
-  private isBlockedAtEmission(node: Node | null): boolean {
-    return isBlockedIncludingShadowHosts(
-      node,
-      this.blockClass,
-      this.blockSelector,
+  private isBlockedAtEmission(
+    node: Node | null,
+    cache?: WeakMap<Element, observerParam['maskInputOptions']>,
+  ): boolean {
+    return (
+      isBlockedIncludingShadowHosts(
+        node,
+        this.blockClass,
+        this.blockSelector,
+      ) ||
+      (!!this.selectMaskingFn &&
+        !!node &&
+        isMaskedSelectedContent(
+          node,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          cache,
+        ))
     );
   }
 
@@ -292,6 +306,9 @@ export default class MutationBuffer {
 
     const adds: addedNodeMutation[] = [];
     const addedIds = new Set<number>();
+    const selectMaskingCache = this.selectMaskingFn
+      ? new WeakMap<Element, observerParam['maskInputOptions']>()
+      : undefined;
 
     const getNextId = (n: Node): number | null => {
       let ns: Node | null = n;
@@ -320,7 +337,17 @@ export default class MutationBuffer {
       }
       // A blocked node itself still needs a placeholder, but its descendants
       // must not be serialized from stale added/moved entries.
-      if (this.isBlockedAtEmission(parent)) return true;
+      if (this.isBlockedAtEmission(parent, selectMaskingCache)) return true;
+      if (
+        this.selectMaskingFn &&
+        isMaskedSelectedContent(
+          n,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          selectMaskingCache,
+        )
+      )
+        return true;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
@@ -329,7 +356,11 @@ export default class MutationBuffer {
         return false;
       }
       serializationOptions ??= this.buildSerializationOptions();
-      const sn = serializeNodeWithId(n, serializationOptions);
+      const sn = serializeNodeWithId(
+        n,
+        serializationOptions,
+        selectMaskingCache,
+      );
       if (sn) {
         adds.push({
           parentId,
@@ -503,7 +534,9 @@ export default class MutationBuffer {
 
     const payload = {
       texts: Array.from(this.texts, ([node, value]) => ({ node, value }))
-        .filter((text) => !this.isBlockedAtEmission(text.node))
+        .filter(
+          (text) => !this.isBlockedAtEmission(text.node, selectMaskingCache),
+        )
         .map((text) => {
           const n = text.node;
           const parent = dom.parentNode(n);
@@ -521,7 +554,10 @@ export default class MutationBuffer {
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
       attributes: Array.from(this.attributes.values())
-        .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
+        .filter(
+          (attribute) =>
+            !this.isBlockedAtEmission(attribute.node, selectMaskingCache),
+        )
         .map((attribute) => {
           const { attributes } = attribute;
           if (
@@ -786,7 +822,12 @@ export default class MutationBuffer {
       }
       case 'attributes': {
         const target = m.target as Element;
-        const tagNameLower = toLowerCase(target.tagName);
+        const tagNameLower =
+          this.selectMaskingFn &&
+          target.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+          (target.localName === 'select' || target.localName === 'option')
+            ? target.localName
+            : toLowerCase(target.tagName);
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -831,7 +872,10 @@ export default class MutationBuffer {
               this.maskInputOptions,
               this.selectMaskingFn,
             ),
-            tagName: target.tagName,
+            tagName:
+              this.selectMaskingFn && tagNameLower === 'select'
+                ? 'select'
+                : target.tagName,
             type,
             value,
             maskInputFn: this.maskInputFn,

@@ -26,6 +26,7 @@ import {
   isShadowRoot,
   maskInputValue,
   getInputMaskOptions,
+  isMaskedSelectedContent,
   maskAttributeValue,
   isNativeShadowDom,
   stringifyStylesheet,
@@ -916,7 +917,14 @@ function serializeElementNode(
     rootId,
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
-  const tagName = getValidTagName(n);
+  const tagName =
+    selectMaskingFn &&
+    n.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+    (n.localName === 'select' ||
+      n.localName === 'option' ||
+      n.localName === 'selectedcontent')
+      ? n.localName
+      : getValidTagName(n);
   let inputMaskOptions = maskInputOptions;
   if (
     selectMaskingFn &&
@@ -926,14 +934,20 @@ function serializeElementNode(
     let owner: Element | null = n;
     if (tagName === 'option') {
       owner = dom.parentElement(n);
-      while (owner && owner.tagName !== 'SELECT')
+      while (
+        owner &&
+        (owner.localName !== 'select' ||
+          owner.namespaceURI !== 'http://www.w3.org/1999/xhtml')
+      )
         owner = dom.parentElement(owner);
     }
     if (owner) {
-      const cached = selectMaskingCache?.get(owner);
-      inputMaskOptions =
-        cached ?? getInputMaskOptions(owner, maskInputOptions, selectMaskingFn);
-      selectMaskingCache?.set(owner, inputMaskOptions);
+      inputMaskOptions = getInputMaskOptions(
+        owner,
+        maskInputOptions,
+        selectMaskingFn,
+        selectMaskingCache,
+      );
     }
   }
   const generatedAttributeNames = new Set<string>();
@@ -1515,6 +1529,16 @@ export function serializeNodeWithId(
   let { preserveWhiteSpace = true } = options;
   if (selectMaskingFn && !selectMaskingCache)
     selectMaskingCache = new WeakMap();
+  if (
+    selectMaskingFn &&
+    isMaskedSelectedContent(
+      n,
+      maskInputOptions,
+      selectMaskingFn,
+      selectMaskingCache,
+    )
+  )
+    return null;
 
   if (depth >= maxDepth) {
     _maxDepthReached = true;

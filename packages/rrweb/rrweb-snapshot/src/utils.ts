@@ -881,16 +881,63 @@ export function getInputMaskOptions(
   element: Element,
   options: MaskInputOptions,
   selectMaskingFn?: SelectMaskingFn,
+  cache: WeakMap<Element, MaskInputOptions> | undefined = undefined,
 ): MaskInputOptions {
-  if (!selectMaskingFn || element.tagName !== 'SELECT') return options;
+  if (
+    !selectMaskingFn ||
+    element.localName !== 'select' ||
+    element.namespaceURI !== 'http://www.w3.org/1999/xhtml'
+  )
+    return options;
+  const cached = cache?.get(element);
+  if (cached) return cached;
+  let masked: boolean;
   try {
-    return {
-      ...options,
-      select: selectMaskingFn(element as HTMLSelectElement) !== 'unmasked',
-    };
+    masked = selectMaskingFn(element as HTMLSelectElement) !== 'unmasked';
   } catch {
-    return { ...options, select: true };
+    masked = true;
   }
+  const result = { ...options, select: masked };
+  cache?.set(element, result);
+  return result;
+}
+
+export function isMaskedSelectedContent(
+  node: Node,
+  options: MaskInputOptions,
+  selectMaskingFn?: SelectMaskingFn,
+  cache?: WeakMap<Element, MaskInputOptions>,
+): boolean {
+  if (!selectMaskingFn) return false;
+  // Keep the container so native selection updates can still render on replay.
+  let ancestor = dom.parentNode(node);
+  while (ancestor) {
+    if (
+      isElement(ancestor) &&
+      ancestor.localName === 'selectedcontent' &&
+      ancestor.namespaceURI === 'http://www.w3.org/1999/xhtml'
+    ) {
+      let owner = dom.parentElement(ancestor);
+      while (owner) {
+        const tagName = owner.localName;
+        // An authored selectedcontent inside an option is static option content.
+        if (tagName === 'option') break;
+        if (tagName === 'select') {
+          if (
+            owner.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+            getInputMaskOptions(owner, options, selectMaskingFn, cache).select
+          )
+            return true;
+          break;
+        }
+        owner = dom.parentElement(owner);
+      }
+    }
+    ancestor = isShadowRoot(ancestor)
+      ? dom.host(ancestor)
+      : dom.parentNode(ancestor);
+  }
+  return false;
 }
 
 export function maskInputValue({
