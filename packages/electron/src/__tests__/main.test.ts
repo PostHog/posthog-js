@@ -720,6 +720,36 @@ describe('main Electron client', () => {
     )
 
     it.each(['screen', 'set', 'setOnce'] as const)(
+        'applies top-level toJSON redaction to %s properties deferred behind a queued consent change',
+        async (operation) => {
+            const owner = await start()
+            class Profile {
+                constructor(
+                    public email: string,
+                    public secret: string
+                ) {}
+                toJSON() {
+                    return { email: this.email }
+                }
+            }
+            const properties = new Profile('deferred@example.com', 'do-not-send') as unknown as Properties
+            // A queued consent change defers inspection until the mutation runs.
+            const consenting = owner.optIn()
+            const pending =
+                operation === 'screen'
+                    ? owner.screen('Home', properties)
+                    : operation === 'set'
+                      ? owner.setPersonProperties(properties)
+                      : owner.setPersonProperties(undefined, properties)
+            await Promise.all([consenting, pending])
+            await owner.flush()
+            const sent = JSON.stringify(mock.fetch.mock.calls.map(([, options]) => options?.body))
+            expect(sent).toContain('deferred@example.com')
+            expect(sent).not.toContain('do-not-send')
+        }
+    )
+
+    it.each(['screen', 'set', 'setOnce'] as const)(
         'does not inspect %s properties behind a queued opt-out',
         async (operation) => {
             const owner = await start()
