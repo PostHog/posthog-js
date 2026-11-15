@@ -318,7 +318,8 @@ export class PostHog {
         const copy = this._snapshotEventProperties(properties)
         return this._run(() => {
             if (!this._core.optedOut && !this._core.isDisabled) {
-                this._core.capture('$screen', snapshot({ ...copy, $screen_name: name }))
+                // copy may still be the caller's object when inspection was deferred; apply toJSON before spreading.
+                this._core.capture('$screen', { ...(copy === undefined ? {} : snapshot(copy)), $screen_name: name })
             }
         })
     }
