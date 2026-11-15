@@ -84,6 +84,17 @@ describe('screenshot configuration through native setup', () => {
     expect(config).not.toHaveProperty('screenshotCompressionQuality')
     expect(config.screenshotColorMode).toBe('RGB_565')
   })
+
+  it.each<[PostHogSessionReplayConfig | undefined, string]>([
+    [undefined, 'standard'],
+    [{ iOSCaptureMethod: 'background' }, 'background'],
+    [{ iOSCaptureMethod: 'gpu' }, 'gpu'],
+  ])('forwards the iOS capture method from %j', async (options, method) => {
+    const config = await initialize(options)
+
+    expect(config.iOSCaptureMethod).toBe(method)
+    expect(config).not.toHaveProperty('screenshotModeBackgroundCapture')
+  })
 })
 
 describe('screenshot configuration before replay starts', () => {
