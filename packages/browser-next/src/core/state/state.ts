@@ -4,6 +4,9 @@ import { createId } from '../../primitives/id'
 import { createKeyValueStore, TabValues } from './key-value-store'
 import type { NewSessionReason, StorageLike } from '../types'
 
+const FEATURE_FLAGS_EXTENSION = 'featureFlags'
+const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
+
 export type ConsentState = 'implicit' | 'granted' | 'denied'
 
 type StoredValue = [read: boolean, value: unknown]
@@ -435,6 +438,10 @@ export class BrowserState {
 
     resetGroups(): void {
         this._state.groups = emptyRecord<string>()
+        const flagsData = this._state.extensionData[FEATURE_FLAGS_EXTENSION]
+        if (flagsData && STORED_GROUP_PROPERTIES_KEY in flagsData) {
+            delete flagsData[STORED_GROUP_PROPERTIES_KEY]
+        }
         this._save()
     }
 
