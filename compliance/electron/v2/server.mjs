@@ -65,18 +65,30 @@ export class Fixture {
         )
         const require = createRequire(join(consumer, 'package.json'))
         this.directory = mkdtempSync(join(tmpdir(), 'electron-acceptance-'))
-        this.child = spawn(require('electron'), [fileURLToPath(new URL('./electron-main.mjs', import.meta.url))], {
-            cwd: consumer,
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: undefined,
-                POSTHOG_ELECTRON_CONSUMER: consumer,
-                POSTHOG_ELECTRON_PROFILE: profile,
-                POSTHOG_ELECTRON_USER_DATA: this.directory,
-            },
-            stdio: ['pipe', 'inherit', 'inherit', 'pipe'],
-            detached: true,
-        })
+        // The guardian leads the fixture's process group, so stop() can reap descendants that
+        // outlive the Electron leader, and the group dies if this adapter crashes.
+        this.child = spawn(
+            process.execPath,
+            [
+                fileURLToPath(new URL('./guardian.cjs', import.meta.url)),
+                require('electron'),
+                fileURLToPath(new URL('./electron-main.mjs', import.meta.url)),
+            ],
+            {
+                cwd: consumer,
+                env: {
+                    ...process.env,
+                    ELECTRON_RUN_AS_NODE: undefined,
+                    POSTHOG_ELECTRON_CONSUMER: consumer,
+                    POSTHOG_ELECTRON_PROFILE: profile,
+                    POSTHOG_ELECTRON_USER_DATA: this.directory,
+                },
+                stdio: ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'],
+                detached: true,
+            }
+        )
+        this.guardian = this.child.stdio[4]
+        this.guardian.on('error', () => {})
         this.child.stdin.on('error', () => {
             this.dead = true
         })
@@ -90,13 +102,20 @@ export class Fixture {
         this.child.on('exit', () => {
             this.dead = true
         })
+        // The guardian outlives the Electron leader; the protocol pipe closing is the leader's exit.
+        this.leaderExited = new Promise((resolve) => this.child.stdio[3].once('close', resolve))
+        void this.leaderExited.then(() => {
+            this.dead = true
+        })
     }
     async exchange(message, milliseconds) {
         requireRequest(!this.dead && !this.busy, 'Fixture unavailable or busy')
         this.busy = true
         try {
             return await new Promise((resolveReply, reject) => {
+                let settled = false
                 const cleanup = () => {
+                    settled = true
                     clearTimeout(timer)
                     this.lines.off('line', reply)
                     this.child.off('error', failed)
@@ -129,6 +148,9 @@ export class Fixture {
                 this.lines.once('line', reply)
                 this.child.once('error', failed)
                 this.child.once('exit', exited)
+                void this.leaderExited.then(() => {
+                    if (!settled) exited()
+                })
                 if (message)
                     this.child.stdin.write(JSON.stringify(message) + '\n', (error) => {
                         if (error) failed()
@@ -146,6 +168,8 @@ export class Fixture {
     }
     async stopOwnedProcess() {
         this.dead = true
+        // The guardian is this.child; it never exits before its group is gone, so a live guardian
+        // means the group id is still ours. Never signal a retired guardian group.
         const active = this.child.pid && this.child.exitCode === null && this.child.signalCode === null
         const exited = active ? once(this.child, 'exit').catch(() => {}) : Promise.resolve()
         if (active) {
@@ -156,6 +180,7 @@ export class Fixture {
             }
         }
         await exited
+        this.guardian?.destroy()
         this.lines.close()
         rmSync(this.directory, { recursive: true, force: true })
     }
