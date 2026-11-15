@@ -201,6 +201,8 @@ try {
     console.log(`Electron smoke test passed: ${events.length} wire events from two real sandboxed renderer windows.`)
 } finally {
     await receiver.close()
-    await rm(userData, { recursive: true, force: true })
-    if (packaged) await rm(packaged, { recursive: true, force: true })
+    // Windows can keep the exited app's executable and profile locked briefly (EBUSY/EPERM).
+    const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }
+    await rm(userData, retry)
+    if (packaged) await rm(packaged, retry)
 }
