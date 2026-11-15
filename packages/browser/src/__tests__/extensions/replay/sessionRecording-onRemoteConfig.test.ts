@@ -291,12 +291,15 @@ describe('SessionRecording', () => {
         })
 
         it.each([
-            { replace: false, supportsPolicy: true },
-            { replace: true, supportsPolicy: true },
-            { replace: true, supportsPolicy: false },
+            { replace: false, supportsPolicy: true, disable: false },
+            { replace: true, supportsPolicy: true, disable: false },
+            { replace: true, supportsPolicy: false, disable: false },
+            { replace: false, supportsPolicy: true, disable: true },
+            { replace: true, supportsPolicy: true, disable: true },
+            { replace: true, supportsPolicy: false, disable: true },
         ])(
-            'discards buffered public selections (replace=$replace, supportsPolicy=$supportsPolicy)',
-            ({ replace, supportsPolicy }) => {
+            'discards buffered public selections (replace=$replace, supportsPolicy=$supportsPolicy, disable=$disable)',
+            ({ replace, supportsPolicy, disable }) => {
                 addRRwebToWindow()
                 assignableWindow.__PosthogExtensions__.rrweb!.record.supportsSelectMasking = supportsPolicy
                 if (supportsPolicy) config.session_recording.selectMaskingFn = () => 'unmasked'
@@ -304,10 +307,9 @@ describe('SessionRecording', () => {
                 const data = { source: 5 as const, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] }
                 sessionRecording.onRRwebEmit({ type: 3, data, timestamp: Date.now() })
 
-                if (replace) {
-                    config.session_recording.selectMaskingFn = () => 'masked'
-                    sessionRecording.startIfEnabledOrStop()
-                }
+                config.disable_session_recording = disable
+                if (replace) config.session_recording.selectMaskingFn = () => 'masked'
+                if (replace || disable) sessionRecording.startIfEnabledOrStop()
                 sessionRecording.stopRecording()
 
                 const inputs = vi
@@ -323,6 +325,61 @@ describe('SessionRecording', () => {
             }
         )
 
+        it.each([false, true])('checks a retained older driver when enabling the policy (%s)', (enablePolicy) => {
+            addRRwebToWindow()
+            const record = assignableWindow.__PosthogExtensions__.rrweb!.record
+            const oldDriver = new LazyLoadedSessionRecording(posthog)
+            Object.defineProperty(oldDriver, 'supportsSelectMasking', { value: undefined })
+            oldDriver.discard = () => {
+                oldDriver['_clearBuffer']()
+                oldDriver['_teardown']()
+            }
+            assignableWindow.__PosthogExtensions__.initSessionRecording = () => oldDriver
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            expect(sessionRecording.started).toBe(true)
+
+            record.supportsSelectMasking = true
+            assignableWindow.__PosthogExtensions__.initSessionRecording = Object.assign(
+                () => new LazyLoadedSessionRecording(posthog),
+                { supportsSelectMasking: true }
+            )
+            const key = oldDriver['_pendingBufferStorageKey']
+            window!.sessionStorage.setItem(key, JSON.stringify(oldDriver['_buffer']))
+            if (enablePolicy) config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording.startIfEnabledOrStop()
+
+            const retained = window!.sessionStorage.getItem(key)
+            window!.sessionStorage.removeItem(key)
+            expect(retained).toEqual(enablePolicy ? null : expect.any(String))
+            expect(record).toHaveBeenCalledTimes(1)
+            expect(sessionRecording.started).toBe(!enablePolicy)
+            sessionRecording.stopRecording()
+        })
+
+        it.each(['masked', undefined] as const)(
+            'discards a stopped producer tail when its policy changes to %s',
+            (next) => {
+                addRRwebToWindow()
+                assignableWindow.__PosthogExtensions__.rrweb!.record.supportsSelectMasking = true
+                config.session_recording.selectMaskingFn = () => 'unmasked'
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                const driver = sessionRecording['_lazyLoadedSessionRecording'] as LazyLoadedSessionRecording
+                const data = { source: 5 as const, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] }
+                sessionRecording.onRRwebEmit({ type: 3, timestamp: Date.now(), data })
+                driver['_stopAfterCompressionQueueDrains'] = () => true
+                sessionRecording.stopRecording()
+                expect(driver.isStarted).toBe(false)
+                expect(driver['_buffer'].data).toHaveLength(1)
+
+                config.disable_session_recording = true
+                config.session_recording.selectMaskingFn = next ? () => next : undefined
+                sessionRecording.startIfEnabledOrStop()
+                driver['_flushBuffer']()
+
+                expect(vi.mocked(posthog.capture).mock.calls.filter(([name]) => name === '$snapshot')).toEqual([])
+            }
+        )
+
         it('restarts when an installed policy is removed', () => {
             addRRwebToWindow()
             const record = assignableWindow.__PosthogExtensions__.rrweb!.record
@@ -335,6 +392,26 @@ describe('SessionRecording', () => {
 
             expect(record).toHaveBeenCalledTimes(2)
             expect(vi.mocked(record).mock.lastCall?.[0]?.selectMaskingFn).toBeUndefined()
+        })
+
+        it('keeps refreshing persisted config on rotation after a policy replacement', () => {
+            let now = Date.now()
+            const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+            posthog.has_opted_out_capturing = () => false
+            addRRwebToWindow()
+            assignableWindow.__PosthogExtensions__.rrweb!.record.supportsSelectMasking = true
+            config.session_recording.selectMaskingFn = () => 'unmasked'
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording.startIfEnabledOrStop()
+
+            now += 1000
+            sessionIdGeneratorMock.mockReturnValue('policy-replacement-session')
+            sessionManager.resetSessionId()
+            sessionManager.checkAndGetSessionAndWindowId()
+
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.cache_timestamp).toBe(now)
+            clock.mockRestore()
         })
 
         it('does not restart for an unchanged policy during a config refresh', () => {

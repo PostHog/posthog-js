@@ -28,6 +28,7 @@ import {
     circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
+    getReplayPendingBufferKey,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
@@ -138,7 +139,7 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
 // next page in the same tab. sessionStorage dies with the tab, so a visit that really ended
 // there still honours the gate that held them
-export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
+export { PENDING_BUFFER_STORAGE_SUFFIX } from './sessionrecording-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -500,6 +501,8 @@ function isRecordingPausedEvent(e: eventWithTime) {
 }
 
 export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
+    readonly supportsSelectMasking = true
+    private _selectMaskingFn: SessionRecordingOptions['selectMaskingFn']
     private _endpoint: string = BASE_ENDPOINT
     private _mutationThrottler?: MutationThrottler
     /**
@@ -658,9 +661,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // A shared persistence_name also shares session/window IDs, but must not share replay
         // data across project tokens. Encode the pair without ambiguous separators and use a
         // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
-        const persistenceName = this._instance.config.persistence_name || this._instance.config.token
-        this._pendingBufferStorageKey =
-            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
+        this._pendingBufferStorageKey = getReplayPendingBufferKey(this._instance.config)
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(
@@ -1736,6 +1737,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        if (
+            discardProducerEvents &&
+            (this._selectMaskingFn || this._instance.config.session_recording.selectMaskingFn)
+        ) {
+            sessionStore._remove(this._pendingBufferStorageKey)
+        }
         // Reuse the internal hold as a synchronous discard guard. rrweb teardown can emit enough
         // data to hit the size cap, but discard must never flush it.
         this._holdFlushUntilInteraction = true
@@ -2327,6 +2334,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * recording opens partway through the session.
      */
     private _parkBufferForNextPage(): void {
+        // Callback identity and captured closure state cannot be verified on the next page.
+        if (this._selectMaskingFn || this._instance.config.session_recording.selectMaskingFn) {
+            return
+        }
         if (
             this._buffer.data.length === 0 ||
             this._buffer.size === this._lastParkedBufferSize ||
@@ -2349,6 +2360,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         sessionStore._remove(this._pendingBufferStorageKey)
 
         if (
+            this._instance.config.session_recording.selectMaskingFn ||
             !isObject(parked) ||
             !isArray(parked.data) ||
             parked.data.length === 0 ||
@@ -3030,6 +3042,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
+        this._selectMaskingFn = sessionRecordingOptions.selectMaskingFn
         const activePlugins = this._gatherRRWebPlugins()
         const sourceHandoff = this._styleRuleSourceHandoff
         this._stopRrweb = rrwebRecord({

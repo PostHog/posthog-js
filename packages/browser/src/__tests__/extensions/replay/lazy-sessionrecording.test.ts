@@ -7477,6 +7477,64 @@ describe('Lazy SessionRecording', () => {
             return sessionStartTimestamp
         }
 
+        it('clears parked old-policy selections when a select policy is installed', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            _emit(
+                createIncrementalSnapshot({
+                    timestamp: timestamp + 200,
+                    data: { source: 5, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] },
+                })
+            )
+            unload()
+            expect(parkedBuffer().data).toContainEqual(
+                expect.objectContaining({ data: expect.objectContaining({ selectedOptionIds: [2] }) })
+            )
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+
+        it('does not park an opt-in buffer whose callback cannot be compared across pages', () => {
+            addRRwebToWindow(true)
+            config.session_recording.selectMaskingFn = () => 'unmasked'
+            startBelowMinimumDuration()
+            expect(sessionRecording.started).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            unload()
+
+            expect(parkedBuffer()).toBeNull()
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+
+        it('does not restore a previous page buffer under a newly configured select policy', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            unload()
+            expect(parkedBuffer().data).toHaveLength(1)
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
+            )
+            expect(sessionRecording.started).toBe(true)
+            expect(parkedBuffer()).toBeNull()
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: timestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            expect(shipped[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)).not.toContain(
+                timestamp + 100
+            )
+        })
+
         it('parks the buffer the minimum-duration gate is holding, instead of losing it with the page', () => {
             startBelowMinimumDuration()
 

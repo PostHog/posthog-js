@@ -680,6 +680,7 @@ function serializeNode(
      */
     newlyAddedElement?: boolean;
   },
+  selectMaskingCache?: WeakMap<Element, MaskInputOptions>,
 ): serializedNode | false {
   const {
     doc,
@@ -726,24 +727,28 @@ function serializeNode(
         rootId,
       };
     case n.ELEMENT_NODE:
-      return serializeElementNode(n as Element, {
-        doc,
-        blockClass,
-        blockSelector,
-        inlineStylesheet,
-        maskInputOptions,
-        maskInputFn,
-        selectMaskingFn,
-        maskAllElementAttributes,
-        maskAttributeFn,
-        dataURLOptions,
-        inlineImages,
-        recordCanvas,
-        canvasMaskingConfigured,
-        keepIframeSrcFn,
-        newlyAddedElement,
-        rootId,
-      });
+      return serializeElementNode(
+        n as Element,
+        {
+          doc,
+          blockClass,
+          blockSelector,
+          inlineStylesheet,
+          maskInputOptions,
+          maskInputFn,
+          selectMaskingFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          dataURLOptions,
+          inlineImages,
+          recordCanvas,
+          canvasMaskingConfigured,
+          keepIframeSrcFn,
+          newlyAddedElement,
+          rootId,
+        },
+        selectMaskingCache,
+      );
     case n.TEXT_NODE:
     case n.CDATA_SECTION_NODE:
       return serializeTextNode(n as Text, {
@@ -890,6 +895,7 @@ function serializeElementNode(
     newlyAddedElement?: boolean;
     rootId: number | undefined;
   },
+  selectMaskingCache?: WeakMap<Element, MaskInputOptions>,
 ): serializedNode | false {
   const {
     doc,
@@ -920,14 +926,15 @@ function serializeElementNode(
     let owner: Element | null = n;
     if (tagName === 'option') {
       owner = dom.parentElement(n);
-      if (owner?.tagName === 'OPTGROUP') owner = dom.parentElement(owner);
+      while (owner && owner.tagName !== 'SELECT')
+        owner = dom.parentElement(owner);
     }
-    if (owner)
-      inputMaskOptions = getInputMaskOptions(
-        owner,
-        maskInputOptions,
-        selectMaskingFn,
-      );
+    if (owner) {
+      const cached = selectMaskingCache?.get(owner);
+      inputMaskOptions =
+        cached ?? getInputMaskOptions(owner, maskInputOptions, selectMaskingFn);
+      selectMaskingCache?.set(owner, inputMaskOptions);
+    }
   }
   const generatedAttributeNames = new Set<string>();
   let attributes: attributes = {};
@@ -1469,6 +1476,9 @@ export function serializeNodeWithId(
     maxDepth?: number;
     onMaxDepthReached?: () => void;
   },
+  selectMaskingCache:
+    | WeakMap<Element, MaskInputOptions>
+    | undefined = undefined,
 ): serializedNodeWithId | null {
   const {
     doc,
@@ -1503,6 +1513,8 @@ export function serializeNodeWithId(
   } = options;
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
+  if (selectMaskingFn && !selectMaskingCache)
+    selectMaskingCache = new WeakMap();
 
   if (depth >= maxDepth) {
     _maxDepthReached = true;
@@ -1530,26 +1542,30 @@ export function serializeNodeWithId(
 
   countSerializedNode();
 
-  const _serializedNode = serializeNode(n, {
-    doc,
-    mirror,
-    blockClass,
-    blockSelector,
-    needsMask,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    selectMaskingFn,
-    maskAllElementAttributes,
-    maskAttributeFn,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    canvasMaskingConfigured,
-    keepIframeSrcFn,
-    newlyAddedElement,
-  });
+  const _serializedNode = serializeNode(
+    n,
+    {
+      doc,
+      mirror,
+      blockClass,
+      blockSelector,
+      needsMask,
+      inlineStylesheet,
+      maskInputOptions,
+      maskTextFn,
+      maskInputFn,
+      selectMaskingFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
+      dataURLOptions,
+      inlineImages,
+      recordCanvas,
+      canvasMaskingConfigured,
+      keepIframeSrcFn,
+      newlyAddedElement,
+    },
+    selectMaskingCache,
+  );
   if (!_serializedNode) {
     // TODO: dev only
     console.warn(n, 'not serialized');
@@ -1647,7 +1663,11 @@ export function serializeNodeWithId(
       // value parameter in DOM reflects the correct value, so ignore childNode
     } else {
       for (const childN of Array.from(dom.childNodes(n))) {
-        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
+        const serializedChildNode = serializeNodeWithId(
+          childN,
+          bypassOptions,
+          selectMaskingCache,
+        );
         if (serializedChildNode) {
           serializedNode.childNodes.push(serializedChildNode);
         }
@@ -1657,7 +1677,11 @@ export function serializeNodeWithId(
     let shadowRootEl: ShadowRoot | null = null;
     if (isElement(n) && (shadowRootEl = dom.shadowRoot(n))) {
       for (const childN of Array.from(dom.childNodes(shadowRootEl))) {
-        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
+        const serializedChildNode = serializeNodeWithId(
+          childN,
+          bypassOptions,
+          selectMaskingCache,
+        );
         if (serializedChildNode) {
           isNativeShadowDom(shadowRootEl) &&
             (serializedChildNode.isShadow = true);

@@ -226,6 +226,7 @@ export type PostHogExtensionKind =
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
+    readonly supportsSelectMasking?: boolean
     start: (startReason?: SessionStartReason) => void
     stop: () => void
     discard: (options?: { discardProducerEvents?: boolean }) => void

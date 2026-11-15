@@ -718,6 +718,8 @@ export interface SessionRecordingOptions {
      * and snapshots; changes to external state take effect at the next such capture.
      * Keep the callback reference stable. Replacing it restarts recording and discards
      * queued old-policy data; changing its return value does not require a restart.
+     * Pending buffers are not carried across page loads with this option, because
+     * callback compatibility cannot be verified across pages.
      * Invalid return values and exceptions resolve to masked. Recording does not start
      * if the loaded recorder or driver does not support this option. Policy transitions
      * also require a matching replay player.

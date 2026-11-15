@@ -44,6 +44,8 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { sessionStore } from '../../storage'
+import { getReplayPendingBufferKey } from './external/sessionrecording-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = /* @__PURE__ */ createLogger(LOGGER_PREFIX)
@@ -150,16 +152,17 @@ export class SessionRecording implements Extension {
             return
         }
 
-        if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
-            if (!this._checkSelectMaskingSupport()) {
-                this._discardRecording(true)
+        if (this._lazyLoadedSessionRecording) {
+            if (this._selectMaskingFn !== this._config.session_recording?.selectMaskingFn) {
+                sessionStore._remove(getReplayPendingBufferKey(this._config))
+                this._lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
+                this._selectMaskingFn = undefined
+            } else if (this._lazyLoadedSessionRecording.isStarted && this._isRecordingEnabled) {
+                if (!this._checkSelectMaskingSupport()) {
+                    this._discardRecording(true)
+                }
                 return
             }
-            if (this._selectMaskingFn === this._config.session_recording?.selectMaskingFn) {
-                return
-            }
-            // Discard old-policy buffers before installing a replacement callback.
-            this._lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
         }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -241,10 +244,12 @@ export class SessionRecording implements Extension {
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
-        this._selectMaskingFn = undefined
     }
 
     private _discardRecording(discardProducerEvents = false) {
+        if (discardProducerEvents && (this._selectMaskingFn || this._config.session_recording?.selectMaskingFn)) {
+            sessionStore._remove(getReplayPendingBufferKey(this._config))
+        }
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
@@ -396,7 +401,8 @@ export class SessionRecording implements Extension {
         if (
             !this._config.session_recording?.selectMaskingFn ||
             (assignableWindow.__PosthogExtensions__?.rrweb?.record?.supportsSelectMasking === true &&
-                assignableWindow.__PosthogExtensions__?.initSessionRecording?.supportsSelectMasking === true)
+                assignableWindow.__PosthogExtensions__?.initSessionRecording?.supportsSelectMasking === true &&
+                (!this._lazyLoadedSessionRecording || this._lazyLoadedSessionRecording.supportsSelectMasking === true))
         ) {
             return true
         }
@@ -433,6 +439,11 @@ export class SessionRecording implements Extension {
             )
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
+        }
+
+        if (!this._checkSelectMaskingSupport()) {
+            this._discardRecording(true)
+            return
         }
 
         if (!this._isRemoteConfigFresh()) {
