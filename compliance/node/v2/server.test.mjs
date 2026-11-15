@@ -638,3 +638,10 @@ test('missing public package fails allocation rather than claiming execution', a
         400
     )
 })
+
+for (const mode of ['v0', 'v1']) {
+    test(`${mode} declares Node's native GeoIP-disabled privacy default`, async (t) => {
+        const negotiation = await (await harness(t, { mode })).post('negotiate', { protocol })
+        assert.ok(negotiation.profiles[0].sdk_capabilities.includes('flags_geoip_default_disabled'))
+    })
+}

@@ -33,6 +33,35 @@ const unsupported = (path) => {
 }
 const own = (object, key) => Object.hasOwn(object, key)
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+function exceptionFixture(descriptor, path) {
+    if (!object(descriptor)) blocked('exception-fixture', 'Expected a native exception descriptor')
+    checkKeys(descriptor, ['value', 'type', 'message', 'stack', 'cause', 'errors'], path)
+    if (own(descriptor, 'value')) {
+        if (Object.keys(descriptor).length !== 1)
+            blocked('exception-fixture', 'Value fixtures cannot include error fields')
+        return descriptor.value
+    }
+    const constructors = { Error, TypeError, RangeError, AggregateError }
+    if (!own(constructors, descriptor.type) || typeof descriptor.message !== 'string')
+        blocked('exception-fixture', 'Unsupported native error type or message')
+    if (own(descriptor, 'stack') && typeof descriptor.stack !== 'string')
+        blocked('exception-fixture', 'Expected a string stack')
+    if (own(descriptor, 'errors') && (descriptor.type !== 'AggregateError' || !Array.isArray(descriptor.errors)))
+        blocked('exception-fixture', 'Expected aggregate error members')
+    const options = own(descriptor, 'cause')
+        ? { cause: exceptionFixture(descriptor.cause, `${path}/cause`) }
+        : undefined
+    const error =
+        descriptor.type === 'AggregateError'
+            ? new AggregateError(
+                  (descriptor.errors ?? []).map((member, index) => exceptionFixture(member, `${path}/errors/${index}`)),
+                  descriptor.message,
+                  options
+              )
+            : new constructors[descriptor.type](descriptor.message, options)
+    if (own(descriptor, 'stack')) error.stack = descriptor.stack
+    return error
+}
 const configFields = {
     host: 'host',
     flush_at: 'flushAt',
@@ -305,11 +334,7 @@ export class Binding {
                 )
             } else if (route === '/capture_exception') {
                 checkKeys(args, ['error', 'distinct_id', 'properties'], route)
-                if (!object(args.error)) blocked('exception-fixture', 'Expected a native exception descriptor')
-                checkKeys(args.error, ['type', 'message'], `${route}/error`)
-                if (args.error.type !== 'TypeError' || typeof args.error.message !== 'string')
-                    blocked('exception-fixture', 'Native fixture requires TypeError and a string message')
-                const parameters = [new TypeError(args.error.message)]
+                const parameters = [exceptionFixture(args.error, `${route}/error`)]
                 if (own(args, 'distinct_id') || own(args, 'properties')) parameters.push(args.distinct_id)
                 if (own(args, 'properties')) parameters.push(args.properties)
                 result = this.client.captureException(...parameters)

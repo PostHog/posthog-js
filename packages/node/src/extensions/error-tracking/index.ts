@@ -3,13 +3,62 @@ import type { AutocaptureClient } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
-import { isObject } from '@posthog/core'
+import { isObject, safeJsonStringify } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
 import { BucketedRateLimiter, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
+
+// Copy custom JSON containers only: null array entries and native values keep their meaning.
+function withoutNullObjectProperties(value: any): any {
+  const copies = new WeakMap<object, any>()
+  const pending: { source: Record<string, any>; target: Record<string, any>; array: boolean }[] = []
+  const copyValue = (source: any, inArray = false): any => {
+    if (
+      !Array.isArray(source) &&
+      (source === null ||
+        typeof source !== 'object' ||
+        (Object.getPrototypeOf(source) !== Object.prototype && Object.getPrototypeOf(source) !== null))
+    )
+      return source
+    if (copies.has(source)) return copies.get(source)
+    const toJSON = source.toJSON
+    if (typeof toJSON === 'function') {
+      // Let serialization choose the key and call the original receiver. Its backing
+      // properties may be unreadable; clean only the representation the hook returns.
+      return {
+        toJSON(key: string) {
+          const representation = JSON.parse(safeJsonStringify({ [key]: { toJSON: toJSON.bind(source) } }))[key]
+          if (representation === null && !inArray) return undefined
+          return withoutNullObjectProperties(representation)
+        },
+      }
+    }
+    const array = Array.isArray(source)
+    const target: any = array ? new Array(source.length) : {}
+    copies.set(source, target)
+    pending.push({ source, target, array })
+    return target
+  }
+  const root = copyValue(value)
+  while (pending.length) {
+    const { source, target, array } = pending.pop()!
+    for (const key of Object.keys(source)) {
+      const entry = source[key]
+      if (entry !== null || array) {
+        Object.defineProperty(target, key, {
+          value: copyValue(entry, array),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        })
+      }
+    }
+  }
+  return root
+}
 
 export default class ErrorTracking {
   private client: PostHogBackendClient
@@ -56,7 +105,17 @@ export default class ErrorTracking {
     context?: ContextData
   ): Promise<EventMessage> {
     const applyContextSnapshot = snapshotEventContext(context)
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const customProperties = Object.fromEntries(
+      Object.keys(additionalProperties ?? {})
+        .filter(
+          (key) =>
+            !(key.startsWith('$exception_') && key !== '$exception_fingerprint') &&
+            key !== '$debug_images' &&
+            key !== '$cymbal_errors'
+        )
+        .map((key) => [key, additionalProperties![key]])
+    )
+    const properties: NonNullable<EventMessage['properties']> = withoutNullObjectProperties(customProperties)
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
