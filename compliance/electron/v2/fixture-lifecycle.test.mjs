@@ -127,17 +127,40 @@ test('runtime mismatch immediately removes only the rejected real fixture alloca
     )
 })
 
-test('retired fixture leader leaves ambiguous descendants untouched rather than signaling a stale group (BLOCKED cleanup)', async (t) => {
+test('fixture stop reaps descendants that outlive the exited fixture leader', async (t) => {
     const consumer = await controlledConsumer(t, true)
     const fixture = new Fixture(consumer.directory, 'electron-main')
     t.after(() => fixture.stop())
     await fixture.exchange(null, 3000)
-    await consumer.wait('descendant')
-    if (fixture.child.exitCode === null) await once(fixture.child, 'exit')
+    const descendant = await consumer.wait('descendant')
+    // The Electron leader exits first; its descendant keeps running.
+    await consumer.wait('electron-main', (owned) => owned.closed)
+    assert.equal(descendant.closed, false)
     await fixture.stop()
-    assert.equal(
-        consumer.sockets.get('descendant').closed,
-        false,
-        'ownership is ambiguous after leader exit; test owner releases it cooperatively'
+    await consumer.wait('descendant', (owned) => owned.closed)
+    await assert.rejects(access(descendant.directory), { code: 'ENOENT' })
+})
+
+test('a crashed adapter cannot leave fixture processes running', async (t) => {
+    const consumer = await controlledConsumer(t, true)
+    const { spawn } = await import('node:child_process')
+    const server = new URL('./server.mjs', import.meta.url).pathname
+    const adapter = spawn(
+        process.execPath,
+        [
+            '--input-type=module',
+            '-e',
+            `import { Fixture } from ${JSON.stringify(server)}; const f = new Fixture(${JSON.stringify(consumer.directory)}, 'electron-main'); await f.exchange(null, 3000); process.stdout.write('allocated\\n'); setInterval(() => {}, 1000)`,
+        ],
+        { stdio: ['ignore', 'pipe', 'inherit'] }
     )
+    t.after(() => {
+        if (adapter.exitCode === null && adapter.signalCode === null) adapter.kill('SIGKILL')
+    })
+    await new Promise((resolve) => adapter.stdout.once('data', resolve))
+    await consumer.wait('descendant')
+    // No cleanup code can run in the adapter.
+    adapter.kill('SIGKILL')
+    await once(adapter, 'exit')
+    await consumer.wait('descendant', (owned) => owned.closed)
 })
