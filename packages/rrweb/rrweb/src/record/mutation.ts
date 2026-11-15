@@ -282,6 +282,7 @@ export default class MutationBuffer {
   private isBlockedAtEmission(
     node: Node | null,
     cache?: WeakMap<Element, observerParam['maskInputOptions']>,
+    selectedContentCache?: WeakMap<Node, boolean>,
   ): boolean {
     return (
       isBlockedIncludingShadowHosts(
@@ -296,6 +297,7 @@ export default class MutationBuffer {
           this.maskInputOptions,
           this.selectMaskingFn,
           cache,
+          selectedContentCache,
         ))
     );
   }
@@ -308,6 +310,9 @@ export default class MutationBuffer {
     const addedIds = new Set<number>();
     const selectMaskingCache = this.selectMaskingFn
       ? new WeakMap<Element, observerParam['maskInputOptions']>()
+      : undefined;
+    const selectedContentCache = this.selectMaskingFn
+      ? new WeakMap<Node, boolean>()
       : undefined;
 
     const getNextId = (n: Node): number | null => {
@@ -337,7 +342,14 @@ export default class MutationBuffer {
       }
       // A blocked node itself still needs a placeholder, but its descendants
       // must not be serialized from stale added/moved entries.
-      if (this.isBlockedAtEmission(parent, selectMaskingCache)) return true;
+      if (
+        this.isBlockedAtEmission(
+          parent,
+          selectMaskingCache,
+          selectedContentCache,
+        )
+      )
+        return true;
       if (
         this.selectMaskingFn &&
         isMaskedSelectedContent(
@@ -345,6 +357,7 @@ export default class MutationBuffer {
           this.maskInputOptions,
           this.selectMaskingFn,
           selectMaskingCache,
+          selectedContentCache,
         )
       )
         return true;
@@ -360,6 +373,7 @@ export default class MutationBuffer {
         n,
         serializationOptions,
         selectMaskingCache,
+        selectedContentCache,
       );
       if (sn) {
         adds.push({
@@ -535,7 +549,12 @@ export default class MutationBuffer {
     const payload = {
       texts: Array.from(this.texts, ([node, value]) => ({ node, value }))
         .filter(
-          (text) => !this.isBlockedAtEmission(text.node, selectMaskingCache),
+          (text) =>
+            !this.isBlockedAtEmission(
+              text.node,
+              selectMaskingCache,
+              selectedContentCache,
+            ),
         )
         .map((text) => {
           const n = text.node;
@@ -556,7 +575,11 @@ export default class MutationBuffer {
       attributes: Array.from(this.attributes.values())
         .filter(
           (attribute) =>
-            !this.isBlockedAtEmission(attribute.node, selectMaskingCache),
+            !this.isBlockedAtEmission(
+              attribute.node,
+              selectMaskingCache,
+              selectedContentCache,
+            ),
         )
         .map((attribute) => {
           const { attributes } = attribute;

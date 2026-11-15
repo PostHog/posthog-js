@@ -1493,6 +1493,7 @@ export function serializeNodeWithId(
   selectMaskingCache:
     | WeakMap<Element, MaskInputOptions>
     | undefined = undefined,
+  selectedContentCache?: WeakMap<Node, boolean>,
 ): serializedNodeWithId | null {
   const {
     doc,
@@ -1527,8 +1528,10 @@ export function serializeNodeWithId(
   } = options;
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
-  if (selectMaskingFn && !selectMaskingCache)
-    selectMaskingCache = new WeakMap();
+  if (selectMaskingFn) {
+    selectMaskingCache ??= new WeakMap();
+    selectedContentCache ??= new WeakMap();
+  }
   if (
     selectMaskingFn &&
     isMaskedSelectedContent(
@@ -1536,6 +1539,7 @@ export function serializeNodeWithId(
       maskInputOptions,
       selectMaskingFn,
       selectMaskingCache,
+      selectedContentCache,
     )
   )
     return null;
@@ -1691,6 +1695,7 @@ export function serializeNodeWithId(
           childN,
           bypassOptions,
           selectMaskingCache,
+          selectedContentCache,
         );
         if (serializedChildNode) {
           serializedNode.childNodes.push(serializedChildNode);
@@ -1705,6 +1710,7 @@ export function serializeNodeWithId(
           childN,
           bypassOptions,
           selectMaskingCache,
+          selectedContentCache,
         );
         if (serializedChildNode) {
           isNativeShadowDom(shadowRootEl) &&

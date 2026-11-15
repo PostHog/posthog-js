@@ -907,11 +907,20 @@ export function isMaskedSelectedContent(
   options: MaskInputOptions,
   selectMaskingFn?: SelectMaskingFn,
   cache?: WeakMap<Element, MaskInputOptions>,
+  ancestryCache?: WeakMap<Node, boolean>,
 ): boolean {
   if (!selectMaskingFn) return false;
-  // Keep the container so native selection updates can still render on replay.
+  // Cache inclusive ancestor context, but query the parent to keep the container.
   let ancestor = dom.parentNode(node);
+  const visited: Node[] = [];
+  let masked = false;
   while (ancestor) {
+    const cached = ancestryCache?.get(ancestor);
+    if (cached !== undefined) {
+      masked = cached;
+      break;
+    }
+    visited.push(ancestor);
     if (
       isElement(ancestor) &&
       ancestor.localName === 'selectedcontent' &&
@@ -927,17 +936,19 @@ export function isMaskedSelectedContent(
             owner.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
             getInputMaskOptions(owner, options, selectMaskingFn, cache).select
           )
-            return true;
+            masked = true;
           break;
         }
         owner = dom.parentElement(owner);
       }
+      if (masked) break;
     }
     ancestor = isShadowRoot(ancestor)
       ? dom.host(ancestor)
       : dom.parentNode(ancestor);
   }
-  return false;
+  for (const ancestor of visited) ancestryCache?.set(ancestor, masked);
+  return masked;
 }
 
 export function maskInputValue({
