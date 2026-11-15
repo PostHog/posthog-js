@@ -70,6 +70,7 @@ test('packaged consumer cannot borrow missing @posthog/core from workspace ances
         )
         assert.match(result.output, /Electron exited with code 1, signal null/, 'native app must exit, not time out')
     } finally {
-        await rm(scratch, { recursive: true, force: true })
+        // Windows can keep the exited app's executable locked briefly (EBUSY/EPERM).
+        await rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
     }
 })
