@@ -148,7 +148,16 @@ export function dropIdentifyStyleLegacyPersonProfile(
  * itself, which can hide some of its fields, so copying its entries would bypass that encoding.
  */
 function isMergeableObject(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value) && typeof (value as { toJSON?: unknown }).toJSON !== 'function'
+  if (!isPlainObject(value)) {
+    return false
+  }
+  try {
+    return typeof (value as { toJSON?: unknown }).toJSON !== 'function'
+  } catch {
+    // A `toJSON` getter that throws is left to serialization, which drops the event without
+    // logging the error, since its message can hold event content.
+    return false
+  }
 }
 
 /** A new object: the event's inner values, plus the default's inner keys the event left unset. */

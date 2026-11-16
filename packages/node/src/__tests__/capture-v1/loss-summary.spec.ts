@@ -303,6 +303,27 @@ describe('capture loss summary', () => {
     )
 
     it.each([false, true])(
+      'logs one content-free line for a $set whose toJSON getter throws beside a registered $set (immediate: %s)',
+      async (immediate) => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const posthog = harness.makeClient()
+        await posthog.register({ $set: { plan: 'free' } })
+        const throwingToJsonGetter = Object.defineProperty({}, 'toJSON', {
+          get: () => {
+            throw new Error(`toJSON getter failed: ${SECRET_PROPERTY}`)
+          },
+        })
+
+        await captureAround(posthog, { $set: throwingToJsonGetter }, immediate, false)
+
+        expect(harness.eventsIn(ANALYTICS_CAPTURE_PATH)).toEqual(['before', 'after'])
+        expect(lines()).toEqual([LOSS_LINE])
+        expectContentFree(lines()[0])
+        expect(consoleError).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each([false, true])(
       'reports a captureAi event whose properties throw on the AI lane, under its returned uuid (immediate: %s)',
       async (immediate) => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
