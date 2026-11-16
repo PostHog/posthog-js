@@ -1,6 +1,6 @@
-import { createKeyValueStore, TabValues } from '../src/key-value-store'
+import { createKeyValueStore, TabValues } from '../src/core/state/key-value-store'
 import { MemoryStorage } from './helpers'
-import { BrowserState } from '../src/state'
+import { BrowserState } from '../src/core/state/state'
 
 describe('core scoped KV mechanisms', () => {
     it('keeps copied methods bound, snapshots values and omits missing batch keys', () => {

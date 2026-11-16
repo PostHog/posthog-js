@@ -1,4 +1,4 @@
-import { createId } from '../src/id'
+import { createId } from '../src/primitives/id'
 
 describe('createId', () => {
     it('returns a UUID when browser randomness throws', () => {

@@ -1,9 +1,13 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/analytics'
-import type { CaptureV1Event } from '../src/capture-v1'
-import { applySessionProperties, snapshotCaptureProperties, unavoidableProperties } from '../src/capture-properties'
+import { analytics } from '../src/products/analytics/analytics'
+import type { CaptureV1Event } from '../src/products/analytics/delivery/capture-v1'
+import {
+    applySessionProperties,
+    snapshotCaptureProperties,
+    unavoidableProperties,
+} from '../src/products/analytics/admission/capture-properties'
 
 const nullableProperties = {
     test: null,

@@ -1,6 +1,6 @@
 # browser-next real-data sandbox
 
-A small Vite app for exercising the experimental `@posthog/browser` client against the shared PostHog US Cloud test project. It imports `packages/browser-next/src` directly, so local SDK edits appear immediately without packaging a tarball.
+A small Vite app for exercising the experimental `@posthog/browser` client against the shared PostHog US Cloud test project. It imports `packages/browser-next/src/composition/npm` directly, so local SDK edits appear immediately without packaging a tarball.
 
 ## Start
 

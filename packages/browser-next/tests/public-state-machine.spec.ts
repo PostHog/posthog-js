@@ -1,10 +1,10 @@
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/analytics'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import { createAnalyticsDelivery } from '../src/analytics-delivery'
-import { type AnalyticsDeliveryFactory } from '../src/analytics-internal'
-import { createPostHog, type BrowserFetch } from '../src/core'
+import { analytics } from '../src/products/analytics/analytics'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { createAnalyticsDelivery } from '../src/products/analytics/delivery/analytics-delivery'
+import { type AnalyticsDeliveryFactory } from '../src/products/analytics/analytics-internal'
+import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'
 import { MemoryStorage } from './helpers'
 
 const deferred = <T>() => {

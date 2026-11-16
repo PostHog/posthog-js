@@ -2,9 +2,9 @@ import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { createPostHog as createAutomaticPostHog } from '../src'
-import { analytics as createAnalytics } from '../src/analytics'
-import type { BrowserFetch, CaptureOptions, CorePostHogOptions, RemoteConfig } from '../src/core'
+import { createPostHog as createAutomaticPostHog } from '../src/composition/npm'
+import { analytics as createAnalytics } from '../src/products/analytics/analytics'
+import type { BrowserFetch, CaptureOptions, CorePostHogOptions, RemoteConfig } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>

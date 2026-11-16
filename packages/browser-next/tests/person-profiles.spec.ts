@@ -1,10 +1,10 @@
-import { analytics, type AnalyticsOptions } from '../src/analytics'
-import { flags } from '../src/flags'
-import type { FlagsExtension } from '../src/flags-internal'
-import { createPostHog } from '../src/core'
-import { createPostHog as createRootPostHog } from '../src'
-import { BrowserState } from '../src/state'
-import { EventBuffer } from '../src/event-buffer'
+import { analytics, type AnalyticsOptions } from '../src/products/analytics/analytics'
+import { flags } from '../src/products/flags/flags'
+import type { FlagsExtension } from '../src/products/flags/flags-internal'
+import { createPostHog } from '../src/composition/npm/core'
+import { createPostHog as createRootPostHog } from '../src/composition/npm'
+import { BrowserState } from '../src/core/state/state'
+import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
 import { createFetch, localRemoteConfig, MemoryStorage, requireInstalledExtension, type SentRequest } from './helpers'
 
 const options = {
