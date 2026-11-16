@@ -26,6 +26,8 @@ export type PostHogCoreOptions = {
   /**
    * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
    *
+   * When the queue is full, the SDK drops the oldest event first.
+   *
    * @default 1000
    */
   maxQueueSize?: number
@@ -250,6 +252,7 @@ export type PostHogCoreOptions = {
    * Use this to link requests made from your app to session replays and LLM traces
    * in PostHog. When set, the global `fetch` is patched on initialization and the
    * headers are added to requests whose hostname matches one of the entries.
+   * Hostnames match exactly, so pass hostnames only, without a protocol or path.
    *
    * Requires the SDK to wire up `patchFetchForTracingHeaders` against this option
    * (currently supported in posthog-react-native).

@@ -7,7 +7,9 @@ export interface ContextData {
   properties?: Record<string, any>
   /**
    * Options that fill the options an event left unset (missing or `null`). The event's own options
-   * win; these beat options from `registerOptions()`.
+   * win; these beat options from `registerOptions()`. A `process_person_profile` here does not
+   * reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or
+   * `$set_once` events unless their distinct id is generated.
    */
   options?: Record<string, JsonType>
 }

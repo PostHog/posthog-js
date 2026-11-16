@@ -788,7 +788,8 @@ describe('layered event values', () => {
         )
 
         expect(event.distinct_id).toBe(expected)
-        expect(event.options).toStrictEqual({})
+        // Every id here, including `$<type>_<key>`, is not SDK-generated, so the event keeps its person default.
+        expect(event.options).toStrictEqual({ process_person_profile: true })
         expect(event).not.toHaveProperty('session_id')
       })
     })

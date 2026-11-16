@@ -72,8 +72,8 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
    - Always: the main `$mcp_*` capture event.
    - If `event.isError && event.error` (and `enableExceptionAutocapture !== false`): a sibling `$exception` event.
    - Each payload gets its own copy of the event's per-event `options`, plus the anonymous `process_person_profile: false` default (see §4).
-4. **`beforeSend`**: each fully-built PostHog payload (`{ event, distinct_id, properties, options }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch, so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property and option tweaks. The SDK sends the options the hook returns.
-5. **Dispatch**: each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. On posthog-node 6, detected by `registerOptions`, the payload's `options` are passed as the event's `options`. posthog-node 5 has no per-event options, so the SDK sends each known option the way that version reads it and drops unknown keys. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain; the SDK installs no process-signal handlers and owns no client lifecycle.
+4. **`beforeSend`**: each fully-built PostHog payload (`{ event, distinct_id, properties, options }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch, so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it. Returning a nullish value drops it. A throw drops that event (and is logged). This is the seam for customer redaction or property and option tweaks. The SDK sends the options the hook returns.
+5. **Dispatch**: each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. On posthog-node 6.x.x, detected by `registerOptions`, the payload's `options` are passed as the event's `options`. posthog-node 5.x.x has no per-event options, so the SDK sends each known option the way that version reads it and drops unknown keys. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain. The SDK installs no process-signal handlers and owns no client lifecycle.
 
 ### Tool input field names
 
@@ -286,17 +286,22 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 
 ### Person & group properties
 
-| Key               | On                              | Source                                                                                         |
-| ----------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `$set.<anything>` | events with a resolved identity | Keys of `UserIdentity.properties` (e.g. `name`, `email`), written to `$set` verbatim           |
-| `$groups`         | every event for the session     | `UserIdentity.groups` (`{ groupType: groupKey }`) — callers never hand-write the `$groups` key |
+| Key               | On                              | Source                                                                               |
+| ----------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| `$set.<anything>` | events with a resolved identity | Keys of `UserIdentity.properties` (e.g. `name`, `email`), written to `$set` verbatim |
+| `$groups`         | every event for the session     | `UserIdentity.groups` (`{ groupType: groupKey }`)                                    |
+
+Callers never hand-write the `$groups` key.
 
 ### Event options
 
-| Option                   | On                                   | Source                                                                                                 |
-| ------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `process_person_profile` | events with **no** resolved identity | `false` so anonymous sessions don't mint a person profile each, unless the user chose a value (see §4) |
-| any key                  | every event, `$exception` included   | `eventOptions`, from the callback on auto-captured events or per call on the others                    |
+| Option                   | On                                   | Source         |
+| ------------------------ | ------------------------------------ | -------------- |
+| `process_person_profile` | events with **no** resolved identity | `false`        |
+| any key                  | every event, `$exception` included   | `eventOptions` |
+
+- `process_person_profile` is `false` so anonymous sessions don't mint a person profile each, unless the user chose a value (see §4).
+- Any key comes from `eventOptions`, from the callback on auto-captured events or per call on the others.
 
 ### Exception properties (`$exception` event)
 
@@ -308,7 +313,7 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 ### Customer-defined options
 
-`eventOptions` sets posthog-node per-event options, such as `process_person_profile`. The `instrument()` path takes a per-request callback in `MCPAnalyticsOptions`; `analytics.capture()` and every `PostHogMCP` capture method take a per-call `eventOptions` field. The callback runs only on the request-handling paths, after any options the event already carries, which win. The options reach every payload of the event, including the `$exception` sibling. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's `options` field instead.
+`eventOptions` sets posthog-node per-event options, such as `process_person_profile`. The `instrument()` path takes a per-request callback in `MCPAnalyticsOptions`. `analytics.capture()` and every `PostHogMCP` capture method take a per-call `eventOptions` field. The callback runs only on the request-handling paths, after any options the event already carries, which win. The options reach every payload of the event, including the `$exception` sibling. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's `options` field instead.
 
 ## 7. Customer extension points (`MCPAnalyticsOptions`, `src/types.ts`)
 
@@ -327,7 +332,9 @@ The `posthog-node` client is **not** an option — it is the required positional
 | `identify`                   | —                                                                                              | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`.                                                                                                                |
 | `beforeSend`                 | —                                                                                              | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event.                |
 | `eventProperties`            | —                                                                                              | Freeform JSON, spread flat.                                                                                                                                                                                                                                                  |
-| `eventOptions`               | none                                                                                           | Per-request callback returning posthog-node per-event options for every auto-captured event, `$exception` included. `beforeSend` sees them as the payload's `options`. An explicit `process_person_profile` wins over the anonymous default.                                 |
+| `eventOptions`               | none                                                                                           | Per-request callback returning posthog-node per-event options                                                                                                                                                                                                                |
+
+`eventOptions` returns options for every auto-captured event, `$exception` included. `beforeSend` sees them as the payload's `options`. An explicit `process_person_profile` wins over the anonymous default.
 
 ## 8. Useful queries
 

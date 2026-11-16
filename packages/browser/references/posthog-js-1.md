@@ -177,6 +177,91 @@ posthog.capture('signed_up', { plan: 'pro' })
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
 
+### Pin the snippet version
+
+To pin the snippet, change `/static/array.js` to a major path such as `/static/1/array.js` or an exact path such as `/static/1.380.0/array.js`. Minor paths such as `/static/1.380/array.js` are not supported. Exact version paths never change, so your CDN or proxy can cache them for a long time. Keep cache times short for `/static/array.js` and `/static/1/array.js`.
+
+### Verify the SDK with Subresource Integrity
+
+From `posthog-js` 1.445.0, each release publishes a manifest of SHA-384 hashes at `/static/<SDK_VERSION>/integrity.json`. The npm package includes the same manifest at `dist/integrity.json`.
+
+```bash
+curl --fail --silent --show-error --location \
+  "https://us-assets.i.posthog.com/static/<SDK_VERSION>/integrity.json" \
+  --output posthog-integrity.json
+```
+
+The `files` object in the manifest maps each asset to its hash. Store the hashes in your source code. Don't fetch them at page load. Then replace the inline snippet with the static loader. Set `integrity` to `files["loader.js"]` and `data-core-integrity` to `files["array.js"]`.
+
+```html
+<script
+    src="https://us-assets.i.posthog.com/static/<SDK_VERSION>/loader.js"
+    integrity="sha384-<LOADER_SHA384_BASE64_DIGEST>"
+    data-core-integrity="sha384-<ARRAY_SHA384_BASE64_DIGEST>"
+    data-project-token="<ph_project_api_key>"
+    crossorigin="anonymous"
+></script>
+```
+
+The loader reads its options from these attributes:
+
+- `data-api-host` sets your ingestion URL when you use a reverse proxy.
+- `data-config` takes your other `init` options as JSON.
+- `data-defer-init="true"` skips the automatic `init`, so you can call `posthog.init` yourself with function options.
+
+A cross-origin asset proxy must preserve the CORS response headers from PostHog's asset host and serve the same approved script bytes. When upgrading, update the pinned version and both hashes together. A hash mismatch blocks execution. Don't retry without integrity.
+
+The hashes cover only `loader.js` and `array.js`. They don't cover the recorder, surveys, toolbar, or `config.js` scripts. Use the manifest from the regional asset host you serve, because toolbar assets differ between regions.
+
+### Prevent runtime script downloads
+
+Use a no-external build and set `disable_external_dependency_loading: true` on the first initialization of every SDK instance. See [browser extension setup](https://posthog.com/docs/advanced/browser-extension) for no-external imports and feature trade-offs. The default `posthog-js` npm import can still download dependencies.
+
+Don't combine this setup with the snippet, a tag-manager installation, or another permissively configured SDK copy. A no-external build doesn't remove shared loaders or renderers registered by another bundle.
+
+With external loading disabled, the standard loader doesn't fetch executable `config.js`. Without preloaded configuration, the SDK requests configuration as JSON instead. Configuration, flags and events still use the network. Preventing script downloads doesn't sanitize remote HTML or disable bundled renderers.
+
+### Use samplers with the HTML snippet
+
+Load the customization script before the snippet calls `posthog.init`. Adjust the host for your region or proxy:
+
+```html
+<script src="https://us.i.posthog.com/static/customizations.full.js"></script>
+```
+
+Set the snippet's `before_send` option to `posthogCustomizations.sampleByDistinctId(0.4)` to keep about 40% of distinct IDs, or `posthogCustomizations.sampleBySessionId(0.25)` to keep about 25% of sessions. A given distinct ID or session sends either all its events or none.
+
+### Cookies in iframes
+
+In an iframe on another site, browsers treat PostHog cookies as third-party cookies and can block them. Pass an ID from the parent page and call `identify` inside the iframe.
+
+### Enriched flag analytics
+
+To add view and interaction charts to a flag's Usage tab, capture `$feature_view` when a user sees the feature and `$feature_interaction` when they use it.
+
+```ts
+posthog.capture('$feature_view', { feature_flag: flag })
+
+posthog.capture('$feature_interaction', {
+    feature_flag: flag,
+    $set: { [`$feature_interaction/${flag}`]: true },
+})
+```
+
+### Block Lighthouse traffic
+
+posthog-js already skips browsers whose user agent contains `Chrome-Lighthouse`, ignoring case. Some tools built on Lighthouse, such as Ahrefs and Semrush, send an ordinary browser user agent instead, so PostHog can't tell them apart from real visitors. If one of them inflates your numbers, add a string that only its user agent contains to `custom_blocked_useragents`. The SDK sends nothing from a browser whose user agent contains one of these strings, ignoring case, so never add a full browser user agent: that also blocks real visitors on the same browser and platform.
+
+```ts
+posthog.init('<ph_project_api_key>', {
+    custom_blocked_useragents: ['example-crawler'],
+})
+```
+
+### Use `posthog` in the browser console
+
+Bundled apps often don't expose `window.posthog`. To reach the instance in Chrome or Firefox, set `debug: true`, find the `[PostHog.js] Starting in debug mode` log, expand the logged object, right-click `this`, and select **Store as global variable**. The instance is then available as `temp1` in Chrome or `temp0` in Firefox.
+
 ## Setup
 
 ### `new PostHog(...)`
@@ -2703,6 +2788,82 @@ posthog.updateFlags(
 )
 ```
 
+### `sampleByDistinctId`
+
+> **sampleByDistinctId**(`percent`): `BeforeSendFn`
+
+Return a `before_send` hook that samples by distinct ID.
+A given ID sends either all its events or none. A rate of 0.5 keeps roughly
+half of distinct IDs, not half of each ID's events.
+
+Import it from `posthog-js/customizations` and pass it to `before_send`.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `percent` | `number` | Fraction of IDs to keep, from 0 (none) to 1 (all). |
+
+#### Returns
+
+`BeforeSendFn`
+
+#### Example
+
+```ts
+import { sampleByDistinctId } from 'posthog-js/customizations'
+
+posthog.init('<ph_project_token>', { before_send: sampleByDistinctId(0.4) })
+```
+
+### `sampleByEvent`
+
+> **sampleByEvent**(`eventNames`, `percent`): `BeforeSendFn`
+
+Return a `before_send` hook that samples events with the listed names.
+Other events are kept. Sampling applies to individual events.
+
+Import it from `posthog-js/customizations` and pass it to `before_send`.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `eventNames` | `string`[] | Event names to sample. |
+| `percent` | `number` | Fraction of matching events to keep, from 0 (none) to 1 (all). |
+
+#### Returns
+
+`BeforeSendFn`
+
+### `sampleBySessionId`
+
+> **sampleBySessionId**(`percent`): `BeforeSendFn`
+
+Return a `before_send` hook that samples by session ID.
+A given session sends either all its events or none. A rate of 0.5 keeps
+roughly half of sessions, not half of each session's events.
+
+Import it from `posthog-js/customizations` and pass it to `before_send`.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `percent` | `number` | Fraction of sessions to keep, from 0 (none) to 1 (all). |
+
+#### Returns
+
+`BeforeSendFn`
+
+#### Example
+
+```ts
+import { sampleBySessionId } from 'posthog-js/customizations'
+
+posthog.init('<ph_project_token>', { before_send: sampleBySessionId(0.25) })
+```
+
 ### `Compression`
 
 > `const` **Compression**: `object`
@@ -4409,7 +4570,7 @@ Logs configuration options
 | Property | Type | Description | Inherited from |
 | ------ | ------ | ------ | ------ |
 | <a id="property-beforesend-2"></a> `beforeSend?` | `BeforeSendLogFn` \| `BeforeSendLogFn`[] | Pre-send filter for log records, as a single function or a left-to-right chain. Each function inspects, mutates, or drops a record (return `null` to drop) before it enters the rate cap or the buffer. | `LogCaptureOptions`.`beforeSend` |
-| <a id="property-captureconsolelogs-1"></a> `captureConsoleLogs?` | `boolean` | Automatically capture `console.*` calls as structured log records. Review console output before enabling, as messages can include sensitive values written by your code or by third-party libraries. **Default** `undefined` | - |
+| <a id="property-captureconsolelogs-1"></a> `captureConsoleLogs?` | `boolean` | Automatically capture `console.*` calls as structured log records. Review console output before enabling, as messages can include sensitive values written by your code or by third-party libraries. The project setting can also turn this on. Console logs are captured when either one enables them. **Default** `undefined` | - |
 | <a id="property-environment-2"></a> `environment?` | `string` | The deployment environment for log records (e.g. 'production', 'staging'). Maps to the OTel resource attribute 'deployment.environment'. | `LogCaptureOptions`.`environment` |
 | <a id="property-flushintervalms-2"></a> `flushIntervalMs?` | `number` | Flush interval in milliseconds for batched log records. **Default** `3000` | `LogCaptureOptions`.`flushIntervalMs` |
 | <a id="property-maxbuffersize-2"></a> `maxBufferSize?` | `number` | Maximum number of log records to buffer before forcing a flush. The queue may grow beyond this while a flush is in flight (e.g. during a synchronous burst) and is bounded separately by the per-interval rate cap. **Default** `100` | `LogCaptureOptions`.`maxBufferSize` |
@@ -4825,7 +4986,7 @@ Can be:
 | <a id="property-__preview_web_vitals_soft_navs"></a> `__preview_web_vitals_soft_navs?` | `boolean` | Scope web vitals metrics to the browser's Soft Navigation entries, so that client-side route changes in single-page apps each start a fresh measurement window instead of accumulating against the original hard-navigation timestamp. Without this, an SPA's LCP observer keeps treating the "largest paint so far" as belonging to the initial page load across every subsequent route change, which inflates LCP (and the other metrics) by the time spent on the app. This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API, which is still experimental. When enabled, PostHog loads a pinned stable web-vitals 6.x bundle and passes `reportSoftNavs` to the observers. The default path remains on the existing web-vitals 5.x bundle. In browsers without soft-nav support, metrics fall back to their existing hard-navigation behavior. **Default** `false` |
 | <a id="property-__web_vitals_max_value"></a> `__web_vitals_max_value?` | `number` | We observe very large values reported by the Chrome web vitals library These outliers are likely not real, useful values, and we exclude them You can set this to 0 in order to include all values, NB this is not recommended **Default** `15 * 60 * 1000 (15 minutes)` |
 | <a id="property-network_timing"></a> `network_timing?` | `boolean` | Works with session replay to use the browser's native performance observer to capture performance metrics |
-| <a id="property-web_vitals"></a> `web_vitals?` | `boolean` | Use chrome's web vitals library to wrap fetch and capture web vitals When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events). |
+| <a id="property-web_vitals"></a> `web_vitals?` | `boolean` | Use chrome's web vitals library to wrap fetch and capture web vitals When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events). A boolean here overrides the project setting. When unset, the project setting applies. |
 | <a id="property-web_vitals_allowed_metrics"></a> `web_vitals_allowed_metrics?` | `SupportedWebVitalsMetrics`[] | By default all 4 metrics are captured You can set this config to restrict which metrics are captured e.g. ['CLS', 'FCP'] to only capture those two metrics NB setting this does not override whether the capture is enabled **Default** `['LCP', 'CLS', 'FCP', 'INP']` |
 | <a id="property-web_vitals_attribution"></a> `web_vitals_attribution?` | `boolean` \| `SupportedWebVitalsMetrics`[] | Which web vitals metrics include attribution data. Attribution names the cause of a metric, such as the slow interaction target for INP or the load-phase breakdown for LCP, which is what makes a slow number diagnosable. Pass `true` to attribute all metrics, `false` for none, or an array to name them. The default attributes INP and LCP only. CLS is excluded by default because its attribution holds detached DOM nodes and can leak memory in single-page apps. **Default** `['INP', 'LCP']` |
 | <a id="property-web_vitals_delayed_flush_ms"></a> `web_vitals_delayed_flush_ms?` | `number` | We delay flushing web vitals metrics to reduce the number of events we send This is the maximum time we will wait before sending the metrics **Default** `5000` |
@@ -6025,12 +6186,12 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-api_method"></a> ~~`api_method?`~~ | `string` | **Deprecated** - NOT USED ANYMORE, kept here for backwards compatibility reasons |
 | <a id="property-api_transport"></a> `api_transport?` | `"XHR"` \| `"fetch"` | The transport method to use for API requests. **Default** `'fetch'` |
 | <a id="property-asset_host"></a> `asset_host` | `string` \| `null` | Optional host override for static assets loaded by PostHog, such as recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset paths; dynamic assets like remote config continue to use the regular asset host derived from api_host. **Default** `null` |
-| <a id="property-autocapture"></a> `autocapture` | `boolean` \| `AutocaptureConfig` | Determines whether PostHog should autocapture events. This setting does not affect capturing pageview events (see `capture_pageview`). by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent **Default** `true` |
+| <a id="property-autocapture"></a> `autocapture` | `boolean` \| `AutocaptureConfig` | Determines whether PostHog should autocapture events. This setting does not affect capturing pageview events (see `capture_pageview`). by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent The project setting can also turn autocapture off. Events are autocaptured only when both allow it. **Default** `true` |
 | <a id="property-before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | This function or array of functions - if provided - are called immediately before sending data to the server. It allows you to edit data before it is sent, or choose not to send it all. if provided as an array the functions are called in the order they are provided any one function returning null means the event will not be sent |
 | <a id="property-bootstrap-1"></a> `bootstrap` | `BootstrapConfig` | An object containing the `distinctID`, `isIdentifiedID`, and `featureFlags` keys, where `distinctID` is a string, and `featureFlags` is an object of key-value pairs. Since there is a delay between initializing PostHog and fetching feature flags, feature flags are not always available immediately. This makes them unusable if you want to do something like redirecting a user to a different page based on a feature flag. You can, therefore, fetch the feature flags in your server and pre-fill them here, allowing PostHog to know the feature flag values immediately. After the SDK fetches feature flags from PostHog, it will use those flag values instead of bootstrapped ones. **Default** `{}` |
 | <a id="property-capture_dead_clicks"></a> `capture_dead_clicks?` | `boolean` \| `DeadClicksAutoCaptureConfig` | Determines whether to capture dead clicks. by default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent **See** **Default** `undefined` |
-| <a id="property-capture_exceptions"></a> `capture_exceptions?` | `boolean` \| `ExceptionAutoCaptureConfig` | Determines whether to capture exceptions. **See** **Default** `undefined` |
-| <a id="property-capture_heatmaps"></a> `capture_heatmaps?` | `boolean` \| `HeatmapConfig` | Determines whether to capture heatmaps. **See** **Default** `undefined` |
+| <a id="property-capture_exceptions"></a> `capture_exceptions?` | `boolean` \| `ExceptionAutoCaptureConfig` | Determines whether to capture exceptions. When set, this overrides the project setting. When unset, the project setting applies. **See** **Default** `undefined` |
+| <a id="property-capture_heatmaps"></a> `capture_heatmaps?` | `boolean` \| `HeatmapConfig` | Determines whether to capture heatmaps. When set, this overrides the project setting. When unset, the project setting applies. **See** **Default** `undefined` |
 | <a id="property-capture_pageleave"></a> `capture_pageleave` | `boolean` \| `"if_capture_pageview"` | Determines whether PostHog should capture pageleave events. If set to `true`, it will capture pageleave events for all pages. If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled. **Default** `'if_capture_pageview'` |
 | <a id="property-capture_pageview"></a> `capture_pageview` | `boolean` \| `CapturePageviewOptions` \| `"history_change"` | Determines whether PostHog should capture pageview events automatically. Can be: - `true`: Capture the initial pageview - `false`: Don't capture any pageviews - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes - An object: Capture the initial pageview and pageviews when any selected URL component changes With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture` from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured. **Default** true (or `'history_change'` when `defaults` is `'2025-05-24'` or later) |
 | <a id="property-capture_performance"></a> `capture_performance?` | `boolean` \| `PerformanceCaptureConfig` | Determines whether to capture performance metrics. These include Network Timing for Session Replay and Web Vitals. The `network_timing` option is only used by the Session Replay feature. For more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option. When `undefined`, fallback to the remote configuration. If `false`, neither network timing nor web vitals will work. If an object, that will override the remote configuration. **See** **Default** `undefined` |
@@ -6039,9 +6200,9 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-conversations"></a> `conversations?` | `ConversationsConfig` | Conversations-specific configuration options, such as the support widget theme. **Default** `undefined` |
 | <a id="property-cookie_expiration"></a> `cookie_expiration` | `number` | Determines the number of days to store cookies for. **Default** `365` |
 | <a id="property-cookie_name"></a> ~~`cookie_name?`~~ | `string` | **Deprecated** - Use 'persistence_name' instead |
-| <a id="property-cookie_persisted_properties"></a> `cookie_persisted_properties?` | readonly `string`[] | List of custom property names that should be stored in cookies (in addition to the default ones) when using 'localStorage+cookie' persistence mode. This allows these properties to be shared across subdomains when cross_subdomain_cookie is enabled. **Default** `[]` |
+| <a id="property-cookie_persisted_properties"></a> `cookie_persisted_properties?` | readonly `string`[] | List of custom property names that should be stored in cookies (in addition to the default ones) when using 'localStorage+cookie' persistence mode. This allows these properties to be shared across subdomains when cross_subdomain_cookie is enabled. Cookies hold about 4KB, so large values can cause `431 Request Header Fields Too Large` errors. **Default** `[]` |
 | <a id="property-cookieless_mode"></a> `cookieless_mode?` | `"always"` \| `"on_reject"` | Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User identity is handled by generating a privacy-preserving hash on PostHog's servers. Web Vitals (`capture_performance.web_vitals`) are supported: metrics are sent without client session IDs; ingestion assigns `$session_id` when cookieless mode is enabled for the project. - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual. Note that you MUST enable cookieless mode in your PostHog project's settings, otherwise all your cookieless events will be ignored. We plan to remove this requirement in the future. |
-| <a id="property-cookiewinsonconflict"></a> `cookieWinsOnConflict` | `boolean` | In `'localStorage+cookie'` persistence mode, prefer shared cookie values over per-origin localStorage when both stores carry the same key. The SDK also checks for cookie changes before captures and persistence writes so already-open sibling subdomains adopt identity changes made by `identify()` or `reset()`. When `defaults` is `'2026-08-29'` or later, this defaults to `true`. **Default** `false` |
+| <a id="property-cookiewinsonconflict"></a> `cookieWinsOnConflict` | `boolean` | In `'localStorage+cookie'` persistence mode, prefer shared cookie values over per-origin localStorage when both stores carry the same key. The SDK also checks for cookie changes before captures and persistence writes so already-open sibling subdomains adopt identity changes made by `identify()` or `reset()`. Synchronization happens on the tab's next PostHog activity, not immediately. A persistence write can adopt an identity without immediately reloading feature flags. When the SDK next processes that identity, such as before a capture, it clears identity-bound flag state and starts a reload. `onFeatureFlags` runs after that reload. If the session ID changes, `onSessionId` runs when the tab next checks its session. A synchronized `reset()` also clears event and session properties of the previous identity. When `defaults` is `'2026-08-29'` or later, this defaults to `true`. Requires `posthog-js` 1.418.0 or later. **Default** `false` |
 | <a id="property-cross_subdomain_cookie"></a> `cross_subdomain_cookie` | `boolean` | Determines if cookie should be set on the top level domain (example.com). If PostHog-js is loaded on a subdomain (test.example.com), and `cross_subdomain_cookie` is set to false, it'll set the cookie on the subdomain only (test.example.com). NOTE: It will be set to `false` if we detect that the domain is a subdomain of a platform that is excluded from cross-subdomain cookie setting. The current list of excluded platforms is `herokuapp.com`, `vercel.app`, and `netlify.app`. **See** `isCrossDomainCookie` **Default** `true` |
 | <a id="property-custom_blocked_useragents"></a> `custom_blocked_useragents` | `string`[] | Used to extend the list of user agents that are blocked by default. **See** from './utils/blocked-uas' - Default list of blocked user agents. **Default** `[]` |
 | <a id="property-custom_campaign_params"></a> `custom_campaign_params` | `string`[] | Used to extend the list of campaign parameters that are saved by default. **See** from './utils/event-utils' - Default campaign parameters like utm_source, utm_medium, etc. **Default** `[]` |
@@ -6058,7 +6219,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-disable_persistence"></a> `disable_persistence` | `boolean` | Determines whether PostHog should disable persistence. If set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser. **Default** `false` |
 | <a id="property-disable_product_tours"></a> `disable_product_tours` | `boolean` | Determines whether PostHog should disable all product tours functionality. **Default** `false` |
 | <a id="property-disable_scroll_properties"></a> `disable_scroll_properties?` | `boolean` | Determines whether to disable scroll properties. These allow you to keep track of how far down someone scrolled in your website. **Default** `false` |
-| <a id="property-disable_session_recording"></a> `disable_session_recording` | `boolean` | Determines whether PostHog should disable session recording. **Default** `false` |
+| <a id="property-disable_session_recording"></a> `disable_session_recording` | `boolean` | Determines whether PostHog should disable session recording. Recording starts only when this option and the project setting both allow it. **Default** `false` |
 | <a id="property-disable_surveys"></a> `disable_surveys` | `boolean` | Determines whether PostHog should disable all surveys functionality. **Default** `false` |
 | <a id="property-disable_surveys_automatic_display"></a> `disable_surveys_automatic_display` | `boolean` | Determines whether PostHog should disable automatic display of surveys. If this is true, popup or widget surveys will not be shown when display conditions are met. **Default** `false` |
 | <a id="property-disable_web_experiments"></a> `disable_web_experiments` | `boolean` | Determines whether PostHog should disable web experiments. Currently disabled while we're in BETA. It will be toggled to `true` in a future release. **Default** `true` |
@@ -6102,7 +6263,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-opt_out_persistence_by_default"></a> `opt_out_persistence_by_default?` | `boolean` | Determines if users should be opted out of browser data storage by this PostHog instance by default, requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`. **Default** `false` |
 | <a id="property-opt_out_useragent_filter"></a> `opt_out_useragent_filter` | `boolean` | Determines if users should be opted out of user agent filtering such as googlebot or other bots. If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events, but will process all events as if they were from a browser. When the filter drops events, a one-time warning is written to the console (even without debug mode). The filter applies to events only; logs sent with `captureLog` bypass it. Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer). **Default** `false` |
 | <a id="property-override_display_language"></a> `override_display_language?` | `string` \| `null` | Display language override for Product Tours. Must be a valid BCP 47 language code. In the future this will be used for Surveys and other products that deliver in-app experiences to end-users. |
-| <a id="property-persistence"></a> `persistence` | `"localStorage"` \| `"cookie"` \| `"memory"` \| `"localStorage+cookie"` \| `"sessionStorage"` | Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details. **Default** `'localStorage+cookie'` |
+| <a id="property-persistence"></a> `persistence` | `"localStorage"` \| `"cookie"` \| `"memory"` \| `"localStorage+cookie"` \| `"sessionStorage"` | Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details. PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser. - `'localStorage+cookie'` stores essential state, such as the distinct ID, device ID and session ID, in a cookie, and other data in `localStorage`. `cookie_persisted_properties` adds custom properties to the cookie. - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors. - `'localStorage'` stores everything in `localStorage`. - `'sessionStorage'` stores everything in `sessionStorage`. - `'memory'` stores everything in page memory, so it lasts for one pageview. Call `set_config` to change the mode after `init`, for example when a user accepts cookies. **Default** `'localStorage+cookie'` |
 | <a id="property-persistence_name"></a> `persistence_name` | `string` | The name for the super properties persistent store **Default** `''` |
 | <a id="property-persistence_save_debounce_ms"></a> `persistence_save_debounce_ms?` | `number` | Coalesce rapid `Persistence.save()` calls into a single write. Set to a positive number (milliseconds) to debounce writes to localStorage / cookie by that window. The in-memory `props` object is always updated synchronously so within-tab reads see the latest values immediately. Cross-tab `storage` events (which carry the full persistence value as a payload) are reduced proportionally to the debounce window. Pending writes are flushed on `beforeunload` and `pagehide` so no state is lost on tab close. The cross-tab visibility delay is bounded by the configured window. Defaults to `0` (no debouncing, write synchronously) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point to reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30` config default opts into `250` automatically. **Default** `0` |
 | <a id="property-person_profiles"></a> `person_profiles?` | `"always"` \| `"never"` \| `"identified_only"` | You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting. There are three options: - `person_profiles: 'always'` - we will process persons data for all events - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`. - `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.unsetPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles. **Default** `'identified_only'` |
