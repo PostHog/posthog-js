@@ -178,6 +178,8 @@ app.get('/health', (req, res) => {
             'property_layers',
             'fail_open',
             `encoding_${COMPRESSION}`,
+            // Remote /flags requests send ?v=4 and read the v4 flag record.
+            'flags_response_v4',
         ],
     })
 })

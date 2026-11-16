@@ -766,6 +766,34 @@ describe('$experiment_exposure', () => {
       expect(attribution(exposure.properties)).toEqual(attribution(EXPECTED_EXPOSURE))
     })
 
+    it('a minimized config version 2 call keeps the properties that set options', async () => {
+      const { client, events } = createClient([
+        response([split({ hasExperiment: false })], { minimalFlagCalledEvents: true }),
+      ])
+      await client.register({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+        plan: 'team',
+      })
+
+      ;(await client.evaluateFlags(DISTINCT_ID)).getFlag(FLAG)
+      await client.shutdown()
+
+      const [called] = events
+      expect(called.event).toBe(FLAG_CALLED)
+      expect(called.properties).not.toHaveProperty('plan')
+      expect(attribution(called.properties)).toEqual(EXPECTED_ATTRIBUTION)
+      // The send step moves these into options, so the minimized event must keep them.
+      expect(called.properties).toMatchObject({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+      })
+    })
+
     it('a minimized config version 1 call drops super properties named like the attribution', async () => {
       const record = v4Record('condition_match', true, { configVersion: 1 })
       const { client, events } = createClient([response([record], { minimalFlagCalledEvents: true })])
