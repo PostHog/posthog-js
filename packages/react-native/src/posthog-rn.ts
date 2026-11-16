@@ -114,6 +114,10 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
   '$sdk_debug_replay_capture_mode',
   '$sdk_debug_replay_flush_hold_reason',
   '$sdk_debug_replay_pending_trigger_conditions',
+  // registered for the session while v2 trigger groups are in effect
+  '$sdk_debug_replay_remote_trigger_matching_config',
+  '$sdk_debug_replay_trigger_groups_count',
+  '$sdk_debug_replay_matched_recording_trigger_groups',
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
 
@@ -428,6 +432,8 @@ export class PostHog extends PostHogCore {
   private _sessionReplayTriggerGroups: SessionReplayTriggerGroup[] | null = null
   private _triggerGroupsEvaluator = new SessionReplayTriggerGroupsEvaluator()
   private _triggerGroupsDebugRegistered = false
+  // The last v2 decision left no group recording and at least one still able to activate.
+  private _triggerGroupsPending = false
   private _eventsStoragePreloadSucceeded = true
   private _fatalCaptureObservation?: {
     eventUuid: string
@@ -974,13 +980,24 @@ export class PostHog extends PostHogCore {
         const sessionReplay = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
           [key: string]: JsonType
         }
-        linkedFlagTriggerStatus = this._linkedFlagTriggerStatus(
-          sessionReplay['linkedFlag'],
-          (this.getKnownFeatureFlags() ?? {}) as { [key: string]: FeatureFlagValue }
-        ).status
+        // v2 trigger groups replace the flat linked flag, as they do the flat event triggers
+        // (cleared on evaluation), so a leftover flat key is not a pending condition.
+        linkedFlagTriggerStatus =
+          this._sessionReplayTriggerGroups !== null
+            ? 'trigger_disabled'
+            : this._linkedFlagTriggerStatus(
+                sessionReplay['linkedFlag'],
+                (this.getKnownFeatureFlags() ?? {}) as { [key: string]: FeatureFlagValue }
+              ).status
+        // As on posthog-ios. The decision belongs to the session it was evaluated for.
+        const triggerGroupsPending =
+          this._sessionReplayTriggerGroups !== null &&
+          this._triggerGroupsPending &&
+          this._replayEvaluatedSessionId === sessionId
         const pending = [
           eventTriggerStatus === 'trigger_pending' ? 'event_trigger' : undefined,
           linkedFlagTriggerStatus === 'trigger_pending' ? 'linked_flag' : undefined,
+          triggerGroupsPending ? 'trigger_groups' : undefined,
         ].filter((condition): condition is string => condition !== undefined)
         pendingTriggerConditions = pending.length > 0 ? pending : undefined
       }
@@ -4089,9 +4106,11 @@ export class PostHog extends PostHogCore {
       $sdk_debug_replay_matched_recording_trigger_groups: decision.matchedGroups,
     })
     this._triggerGroupsDebugRegistered = true
+    this._triggerGroupsPending = !decision.shouldRecord && decision.hasPendingGroups
   }
 
   private _unregisterTriggerGroupsDebugProperties(): void {
+    this._triggerGroupsPending = false
     if (!this._triggerGroupsDebugRegistered) {
       return
     }
