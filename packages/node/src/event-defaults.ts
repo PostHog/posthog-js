@@ -57,7 +57,7 @@ export function isUnsetOption(options: Record<string, unknown>, key: string): bo
  * Fill the properties the event left unset from each layer in turn, highest layer first, so a
  * value from an earlier layer is never replaced. A layer's `$lib` or `$lib_version` counts only
  * when it is a non-empty string. `$set`, `$set_once`, `$groups` and `$group_set`
- * fill one level deep when both values are objects. Keys in `skipKeys` are never filled.
+ * fill one level deep when both values are objects without their own `toJSON`. Keys in `skipKeys` are never filled.
  */
 export function fillProperties(
   properties: PostHogEventProperties,
@@ -75,7 +75,7 @@ export function fillProperties(
       const existing = properties[key]
       if (isUnsetValue(key, existing)) {
         properties[key] = value as JsonType
-      } else if (NESTED_FILL_PROPERTIES.has(key) && isPlainObject(existing) && isPlainObject(value)) {
+      } else if (NESTED_FILL_PROPERTIES.has(key) && isMergeableObject(existing) && isMergeableObject(value)) {
         properties[key] = fillNested(existing, value)
       }
     }
@@ -141,6 +141,14 @@ export function dropIdentifyStyleLegacyPersonProfile(
   if (IDENTIFY_STYLE_EVENTS.has(event) && !isUnsetOption(options, 'process_person_profile')) {
     delete properties[EVENT_OPTION_LEGACY_PROPERTIES.process_person_profile]
   }
+}
+
+/**
+ * An object whose inner keys can be filled. A value with its own `toJSON` is sent as it encodes
+ * itself, which can hide some of its fields, so copying its entries would bypass that encoding.
+ */
+function isMergeableObject(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value) && typeof (value as { toJSON?: unknown }).toJSON !== 'function'
 }
 
 /** A new object: the event's inner values, plus the default's inner keys the event left unset. */

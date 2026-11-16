@@ -185,6 +185,24 @@ describe('layered event values', () => {
         expect(event.properties[key]).toStrictEqual(expected)
       })
 
+      it('an event value with its own toJSON is never merged, so its encoding is honored', async () => {
+        class Redacting {
+          constructor(
+            readonly a: string,
+            readonly secret: string
+          ) {}
+          toJSON(): Record<string, string> {
+            return { a: this.a }
+          }
+        }
+        const { event } = await sendWithPropertyLayers({
+          event: { $set: new Redacting('event', 'hidden') as any },
+          context: { $set: { b: 'context' } },
+        })
+
+        expect(event.properties.$set).toStrictEqual({ a: 'event' })
+      })
+
       it('a filled default never changes the registered object', async () => {
         const registered = { a: 'global' }
         await sendWithPropertyLayers({ event: { $set: { b: 'event' } }, global: { $set: registered } })
