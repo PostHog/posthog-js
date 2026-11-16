@@ -8,7 +8,29 @@ import type { PostHogCaptureEvent } from '../extensions/posthog-events'
 import type { FeedbackReport, McpCaptureCommon } from '../types'
 import { deriveSessionIdFromConversation } from '../extensions/session'
 import { MCP_INSTRUCTIONS_KEY } from '../extensions/output-instructions'
+import type { ContextInjectableTool } from '../extensions/context-parameters'
 import { EventCapture } from './test-utils'
+
+interface JsonSchemaLike {
+  properties: Record<string, unknown>
+  required?: string[]
+  type?: string
+  additionalProperties?: boolean
+}
+
+interface SchemaTool extends ContextInjectableTool {
+  name: string
+  inputSchema: JsonSchemaLike
+}
+
+interface SchemaToolWithOutput extends SchemaTool {
+  outputSchema: JsonSchemaLike
+}
+
+interface StructuredToolResult {
+  content: { type: string; text: string }[]
+  structuredContent: Record<string, unknown>
+}
 
 // The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
 // so let the microtask/timer queue drain before asserting on what the sink saw.
@@ -352,7 +374,7 @@ describe('PostHogMCP', () => {
   })
 
   describe('prepareToolList', () => {
-    const tools = [
+    const tools: SchemaTool[] = [
       { name: 'execute-sql', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
       { name: 'query-logs', inputSchema: { type: 'object', properties: {} } },
     ]
@@ -499,7 +521,7 @@ describe('PostHogMCP', () => {
 
     it('skips model injection for duplicate names when any descriptor owns llm_model', async () => {
       const client = newClient({ captureModel: true })
-      const duplicateTools = [
+      const duplicateTools: SchemaTool[] = [
         tools[0],
         {
           name: 'execute-sql',
@@ -615,7 +637,7 @@ describe('PostHogMCP', () => {
 
   describe('conversation correlation', () => {
     const conversationId = '0198ef20-1234-7abc-8def-123456789abc'
-    const tools = [
+    const tools: SchemaToolWithOutput[] = [
       {
         name: 'execute-sql',
         inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
@@ -656,7 +678,7 @@ describe('PostHogMCP', () => {
     })
 
     it('preserves application-owned fields and fails closed for duplicate names', () => {
-      const applicationOwned = {
+      const applicationOwned: SchemaToolWithOutput = {
         name: 'execute-sql',
         inputSchema: {
           type: 'object',
@@ -742,7 +764,10 @@ describe('PostHogMCP', () => {
     it('delivers a minted handle through text and structured content without mutation', () => {
       posthog.prepareToolList(tools)
       const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
-      const toolResult = { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } }
+      const toolResult: StructuredToolResult = {
+        content: [{ type: 'text', text: 'done' }],
+        structuredContent: { rows: [] },
+      }
       const prepared = posthog.prepareToolResult(toolResult, preparedCall)
 
       expect(prepared.result).not.toBe(toolResult)
@@ -761,7 +786,7 @@ describe('PostHogMCP', () => {
       posthog.prepareToolList(tools)
       const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
       const transportedCall = JSON.parse(JSON.stringify(preparedCall))
-      const prepared = posthog.prepareToolResult(
+      const prepared = posthog.prepareToolResult<StructuredToolResult>(
         { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } },
         transportedCall
       )
@@ -833,7 +858,7 @@ describe('PostHogMCP', () => {
     })
 
     it('adds conversation fields to virtual tools', () => {
-      const prepared = posthog.prepareToolList([], { reportMissing: true })
+      const prepared = posthog.prepareToolList<SchemaTool>([], { reportMissing: true })
       const virtualTool = prepared.find((tool) => tool.name === GET_MORE_TOOLS_NAME)
       const preparedCall = posthog.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'Find a tool' })
       const preparedResult = posthog.prepareToolResult(getMoreToolsResult(), preparedCall)

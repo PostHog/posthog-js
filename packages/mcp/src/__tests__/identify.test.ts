@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
-import type { HighLevelMCPServerLike, UserIdentity } from '../types'
+import type { HighLevelMCPServerLike, ToolCallback, UserIdentity } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -26,7 +26,7 @@ describe('identify option', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
   })
@@ -116,12 +116,11 @@ describe('identify option', () => {
     const identify = vi.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
     instrument(server, fakePostHog(), { enableConversationId: false, context: true, identify })
 
-    server.tool!(
-      'post_track_tool',
-      'A tool added after tracking was enabled',
-      { message: z.string() },
-      async (args: { message: string }) => ({ content: [{ type: 'text', text: `Got: ${args.message}` }] })
-    )
+    server.tool!('post_track_tool', 'A tool added after tracking was enabled', { message: z.string() }, (async (args: {
+      message: string
+    }) => ({
+      content: [{ type: 'text', text: `Got: ${args.message}` }],
+    })) as ToolCallback)
 
     await client.request(
       {

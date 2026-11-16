@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.20.2
+
+### Patch Changes
+
+- [#5533](https://github.com/PostHog/posthog-js/pull/5533) [`50197f0`](https://github.com/PostHog/posthog-js/commit/50197f0becfec65aa00a8ce7e23b41f4324ce89e) Thanks [@yoarajota](https://github.com/yoarajota)! - Keep an object that appears twice in the input of a captured AI generation. The second occurrence was replaced with `null`.
+  (2026-11-16)
+
 ## 8.20.1
 
 ### Patch Changes

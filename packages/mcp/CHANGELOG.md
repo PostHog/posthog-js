@@ -1,5 +1,15 @@
 # @posthog/mcp
 
+## 1.2.3
+
+### Patch Changes
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `instrumentMutator(posthog)(server)` now returns the server's own type instead of `unknown`, so no type argument or cast is needed. Explicit `instrumentMutator<McpServer>(posthog)` calls and typed `serverMutator` hooks keep working.
+  (2026-11-16)
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `getMoreToolsResult()` and `sendFeedbackResult()` are now typed so they can be returned from an MCP SDK tool handler (v1 and v2 `CallToolResult`) without a cast.
+  (2026-11-16)
+
 ## 1.2.2
 
 ### Patch Changes
