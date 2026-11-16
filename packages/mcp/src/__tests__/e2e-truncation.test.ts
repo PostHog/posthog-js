@@ -47,7 +47,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
       )
 
       expect(toolEvent).toBeDefined()
-      const text = toolEvent!.response.content[0].text
+      const text = toolEvent!.response.content[0].text as unknown as string
       // Text should be capped at 32KB + "..."
       expect(text.length).toBeLessThanOrEqual(32_768 + 3)
       expect(text.endsWith('...')).toBe(true)
@@ -227,8 +227,9 @@ describe('E2E Truncation - real MCP tool calls', () => {
       const content = toolEvent!.response.content
 
       // Text block should be truncated
-      expect(content[0].text.length).toBeLessThanOrEqual(32_768 + 3)
-      expect(content[0].text.endsWith('...')).toBe(true)
+      const text = content[0].text as unknown as string
+      expect(text.length).toBeLessThanOrEqual(32_768 + 3)
+      expect(text.endsWith('...')).toBe(true)
 
       // Image block should be sanitized
       expect(content[1]).toEqual({

@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.20.2
+
+### Patch Changes
+
+- [#5533](https://github.com/PostHog/posthog-js/pull/5533) [`50197f0`](https://github.com/PostHog/posthog-js/commit/50197f0becfec65aa00a8ce7e23b41f4324ce89e) Thanks [@yoarajota](https://github.com/yoarajota)! - Keep an object that appears twice in the input of a captured AI generation. The second occurrence was replaced with `null`.
+  (2026-11-16)
+
+## 8.20.1
+
+### Patch Changes
+
+- [#5728](https://github.com/PostHog/posthog-js/pull/5728) [`74013ba`](https://github.com/PostHog/posthog-js/commit/74013ba51f537a0bf09bfbf1289f5d932471e5ab) Thanks [@mindulle](https://github.com/mindulle)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <2.0.0` and `@google/genai` to `^1.52.0 || ^2.18.0 || ^3.0.0` to support current SDK majors.
+  (2026-11-16)
+
 ## 8.20.0
 
 ### Minor Changes

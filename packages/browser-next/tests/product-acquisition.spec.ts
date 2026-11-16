@@ -1,9 +1,9 @@
 import { requireInstalledExtension } from './helpers'
-import { createPostHog as createCore } from '../src/core'
-import { createPostHogCore } from '../src/posthog'
-import { createPostHog } from '../src'
-import { analytics } from '../src/analytics'
-import { flags } from '../src/flags'
+import { createPostHog as createCore } from '../src/composition/npm/core'
+import { createPostHogCore } from '../src/core/posthog'
+import { createPostHog } from '../src/composition/npm'
+import { analytics } from '../src/products/analytics/analytics'
+import { flags } from '../src/products/flags/flags'
 import { localRemoteConfig } from './helpers'
 
 const base = {

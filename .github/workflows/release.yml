@@ -497,6 +497,7 @@ jobs:
                     - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
+                    - name: posthog-docusaurus
                     - name: '@posthog/browser'
                     - name: '@posthog/browser-common'
                     - name: '@posthog/core'

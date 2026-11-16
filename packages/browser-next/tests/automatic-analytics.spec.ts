@@ -1,16 +1,16 @@
 import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/analytics'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import { createAnalyticsDelivery } from '../src/analytics-delivery'
+import { analytics } from '../src/products/analytics/analytics'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { createAnalyticsDelivery } from '../src/products/analytics/delivery/analytics-delivery'
 import {
     isAnalyticsExtension,
     type AnalyticsDeliveryFactory,
     type IAnalyticsExtension,
-} from '../src/analytics-internal'
-import { createPostHog } from '../src'
-import { createPostHog as createCorePostHog } from '../src/core'
-import type { AutomaticAnalyticsOptions, CorePostHogOptions, IPostHog } from '../src/types'
+} from '../src/products/analytics/analytics-internal'
+import { createPostHog } from '../src/composition/npm'
+import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
+import type { AutomaticAnalyticsOptions, CorePostHogOptions, IPostHog } from '../src/core/types'
 import { createFetch, type SentRequest } from './helpers'
 
 const automaticAnalytics = (
