@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.20.1
+
+### Patch Changes
+
+- [#5728](https://github.com/PostHog/posthog-js/pull/5728) [`74013ba`](https://github.com/PostHog/posthog-js/commit/74013ba51f537a0bf09bfbf1289f5d932471e5ab) Thanks [@mindulle](https://github.com/mindulle)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <2.0.0` and `@google/genai` to `^1.52.0 || ^2.18.0 || ^3.0.0` to support current SDK majors.
+  (2026-11-16)
+
 ## 8.20.0
 
 ### Minor Changes
