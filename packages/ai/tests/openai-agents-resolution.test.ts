@@ -34,10 +34,22 @@ function listFiles(root: string, directory = root): string[] {
 
 function expectPublicBuildArtifacts(): void {
   const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
-    exports: Record<string, { require: string; import: string; types: string }>
+    exports: Record<
+      string,
+      { require: string; import: string; types: string; browser?: { require: string; import: string } }
+    >
   }
   const expectedArtifacts = Object.values(packageJson.exports)
-    .flatMap((entry) => [entry.require, `${entry.require}.map`, entry.import, `${entry.import}.map`, entry.types])
+    .flatMap((entry) => [
+      entry.require,
+      `${entry.require}.map`,
+      entry.import,
+      `${entry.import}.map`,
+      entry.types,
+      ...(entry.browser
+        ? [entry.browser.require, `${entry.browser.require}.map`, entry.browser.import, `${entry.browser.import}.map`]
+        : []),
+    ])
     .map((path) => path.replace('./dist/', ''))
     .sort()
 

@@ -1,4 +1,4 @@
-import { createPostHog } from '../../../../browser-next/src'
+import { createPostHog } from '../../../../browser-next/src/composition/npm'
 
 import {
     type BehaviorAdapter,
@@ -25,36 +25,40 @@ export const browserNextAdapter: BehaviorAdapter = {
             capturePageview: false,
             optOutByDefault: setup.optOutByDefault,
         })
+        const analytics = await posthog.resolveExtension('analytics')
+        if (!analytics) {
+            throw new Error('Expected an installed analytics extension')
+        }
         const ids = createGeneratedIdNormalizer()
-        ids.remember('anonymous', posthog.anonymousId)
-        ids.remember('session', posthog.session.sessionId)
-        ids.remember('window', posthog.session.windowId)
-        const subscription = posthog.onEvent((event) => {
+        const rememberCurrentState = (): void => {
+            ids.remember('anonymous', posthog.anonymousId)
+            const session = posthog.session
+            if (session) {
+                ids.remember('session', session.sessionId)
+                ids.remember('window', session.windowId)
+            }
+        }
+        rememberCurrentState()
+        const subscription = analytics.onEvent((event) => {
             capturedEvents.push({ event: event.event, properties: copyProperties(event.properties) })
         })
 
-        const rememberCurrentState = (): void => {
-            ids.remember('anonymous', posthog.anonymousId)
-            ids.remember('session', posthog.session.sessionId)
-            ids.remember('window', posthog.session.windowId)
-        }
-
         return {
             async capture(event, properties): Promise<void> {
-                await posthog.capture(event, properties)
+                await analytics.capture(event, properties)
                 await posthog.flush()
                 rememberCurrentState()
             },
             async identify(distinctId, set, setOnce): Promise<void> {
-                await posthog.identify(distinctId, set, setOnce)
+                await analytics.identify(distinctId, set, setOnce)
                 await posthog.flush()
             },
             async group(type, key, properties): Promise<void> {
-                await posthog.group(type, key, properties)
+                await analytics.group(type, key, properties)
                 await posthog.flush()
             },
             reset(): void {
-                posthog.reset()
+                analytics.reset()
                 rememberCurrentState()
             },
             optIn: () => posthog.optIn(),

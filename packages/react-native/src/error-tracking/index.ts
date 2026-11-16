@@ -4,12 +4,15 @@ import {
   Logger,
   ErrorTracking as CoreErrorTracking,
   isPostHogFetchNetworkError,
+  isArray,
   isNullish,
   isObject,
   isString,
   PostHogEventProperties,
+  PropertyMatchType,
   uuidv7,
 } from '@posthog/core'
+import { propertyComparisons } from '@posthog/core/surveys'
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
@@ -19,6 +22,26 @@ import { buildFatalExceptionPayload } from './fatal-payload'
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
 const LogLevelList: LogLevel[] = ['debug', 'log', 'info', 'warn', 'error']
+
+// Native crash reports truncate the JS message (iOS keeps 175 characters, including its own
+// prefix), so the start of the message is what both sides reliably share.
+const FATAL_MESSAGE_KEY_LENGTH = 80
+
+// The start of the message React Native's ExceptionsManager sends native for this error:
+// `<name>: <message>`, where a thrown non-Error has no name and is converted to a string.
+function fatalMessageKey(error: unknown): string {
+  let message: string
+  if (error instanceof Error) {
+    const namePrefix = error.name ? `${error.name}: ` : ''
+    message = error.message || ''
+    if (!message.startsWith(namePrefix)) {
+      message = namePrefix + message
+    }
+  } else {
+    message = error === undefined ? '' : String(error)
+  }
+  return Array.from(message).slice(0, FATAL_MESSAGE_KEY_LENGTH).join('')
+}
 
 // user provided configuration
 interface AutocaptureOptions {
@@ -83,6 +106,25 @@ interface ResolvedErrorTrackingOptions {
   autocapture: ResolvedAutocaptureOptions
 }
 
+// Same shape as the browser SDK's ErrorTrackingSuppressionRule, delivered in remote config as
+// `errorTracking.suppressionRules`.
+interface ErrorTrackingSuppressionRule {
+  type: 'AND' | 'OR'
+  values: {
+    key: '$exception_types' | '$exception_values'
+    operator: PropertyMatchType
+    value: string | string[]
+  }[]
+}
+
+function parseSuppressionRules(errorTracking: boolean | { [key: string]: JsonType }): ErrorTrackingSuppressionRule[] {
+  const rules = isObject(errorTracking) ? errorTracking.suppressionRules : undefined
+  if (!isArray(rules)) {
+    return []
+  }
+  return rules.filter((rule) => isObject(rule) && isArray(rule.values)) as unknown as ErrorTrackingSuppressionRule[]
+}
+
 // Hooks supplied by PostHogRN for coordinating the fatal capture with its event storage.
 // Storage readiness is explicit so unknown persisted consent fails closed rather than being
 // mistaken for the in-memory default.
@@ -123,6 +165,10 @@ export class ErrorTracking {
    * Defaults to true (don't block locally enabled capture before remote config loads).
    */
   private _autocaptureEnabled: boolean = true
+
+  // Kept in memory only: the remote config they come from is already persisted and replayed
+  // through onRemoteConfig at startup.
+  private _suppressionRules: ErrorTrackingSuppressionRule[] = []
 
   constructor(
     private instance: PostHog,
@@ -247,6 +293,55 @@ export class ErrorTracking {
     this._exceptionStepsBuffer.clear()
   }
 
+  /**
+   * Whether an exception matches one of the suppression rules from remote config, in which case
+   * it should be dropped instead of captured. Mirrors the browser SDK. Records an exception step
+   * when it matches, so the next captured exception shows that one was dropped.
+   */
+  shouldSuppressException(exceptionList: unknown): boolean {
+    if (!isArray(exceptionList) || exceptionList.length === 0 || this._suppressionRules.length === 0) {
+      return false
+    }
+
+    try {
+      const exceptionValues: Record<string, string[]> = { $exception_types: [], $exception_values: [] }
+      for (const exception of exceptionList) {
+        if (!isObject(exception)) {
+          continue
+        }
+        if (isString(exception.type) && exception.type.length > 0) {
+          exceptionValues.$exception_types.push(exception.type)
+        }
+        if (isString(exception.value) && exception.value.length > 0) {
+          exceptionValues.$exception_values.push(exception.value)
+        }
+      }
+
+      const matched = this._suppressionRules.some((rule) => {
+        const results = rule.values.map((v) => {
+          const compare = propertyComparisons[v.operator]
+          const values = exceptionValues[v.key]
+          if (!compare || !values) {
+            return false
+          }
+          const targets = isArray(v.value) ? v.value : [v.value]
+          return targets.length > 0 ? compare(targets, values) : false
+        })
+        return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
+      })
+
+      if (matched) {
+        this.addExceptionStep('Exception dropped: matched a suppression rule')
+      }
+      return matched
+    } catch (error) {
+      // Suppression only ever filters what we capture, so failing to evaluate it must not cost
+      // us the exception.
+      this.logger.warn('Failed to evaluate suppression rules. Capturing the exception.', error)
+      return false
+    }
+  }
+
   shutdown(): void {
     this._autocaptureEnabled = false
     this._unsubscribeUncaughtExceptions?.()
@@ -258,6 +353,7 @@ export class ErrorTracking {
    * Called when remote config is loaded.
    * If errorTracking.autocaptureExceptions is explicitly false, autocapture is disabled.
    * If it's true or undefined (not yet loaded / not present), autocapture follows local config.
+   * errorTracking.suppressionRules replaces the current rules; a response without them clears them.
    */
   onRemoteConfig(errorTracking: boolean | { [key: string]: JsonType } | undefined): void {
     if (errorTracking == null) {
@@ -267,6 +363,7 @@ export class ErrorTracking {
 
     // Default to false: if remote config is present but the key is missing, disable autocapture
     this._autocaptureEnabled = getRemoteConfigBool(errorTracking, 'autocaptureExceptions', false)
+    this._suppressionRules = parseSuppressionRules(errorTracking)
 
     this.logger.info(
       `Error tracking autocapture ${this._autocaptureEnabled ? 'enabled' : 'disabled'} by remote config.`
@@ -314,8 +411,9 @@ export class ErrorTracking {
 
   private autocaptureUncaughtErrors() {
     const onUncaughtException = (error: unknown, isFatal: boolean): void | Promise<void> => {
+      const marked = isFatal ? this.markFatalExceptionHandled(error) : undefined
       if (!this._autocaptureEnabled || isPostHogFetchNetworkError(error)) {
-        return
+        return marked
       }
       const hint: CoreErrorTracking.EventHint = {
         mechanism: { type: 'onuncaughtexception', handled: false },
@@ -324,12 +422,30 @@ export class ErrorTracking {
         this.instance.captureException(error, {}, hint)
         return
       }
-      return this.handleFatalException(error, hint, uuidv7(), new Date())
+      return Promise.all([marked, this.handleFatalException(error, hint, uuidv7(), new Date())]).then(() => {})
     }
     try {
       this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
     } catch (err) {
       this.logger.warn('Failed to track uncaught exceptions: ', err)
+    }
+  }
+
+  // React Native turns this fatal into a native crash once the handler chain finishes. The
+  // native plugin drops that crash report only when it contains the message marked here, so
+  // fatals that bypass this handler (React render errors) still reach error tracking.
+  private markFatalExceptionHandled(error: unknown): Promise<void> | undefined {
+    const bridge = OptionalReactNativePlugin?.markFatalExceptionHandled
+    if (!bridge) {
+      return undefined
+    }
+    try {
+      return Promise.resolve(bridge(fatalMessageKey(error))).catch((e) => {
+        this.logger.warn(`Failed to mark fatal exception as handled: ${e}`)
+      })
+    } catch (e) {
+      this.logger.warn(`Failed to mark fatal exception as handled: ${e}`)
+      return undefined
     }
   }
 

@@ -169,6 +169,10 @@ async function runEra(era) {
 
   // --- Milestone B: identity ---
   check('identify() resolved a user', echoCall?.distinctId === `user_${TOKEN}`, `distinct_id=${echoCall?.distinctId}`)
+  check(
+    'no standalone $identify event',
+    events.every((e) => e.event !== '$identify')
+  )
   // ADR-0006: host callbacks get the SDK's own `extra`, unnormalised. A
   // synthesised `requestInfo` on v2 would be a convincing partial lie, so its
   // absence is the assertion — previously proved only by letting a v1-shaped

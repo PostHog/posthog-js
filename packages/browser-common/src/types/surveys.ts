@@ -1,4 +1,29 @@
 import type {
+    SurveyWidgetType,
+    SurveyPosition,
+    SurveyTabPosition,
+    SurveyType,
+    SurveyQuestionType,
+    SurveyQuestionBranchingType,
+    SurveySchedule,
+    DisplaySurveyType,
+} from '../survey-constants'
+export type {
+    SurveyEventType,
+    SurveyWidgetType,
+    SurveyPosition,
+    SurveyTabPosition,
+    SurveyType,
+    SurveyQuestionType,
+    SurveyQuestionBranchingType,
+    SurveySchedule,
+    SurveyEventName,
+    SurveyEventProperties,
+    DisplaySurveyType,
+} from '../survey-constants'
+import type { Properties } from '@posthog/types'
+import type { SurveyResponseValue as CoreSurveyResponseValue } from '@posthog/core'
+import type {
     PropertyMatchType,
     SurveyAppearance as CoreSurveyAppearance,
     SurveyEventWithFilters,
@@ -8,103 +33,6 @@ import type {
 } from '@posthog/core'
 
 export type { PropertyFilters, PropertyMatchType, PropertyOperator, SurveyEventWithFilters } from '@posthog/core'
-
-export const SurveyEventType = {
-    Activation: 'events',
-    Cancellation: 'cancelEvents',
-} as const
-export type SurveyEventType = (typeof SurveyEventType)[keyof typeof SurveyEventType]
-
-export const SurveyWidgetType = {
-    Button: 'button',
-    Tab: 'tab',
-    Selector: 'selector',
-} as const
-export type SurveyWidgetType = (typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]
-
-export const SurveyPosition = {
-    TopLeft: 'top_left',
-    TopRight: 'top_right',
-    TopCenter: 'top_center',
-    MiddleLeft: 'middle_left',
-    MiddleRight: 'middle_right',
-    MiddleCenter: 'middle_center',
-    Left: 'left',
-    Center: 'center',
-    Right: 'right',
-    NextToTrigger: 'next_to_trigger',
-} as const
-export type SurveyPosition = (typeof SurveyPosition)[keyof typeof SurveyPosition]
-
-export const SurveyTabPosition = {
-    Top: 'top',
-    Left: 'left',
-    Right: 'right',
-    Bottom: 'bottom',
-} as const
-export type SurveyTabPosition = (typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]
-
-export const SurveyType = {
-    Popover: 'popover',
-    API: 'api',
-    Widget: 'widget',
-    ExternalSurvey: 'external_survey',
-} as const
-export type SurveyType = (typeof SurveyType)[keyof typeof SurveyType]
-
-export const SurveyQuestionType = {
-    Open: 'open',
-    MultipleChoice: 'multiple_choice',
-    SingleChoice: 'single_choice',
-    Rating: 'rating',
-    Link: 'link',
-} as const
-export type SurveyQuestionType = (typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]
-
-export const SurveyQuestionBranchingType = {
-    NextQuestion: 'next_question',
-    End: 'end',
-    ResponseBased: 'response_based',
-    SpecificQuestion: 'specific_question',
-} as const
-export type SurveyQuestionBranchingType = (typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]
-
-export const SurveySchedule = {
-    Once: 'once',
-    Recurring: 'recurring',
-    Always: 'always',
-} as const
-export type SurveySchedule = (typeof SurveySchedule)[keyof typeof SurveySchedule]
-
-export const SurveyEventName = {
-    SHOWN: 'survey shown',
-    DISMISSED: 'survey dismissed',
-    SENT: 'survey sent',
-    ABANDONED: 'survey abandoned',
-} as const
-export type SurveyEventName = (typeof SurveyEventName)[keyof typeof SurveyEventName]
-
-export const SurveyEventProperties = {
-    SURVEY_ID: '$survey_id',
-    SURVEY_NAME: '$survey_name',
-    SURVEY_RESPONSE: '$survey_response',
-    SURVEY_ITERATION: '$survey_iteration',
-    SURVEY_ITERATION_START_DATE: '$survey_iteration_start_date',
-    SURVEY_PARTIALLY_COMPLETED: '$survey_partially_completed',
-    SURVEY_SUBMISSION_ID: '$survey_submission_id',
-    SURVEY_QUESTIONS: '$survey_questions',
-    SURVEY_COMPLETED: '$survey_completed',
-    PRODUCT_TOUR_ID: '$product_tour_id',
-    SURVEY_LAST_SEEN_DATE: '$survey_last_seen_date',
-    SURVEY_LANGUAGE: '$survey_language',
-} as const
-export type SurveyEventProperties = (typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]
-
-export const DisplaySurveyType = {
-    Popover: 'popover',
-    Inline: 'inline',
-} as const
-export type DisplaySurveyType = (typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]
 
 export type SurveyQuestionDescriptionContentType = 'html' | 'text'
 
@@ -267,3 +195,93 @@ export interface ActionStepType {
         type?: string
     }[]
 }
+
+export type SurveyCallback = (surveys: Survey[], context?: { isLoaded: boolean; error?: string }) => void
+
+export interface SurveyElement {
+    text?: string
+    $el_text?: string
+    tag_name?: string
+    href?: string
+    attr_id?: string
+    attr_class?: string[]
+    nth_child?: number
+    nth_of_type?: number
+    attributes?: Record<string, any>
+    event_id?: number
+    order?: number
+    group_id?: number
+}
+
+// Re-export from @posthog/types to avoid duplication
+export type { SurveyRenderReason } from '@posthog/types'
+
+interface DisplaySurveyOptionsBase {
+    /**
+     * Whether to bypass the survey's targeting and display conditions.
+     * @default false
+     */
+    ignoreConditions: boolean
+
+    /**
+     * Whether to bypass the survey's configured popup delay.
+     * @default false
+     */
+    ignoreDelay: boolean
+
+    /**
+     * How the survey should be displayed.
+     * @default DisplaySurveyType.Popover
+     */
+    displayType: DisplaySurveyType
+
+    /** Additional properties to include in all survey events (shown, sent, dismissed). */
+    properties?: Properties
+
+    /** Pre-filled responses by question index (0-based). Only supported for popover surveys. */
+    initialResponses?: Record<number, SurveyResponseValue>
+}
+
+/** Options for displaying a survey as a popover. */
+export interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
+    displayType: typeof DisplaySurveyType.Popover
+    /** Override the survey's configured position. */
+    position?: SurveyPosition
+    /** CSS selector for the element to position the survey next to (when position is NextToTrigger). */
+    selector?: string
+    /** When true, `survey shown` events will not be emitted automatically. */
+    skipShownEvent?: boolean
+}
+
+interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
+    displayType: typeof DisplaySurveyType.Inline
+    /** CSS selector for the element where the inline survey should render. */
+    selector: string
+}
+
+/** Options for `posthog.displaySurvey()`. */
+export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions
+
+export interface SurveyConfig {
+    /**
+     * Prefill survey responses from matching URL parameters.
+     *
+     * @default undefined
+     */
+    prefillFromUrl?: boolean
+    /**
+     * @deprecated No longer used. Surveys will automatically advance past
+     * prefilled questions with skipSubmitButton enabled. If partial response
+     * collection is enabled, partial responses for pre-filled questions will
+     * be submitted automatically on page load.
+     */
+    autoSubmitIfComplete?: boolean
+    /**
+     * @deprecated No longer used. Pre-filled responses are now sent
+     * immediately when partial responses are enabled, or all required
+     * questions have been pre-filled.
+     */
+    autoSubmitDelay?: number
+}
+
+export type SurveyResponseValue = CoreSurveyResponseValue

@@ -1,9 +1,12 @@
+import { createBufferedPostHog as createPostHog } from './helpers'
+import { requireInstalledExtension } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { Client, ExtensionToken } from '@posthog/browser-common'
+import type { ExtensionToken } from '@posthog/browser-common'
+import type { IPostHogInternal, ConsentChangeInfo } from '../src/core/context/browser-client'
 
-import { analytics as createAnalytics } from '../src/analytics'
-import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
+import { analytics as createAnalytics } from '../src/products/analytics/analytics'
+import type { Extension, RemoteConfig } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
@@ -22,9 +25,11 @@ const flagExtension = (events: string[]): FlagCapability => {
 
     return {
         name: 'flags',
-        setup(client: Client) {
+        setup(client: IPostHogInternal) {
             events.push('flags:setup')
-            propertyRegistration = client.registerDynamicEventProperties(() => ({ feature_context: 'ready' }))
+            propertyRegistration = requireInstalledExtension(client.analytics).registerDynamicEventProperties(() => ({
+                feature_context: 'ready',
+            }))
         },
         dispose() {
             events.push('flags:dispose')
@@ -37,6 +42,69 @@ const flagExtension = (events: string[]): FlagCapability => {
 }
 
 describe('@posthog/browser extensions', () => {
+    it('notifies extensions of consent changes without replaying initial state', async () => {
+        const changes: ConsentChangeInfo[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            remoteConfig: localRemoteConfig,
+            extensions: [
+                {
+                    name: 'consent-observer',
+                    setup(client: IPostHogInternal) {
+                        client.onConsentChange((change) => changes.push(change))
+                    },
+                },
+            ],
+        })
+        expect(changes).toEqual([])
+        posthog.optOut()
+        posthog.optIn()
+        expect(changes).toEqual([
+            { current: 'denied', previous: 'implicit' },
+            { current: 'granted', previous: 'denied' },
+        ])
+        await posthog.shutdown()
+    })
+
+    it('exposes session notifications through the shared client', async () => {
+        const listener = vi.fn()
+        let subscription: { dispose(): void } | undefined
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            capturePageview: false,
+            fetch: createFetch([]),
+            extensions: [
+                analytics(),
+                {
+                    name: 'session-consumer',
+                    setup(client) {
+                        subscription = client.onSession(listener)
+                    },
+                },
+            ],
+        })
+        expect(subscription).toBeDefined()
+        expect(listener).not.toHaveBeenCalled()
+        await requireInstalledExtension(posthog.analytics).capture('first')
+        expect(listener).not.toHaveBeenCalled()
+        await requireInstalledExtension(posthog.analytics).reset()
+        await requireInstalledExtension(posthog.analytics).capture('new-session')
+        expect(listener).toHaveBeenCalledWith(posthog.session!.sessionId)
+        expect(listener).toHaveBeenCalledTimes(1)
+        await requireInstalledExtension(posthog.analytics).capture('same-session')
+        expect(listener).toHaveBeenCalledTimes(1)
+        subscription!.dispose()
+        await requireInstalledExtension(posthog.analytics).reset()
+        await requireInstalledExtension(posthog.analytics).capture('unsubscribed')
+        expect(listener).toHaveBeenCalledTimes(1)
+        await posthog.dispose()
+    })
+
     it('installs an extension and exposes its capability', async () => {
         const requests: SentRequest[] = []
         const events: string[] = []
@@ -54,9 +122,9 @@ describe('@posthog/browser extensions', () => {
                 extension,
                 {
                     name: 'consumer',
-                    setup(client) {
+                    async setup(client) {
                         extensionCanCapture = client.canCapture
-                        flagFromExtension = client.getExtension(FlagsExtension)?.getFlag('beta')
+                        flagFromExtension = (await client.resolveExtension(FlagsExtension))?.getFlag('beta')
                     },
                 },
             ],
@@ -65,8 +133,8 @@ describe('@posthog/browser extensions', () => {
         expect(posthog.canCapture).toBe(true)
         expect(extensionCanCapture).toBe(true)
         expect(flagFromExtension).toBe('enabled')
-        expect(posthog.getExtension(FlagsExtension)?.getFlag('beta')).toBe('enabled')
-        await posthog.capture('event')
+        expect((await posthog.resolveExtension(FlagsExtension))?.getFlag('beta')).toBe('enabled')
+        await requireInstalledExtension(posthog.analytics).capture('event')
         await posthog.flush()
         const batch = requests[0]?.body?.batch as Array<{ properties: Record<string, unknown> }> | undefined
         expect(batch?.[0]?.properties).toMatchObject({ feature_context: 'ready' })
@@ -94,7 +162,8 @@ describe('@posthog/browser extensions', () => {
             extensions: [extension],
         })
 
-        expect(storedValue).toBe('safe')
+        expect(storedValue).toBeUndefined()
+        expect(Object.getPrototypeOf(posthog)).not.toBe(extension)
         expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
         await posthog.dispose()
     })
@@ -123,7 +192,7 @@ describe('@posthog/browser extensions', () => {
 
     it('keeps extension key-value access independent of capture consent and blocks it after disposal', async () => {
         const storage = new MemoryStorage()
-        let client: Client | undefined
+        let client: IPostHogInternal | undefined
         const extension: Extension = {
             name: 'stateful',
             setup(extensionClient) {
@@ -177,7 +246,7 @@ describe('@posthog/browser extensions', () => {
     })
 
     it('provides live client identity and stable SDK metadata', async () => {
-        let client: Client | undefined
+        let client: IPostHogInternal | undefined
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
@@ -205,14 +274,20 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
         expect(client?.canCapture).toBe(true)
 
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         posthog.optOut()
         expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.isOptedOut).toBe(true)
+        expect(posthog.isOptedOut).toBe(true)
         expect(client?.canCapture).toBe(false)
         posthog.optIn()
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         expect(client?.canCapture).toBe(true)
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)
-        await posthog.identify('user-123')
+        await requireInstalledExtension(posthog.analytics).identify('user-123')
         expect(client?.distinctId).toBe('user-123')
         expect(client?.anonymousId).toBe(postConsentAnonymousId)
         expect(client?.deviceId).toBe(postConsentAnonymousId)
@@ -220,11 +295,11 @@ describe('@posthog/browser extensions', () => {
 
     it('runs extensions and fetches remote config while opted out, but gates analytics outputs', async () => {
         const deniedRequests: SentRequest[] = []
-        let deniedClient: Client | undefined
-        const deniedSetup = vi.fn(async (client: Client) => {
+        let deniedClient: IPostHogInternal | undefined
+        const deniedSetup = vi.fn(async (client: IPostHogInternal) => {
             deniedClient = client
             client.kv.set('private', true)
-            await client.capture('denied-output')
+            await requireInstalledExtension(client.analytics).capture('denied-output')
             await client.sendRequest('/flags/')
         })
         const configResponse = vi.fn(async () => createRemoteConfig())
@@ -239,7 +314,7 @@ describe('@posthog/browser extensions', () => {
 
         await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
-        expect(denied.getExtension('denied')).toBeDefined()
+        expect(await denied.resolveExtension('denied')).toBeDefined()
         expect(configResponse).toHaveBeenCalledTimes(1)
         expect(deniedClient?.kv.get('private')).toBe(true)
         expect(deniedRequests).toHaveLength(0)
@@ -249,7 +324,7 @@ describe('@posthog/browser extensions', () => {
         expect(denied.hasOptedOut()).toBe(false)
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
         expect(configResponse).toHaveBeenCalledTimes(1)
-        await deniedClient?.capture('allowed-output')
+        await requireInstalledExtension(requireInstalledExtension(deniedClient).analytics).capture('allowed-output')
         await denied.flush()
         expect(deniedRequests).toHaveLength(1)
         await denied.dispose()
@@ -257,8 +332,8 @@ describe('@posthog/browser extensions', () => {
 
     it('runs extensions and exposes inline remote config for bots while blocking network outputs', async () => {
         const blockedRequests: SentRequest[] = []
-        const blockedSetup = vi.fn(async (client: Client) => {
-            await client.capture('bot-output')
+        const blockedSetup = vi.fn(async (client: IPostHogInternal) => {
+            await requireInstalledExtension(client.analytics).capture('bot-output')
             await client.sendRequest('/flags/')
         })
         const blocked = await createPostHog({
@@ -272,7 +347,7 @@ describe('@posthog/browser extensions', () => {
         await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(blocked.getRemoteConfig()).resolves.toEqual(createRemoteConfig())
         expect(blockedSetup).toHaveBeenCalledTimes(1)
-        expect(blocked.getExtension('blocked')).toBeDefined()
+        expect(await blocked.resolveExtension('blocked')).toBeDefined()
         expect(blockedRequests).toHaveLength(0)
         await blocked.dispose()
     })
@@ -334,12 +409,12 @@ describe('@posthog/browser extensions', () => {
             extensions: [first, { name: 'flags', setup: duplicateSetup }],
         })
 
-        expect(posthog.getExtension('flags')).toBe(first)
+        expect(await posthog.resolveExtension('flags')).toBe(first)
         expect(duplicateSetup).not.toHaveBeenCalled()
         await posthog.dispose()
     })
 
-    it('exposes a typed self-capability during setup and removes it after setup fails', async () => {
+    it('keeps a failing extension unavailable during setup and after cleanup', async () => {
         interface FailingExtension extends Extension {
             marker: true
         }
@@ -349,8 +424,8 @@ describe('@posthog/browser extensions', () => {
         const failed: FailingExtension = {
             name: FailingExtension,
             marker: true,
-            setup(client) {
-                resolvedDuringSetup = client.getExtension(FailingExtension)
+            async setup(client) {
+                resolvedDuringSetup = await client.resolveExtension(FailingExtension)
                 throw new Error('setup failed')
             },
             dispose,
@@ -363,9 +438,9 @@ describe('@posthog/browser extensions', () => {
             extensions: [failed],
         })
 
-        expect(resolvedDuringSetup).toBe(failed)
+        expect(resolvedDuringSetup).toBeUndefined()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(posthog.getExtension(FailingExtension)).toBeUndefined()
+        expect(await posthog.resolveExtension(FailingExtension)).toBeUndefined()
         await posthog.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
     })
@@ -391,7 +466,7 @@ describe('@posthog/browser extensions', () => {
             fetch: createFetch(requests),
             extensions: [analytics(), first, failed],
         })
-        await posthog.capture('still_available')
+        await requireInstalledExtension(posthog.analytics).capture('still_available')
         await posthog.flush()
 
         expect(requests).toHaveLength(1)
@@ -454,7 +529,8 @@ describe('@posthog/browser extensions', () => {
             fetch,
             extensions: [analytics(), blocker],
         })
-        posthog.capture('active', { value: 'a'.repeat(1_000) })
+        const installedAnalytics = requireInstalledExtension(posthog.analytics)
+        installedAnalytics.capture('active', { value: 'a'.repeat(1_000) })
         await Promise.resolve()
         expect(fetch).toHaveBeenCalledTimes(1)
         let disposed = false
@@ -466,12 +542,12 @@ describe('@posthog/browser extensions', () => {
         await started
         expect(events).toEqual(['fetch:start', 'fetch:complete', 'extension:dispose'])
         expect(disposed).toBe(false)
-        posthog.capture('after-shutdown')
+        installedAnalytics.capture('after-shutdown')
         expect(fetch).toHaveBeenCalledTimes(1)
         releaseExtension()
         await disposal
         expect(disposed).toBe(true)
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.analytics).toBeUndefined()
     })
 
     it('disposes extensions in reverse installation order', async () => {

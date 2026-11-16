@@ -60,13 +60,43 @@ function webpackSupportsDebugIds(version: string | undefined): boolean {
     return major > DEBUG_IDS_MIN_MAJOR || (major === DEBUG_IDS_MIN_MAJOR && minor >= DEBUG_IDS_MIN_MINOR)
 }
 
+type ReleaseIdInjection = { mode: 'chunk' } | { mode: 'runtime'; releaseId: string | undefined }
+
+// Use the active compiler's RuntimeModule class, including Next's bundled webpack. Runtime
+// modules participate in chunk hashing and execute before application modules/external SDKs.
+function addReleaseIdRuntimeModule(compiler: webpack.Compiler, compilation: webpack.Compilation, releaseId: string) {
+    const { RuntimeModule, RuntimeGlobals } = compiler.webpack
+    class PostHogReleaseIdRuntimeModule extends RuntimeModule {
+        constructor() {
+            // RuntimeGlobals.global is initialized at STAGE_NORMAL, before this module.
+            super('posthog release id', RuntimeModule.STAGE_BASIC)
+        }
+
+        generate() {
+            // Match the chunk snippet's fail-soft behavior if the host blocks global assignment.
+            return `try { ${RuntimeGlobals.global}._posthogReleaseId = ${RuntimeGlobals.global}._posthogReleaseId || ${JSON.stringify(releaseId)}; } catch (_) {}`
+        }
+    }
+    compilation.hooks.additionalTreeRuntimeRequirements.tap('PosthogWebpackPlugin', (chunk, requirements) => {
+        requirements.add(RuntimeGlobals.global)
+        compilation.addRuntimeModule(chunk, new PostHogReleaseIdRuntimeModule())
+    })
+}
+
 export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
+    private readonly _releaseIdInjection: ReleaseIdInjection
 
     constructor(pluginConfig: PluginConfig)
-    constructor(pluginConfig: ResolvedPluginConfig, resolved: true)
-    constructor(pluginConfig: PluginConfig | ResolvedPluginConfig, resolved?: boolean) {
+    /** @internal Frameworks can embed a pre-resolved release in the runtime before hashing. */
+    constructor(pluginConfig: ResolvedPluginConfig, resolved: true, releaseIdInjection?: ReleaseIdInjection)
+    constructor(
+        pluginConfig: PluginConfig | ResolvedPluginConfig,
+        resolved?: boolean,
+        releaseIdInjection: ReleaseIdInjection = { mode: 'chunk' }
+    ) {
+        this._releaseIdInjection = releaseIdInjection
         this.logger = createLogger('[PostHog Webpack]')
         this.resolvedConfig = resolved
             ? (pluginConfig as ResolvedPluginConfig)
@@ -74,7 +104,7 @@ export class PosthogWebpackPlugin {
     }
 
     apply(compiler: webpack.Compiler): void {
-        const failedCompilations = new WeakSet<webpack.Compilation>()
+        const failedCompilations = new WeakMap<webpack.Compilation, unknown>()
         if (this.resolvedConfig.sourcemaps.enabled) {
             // In event release mode webpack stamps an ECMA-426 debug id into each chunk at
             // compile time, and we adopt it as the chunk id instead of deriving another,
@@ -82,6 +112,7 @@ export class PosthogWebpackPlugin {
             // without the option we fall back to content-derived ids, which are equally
             // stable — just not shared with other tooling.
             const eventReleaseMode = this.resolvedConfig.sourcemaps.releaseMode === 'event'
+            const injectReleaseId = eventReleaseMode && this._releaseIdInjection.mode === 'chunk'
             new compiler.webpack.SourceMapDevToolPlugin({
                 filename: '[file].map',
                 noSources: false,
@@ -91,11 +122,19 @@ export class PosthogWebpackPlugin {
             }).apply(compiler)
 
             compiler.hooks.compilation.tap('PosthogWebpackPlugin', (compilation) => {
+                if (
+                    eventReleaseMode &&
+                    this._releaseIdInjection.mode === 'runtime' &&
+                    this._releaseIdInjection.releaseId
+                ) {
+                    addReleaseIdRuntimeModule(compiler, compilation, this._releaseIdInjection.releaseId)
+                }
                 compilation.hooks.processAssets.tapPromise(
                     {
                         name: 'PosthogWebpackPlugin',
-                        // Maps (including native debug ids) exist now, but content hashes and
-                        // Next.js's afterProcessAssets integrity manifest have not been finalized.
+                        // Maps exist now, before real content hashes and integrity manifests.
+                        // Chunk hashes are already fixed: frameworks serving immutable [chunkhash]
+                        // assets must compile the release id before hashing rather than inject it here.
                         stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_DEV_TOOLING + 1,
                     },
                     async () => {
@@ -122,7 +161,7 @@ export class PosthogWebpackPlugin {
                                             ...asset.info,
                                             posthogChunkId: chunkId,
                                         })
-                                        if (eventReleaseMode) {
+                                        if (injectReleaseId) {
                                             this.logger.warn(
                                                 `PostHog: ${file} already carries a chunk id, so no release id was injected`
                                             )
@@ -135,10 +174,10 @@ export class PosthogWebpackPlugin {
                                         )
                                         continue
                                     }
-                                    const releaseId = eventReleaseMode
+                                    const releaseId = injectReleaseId
                                         ? await (releaseIdPromise ??= resolveReleaseId(this.resolvedConfig))
                                         : undefined
-                                    if (eventReleaseMode && !releaseId && !warnedAboutMissingRelease) {
+                                    if (injectReleaseId && !releaseId && !warnedAboutMissingRelease) {
                                         warnedAboutMissingRelease = true
                                         this.logger.warn(
                                             'No release could be resolved, injecting chunk ids only. Set sourcemaps.releaseName and sourcemaps.releaseVersion, or build from git or a supported CI environment.'
@@ -175,9 +214,9 @@ export class PosthogWebpackPlugin {
                                 }
                             }
                         } catch (error) {
-                            // Match the existing fail-soft upload hook; never delete maps for a
+                            // Match the existing fail-soft upload hook; never upload maps for a
                             // compilation whose injection/release resolution did not complete.
-                            failedCompilations.add(compilation)
+                            failedCompilations.set(compilation, error)
                             this.logger.error('Error injecting PostHog chunk ids:', error)
                         }
                     }
@@ -187,13 +226,25 @@ export class PosthogWebpackPlugin {
 
         const onDone = async (stats: webpack.Stats, callback: any): Promise<void> => {
             callback = callback || (() => {})
+            // A failed `done` hook stops webpack from rebuilding, so watch builds log the error instead.
+            const failOnError = this.resolvedConfig.sourcemaps.failOnError && !compiler.watchMode
             try {
-                if (!failedCompilations.has(stats.compilation)) {
+                if (failedCompilations.has(stats.compilation)) {
+                    await this.deleteSourceMapsWithoutUpload(stats.compilation, this.resolvedConfig)
+                    if (failOnError) throw failedCompilations.get(stats.compilation)
+                } else {
                     await this.processSourceMaps(stats.compilation, this.resolvedConfig)
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : error
                 this.logger.error('Error running PostHog webpack plugin:', errorMessage)
+                if (failOnError) {
+                    return callback(
+                        new Error(
+                            `PostHog sourcemap processing failed (set sourcemaps.failOnError to false to continue the build): ${errorMessage}`
+                        )
+                    )
+                }
             }
             return callback()
         }
@@ -230,7 +281,12 @@ export class PosthogWebpackPlugin {
 
         if (filePaths.length > 0) {
             // Files are final: `process` and `--delete-after` rewrite JS and invalidate SRI.
-            await runSourcemapCli(config, { filePaths, command: 'upload' })
+            try {
+                await runSourcemapCli(config, { filePaths, command: 'upload' })
+            } catch (error) {
+                await this.deleteSourceMapsWithoutUpload(compilation, config)
+                throw error
+            }
         }
 
         if (config.sourcemaps.deleteAfterUpload) {
@@ -246,6 +302,40 @@ export class PosthogWebpackPlugin {
                 }
             })
         }
+    }
+
+    // A failed upload must not ship the original sources that deleteAfterUpload promises to remove.
+    private async deleteSourceMapsWithoutUpload(
+        compilation: webpack.Compilation,
+        config: ResolvedPluginConfig
+    ): Promise<void> {
+        if (!config.sourcemaps.deleteAfterUpload) return
+
+        const outputDirectory = compilation.outputOptions.path
+        const sourceMaps = [
+            ...Array.from(compilation.chunks).flatMap((chunk) =>
+                Array.from(chunk.files)
+                    .filter((file) => JS_CHUNK_REGEX.test(file))
+                    .map((file) => `${file}.map`)
+            ),
+            ...compilation
+                .getAssets()
+                .filter((asset) => asset.name.endsWith('.css.map'))
+                .map((asset) => asset.name),
+        ].map((file) => path.resolve(outputDirectory, file))
+        if (sourceMaps.length === 0) return
+
+        this.logger.warn('PostHog sourcemaps were not uploaded; deleting them because deleteAfterUpload is enabled.')
+        const results = await Promise.allSettled(sourceMaps.map((file) => fs.rm(file, { force: true })))
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                this.logger.error(
+                    'PostHog sourcemaps were not uploaded, and failed to delete source map:',
+                    sourceMaps[index],
+                    result.reason
+                )
+            }
+        })
     }
 
     private async deleteCssSourceMaps(compilation: webpack.Compilation, outputDirectory: string): Promise<void> {

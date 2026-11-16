@@ -5,6 +5,7 @@ import type {
   JsonType,
   Metrics,
   MetricsConfig,
+  PostHogLogsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -15,6 +16,7 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+import type { Emails } from './emails/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
@@ -164,7 +166,7 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
  */
 export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
-export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
+export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
@@ -181,6 +183,24 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   maxQueueSize?: number
   /**
+   * Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the
+   * posthog-js cookie when a request has neither tracing header.
+   *
+   * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server
+   * cannot read an opt-out that posthog-js keeps in localStorage (its default).
+   *
+   * It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie
+   * name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set
+   * `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set
+   * `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie
+   * counts as opted out. A request sent right
+   * after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a
+   * short delay.
+   *
+   * @default false
+   */
+  readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean }
+  /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.
    *
@@ -191,6 +211,21 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * ```
    */
   metrics?: MetricsConfig
+  /**
+   * Configuration for the `posthog.logger` / `posthog.captureLog` logs API. Logs are sent
+   * to PostHog Logs as OTLP records, with no OpenTelemetry packages needed.
+   *
+   * Each record carries the active span's `trace_id` / `span_id` and, inside `withContext`,
+   * the `distinctId` and `sessionId`, so logs join back to traces, persons and replays.
+   * `serviceName` defaults to the `traces` / `metrics` `serviceName`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { logs: { serviceName: 'checkout-api' } })
+   * client.logger.info('order placed', { order_id: 'ord_1' })
+   * ```
+   */
+  logs?: PostHogLogsConfig
   /**
    * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
    * off until this is set; supplying it is all that's needed to turn it on.
@@ -211,11 +246,15 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   traces?: TracesConfig
   /**
-   * Credential that enables local feature flag evaluation and remote config.
+   * Credential for fetching local feature flag definitions, decrypting remote config and
+   * sending email.
    *
    * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
-   * When provided, the client can evaluate feature flags locally and decrypt remote
-   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * Local evaluation can also use definitions from `flagDefinitionCacheProvider` without
+   * this credential. Remote config payload decryption via `getRemoteConfigPayload`
+   * still requires it. `emails.send` needs a Project Secret API Key with the
+   * `transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email.
+   * Prefer this over the deprecated
    * `personalApiKey` option; when both are set, `secretKey` takes precedence.
    *
    * @example
@@ -228,6 +267,36 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there.
+   *
+   * Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not
+   * receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or
+   * `https://eu.posthog.com` from `host`.
+   */
+  appHost?: string
+  /**
+   * Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,
+   * so raise it when large files upload slowly.
+   *
+   * @default 15000
+   */
+  emailRequestTimeoutMs?: number
+  /**
+   * Number of retries for an `emails.send` after a network error, a rate limit, or an
+   * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
+   * runner already retries the send.
+   *
+   * @default 2
+   */
+  emailRequestMaxRetries?: number
+  /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
+  migratedFrom?: string
+  /**
+   * Redact prompts, outputs and error details from every event that the PostHog AI
+   * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
+   * can only add redaction. Defaults to false.
+   */
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
   /**
@@ -236,10 +305,11 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.
    */
   featureFlagsPollingInterval?: number | null
-  // Maximum size of cache that deduplicates $feature_flag_called calls per user.
+  // Maximum number of distinct ids held in the cache that deduplicates $feature_flag_called calls
+  // per user. When the cache is full the least recently used distinct ids are evicted.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // Whether to enable local evaluation and definition polling. Defaults to true when a secretKey, personalApiKey, or flagDefinitionCacheProvider is provided.
   // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
@@ -247,6 +317,11 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    *
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
    * in multi-worker environments. If not provided, defaults to in-memory cache.
+   *
+   * Without a secretKey or personalApiKey, this instance only reads cached definitions on
+   * each refresh; it does not call shouldFetchFlagDefinitions or publish definitions.
+   * With a credential, it uses the provider's fetch decision to coordinate fetching
+   * fresh definitions from PostHog and publishing them to the cache.
    *
    * This enables distributed coordination where only one worker fetches flags while
    * others use cached data, reducing API calls and improving performance.
@@ -260,7 +335,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * }
    *
    * const client = new PostHog('api-key', {
-   *   personalApiKey: 'personal-key',
    *   flagDefinitionCacheProvider: new RedisCacheProvider(redis)
    * })
    * ```
@@ -449,12 +523,15 @@ export type PostHogFeatureFlag = {
  * Error values:
  *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
  *   FLAG_MISSING: Requested flag not in API response
+ *   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
  *   QUOTA_LIMITED: Rate/quota limit exceeded
  *   UNKNOWN_ERROR: Unexpected exceptions
  */
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
+  EVALUATION_FAILED: 'evaluation_failed',
+  LOCAL_EVALUATION_INCONCLUSIVE: 'local_evaluation_inconclusive',
   QUOTA_LIMITED: 'quota_limited',
   UNKNOWN_ERROR: 'unknown_error',
 } as const
@@ -626,8 +703,8 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param options: dict with optional parameters below
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
-   * @param personProperties optional - what person properties are known. Used to compute flags locally, if personalApiKey is present.
-   * @param groupProperties optional - what group properties are known. Used to compute flags locally, if personalApiKey is present.
+   * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
+   * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
@@ -657,8 +734,8 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param options: dict with optional parameters below
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
-   * @param personProperties optional - what person properties are known. Used to compute flags locally, if personalApiKey is present.
-   * @param groupProperties optional - what group properties are known. Used to compute flags locally, if personalApiKey is present.
+   * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
+   * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
@@ -890,6 +967,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.emails` API: sends transactional email from PostHog email templates.
+   * Needs `secretKey`, a project secret API key with the `transactional_email:write` scope.
+   */
+  readonly emails: Emails
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.

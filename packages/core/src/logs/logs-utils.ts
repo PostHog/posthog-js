@@ -18,16 +18,16 @@ import { buildOtlpResourceAttributes, toOtlpResourceKeyValueList } from '../util
 // Severity mapping
 // ============================================================================
 
+const DEFAULT_OTLP_SEVERITY: OtlpSeverityEntry = { text: 'INFO', number: 9 }
+
 const OTLP_SEVERITY_MAP: Record<LogSeverityLevel, OtlpSeverityEntry> = {
   trace: { text: 'TRACE', number: 1 },
   debug: { text: 'DEBUG', number: 5 },
-  info: { text: 'INFO', number: 9 },
+  info: DEFAULT_OTLP_SEVERITY,
   warn: { text: 'WARN', number: 13 },
   error: { text: 'ERROR', number: 17 },
   fatal: { text: 'FATAL', number: 21 },
 }
-
-const DEFAULT_OTLP_SEVERITY = OTLP_SEVERITY_MAP.info
 
 export function getOtlpSeverityText(level: LogSeverityLevel): OtlpSeverityText {
   return (OTLP_SEVERITY_MAP[level] || DEFAULT_OTLP_SEVERITY).text

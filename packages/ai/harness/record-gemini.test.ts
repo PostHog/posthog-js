@@ -67,28 +67,58 @@ it.each(['', 'fake-key\nmalformed', 'fake-key'])('fails safely without exposing 
   expect(result.stderr).not.toContain('ERR_PACKAGE_PATH_NOT_EXPORTED')
 })
 
-it.each(['generate', 'stream', 'tools', 'tools-stream', 'embed'])(
-  'records and replays the %s CLI with synthetic upstream responses',
-  async (group) => {
-    const directory = await mkdtemp(join(tmpdir(), 'gemini-cli-'))
-    try {
-      for (const name of [
-        'record-gemini.mjs',
-        'gemini-scenarios.mjs',
-        'cassette.ts',
-        'gemini-protocol.ts',
-        'openai-protocol.ts',
-      ]) {
-        await cp(new URL(name, import.meta.url), join(directory, name))
-      }
-      await mkdir(join(directory, 'fixtures'))
-      await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(directory, 'node_modules'), 'dir')
-      const intercept = `
+it.each([
+  'generate',
+  'stream',
+  'tools',
+  'tools-stream',
+  'embed',
+  'interaction',
+  'interaction-stream',
+  'interaction-tools',
+  'interaction-tools-stream',
+])('records and replays the %s CLI with synthetic upstream responses', async (group) => {
+  const directory = await mkdtemp(join(tmpdir(), 'gemini-cli-'))
+  try {
+    for (const name of [
+      'record-gemini.mjs',
+      'gemini-scenarios.mjs',
+      'cassette.ts',
+      'gemini-protocol.ts',
+      'gemini-interactions-protocol.ts',
+      'openai-protocol.ts',
+    ]) {
+      await cp(new URL(name, import.meta.url), join(directory, name))
+    }
+    await mkdir(join(directory, 'fixtures'))
+    await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(directory, 'node_modules'), 'dir')
+    const intercept = `
       const realFetch = globalThis.fetch;
       globalThis.fetch = async (url, init) => {
         const target = new URL(typeof url === 'string' || url instanceof URL ? url : url.url);
         if (target.origin === 'https://generativelanguage.googleapis.com') {
           const request = JSON.parse(init.body);
+          if (target.pathname.endsWith('/interactions')) {
+            const tools = Array.isArray(request.tools);
+            const interaction = {
+              id: 'v1_synthetic', model: request.model, status: tools ? 'requires_action' : 'completed',
+              steps: tools
+                ? [{type:'function_call',id:'call_synthetic',name:'describe_shape',arguments:{color:'blue',sides:3}}]
+                : [{type:'model_output',content:[{type:'text',text:'Hello.'}]}],
+              usage: {total_input_tokens:7,total_output_tokens:3,total_tokens:10},
+            };
+            if (!request.stream) return Response.json(interaction);
+            const frame = (type, data) => 'event: '+type+'\\ndata: '+JSON.stringify({event_type:type,...data})+'\\n\\n';
+            const step = interaction.steps[0];
+            return new Response([
+              frame('interaction.created',{interaction:{id:interaction.id,model:interaction.model,status:'in_progress'}}),
+              frame('step.start',{index:0,step:tools ? {type:'function_call',id:step.id,name:step.name,arguments:{}} : {type:'model_output'}}),
+              frame('step.delta',{index:0,delta:tools ? {type:'arguments_delta',arguments:JSON.stringify(step.arguments)} : {type:'text',text:'Hello.'}}),
+              frame('step.stop',{index:0}),
+              frame('interaction.completed',{interaction:{id:interaction.id,status:interaction.status,usage:interaction.usage}}),
+              'event: done\\ndata: [DONE]\\n\\n',
+            ].join(''), {headers:{'content-type':'text/event-stream'}});
+          }
           if (target.pathname.endsWith(':batchEmbedContents')) {
             return Response.json({embeddings:[{values:[1,0,0,0,0,0,0,0]},{values:[0,1,0,0,0,0,0,0]}]});
           }
@@ -102,47 +132,48 @@ it.each(['generate', 'stream', 'tools', 'tools-stream', 'embed'])(
         return realFetch(url, init);
       };
     `
-      const result = await promisify(execFile)(
-        process.execPath,
-        [
-          '--import',
-          `data:text/javascript,${encodeURIComponent(intercept)}`,
-          join(directory, 'record-gemini.mjs'),
-          group,
-        ],
-        {
-          env: {
-            GEMINI_API_KEY: 'fake-cli-secret',
-            ...(group === 'embed'
-              ? { GEMINI_EMBEDDING_MODEL: 'synthetic-embedding' }
-              : { GEMINI_MODEL: 'synthetic-model' }),
-          },
-          timeout: 10000,
-        }
+    const result = await promisify(execFile)(
+      process.execPath,
+      [
+        '--import',
+        `data:text/javascript,${encodeURIComponent(intercept)}`,
+        join(directory, 'record-gemini.mjs'),
+        group,
+      ],
+      {
+        env: {
+          GEMINI_API_KEY: 'fake-cli-secret',
+          ...(group === 'embed'
+            ? { GEMINI_EMBEDDING_MODEL: 'synthetic-embedding' }
+            : { GEMINI_MODEL: 'synthetic-model' }),
+        },
+        timeout: 10000,
+      }
+    )
+    expect(result.stdout).toContain(`Saved gemini-${group}.live.json and verified SDK replay`)
+    const saved = await readFile(join(directory, 'fixtures', `gemini-${group}.live.json`), 'utf8')
+    expect(saved).not.toContain('fake-cli-secret')
+    const cassette = JSON.parse(saved)
+    const sdkPackage = JSON.parse(
+      await readFile(
+        new URL('../../package.json', pathToFileURL(createRequire(import.meta.url).resolve('@google/genai'))),
+        'utf8'
       )
-      expect(result.stdout).toContain(`Saved gemini-${group}.live.json and verified SDK replay`)
-      const saved = await readFile(join(directory, 'fixtures', `gemini-${group}.live.json`), 'utf8')
-      expect(saved).not.toContain('fake-cli-secret')
-      const cassette = JSON.parse(saved)
-      const sdkPackage = JSON.parse(
-        await readFile(
-          new URL('../../package.json', pathToFileURL(createRequire(import.meta.url).resolve('@google/genai'))),
-          'utf8'
-        )
-      )
-      expect(sdkPackage.version).toEqual(expect.any(String))
-      expect(sdkPackage.version.length).toBeGreaterThan(0)
-      expect(cassette.provenance).toMatchObject({ source: 'gemini', providerSdkVersion: sdkPackage.version })
-      expect(cassette.interactions).toHaveLength(1)
-      expect(cassette.interactions[0].request.path).toContain(
-        group === 'embed'
-          ? ':batchEmbedContents'
+    )
+    expect(sdkPackage.version).toEqual(expect.any(String))
+    expect(sdkPackage.version.length).toBeGreaterThan(0)
+    expect(cassette.provenance).toMatchObject({ source: 'gemini', providerSdkVersion: sdkPackage.version })
+    expect(cassette.interactions).toHaveLength(1)
+    expect(cassette.interactions[0].request.path).toContain(
+      group === 'embed'
+        ? ':batchEmbedContents'
+        : group.startsWith('interaction')
+          ? '/v1beta/interactions'
           : group.endsWith('stream')
             ? ':streamGenerateContent?alt=sse'
             : ':generateContent'
-      )
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
-)
+})

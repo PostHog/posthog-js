@@ -6,7 +6,7 @@ import { start, waitForSessionRecordingToStart } from '../utils/setup'
 test('captures complete masked fetch bodies after a legacy persisted cold start with delayed remote config', async ({
     page,
     context,
-}) => {
+}, testInfo) => {
     const key = '$session_recording_remote_config'
     const options = {
         url: '/playground/cypress/index.html',
@@ -15,6 +15,18 @@ test('captures complete masked fetch bodies after a legacy persisted cold start 
             strict_script_versioning: false as const,
             session_recording: { compress_events: false },
         },
+        runBeforePostHogInit: (pg: typeof page) =>
+            pg.evaluate(() => {
+                const win = window as any
+                const downstream = window.fetch.bind(window)
+                win.delegations = []
+                window.fetch = (input, init) => {
+                    if ((input instanceof Request ? input.url : String(input)) === 'https://fetch-compat.test/body') {
+                        win.delegations.push(win.applicationStackActive)
+                    }
+                    return downstream(input, init)
+                }
+            }),
         flagsResponseOverrides: {
             sessionRecording: {
                 endpoint: '/ses/',
@@ -75,16 +87,27 @@ test('captures complete masked fetch bodies after a legacy persisted cold start 
                 await page.locator('[data-cy-input]').fill('activity')
                 expect(
                     await page.evaluate(async () => {
-                        const response = await fetch('https://fetch-compat.test/body', {
+                        const win = window as any
+                        win.applicationStackActive = true
+                        const pending = fetch('https://fetch-compat.test/body', {
                             method: 'POST',
                             body: 'complete request',
                             headers: { Authorization: 'PRIVATE_REQUEST_HEADER' },
                         })
-                        return response.text()
+                        win.applicationStackActive = false
+                        return (await pending).text()
                     })
                 ).toEqual('complete response')
             },
         })
+        // The old core has no private option, even when the new recorder starts from persisted config.
+        const configured = await page.evaluate(
+            () => (window as WindowWithPostHog).posthog!.config.__preview_replay_sync_fetch === true
+        )
+        if (testInfo.project.name !== 'chromium-compat') {
+            expect(configured).toBe(testInfo.project.name !== 'chromium-legacy-replay-fetch')
+        }
+        expect(await page.evaluate(() => (window as any).delegations)).toEqual([configured])
         const events = await page.capturedEvents()
         const snapshots = events.filter((e) => e.event === '$snapshot')
         const entries = snapshots

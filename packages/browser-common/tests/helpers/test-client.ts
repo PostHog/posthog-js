@@ -31,6 +31,7 @@ export interface TestClientOptions {
     anonymousId?: string
     groups?: Record<string, string>
     session?: SessionContext
+    isOptedOut?: boolean
     canCapture?: boolean
     remoteConfig?: RemoteConfig
     logger?: Logger
@@ -111,8 +112,10 @@ export class TestClient implements Client {
     library = { name: 'posthog-test', version: '0.0.0' }
     initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
-    session: SessionContext
+    session: SessionContext | undefined
+    isOptedOut: boolean
     canCapture: boolean
+    isRateLimited = false
 
     private _remoteConfigResult: RemoteConfigResult | undefined
     private _requestResponse: ApiResponse
@@ -120,6 +123,8 @@ export class TestClient implements Client {
     private _eventPublisher = new Publisher<CapturedEventInfo>()
     private _remoteConfigPublisher = new Publisher<RemoteConfigResult>()
 
+    private _sessionPublisher = new Publisher<string>()
+    readonly onSession = this._sessionPublisher.listener
     readonly onEvent = this._eventPublisher.listener
     readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
         const subscription = this._remoteConfigPublisher.listener(handler)
@@ -139,7 +144,9 @@ export class TestClient implements Client {
             sessionId: 'test-session-id',
             windowId: 'test-window-id',
             sessionStartTimestamp: 0,
+            lastActivityTimestamp: 0,
         }
+        this.isOptedOut = options.isOptedOut ?? false
         this.canCapture = options.canCapture ?? true
         this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
         this.logger = options.logger ?? noopLogger
@@ -147,7 +154,7 @@ export class TestClient implements Client {
         this.getExtension = options.getExtension ?? (() => undefined)
     }
 
-    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void {
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): boolean {
         const dynamicProperties = this._dynamicEventPropertyProducers.reduce(
             (acc, producer) => ({ ...acc, ...producer() }),
             {} as Record<string, unknown>
@@ -156,6 +163,7 @@ export class TestClient implements Client {
 
         this.capturedEvents.push({ event, properties: finalProperties, options })
         this._eventPublisher.publish({ event, properties: finalProperties })
+        return true
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {

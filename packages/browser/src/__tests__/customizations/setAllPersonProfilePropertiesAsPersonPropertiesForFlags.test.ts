@@ -75,6 +75,7 @@ describe('setAllPersonPropertiesForFlags', () => {
   "$viewport_height": 768,
   "$viewport_width": 1024,
   "_kx": null,
+  "bfcid": null,
   "dclid": null,
   "epik": null,
   "fbclid": null,

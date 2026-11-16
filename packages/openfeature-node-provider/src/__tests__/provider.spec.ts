@@ -1,5 +1,5 @@
 import { ErrorCode, OpenFeature, StandardResolutionReasons, type ResolutionDetails } from '@openfeature/server-sdk'
-import type { PostHog } from 'posthog-node'
+import { PostHog } from 'posthog-node'
 
 import { PostHogServerProvider } from '../provider'
 
@@ -234,7 +234,7 @@ describe('PostHogServerProvider', () => {
         groups: { organization: 'acme' },
         personProperties: { plan: 'enterprise' },
         groupProperties: { organization: { tier: 'gold' } },
-        sendFeatureFlagEvents: true,
+        sendFeatureFlagEvents: undefined,
       })
     })
 
@@ -268,6 +268,58 @@ describe('PostHogServerProvider', () => {
         groupProperties: undefined,
         sendFeatureFlagEvents: false,
       })
+    })
+  })
+
+  describe('$feature_flag_called with a posthog-node client', () => {
+    const flagsResponse = {
+      flags: {
+        flag: {
+          key: 'flag',
+          enabled: true,
+          variant: null,
+          reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+          metadata: { id: 1, version: 1, payload: null },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'request-1',
+    }
+
+    let client: PostHog | undefined
+
+    afterEach(async () => {
+      await client?.shutdown()
+      client = undefined
+    })
+
+    it.each<[string, number, boolean | undefined, boolean | undefined]>([
+      ['client unset, provider unset', 1, undefined, undefined],
+      ['client off, provider unset', 0, false, undefined],
+      ['client off, provider true', 1, false, true],
+      ['client on, provider false', 0, true, false],
+    ])('%s sends %i event(s)', async (_, expectedEvents, clientOption, providerOption) => {
+      const fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify(flagsResponse)),
+        json: () => Promise.resolve(flagsResponse),
+      })
+      client = new PostHog('test-project-key', {
+        host: 'http://localhost',
+        fetch,
+        fetchRetryCount: 0,
+        ...(clientOption === undefined ? {} : { sendFeatureFlagEvent: clientOption }),
+      })
+      const capture = vi.spyOn(client, 'capture').mockImplementation(() => {})
+      const provider = new PostHogServerProvider(
+        client,
+        providerOption === undefined ? {} : { sendFeatureFlagEvents: providerOption }
+      )
+
+      expect(await provider.resolveBooleanEvaluation('flag', false, CTX)).toMatchObject({ value: true })
+
+      const flagCalled = capture.mock.calls.filter(([message]) => message.event === '$feature_flag_called')
+      expect(flagCalled).toHaveLength(expectedEvents)
     })
   })
 

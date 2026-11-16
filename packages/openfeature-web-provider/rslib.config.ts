@@ -11,7 +11,7 @@ export default defineConfig({
   },
   source: {
     entry: {
-      index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts'],
+      index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts', '!src/**/*.md'],
     },
     tsconfigPath: './tsconfig.build.json',
   },

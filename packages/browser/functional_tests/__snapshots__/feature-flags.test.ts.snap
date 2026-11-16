@@ -11,6 +11,7 @@ exports[`FunctionalTests / Feature Flags > snapshots the decoded /flags wire env
     "groups": {},
     "person_properties": {
       "$initial__kx": null,
+      "$initial_bfcid": null,
       "$initial_current_url": "http://localhost/",
       "$initial_dclid": null,
       "$initial_epik": null,

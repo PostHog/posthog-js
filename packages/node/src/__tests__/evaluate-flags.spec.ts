@@ -104,7 +104,7 @@ describe('evaluateFlags', () => {
       expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       const [url] = mockedFetch.mock.calls[0]
-      expect(url).toMatch(/\/flags\/\?v=2(?:&|$)/)
+      expect(url).toMatch(/\/flags\/\?v=4(?:&|$)/)
     })
 
     it('treats a runtime null flagKeys value as evaluating all flags', async () => {
@@ -380,6 +380,149 @@ describe('evaluateFlags', () => {
     })
   })
 
+  describe('$feature_flag_called settings for snapshot reads', () => {
+    const flagCalledKeys = (): string[] =>
+      captures.filter((m) => m.event === '$feature_flag_called').map((m) => m.properties.$feature_flag)
+
+    beforeEach(() => {
+      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+    })
+
+    it.each<[boolean | undefined, boolean | undefined, boolean]>([
+      [undefined, undefined, true],
+      [true, undefined, true],
+      [false, undefined, false],
+      [undefined, true, true],
+      [false, true, true],
+      [undefined, false, false],
+      [true, false, false],
+    ])(
+      'with client option %s and read option %s, isEnabled() and getFlag() send events: %s',
+      async (clientOption, readOption, sendsEvents) => {
+        setup(clientOption === undefined ? {} : { sendFeatureFlagEvent: clientOption })
+        const readOptions = readOption === undefined ? undefined : { sendFeatureFlagEvents: readOption }
+        const flags = await posthog.evaluateFlags('user-1')
+
+        // Read the payload before any value read so dedupe can't hide an event from it.
+        expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+
+        expect(flags.isEnabled('boolean-flag', readOptions)).toBe(true)
+        expect(flags.getFlag('variant-flag', readOptions)).toBe('variant-value')
+
+        await waitForPromises()
+        expect(flagCalledKeys().sort()).toEqual(sendsEvents ? ['boolean-flag', 'variant-flag'] : [])
+      }
+    )
+
+    it.each<[string, (flags: FeatureFlagEvaluations) => unknown]>([
+      ['the snapshot', (flags) => flags.getFlag('variant-flag', { sendFeatureFlagEvents: true })],
+      ['getFeatureFlag()', () => posthog.getFeatureFlag('variant-flag', 'user-1', { sendFeatureFlagEvents: true })],
+    ])(
+      'leaves the dedupe cache untouched on suppressed reads, so a later opted-in read through %s sends one event',
+      async (_, optedInRead) => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        try {
+          setup({ sendFeatureFlagEvent: false })
+          const flags = await posthog.evaluateFlags('user-1')
+          flags.getFlag('variant-flag')
+          flags.isEnabled('variant-flag', { sendFeatureFlagEvents: false })
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual([])
+
+          await optedInRead(flags)
+          await optedInRead(flags)
+
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual(['variant-flag'])
+        } finally {
+          warnSpy.mockRestore()
+        }
+      }
+    )
+
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('still marks reads silenced by %s as accessed for onlyAccessed()', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag', readOptions)
+      flags.getFlag('variant-flag', readOptions)
+
+      const accessed = flags.onlyAccessed()
+      expect(accessed.keys.sort()).toEqual(['boolean-flag', 'variant-flag'])
+
+      posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags: accessed })
+      await waitForPromises()
+
+      const pageViewed = captures.find((m) => m.event === 'page_viewed')
+      expect(pageViewed.properties).toMatchObject({
+        '$feature/boolean-flag': true,
+        '$feature/variant-flag': 'variant-value',
+        $active_feature_flags: ['boolean-flag', 'variant-flag'],
+      })
+      expect(flagCalledKeys()).toEqual([])
+    })
+
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('sends no flag_missing event for a missing key silenced by %s', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
+      const flags = await posthog.evaluateFlags('user-1')
+
+      expect(flags.isEnabled('missing-flag', readOptions)).toBe(false)
+      expect(flags.getFlag('missing-flag', readOptions)).toBeUndefined()
+      await waitForPromises()
+      expect(flagCalledKeys()).toEqual([])
+
+      flags.getFlag('missing-flag', { sendFeatureFlagEvents: true })
+      await waitForPromises()
+      const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
+      expect(flagCalled).toHaveLength(1)
+      expect(flagCalled[0].properties).toMatchObject({
+        $feature_flag: 'missing-flag',
+        $feature_flag_error: 'flag_missing',
+      })
+    })
+
+    describe.each<[string, (flags: FeatureFlagEvaluations) => FeatureFlagEvaluations]>([
+      ['only()', (flags) => flags.only(['boolean-flag'])],
+      [
+        'onlyAccessed()',
+        (flags) => {
+          flags.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })
+          return flags.onlyAccessed()
+        },
+      ],
+    ])('on a snapshot returned by %s', (_, slice) => {
+      it('a read option of true overrides a client option of false', async () => {
+        setup({ sendFeatureFlagEvent: false })
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
+
+        expect(sliced.isEnabled('boolean-flag')).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: true })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual(['boolean-flag'])
+      })
+
+      it('a read option of false silences a default-on client', async () => {
+        setup()
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
+
+        expect(sliced.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+      })
+    })
+  })
+
   describe('capture integration', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
@@ -424,18 +567,18 @@ describe('evaluateFlags', () => {
       await posthog.flush()
 
       const flagCallsAfterCapture = mockedFetch.mock.calls.filter((c) =>
-        (c[0] as string).includes('/flags/?v=2')
+        (c[0] as string).includes('/flags/?v=4')
       ).length
       const flagCallsBeforeCapture = mockedFetch.mock.calls
         .slice(0, callsAfterEvaluate)
-        .filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+        .filter((c) => (c[0] as string).includes('/flags/?v=4')).length
       expect(flagCallsAfterCapture).toEqual(flagCallsBeforeCapture)
     })
 
     it('flags option takes precedence over sendFeatureFlags and warns when both passed', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
       const flags = await posthog.evaluateFlags('user-1')
-      const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+      const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4')).length
 
       posthog.capture({
         distinctId: 'user-1',
@@ -445,7 +588,7 @@ describe('evaluateFlags', () => {
       })
       await posthog.flush()
 
-      const callsAfter = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
+      const callsAfter = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4')).length
       expect(callsAfter).toEqual(callsBefore)
 
       const pageViewed = captures.find((m) => m.event === 'page_viewed')
@@ -466,13 +609,7 @@ describe('evaluateFlags', () => {
 
       posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
 
-      // captureException → addPendingPromise(buildEventMessage().then(msg => capture(...)))
-      // → capture itself queues async work via prepareEventMessage. The 'capture' event
-      // fires inside captureStateless before the network flush, so we just need enough
-      // microtask cycles to let the chain resolve.
-      await waitForPromises()
-      await waitForPromises()
-      await waitForPromises()
+      await posthog.flush()
 
       const exception = captures.find((m) => m.event === '$exception')
       expect(exception).toBeDefined()
@@ -709,7 +846,7 @@ describe('evaluateFlags', () => {
       })
 
       // No remote /flags request since local evaluation covered it.
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -732,7 +869,7 @@ describe('evaluateFlags', () => {
       expect(localEvaluationSpy).not.toHaveBeenCalled()
       expect(definitionsLoadSpy).not.toHaveBeenCalled()
       expect(definitionsReadSpy).not.toHaveBeenCalled()
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -767,7 +904,7 @@ describe('evaluateFlags', () => {
       expect(flags.getFlag('local-flag')).toBe(true)
       expect(flags.getFlag('remote-only')).toBe(true)
 
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(1)
       const [, init] = remoteFlagCalls[0]
       expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'remote-only'])
@@ -798,7 +935,7 @@ describe('evaluateFlags', () => {
 
       // Node does not cache evaluateFlags() responses across calls. Each call still makes at most
       // one scoped fallback and keeps the local value when the server cannot resolve the typo.
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(2)
       for (const [, init] of remoteFlagCalls) {
         expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'typo-flag'])
@@ -814,7 +951,7 @@ describe('evaluateFlags', () => {
       expect(flags.keys).toEqual(['local-flag'])
       expect(flags.getFlag('local-flag')).toBe(true)
       expect(flags.getFlag('remote-only')).toBeUndefined()
-      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
@@ -851,6 +988,618 @@ describe('evaluateFlags', () => {
       await waitForPromises()
       const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
       expect(flagCalled.properties).not.toHaveProperty('$feature_flag_has_experiment')
+    })
+  })
+
+  describe('unresolved flags', () => {
+    const alwaysOn = (key: string, extra: Record<string, any> = {}): Record<string, any> => ({
+      id: 1,
+      name: key,
+      key,
+      active: true,
+      filters: { groups: [{ variant: null, properties: [], rollout_percentage: 100 }] },
+      ...extra,
+    })
+    const continuityFlag = (extra: Record<string, any> = {}): Record<string, any> =>
+      alwaysOn('checkout', { id: 2, ensure_experience_continuity: true, ...extra })
+    const remoteCheckoutResponse = (): PostHogV2FlagsResponse => ({
+      flags: {
+        checkout: {
+          key: 'checkout',
+          enabled: true,
+          variant: undefined,
+          reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+          metadata: { id: 2, version: 1, payload: undefined, description: undefined },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'request-id-1',
+    })
+
+    const setupWithDefinitions = async (
+      localFlags: Record<string, any>[],
+      remoteResponse: Parameters<typeof apiImplementationV4>[0] = { flags: {}, errorsWhileComputingFlags: false },
+      extraDefinitions: Record<string, any> = {}
+    ): Promise<void> => {
+      const localApi = apiImplementation({ localFlags: { flags: localFlags, ...extraDefinitions } })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+      await posthog.reloadFeatureFlags()
+      mockedFetch.mockClear()
+    }
+    const remoteFlagCalls = (): unknown[] =>
+      mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
+    const flagCalledEvents = async (key?: string): Promise<any[]> => {
+      await waitForPromises()
+      return captures.filter(
+        (m) => m.event === '$feature_flag_called' && (key === undefined || m.properties.$feature_flag === key)
+      )
+    }
+
+    it.each([
+      ['experience_continuity', continuityFlag({ evaluation_runtime: 'client' })],
+      [
+        'unsupported_definition',
+        alwaysOn('checkout', {
+          evaluation_runtime: 'client',
+          filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 999 }] }] },
+        }),
+      ],
+    ] as const)('does not request remote evaluation for a client-only flag with %s', async (reason, definition) => {
+      await setupWithDefinitions([alwaysOn('beta-ui', { evaluation_runtime: 'client' }), definition])
+
+      const flags = await posthog.evaluateFlags('user')
+
+      expect(remoteFlagCalls()).toHaveLength(0)
+      expect(flags.keys).toEqual(['beta-ui'])
+      expect(flags.getFlag('beta-ui', { sendFeatureFlagEvents: false })).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
+      expect(await posthog.getAllFlags('user')).toEqual({ 'beta-ui': true })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each(['server', 'all', null, undefined] as const)(
+      'still requests remote evaluation for an unresolved flag with runtime %s alongside a client-only flag',
+      async (runtime) => {
+        await setupWithDefinitions(
+          [
+            continuityFlag({ evaluation_runtime: runtime }),
+            continuityFlag({ id: 3, key: 'client-checkout', evaluation_runtime: 'client' }),
+          ],
+          remoteCheckoutResponse()
+        )
+
+        const flags = await posthog.evaluateFlags('user')
+
+        expect(remoteFlagCalls()).toHaveLength(1)
+        expect(flags.getFlag('checkout', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(flags.unresolvedFlags).toEqual({ 'client-checkout': 'experience_continuity' })
+      }
+    )
+
+    it('reports an experience continuity flag as unresolved in local-only evaluation', async () => {
+      await setupWithDefinitions([alwaysOn('beta-ui'), continuityFlag()])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.keys).toEqual(['beta-ui'])
+      expect(flags.getFlagPayload('beta-ui')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'experience_continuity' })
+      expect(remoteFlagCalls()).toHaveLength(0)
+      expect(await flagCalledEvents()).toHaveLength(0)
+      expect(flags.onlyAccessed().keys).toEqual([])
+      expect(flags._getEventProperties()).not.toHaveProperty('$feature/checkout')
+    })
+
+    it('reports other inconclusive causes as unresolved', async () => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          ensure_experience_continuity: false,
+          filters: {
+            groups: [{ properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }] }],
+          },
+        }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.keys).toEqual([])
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
+    })
+
+    it('does not report a flag the remote fallback resolved', async () => {
+      await setupWithDefinitions([continuityFlag()], remoteCheckoutResponse())
+
+      const flags = await posthog.evaluateFlags('user-123')
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    it('does not report a flag an override resolved', async () => {
+      await setupWithDefinitions([continuityFlag()])
+      posthog.overrideFeatureFlags({ flags: { checkout: true } })
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    it.each([
+      ['fails', { status: 500, json: () => Promise.resolve({}) } as any],
+      ['does not return it', { flags: {}, errorsWhileComputingFlags: false }],
+    ])('leaves the flag unresolved when the remote fallback %s', async (_, remoteResponse) => {
+      await setupWithDefinitions([continuityFlag()], remoteResponse)
+
+      const flags = await posthog.evaluateFlags('user-123')
+      flags.isEnabled('checkout')
+
+      expect(remoteFlagCalls()).toHaveLength(1)
+      expect(flags.keys).toEqual([])
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'experience_continuity' })
+      const [event] = await flagCalledEvents('checkout')
+      expect(event.properties.$feature_flag_error).toContain('local_evaluation_inconclusive')
+      expect(event.properties.$feature_flag_error).not.toContain('flag_missing')
+    })
+
+    it('reports a key without a local definition as missing, not unresolved', async () => {
+      await setupWithDefinitions([alwaysOn('beta-ui')])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+      flags.isEnabled('typo-flag')
+
+      expect(flags.unresolvedFlags).toEqual({})
+      const [event] = await flagCalledEvents('typo-flag')
+      expect(event.properties.$feature_flag_error).toBe('flag_missing')
+    })
+
+    it('does not report a flag outside the requested keys', async () => {
+      await setupWithDefinitions([alwaysOn('beta-ui'), continuityFlag()])
+
+      const flags = await posthog.evaluateFlags('user-123', { flagKeys: ['beta-ui'] })
+
+      expect(flags.getFlag('beta-ui')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it('resolves an inactive flag as false rather than unresolved', async () => {
+      await setupWithDefinitions([continuityFlag({ active: false })])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('checkout')).toBe(false)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    it('reports no inconclusive error when reading a flag the remote fallback resolved', async () => {
+      await setupWithDefinitions([continuityFlag()], remoteCheckoutResponse())
+
+      const flags = await posthog.evaluateFlags('user-123')
+
+      expect(flags.isEnabled('checkout')).toBe(true)
+      const [event] = await flagCalledEvents('checkout')
+      expect(event.properties.$feature_flag_error).toBeUndefined()
+    })
+
+    it('reports local_evaluation_inconclusive when reading an unresolved flag', async () => {
+      await setupWithDefinitions([continuityFlag()])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.isEnabled('checkout')).toBe(false)
+      const [event] = await flagCalledEvents('checkout')
+      expect(event.properties.$feature_flag_error).toBe('local_evaluation_inconclusive')
+    })
+
+    it('keeps response-level errors alongside local_evaluation_inconclusive', async () => {
+      await setupWithDefinitions([continuityFlag()], { flags: {}, errorsWhileComputingFlags: true })
+
+      const flags = await posthog.evaluateFlags('user-123')
+      flags.getFlag('checkout')
+
+      const [event] = await flagCalledEvents('checkout')
+      expect(event.properties.$feature_flag_error).toBe('errors_while_computing_flags,local_evaluation_inconclusive')
+    })
+
+    it('carries no unresolved entries on filtered snapshots', async () => {
+      await setupWithDefinitions([alwaysOn('beta-ui'), continuityFlag()])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+      flags.isEnabled('beta-ui')
+      const only = flags.only(['beta-ui', 'checkout'])
+      const accessed = flags.onlyAccessed()
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'experience_continuity' })
+      expect(only.unresolvedFlags).toEqual({})
+      expect(accessed.unresolvedFlags).toEqual({})
+      expect(only.isEnabled('checkout')).toBe(false)
+      expect(accessed.getFlag('checkout')).toBeUndefined()
+      expect(await flagCalledEvents('checkout')).toHaveLength(0)
+    })
+
+    const dependsOnCheckout = (dependencyChain: string[]): Record<string, any> =>
+      alwaysOn('depends-on-checkout', {
+        filters: {
+          groups: [
+            {
+              properties: [
+                {
+                  key: dependencyChain[dependencyChain.length - 1],
+                  type: 'flag',
+                  value: true,
+                  operator: 'flag_evaluates_to',
+                  dependency_chain: dependencyChain,
+                },
+              ],
+              rollout_percentage: 100,
+            },
+          ],
+        },
+      })
+    it.each([
+      [
+        'all flags requested',
+        ['checkout'],
+        undefined,
+        { checkout: 'experience_continuity', 'depends-on-checkout': 'unresolved_dependency' },
+      ],
+      [
+        'only the dependent flag requested',
+        ['checkout'],
+        ['depends-on-checkout'],
+        { 'depends-on-checkout': 'unresolved_dependency' },
+      ],
+      [
+        'a missing dependency after an inconclusive one',
+        ['checkout', 'gone'],
+        ['depends-on-checkout'],
+        { 'depends-on-checkout': 'unsupported_definition' },
+      ],
+    ])('reports flag dependency reasons with %s', async (_, dependencyChain, flagKeys, expected) => {
+      await setupWithDefinitions([continuityFlag(), dependsOnCheckout(dependencyChain)])
+
+      const flags = await posthog.evaluateFlags('user-123', { flagKeys, onlyEvaluateLocally: true })
+
+      expect(flags.unresolvedFlags).toEqual(expected)
+    })
+
+    it.each([
+      [
+        'a dependency with no loaded definition',
+        {
+          properties: [
+            { key: 'gone', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['gone'] },
+          ],
+        },
+        {},
+        'unsupported_definition',
+      ],
+      [
+        'a circular dependency',
+        {
+          properties: [{ key: 'self', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: [] }],
+        },
+        {},
+        'unsupported_definition',
+      ],
+      ['a static cohort', { properties: [{ key: 'id', type: 'cohort', value: 999 }] }, {}, 'unsupported_definition'],
+      [
+        'a missing property and a static cohort in one condition',
+        {
+          properties: [
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+            { key: 'id', type: 'cohort', value: 999 },
+          ],
+        },
+        {},
+        'unsupported_definition',
+      ],
+      [
+        'an unknown operator',
+        { properties: [{ key: 'plan', type: 'person', value: 'pro', operator: 'not_a_real_operator' }] },
+        { plan: 'pro' },
+        'unsupported_definition',
+      ],
+      [
+        'a malformed semver filter value',
+        { properties: [{ key: 'version', type: 'person', value: 'not-semver', operator: 'semver_gt' }] },
+        { version: '1.2.3' },
+        'unsupported_definition',
+      ],
+      [
+        'an unknown operator on a missing property',
+        { properties: [{ key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' }] },
+        {},
+        'unsupported_definition',
+      ],
+      [
+        'a context value the evaluator cannot use',
+        { properties: [{ key: 'version', type: 'person', value: '1.2.3', operator: 'semver_gt' }] },
+        { version: 'not-semver' },
+        'missing_context',
+      ],
+      [
+        'a missing property and an unknown operator in one condition',
+        {
+          properties: [
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+            { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' },
+          ],
+        },
+        { tier: 'gold' },
+        'unsupported_definition',
+      ],
+      [
+        'an unknown operator and a missing property in one condition',
+        {
+          properties: [
+            { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' },
+            { key: 'plan', type: 'person', value: 'pro', operator: 'exact' },
+          ],
+        },
+        { tier: 'gold' },
+        'unsupported_definition',
+      ],
+      [
+        'an invalid date in the context',
+        { properties: [{ key: 'signup', type: 'person', value: '2024-01-01', operator: 'is_date_after' }] },
+        { signup: 'not-a-date' },
+        'missing_context',
+      ],
+    ])('reports the reason for %s', async (_, group, personProperties, reason) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', { filters: { groups: [{ ...group, rollout_percentage: 100 }] } }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
+    })
+
+    it.each([
+      ['no other cause', [], 'missing_context'],
+      ['a static cohort', [{ key: 'id', type: 'cohort', value: 999 }], 'unsupported_definition'],
+    ])('reports the reason for a device-id bucketed flag without a device id and %s', async (_, properties, reason) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          bucketing_identifier: 'device_id',
+          filters: { groups: [{ properties, rollout_percentage: 100 }] },
+        }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: reason })
+    })
+
+    it('reports missing_context for a local cohort whose property is missing', async () => {
+      await setupWithDefinitions(
+        [alwaysOn('checkout', { filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 2 }] }] } })],
+        undefined,
+        {
+          cohorts: {
+            '2': {
+              type: 'OR',
+              values: [{ type: 'AND', values: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }] }],
+            },
+          },
+        }
+      )
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'missing_context' })
+    })
+
+    const country = { key: 'country', type: 'person', value: 'US', operator: 'exact' }
+    it.each([
+      ['a missing property first', [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }, country]],
+      ['a static cohort first', [{ key: 'id', type: 'cohort', value: 999 }, country]],
+      ['a static cohort last', [country, { key: 'id', type: 'cohort', value: 999 }]],
+    ])('resolves a condition as no match when another filter rules it out, with %s', async (_, properties) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', { filters: { groups: [{ properties, rollout_percentage: 100 }] } }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { country: 'CA' },
+      })
+
+      expect(flags.getFlag('checkout')).toBe(false)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    const missingPlan = { key: 'plan', type: 'person', value: 'pro', operator: 'exact' }
+    const unknownTierOperator = { key: 'tier', type: 'person', value: 'gold', operator: 'not_a_real_operator' }
+    it.each([
+      ['the lower reason first', missingPlan, unknownTierOperator],
+      ['the higher reason first', unknownTierOperator, missingPlan],
+    ])('reports the highest-precedence reason across conditions, with %s', async (_, first, second) => {
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          filters: {
+            groups: [
+              { properties: [first], rollout_percentage: 100 },
+              { properties: [second], rollout_percentage: 100 },
+            ],
+          },
+        }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { tier: 'gold' },
+      })
+
+      expect(flags.unresolvedFlags).toEqual({ checkout: 'unsupported_definition' })
+    })
+
+    const staticCohort = { key: 'id', type: 'cohort', value: 999 }
+    it.each([
+      ['a missing property before a static cohort', [missingPlan, staticCohort], true, {}],
+      [
+        'a static cohort before a missing property',
+        [staticCohort, missingPlan],
+        undefined,
+        { checkout: 'unsupported_definition' },
+      ],
+    ])(
+      'lets a later condition resolve the flag only when the first unresolvable filter is not a static cohort, with %s',
+      async (_, properties, value, unresolvedFlags) => {
+        await setupWithDefinitions([
+          alwaysOn('checkout', {
+            filters: {
+              groups: [
+                { properties, rollout_percentage: 100 },
+                { properties: [], rollout_percentage: 100 },
+              ],
+            },
+          }),
+        ])
+
+        const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+        expect(flags.getFlag('checkout')).toBe(value)
+        expect(flags.unresolvedFlags).toEqual(unresolvedFlags)
+      }
+    )
+
+    it('lets a later condition resolve the flag when an unexpected error follows a filter that cannot be checked', async () => {
+      const dependsOnBeta = {
+        key: 'beta',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['beta'],
+      }
+      await setupWithDefinitions([
+        alwaysOn('checkout', {
+          filters: {
+            groups: [
+              { properties: [missingPlan, dependsOnBeta], rollout_percentage: 100 },
+              { properties: [], rollout_percentage: 100 },
+            ],
+          },
+        }),
+        alwaysOn('beta', { id: 3 }),
+      ])
+      vi.spyOn((posthog as any).featureFlagsPoller, 'evaluateFlagDependency').mockRejectedValue(new Error('unexpected'))
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('checkout')).toBe(true)
+      expect(flags.unresolvedFlags).toEqual({})
+    })
+
+    describe('a dependency that only the server can evaluate', () => {
+      const dependentFlag = (): Record<string, any> =>
+        alwaysOn('target', {
+          id: 4,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  { key: 'dep', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['dep'] },
+                ],
+                rollout_percentage: 100,
+                variant: 'a',
+              },
+              { properties: [], rollout_percentage: 100, variant: 'b' },
+            ],
+            multivariate: {
+              variants: [
+                { key: 'a', rollout_percentage: 50 },
+                { key: 'b', rollout_percentage: 50 },
+              ],
+            },
+          },
+        })
+      const dependencyFlag = (property: Record<string, any>): Record<string, any> =>
+        alwaysOn('dep', { id: 5, filters: { groups: [{ properties: [property], rollout_percentage: 100 }] } })
+      const remoteTargetResponse = (): PostHogV2FlagsResponse => ({
+        flags: {
+          target: {
+            key: 'target',
+            enabled: true,
+            variant: 'a',
+            reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+            metadata: { id: 4, version: 1, payload: undefined, description: undefined },
+          },
+        },
+        errorsWhileComputingFlags: false,
+        requestId: 'request-id-1',
+      })
+
+      it.each([
+        ['requested alone', ['target']],
+        ['requested with all flags', undefined],
+      ])('falls back to the server instead of choosing a later variant, with the flag %s', async (_, flagKeys) => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()], remoteTargetResponse())
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(1)
+      })
+
+      it('reports the flag as an unresolved dependency in local-only evaluation', async () => {
+        await setupWithDefinitions([dependencyFlag(staticCohort), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', { flagKeys: ['target'], onlyEvaluateLocally: true })
+
+        expect(flags.getFlag('target')).toBeUndefined()
+        expect(flags.unresolvedFlags).toEqual({ target: 'unresolved_dependency' })
+      })
+
+      const dependsOnDep = {
+        key: 'dep',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+        dependency_chain: ['dep'],
+      }
+      it.each([
+        ['the dependency first', [dependsOnDep, unknownTierOperator]],
+        ['the unsupported filter first', [unknownTierOperator, dependsOnDep]],
+      ])('reports a cohort with an unsupported filter as unsupported_definition, with %s', async (_, values) => {
+        await setupWithDefinitions(
+          [
+            dependencyFlag(staticCohort),
+            alwaysOn('target', {
+              id: 4,
+              filters: { groups: [{ properties: [{ key: 'id', type: 'cohort', value: 3 }], rollout_percentage: 100 }] },
+            }),
+          ],
+          undefined,
+          { cohorts: { '3': { type: 'AND', values } } }
+        )
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          onlyEvaluateLocally: true,
+          personProperties: { tier: 'gold' },
+        })
+
+        expect(flags.unresolvedFlags).toEqual({ target: 'unsupported_definition' })
+      })
+
+      it('resolves locally when the dependency resolves locally', async () => {
+        await setupWithDefinitions([dependencyFlag(missingPlan), dependentFlag()])
+
+        const flags = await posthog.evaluateFlags('user-123', {
+          flagKeys: ['target'],
+          personProperties: { plan: 'pro' },
+        })
+
+        expect(flags.getFlag('target')).toBe('a')
+        expect(remoteFlagCalls()).toHaveLength(0)
+      })
     })
   })
 

@@ -35,6 +35,11 @@ export interface PostHogReactNativePluginErrorTrackingConfig {
   nativeAutocapture?: boolean
   androidNdkCrashes?: boolean
   exceptionSteps?: PostHogReactNativePluginExceptionStepsConfig
+  /**
+   * Native drops its report of a fatal JS crash only after {@link markFatalExceptionHandled}
+   * marked it. When absent, native drops every fatal JS crash report.
+   */
+  fatalExceptionMarker?: boolean
 }
 
 export interface PostHogReactNativePluginPushConfig {
@@ -138,6 +143,23 @@ export function captureFatalException(
   properties: PostHogReactNativePluginMap
 ): Promise<void> {
   return PosthogReactNativePlugin.captureFatalException(distinctId, timestamp, properties)
+}
+
+/**
+ * Records that the JS fatal handler saw a crash before React Native turns it into a native one.
+ * Native error tracking drops its own report of a fatal JS error only when the report's message
+ * is `message` (the first 80 characters of the `<name>: <message>` text React Native reports), so
+ * fatals that never reach the JS handler (such as React render errors) are still reported.
+ *
+ * @internal Used by `posthog-react-native`'s fatal handler. Not part of the public API.
+ */
+export function markFatalExceptionHandled(message: string): Promise<void> {
+  // An OTA-updated JS bundle can run on a native build that predates this method. That build
+  // drops every fatal JS report natively, so there is nothing to mark.
+  if (typeof PosthogReactNativePlugin.markFatalExceptionHandled !== 'function') {
+    return Promise.resolve()
+  }
+  return PosthogReactNativePlugin.markFatalExceptionHandled(message)
 }
 
 /**
@@ -258,6 +280,8 @@ export interface PostHogReactNativePluginModule {
     properties: PostHogReactNativePluginMap
   ) => Promise<void>
 
+  markFatalExceptionHandled: (message: string) => Promise<void>
+
   getSessionReplayDebugProperties: () => Promise<PostHogReactNativePluginMap>
 
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
@@ -283,6 +307,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   stopRecording,
   addExceptionStep,
   captureFatalException,
+  markFatalExceptionHandled,
   getSessionReplayDebugProperties,
   registerPushNotificationToken,
   unregisterPushNotificationToken,

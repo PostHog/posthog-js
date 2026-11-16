@@ -34,7 +34,7 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 
 async function main() {
     const result = streamText({
-        model: anthropic('claude-sonnet-4-5-20250929'),
+        model: anthropic('claude-sonnet-5-5'),
         experimental_telemetry: {
             isEnabled: true,
             functionId: 'anthropic-streaming',
@@ -42,6 +42,8 @@ async function main() {
                 posthog_distinct_id: 'example-user',
             },
         },
+        // Claude Sonnet 5.5 rejects non-default sampling; AI SDK v4 sends temperature 0 unless set
+        temperature: 1,
         maxTokens: 1024,
         messages: [
             { role: 'system', content: 'You are a helpful assistant with access to weather data.' },

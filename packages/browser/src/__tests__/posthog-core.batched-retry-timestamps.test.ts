@@ -29,12 +29,12 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
                     network.requests.push({ url, body, receivedAt: Date.now() })
                     xhr.readyState = 4
                     xhr.status = network.status
-                    xhr.onreadystatechange?.()
+                    xhr.onloadend?.()
                 }),
                 readyState: 0,
                 status: 0,
                 responseText: '{}',
-                onreadystatechange: undefined as (() => void) | undefined,
+                onloadend: undefined as (() => void) | undefined,
             }
             return xhr
         }),

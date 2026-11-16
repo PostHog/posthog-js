@@ -7,7 +7,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfigResult } from '../types'
 import type { Extension } from './types'
 
-const logger = createLogger('[Dead Clicks]')
+const logger = /* @__PURE__ */ createLogger('[Dead Clicks]')
 
 export const isDeadClicksEnabledForHeatmaps = () => {
     return true

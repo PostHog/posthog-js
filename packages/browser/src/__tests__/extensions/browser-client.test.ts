@@ -8,10 +8,20 @@ import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-e
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE, DEVICE_ID, HEATMAPS_ENABLED_SERVER_SIDE } from '../../constants'
 import { BrowserClientAdapter } from '../../extensions/browser-client'
 import { request } from '../../request'
+import { RequestRouter } from '../../utils/request-router'
 import { PostHog } from '../../posthog-core'
 import type { PostHogPersistence } from '../../posthog-persistence'
-import type { CaptureOptions, Properties, Property, QueuedRequestWithOptions, RemoteConfigResult } from '../../types'
+import type {
+    CaptureOptions,
+    Properties,
+    Property,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+    RequestResponse,
+    SessionIdChangedCallback,
+} from '../../types'
 import { createPosthogInstance } from '../helpers/posthog-instance'
+import { FakePerformanceObserver, resourceEntry } from '../helpers/fake-performance-observer'
 
 interface MockPostHog extends PostHog {
     emitEvent(event: string, properties?: Properties): void
@@ -29,7 +39,12 @@ function createMockPostHog(
         $groups: { organization: 'org-id' },
     }
     const eventHandlers = new Set<(event: { event: string; properties: Properties }) => void>()
-    const currentSession = { sessionId: 'session-id', windowId: 'window-id', sessionStartTimestamp: 123 }
+    const currentSession = {
+        sessionId: 'session-id',
+        windowId: 'window-id',
+        sessionStartTimestamp: 123,
+        lastActivityTimestamp: 120,
+    }
 
     const persistence = {
         props,
@@ -53,6 +68,7 @@ function createMockPostHog(
         get_property: vi.fn((key: string) => props[key]),
         getGroups: vi.fn(() => props.$groups),
         is_capturing: vi.fn(() => true),
+        has_opted_out_capturing: vi.fn(() => false),
         sessionManager: {
             checkAndGetSessionAndWindowId: vi.fn(() => currentSession),
         },
@@ -67,6 +83,7 @@ function createMockPostHog(
             eventHandlers.add(handler)
             return () => eventHandlers.delete(handler)
         }),
+        _addCaptureHook: vi.fn((handler) => instance.on('eventCaptured', (payload) => handler(payload.event, payload))),
         emitEvent(event, properties = {}) {
             eventHandlers.forEach((handler) => handler({ event, properties }))
         },
@@ -93,30 +110,70 @@ runClientConformanceSuite('legacy browser', async () => {
     }
 })
 
-function testExtension(
-    name: string,
-    setup: (client: Client) => void | Promise<void>,
-    dispose: () => void = vi.fn()
-): Extension {
-    return { name, setup, dispose }
+function publishRemoteConfig(instance: PostHog, result: RemoteConfigResult): void {
+    instance._lastRemoteConfig = result
+    instance._internalEventEmitter.emit('extensionsRemoteConfig', result)
 }
 
 describe('BrowserClientAdapter', () => {
+    it('maps unload delivery to an immediate Beacon capture', () => {
+        const instance = createMockPostHog()
+        const client = new BrowserClientAdapter(instance)
+        client.capture('survey abandoned', { survey_id: 'test' }, { delivery: 'unload' })
+        expect(instance.capture).toHaveBeenCalledWith(
+            'survey abandoned',
+            { survey_id: 'test' },
+            expect.objectContaining({ transport: 'sendBeacon', send_instantly: true })
+        )
+    })
+
+    it('delegates session notifications without reading or creating a session', () => {
+        const instance = createMockPostHog()
+        const unsubscribe = vi.fn()
+        let notify!: SessionIdChangedCallback
+        instance.onSessionId = vi.fn((listener) => {
+            notify = listener
+            listener('existing-session', 'window')
+            return unsubscribe
+        })
+        const client = new BrowserClientAdapter(instance)
+        const listener = vi.fn()
+        const subscription = client.onSession(listener)
+        expect(listener).toHaveBeenCalledWith('existing-session')
+        notify('next-session', 'window')
+        expect(listener).toHaveBeenLastCalledWith('next-session')
+        expect(instance.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        subscription.dispose()
+        subscription.dispose()
+        expect(unsubscribe).toHaveBeenCalledTimes(1)
+        const nextSubscription = client.onSession(listener)
+        expect(instance.onSessionId).toHaveBeenCalledTimes(2)
+        nextSubscription.dispose()
+        expect(unsubscribe).toHaveBeenCalledTimes(2)
+    })
+
+    it('isolates a failing session listener', () => {
+        const instance = createMockPostHog()
+        instance.onSessionId = vi.fn((listener) => {
+            listener('existing-session', 'window')
+            return vi.fn()
+        })
+        const client = new BrowserClientAdapter(instance)
+        const log = vi.spyOn(logger, 'error').mockImplementation(() => {})
+        expect(() =>
+            client.onSession(() => {
+                throw new Error('listener failed')
+            })
+        ).not.toThrow()
+        expect(log).toHaveBeenCalledWith('Browser extension session listener failed', expect.any(Error))
+        log.mockRestore()
+    })
+
     it('shares one Client with core analytics behavior across extensions', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        let secondClient: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
-        host.add(
-            testExtension('second', (value) => {
-                secondClient = value
-            })
-        )
+        const client: Client = host
+        const secondClient = host
 
         expect(client).toBe(host)
         expect(secondClient).toBe(client)
@@ -132,6 +189,7 @@ describe('BrowserClientAdapter', () => {
             sessionId: 'session-id',
             windowId: 'window-id',
             sessionStartTimestamp: 123,
+            lastActivityTimestamp: 120,
         })
         expect(client?.canCapture).toBe(true)
         ;(instance.is_capturing as VitestMock).mockReturnValue(false)
@@ -140,29 +198,28 @@ describe('BrowserClientAdapter', () => {
         expect(client?.logger).toBeDefined()
 
         const timestamp = new Date('2026-01-01T00:00:00Z')
-        const captureResult: void = client?.capture(
+        const captureResult: boolean | undefined = client?.capture(
             'test-event',
             { explicit: true },
             { timestamp, uuid: 'test-uuid', set: { plan: 'paid' }, setOnce: { source: 'test' } }
         )
-        expect(captureResult).toBeUndefined()
+        expect(captureResult).toBe(true)
         expect(instance.capture).toHaveBeenCalledWith('test-event', { explicit: true }, {
             timestamp,
             uuid: 'test-uuid',
             $set: { plan: 'paid' },
             $set_once: { source: 'test' },
         } satisfies CaptureOptions)
-
-        await host.dispose()
     })
 
-    it('resolves registered extensions through typed stable names during setup', async () => {
+    it('resolves host extensions through typed stable names during setup', async () => {
         interface LogsExtension extends Extension {
             captureLog(): void
         }
         const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
         const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
-        const host = new BrowserClientAdapter(createMockPostHog())
+        const instance = new PostHog()
+        const host = instance._getBrowserClientAdapter()
         const captureLog = vi.fn()
         let client: Client | undefined
         let resolvedDuringSetup: LogsExtension | undefined
@@ -177,7 +234,8 @@ describe('BrowserClientAdapter', () => {
         }
 
         expect(client).toBeUndefined()
-        await host.add(extension)
+        instance.logs = extension as any
+        await extension.setup(host)
 
         expect(resolvedDuringSetup).toBe(extension)
         expect(captureLog).toHaveBeenCalledTimes(1)
@@ -185,7 +243,7 @@ describe('BrowserClientAdapter', () => {
         expect(client?.getExtension<LogsExtension>('logs')).toBe(extension)
         expect(client?.getExtension(MissingExtension)).toBeUndefined()
 
-        host.dispose()
+        instance.logs = undefined
         expect(client?.getExtension(LogsExtension)).toBeUndefined()
     })
 
@@ -195,19 +253,16 @@ describe('BrowserClientAdapter', () => {
         }
         const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
         const posthog = new PostHog()
-        const host = posthog._getBrowserClientAdapter()
+        posthog._getBrowserClientAdapter()
         const extension: LogsExtension = {
             name: LogsExtension,
             setup: vi.fn(),
             captureLog: vi.fn(),
         }
 
-        await host.add(extension)
-
+        posthog.logs = extension as any
         expect(posthog.getExtension(LogsExtension)).toBe(extension)
-
-        host.dispose()
-        expect(posthog.getExtension(LogsExtension)).toBeUndefined()
+        expect(new BrowserClientAdapter(posthog).getExtension(LogsExtension)).toBe(extension)
     })
 
     it('falls back to the distinct id and an empty session in limited environments', async () => {
@@ -217,28 +272,22 @@ describe('BrowserClientAdapter', () => {
             throw new Error('cookieless')
         })
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
 
         expect(client?.anonymousId).toBe('distinct-id')
         expect(client?.deviceId).toBeUndefined()
-        expect(client?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
-        await host.dispose()
+        expect(client?.session).toEqual({
+            sessionId: '',
+            windowId: '',
+            sessionStartTimestamp: 0,
+            lastActivityTimestamp: 0,
+        })
     })
 
     it('reads, writes, and removes persistence keys directly', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
 
         const key = '$extension_state'
         expect(client?.kv.initialize()).toBeUndefined()
@@ -272,21 +321,16 @@ describe('BrowserClientAdapter', () => {
         client?.kv.remove(key)
         expect(instance.persistence?.unregister).toHaveBeenLastCalledWith(key)
         expect(instance.persistence?.props[key]).toBeUndefined()
-        await host.dispose()
     })
 
     it('publishes every remote-config outcome and replays the latest result to late listeners', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const instance = createMockPostHog()
+        const host = new BrowserClientAdapter(instance)
+        const client: Client = host
         const changes: RemoteConfigResult[] = []
         client?.onRemoteConfig((result) => changes.push(result as RemoteConfigResult))
 
-        host.handleRemoteConfig({ ok: false })
+        publishRemoteConfig(instance, { ok: false })
         expect(changes).toEqual([{ ok: false }])
 
         const successfulConfig = {
@@ -295,51 +339,40 @@ describe('BrowserClientAdapter', () => {
             nested: { approved: true },
         } as any
         const success = { ok: true, config: successfulConfig } as const
-        host.handleRemoteConfig(success)
+        publishRemoteConfig(instance, success)
         expect(changes).toEqual([{ ok: false }, success])
 
         const lateListener = vi.fn()
         client?.onRemoteConfig(lateListener)
         expect(lateListener).toHaveBeenCalledWith(success)
-        await host.dispose()
     })
 
     it('publishes each remote-config result to every listener', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const instance = createMockPostHog()
+        const host = new BrowserClientAdapter(instance)
+        const client: Client = host
         const firstListener = vi.fn()
         const secondListener = vi.fn()
         client?.onRemoteConfig(firstListener)
         client?.onRemoteConfig(secondListener)
         const result = { ok: true, config: { nested: { approved: true } } as any } as const
 
-        host.handleRemoteConfig(result)
+        publishRemoteConfig(instance, result)
         expect(firstListener).toHaveBeenCalledWith(result)
         expect(secondListener).toHaveBeenCalledWith(result)
-        await host.dispose()
     })
 
-    it('stops publishing remote config after disposal', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+    it('unsubscribes remote-config listeners through their returned disposable', () => {
+        const instance = createMockPostHog()
+        const client = new BrowserClientAdapter(instance)
         const listener = vi.fn()
-        client!.onRemoteConfig(listener)
+        const subscription = client.onRemoteConfig(listener)
 
-        host.dispose()
-        host.handleRemoteConfig({ ok: false })
+        subscription.dispose()
+        publishRemoteConfig(instance, { ok: false })
 
         expect(listener).not.toHaveBeenCalled()
-        expect(client!.onRemoteConfig(vi.fn()).dispose).toEqual(expect.any(Function))
+        expect(client.onRemoteConfig(vi.fn()).dispose).toEqual(expect.any(Function))
     })
 
     it('replays only canonical cached remote-config outcomes', async () => {
@@ -348,39 +381,22 @@ describe('BrowserClientAdapter', () => {
             config: { supportedCompression: [], cached: true } as any,
         } as const
         const cachedHost = new BrowserClientAdapter(createMockPostHog({ remoteConfigResult: cachedResult }))
-        let cachedClient: Client | undefined
-        cachedHost.add(
-            testExtension('cached', (client) => {
-                cachedClient = client
-            })
-        )
+        const cachedClient: Client = cachedHost
         const cachedListener = vi.fn()
         cachedClient?.onRemoteConfig(cachedListener)
         expect(cachedListener).toHaveBeenCalledWith(cachedResult)
-        await cachedHost.dispose()
 
         const disabledHost = new BrowserClientAdapter(createMockPostHog({ flagsDisabled: true }))
-        let disabledClient: Client | undefined
-        disabledHost.add(
-            testExtension('disabled', (client) => {
-                disabledClient = client
-            })
-        )
+        const disabledClient: Client = disabledHost
         const disabledListener = vi.fn()
         disabledClient?.onRemoteConfig(disabledListener)
         expect(disabledListener).not.toHaveBeenCalled()
-        await disabledHost.dispose()
     })
 
     it('adapts captured events and disposes subscriptions', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
         const events: unknown[] = []
         const eventSubscription = client!.onEvent((event) => events.push(event))
 
@@ -390,18 +406,12 @@ describe('BrowserClientAdapter', () => {
         eventSubscription.dispose()
         instance.emitEvent('ignored')
         expect(events).toHaveLength(1)
-        host.dispose()
     })
 
     it('isolates shared listener failures and continues sibling event and config delivery', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
         const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const eventSibling = vi.fn()
         const configSibling = vi.fn()
@@ -416,12 +426,13 @@ describe('BrowserClientAdapter', () => {
         client?.onRemoteConfig(configSibling)
 
         expect(() => instance.emitEvent('continues', { nested: { approved: true } })).not.toThrow()
-        expect(() => host.handleRemoteConfig({ ok: true, config: { nested: { approved: true } } as any })).not.toThrow()
+        expect(() =>
+            publishRemoteConfig(instance, { ok: true, config: { nested: { approved: true } } as any })
+        ).not.toThrow()
 
         expect(eventSibling).toHaveBeenCalledTimes(1)
         expect(configSibling).toHaveBeenCalledTimes(1)
         expect(error).toHaveBeenCalledTimes(2)
-        host.dispose()
     })
 
     it('delegates dynamic properties and returns an idempotent disposable', async () => {
@@ -429,12 +440,7 @@ describe('BrowserClientAdapter', () => {
         const remove = vi.fn()
         instance._registerExtensionEventProperties = vi.fn(() => remove)
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
         const producer = () => ({ dynamic: true })
 
         const registration = client!.registerDynamicEventProperties(producer)
@@ -442,8 +448,83 @@ describe('BrowserClientAdapter', () => {
         registration.dispose()
         registration.dispose()
         expect(remove).toHaveBeenCalledTimes(1)
-        await host.dispose()
     })
+
+    it('flushes both logs queues and releases capture resources during shutdown', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            capture_pageview: false,
+            advanced_disable_flags: true,
+            disable_session_recording: true,
+        })
+        const send = vi.spyOn(posthog, '_send_request')
+        const logger = posthog.logger
+        const beforeSend = vi.fn((record) => record)
+        posthog.set_config({ logs: { beforeSend } })
+        posthog.captureLog({ body: 'programmatic' })
+        posthog.logs!.captureConsoleLog({ body: 'console' })
+        const requestHeader = vi.fn(() => {
+            logger.info('reentrant cached logger')
+            posthog.captureLog({ body: 'reentrant SDK capture' })
+            return 'value'
+        })
+        posthog.set_config({
+            request_headers: {
+                get 'X-Test'() {
+                    return requestHeader()
+                },
+            },
+        })
+        await posthog.shutdown()
+        expect(requestHeader).toHaveBeenCalledTimes(2)
+        expect(send).toHaveBeenCalledTimes(2)
+        expect(
+            send.mock.calls.flatMap(([options]) =>
+                (options.data as any).resourceLogs[0].scopeLogs[0].logRecords.map((record: any) => [
+                    options.transport,
+                    record.body,
+                ])
+            )
+        ).toEqual([
+            ['sendBeacon', { stringValue: 'programmatic' }],
+            ['sendBeacon', { stringValue: 'console' }],
+        ])
+        beforeSend.mockClear()
+        posthog.captureLog({ body: 'after cleanup' })
+        logger.info('after cleanup')
+        expect(beforeSend).not.toHaveBeenCalled()
+        expect(send).toHaveBeenCalledTimes(2)
+    })
+
+    it.each([false, 'on_reject', 'always'] as const)(
+        'exposes live consent separately from capture permission in cookieless mode %s',
+        async (cookielessMode) => {
+            const instance = await createPosthogInstance(undefined, {
+                cookieless_mode: cookielessMode || undefined,
+                capture_pageview: false,
+                advanced_disable_flags: true,
+                disable_session_recording: true,
+            })
+            try {
+                const client = instance._getBrowserClientAdapter()
+                if (cookielessMode === 'always') {
+                    expect(client.isOptedOut).toBe(true)
+                    expect(client.canCapture).toBe(true)
+                } else {
+                    instance.opt_in_capturing()
+                    expect(client.isOptedOut).toBe(false)
+                    expect(client.canCapture).toBe(true)
+                    instance.opt_out_capturing()
+                    expect(client.isOptedOut).toBe(true)
+                    expect(client.canCapture).toBe(cookielessMode === 'on_reject')
+                    instance.opt_in_capturing()
+                    expect(client.isOptedOut).toBe(false)
+                    expect(client.canCapture).toBe(true)
+                }
+            } finally {
+                await instance.shutdown()
+            }
+        }
+    )
 
     it('exposes the project token and adapts caller-owned request options', async () => {
         const instance = createMockPostHog()
@@ -452,12 +533,7 @@ describe('BrowserClientAdapter', () => {
             options.callback?.({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
         )
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
         const body = {
             token: 'body-project',
             $token: 'body-alias',
@@ -479,7 +555,10 @@ describe('BrowserClientAdapter', () => {
         })
 
         expect(response).toEqual({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
-        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith('flags', '/flags/?existing=yes')
+        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith(
+            'flags',
+            '/flags/?existing=yes&token=query-project&extra=value'
+        )
         expect(send).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
@@ -502,7 +581,40 @@ describe('BrowserClientAdapter', () => {
             api_key: 'api-key-alias',
             distinct_id: 'person-1',
         })
-        await host.dispose()
+    })
+
+    it.each([
+        ['/i/v1/logs', undefined, 'logs'],
+        ['/i/v1/logs', 'api', 'logs'],
+        ['/i/v1/logs', 'flags', undefined],
+        ['/i/v1/analytics/events', undefined, undefined],
+    ] as const)('preserves the quota bucket for %s on %s', async (path, target, batchKey) => {
+        const instance = createMockPostHog()
+        vi.mocked(instance._send_request).mockImplementation((options) => options.callback?.({ statusCode: 200 }))
+        const client = new BrowserClientAdapter(instance)
+        await client.sendRequest(path, { target })
+        expect(vi.mocked(instance._send_request).mock.calls[0][0].batchKey).toBe(batchKey)
+    })
+
+    it('passes survey query parameters through the request URL rewrite hook', async () => {
+        const instance = createMockPostHog()
+        instance.config.api_host = 'https://api.example.com'
+        instance.config.rewriteRequestPath = vi.fn((url: URL) => {
+            expect(url.searchParams.get('token')).toBe('test-token')
+            url.searchParams.set('token', 'rewritten-token')
+            return url
+        })
+        instance.requestRouter = new RequestRouter(instance)
+        const send = vi.mocked(instance._send_request)
+        send.mockImplementation(({ callback }) => callback?.({ statusCode: 200 }))
+        const client = new BrowserClientAdapter(instance)
+
+        await client.sendRequest('/api/surveys/', { query: { token: client.projectToken } })
+
+        expect(instance.config.rewriteRequestPath).toHaveBeenCalledOnce()
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({ url: 'https://api.example.com/api/surveys/?token=rewritten-token' })
+        )
     })
 
     it('uses the regular API target by default and resolves dropped requests', async () => {
@@ -511,12 +623,7 @@ describe('BrowserClientAdapter', () => {
         const send = instance._send_request as VitestMockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation((options) => options.callback?.({ statusCode: 0, error: requestError }))
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
 
         await expect(client!.sendRequest('/api/surveys/', { method: 'GET' })).resolves.toEqual({
             statusCode: 0,
@@ -526,7 +633,6 @@ describe('BrowserClientAdapter', () => {
         expect(send).toHaveBeenCalledWith(
             expect.objectContaining({ method: 'GET', url: 'https://api.example.com/api/surveys/' })
         )
-        await host.dispose()
     })
 
     it('returns a best-effort response immediately for an explicit sendBeacon transport', async () => {
@@ -534,12 +640,7 @@ describe('BrowserClientAdapter', () => {
         const send = instance._send_request as VitestMockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation(() => undefined)
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
 
         const response = await client!.sendRequest('/s/', {
             method: 'POST',
@@ -558,7 +659,301 @@ describe('BrowserClientAdapter', () => {
             })
         )
         expect(send.mock.calls[0][0].callback).toBeUndefined()
-        await host.dispose()
+    })
+
+    describe('flags request duration metric', () => {
+        const METRIC = 'posthog.flags.request.duration'
+        const BASE_ATTRIBUTES = { 'server.address': 'flags.example.com', 'client.timezone': 'Europe/Berlin' }
+        const BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
+        const histogram = vi.fn()
+
+        beforeEach(() => {
+            histogram.mockClear()
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Europe/Berlin',
+            } as Intl.ResolvedDateTimeFormatOptions)
+        })
+
+        afterEach(() => {
+            vi.restoreAllMocks()
+        })
+
+        // A `dropped` response models a request that `_send_request` drops before the network.
+        // It calls back synchronously and never calls `onDispatch` or `onSend`.
+        function createFlagsInstance(metrics: { flags?: boolean } | undefined): MockPostHog {
+            const instance = createMockPostHog()
+            instance.config.metrics = metrics
+            ;(instance as unknown as { metrics: { histogram: typeof histogram } }).metrics = { histogram }
+            return instance
+        }
+
+        function createClient(
+            metrics: { flags?: boolean } | undefined,
+            responses: (RequestResponse | { dropped: RequestResponse })[]
+        ): BrowserClientAdapter {
+            const instance = createFlagsInstance(metrics)
+            const queue = [...responses]
+            vi.mocked(instance._send_request).mockImplementation(({ url, callback, onDispatch, onSend }) => {
+                const response = queue.shift()!
+                if ('dropped' in response) {
+                    callback?.(response.dropped)
+                    return
+                }
+                onDispatch?.()
+                onSend?.(url)
+                setTimeout(() => callback?.(response), 0)
+            })
+            return new BrowserClientAdapter(instance)
+        }
+
+        it('records one sample per /flags attempt with timezone and status attributes', async () => {
+            const client = createClient({ flags: true }, [{ statusCode: 503 }, { statusCode: 200 }])
+
+            await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+            await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+            expect(histogram).toHaveBeenCalledTimes(2)
+            expect(histogram).toHaveBeenNthCalledWith(1, METRIC, expect.any(Number), {
+                unit: 'ms',
+                bounds: BOUNDS,
+                attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 503, 'error.type': '503' },
+            })
+            expect(histogram).toHaveBeenNthCalledWith(2, METRIC, expect.any(Number), {
+                unit: 'ms',
+                bounds: BOUNDS,
+                attributes: { ...BASE_ATTRIBUTES, 'http.response.status_code': 200 },
+            })
+            expect(histogram.mock.calls[0][1]).toBeGreaterThanOrEqual(0)
+        })
+
+        it.each([
+            ['timeout', { statusCode: 0, error: Object.assign(new Error('timed out'), { name: 'AbortError' }) }],
+            ['_OTHER', { statusCode: 0, error: new TypeError('Failed to fetch') }],
+            ['_OTHER', { statusCode: 0 }],
+        ] as const)('reports error type %s when no response arrives', async (errorType, response) => {
+            const client = createClient({ flags: true }, [response])
+
+            await client.sendRequest('/flags/', { target: 'flags' })
+
+            expect(histogram).toHaveBeenCalledWith(METRIC, expect.any(Number), {
+                unit: 'ms',
+                bounds: BOUNDS,
+                attributes: { ...BASE_ATTRIBUTES, 'error.type': errorType },
+            })
+        })
+
+        it.each([
+            ['the option is off', undefined],
+            ['metrics.flags is false', { flags: false }],
+        ])('records nothing when %s', async (_name, metrics) => {
+            const client = createClient(metrics, [{ statusCode: 200 }])
+
+            await client.sendRequest('/flags/', { target: 'flags' })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('records nothing for a non-flags request', async () => {
+            const client = createClient({ flags: true }, [{ statusCode: 200 }])
+
+            await client.sendRequest('/api/surveys/', { method: 'GET' })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('records nothing when the request is dropped before the network', async () => {
+            const client = createClient({ flags: true }, [{ dropped: { statusCode: 429 } }])
+
+            await expect(client.sendRequest('/flags/', { target: 'flags' })).resolves.toEqual({ statusCode: 429 })
+
+            expect(histogram).not.toHaveBeenCalled()
+        })
+
+        it('resolves the request when recording throws', async () => {
+            histogram.mockImplementationOnce(() => {
+                throw new Error('boom')
+            })
+            const client = createClient({ flags: true }, [{ statusCode: 200 }])
+
+            await expect(client.sendRequest('/flags/', { target: 'flags' })).resolves.toEqual({ statusCode: 200 })
+        })
+
+        describe('pre-send, network and main-thread split', () => {
+            const FLAGS_URL = 'https://flags.example.com/flags/'
+            const PRE_SEND = 'posthog.flags.request.pre_send_duration'
+            const NETWORK = 'posthog.flags.request.network_duration'
+            const MAIN_THREAD = 'posthog.flags.request.main_thread_duration'
+            const SPLIT_BOUNDS = [5, 10, 25, ...BOUNDS]
+            let clock: number
+
+            beforeEach(() => {
+                FakePerformanceObserver.reset()
+                vi.stubGlobal('PerformanceObserver', FakePerformanceObserver)
+                clock = 0
+                vi.spyOn(performance, 'now').mockImplementation(() => clock)
+            })
+
+            afterEach(() => {
+                vi.unstubAllGlobals()
+            })
+
+            // The attempt dispatches at 100ms, the transport sends it at 110ms, and the callback runs at 340ms.
+            // `entries` are the Resource Timing entries that the browser has recorded but not delivered
+            // when the callback runs.
+            function createTimedClient(
+                response: RequestResponse,
+                entries: Partial<PerformanceResourceTiming>[] = []
+            ): BrowserClientAdapter {
+                const instance = createFlagsInstance({ flags: true })
+                vi.mocked(instance._send_request).mockImplementation(({ url, callback, onDispatch, onSend }) => {
+                    clock = 100
+                    onDispatch?.()
+                    clock = 110
+                    onSend?.(url)
+                    setTimeout(() => {
+                        FakePerformanceObserver.latest?.queue(...entries)
+                        clock = 340
+                        callback?.(response)
+                    }, 0)
+                })
+                return new BrowserClientAdapter(instance)
+            }
+
+            const recorded = (name: string) => histogram.mock.calls.filter(([metric]) => metric === name)
+
+            it('splits the attempt into pre-send, network and main-thread time with the total attributes', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                const attributes = { ...BASE_ATTRIBUTES, 'http.response.status_code': 200 }
+                expect(histogram.mock.calls).toEqual([
+                    [METRIC, 240, { unit: 'ms', bounds: BOUNDS, attributes }],
+                    [PRE_SEND, 12, { unit: 'ms', bounds: SPLIT_BOUNDS, attributes }],
+                    [NETWORK, 188, { unit: 'ms', bounds: BOUNDS, attributes }],
+                    [MAIN_THREAD, 40, { unit: 'ms', bounds: SPLIT_BOUNDS, attributes }],
+                ])
+            })
+
+            it('splits an attempt that returned an error status', async () => {
+                const client = createTimedClient({ statusCode: 503 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(recorded(NETWORK)[0][2].attributes).toEqual({
+                    ...BASE_ATTRIBUTES,
+                    'http.response.status_code': 503,
+                    'error.type': '503',
+                })
+            })
+
+            it('measures main-thread time to the callback when the entry arrives after it', async () => {
+                const client = createTimedClient({ statusCode: 200 })
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+                expect(histogram).toHaveBeenCalledTimes(1)
+
+                clock = 500
+                FakePerformanceObserver.latest.deliver(resourceEntry(FLAGS_URL, 112, 300))
+
+                expect(recorded(MAIN_THREAD)[0][1]).toBe(40)
+                expect(recorded(METRIC)).toEqual([[METRIC, 240, expect.anything()]])
+            })
+
+            it('ends network time at the callback when the entry ends after it, so the parts sum to the total', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 341)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(recorded(NETWORK)[0][1]).toBe(228)
+                expect(recorded(MAIN_THREAD)[0][1]).toBe(0)
+            })
+
+            it.each([
+                ['no entry arrives', { statusCode: 200 }, [], true],
+                ['no response arrives', { statusCode: 0 }, [resourceEntry(FLAGS_URL, 112, 300)], true],
+                ['the browser has no PerformanceObserver', { statusCode: 200 }, [], false],
+                ['the entry ends before it starts', { statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 0)], true],
+            ] as const)('records only the total when %s', async (_name, response, entries, hasObserver) => {
+                if (!hasObserver) {
+                    vi.stubGlobal('PerformanceObserver', undefined)
+                }
+                const client = createTimedClient(response, [...entries])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(histogram.mock.calls).toEqual([[METRIC, 240, expect.anything()]])
+            })
+
+            it('gives each histogram its own attributes object', async () => {
+                const client = createTimedClient({ statusCode: 200 }, [resourceEntry(FLAGS_URL, 112, 300)])
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                const attributeObjects = new Set(histogram.mock.calls.map(([, , options]) => options.attributes))
+                expect(attributeObjects.size).toBe(4)
+            })
+
+            it('resolves the request when reading the Resource Timing entry throws', async () => {
+                vi.spyOn(FakePerformanceObserver.prototype, 'takeRecords').mockImplementation(() => {
+                    throw new Error('boom')
+                })
+                vi.spyOn(logger, 'error').mockImplementation(() => {})
+                const client = createTimedClient({ statusCode: 200 })
+
+                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                    statusCode: 200,
+                })
+                expect(recorded(METRIC)).toHaveLength(1)
+                expect(FakePerformanceObserver.latest.disconnected).toBe(true)
+            })
+
+            it('sends the request and records the total when reading PerformanceObserver throws', async () => {
+                Object.defineProperty(window, 'PerformanceObserver', {
+                    configurable: true,
+                    get() {
+                        throw new Error('boom')
+                    },
+                })
+                const client = createTimedClient({ statusCode: 200 })
+
+                await expect(client.sendRequest('/flags/', { target: 'flags', method: 'POST' })).resolves.toEqual({
+                    statusCode: 200,
+                })
+                expect(recorded(METRIC)).toHaveLength(1)
+            })
+
+            it('logs instead of throwing when recording a split that arrives after the callback throws', async () => {
+                const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+                const client = createTimedClient({ statusCode: 200 })
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+                histogram.mockImplementationOnce(() => {
+                    throw new Error('boom')
+                })
+
+                expect(() => FakePerformanceObserver.latest.deliver(resourceEntry(FLAGS_URL, 112, 300))).not.toThrow()
+                expect(error).toHaveBeenCalledWith(
+                    'Failed to record the /flags request timing split',
+                    expect.any(Error)
+                )
+            })
+
+            it('stops watching when no response arrives', async () => {
+                const client = createTimedClient({ statusCode: 0 })
+
+                await client.sendRequest('/flags/', { target: 'flags', method: 'POST' })
+
+                expect(FakePerformanceObserver.latest.disconnected).toBe(true)
+            })
+
+            it('does not watch resource timing when the flags metric is off', async () => {
+                const client = createClient({ flags: false }, [{ statusCode: 200 }])
+
+                await client.sendRequest('/flags/', { target: 'flags' })
+
+                expect(FakePerformanceObserver.instances).toHaveLength(0)
+            })
+        })
     })
 
     it('serializes the caller-owned body through the selected browser transport', async () => {
@@ -574,12 +969,7 @@ describe('BrowserClientAdapter', () => {
                 options.callback?.({ statusCode: 200 })
             })
             const host = new BrowserClientAdapter(instance)
-            let client: Client | undefined
-            await host.add(
-                testExtension('test', (value) => {
-                    client = value
-                })
-            )
+            const client: Client = host
             const body = {
                 token: 'body-project',
                 $token: 'body-alias',
@@ -597,7 +987,6 @@ describe('BrowserClientAdapter', () => {
             expect(open).toHaveBeenCalled()
             expect(setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
             expect(JSON.parse(sendRequest.mock.calls[0][0] as string)).toEqual(body)
-            await host.dispose()
         } finally {
             open.mockRestore()
             setRequestHeader.mockRestore()
@@ -615,12 +1004,7 @@ describe('BrowserClientAdapter', () => {
                 return event
             },
         })
-        let client: Client | undefined
-        await posthog._getBrowserClientAdapter().add(
-            testExtension('test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = posthog._getBrowserClientAdapter()
 
         const extensionKey = 'posthog.test.opaqueState'
         await client?.kv.set(extensionKey, 'visible')
@@ -642,6 +1026,22 @@ describe('BrowserClientAdapter', () => {
         await posthog.shutdown()
     })
 
+    it.each([
+        ['an event that before_send drops', { before_send: () => null }, [true, true]],
+        [
+            'events past the client rate limit',
+            { rate_limiting: { events_per_second: 1, events_burst_limit: 1 } },
+            [true, false],
+        ],
+    ])('returns whether capture can be retried for %s', async (_, config, expected) => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const posthog = await createPosthogInstance(undefined, { capture_pageview: false, ...config })
+        const client = posthog._getBrowserClientAdapter()
+
+        expect([client.capture('first-event'), client.capture('second-event')]).toEqual(expected)
+        await posthog.shutdown()
+    })
+
     it('uses normal batching when Client capture options are omitted and preserves explicit mappings', async () => {
         const posthog = await createPosthogInstance(undefined, {
             request_batching: true,
@@ -649,12 +1049,7 @@ describe('BrowserClientAdapter', () => {
         })
         const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         const send = vi.spyOn(posthog, '_send_retriable_request')
-        let client: Client | undefined
-        await posthog._getBrowserClientAdapter().add(
-            testExtension('capture-test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = posthog._getBrowserClientAdapter()
 
         await client?.capture('batched-core-event', { source: 'core' })
         expect(enqueue).toHaveBeenCalledTimes(1)
@@ -693,12 +1088,7 @@ describe('BrowserClientAdapter', () => {
             posthog._onRemoteConfig(result)
 
             const host = posthog._getBrowserClientAdapter()
-            let client: Client | undefined
-            await host.add(
-                testExtension('remote-config-test', (value) => {
-                    client = value
-                })
-            )
+            const client: Client = host
             const earlySubscriber = vi.fn()
             client?.onRemoteConfig(earlySubscriber)
             const initialCallCount = earlySubscriber.mock.calls.length
@@ -737,12 +1127,7 @@ describe('BrowserClientAdapter', () => {
             before_send: (event) => event,
         })
         const host = posthog._getBrowserClientAdapter()
-        let client: Client | undefined
-        await host.add(
-            testExtension('continuation-test', (value) => {
-                client = value
-            })
-        )
+        const client: Client = host
         const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         const eventSibling = vi.fn()
@@ -780,18 +1165,7 @@ describe('BrowserClientAdapter', () => {
 
     it('bridges PostHog remote config, finalized events, persistence reset, and shutdown', async () => {
         const posthog = await createPosthogInstance(undefined, { before_send: (event) => event })
-        const host = posthog._getBrowserClientAdapter()
-        const extensionDispose = vi.fn()
-        let client: Client | undefined
-        host.add(
-            testExtension(
-                'lifecycle',
-                (value) => {
-                    client = value
-                },
-                extensionDispose
-            )
-        )
+        const client = posthog._getBrowserClientAdapter()
         const remoteConfigs: unknown[] = []
         const events: Array<{ event: string; properties: Record<string, unknown> }> = []
         client?.onRemoteConfig((config) => remoteConfigs.push(config))
@@ -834,7 +1208,6 @@ describe('BrowserClientAdapter', () => {
         expect(await client?.kv.get(AUTOCAPTURE_DISABLED_SERVER_SIDE)).toBeUndefined()
 
         await posthog.shutdown()
-        expect(extensionDispose).toHaveBeenCalledTimes(1)
     })
 })
 

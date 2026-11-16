@@ -66,6 +66,10 @@ export type PostHogCoreOptions = {
   /**
    * Whether to track that `getFeatureFlag` was called (used by Experiments)
    *
+   * In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot
+   * (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a
+   * single-flag getter, to override it for that call.
+   *
    * @default true
    */
   sendFeatureFlagEvent?: boolean
@@ -558,6 +562,8 @@ export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<P
  * Error values:
  *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
  *   FLAG_MISSING: Requested flag not in API response
+ *   EVALUATION_FAILED: Requested flag's remote record has no evaluated value
+ *   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
  *   QUOTA_LIMITED: Rate/quota limit exceeded
  *   TIMEOUT: Request timed out
  *   CONNECTION_ERROR: Network connection failed
@@ -566,6 +572,8 @@ export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<P
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
+  EVALUATION_FAILED: 'evaluation_failed',
+  LOCAL_EVALUATION_INCONCLUSIVE: 'local_evaluation_inconclusive',
   QUOTA_LIMITED: 'quota_limited',
   TIMEOUT: 'timeout',
   CONNECTION_ERROR: 'connection_error',
@@ -1014,4 +1022,4 @@ export type CaptureEvent = {
  * Function type for the `before_send` hook.
  * Receives an event and can return a modified event or null to drop the event.
  */
-export type BeforeSendFn = (event: CaptureEvent | null) => CaptureEvent | null
+export type BeforeSendFn = (event: CaptureEvent) => CaptureEvent | null

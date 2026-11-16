@@ -1,36 +1,23 @@
 import fs from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { parseSemver } from './release-utils.ts'
-import { putS3ObjectFromFile, s3ObjectExists } from './s3.ts'
+import { writeIntegrityManifest } from './integrity-manifest.ts'
+import {
+    IMMUTABLE_ASSET_CACHE_CONTROL,
+    MUTABLE_ALIAS_CACHE_CONTROL,
+    inferContentType,
+    assertCanUploadImmutableAssets,
+    uploadReleaseAssets,
+    verifyUploadedAssets,
+    type ReleaseAsset,
+    type PlannedAssetUpload,
+} from './release-assets.ts'
 
-const require = createRequire(import.meta.url)
-const mimeTypes = require('mime-types') as {
-    lookup(filePath: string): string | false
-}
+export { inferContentType, assertCanUploadImmutableAssets } from './release-assets.ts'
+export type { ReleaseAsset, PlannedAssetUpload } from './release-assets.ts'
 
-const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
-const MUTABLE_ALIAS_CACHE_CONTROL = 'public, max-age=300'
 const COMPATIBILITY_VERSION_NAMESPACE_COLLISION_PATH = /^\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.]+)?(?:\/|$)/
 const DIST_DIR = path.resolve('packages/browser/dist')
-
-export type ReleaseAsset = {
-    relativeKey: string
-    filePath: string
-    contentType?: string
-}
-
-export type PlannedAssetUpload = {
-    key: string
-    filePath: string
-    contentType?: string
-    cacheControl: string
-}
-
-export function inferContentType(filePath: string): string | undefined {
-    const inferred = mimeTypes.lookup(filePath)
-    return inferred || undefined
-}
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {
@@ -59,11 +46,12 @@ async function listFilesRecursively(root: string): Promise<string[]> {
 export async function collectReleaseAssets(distDir = DIST_DIR): Promise<ReleaseAsset[]> {
     const distEntries = (await fs.readdir(distDir)).sort()
     const assets: ReleaseAsset[] = distEntries
-        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map'))
+        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map') || name === 'integrity.json')
         .map((entry) => ({
             relativeKey: entry,
             filePath: path.join(distDir, entry),
-            contentType: entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
+            contentType:
+                entry.endsWith('.json') || entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
         }))
 
     const toolbarCssPath = path.join(distDir, 'toolbar.css')
@@ -147,6 +135,7 @@ export function buildAssetUploadPlans(
     const shouldPublishMutableAliases = publishMutableAliases && !parsedVersion.prerelease
 
     assertNoCompatibilityVersionNamespaceCollisions(assets)
+    const aliasAssets = assets.filter((asset) => asset.relativeKey !== 'integrity.json')
 
     return {
         immutable: assets.map((asset) => ({
@@ -156,7 +145,7 @@ export function buildAssetUploadPlans(
             cacheControl: IMMUTABLE_ASSET_CACHE_CONTROL,
         })),
         majorAlias: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(majorPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
@@ -164,7 +153,7 @@ export function buildAssetUploadPlans(
               }))
             : [],
         compatibility: shouldPublishMutableAliases
-            ? assets.map((asset) => ({
+            ? aliasAssets.map((asset) => ({
                   key: getAssetKey(compatibilityPrefix, asset),
                   filePath: asset.filePath,
                   contentType: asset.contentType,
@@ -174,70 +163,10 @@ export function buildAssetUploadPlans(
     }
 }
 
-async function uploadReleaseAssets(
-    bucket: string,
-    uploads: PlannedAssetUpload[],
-    label: string,
-    options: { ifNoneMatch?: string } = {}
-): Promise<string[]> {
-    if (uploads.length === 0) {
-        return []
-    }
-
-    console.log(`==> Uploading ${label} to s3://${bucket}`)
-
-    await Promise.all(
-        uploads.map((upload) =>
-            putS3ObjectFromFile(bucket, upload.key, upload.filePath, {
-                cacheControl: upload.cacheControl,
-                contentType: upload.contentType,
-                ifNoneMatch: options.ifNoneMatch,
-            })
-        )
-    )
-
-    return uploads.map((upload) => upload.key)
-}
-
-async function verifyUploadedObject(bucket: string, key: string): Promise<void> {
-    if (!(await s3ObjectExists(bucket, key))) {
-        throw new Error(`Expected uploaded object s3://${bucket}/${key} to exist`)
-    }
-}
-
-async function verifyUploadedAssets(bucket: string, keys: string[], label: string): Promise<void> {
-    console.log(`==> Verifying ${label} exist in s3://${bucket}`)
-    await Promise.all(keys.map((key) => verifyUploadedObject(bucket, key)))
-}
-
-export async function assertCanUploadImmutableAssets(
-    bucket: string,
-    uploads: PlannedAssetUpload[],
-    forceOverwrite: boolean,
-    objectExists: (bucket: string, key: string) => Promise<boolean> = s3ObjectExists
-): Promise<void> {
-    if (forceOverwrite) {
-        return
-    }
-
-    const existingKeys = (
-        await Promise.all(uploads.map(async ({ key }) => ((await objectExists(bucket, key)) ? key : undefined)))
-    ).filter((key): key is string => key !== undefined)
-
-    if (existingKeys.length > 0) {
-        const examples = existingKeys.slice(0, 3).map((key) => `s3://${bucket}/${key}`)
-        const remaining = existingKeys.length - examples.length
-        const suffix = remaining > 0 ? ` (and ${remaining} more)` : ''
-        throw new Error(
-            `Refusing to overwrite existing immutable release assets: ${examples.join(', ')}${suffix}. Retry with force overwrite enabled (CLI: --force-overwrite) to replace this S3 release.`
-        )
-    }
-}
-
 export async function uploadPostHogJsS3(
     bucket: string,
     version: string,
-    options: { publishMutableAliases?: boolean; forceOverwrite?: boolean } = {}
+    options: { publishMutableAliases?: boolean; forceOverwrite?: boolean; aliasesOnly?: boolean } = {}
 ): Promise<void> {
     const parsedVersion = parseSemver(version)
     if (!parsedVersion) {
@@ -245,11 +174,29 @@ export async function uploadPostHogJsS3(
     }
 
     const assets = await collectReleaseAssets()
+    if (assets.length === 0) throw new Error('No release assets found')
+    await writeIntegrityManifest(
+        DIST_DIR,
+        version,
+        assets.map((asset) => asset.relativeKey)
+    )
+    if (!assets.some((asset) => asset.relativeKey === 'integrity.json')) {
+        assets.push({
+            relativeKey: 'integrity.json',
+            filePath: path.join(DIST_DIR, 'integrity.json'),
+            contentType: 'application/json',
+        })
+    }
     const publishMutableAliases = options.publishMutableAliases ?? true
     const forceOverwrite = options.forceOverwrite ?? false
+    if (options.aliasesOnly && (!publishMutableAliases || forceOverwrite)) {
+        throw new Error('Alias promotion cannot upload or overwrite immutable assets')
+    }
     const uploadPlans = buildAssetUploadPlans(version, assets, publishMutableAliases)
 
-    await assertCanUploadImmutableAssets(bucket, uploadPlans.immutable, forceOverwrite)
+    if (!options.aliasesOnly) {
+        await assertCanUploadImmutableAssets(bucket, uploadPlans.immutable, forceOverwrite)
+    }
 
     console.log(`==> Uploading posthog-js v${version}`)
     console.log(`    immutable prefix: s3://${bucket}/static/${version}/`)
@@ -262,20 +209,20 @@ export async function uploadPostHogJsS3(
         console.log(`    compatibility prefix: s3://${bucket}/static/`)
     }
 
-    const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets', {
-        ifNoneMatch: forceOverwrite ? undefined : '*',
-    })
-    await verifyUploadedAssets(bucket, immutableKeys, 'immutable assets')
+    if (!options.aliasesOnly) {
+        await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets', {
+            ifNoneMatch: forceOverwrite ? undefined : '*',
+        })
+    }
+    // Alias-only jobs consume the exact same artifacts, after the workflow's
+    // cross-region barrier. Recheck locally before exposing any mutable alias.
+    await verifyUploadedAssets(bucket, uploadPlans.immutable, 'immutable assets')
 
-    const majorAliasKeys = await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
-    await verifyUploadedAssets(bucket, majorAliasKeys, 'major-version alias assets')
+    await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
+    await verifyUploadedAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
 
-    const compatibilityKeys = await uploadReleaseAssets(
-        bucket,
-        uploadPlans.compatibility,
-        'top-level compatibility assets'
-    )
-    await verifyUploadedAssets(bucket, compatibilityKeys, 'top-level compatibility assets')
+    await uploadReleaseAssets(bucket, uploadPlans.compatibility, 'top-level compatibility assets')
+    await verifyUploadedAssets(bucket, uploadPlans.compatibility, 'top-level compatibility assets')
 
     if (uploadPlans.majorAlias.length > 0 || uploadPlans.compatibility.length > 0) {
         console.log(

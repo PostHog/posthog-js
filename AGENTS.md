@@ -1,6 +1,7 @@
 # Agent Instructions
 
 - Read and follow [CONTRIBUTING.md](./CONTRIBUTING.md) before contributing to the SDKs.
+- Sign every commit; `main` rejects unsigned commits. Configure signing in the git config you commit with, as described in "Commit signing" in [CONTRIBUTING.md](./CONTRIBUTING.md).
 - Read and follow [RELEASING.md](./RELEASING.md) when adding changesets or working on publishing or release recovery.
 - Public API changes: follow "Public API changes" in [CONTRIBUTING.md](./CONTRIBUTING.md). As an agent, also:
     - When reviewing or fixing someone else's PR, don't ask for or open an issue. Note an external contributor's public API change when it has neither an agreed issue nor an API-defining published spec.

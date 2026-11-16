@@ -137,4 +137,4 @@ export interface CaptureOptions {
     _originatedFromCaptureException?: boolean
 }
 
-export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
+export type BeforeSendFn = (cr: CaptureResult) => CaptureResult | null

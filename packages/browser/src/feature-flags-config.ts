@@ -2,7 +2,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
 import type { PostHogConfig } from './types'
 
-const logger = createLogger('[FeatureFlags]')
+const logger = /* @__PURE__ */ createLogger('[FeatureFlags]')
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
 export type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '@posthog/browser-common/feature-flags-config'

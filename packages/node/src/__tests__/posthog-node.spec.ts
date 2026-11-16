@@ -3,6 +3,7 @@ import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
+import { setTimeout as waitWithRealTimers } from 'node:timers/promises'
 import { UUID_REGEX } from '@posthog/core'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -1454,7 +1455,7 @@ describe('PostHog Node.js', () => {
       )
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -1488,7 +1489,7 @@ describe('PostHog Node.js', () => {
       await waitForPromises()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST' })
       )
 
@@ -1513,7 +1514,7 @@ describe('PostHog Node.js', () => {
 
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyLocalEvalCall)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -1556,6 +1557,8 @@ describe('PostHog Node.js', () => {
 
     it.each([
       { name: 'resolves secretKey into the personal api key', keyOption: { secretKey: 'TEST_SECRET_KEY' } },
+      { name: 'accepts a project secret API key', keyOption: { secretKey: 'phs_abc123' } },
+      { name: 'accepts a personal API key via secretKey', keyOption: { secretKey: 'phx_abc123' } },
       {
         name: 'still accepts the deprecated personalApiKey alias',
         keyOption: { personalApiKey: 'TEST_PERSONAL_API_KEY' },
@@ -1619,17 +1622,25 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalled()
     })
 
-    it('should throw an error when creating SDK if a project key is passed in as personalApiKey', async () => {
-      expect(() => {
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          personalApiKey: 'phc_abc123',
-          featureFlagsPollingInterval: 100,
-          disableCompression: true,
-        })
-      }).toThrow(Error)
-    })
+    it.each(['secretKey', 'personalApiKey'])(
+      'explains how to configure server-only credentials when a project key is passed as %s',
+      (keyOption) => {
+        expect(() => {
+          new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            [keyOption]: 'phc_abc123',
+            featureFlagsPollingInterval: 100,
+            disableCompression: true,
+          })
+        }).toThrowError(
+          new Error(
+            'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
+          )
+        )
+        expect(mockedFetch).not.toHaveBeenCalled()
+      }
+    )
 
     it.each(['loaded', 'empty'])(
       'does not automatically enrich capture events with %s local definitions',
@@ -1713,7 +1724,7 @@ describe('PostHog Node.js', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
 
@@ -1735,6 +1746,8 @@ describe('PostHog Node.js', () => {
     })
 
     describe('sendFeatureFlags with property overrides', () => {
+      let digestSpy: vi.SpyInstance
+
       beforeEach(() => {
         const mockDecideFlags = {
           'basic-flag': true,
@@ -1834,6 +1847,26 @@ describe('PostHog Node.js', () => {
             },
           })
         )
+        // a slow CI runner answers the definitions request after the tests' fixed waits; delaying it
+        // here makes a test that does not wait for local evaluation fail every time, not now and then
+        const apiImplementationWithoutDelay = mockedFetch.getMockImplementation()!
+        mockedFetch.mockImplementation(async (url: any, opts: any) => {
+          if (String(url).includes('flags/definitions')) {
+            await waitWithRealTimers(50)
+          }
+          return apiImplementationWithoutDelay(url, opts)
+        })
+
+        // Local evaluation uses asynchronous Web Crypto hashing, which can outlast a flush timer tick.
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (...args) => {
+          await waitWithRealTimers(50)
+          return digest(...args)
+        })
+      })
+
+      afterEach(() => {
+        digestSpy.mockRestore()
       })
 
       it('should fallback to remote evaluation when no local evaluation is available and onlyEvaluateLocally is not specified', async () => {
@@ -1863,7 +1896,7 @@ describe('PostHog Node.js', () => {
 
         // Should make remote flags call
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('"plan":"premium"'),
@@ -1898,8 +1931,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -1916,14 +1948,14 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make local evaluation call during initialization
         expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
 
         // Should not make remote flags call
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -1952,8 +1984,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -1974,7 +2005,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2003,8 +2034,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2025,7 +2055,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2049,8 +2079,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2063,7 +2092,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2093,8 +2122,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2112,7 +2140,7 @@ describe('PostHog Node.js', () => {
 
         // Should not make remote flags call
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -2143,8 +2171,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         await posthog.captureImmediate({
           distinctId: 'user123',
@@ -2205,8 +2232,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(false)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2225,7 +2251,7 @@ describe('PostHog Node.js', () => {
 
         // Should make remote flags call since local evaluation has no flags
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('"plan":"premium"'),
@@ -2324,7 +2350,7 @@ describe('PostHog Node.js', () => {
         )
       })
 
-      it('should work with explicit personProperties in sendFeatureFlags options', async () => {
+      it('waits for hashing before flushing explicit personProperties in sendFeatureFlags options', async () => {
         posthog = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           flushAt: 1,
@@ -2333,38 +2359,69 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
-        posthog.capture({
-          distinctId: 'user123',
-          event: 'test event',
-          sendFeatureFlags: {
-            onlyEvaluateLocally: true,
-            personProperties: {
-              plan: 'premium',
-            },
-          },
-          properties: {
-            foo: 'bar',
-          },
+        let releaseHash!: () => void
+        const hashGate = new Promise<void>((resolve) => {
+          releaseHash = resolve
+        })
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        const digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest')
+        const hashStarted = new Promise<void>((resolve) => {
+          digestSpy.mockImplementation(async (...args) => {
+            resolve()
+            await hashGate
+            return digest(...args)
+          })
         })
 
-        await waitForFlushTimer()
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents?.[0]).toEqual(
-          expect.objectContaining({
-            distinct_id: 'user123',
+        try {
+          posthog.capture({
+            distinctId: 'user123',
             event: 'test event',
-            properties: expect.objectContaining({
+            sendFeatureFlags: {
+              onlyEvaluateLocally: true,
+              personProperties: {
+                plan: 'premium',
+              },
+            },
+            properties: {
               foo: 'bar',
-              '$feature/basic-flag': true,
-              '$feature/person-property-flag': true, // Should be true due to explicit personProperties
-              $active_feature_flags: ['basic-flag', 'person-property-flag'],
-            }),
+            },
           })
-        )
+
+          let flushFinished = false
+          const flushing = posthog.flush().then(() => {
+            flushFinished = true
+          })
+          await hashStarted
+          await vi.advanceTimersByTimeAsync(0)
+          expect(flushFinished).toBe(false)
+          expect(mockedFetch).not.toHaveBeenCalledWith(
+            'http://example.com/batch/',
+            expect.objectContaining({ method: 'POST' })
+          )
+
+          releaseHash()
+          await flushing
+
+          const batchEvents = getLastBatchEvents()
+          expect(batchEvents?.[0]).toEqual(
+            expect.objectContaining({
+              distinct_id: 'user123',
+              event: 'test event',
+              properties: expect.objectContaining({
+                foo: 'bar',
+                '$feature/basic-flag': true,
+                '$feature/person-property-flag': true,
+                $active_feature_flags: ['basic-flag', 'person-property-flag'],
+              }),
+            })
+          )
+        } finally {
+          releaseHash()
+          digestSpy.mockRestore()
+        }
       })
 
       it('should work with explicit groupProperties in sendFeatureFlags options', async () => {
@@ -2376,8 +2433,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2396,7 +2452,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2431,8 +2487,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         mockedFetch.mockClear()
 
@@ -2447,11 +2502,11 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should not make any remote calls for flags
         expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -2485,8 +2540,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         mockedFetch.mockClear()
 
@@ -2501,11 +2555,11 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make remote calls for flags
         expect(mockedFetch).toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
+          'http://example.com/flags/?v=4',
           expect.objectContaining({ method: 'POST' })
         )
 
@@ -2531,8 +2585,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2543,7 +2596,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2567,8 +2620,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         await posthog.captureImmediate({
           distinctId: 'user123',
@@ -2608,8 +2660,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        await posthog.reloadFeatureFlags()
 
         posthog.capture({
           distinctId: 'user123',
@@ -2626,7 +2677,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2708,6 +2759,85 @@ describe('PostHog Node.js', () => {
 
         expect(Object.keys(posthog.distinctIdHasSentFlagCalls).length <= 10).toEqual(true)
       }
+    })
+
+    it('evicts only the least recently used distinct ids when the dedupe cache is full', () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize: 3,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureFlagCalled = (distinctId: string): void =>
+        (posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId,
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-2')
+      captureFlagCalled('user-3')
+
+      // Touching user-1 again makes user-2 the least recently used entry.
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-4')
+
+      expect(Object.keys(posthog.distinctIdHasSentFlagCalls).sort()).toEqual(['user-1', 'user-3', 'user-4'])
+    })
+
+    it('keeps deduping retained distinct ids after an eviction', () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize: 2,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+      const captureFlagCalled = (distinctId: string): void =>
+        (posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId,
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-2')
+      captureFlagCalled('user-3') // evicts user-1
+      captureFlagCalled('user-3')
+      captureFlagCalled('user-2')
+
+      // user-1, user-2, user-3 each reported once; the repeats of user-2/user-3 were deduped.
+      expect(captureSpy).toHaveBeenCalledTimes(3)
+    })
+
+    it.each([-1, 0.5])('never evicts the current distinct id when maxCacheSize is %s', (maxCacheSize) => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+
+      for (let i = 0; i < 3; i++) {
+        ;(posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId: 'user-1',
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+      }
+
+      expect(captureSpy).toHaveBeenCalledTimes(1)
     })
 
     it('$feature_flag_called is called appropriately when querying flags', async () => {
@@ -2960,7 +3090,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual(2)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -3001,7 +3131,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual([1])
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
     })
@@ -3021,7 +3151,7 @@ describe('PostHog Node.js', () => {
       ).resolves.toEqual(2)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":true') })
       )
 
@@ -3030,7 +3160,7 @@ describe('PostHog Node.js', () => {
       await expect(posthog.isFeatureEnabled('feature-variant', '123', { disableGeoip: false })).resolves.toEqual(true)
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
     })
@@ -3044,7 +3174,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3074,7 +3204,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3106,7 +3236,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3129,7 +3259,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3148,7 +3278,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3169,7 +3299,7 @@ describe('PostHog Node.js', () => {
       vi.runOnlyPendingTimers()
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           body: JSON.stringify({
             token: 'TEST_API_KEY',
@@ -3230,7 +3360,7 @@ describe('PostHog Node.js', () => {
       // User-Agent falls through to browser signals like `sec-fetch-mode`, which Node's fetch
       // always sends, so the request resolves to the client runtime and loses `server` flags.
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"evaluation_runtime":"server"'),
@@ -3263,7 +3393,7 @@ describe('PostHog Node.js', () => {
       await posthogWithEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),
@@ -3289,7 +3419,7 @@ describe('PostHog Node.js', () => {
       await posthogWithoutEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           method: 'POST',
           body: expect.not.stringContaining('evaluation_contexts'),
@@ -3316,7 +3446,7 @@ describe('PostHog Node.js', () => {
       await posthogWithEmptyEnvs.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           method: 'POST',
           body: expect.not.stringContaining('evaluation_contexts'),
@@ -3343,7 +3473,7 @@ describe('PostHog Node.js', () => {
       await posthogWithDeprecated.getAllFlags('some-distinct-id')
 
       expect(mockedFetch).toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
+        'http://example.com/flags/?v=4',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"evaluation_contexts":["production","backend"]'),

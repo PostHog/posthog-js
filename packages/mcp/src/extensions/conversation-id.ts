@@ -57,10 +57,6 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
     inputSchema.properties = {}
   }
 
-  if (inputSchema.additionalProperties === false) {
-    inputSchema.additionalProperties = undefined
-  }
-
   inputSchema.properties[CONVERSATION_ID_PARAM_NAME] = {
     type: 'string',
     description: DEFAULT_CONVERSATION_ID_DESCRIPTION,

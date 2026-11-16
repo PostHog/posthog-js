@@ -345,7 +345,36 @@ describe('posthog core', () => {
 
             expect(posthog.capture(eventName, {}, {})).toBeUndefined()
             expect(hook).not.toHaveBeenCalled()
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('user agent looks like a bot'))
             navigatorSpy.mockRestore()
+        })
+
+        it('warns once on the console (outside debug mode) when the bot filter drops events', () => {
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue({
+                ...globals.navigator,
+                userAgent:
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+            } as Navigator)
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+
+            posthog.capture(eventName, {}, {})
+            posthog.capture(eventName, {}, {})
+
+            expect(warnSpy).toHaveBeenCalledTimes(1)
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('opt_out_useragent_filter'))
+            warnSpy.mockRestore()
+            navigatorSpy.mockRestore()
+        })
+
+        it('logs why an event is dropped when capturing is disabled', () => {
+            const hook = vi.fn()
+            const posthog = posthogWith({ opt_out_capturing_by_default: true }, defaultOverrides)
+            posthog._addCaptureHook(hook)
+
+            expect(posthog.capture(eventName, {}, {})).toBeUndefined()
+            expect(hook).not.toHaveBeenCalled()
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('capturing is disabled'))
         })
 
         it('respects opt_out_useragent_filter', () => {

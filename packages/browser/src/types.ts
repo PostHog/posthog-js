@@ -148,6 +148,7 @@ export type {
     MetricAttributes,
     MetricType,
     CaptureMetricOptions,
+    HistogramOptions,
     MetricSample,
     BeforeSendMetricFn,
     OtlpMetricsPayload,
@@ -280,6 +281,16 @@ export interface RequestWithOptions {
      * later retry instead of losing them silently.
      */
     fireCallbackOnDrop?: boolean
+    /**
+     * Called each time `_send_request` hands the request to the transport. It is
+     * not called on the paths that drop the request before the network.
+     */
+    onDispatch?: () => void
+    /**
+     * Called by the fetch and XHR transports with the final request URL, just before they send it.
+     * Body encoding can run between `onDispatch` and this call.
+     */
+    onSend?: (url: string) => void
 }
 
 // Queued request types - the same as a request but with additional queueing information

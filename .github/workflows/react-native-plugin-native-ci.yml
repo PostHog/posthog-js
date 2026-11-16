@@ -53,7 +53,7 @@ jobs:
 
       - name: Install JDK
         if: steps.is-affected.outputs.is-affected == 'true'
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -98,7 +98,7 @@ jobs:
     permissions:
       contents: read
     name: Build example for iOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    runs-on: macos-15-xlarge
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -297,7 +297,7 @@ jobs:
     permissions:
       contents: read
     name: Build example for macOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    runs-on: macos-15-xlarge
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

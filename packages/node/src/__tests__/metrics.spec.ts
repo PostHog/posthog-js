@@ -63,6 +63,21 @@ describe('PostHog Node.js metrics', () => {
     expect(metrics['job.duration'].histogram.dataPoints[0].count).toBe(1)
   })
 
+  it('links a sample recorded inside withSpan to that span through an exemplar', async () => {
+    const traced = new PostHog('TEST_API_KEY', { ...options, traces: { serviceName: 'test-service' } })
+    let traceparent: string | null | undefined
+    traced.withSpan('job', () => {
+      traced.metrics.histogram('job.duration', 42, { unit: 'ms' })
+      traceparent = traced.getActiveSpan()?.traceparent()
+    })
+    await traced.metrics.flush()
+
+    const [, traceId, spanId] = traceparent!.split('-')
+    const point = metricsByName(lastMetricsBody())['job.duration'].histogram.dataPoints[0]
+    expect(point.exemplars).toEqual([expect.objectContaining({ traceId, spanId, asDouble: 42 })])
+    await traced.shutdown()
+  })
+
   it('merges the window back and resends on network failure', async () => {
     mockedFetch.mockRejectedValueOnce(new Error('connection refused'))
 

@@ -4,6 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
+import { MCPAnalyticsEventType } from './event-types'
 import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
@@ -32,11 +33,15 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.parameters = sanitizeParameters(result.parameters)
   }
 
-  // Every event type, not just `resources/read`: `$identify` and the `$exception`
-  // sibling carry the same name, and a tool or prompt name is free text an
-  // application can spell as a URL too.
+  // Every event type, not just `resources/read`: the `$exception` sibling
+  // carries the same name, and a tool or prompt name is free text an
+  // application can spell as a URL too. An unknown tool's name is whatever the
+  // agent typed, so it also gets the intent's personal-data redaction.
   if (result.resourceName != null) {
-    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
+    result.resourceName =
+      result.eventType === MCPAnalyticsEventType.mcpUnknownTool
+        ? sanitizeFreeText(result.resourceName)
+        : (sanitizeCapturedValue(result.resourceName) as string)
   }
 
   // The intent comes straight from an agent-narrated `context` string, so it can
@@ -54,6 +59,10 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.llmModel = sanitizeCapturedValue(result.llmModel) as string
   }
 
+  if (result.errorType != null) {
+    result.errorType = sanitizeCapturedValue(result.errorType) as string
+  }
+
   if (result.error != null) {
     result.error = sanitizeExceptionValues(result.error)
   }
@@ -62,8 +71,8 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 }
 
 /**
- * Sanitizes exception messages before they fan out to both the primary MCP
- * event's error-message property and the `$exception` sibling.
+ * Sanitizes exception types, messages and stack frames before they fan out to both the primary MCP
+ * event's error properties and the `$exception` sibling.
  */
 function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
   if (!Array.isArray(error.$exception_list)) {
@@ -74,7 +83,9 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
     ...error,
     $exception_list: error.$exception_list.map((exception) => ({
       ...exception,
+      type: sanitizeCapturedValue(exception.type) as string,
       value: sanitizeCapturedValue(exception.value) as string,
+      stacktrace: sanitizeCapturedValue(exception.stacktrace) as typeof exception.stacktrace,
     })),
   }
 }
@@ -84,42 +95,26 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
  * with informative redaction messages.
  */
 function sanitizeResponse(response: unknown): unknown {
-  if (response == null || typeof response !== 'object') {
-    return sanitizeCapturedValue(response)
+  // Sanitize each kept block on its own, so the pass never scans the data of replaced blocks.
+  if (isRecord(response) && Array.isArray(response.content)) {
+    const result = sanitizeCapturedValue({ ...response, content: [] }) as SanitizedRecord
+    result.content = response.content.map(sanitizeContentBlock)
+    return result
   }
-
-  const sanitized = sanitizeCapturedValue(response)
-  if (!isRecord(sanitized)) {
-    return sanitized
-  }
-
-  const result: SanitizedRecord = { ...sanitized }
-  const content = result.content
-  if (Array.isArray(content)) {
-    result.content = content.map(sanitizeContentBlock)
-  }
-
-  if (result.structuredContent != null && typeof result.structuredContent === 'object') {
-    result.structuredContent = sanitizeCapturedValue(result.structuredContent)
-  }
-
-  return result
+  return sanitizeCapturedValue(response)
 }
 
 /**
  * Sanitizes a single content block based on its type discriminator.
  */
 function sanitizeContentBlock(block: unknown): unknown {
-  if (block == null || typeof block !== 'object') {
-    return block
-  }
-
   if (!isRecord(block)) {
-    return block
+    return sanitizeCapturedValue(block)
   }
 
   switch (block.type) {
     case 'text':
+    case 'resource_link':
       return sanitizeCapturedValue(block)
 
     case 'image':
@@ -137,13 +132,10 @@ function sanitizeContentBlock(block: unknown): unknown {
     case 'resource':
       return sanitizeResourceBlock(block)
 
-    case 'resource_link':
-      return sanitizeCapturedValue(block)
-
     default:
       return {
         type: 'text',
-        text: `[unsupported content type "${block.type}" redacted - not supported by PostHog MCP analytics]`,
+        text: `[unsupported content type "${sanitizeCapturedValue(block.type)}" redacted - not supported by PostHog MCP analytics]`,
       }
   }
 }

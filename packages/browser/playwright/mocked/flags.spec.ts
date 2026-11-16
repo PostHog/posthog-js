@@ -83,6 +83,7 @@ test.describe('flags', () => {
                 $lib: 'web',
                 $lib_version: expect.any(String),
                 $initial__kx: null,
+                $initial_bfcid: null,
                 $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
                 $initial_dclid: null,
                 $initial_epik: null,

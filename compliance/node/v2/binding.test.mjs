@@ -18,8 +18,11 @@ async function spies(run, captureMode = 'v0') {
         captureAi: undefined,
         identify: undefined,
         alias: undefined,
+        groupIdentify: undefined,
+        captureException: undefined,
         flush: undefined,
         getFeatureFlag: undefined,
+        getFeatureFlagPayload: undefined,
         reloadFeatureFlags: undefined,
     }
     for (const name of Object.keys(results)) {
@@ -226,6 +229,142 @@ test('identify and alias preserve exact public arguments, omission, native void 
     }
 })
 
+test('captureException constructs a native fixture and preserves positional arguments and outcomes', async () => {
+    for (const mode of ['v0', 'v1']) {
+        await spies(async (binding, calls, results) => {
+            assert.equal((await binding.invoke('/capture_exception', {})).failure.code, 'before-setup')
+            await setup(binding)
+            const error = { type: 'TypeError', message: 'boom' }
+            const properties = { active: false, score: 0, context: { codes: [1, 2] }, note: null }
+            for (const [args, expected] of [
+                [{ error }, []],
+                [{ error, distinct_id: 'user' }, ['user']],
+                [{ error, distinct_id: 'user', properties }, ['user', properties]],
+                [{ error, properties }, [undefined, properties]],
+                [{ error, distinct_id: null, properties: null }, [null, null]],
+            ]) {
+                const before = structuredClone(args)
+                assert.deepEqual(await binding.invoke('/capture_exception', args), {
+                    kind: 'sdk',
+                    outcome: { kind: 'void' },
+                })
+                const [name, parameters] = calls.at(-1)
+                assert.equal(name, 'captureException')
+                assert.ok(parameters[0] instanceof TypeError)
+                assert.equal(parameters[0].message, 'boom')
+                assert.ok(parameters[0].stack.includes('TypeError: boom'))
+                assert.deepEqual(parameters.slice(1), expected)
+                assert.deepEqual(args, before)
+            }
+            for (const value of [false, 0, null]) {
+                results.captureException = value
+                assert.deepEqual(await binding.invoke('/capture_exception', { error }), {
+                    kind: 'sdk',
+                    outcome: { kind: 'value', value },
+                })
+            }
+            results.captureException = new Error('native capture failure')
+            const thrown = await binding.invoke('/capture_exception', { error })
+            assert.equal(thrown.kind, 'sdk')
+            assert.equal(thrown.outcome.kind, 'thrown')
+            assert.deepEqual(await binding.invoke('/capture_exception', { error }), thrown)
+            assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
+        }, mode)
+    }
+})
+
+test('captureException reports unsupported or unrepresentable fixture arguments without invoking the SDK', async () => {
+    await spies(async (binding, calls) => {
+        await setup(binding)
+        for (const error of [
+            undefined,
+            null,
+            false,
+            {},
+            { type: 'Error', message: 'boom' },
+            { type: 'TypeError', message: 0 },
+        ]) {
+            const completion = await binding.invoke('/capture_exception', { error })
+            assert.equal(completion.kind, 'harness')
+            assert.equal(completion.failure.kind, 'blocked_fixture')
+            assert.equal(completion.failure.code, 'exception-fixture')
+        }
+        for (const args of [
+            { error: { type: 'TypeError', message: 'boom', stack: 'invented' } },
+            { error: { type: 'TypeError', message: 'boom' }, uuid: 'unsupported' },
+        ]) {
+            const completion = await binding.invoke('/capture_exception', args)
+            assert.equal(completion.failure.kind, 'unsupported_binding')
+        }
+        assert.equal(calls.length, 1)
+    })
+})
+
+test('groupIdentify preserves public arguments, omission and native outcomes', async () => {
+    for (const mode of ['v0', 'v1']) {
+        await spies(async (binding, calls, results) => {
+            assert.equal((await binding.invoke('/group_identify', {})).failure.code, 'before-setup')
+            await setup(binding)
+            const properties = {
+                active: false,
+                score: 0,
+                note: null,
+                preferences: { theme: 'dark' },
+                tags: ['beta', 'team'],
+                $group_type: 'literal-type',
+                $group_key: 'literal-key',
+            }
+            const cases = [
+                [
+                    { group_type: 'company', group_key: 'company-123', properties, distinct_id: 'user-123' },
+                    { groupType: 'company', groupKey: 'company-123', properties, distinctId: 'user-123' },
+                ],
+                [
+                    { group_type: 'company', group_key: 'company-123' },
+                    { groupType: 'company', groupKey: 'company-123' },
+                ],
+                [{}, {}],
+            ]
+            for (const value of [false, 0, null, '', {}, []]) {
+                cases.push([
+                    {
+                        group_type: value,
+                        group_key: value,
+                        properties: value,
+                        distinct_id: value,
+                        disable_geoip: value,
+                    },
+                    { groupType: value, groupKey: value, properties: value, distinctId: value, disableGeoip: value },
+                ])
+            }
+            for (const [args, expected] of cases) {
+                const before = structuredClone(args)
+                assert.deepEqual(await binding.invoke('/group_identify', args), {
+                    kind: 'sdk',
+                    outcome: { kind: 'void' },
+                })
+                assert.deepEqual(calls.at(-1), ['groupIdentify', [expected]])
+                assert.deepEqual(args, before)
+            }
+            assert.equal(calls.length, cases.length + 1)
+            for (const value of [false, 0, null]) {
+                results.groupIdentify = value
+                assert.deepEqual(await binding.invoke('/group_identify', {}), {
+                    kind: 'sdk',
+                    outcome: { kind: 'value', value },
+                })
+            }
+            results.groupIdentify = new Error('native groupIdentify failure')
+            const thrown = await binding.invoke('/group_identify', {})
+            assert.equal(thrown.kind, 'sdk')
+            assert.equal(thrown.outcome.kind, 'thrown')
+            assert.equal(thrown.outcome.error.kind, 'exception')
+            assert.deepEqual(await binding.invoke('/group_identify', {}), thrown)
+            assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
+        }, mode)
+    }
+})
+
 test('semantic negatives reach public constructor/capture without coercion', async () => {
     await spies(async (binding, calls) => {
         const result = await binding.invoke('/setup', { project_token: 'test-project', config: null })
@@ -337,6 +476,39 @@ test('flag getter maps options, preserves omission/results, performs no flush', 
         assert.equal(calls.filter(([name]) => name === 'flush').length, 0)
     }))
 
+test('flag payload getter takes the getter arguments and leaves matchValue unset', async () =>
+    spies(async (binding, calls, results) => {
+        await setup(binding)
+        for (const value of [undefined, null, false, 0, 'compact', { columns: 2 }]) {
+            results.getFeatureFlagPayload = Promise.resolve(value)
+            const result = await binding.invoke('/get_feature_flag_payload', {
+                key: 'flag',
+                distinct_id: 'person',
+                person_properties: {},
+                send_event: false,
+            })
+            assert.deepEqual(result, {
+                kind: 'sdk',
+                outcome: value === undefined ? { kind: 'undefined' } : { kind: 'value', value },
+            })
+            assert.deepEqual(calls.at(-1), [
+                'getFeatureFlagPayload',
+                ['flag', 'person', undefined, { personProperties: {}, sendFeatureFlagEvents: false }],
+            ])
+            assert.equal(calls.at(-1)[1].length, 4)
+        }
+        await binding.invoke('/get_feature_flag_payload', { key: 'flag', distinct_id: 'person' })
+        assert.deepEqual(calls.at(-1), ['getFeatureFlagPayload', ['flag', 'person']])
+        await binding.invoke('/get_feature_flag_payload', { key: 'flag' })
+        assert.deepEqual(calls.at(-1), ['getFeatureFlagPayload', ['flag']])
+        assert.equal(
+            (await binding.invoke('/get_feature_flag_payload', { key: 'f', match_value: true })).failure.kind,
+            'unsupported_binding'
+        )
+        assert.equal(calls.filter(([name]) => name === 'getFeatureFlag').length, 0)
+        assert.equal(calls.filter(([name]) => name === 'flush').length, 0)
+    }))
+
 test('void evidence does not discard real values; async native completion is awaited', async () =>
     spies(async (binding, calls, results) => {
         await setup(binding)
@@ -383,6 +555,8 @@ test('unsupported supplied fields remain attributed gaps before native work', as
             ['/identify', { set_once: null }],
             ['/alias', { properties: {} }],
             ['/alias', { set: false }],
+            ['/group_identify', { set: {} }],
+            ['/group_identify', { timestamp: null }],
         ])
             assert.equal((await binding.invoke(route, args)).failure.kind, 'unsupported_binding')
         assert.equal((await setup(binding)).failure.code, 'repeated-setup')

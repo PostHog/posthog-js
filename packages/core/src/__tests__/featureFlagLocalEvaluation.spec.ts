@@ -139,15 +139,27 @@ describe('feature flag local evaluation primitives', () => {
       )
     })
 
-    test('keeps explicit undefined values from matching non-exact operators', () => {
+    test.each([
+      ['exact', 'undefined'],
+      ['is_not', 'undefined'],
+      ['icontains', 'undefined'],
+      ['not_icontains', 'undefined'],
+      ['starts_with', 'undefined'],
+      ['not_starts_with', 'undefined'],
+      ['ends_with', 'undefined'],
+      ['not_ends_with', 'undefined'],
+      ['regex', 'undefined'],
+      ['not_regex', 'undefined'],
+      ['gt', 10],
+      ['is_date_before', '2025-01-01'],
+      ['semver_eq', '1.2.3'],
+    ] as const)('%s is inconclusive for an explicit undefined property value', (operator, target) => {
       const warnFunction = vi.fn()
-      expect(matchFeatureFlagProperty(property('icontains', 'undefined'), { key: undefined }, { warnFunction })).toBe(
-        false
+      expect(() => matchFeatureFlagProperty(property(operator, target), { key: undefined }, { warnFunction })).toThrow(
+        InconclusiveMatchError
       )
-      expect(matchFeatureFlagProperty(property('exact', 'undefined'), { key: undefined }, { warnFunction })).toBe(false)
-      expect(matchFeatureFlagProperty(property('is_not', 'undefined'), { key: undefined }, { warnFunction })).toBe(true)
       expect(warnFunction).toHaveBeenCalledWith(
-        'Property key cannot have a value of undefined with the icontains operator'
+        `Property key cannot have a value of undefined with the ${operator} operator`
       )
     })
 
@@ -193,6 +205,25 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property('exact', 'x'), {})).toThrow(InconclusiveMatchError)
     })
 
+    test.each([
+      ['icontains', 'nul', true],
+      ['icontains', 'x', false],
+      ['not_icontains', 'x', true],
+      ['not_icontains', 'nul', false],
+      ['starts_with', 'x', false],
+      ['not_starts_with', 'x', true],
+      ['ends_with', 'x', false],
+      ['not_ends_with', 'x', true],
+      ['regex', '^nu', true],
+      ['regex', 'Nu', false],
+      ['regex', 'x', false],
+      ['not_regex', 'x', true],
+      ['not_regex', '^nu', false],
+      ['gt', '5', false],
+    ])('matches %s %p against an explicit null as the string "null"', (operator, value, expected) => {
+      expect(matchFeatureFlagProperty(property(operator, value), { key: null })).toBe(expected)
+    })
+
     test('preserves invalid regex and unknown operator behavior', () => {
       expect(matchFeatureFlagProperty(property('regex', '['), { key: 'value' })).toBe(false)
       expect(matchFeatureFlagProperty(property('not_regex', '['), { key: 'value' })).toBe(false)
@@ -210,6 +241,30 @@ describe('feature flag local evaluation primitives', () => {
       ).toBe(true)
     })
 
+    test.each([
+      ['2025-03-31T12:00:00.000Z', '1m', '2025-02-28T12:00:00.000Z'],
+      ['2024-03-31T12:00:00.000Z', '1m', '2024-02-29T12:00:00.000Z'],
+      ['2025-03-31T12:00:00.000Z', '2m', '2025-01-28T12:00:00.000Z'],
+      ['2025-05-31T12:00:00.000Z', '1m', '2025-04-30T12:00:00.000Z'],
+      ['2025-05-31T12:00:00.000Z', '-4m', '2025-01-28T12:00:00.000Z'],
+      ['2025-01-31T12:00:00.000Z', '1m', '2024-12-31T12:00:00.000Z'],
+      ['2025-03-30T12:00:00.000Z', '13m', '2024-02-28T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '1y', '2023-02-28T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '4y', '2020-02-28T12:00:00.000Z'],
+      ['2024-03-31T12:00:00.000Z', '4y', '2020-03-31T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '0m', '2024-02-29T12:00:00.000Z'],
+      ['2024-02-29T12:00:00.000Z', '0y', '2024-02-29T12:00:00.000Z'],
+    ])('at %s, %s clamps the day after every step', (now, value, expected) => {
+      vi.setSystemTime(new Date(now))
+      expect(relativeDateParseForFeatureFlagMatching(value)).toEqual(new Date(expected))
+    })
+
+    test('compares against the clamped date for a month lookback at the end of a month', () => {
+      vi.setSystemTime(new Date('2025-03-31T12:00:00.000Z'))
+      expect(matchFeatureFlagProperty(property('is_date_after', '1m'), { key: '2025-03-01T00:00:00Z' })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_date_after', '1m'), { key: '2025-02-27T00:00:00Z' })).toBe(false)
+    })
+
     test('makes strict and legacy-permissive SemVer parsing an explicit policy', () => {
       expect(() => parseFeatureFlagSemver('01.02.03')).toThrow(InconclusiveMatchError)
       expect(parseFeatureFlagSemver('01.02.03', 'legacy-permissive')).toEqual([1, 2, 3])
@@ -225,6 +280,52 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property('semver_wildcard', '1x.*'), { key: '1.8.0' })).toThrow(
         InconclusiveMatchError
       )
+    })
+  })
+
+  describe('inconclusive match reasons', () => {
+    const reasonFor = (prop: FeatureFlagProperty, propertyValues: Record<string, any>): string | undefined => {
+      try {
+        matchFeatureFlagProperty(prop, propertyValues)
+      } catch (e) {
+        return e instanceof InconclusiveMatchError ? e.reason : undefined
+      }
+      return undefined
+    }
+
+    test('defaults to unsupported_definition', () => {
+      expect(new InconclusiveMatchError('message').reason).toBe('unsupported_definition')
+    })
+
+    test.each([
+      ['a missing property', property('exact', 'x'), {}, 'missing_context'],
+      ['an unknown operator and a missing property', property('unknown', 'x'), {}, 'unsupported_definition'],
+      ['an invalid semver filter and a missing property', property('semver_gt', 'x.y'), {}, 'unsupported_definition'],
+      ['an unknown operator', property('unknown', 'x'), { key: 'x' }, 'unsupported_definition'],
+      ['a boolean date filter', property('is_date_after', true), { key: '2025-01-01' }, 'unsupported_definition'],
+      [
+        'an invalid date filter',
+        property('is_date_after', 'not-a-date'),
+        { key: '2025-01-01' },
+        'unsupported_definition',
+      ],
+      ['an invalid context date', property('is_date_after', '2025-01-01'), { key: 'not-a-date' }, 'missing_context'],
+      ['an invalid semver filter', property('semver_gt', 'x.y'), { key: '1.2.3' }, 'unsupported_definition'],
+      ['an invalid wildcard filter', property('semver_wildcard', '1x.*'), { key: '1.8.0' }, 'unsupported_definition'],
+      ['an invalid context semver', property('semver_gt', '1.2.3'), { key: 'x.y' }, 'missing_context'],
+      ['an invalid semver filter and context', property('semver_gt', 'x.y'), { key: 'a.b' }, 'unsupported_definition'],
+      [
+        'an invalid wildcard filter and context',
+        property('semver_wildcard', '1x.*'),
+        { key: 'a.b' },
+        'unsupported_definition',
+      ],
+      ['an ambiguous context number', property('exact', '323'), { key: 323 }, 'missing_context'],
+      ['an ambiguous filter number', property('exact', [323]), { key: 'x' }, 'unsupported_definition'],
+      ['an ambiguous filter and context number', property('exact', [323]), { key: 323 }, 'unsupported_definition'],
+      ['a non-JSON context value', property('exact', true), { key: new Date(0) }, 'missing_context'],
+    ])('reports %s', (_, prop, propertyValues, reason) => {
+      expect(reasonFor(prop, propertyValues)).toBe(reason)
     })
   })
 

@@ -46,8 +46,8 @@ const WINDOWS_PHONE = WINDOWS + ' Phone'
 const NOKIA = 'Nokia'
 const OUYA = 'Ouya'
 const GENERIC = 'Generic'
-const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
-const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
+const GENERIC_MOBILE = GENERIC + ' mobile'
+const GENERIC_TABLET = GENERIC + ' tablet'
 const KONQUEROR = 'Konqueror'
 const OCULUS_BROWSER = 'Oculus Browser'
 const VIVALDI = 'Vivaldi'
@@ -63,8 +63,8 @@ const CHATGPT = 'ChatGPT'
 const GOOGLE_SEARCH_APP = 'Google Search App'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
-const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
-const AI_APP_VERSION_REGEX = new RegExp(
+const DEFAULT_BROWSER_VERSION_REGEX = /* @__PURE__ */ new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
+const AI_APP_VERSION_REGEX = /* @__PURE__ */ new RegExp(
   '(' + CLAUDE + '|' + CODEX + '|' + CHATGPT + ')\\/' + BROWSER_VERSION_REGEX_SUFFIX
 )
 
@@ -99,10 +99,10 @@ export interface BrowserDetectionOptions {
   detectGoogleSearchApp?: boolean
 }
 
-const XBOX_REGEX = new RegExp(XBOX, 'i')
-const PLAYSTATION_REGEX = new RegExp(PLAYSTATION + ' \\w+', 'i')
-const NINTENDO_REGEX = new RegExp(NINTENDO + ' \\w+', 'i')
-const BLACKBERRY_REGEX = new RegExp(BLACKBERRY + '|PlayBook|BB10', 'i')
+const XBOX_REGEX = /* @__PURE__ */ new RegExp(XBOX, 'i')
+const PLAYSTATION_REGEX = /* @__PURE__ */ new RegExp(PLAYSTATION + ' \\w+', 'i')
+const NINTENDO_REGEX = /* @__PURE__ */ new RegExp(NINTENDO + ' \\w+', 'i')
+const BLACKBERRY_REGEX = /* @__PURE__ */ new RegExp(BLACKBERRY + '|PlayBook|BB10', 'i')
 
 const windowsVersionMap: Record<string, string> = {
   'NT3.51': 'NT 3.11',
@@ -247,39 +247,42 @@ export const detectBrowser = function (
 }
 
 const versionRegexes: Record<string, RegExp[]> = {
-  [INTERNET_EXPLORER_MOBILE]: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [MICROSOFT_EDGE]: [new RegExp(EDGE + '?\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [CHROME]: [new RegExp('(' + CHROME + '|CrMo)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [CHROME_IOS]: [new RegExp('CriOS\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  'UC Browser': [new RegExp('(UCBrowser|UCWEB)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [INTERNET_EXPLORER_MOBILE]: [/* @__PURE__ */ new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [MICROSOFT_EDGE]: [/* @__PURE__ */ new RegExp(EDGE + '?\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CHROME]: [/* @__PURE__ */ new RegExp('(' + CHROME + '|CrMo)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CHROME_IOS]: [/* @__PURE__ */ new RegExp('CriOS\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  'UC Browser': [/* @__PURE__ */ new RegExp('(UCBrowser|UCWEB)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [SAFARI]: [DEFAULT_BROWSER_VERSION_REGEX],
   [MOBILE_SAFARI]: [DEFAULT_BROWSER_VERSION_REGEX],
-  [OPERA]: [new RegExp('(' + OPERA + '|OPR)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [FIREFOX]: [new RegExp(FIREFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [FIREFOX_IOS]: [new RegExp('FxiOS\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [KONQUEROR]: [new RegExp('Konqueror[:/]?' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
+  [OPERA]: [/* @__PURE__ */ new RegExp('(' + OPERA + '|OPR)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [FIREFOX]: [/* @__PURE__ */ new RegExp(FIREFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [FIREFOX_IOS]: [/* @__PURE__ */ new RegExp('FxiOS\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [KONQUEROR]: [/* @__PURE__ */ new RegExp('Konqueror[:/]?' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
   // not every blackberry user agent has the version after the name
-  [BLACKBERRY]: [new RegExp(BLACKBERRY + ' ' + BROWSER_VERSION_REGEX_SUFFIX), DEFAULT_BROWSER_VERSION_REGEX],
-  [ANDROID_MOBILE]: [new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
-  [SAMSUNG_INTERNET]: [new RegExp(SAMSUNG_BROWSER + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [OCULUS_BROWSER]: [new RegExp('OculusBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [VIVALDI]: [new RegExp(VIVALDI + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [YANDEX]: [new RegExp('YaBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [WHALE]: [new RegExp(WHALE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [BLACKBERRY]: [
+    /* @__PURE__ */ new RegExp(BLACKBERRY + ' ' + BROWSER_VERSION_REGEX_SUFFIX),
+    DEFAULT_BROWSER_VERSION_REGEX,
+  ],
+  [ANDROID_MOBILE]: [/* @__PURE__ */ new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
+  [SAMSUNG_INTERNET]: [/* @__PURE__ */ new RegExp(SAMSUNG_BROWSER + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [OCULUS_BROWSER]: [/* @__PURE__ */ new RegExp('OculusBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [VIVALDI]: [/* @__PURE__ */ new RegExp(VIVALDI + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [YANDEX]: [/* @__PURE__ */ new RegExp('YaBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [WHALE]: [/* @__PURE__ */ new RegExp(WHALE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   // Brave on iOS exposes itself as `Brave/X.X` in the UA. Desktop / Android
   // Brave don't, which is why hint-based Brave detection returns a null
   // version: we have no UA marker to parse.
-  [BRAVE]: [new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [BRAVE]: [/* @__PURE__ */ new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [CLAUDE]: [AI_APP_VERSION_REGEX],
   [CODEX]: [AI_APP_VERSION_REGEX],
   [CHATGPT]: [AI_APP_VERSION_REGEX],
   // DuckDuckGo on iOS uses `Ddg/`, on Android/desktop preview it uses `DuckDuckGo/`.
-  [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [WATERFOX]: [new RegExp(WATERFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [GOOGLE_SEARCH_APP]: [new RegExp('GSA\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [INTERNET_EXPLORER]: [new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
-  Mozilla: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [DUCKDUCKGO]: [/* @__PURE__ */ new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [PALE_MOON]: [/* @__PURE__ */ new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [WATERFOX]: [/* @__PURE__ */ new RegExp(WATERFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [GOOGLE_SEARCH_APP]: [/* @__PURE__ */ new RegExp('GSA\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [INTERNET_EXPLORER]: [/* @__PURE__ */ new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
+  Mozilla: [/* @__PURE__ */ new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
 }
 
 /**
@@ -323,16 +326,16 @@ const osMatchers: [
   [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string]),
 ][] = [
   [
-    new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
+    /* @__PURE__ */ new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
     (match) => {
       return [XBOX, (match && match[1]) || '']
     },
   ],
-  [new RegExp(NINTENDO, 'i'), [NINTENDO, '']],
-  [new RegExp(PLAYSTATION, 'i'), [PLAYSTATION, '']],
+  [/* @__PURE__ */ new RegExp(NINTENDO, 'i'), [NINTENDO, '']],
+  [/* @__PURE__ */ new RegExp(PLAYSTATION, 'i'), [PLAYSTATION, '']],
   [BLACKBERRY_REGEX, [BLACKBERRY, '']],
   [
-    new RegExp(WINDOWS, 'i'),
+    /* @__PURE__ */ new RegExp(WINDOWS, 'i'),
     (_, user_agent) => {
       if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
         return [WINDOWS_PHONE, '']
@@ -375,7 +378,7 @@ const osMatchers: [
     },
   ],
   [
-    new RegExp('(' + ANDROID + ' (\\d+)\\.(\\d+)\\.?(\\d+)?|' + ANDROID + ')', 'i'),
+    /* @__PURE__ */ new RegExp('(' + ANDROID + ' (\\d+)\\.(\\d+)\\.?(\\d+)?|' + ANDROID + ')', 'i'),
     (match) => {
       if (match && match[2]) {
         const versionParts = [match[2], match[3], match[4] || '0']

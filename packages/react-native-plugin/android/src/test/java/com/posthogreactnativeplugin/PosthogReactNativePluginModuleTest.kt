@@ -11,6 +11,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Date
 
 class PosthogReactNativePluginModuleTest {
 
@@ -70,7 +71,7 @@ class PosthogReactNativePluginModuleTest {
 
       applyScreenshotConfig(map, config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(30, config.screenshotCompressionQuality)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
@@ -78,7 +79,7 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `screenshot scale is independent and uses native clamping without float overflow`() {
-    val cases = listOf(0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
+    val cases = listOf(1.0 to 1f, 0.5 to 0.5f, 0.0 to 0.1f, -Double.MAX_VALUE to 0.1f, Double.MAX_VALUE to 1f)
     for ((value, expected) in cases) {
       val config = PostHogSessionReplayConfig()
 
@@ -91,13 +92,13 @@ class PosthogReactNativePluginModuleTest {
   }
 
   @Test
-  fun `non-finite screenshot scale uses full resolution`() {
+  fun `non-finite screenshot scale preserves the native default`() {
     for (value in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
       val config = PostHogSessionReplayConfig()
 
       applyScreenshotConfig(JavaOnlyMap.of("screenshotScale", value), config)
 
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
     }
   }
 
@@ -110,7 +111,7 @@ class PosthogReactNativePluginModuleTest {
       applyScreenshotConfig(JavaOnlyMap.of("screenshotCompressionQuality", value), config)
 
       assertEquals(expected, config.screenshotCompressionQuality)
-      assertEquals(1f, config.screenshotScale)
+      assertNull(config.screenshotScale)
       assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
     }
   }
@@ -160,6 +161,23 @@ class PosthogReactNativePluginModuleTest {
     for (value in listOf("", "not-a-date", "2026-09-22", "2026-09-22T10:11:12Z", "2026-13-45T99:99:99.999Z")) {
       assertNull("expected $value to be rejected", parseIso8601(value))
     }
+  }
+
+  @Test
+  fun `a JS timestamp keeps its age when moved onto the SDK clock`() {
+    val crashedAt = Date(1_000_000L)
+
+    // The device clock reads 2 s after the crash; network time is 90 s behind the device clock.
+    val moved = toSdkClock(crashedAt, deviceNowMs = 1_002_000L, sdkNowMs = 912_000L)
+
+    assertEquals(910_000L, moved.time)
+  }
+
+  @Test
+  fun `a JS timestamp is unchanged when both clocks agree`() {
+    val crashedAt = Date(1_000_000L)
+
+    assertEquals(crashedAt.time, toSdkClock(crashedAt, deviceNowMs = 1_000_500L, sdkNowMs = 1_000_500L).time)
   }
 
   private fun nativeExceptionEvent(name: String = "\$exception") =
@@ -224,5 +242,86 @@ class PosthogReactNativePluginModuleTest {
       assertEquals(false, event.properties!!["\$process_person_profile"])
       assertEquals(false, event.properties!!["\$is_identified"])
     }
+  }
+
+  private fun javascriptCrashEvent(message: String = "Error: boom, stack:\nfoo@1:2") =
+    PostHogEvent(
+      "\$exception",
+      "distinct-id",
+      properties =
+        mutableMapOf(
+          "\$exception_list" to
+            listOf(
+              mapOf("type" to "JavascriptException", "module" to "com.facebook.react.common", "value" to message),
+            ),
+        ),
+    )
+
+  @Test
+  fun `native JavascriptException is kept when the JS layer did not see the crash`() {
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `native JavascriptException is dropped once after the JS layer saw the crash`() {
+    markJsFatalHandled("Error: boom")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `a marked fatal that never crashed does not hide a later different crash`() {
+    markJsFatalHandled("Error: recovered")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: recovered, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a recovered fatal without a message does not hide a later render crash`() {
+    markJsFatalHandled("Error: ")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
+  }
+
+  @Test
+  fun `a fatal without a message is dropped as a duplicate`() {
+    markJsFatalHandled("Error: ")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: , js engine: hermes, stack:\nfoo@1:2")))
+
+    markJsFatalHandled("")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(", js engine: hermes, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a short marker does not match a report whose message only starts with it`() {
+    markJsFatalHandled("1")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("10 apples, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a truncated marker matches the start of a longer message`() {
+    val message = "Error: " + "x".repeat(73)
+    markJsFatalHandled(message)
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(message + "yz, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `the first of two fatals marked before the crash is dropped`() {
+    markJsFatalHandled("Error: first")
+    markJsFatalHandled("Error: second")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: first, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `the JS crash marker is not consumed by other exceptions`() {
+    markJsFatalHandled("Error: boom")
+
+    assertNotNull(dropJsHandledFatalCrash(nativeExceptionEvent()))
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
   }
 }

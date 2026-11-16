@@ -16,6 +16,7 @@ interface MockAnthropicResponseOptions {
   usage?: {
     input_tokens: number
     output_tokens: number
+    output_tokens_details?: { thinking_tokens: number } | null
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
     cache_creation?: {
@@ -223,7 +224,10 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         stop_reason: options.stopReason || 'end_turn',
         type: 'stop_reason',
       },
-      usage: { output_tokens: options.usage?.output_tokens || 10 },
+      usage: {
+        output_tokens: options.usage?.output_tokens || 10,
+        ...(options.usage?.output_tokens_details ? { output_tokens_details: options.usage.output_tokens_details } : {}),
+      },
     },
     { type: 'message_stop' }
   )
@@ -679,6 +683,7 @@ describe('PostHogAnthropic', () => {
         {
           role: 'assistant',
           content: [
+            { type: 'reasoning', text: 'Use the tool.' },
             { type: 'text', text: 'Checking.' },
             {
               type: 'function',
@@ -688,6 +693,84 @@ describe('PostHogAnthropic', () => {
           ],
         },
       ])
+    })
+
+    it('should capture streamed thinking as reasoning and time the first token from it', async () => {
+      const chunks: MockStreamChunk[] = [
+        {
+          type: 'message_start',
+          message: { id: 'msg_test_123', type: 'message', role: 'assistant', usage: { input_tokens: 20 } as any },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'The user ' } as any },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'wants a greeting.' } as any,
+        },
+        { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } as any },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: { type: 'redacted_thinking', data: 'enc' } as any },
+        { type: 'content_block_stop', index: 1 },
+        // display: 'omitted' streams only a signature
+        { type: 'content_block_start', index: 2, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 2, delta: { type: 'signature_delta', signature: 'sig' } as any },
+        { type: 'content_block_stop', index: 2 },
+        { type: 'content_block_start', index: 3, content_block: { type: 'text', text: '' } as any },
+        { type: 'content_block_delta', index: 3, delta: { type: 'text_delta', text: 'Hello!' } },
+        { type: 'content_block_stop', index: 3 },
+        {
+          type: 'message_delta',
+          delta: { type: 'stop_reason', stop_reason: 'end_turn' },
+          usage: { output_tokens: 10 },
+        },
+        { type: 'message_stop' },
+      ]
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        ;(AnthropicOriginal.Messages.prototype.create as unknown as vi.Mock).mockImplementation(() =>
+          Promise.resolve({
+            async *[Symbol.asyncIterator]() {
+              for (const chunk of chunks) {
+                // The answer starts 5s after thinking does
+                if (chunk.type === 'content_block_start' && chunk.index === 3) {
+                  vi.setSystemTime(Date.now() + 5000)
+                }
+                yield chunk
+              }
+            },
+          })
+        )
+
+        const stream = await client.messages.create({
+          model: 'claude-sonnet-4-5',
+          messages: [{ role: 'user', content: 'Say hello' }],
+          max_tokens: 2048,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+          stream: true,
+          posthogDistinctId: 'test-user-123',
+        })
+
+        for await (const _chunk of stream) {
+          // Consume the stream so the monitoring branch sees every block.
+        }
+        await waitForAsyncCapture()
+      } finally {
+        vi.useRealTimers()
+      }
+
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_output_choices']).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants a greeting.' },
+            { type: 'text', text: 'Hello!' },
+          ],
+        },
+      ])
+      expect(properties['$ai_time_to_first_token']).toBeLessThan(5)
     })
   })
 
@@ -850,6 +933,64 @@ describe('PostHogAnthropic', () => {
       })
     })
 
+    it('should track thinking tokens as reasoning tokens', async () => {
+      mockResponse = createMockResponse({
+        content: 'Response',
+        usage: { input_tokens: 20, output_tokens: 600, output_tokens_details: { thinking_tokens: 512 } },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 1000,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(600)
+      expect(captureArgs[0].properties['$ai_reasoning_tokens']).toBe(512)
+    })
+
+    it('should track thinking tokens in streaming mode', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Streaming response',
+        usage: { input_tokens: 20, output_tokens: 600, output_tokens_details: { thinking_tokens: 512 } },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 1000,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+      for await (const _chunk of stream) {
+        // consume
+      }
+      await waitForAsyncCapture()
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(600)
+      expect(captureArgs[0].properties['$ai_reasoning_tokens']).toBe(512)
+    })
+
+    it('should omit reasoning tokens when output_tokens_details is null', async () => {
+      mockResponse = createMockResponse({
+        content: 'Response',
+        usage: { input_tokens: 20, output_tokens: 30, output_tokens_details: null },
+      })
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const [captureArgs] = (mockPostHogClient.capture as any).mock.calls
+      expect(captureArgs[0].properties).not.toHaveProperty('$ai_reasoning_tokens')
+    })
+
     conditionalTest('should track cache tokens', async () => {
       mockResponse = createMockResponse({
         content: 'Response',
@@ -993,6 +1134,30 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Error Handling', () => {
+    test('streaming requests capture an error event when the request fails before the stream opens', async () => {
+      const apiError = new Error('Invalid API key') as Error & { status: number }
+      apiError.status = 401
+
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(apiError)
+
+      await expect(
+        client.messages.create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          stream: true,
+          posthogDistinctId: 'test-user-123',
+        })
+      ).rejects.toBe(apiError)
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      expect(captureMock).toHaveBeenCalledTimes(1)
+      const { properties } = captureMock.mock.calls[0][0]
+      expect(properties['$ai_http_status']).toBe(401)
+      expect(properties['$ai_is_error']).toBe(true)
+    })
+
     conditionalTest('should handle API errors', async () => {
       const apiError = new Error('API Error') as Error & { status: number }
       apiError.status = 429
@@ -1461,5 +1626,76 @@ describe('PostHogAnthropic - streaming error safety', () => {
 
     // The detached analytics consumer must not crash the host process
     expect(unhandledRejections).toEqual([])
+  })
+})
+
+describe('PostHogAnthropic - streaming usage', () => {
+  let usageMockPostHogClient: PostHog
+  let usageClient: PostHogAnthropic
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    usageMockPostHogClient = new (PostHog as any)()
+    usageClient = new PostHogAnthropic({
+      apiKey: 'test-api-key',
+      posthog: usageMockPostHogClient as any,
+    })
+  })
+
+  const captureStreamUsage = async (deltaUsage: Record<string, number>): Promise<Record<string, unknown>> => {
+    const events = [
+      {
+        type: 'message_start',
+        message: {
+          usage: { input_tokens: 50, cache_creation_input_tokens: 10, cache_read_input_tokens: 20, output_tokens: 1 },
+        },
+      },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: deltaUsage },
+      { type: 'message_stop' },
+    ]
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        yield* events
+      },
+    })
+
+    const stream = await usageClient.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+      posthogDistinctId: 'anthropic-usage-user',
+    } as any)
+    for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
+      // consume
+    }
+    await new Promise(process.nextTick)
+
+    expect(usageMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    return (usageMockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+  }
+
+  test('uses the cumulative input and cache tokens from message_delta when they grow (server tools)', async () => {
+    const properties = await captureStreamUsage({
+      input_tokens: 120,
+      cache_creation_input_tokens: 30,
+      cache_read_input_tokens: 70,
+      output_tokens: 25,
+    })
+
+    expect(properties['$ai_input_tokens']).toBe(120)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(30)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(70)
+    expect(properties['$ai_output_tokens']).toBe(25)
+  })
+
+  test('keeps the message_start input and cache tokens when message_delta omits them or reports less', async () => {
+    const properties = await captureStreamUsage({ input_tokens: 5, output_tokens: 25 })
+
+    expect(properties['$ai_input_tokens']).toBe(50)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(10)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(25)
   })
 })

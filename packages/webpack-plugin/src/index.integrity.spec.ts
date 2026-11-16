@@ -52,7 +52,8 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         deleteAfterUpload: boolean,
         releaseMode: 'event' | 'symbol-set',
         extra: webpack.Configuration = {},
-        runs = 1
+        runs = 1,
+        failOnError?: boolean
     ) {
         await fs.writeFile(
             path.join(directory, 'entry.js'),
@@ -90,7 +91,7 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
                     personalApiKey: 'dummy',
                     projectId: '1',
                     cliBinaryPath: 'mock-cli',
-                    sourcemaps: { deleteAfterUpload, releaseMode },
+                    sourcemaps: { deleteAfterUpload, releaseMode, failOnError },
                 }),
                 {
                     apply(compiler) {
@@ -293,46 +294,95 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         expect(uploads[0].map.chunk_id).toBe(uploads[1].map.chunk_id)
     })
 
-    it('retains maps and skips upload when release resolution fails, then recovers on rebuild', async () => {
+    it('deletes maps and skips upload when release resolution fails, then recovers on rebuild', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.mocked(resolveReleaseId).mockRejectedValueOnce(new Error('release unavailable'))
-        await build(true, 'event', {}, 2)
+        await build(true, 'event', {}, 2, false)
         expect(error).toHaveBeenCalled()
         expect(uploads).toHaveLength(1)
         expect(uploads[0].map.chunk_id).toBeTruthy()
-        // The failed compilation's map remains; only the successful rebuild's map is deleted.
+        // deleteAfterUpload removes the failed compilation's maps too, so none ship.
         const files = await fs.readdir(path.join(directory, 'dist'))
-        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(1)
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
         error.mockRestore()
     })
 
-    it('retains all maps and emitted integrity on a mid-injection failure', async () => {
+    it.each([
+        ['release resolution', 'event', () => vi.mocked(resolveReleaseId).mockRejectedValueOnce(new Error('bad key'))],
+        ['upload', 'symbol-set', () => vi.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('bad key'))],
+    ] as const)('fails the build by default when %s fails, after deleting maps', async (_, releaseMode, fail) => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        fail()
+        await expect(build(true, releaseMode)).rejects.toThrow(
+            'PostHog sourcemap processing failed (set sourcemaps.failOnError to false to continue the build): bad key'
+        )
+        const files = await fs.readdir(path.join(directory, 'dist'))
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
+        error.mockRestore()
+    })
+
+    it('keeps watch builds running when the upload fails', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('bad key'))
+        await fs.writeFile(path.join(directory, 'entry.js'), 'module.exports = 1\n')
+        const compiler = webpack({
+            mode: 'production',
+            context: directory,
+            entry: './entry.js',
+            output: { path: path.join(directory, 'dist') },
+            plugins: [
+                new PosthogWebpackPlugin({
+                    personalApiKey: 'dummy',
+                    projectId: '1',
+                    cliBinaryPath: 'mock-cli',
+                    sourcemaps: { releaseMode: 'symbol-set' },
+                }),
+            ],
+        })!
+        const buildError = await new Promise((resolve) => {
+            const watching = compiler.watch({}, (err) => watching.close(() => resolve(err)))
+        })
+        expect(runSourcemapCli).toHaveBeenCalled()
+        expect(buildError).toBeNull()
+        error.mockRestore()
+    })
+
+    it('deletes all maps and preserves emitted integrity on a mid-injection failure', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         let originalCode: string | undefined
-        const hashes = await build(true, 'symbol-set', {
-            plugins: [
-                {
-                    apply(compiler) {
-                        compiler.hooks.compilation.tap('BrokenMap', (compilation) => {
-                            compilation.hooks.processAssets.tap(
-                                { name: 'BrokenMap', stage: webpack.Compilation.PROCESS_ASSETS_STAGE_DEV_TOOLING },
-                                () => {
-                                    const chunk = [...compilation.chunks][0]
-                                    originalCode = 'module.exports = 42;'
-                                    compilation.emitAsset('broken.js', new webpack.sources.RawSource(originalCode))
-                                    compilation.emitAsset('broken.js.map', new webpack.sources.RawSource('invalid map'))
-                                    chunk.files.add('broken.js')
-                                }
-                            )
-                        })
+        const hashes = await build(
+            true,
+            'symbol-set',
+            {
+                plugins: [
+                    {
+                        apply(compiler) {
+                            compiler.hooks.compilation.tap('BrokenMap', (compilation) => {
+                                compilation.hooks.processAssets.tap(
+                                    { name: 'BrokenMap', stage: webpack.Compilation.PROCESS_ASSETS_STAGE_DEV_TOOLING },
+                                    () => {
+                                        const chunk = [...compilation.chunks][0]
+                                        originalCode = 'module.exports = 42;'
+                                        compilation.emitAsset('broken.js', new webpack.sources.RawSource(originalCode))
+                                        compilation.emitAsset(
+                                            'broken.js.map',
+                                            new webpack.sources.RawSource('invalid map')
+                                        )
+                                        chunk.files.add('broken.js')
+                                    }
+                                )
+                            })
+                        },
                     },
-                },
-            ],
-        })
+                ],
+            },
+            1,
+            false
+        )
         expect(error).toHaveBeenCalled()
         expect(uploads).toHaveLength(0)
         const files = await fs.readdir(path.join(directory, 'dist'))
-        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(2)
+        expect(files.filter((f) => f.endsWith('.map'))).toHaveLength(0)
         for (const file of files.filter((f) => f.endsWith('.js'))) {
             const code = await fs.readFile(path.join(directory, 'dist', file), 'utf8')
             expect(hash(code)).toBe(hashes.get(file))

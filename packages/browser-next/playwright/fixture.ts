@@ -1,6 +1,16 @@
-import { flags } from '../src/flags'
-import { analytics } from '../src/analytics'
-import { createPostHog, FeatureFlagsExtension, type CaptureSummary, type SessionContext } from '../src/core'
+import { acquisitionHarness } from './acquisition-fixture'
+window.acquisitionHarness = acquisitionHarness
+import { requireInstalledExtension } from '../tests/helpers'
+import { autocaptureHarness } from './autocapture-fixture'
+window.autocaptureHarness = autocaptureHarness
+
+import { surveysHarness } from './surveys-fixture'
+window.surveysHarness = surveysHarness
+import { logs } from '../src/products/logs/logs'
+import type { IPostHog } from '../src/core/types'
+import { flags } from '../src/products/flags/flags'
+import { analytics } from '../src/products/analytics/analytics'
+import { createPostHog, type CaptureSummary, type SessionContext } from '../src/composition/npm/core'
 
 interface ConsentHarness {
     updateFlags(values: Record<string, boolean | string>): Promise<void>
@@ -25,13 +35,27 @@ interface ConsentHarness {
     prepareTeardown(events: string[], projectToken: string): Promise<void>
     requests(): number
     remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
+    registerForSession(properties: Record<string, unknown>): Promise<void>
+    unregisterForSession(property: string): Promise<void>
+    delivered(): string | undefined
     reset(): Promise<void>
-    session(): Promise<SessionContext>
+    session(): Promise<SessionContext | undefined>
     sessionChanges(): readonly string[]
 }
 
 declare global {
     interface Window {
+        logsHarness: {
+            initialize(remote: boolean): Promise<void>
+            capture(body: string): void
+            console(body: string): void
+            flush(): Promise<void>
+            optOut(): void
+            optIn(): void
+            shutdown(): Promise<void>
+            restored(): boolean
+            pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number }>
+        }
         consentHarness: ConsentHarness
     }
 }
@@ -90,17 +114,17 @@ const client = createPostHog({
 void client.then((posthog) => posthog.onNewSession(({ reason }) => sessionChanges.push(reason)))
 
 void client.then((posthog) =>
-    posthog.getExtension(FeatureFlagsExtension)!.onFeatureFlags(() => {
+    requireInstalledExtension(posthog.featureFlags).onFeatureFlags(() => {
         flagChanges++
     })
 )
 
 window.consentHarness = {
     async updateFlags(values) {
-        ;(await client).getExtension(FeatureFlagsExtension)!.updateFlags(values)
+        requireInstalledExtension((await client).featureFlags).updateFlags(values)
     },
     async flagValue(key) {
-        const value = (await client).getExtension(FeatureFlagsExtension)!.getFeatureFlag(key)
+        const value = requireInstalledExtension((await client).featureFlags).getFeatureFlag(key)
         return value?.variant ?? value?.enabled
     },
     flagChanges: () => flagChanges,
@@ -108,16 +132,16 @@ window.consentHarness = {
         return (await client).anonymousId
     },
     async capture(event) {
-        ;(await client).capture(event)
+        requireInstalledExtension((await client).analytics).capture(event)
     },
     async captureImmediate(event) {
-        return (await client).captureImmediate(event)
+        return requireInstalledExtension((await client).analytics).captureImmediate(event)
     },
     async compressionDelivery(value) {
         const posthog = await client
         lastDelivery = undefined
         const started = performance.now()
-        await posthog.capture('compression_test', { value })
+        await requireInstalledExtension(posthog.analytics).capture('compression_test', { value })
         await posthog.flush()
         const delivery = currentDelivery()
         if (!delivery) {
@@ -156,7 +180,7 @@ window.consentHarness = {
             ],
         })
         for (const event of events) {
-            await posthog.capture(event)
+            await requireInstalledExtension(posthog.analytics).capture(event)
         }
     },
     requests() {
@@ -176,13 +200,102 @@ window.consentHarness = {
         await posthog.dispose()
         return { config, canCapture }
     },
+    async registerForSession(properties) {
+        requireInstalledExtension((await client).analytics).registerForSession(properties)
+    },
+    async unregisterForSession(property) {
+        requireInstalledExtension((await client).analytics).unregisterForSession(property)
+    },
+    delivered: () => lastDelivery?.body,
     async reset() {
-        ;(await client).reset()
+        requireInstalledExtension((await client).analytics).reset()
     },
     async session() {
         return (await client).session
     },
     sessionChanges() {
         return sessionChanges.slice()
+    },
+}
+
+/* oxlint-disable no-console -- Exercise native console instrumentation. */
+let logsClient: IPostHog | undefined
+let logger: ReturnType<typeof logs> | undefined
+const originalLog = console.log
+window.logsHarness = {
+    async initialize(remote) {
+        logger = logs({ captureConsoleLogs: !remote, flushIntervalMs: 60_000 })
+        logsClient = await createPostHog({
+            projectToken: 'ph_browser_logs',
+            apiHost: window.location.origin,
+            capturePageview: false,
+            navigator: false,
+            extensions: [logger],
+            remoteConfig: {
+                supportedCompression: [],
+                toolbarParams: {},
+                toolbarVersion: 'toolbar',
+                isAuthenticated: false,
+                siteApps: [],
+                logs: { captureConsoleLogs: remote },
+            },
+        })
+    },
+    capture(body) {
+        logger?.captureLog({ body })
+    },
+    console(body) {
+        console.log(body)
+    },
+    async flush() {
+        await logger?.flush()
+    },
+    optOut() {
+        logsClient?.optOut()
+    },
+    optIn() {
+        logsClient?.optIn()
+    },
+    async shutdown() {
+        await logsClient?.shutdown()
+    },
+    restored() {
+        return console.log === originalLog
+    },
+    async pagehideDuringShutdown() {
+        let beacon: Blob | undefined
+        let fetches = 0
+        const logger = logs({ flushIntervalMs: 0 })
+        const client = await createPostHog({
+            projectToken: 'ph_browser_logs_shutdown',
+            storage: false,
+            capturePageview: false,
+            disableBotDetection: true,
+            navigator: {
+                sendBeacon: (_url, body) => {
+                    beacon = body as Blob
+                    return true
+                },
+            },
+            fetch: () => {
+                fetches++
+                return new Promise<Response>(() => {})
+            },
+            extensions: [logger],
+            remoteConfig: {
+                supportedCompression: [],
+                toolbarParams: {},
+                toolbarVersion: 'toolbar',
+                isAuthenticated: false,
+                siteApps: [],
+            },
+        })
+        logger.captureLog({ body: 'pending navigation' })
+        void logger.flush()
+        const closing = client.shutdown(10)
+        window.dispatchEvent(new Event('pagehide'))
+        const body = await beacon?.text()
+        await closing
+        return { beacon: body ?? '', fetches }
     },
 }

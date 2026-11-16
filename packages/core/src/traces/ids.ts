@@ -9,8 +9,10 @@ const SPAN_ID_BYTES = 8
 const TRACE_ID_HEX = TRACE_ID_BYTES * 2
 const SPAN_ID_HEX = SPAN_ID_BYTES * 2
 
-const INVALID_TRACE_ID = '0'.repeat(TRACE_ID_HEX)
-const INVALID_SPAN_ID = '0'.repeat(SPAN_ID_HEX)
+// Spelled out rather than `'0'.repeat(...)`: this runs at module load and the
+// browser bundle, which reaches it through metrics, still loads in IE11.
+const INVALID_SPAN_ID = '0000000000000000'
+const INVALID_TRACE_ID = INVALID_SPAN_ID + INVALID_SPAN_ID
 
 const HEX_RE = /^[0-9a-f]+$/
 

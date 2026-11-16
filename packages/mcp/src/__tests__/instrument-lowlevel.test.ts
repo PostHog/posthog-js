@@ -402,6 +402,30 @@ describe('Low-level Server virtual tool ownership (e2e)', () => {
     }
   })
 
+  it('waits for a slow tools/list before routing get_more_tools to the virtual tool', async () => {
+    const { server, receivedCalls } = await setupLowLevelServer()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      server.setRequestHandler(
+        ListToolsRequestSchema,
+        () => new Promise((resolve) => setTimeout(() => resolve({ tools: TOOLS }), 5000))
+      )
+      instrument(server, fakePostHog(), { reportMissing: true })
+      const callTool = (server as unknown as MCPServerLike)._requestHandlers.get('tools/call')
+      const call = callTool?.(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { context: 'Need a database tool' } } },
+        {} as never
+      ) as Promise<{ content: { text: string }[] }>
+
+      await vi.advanceTimersByTimeAsync(5000)
+      const result = await call
+      expect(result.content[0].text).toContain('Unfortunately')
+      expect(receivedCalls).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('fails open after the server removes its tools/list handler', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
     try {
@@ -942,23 +966,6 @@ describe('Low-level Server — synthetic tools/call fallback', () => {
     expect(logger).not.toHaveBeenCalledWith(expect.stringContaining('does not support tools'))
     expect(logger).not.toHaveBeenCalledWith(expect.stringContaining('Failed to setup tool call instrumentation'))
     expect(handlersOf(server).has('tools/call')).toBe(true)
-  })
-
-  it('captures a call for an unclaimed tool and still reports it as unknown', async () => {
-    const server = new Server({ name: 'no dispatcher', version: '1.0.0' }, { capabilities: { tools: {} } })
-    instrument(server, fakePostHog())
-
-    const fallback = handlersOf(server).get('tools/call')
-    await expect(fallback?.({ method: 'tools/call', params: { name: 'nope', arguments: {} } })).rejects.toThrow(
-      'Unknown tool: nope'
-    )
-
-    await new Promise((r) => setTimeout(r, 50))
-    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
-    expect(toolCalls).toHaveLength(1)
-    expect(toolCalls[0].properties.$mcp_resource_name).toBe('nope')
-    expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
-    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
   })
 
   it('does not displace a tools/call handler that already exists', async () => {

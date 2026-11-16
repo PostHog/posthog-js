@@ -1,12 +1,16 @@
 import { detectDeviceType } from '@posthog/core'
 
-import { navigator, userAgent, window } from './globals'
-import { propertyComparisons, type PropertyMatchType } from './property-utils'
+import { propertyComparisons } from '@posthog/core/surveys'
+import type { PropertyMatchType } from '@posthog/core'
 
 export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: PropertyMatchType): boolean {
     if (!deviceTypes || deviceTypes.length === 0) {
         return true
     }
+    const win = typeof window !== 'undefined' ? window : undefined
+    const global = typeof globalThis !== 'undefined' ? globalThis : win
+    const navigator = global?.navigator
+    const userAgent = navigator?.userAgent
     if (!userAgent) {
         return false
     }
@@ -14,9 +18,9 @@ export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: Property
         userAgentDataPlatform: (navigator as (Navigator & { userAgentData?: { platform?: string } }) | undefined)
             ?.userAgentData?.platform as string,
         maxTouchPoints: navigator?.maxTouchPoints as number,
-        screenWidth: window?.screen?.width as number,
-        screenHeight: window?.screen?.height as number,
-        devicePixelRatio: window?.devicePixelRatio as number,
+        screenWidth: win?.screen?.width as number,
+        screenHeight: win?.screen?.height as number,
+        devicePixelRatio: win?.devicePixelRatio as number,
     })
     return propertyComparisons[matchType ?? 'icontains'](deviceTypes, [deviceType])
 }

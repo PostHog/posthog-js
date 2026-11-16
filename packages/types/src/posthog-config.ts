@@ -99,6 +99,17 @@ export interface AutocaptureConfig {
      * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
+
+    /**
+     * CSS selectors or a predicate opting individual native fields into value capture on change events.
+     * Selectors match the field itself, not its ancestors. An empty array disables value capture.
+     * String values are sent in $input_value and may be edited in before_send.
+     * Values are not automatically redacted; only opt in fields whose contents you intend to collect.
+     * Password fields, no-capture markers, sensitive-field exclusions, and mask_all_text still apply.
+     *
+     * @default ['[data-ph-capture-value]']
+     */
+    capture_value_css_selector_allowlist?: string[] | ((element: Element) => boolean)
 }
 
 export interface RageclickConfig {
@@ -475,19 +486,21 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+export const CONFIG_DEFAULTS_DATES = Object.freeze([
+    '2026-08-30',
+    '2026-08-29',
+    '2026-06-25',
+    '2026-05-30',
+    '2026-01-30',
+    '2025-11-30',
+    '2025-05-24',
+] as const)
+
 /**
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
- * Later dates include all earlier default changes.
+ * Later dates include all earlier default changes. `latest` includes all changes in the loaded SDK version.
  */
-export type ConfigDefaults =
-    | '2026-08-30'
-    | '2026-08-29'
-    | '2026-06-25'
-    | '2026-05-30'
-    | '2026-01-30'
-    | '2025-11-30'
-    | '2025-05-24'
-    | 'unset'
+export type ConfigDefaults = 'latest' | (typeof CONFIG_DEFAULTS_DATES)[number] | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -575,6 +588,7 @@ export interface MaskInputOptions {
     textarea?: boolean
     select?: boolean
     password?: boolean
+    hidden?: boolean
 }
 
 /**
@@ -665,7 +679,7 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
-     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * value of every input, except `file` inputs, whose values are recorded
      * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
      * Set it to `false` to record input values, which is not recommended
      * for apps that handle sensitive data. A `session_recording` masking option set in
@@ -1046,6 +1060,78 @@ export interface SurveyConfig {
 }
 
 /**
+ * Colors of the conversations widget. Any CSS color value is accepted.
+ */
+export interface ConversationsThemeColors {
+    /** Launcher, header, customer messages and buttons. Overrides the color set in project settings. */
+    primary?: string
+    /** Text and icons drawn on `primary`. Computed from `primary` when it is a hex color and this is unset. */
+    primaryText?: string
+    /** Window, message list and input background. */
+    background?: string
+    /** Secondary background: identification form, unread tickets, code blocks. */
+    surface?: string
+    /** Main text color. */
+    text?: string
+    /** Secondary text: timestamps, author names, descriptions. */
+    mutedText?: string
+    /** Borders and dividers. */
+    border?: string
+    /** Background of messages from your team. */
+    agentBubble?: string
+}
+
+/**
+ * Theme of the conversations widget. The top-level colors are the light colors; `dark` holds the dark ones.
+ *
+ * Values are applied as `--ph-conv-*` CSS custom properties (`--ph-conv-primary`, `--ph-conv-on-primary`,
+ * `--ph-conv-bg`, `--ph-conv-surface`, `--ph-conv-text`, `--ph-conv-muted`, `--ph-conv-border`,
+ * `--ph-conv-agent-bubble`, `--ph-conv-font`, `--ph-conv-radius`, `--ph-conv-launcher-shadow`,
+ * `--ph-conv-window-shadow`). Rules in your own stylesheet that set them on
+ * `#ph-conversations-widget-container` take precedence over the theme.
+ */
+export interface ConversationsTheme extends ConversationsThemeColors {
+    /**
+     * Which colors to use. `'auto'` follows the visitor's `prefers-color-scheme`.
+     *
+     * @default 'light'
+     */
+    colorScheme?: 'light' | 'dark' | 'auto'
+    /**
+     * Colors used when the dark scheme is active. Unset values fall back to built-in dark colors,
+     * except `primary` and `primaryText`, which fall back to the light ones.
+     */
+    dark?: ConversationsThemeColors
+    /** Font family of the widget. */
+    fontFamily?: string
+    /** Corner radius of the chat window, e.g. `'16px'`. */
+    borderRadius?: string
+    /** CSS `filter` applied to the launcher button, e.g. `'none'` or `'drop-shadow(0 2px 8px rgba(0,0,0,0.2))'`. */
+    launcherShadow?: string
+    /** CSS `box-shadow` of the chat window. */
+    windowShadow?: string
+}
+
+/**
+ * Conversations configuration options
+ */
+export interface ConversationsConfig {
+    /**
+     * Theme of the support widget. Change it after init with `posthog.conversations.setTheme()`.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     conversations: {
+     *         theme: { colorScheme: 'auto', primary: '#111827', dark: { primary: '#f9fafb' } },
+     *     },
+     * })
+     * ```
+     */
+    theme?: ConversationsTheme
+}
+
+/**
  * Options for the captureLog API and posthog.logger convenience methods.
  */
 export interface LogCaptureOptions {
@@ -1212,7 +1298,11 @@ export interface MetricsConfig {
      * are folded into per-series aggregates in memory between flushes — one
      * data point per series per window, no matter how many calls.
      *
-     * @default 10000
+     * The browser SDK defaults to 60000: every tab of an app writes to the
+     * same series, so a longer window keeps busy series under the backend's
+     * per-series point limit.
+     *
+     * @default 10000 (60000 in the browser)
      */
     flushIntervalMs?: number
     /**
@@ -1238,14 +1328,41 @@ export interface MetricsConfig {
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
-     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
-     * with other protocols are not recorded. Each transport is measured to the
+     * a histogram. `true` uses the defaults. Requests to PostHog itself, URLs
+     * with other protocols, and server-sent event streams (`text/event-stream`
+     * responses) are not recorded. Long-polling requests look like ordinary
+     * requests; skip them with a `name` function that returns `null`. Each transport is measured to the
      * boundary its API exposes: a `fetch` to its response headers, an
      * `XMLHttpRequest` to the end of its response body.
      *
      * @default undefined
      */
     network?: boolean | NetworkMetricsConfig
+    /**
+     * EXPERIMENTAL: Record the round trip of every `/flags` HTTP attempt as the
+     * histogram `posthog.flags.request.duration`, in milliseconds. Each retry is a
+     * separate sample. The timer starts when the SDK hands the request to the
+     * transport, so the duration includes compressing the request body. Samples
+     * carry the server host, the response status or error type, and the browser's
+     * IANA timezone as `client.timezone`. Requests that the SDK drops before they
+     * reach the network are not recorded.
+     *
+     * An attempt that gets a response also splits that duration into three histograms
+     * with the same attributes: `posthog.flags.request.pre_send_duration` (until the
+     * request starts), `posthog.flags.request.network_duration` (until the last byte
+     * of the response arrives, from the request's Resource Timing entry) and
+     * `posthog.flags.request.main_thread_duration` (until the SDK's callback runs).
+     * The attempt records them only when the browser reports a Resource Timing entry
+     * within 5 seconds of the callback that no other `/flags` request from this copy
+     * of the SDK to the same URL can own.
+     *
+     * This option, the metric names, and their attributes may change or be removed
+     * in any release.
+     *
+     * @default undefined
+     * @experimental
+     */
+    flags?: boolean
 }
 
 /**
@@ -1502,6 +1619,9 @@ export interface PostHogConfig {
      * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
+     * With the slim bundle, history-based pageviews require `AnalyticsExtensions.historyAutocapture`
+     * from `posthog-js/extensions` in `__extensionClasses`. Without it, only the initial pageview is captured.
+     *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
     capture_pageview: boolean | 'history_change' | CapturePageviewOptions
@@ -1648,6 +1768,13 @@ export interface PostHogConfig {
      * @default false
      */
     disable_conversations: boolean
+
+    /**
+     * Conversations-specific configuration options, such as the support widget theme.
+     *
+     * @default undefined
+     */
+    conversations?: ConversationsConfig
 
     /**
      * Verified distinct_id for HMAC-based identity verification.
@@ -1798,6 +1925,10 @@ export interface PostHogConfig {
      * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
      * but will process all events as if they were from a browser.
      *
+     * When the filter drops events, a one-time warning is written to the console (even without debug mode).
+     * The filter applies to events only; logs sent with `captureLog` bypass it.
+     * Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer).
+     *
      * @default false
      */
     opt_out_useragent_filter: boolean
@@ -1877,7 +2008,12 @@ export interface PostHogConfig {
     /**
      * Configuration defaults for breaking changes. When set to a specific date,
      * enables new default behaviors that were introduced on that date.
+     * Set to `'latest'` to always use the newest defaults in the loaded SDK version.
+     * Unlike a pinned date, `'latest'` opts into future default changes when the SDK is upgraded,
+     * which may include breaking changes. Explicit configuration options still take precedence.
+     * Events report the resolved date in `$config_defaults` when using `'latest'`.
      *
+     * - `'latest'`: Use all default changes available in the loaded SDK version
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
@@ -2497,7 +2633,43 @@ export interface PostHogConfig {
      */
     addTracingHeaders?: string[]
 
+    /**
+     * Hosts that should receive a W3C Trace Context `traceparent` header on `fetch` and `XMLHttpRequest`
+     * requests, so your backend can continue the trace started in the browser.
+     *
+     * Each request gets a new trace id and span id, with the sampled flag set (`00-<trace-id>-<span-id>-01`).
+     * The browser does not record a span of its own, so the span id in the header is the parent of your
+     * server's root span.
+     *
+     * Matching is exact and nothing is sent to unlisted hosts:
+     * - an entry with a scheme (`https://api.example.com`, `http://localhost:8000`) matches that origin only
+     * - any other entry (`api.example.com`) matches that hostname on any scheme or port
+     *
+     * Only list hosts that accept the header. A cross-origin request with a `traceparent` header triggers a
+     * CORS preflight, and fails if the server's `Access-Control-Allow-Headers` doesn't include `traceparent`.
+     *
+     * A `traceparent` header already set by your app or by OpenTelemetry's instrumentation is never overwritten
+     * or duplicated. If OpenTelemetry's XHR instrumentation also propagates to a cross-origin host (its
+     * `propagateTraceHeaderCorsUrls`), list that host in only one of the two.
+     *
+     * @example
+     * ```js
+     * posthog.init('<token>', { trace_propagation_targets: ['https://api.example.com', 'internal.example.com'] })
+     * ```
+     */
+    trace_propagation_targets?: string[]
+
     // ------- PREVIEW CONFIGS -------
+
+    /**
+     * Private preview: invoke recorded fetch requests synchronously to preserve application error stacks.
+     * Enabled by default in new cores; set to `false` to retain legacy fetch ordering.
+     * An old core without this option also retains legacy ordering when it loads a new recorder.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default true
+     */
+    __preview_replay_sync_fetch?: boolean
 
     /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.

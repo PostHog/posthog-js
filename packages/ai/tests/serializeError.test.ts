@@ -1,4 +1,4 @@
-import { serializeError, stringifyError } from '../src/serializeError'
+import { serializeError, stringifyError, summarizeErrorForPrivacy } from '../src/serializeError'
 
 interface SerializedShape {
   name: string
@@ -119,10 +119,110 @@ describe('stringifyError', () => {
     expect(result).toEqual({ name: 'Error', message: 'big' })
   })
 
+  it.each([
+    [
+      'on the error itself',
+      Object.assign(new Error('bad request'), { requestBodyValues: { prompt: 'secret' }, statusCode: 400 }),
+    ],
+    [
+      'on a nested cause',
+      new Error('wrapper', {
+        cause: Object.assign(new Error('bad request'), {
+          data: { requestBodyValues: { prompt: 'secret' } },
+          statusCode: 400,
+        }),
+      }),
+    ],
+  ])('omits requestBodyValues %s and keeps the other fields', (_where, error) => {
+    const result = stringifyError(error)
+
+    expect(result).not.toContain('requestBodyValues')
+    expect(result).not.toContain('secret')
+    expect(result).toContain('"statusCode":400')
+  })
+
   it('falls back to a string message when the original is not an Error', () => {
     const value: Record<string, unknown> = { description: 'cyclic value' }
     value.self = value
     const result = JSON.parse(stringifyError(value))
     expect(result).toEqual({ message: String(value) })
+  })
+})
+
+describe('summarizeErrorForPrivacy', () => {
+  class APICallError extends Error {
+    constructor(fields: Record<string, unknown>, cause?: unknown) {
+      super('request echoed the prompt', { cause })
+      this.name = 'AI_APICallError'
+      Object.assign(this, fields)
+    }
+  }
+
+  it.each([
+    [
+      'the documented example',
+      new APICallError(
+        {
+          statusCode: 400,
+          responseBody: JSON.stringify({ error: { type: 'invalid_request_error', param: 'messages[3].content' } }),
+        },
+        Object.assign(new Error('nested'), { name: 'AI_TypeValidationError' })
+      ),
+      'AI_APICallError: 400 invalid_request_error param=messages[3].content (caused by AI_TypeValidationError)',
+    ],
+    [
+      'distinct codes, a request id and the constructor name of an SDK subclass',
+      Object.assign(new (class BadRequestError extends Error {})('x'), {
+        status: 429,
+        code: 'rate_limit_exceeded',
+        type: 'requests',
+        error: { code: 'rate_limit_exceeded' },
+        requestID: 'req_123',
+      }),
+      'BadRequestError: 429 rate_limit_exceeded requests request_id=req_123',
+    ],
+    [
+      'a provider status nested in a body envelope',
+      Object.assign(new Error('x'), { status: 400, error: { type: 'error', error: { status: 'INVALID_ARGUMENT' } } }),
+      'Error: 400 INVALID_ARGUMENT',
+    ],
+    [
+      'at most three causes',
+      new Error('a', {
+        cause: new TypeError('b', { cause: new RangeError('c', { cause: new Error('d', { cause: 'e' }) }) }),
+      }),
+      'Error (caused by TypeError, RangeError, Error)',
+    ],
+    ['a thrown non-Error value', { message: 'secret', status: 500 }, 'NonErrorThrown: 500'],
+    ['a thrown string', 'secret', 'NonErrorThrown'],
+  ])('formats %s', (_case, error, expected) => {
+    expect(summarizeErrorForPrivacy(error)).toBe(expected)
+  })
+
+  it.each([
+    ['a name with spaces', { name: 'Leaked secret text' }],
+    ['a name with markup', { name: '<img src=x>' }],
+    ['an out-of-range status', { status: 42 }],
+    ['a non-integer status', { status: 400.5 }],
+    ['a code with spaces', { code: 'secret prompt text' }],
+    ['an oversized code', { code: 'a'.repeat(65) }],
+    ['a param with spaces', { param: 'messages secret' }],
+    ['a request id with a slash', { requestID: 'req/secret' }],
+    ['an unparseable response body', { responseBody: 'secret {' }],
+  ])('drops %s', (_case, fields) => {
+    const error = Object.assign(new Error('secret'), fields)
+
+    expect(summarizeErrorForPrivacy(error)).toBe('Error')
+  })
+
+  it('never throws on hostile getters', () => {
+    const error = new Error('secret')
+    Object.defineProperty(error, 'status', {
+      get() {
+        throw new Error('secret')
+      },
+    })
+
+    expect(summarizeErrorForPrivacy(error)).toBe('Error')
   })
 })

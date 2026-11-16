@@ -375,6 +375,28 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     expect((posthog as any).sessionProps.$sdk_debug_replay_remote_trigger_matching_config).toBeUndefined()
   })
 
+  it('restores a recording the app started on opt-in without waiting on a legacy eventTriggers key in a v2 config', async () => {
+    // v2 replaces the v1 event triggers even when the config still carries them, so with replay
+    // not enabled the restore must not hold the app's recording until a v1 trigger fires.
+    currentSessionRecording = {
+      ...v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: { matchType: 'all' } }]),
+      eventTriggers: ['$pageview'],
+    }
+    await warmup()
+    replay.isEnabled.mockImplementation(async () => true)
+
+    posthog = newPostHog({ enableSessionReplay: false })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    expect(replay.startRecording).toHaveBeenCalledTimes(1)
+
+    await posthog.optOut()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    await posthog.optIn()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(2))
+  })
+
   const rotateSession = (): void => {
     posthog.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 31 * 60 * 1000)
     posthog.getSessionId()

@@ -1,0 +1,20 @@
+import type { Properties } from '@posthog/types'
+
+export interface SurveyCapturedEvent {
+    event: string
+    properties: Properties
+}
+
+/** Event observation and selector registration used by survey and tour triggers. */
+export interface SurveyActionHost {
+    subscribeCapture?: ((listener: (event: string, payload?: SurveyCapturedEvent) => void) => () => void) | undefined
+    setElementSelectors?: ((selectors: Set<string>, owner?: object) => void) | undefined
+    /** Local fallback for action URL steps only; does not change captured properties. */
+    getActionUrl?: (() => string | undefined) | undefined
+}
+
+export interface SurveyEventHost extends SurveyActionHost {
+    subscribeSession?: ((listener: (sessionId: string) => void) => () => void) | undefined
+    getSessionId(): string | undefined
+    getProperty<T = unknown>(key: string): T | undefined
+}

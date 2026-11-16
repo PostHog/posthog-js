@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import ts from 'typescript'
 
 const source = readFileSync(new URL('../src/runtime/nitro-plugin.ts', import.meta.url), 'utf8')
 assert.doesNotMatch(source, /from ['"]nitro/)
 
-const executableSource = source
-  .replace(/^import .*$/gm, '')
-  .replace(/^type [\s\S]+?^export function /m, 'return function ')
-  .replace(': NitroBindings', '')
-  .replace('): void {', ') {')
-  .replace(' as RuntimeConfig', '')
-  .replace(': JsonType', '')
-
 function loadSetup({ PostHog, uuidv7 }) {
-  return new Function('PostHog', 'uuidv7', executableSource)(PostHog, uuidv7)
+  const exports = {}
+  const dependencies = {
+    'posthog-node': { PostHog },
+    '@posthog/core/vendor/uuidv7': { uuidv7 },
+    './server-client': { serverClient: {} },
+  }
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  new Function('exports', 'require', compiled)(exports, (name) => dependencies[name])
+  return exports.setupPostHogNitroPlugin
 }
 
 const calls = []
@@ -28,6 +31,10 @@ class PostHog {
 
   captureException(...args) {
     calls.push(['captureException', ...args])
+  }
+
+  withContext(_identity, handler) {
+    return handler()
   }
 
   async flush() {
@@ -121,8 +128,9 @@ nitro2.bindings.onError((_error, request) => {
   nitro2Request = request
   return nitro2Promise
 })
-assert.equal(nitro2.adapterHandlers.error(error, { event: { path: '/v2', method: 'GET' } }), nitro2Promise)
-assert.deepEqual(nitro2Request, { path: '/v2', method: 'GET' })
+const nitro2Event = { path: '/v2', method: 'GET' }
+assert.equal(nitro2.adapterHandlers.error(error, { event: nitro2Event }), nitro2Promise)
+assert.deepEqual(nitro2Request, { source: nitro2Event, path: '/v2', method: 'GET' })
 
 const nitro3 = loadAdapter('nitro-plugin-v3.ts', 'definePlugin')
 assert.match(nitro3.adapterSource, /from 'nitro'/)
@@ -134,14 +142,14 @@ nitro3.bindings.onError((_error, request) => {
   nitro3Request = request
   return nitro3Promise
 })
-assert.equal(
-  nitro3.adapterHandlers.error(error, {
-    event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } },
-  }),
-  nitro3Promise
-)
+const nitro3Event = { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } }
+assert.equal(nitro3.adapterHandlers.error(error, { event: nitro3Event }), nitro3Promise)
 
-assert.deepEqual(nitro3Request, { path: 'https://example.com/v3?query=ignored', method: 'POST' })
+assert.deepEqual(nitro3Request, {
+  source: nitro3Event.req,
+  path: 'https://example.com/v3?query=ignored',
+  method: 'POST',
+})
 
 for (const [adapter, promise, getRequest] of [
   [nitro2, nitro2Promise, () => nitro2Request],

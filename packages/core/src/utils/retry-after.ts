@@ -17,9 +17,13 @@ const CLOCK_STEP_TOLERANCE_MS = 5_000
  * `Retry-After` as milliseconds from now. The header is either delta-seconds or
  * an HTTP-date; anything else, a date already in the past, or a non-positive
  * delta yields `undefined` so the caller keeps its own backoff. The result is
- * capped at `MAX_RETRY_AFTER_MS`.
+ * capped at `maxMs`, which defaults to `MAX_RETRY_AFTER_MS`.
  */
-export function parseRetryAfterMs(value: unknown, now: number = Date.now()): number | undefined {
+export function parseRetryAfterMs(
+  value: unknown,
+  now: number = Date.now(),
+  maxMs: number = MAX_RETRY_AFTER_MS
+): number | undefined {
   if (typeof value !== 'string' || !value) {
     return undefined
   }
@@ -32,7 +36,7 @@ export function parseRetryAfterMs(value: unknown, now: number = Date.now()): num
   // Integer seconds. Not parseFloat: "10 minutes" must not read as 10 seconds.
   if (/^\d+$/.test(trimmed)) {
     // Cap before multiplication: even a valid integer can overflow to Infinity.
-    const ms = Math.min(Number(trimmed), MAX_RETRY_AFTER_MS / 1000) * 1000
+    const ms = Math.min(Number(trimmed), maxMs / 1000) * 1000
     return ms > 0 ? ms : undefined
   }
   // HTTP dates start with a weekday. Do not let Date.parse guess a date from
@@ -46,7 +50,7 @@ export function parseRetryAfterMs(value: unknown, now: number = Date.now()): num
   if (!Number.isFinite(ms) || ms <= 0) {
     return undefined
   }
-  return Math.min(ms, MAX_RETRY_AFTER_MS)
+  return Math.min(ms, maxMs)
 }
 
 /** The part of an export outcome the window reads. */

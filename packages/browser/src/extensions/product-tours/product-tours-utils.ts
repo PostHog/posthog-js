@@ -12,7 +12,12 @@ import {
 import { findElement } from './element-inference'
 import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
 import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
-import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
+import {
+    getFontFamily,
+    getContrastingTextColor,
+    hexToRgba,
+    setLogoVariant,
+} from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { localStore } from '../../storage'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from './constants'
@@ -217,6 +222,7 @@ export function addProductTourCSSVariablesToElement(element: HTMLElement, appear
     // Derived colors
     style.setProperty('--ph-tour-text-secondary-color', hexToRgba(merged.textColor, 0.6))
     style.setProperty('--ph-tour-branding-text-color', getContrastingTextColor(merged.backgroundColor))
+    setLogoVariant(style, merged.backgroundColor)
     style.setProperty('--ph-tour-button-text-color', getContrastingTextColor(merged.buttonColor))
     style.setProperty('--ph-tour-box-shadow', merged.boxShadow)
     style.setProperty('--ph-tour-overlay-color', merged.showOverlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent')

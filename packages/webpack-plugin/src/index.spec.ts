@@ -9,7 +9,7 @@ import type { ResolvedPluginConfig } from './config'
 const mockLoggerError = vi.hoisted(() => vi.fn())
 
 vi.mock('@posthog/core', () => ({
-    createLogger: () => ({ error: mockLoggerError }),
+    createLogger: () => ({ error: mockLoggerError, warn: vi.fn() }),
 }))
 
 vi.mock('@posthog/plugin-utils', async (importOriginal) => ({
@@ -184,21 +184,25 @@ describe('PosthogWebpackPlugin', () => {
         expect(await exists(path.join(outputDirectory, 'untouched.js.map'))).toBe(true)
     })
 
-    it('retains JavaScript and CSS maps when upload fails', async () => {
-        await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
-        await fs.writeFile(path.join(outputDirectory, 'app.css.map'), '{}')
-        runSourcemapCliMock.mockRejectedValueOnce(new Error('upload failed'))
-        const compilation = createCompilation(
-            outputDirectory,
-            [{ files: new Set(['app.js']) }],
-            [{ name: 'app.css.map' }]
-        )
-        await expect(new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)).rejects.toThrow(
-            'upload failed'
-        )
-        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(true)
-        expect(await exists(path.join(outputDirectory, 'app.css.map'))).toBe(true)
-    })
+    it.each([true, false])(
+        'deletes JavaScript and CSS maps after a failed upload only with deleteAfterUpload (deleteAfterUpload=%s)',
+        async (deleteAfterUpload) => {
+            const testConfig = { ...config, sourcemaps: { ...config.sourcemaps, deleteAfterUpload } }
+            await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
+            await fs.writeFile(path.join(outputDirectory, 'app.css.map'), '{}')
+            runSourcemapCliMock.mockRejectedValueOnce(new Error('upload failed'))
+            const compilation = createCompilation(
+                outputDirectory,
+                [{ files: new Set(['app.js']) }],
+                [{ name: 'app.css.map' }]
+            )
+            await expect(
+                new PosthogWebpackPlugin(testConfig, true).processSourceMaps(compilation, testConfig)
+            ).rejects.toThrow('upload failed')
+            expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(!deleteAfterUpload)
+            expect(await exists(path.join(outputDirectory, 'app.css.map'))).toBe(!deleteAfterUpload)
+        }
+    )
 
     it('logs JavaScript map deletion failures without failing the successful upload', async () => {
         await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')

@@ -1,4 +1,4 @@
-import { SurveySchedule } from '@/posthog-surveys-types'
+import { SurveySchedule } from '@posthog/browser-common'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'

@@ -79,6 +79,7 @@ class PosthogReactNativePluginModule(
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
       androidNdkCrashes = getBoolean(errorTrackingConfig, "androidNdkCrashes", false),
+      fatalExceptionMarker = getBoolean(errorTrackingConfig, "fatalExceptionMarker", false),
       exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       pushConfig = getMap(pluginConfig, "push"),
       promise = promise,
@@ -102,6 +103,7 @@ class PosthogReactNativePluginModule(
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
       androidNdkCrashes = false,
+      fatalExceptionMarker = false,
       exceptionStepsConfig = null,
       pushConfig = null,
       promise = promise,
@@ -117,6 +119,7 @@ class PosthogReactNativePluginModule(
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
     androidNdkCrashes: Boolean,
+    fatalExceptionMarker: Boolean,
     exceptionStepsConfig: ReadableMap?,
     pushConfig: ReadableMap?,
     promise: Promise,
@@ -170,8 +173,14 @@ class PosthogReactNativePluginModule(
                 getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
-              // The JS layer already captured them, so drop the native duplicate.
-              errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
+              // Drop it only when the JS layer saw the crash. Fatals that bypass the JS handler,
+              // such as React render errors, have no marker and are reported natively instead.
+              // A JS layer that sends no flag marks nothing, so every JavascriptException is dropped.
+              if (fatalExceptionMarker) {
+                addBeforeSend { dropJsHandledFatalCrash(it) }
+              } else {
+                errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
+              }
               addBeforeSend { restoreJsFatalCaptureProperties(it) }
 
               // Always apply the session replay configuration so that recording started later
@@ -451,7 +460,8 @@ class PosthogReactNativePluginModule(
       // capture() returns silently when the SDK was never set up. JS gives up its own copy of
       // the event before calling this, so a false success would lose the crash without a
       // trace; report it instead.
-      if (PostHog.getConfig<PostHogConfig>() == null) {
+      val config = PostHog.getConfig<PostHogConfig>()
+      if (config == null) {
         promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: the native SDK is not set up")
         return
       }
@@ -463,7 +473,12 @@ class PosthogReactNativePluginModule(
           event = "\$exception",
           distinctId = distinctId.takeIf { it.isNotEmpty() },
           properties = nativeProperties,
-          timestamp = parsedTimestamp,
+          timestamp =
+            toSdkClock(
+              timestamp = parsedTimestamp,
+              deviceNowMs = System.currentTimeMillis(),
+              sdkNowMs = config.dateProvider.currentTimeMillis(),
+            ),
         )
       }
       promise.resolve(null)
@@ -471,6 +486,19 @@ class PosthogReactNativePluginModule(
       logError("captureFatalException", e)
       promise.reject(FATAL_CAPTURE_ERROR_CODE, e)
     }
+  }
+
+  /**
+   * Records that the JS fatal handler saw a crash, so the JavascriptException React Native
+   * throws for it next is dropped as a duplicate when its message is [message].
+   */
+  @ReactMethod
+  fun markFatalExceptionHandled(
+    message: String?,
+    promise: Promise,
+  ) {
+    markJsFatalHandled(message ?: "")
+    promise.resolve(null)
   }
 
   private fun getMap(
@@ -769,6 +797,80 @@ internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent 
   return event
 }
 
+// The starts of the messages of the fatals the JS fatal handler saw. The JavascriptException
+// React Native throws for one of them is captured in this process, so memory is enough. The next
+// JavascriptException consumes them all and is dropped only when it carries one of them, so a
+// marked fatal the host app recovers from cannot hide a later, different crash.
+private val jsHandledFatalMessages = mutableListOf<String>()
+
+// More fatals than this before the crash keep only the most recent ones.
+private const val MAX_JS_HANDLED_FATAL_MESSAGES = 10
+
+// Must match FATAL_MESSAGE_KEY_LENGTH in posthog-react-native's error tracking.
+private const val JS_FATAL_MESSAGE_KEY_LENGTH = 80
+
+internal fun markJsFatalHandled(message: String) {
+  synchronized(jsHandledFatalMessages) {
+    jsHandledFatalMessages.add(message)
+    if (jsHandledFatalMessages.size > MAX_JS_HANDLED_FATAL_MESSAGES) {
+      jsHandledFatalMessages.removeAt(0)
+    }
+  }
+}
+
+internal fun dropJsHandledFatalCrash(event: PostHogEvent): PostHogEvent? {
+  if (event.event != "\$exception") {
+    return event
+  }
+  val exception = javascriptException(event.properties) ?: return event
+  val messages =
+    synchronized(jsHandledFatalMessages) {
+      jsHandledFatalMessages.toList().also { jsHandledFatalMessages.clear() }
+    }
+  val value = exception["value"] as? String ?: return event
+  return if (messages.any { isJsFatalReportOf(value, it) }) null else event
+}
+
+// React Native's report starts with the JS message and continues with ", js engine: …, stack:"
+// (or ", stack:") for handler fatals, or a newline. A shorter message must end where the report's
+// message ends, so a marked "Error: " does not match "Error: something else".
+private fun isJsFatalReportOf(
+  value: String,
+  message: String,
+): Boolean {
+  if (!value.startsWith(message)) {
+    return false
+  }
+  if (message.codePointCount(0, message.length) >= JS_FATAL_MESSAGE_KEY_LENGTH || value.length == message.length) {
+    return true
+  }
+  return value[message.length] == ',' || value[message.length] == '\n'
+}
+
+private fun javascriptException(properties: Map<String, Any>?): Map<*, *>? {
+  val exceptionList = properties?.get("\$exception_list") as? List<*> ?: return null
+  return exceptionList.firstNotNullOfOrNull { entry ->
+    val exception = entry as? Map<*, *> ?: return@firstNotNullOfOrNull null
+    val type = exception["type"] as? String ?: return@firstNotNullOfOrNull null
+    val module = exception["module"] as? String
+    // posthog-android splits the class name into module and type.
+    val className = if (module.isNullOrEmpty()) type else "$module.$type"
+    if (className == JavascriptException::class.java.name) exception else null
+  }
+}
+
+/**
+ * Moves [timestamp], which JS read from the device clock, onto the native SDK's clock. On Android 13
+ * and later the SDK stamps each request's send time with network time, and PostHog corrects event
+ * timestamps by the gap between that send time and when it receives the request, so a device-clock
+ * timestamp would be shifted by however far the device clock is from network time.
+ */
+internal fun toSdkClock(
+  timestamp: Date,
+  deviceNowMs: Long,
+  sdkNowMs: Long,
+): Date = Date(timestamp.time + (sdkNowMs - deviceNowMs))
+
 // The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly
 // rather than trusting a locale-dependent default, and treat anything unparseable as a
 // caller error: silently substituting "now" would attribute the crash to the wrong instant.
@@ -822,10 +924,10 @@ internal fun applyScreenshotConfig(
   map: ReadableMap?,
   config: PostHogSessionReplayConfig,
 ) {
-  getDoubleOrNull(map, "screenshotScale")?.let { scale ->
-    // Keep finite values within Float range; the native setter clamps to its supported range.
+  getDoubleOrNull(map, "screenshotScale")?.takeIf { it.isFinite() }?.let { scale ->
+    // Keep values within Float range; the native setter clamps to its supported range.
     val floatMax = Float.MAX_VALUE.toDouble()
-    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
+    config.screenshotScale = scale.coerceIn(-floatMax, floatMax).toFloat()
   }
   getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
     config.screenshotCompressionQuality = quality.toInt()

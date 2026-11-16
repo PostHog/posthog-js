@@ -24,6 +24,8 @@ export interface SessionContext {
     readonly windowId: string
     /** When the session started, as a Unix timestamp in milliseconds. */
     readonly sessionStartTimestamp: number
+    /** Most recent session activity, as a Unix timestamp in milliseconds. */
+    readonly lastActivityTimestamp: number
 }
 
 /** A captured event, as observed by `onEvent`. */
@@ -36,6 +38,8 @@ export interface CapturedEventInfo {
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
 export interface CaptureOptions {
+    /** Send immediately without batching, using best-effort unload-safe delivery. */
+    delivery?: 'unload'
     /** Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. */
     timestamp?: Date
     /** Override the event UUID used for de-duplication. */
@@ -107,13 +111,21 @@ export interface Client {
     readonly initialPersonProperties: DeepReadonly<Record<string, unknown>>
     /** Active group memberships attached to events as `$groups`. */
     readonly groups: DeepReadonly<Record<string, string>>
-    /** The current session, created on first read if needed. */
-    readonly session: SessionContext
+    /** The current session, if one exists. Reading it need not create one. */
+    readonly session: SessionContext | undefined
+    /** Effective consent opt-out state. Cookieless capture may still be permitted while opted out. */
+    readonly isOptedOut: boolean
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
+    /** Whether the client rate limit drops an event captured now. Reading it must not use a token. */
+    readonly isRateLimited?: boolean
 
-    /** Synchronously admits an analytics event to the client's normal pipeline. */
-    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void
+    /**
+     * Synchronously admits an analytics event to the client's normal pipeline.
+     * Returns `false` when the client rate limit dropped the event, so the caller can send it again later.
+     * An event that is dropped for another reason, for example by `before_send`, returns `true`.
+     */
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): boolean
 
     /** Registers a synchronous producer of properties merged into every captured event. */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
@@ -122,6 +134,9 @@ export interface Client {
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     /** Returns the extension registered under a stable name, or `undefined` when it is not installed. */
     getExtension<T extends Extension = Extension>(name: string): T | undefined
+
+    /** Observes session IDs through the host's session notifications, without creating a session. May replay an existing session on subscription. */
+    readonly onSession: Listener<string>
 
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>

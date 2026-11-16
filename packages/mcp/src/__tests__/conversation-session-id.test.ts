@@ -55,14 +55,10 @@ describe('conversation_id as the session anchor', () => {
   }
 
   function toolCallSessionIds(): string[] {
-    return (
-      capture
-        .getEvents()
-        // `resourceName` alone is not enough: a `$identify` published during a tool
-        // call carries the same resource name, so it would be counted as a call.
-        .filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall && e.resourceName === 'add_todo')
-        .map((e) => e.sessionId)
-    )
+    return capture
+      .getEvents()
+      .filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall && e.resourceName === 'add_todo')
+      .map((e) => e.sessionId)
   }
 
   describe('getSessionId', () => {
@@ -116,45 +112,13 @@ describe('conversation_id as the session anchor', () => {
     })
   })
 
-  describe('identity', () => {
-    it('still announces $identify for a handle-anchored session on a token deployment', async () => {
-      instrument(server, fakePostHog(), {
-        enableConversationId: true,
-        identify: async () => ({ distinctId: 'user-1' }),
-      })
-
-      // A replayed token leaves data.sessionSource === 'token', which is what
-      // suppresses a second $identify. A handle-anchored session is a brand new
-      // session nobody announced, so suppressing it would lose the event entirely
-      // on exactly the stateless deployments this feature targets.
-      const lowLevel = server.server as MCPServerLike
-      getServerTrackingData(lowLevel)!.sessionSource = 'token'
-      const callHandler = lowLevel._requestHandlers.get('tools/call')!
-      const extra: any = {
-        requestInfo: {
-          headers: { [MCP_SESSION_HEADER]: encodeSessionId({ sessionId: 'ses_from_token', clientName: 'c' }) },
-        },
-      }
-
-      for (const handle of ['019fd2b0-aaaa-7aaa-8aaa-aaaaaaaaaaaa', '019fd2b0-bbbb-7bbb-8bbb-bbbbbbbbbbbb']) {
-        await callHandler(
-          { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 't', conversation_id: handle } } },
-          extra
-        )
-      }
-      await new Promise((r) => setTimeout(r, 60))
-
-      expect(capture.findCapturesByEvent('$identify')).toHaveLength(2)
-    })
-  })
-
   describe('client identity', () => {
     it('still reads the token client identity when a handle wins the session', async () => {
       // A stateless instance that never processed `initialize`: the client replays
       // our token and the agent echoes a handle. The handle must decide the
       // session *without* costing us the only client attribution the request
-      // carries — otherwise every tool call and $identify on that deployment goes
-      // out unattributed.
+      // carries — otherwise every tool call on that deployment goes out
+      // unattributed.
       instrument(server, fakePostHog(), { enableConversationId: true })
       const lowLevel = server.server as MCPServerLike
       const data = getServerTrackingData(lowLevel)!
@@ -315,8 +279,6 @@ describe('conversation_id as the session anchor', () => {
           .map((e) => e.conversationId)
           .filter(Boolean)
       ).toEqual([])
-      // Nothing amplified: one session means one $identify, not one per call.
-      expect(capture.findCapturesByEvent('$identify')).toHaveLength(1)
     })
 
     it('reuses the minted handle across calls once the agent echoes it back', async () => {

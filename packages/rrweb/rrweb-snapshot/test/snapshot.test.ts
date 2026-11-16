@@ -6,14 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import snapshot, {
   _isBlockedElement,
+  classMatchesRegex,
   DEFAULT_MAX_DEPTH,
   transformAttribute,
   wasMaxDepthReached,
   resetMaxDepthState,
   resetStylesheetLoadTracking,
   serializeNodeWithId,
+  onceLinkStylesheetUpToDate,
 } from '../src/snapshot';
-import { elementNode, serializedNodeWithId } from '../src/types';
+import { elementNode, serializedNodeWithId, NodeType } from '../src/types';
 import { Mirror, absolutifyURLs } from '../src/utils';
 
 const serializeNode = (node: Node): serializedNodeWithId | null => {
@@ -87,6 +89,38 @@ describe('absolute url to stylesheet', () => {
     expect(absolutifyURLs('url("../a.jpg")', href)).toEqual(
       `url("http://localhost/a.jpg")`,
     );
+  });
+
+  it.each(['', "'", '"'])(
+    'preserves fragment path segments and ignores the base fragment (quote: %s)',
+    (quote) => {
+      expect(
+        absolutifyURLs(
+          `url(${quote}../icons.svg#icons/../check${quote})`,
+          href + '#route/details',
+        ),
+      ).toBe(`url(${quote}http://localhost/icons.svg#icons/../check${quote})`);
+    },
+  );
+
+  it('preserves fragments in inline style URLs', () => {
+    const dom = new JSDOM('', {
+      url: 'https://example.com/app/page#/settings/profile',
+    });
+    try {
+      expect(
+        transformAttribute(
+          dom.window.document,
+          'div',
+          'style',
+          'background-image: url(./icons.svg#icons/../check)',
+        ),
+      ).toBe(
+        'background-image: url(https://example.com/app/icons.svg#icons/../check)',
+      );
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('can handle absolute path', () => {
@@ -263,6 +297,128 @@ describe('scrollTop/scrollLeft', () => {
       },
     });
   });
+
+  // Reading a scroll position inside content the browser skips rendering
+  // (`content-visibility: auto` off screen) forces the layout of that content
+  it('should not read scroll positions of content the browser skips rendering', () => {
+    const el = render(`<div>Lorem ipsum</div>`);
+    const checkVisibility = vi.fn(() => false);
+    const scrollTop = vi.fn(() => 10);
+    const scrollLeft = vi.fn(() => 20);
+    Object.defineProperty(el, 'checkVisibility', { value: checkVisibility });
+    Object.defineProperty(el, 'scrollTop', { get: scrollTop });
+    Object.defineProperty(el, 'scrollLeft', { get: scrollLeft });
+
+    const serialized = serializeNode(el) as elementNode;
+
+    expect(checkVisibility).toHaveBeenCalledWith({
+      contentVisibilityAuto: true,
+    });
+    expect(scrollTop).not.toHaveBeenCalled();
+    expect(scrollLeft).not.toHaveBeenCalled();
+    expect(serialized.attributes).not.toHaveProperty('rr_scrollTop');
+    expect(serialized.attributes).not.toHaveProperty('rr_scrollLeft');
+  });
+
+  it('should serialize scroll positions of rendered content', () => {
+    const el = render(`<div>Lorem ipsum</div>`);
+    Object.defineProperty(el, 'checkVisibility', { value: () => true });
+    el.scrollTop = 10;
+    el.scrollLeft = 20;
+
+    expect(serializeNode(el)).toMatchObject({
+      attributes: {
+        rr_scrollTop: 10,
+        rr_scrollLeft: 20,
+      },
+    });
+  });
+});
+
+describe('CDATA text content', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  const createCDATA = (masked = false) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const node = xml.createCDATASection('private <value>');
+    const parent = document.createElement('div');
+    if (masked) parent.className = 'maskmask';
+    parent.appendChild(node);
+    document.body.appendChild(parent);
+    return node;
+  };
+
+  it('preserves CDATA content as a text record for older readers', () => {
+    expect(serializeNode(createCDATA())).toMatchObject({
+      type: NodeType.Text,
+      textContent: 'private <value>',
+    });
+  });
+
+  it('applies the existing text masking rules to CDATA', () => {
+    expect(serializeNode(createCDATA(true))).toMatchObject({
+      type: NodeType.Text,
+      textContent: '******* *******',
+    });
+  });
+
+  it('keeps imported SVG CDATA script source out of snapshots', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script type="application/json">' +
+        '<![CDATA[{"email":"cdata-private@example.invalid"}]]></script></svg>',
+      'image/svg+xml',
+    );
+    const imported = svg.documentElement;
+    document.body.appendChild(imported);
+    expect(imported.querySelector('script')!.firstChild!.nodeType).toBe(
+      Node.CDATA_SECTION_NODE,
+    );
+    expect(
+      JSON.stringify(snapshot(document, { slimDOM: false })),
+    ).not.toContain('cdata-private@example.invalid');
+  });
+
+  it.each(['HTML', 'SVG'])('suppresses %s script text and CDATA', (type) => {
+    const xml = document.implementation.createDocument(null, 'root');
+    const script =
+      type === 'HTML'
+        ? document.createElement('script')
+        : document.createElementNS('http://www.w3.org/2000/svg', 'script');
+    script.setAttribute('type', 'application/json');
+    script.append(
+      document.createTextNode('private text'),
+      xml.createCDATASection('private CDATA'),
+    );
+    document.body.appendChild(script);
+
+    expect(snapshot(script, { slimDOM: false })).toMatchObject({
+      childNodes: [
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+        { type: NodeType.Text, textContent: 'SCRIPT_PLACEHOLDER' },
+      ],
+    });
+    expect(snapshot(script, { slimDOM: { script: true } })).toBeNull();
+  });
+
+  it('masks and blocks imported SVG CDATA', () => {
+    const svg = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>' +
+        '<![CDATA[private <value>]]></text></svg>',
+      'image/svg+xml',
+    ).documentElement;
+    document.body.appendChild(svg);
+    svg.setAttribute('class', 'rr-mask');
+    expect(snapshot(svg)).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: '******* *******' }] }],
+    });
+    expect(snapshot(svg, { maskTextFn: () => 'hidden' })).toMatchObject({
+      childNodes: [{ childNodes: [{ textContent: 'hidden' }] }],
+    });
+    svg.setAttribute('class', 'rr-block');
+    expect(snapshot(svg)).toMatchObject({ childNodes: [] });
+  });
 });
 
 describe('form', () => {
@@ -284,6 +440,104 @@ describe('form', () => {
       },
     });
     expect(sel?.childNodes).toEqual([]); // shouldn't be stored in childNodes while in transit
+  });
+});
+
+describe('stateful class matching', () => {
+  for (const frozen of [false, true]) {
+    it.each(['g', 'y', 'gy'])(
+      `matches every blocked sibling without changing lastIndex (frozen=${frozen}, %s)`,
+      (flags) => {
+        document.body.innerHTML =
+          '<div class="rr-block">First</div><div class="rr-block">Second</div>';
+        const regex = new RegExp('^rr-block$', flags);
+        regex.lastIndex = 3;
+        if (frozen) Object.freeze(regex);
+        for (const element of Array.from(document.body.children)) {
+          expect(_isBlockedElement(element, regex, null)).toBe(true);
+          expect(classMatchesRegex(element.firstChild, regex, true)).toBe(true);
+          expect(regex.lastIndex).toBe(3);
+        }
+      },
+    );
+  }
+
+  it.each(['g', 'y'])('masks text in every matching sibling (%s)', (flags) => {
+    document.body.innerHTML =
+      '<div class="rr-mask">first-text-secret</div>' +
+      '<div class="rr-mask">second-text-secret</div>';
+    const result = snapshot(document, {
+      maskTextClass: new RegExp('^rr-mask$', flags),
+    });
+    expect(JSON.stringify(result)).not.toContain('text-secret');
+  });
+});
+
+describe('select snapshot values', () => {
+  it.each([
+    'empty select',
+    'empty option',
+    'no selection',
+    'blocked selection',
+  ])('does not call a custom masker for an empty value (%s)', (selection) => {
+    const doc = document.implementation.createHTMLDocument();
+    doc.body.innerHTML =
+      '<select value="stale-empty-secret">' +
+      (selection === 'empty select'
+        ? ''
+        : '<option value="" selected>Empty</option>' +
+          '<option class="rr-block" value="blocked-empty-secret">Hidden</option>') +
+      '</select>';
+    const select = doc.querySelector('select')!;
+    if (selection === 'no selection') select.selectedIndex = -1;
+    if (selection === 'blocked selection') select.selectedIndex = 1;
+    const maskInputFn = vi.fn((text: string) => `masked:${text}`);
+    const mirror = new Mirror();
+    const result = snapshot(doc, {
+      mirror,
+      maskAllInputs: { select: true },
+      maskInputFn,
+    });
+    expect(maskInputFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('empty-secret');
+    expect(mirror.getMeta(select)).toMatchObject({ attributes: { value: '' } });
+  });
+
+  it.each(['blocked', 'empty option', 'no selection'])(
+    'replaces a stale value attribute (%s)',
+    (selection) => {
+      document.body.innerHTML =
+        '<select value="stale-selection-secret">' +
+        '<option value="" selected>Empty</option>' +
+        '<option class="rr-block" value="blocked-selection-secret">Hidden</option></select>';
+      const select = document.querySelector('select')!;
+      select.selectedIndex =
+        selection === 'blocked' ? 1 : selection === 'no selection' ? -1 : 0;
+      const result = snapshot(select, { maskAllInputs: false }) as elementNode;
+      expect(result.attributes.value).toBe('');
+      expect(JSON.stringify(result)).not.toContain('selection-secret');
+    },
+  );
+
+  it('filters blocked selections before calling the input masker', () => {
+    document.body.innerHTML =
+      '<select multiple><option class="rr-block" value="blocked-selection-secret" selected>Hidden</option>' +
+      '<option value="public" selected>Public</option></select>';
+    const select = document.querySelector('select')!;
+    const maskInputFn = vi.fn((value: string) => `masked:${value}`);
+    const result = snapshot(select, {
+      maskAllInputs: { select: true },
+      maskInputFn,
+    }) as elementNode;
+    expect(maskInputFn).toHaveBeenCalledWith('public', select);
+    expect(result.attributes.value).toBe('masked:public');
+    expect(JSON.stringify(result)).not.toContain('blocked-selection-secret');
+  });
+
+  it('preserves non-form SVG elements named select', () => {
+    document.body.innerHTML = '<svg><select value="svg-value" /></svg>';
+    const result = snapshot(document.querySelector('select')!) as elementNode;
+    expect(result.attributes.value).toBe('svg-value');
   });
 });
 
@@ -977,21 +1231,32 @@ describe('link href capture across SPA navigations', () => {
     return link;
   }
 
-  it('prefers link.sheet.href over the detached-anchor resolution', () => {
+  it('snapshots link.sheet.href over the detached-anchor resolution', () => {
     const link = makeLinkWithSheet(
       '../../_app/auth.css',
       'http://localhost/_app/auth.css',
+    );
+
+    const serialized = serializeNode(link) as elementNode | null;
+
+    expect(serialized?.attributes.href).toBe('http://localhost/_app/auth.css');
+  });
+
+  it('transforms a changed href as written, not as the sheet still attached', () => {
+    const link = makeLinkWithSheet(
+      '/theme-dark.css',
+      'http://localhost/theme-light.css',
     );
 
     const result = transformAttribute(
       document,
       'link',
       'href',
-      '../../_app/auth.css',
+      '/theme-dark.css',
       link,
     );
 
-    expect(result).toBe('http://localhost/_app/auth.css');
+    expect(result).toMatch(/\/theme-dark\.css$/);
   });
 
   it('falls back to detached-anchor resolution when the sheet has not loaded', () => {
@@ -1211,6 +1476,116 @@ describe('preload link load-listener accumulation', () => {
     document.head.removeChild(link);
   });
 
+  it('delivers _cssText when a stylesheet finishes loading after the load timeout', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-slow.css',
+      sheet: null,
+    });
+
+    let deliveredNode: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      deliveredNode = node;
+    });
+
+    vi.advanceTimersByTime(5000);
+    expect(deliveredNode).toBeNull();
+
+    const fakeRules = [
+      { cssText: '.slow { color: green; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+    link.dispatchEvent(new Event('load'));
+
+    const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes;
+    expect(attrs?._cssText).toContain('.slow');
+
+    document.head.removeChild(link);
+  });
+
+  it('releases a link that leaves the DOM after the first sheet check', () => {
+    const { link } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-hung.css',
+      sheet: null,
+    });
+    let loadListenersAdded = 0;
+    const addEventListener = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadListenersAdded += 1;
+      return (addEventListener as (...args: unknown[]) => void)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeWithCapture(link);
+    vi.advanceTimersByTime(5000);
+    document.head.removeChild(link);
+    vi.advanceTimersByTime(5000);
+
+    document.head.appendChild(link);
+    serializeWithCapture(link);
+
+    expect(loadListenersAdded).toBe(2);
+
+    document.head.removeChild(link);
+  });
+
+  it('stops tracking a link whose stylesheet has not loaded after the maximum wait', () => {
+    const { link } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-never.css',
+      sheet: null,
+    });
+    let loadListenersAdded = 0;
+    const addEventListener = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadListenersAdded += 1;
+      return (addEventListener as (...args: unknown[]) => void)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeWithCapture(link);
+    vi.advanceTimersByTime(55_000);
+    serializeWithCapture(link);
+    expect(loadListenersAdded).toBe(1);
+
+    vi.advanceTimersByTime(5_000);
+    serializeWithCapture(link);
+    expect(loadListenersAdded).toBe(2);
+
+    document.head.removeChild(link);
+  });
+
+  it('stops tracking a link whose stylesheet fails to load', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-missing.css',
+      sheet: null,
+    });
+
+    let stylesheetLoadCalls = 0;
+    serializeWithCapture(link, () => {
+      stylesheetLoadCalls += 1;
+    });
+
+    link.dispatchEvent(new Event('error'));
+    setSheet({ cssRules: [], rules: [] } as unknown as CSSStyleSheet);
+    link.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(5000);
+
+    expect(stylesheetLoadCalls).toBe(0);
+
+    document.head.removeChild(link);
+  });
+
   it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
     const { link, setSheet } = setupLink({
       rel: 'stylesheet',
@@ -1249,6 +1624,158 @@ describe('preload link load-listener accumulation', () => {
     expect(attrs._cssText).toContain('color: blue');
 
     document.head.removeChild(link);
+  });
+});
+
+describe('onceLinkStylesheetUpToDate', () => {
+  const createdLinks: HTMLLinkElement[] = [];
+
+  function linkWithSheetHref(attachedSheetHref: string | null) {
+    const link = document.createElement('link');
+    createdLinks.push(link);
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', 'https://example.com/theme-dark.css');
+    let currentSheet: CSSStyleSheet | null =
+      attachedSheetHref === null
+        ? null
+        : ({ href: attachedSheetHref } as unknown as CSSStyleSheet);
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => currentSheet,
+    });
+    document.head.appendChild(link);
+    return {
+      link,
+      attachNewSheet: (sheetHref = link.href) => {
+        currentSheet = { href: sheetHref } as unknown as CSSStyleSheet;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    resetStylesheetLoadTracking();
+    createdLinks.splice(0).forEach((link) => link.remove());
+    vi.useRealTimers();
+  });
+
+  it('waits for the next load while the attached sheet is from the previous href', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the load when a link has no sheet yet', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(null);
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('notices the new sheet without a load event', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    vi.advanceTimersByTime(100);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(60_000);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('notices a new sheet whose URL no longer matches link.href after a pushState', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    attachNewSheet('https://example.com/previous-path/theme-dark.css');
+    vi.advanceTimersByTime(100);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not count the sheet of an href that a later change replaced', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    attachNewSheet();
+    link.setAttribute('href', 'https://example.com/theme-contrast.css');
+    onceLinkStylesheetUpToDate(link, listener);
+    vi.advanceTimersByTime(100);
+    expect(listener).not.toHaveBeenCalled();
+
+    attachNewSheet();
+    vi.advanceTimersByTime(200);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps waiting through the reset at a full snapshot', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    resetStylesheetLoadTracking({ keepChangedLinks: true });
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting at a full reset', () => {
+    const { link, attachNewSheet } = linkWithSheetHref(
+      'https://example.com/theme-light.css',
+    );
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+    resetStylesheetLoadTracking();
+    attachNewSheet();
+    link.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(60_000);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('runs at once when the attached sheet already belongs to the current href', () => {
+    const { link } = linkWithSheetHref('https://example.com/theme-dark.css');
+    const listener = vi.fn();
+
+    onceLinkStylesheetUpToDate(link, listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

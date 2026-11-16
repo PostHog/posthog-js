@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
-import type { ReadStream } from 'node:fs'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { createPutObjectInput, createS3ClientConfig } from './s3.ts'
 
-test('createPutObjectInput passes an atomic no-overwrite condition to S3', () => {
-    const input = createPutObjectInput(
+test('createPutObjectInput uses a replayable body and an atomic no-overwrite condition', async () => {
+    const input = await createPutObjectInput(
         'us-assets.i.posthog.com',
         'static/1.370.0/array.js',
         fileURLToPath(import.meta.url),
@@ -19,7 +18,9 @@ test('createPutObjectInput passes an atomic no-overwrite condition to S3', () =>
     assert.equal(input.Bucket, 'us-assets.i.posthog.com')
     assert.equal(input.Key, 'static/1.370.0/array.js')
     assert.equal(input.IfNoneMatch, '*')
-    ;(input.Body as ReadStream).destroy()
+    assert.ok(Buffer.isBuffer(input.Body))
+    assert.equal(input.ContentLength, input.Body.length)
+    assert.ok(input.ChecksumSHA256)
 })
 
 test('createS3ClientConfig always enables path-style addressing for dotted bucket names', () => {
@@ -35,6 +36,8 @@ test('createS3ClientConfig always enables path-style addressing for dotted bucke
         assert.deepEqual(createS3ClientConfig(), {
             region: 'us-east-1',
             endpoint: undefined,
+            retryMode: 'standard',
+            maxAttempts: 4,
             forcePathStyle: true,
         })
 
@@ -44,6 +47,8 @@ test('createS3ClientConfig always enables path-style addressing for dotted bucke
         assert.deepEqual(createS3ClientConfig(), {
             region: 'eu-central-1',
             endpoint: 'http://localhost:4566',
+            retryMode: 'standard',
+            maxAttempts: 4,
             forcePathStyle: true,
         })
 
@@ -52,6 +57,8 @@ test('createS3ClientConfig always enables path-style addressing for dotted bucke
         assert.deepEqual(createS3ClientConfig(), {
             region: 'ap-southeast-1',
             endpoint: 'http://localhost:4566',
+            retryMode: 'standard',
+            maxAttempts: 4,
             forcePathStyle: true,
         })
     } finally {

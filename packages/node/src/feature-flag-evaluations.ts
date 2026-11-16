@@ -1,5 +1,6 @@
-import { FeatureFlagValue, JsonType } from '@posthog/core'
+import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
+import { isServerFailedFlagRecord, type ParsedFlagRecord } from './flags-response'
 import { FeatureFlagError } from './types'
 
 /**
@@ -19,6 +20,12 @@ export type EvaluatedFlagRecord = {
   locallyEvaluated: boolean
   /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
   hasExperiment: boolean | undefined
+  /**
+   * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
+   * state, reason and rule metadata, for the typed flag API and flag events. Absent for locally
+   * evaluated flags and flags with a value override.
+   */
+  parsed?: ParsedFlagRecord
 }
 
 /**
@@ -33,6 +40,12 @@ export type FlagCalledEventParams = {
   groups: Record<string, string | number> | undefined
   disableGeoip: boolean | undefined
   properties: Record<string, any>
+  /**
+   * The parsed `/flags` record supplying the read's value or failure diagnostics. Absent for
+   * local evaluation, overrides and missing flags. A failed record keeps config/reason
+   * attribution, but only a successful experiment split sends `$experiment_exposure`.
+   */
+  record?: ParsedFlagRecord
 }
 
 /**
@@ -43,6 +56,11 @@ export type FlagCalledEventParams = {
  */
 export interface FeatureFlagEvaluationsHost {
   captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void
+  /**
+   * Whether a read sends `$feature_flag_called`: the per-read option, then the client's
+   * `sendFeatureFlagEvent` option, then `true`.
+   */
+  resolveSendFeatureFlagEvents(perRead: boolean | undefined): boolean
   logWarning(message: string): void
 }
 
@@ -73,6 +91,8 @@ export class FeatureFlagEvaluations {
   private readonly _groups: Record<string, string | number> | undefined
   private readonly _disableGeoip: boolean | undefined
   private readonly _flags: Record<string, EvaluatedFlagRecord>
+  private readonly _failedFlags: Record<string, EvaluatedFlagRecord>
+  private readonly _unresolvedFlags: Readonly<Record<string, UnresolvedFlagReason>>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
@@ -92,6 +112,7 @@ export class FeatureFlagEvaluations {
     groups?: Record<string, string | number>
     disableGeoip?: boolean
     flags: Record<string, EvaluatedFlagRecord>
+    unresolvedFlags?: Record<string, UnresolvedFlagReason>
     requestId?: string
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
@@ -104,7 +125,16 @@ export class FeatureFlagEvaluations {
     this._distinctId = init.distinctId
     this._groups = init.groups
     this._disableGeoip = init.disableGeoip
-    this._flags = init.flags
+    this._flags = Object.create(null)
+    this._failedFlags = Object.create(null)
+    for (const [key, flag] of Object.entries(init.flags)) {
+      if (flag.parsed && isServerFailedFlagRecord(flag.parsed)) {
+        this._failedFlags[key] = flag
+      } else {
+        this._flags[key] = flag
+      }
+    }
+    this._unresolvedFlags = Object.freeze({ ...init.unresolvedFlags })
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
@@ -117,32 +147,48 @@ export class FeatureFlagEvaluations {
   /**
    * Check whether a feature flag is enabled. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
-   * existing cache.
+   * existing cache, unless events are off for this read (see `options.sendFeatureFlagEvents`).
    *
    * Flags that were not returned from the underlying evaluation resolve to
    * `options.defaultValue` (`false` unless overridden). A flag that has a value —
    * including a conclusive `false` result and variant strings — always wins over
    * `options.defaultValue`. Use `getFlag()` to distinguish an absent result from `false`.
+   *
+   * @param key - The feature flag key
+   * @param options - `defaultValue`: the result when the flag is not in the snapshot.
+   *   `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called` event.
+   *   Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
+  isEnabled(key: string, options: { defaultValue?: boolean; sendFeatureFlagEvents?: boolean } = {}): boolean {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     return flag?.enabled ?? options.defaultValue ?? false
   }
 
   /**
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
-   * on the first access per (distinctId, flag, value) tuple.
+   * on the first access per (distinctId, flag, value) tuple, unless events are off for
+   * this read (see `options.sendFeatureFlagEvents`).
    *
    * Returns the variant string for multivariate flags, `true` for boolean flags that
    * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`
    * for flags that were not returned by the evaluation. Cached inactive definitions are
    * conclusive `false` results during local evaluation, while remote evaluation omits
    * globally inactive flags.
+   *
+   * @param key - The feature flag key
+   * @param options - `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called`
+   *   event. Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  getFlag(key: string): FeatureFlagValue | undefined {
+  getFlag(key: string, options: { sendFeatureFlagEvents?: boolean } = {}): FeatureFlagValue | undefined {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     if (!flag) {
       return undefined
     }
@@ -162,7 +208,8 @@ export class FeatureFlagEvaluations {
 
   /**
    * Return a filtered copy containing only flags that have been accessed via
-   * `isEnabled()` or `getFlag()` before this call.
+   * `isEnabled()` or `getFlag()` before this call, including reads that sent no
+   * `$feature_flag_called` event.
    *
    * Order-dependent: if nothing has been accessed yet, the returned snapshot is
    * empty. The method honors its name — pre-access if you want a populated result.
@@ -173,9 +220,9 @@ export class FeatureFlagEvaluations {
    * excluded from the slice.
    */
   onlyAccessed(): FeatureFlagEvaluations {
-    const filtered: Record<string, EvaluatedFlagRecord> = {}
+    const filtered: Record<string, EvaluatedFlagRecord> = Object.create(null)
     for (const key of this._accessed) {
-      const flag = this._flags[key]
+      const flag = this._flags[key] ?? this._failedFlags[key]
       if (flag) {
         filtered[key] = flag
       }
@@ -191,10 +238,10 @@ export class FeatureFlagEvaluations {
    * Branching on a filtered key that was excluded from the slice is a no-op.
    */
   only(keys: string[]): FeatureFlagEvaluations {
-    const filtered: Record<string, EvaluatedFlagRecord> = {}
+    const filtered: Record<string, EvaluatedFlagRecord> = Object.create(null)
     const missing: string[] = []
     for (const key of keys) {
-      const flag = this._flags[key]
+      const flag = this._flags[key] ?? this._failedFlags[key]
       if (flag) {
         filtered[key] = flag
       } else {
@@ -214,6 +261,18 @@ export class FeatureFlagEvaluations {
    */
   get keys(): string[] {
     return Object.keys(this._flags)
+  }
+
+  /**
+   * Flags that have a loaded local definition but that neither local evaluation nor a remote
+   * fallback resolved, mapped to the reason local evaluation was inconclusive. These flags are
+   * absent from `keys`, and their accessors return undefined (`isEnabled` returns false). Reading
+   * this does not count as an access and does not fire any event.
+   *
+   * Always empty on snapshots returned by `only()` / `onlyAccessed()`.
+   */
+  get unresolvedFlags(): Readonly<Record<string, UnresolvedFlagReason>> {
+    return this._unresolvedFlags
   }
 
   /**
@@ -247,6 +306,7 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       flags,
+      // `unresolvedFlags` is left out on purpose: slices carry no unresolved entries.
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
       flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
@@ -260,8 +320,14 @@ export class FeatureFlagEvaluations {
     })
   }
 
-  private _recordAccess(key: string): void {
+  private _recordAccess(key: string, sendFeatureFlagEvents: boolean | undefined): void {
     this._accessed.add(key)
+
+    // Return before the dedupe cache is touched, so a later read that sends events still
+    // reports this flag.
+    if (!this._host.resolveSendFeatureFlagEvents(sendFeatureFlagEvents)) {
+      return
+    }
 
     // Empty snapshots (no resolvable distinctId) are returned by `evaluateFlags()` as a
     // safety fallback. Firing $feature_flag_called for them would emit events with an
@@ -274,13 +340,14 @@ export class FeatureFlagEvaluations {
     // the slice doesn't mean the flag is missing from PostHog — it was filtered out.
     // Don't fire a misleading `flag_missing` event; slices are intended for `capture()`,
     // not for further branching.
-    if (this._isSlice && !(key in this._flags)) {
+    if (this._isSlice && !(key in this._flags) && !(key in this._failedFlags)) {
       return
     }
 
-    const flag = this._flags[key]
+    const failed = key in this._failedFlags
+    const flag = this._flags[key] ?? this._failedFlags[key]
     const response: FeatureFlagValue | undefined =
-      flag === undefined ? undefined : flag.enabled === false ? false : (flag.variant ?? true)
+      flag === undefined || failed ? undefined : flag.enabled === false ? false : (flag.variant ?? true)
 
     const properties: Record<string, any> = {
       $feature_flag: key,
@@ -304,7 +371,7 @@ export class FeatureFlagEvaluations {
 
     // Build the comma-joined `$feature_flag_error` matching the single-flag path's
     // granularity: response-level errors (errors-while-computing, quota-limited) are
-    // combined with per-flag errors (flag-missing) so consumers can filter by type.
+    // combined with per-flag errors. A failed fallback does not resolve a local inconclusive result.
     const errors: string[] = []
     if (this._errorsWhileComputing) {
       errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
@@ -312,7 +379,12 @@ export class FeatureFlagEvaluations {
     if (this._quotaLimited) {
       errors.push(FeatureFlagError.QUOTA_LIMITED)
     }
-    if (flag === undefined) {
+    if (failed) {
+      errors.push(FeatureFlagError.EVALUATION_FAILED)
+    }
+    if (Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)) {
+      errors.push(FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE)
+    } else if (flag === undefined) {
       errors.push(FeatureFlagError.FLAG_MISSING)
     }
     if (errors.length > 0) {
@@ -326,6 +398,8 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       properties,
+      // Failed records retain config/reason diagnostics, but never send an experiment exposure.
+      record: flag?.parsed,
     })
   }
 }

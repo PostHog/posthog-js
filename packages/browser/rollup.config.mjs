@@ -7,6 +7,8 @@ import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 import { modernTransformOptions } from './oxc.config.mjs'
+import { loaderMethods } from './scripts/loader-methods.mjs'
+import { treeShakeableDOMPurify } from './scripts/tree-shakeable-dompurify.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -69,6 +71,7 @@ const finalTerser = (options) => ({
 })
 
 const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
+    ...(preserveCrossBundleProperties ? [treeShakeableDOMPurify()] : []),
     {
         name: 'lightningcss',
         transform(code, id) {
@@ -153,6 +156,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
         },
         format: {
             comments: false,
+            preserve_annotations: preserveCrossBundleProperties,
         },
         mangle:
             noExternal || es5
@@ -200,6 +204,8 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               '_surveyEventReceiver',
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
+
+                              // lifecycle lookup from independently released bundle-local client adapters
 
                               // private ABI between independently emitted slim cores and extension bundles
                               ...(preserveCrossBundleProperties
@@ -451,7 +457,11 @@ const entrypointTargets = entrypoints.map((file) => {
                 : {}),
             ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
+        plugins: [
+            ...(fileName === 'loader' || fileName === 'loader-bootstrap' ? [loaderMethods()] : []),
+            ...pluginsForThisFile,
+            visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true }),
+        ],
     }
 })
 

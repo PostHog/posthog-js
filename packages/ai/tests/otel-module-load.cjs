@@ -45,30 +45,40 @@ try {
     })
   )
 
-  // Reproduce a strict package-manager layout: only @posthog/ai's declared
-  // OpenTelemetry peers are available at its level. Their dependencies remain
-  // nested inside their own package layouts.
+  // Keep each package's dependencies nested rather than hoisting them to the fixture root.
   linkDependency('@opentelemetry/api')
   linkDependency('@opentelemetry/exporter-trace-otlp-http')
-  linkDependency('@opentelemetry/sdk-trace-base')
 
-  const assertCoreIsNotDirectlyResolvable = `
-    try {
-      require.resolve('@opentelemetry/core')
-      throw new Error('@opentelemetry/core unexpectedly resolved from the fixture root')
-    } catch (error) {
-      if (error.code !== 'MODULE_NOT_FOUND') throw error
-    }
-  `
+  const assertStrictLayout = ['@opentelemetry/core', '@opentelemetry/sdk-trace-base', '@opentelemetry/sdk-trace']
+    .map(
+      (name) => `
+      try {
+        require.resolve('${name}')
+        throw new Error('${name} unexpectedly resolved from the fixture root')
+      } catch (error) {
+        if (error.code !== 'MODULE_NOT_FOUND') throw error
+      }
+    `
+    )
+    .join('\n')
 
-  execFileSync(process.execPath, ['--eval', `${assertCoreIsNotDirectlyResolvable}\nrequire('@posthog/ai/otel')`], {
-    cwd: fixtureRoot,
-    stdio: 'inherit',
-  })
-  execFileSync(process.execPath, ['--input-type=module', '--eval', `await import('@posthog/ai/otel')`], {
-    cwd: fixtureRoot,
-    stdio: 'inherit',
-  })
+  execFileSync(
+    process.execPath,
+    [
+      '--eval',
+      `${assertStrictLayout}\nconst { PostHogSpanProcessor } = require('@posthog/ai/otel'); new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown().catch(error => { console.error(error); process.exitCode = 1 })`,
+    ],
+    { cwd: fixtureRoot, stdio: 'inherit' }
+  )
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `const { PostHogSpanProcessor } = await import('@posthog/ai/otel'); await new PostHogSpanProcessor({ projectToken: 'phc_test' }).shutdown()`,
+    ],
+    { cwd: fixtureRoot, stdio: 'inherit' }
+  )
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true })
 }

@@ -9,7 +9,7 @@ import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiter
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
 
-const logger = createLogger('[ExceptionAutocapture]')
+const logger = /* @__PURE__ */ createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
     private _instance: PostHog

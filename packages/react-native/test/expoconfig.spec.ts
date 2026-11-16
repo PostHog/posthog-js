@@ -767,27 +767,31 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     expect(twice.classpathPresent).toBe(true)
   })
 
-  it.each(['1.0.0', '1.4.0', '0.9.9'])('bumps an existing %s classpath that predates native symbols', (version) => {
-    const contents = projectBuildGradle.replace(
-      'classpath("com.android.tools.build:gradle")',
-      `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
-    )
-    const result = addPostHogAndroidGradlePluginClasspath(contents)
-    expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
-    expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
-  })
+  it.each(['1.0.0', '1.4.0', '1.5.0', '1.6.0', '1.7.0', '0.9.9'])(
+    'bumps an existing %s classpath that predates native symbol conflict options',
+    (version) => {
+      const contents = projectBuildGradle.replace(
+        'classpath("com.android.tools.build:gradle")',
+        `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
+      )
+      const result = addPostHogAndroidGradlePluginClasspath(contents)
+      expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
+      expect(result.contents).toContain('posthog-android-gradle-plugin:1.8.0')
+      expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
+    }
+  )
 
-  it.each(['1.5.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
+  it.each(['1.8.0', '1.9.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
     const contents = `buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")\n    }\n}`
     expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
   })
 
-  it('keeps a variable-driven classpath and warns that it needs 1.5.0', () => {
+  it('keeps a variable-driven classpath and warns that it needs 1.8.0', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents =
       'buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")\n    }\n}'
     expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.5.0 or later'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.8.0 or later'))
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
@@ -1304,22 +1308,43 @@ describe('postHogExpoPlugin Android native symbols', () => {
     '}',
   ].join('\n')
 
-  const compilePlugin = async (projectContents = projectBuildGradle, extraProps: Record<string, unknown> = {}) => {
+  const kotlinAppBuildGradle = [
+    'plugins {',
+    '    id("com.android.application")',
+    '    id("com.facebook.react")',
+    '}',
+    '',
+    'android {',
+    '    namespace = "com.example"',
+    '}',
+  ].join('\n')
+
+  const compilePlugin = async (
+    projectContents = projectBuildGradle,
+    extraProps: Record<string, unknown> = {},
+    language: 'groovy' | 'kotlin' = 'groovy',
+    appContents = language === 'kotlin' ? kotlinAppBuildGradle : appBuildGradle,
+    projectLanguage = language
+  ) => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
     const androidRoot = path.join(projectRoot, 'android')
     const appRoot = path.join(androidRoot, 'app')
     projectRoots.push(projectRoot)
     const sourceRoot = path.join(appRoot, 'src/main/java/com/example')
     fs.mkdirSync(sourceRoot, { recursive: true })
-    fs.writeFileSync(path.join(androidRoot, 'build.gradle'), projectContents)
-    fs.writeFileSync(path.join(appRoot, 'build.gradle'), appBuildGradle)
+    const filename = language === 'kotlin' ? 'build.gradle.kts' : 'build.gradle'
+    const projectFilename = projectLanguage === 'kotlin' ? 'build.gradle.kts' : 'build.gradle'
+    fs.writeFileSync(path.join(androidRoot, projectFilename), projectContents)
+    fs.writeFileSync(path.join(appRoot, filename), appContents)
     fs.writeFileSync(path.join(androidRoot, 'gradle.properties'), '')
     fs.writeFileSync(path.join(sourceRoot, 'MainActivity.kt'), kotlinMainActivity)
 
     const withEarlierAppGradlePlugin = withAppBuildGradle(
       { name: 'PostHog config plugin test', slug: 'posthog-config-plugin-test' } as any,
       (config) => {
-        config.modResults.contents += '\n// Added by earlier config plugin'
+        if (!config.modResults.contents.includes('// Added by earlier config plugin')) {
+          config.modResults.contents += '\n// Added by earlier config plugin'
+        }
         return config
       }
     )
@@ -1331,8 +1356,8 @@ describe('postHogExpoPlugin Android native symbols', () => {
     await compileModsAsync(config, { projectRoot, platforms: ['android'] })
 
     return {
-      project: fs.readFileSync(path.join(androidRoot, 'build.gradle'), 'utf8'),
-      app: fs.readFileSync(path.join(appRoot, 'build.gradle'), 'utf8'),
+      project: fs.readFileSync(path.join(androidRoot, projectFilename), 'utf8'),
+      app: fs.readFileSync(path.join(appRoot, filename), 'utf8'),
     }
   }
 
@@ -1346,6 +1371,111 @@ describe('postHogExpoPlugin Android native symbols', () => {
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  it('configures native symbol uploads in Kotlin Gradle files', async () => {
+    const result = await compilePlugin(projectBuildGradle, { uploadNativeSymbols: { includeSource: true } }, 'kotlin')
+
+    expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.8.0")')
+    expect(result.app).toContain('apply(plugin = "com.posthog.android")')
+    expect(result.app).toContain('setProperty("uploadNativeSymbols", true)')
+    expect(result.app).toContain('setProperty("includeNativeSymbolSources", true)')
+    expect(result.app).not.toContain('apply plugin:')
+  })
+
+  it.each([
+    ['skipOnConflict', 'posthogReactNativeSkipOnConflict'],
+    ['force', 'posthogReactNativeForce'],
+  ])('uses Kotlin syntax for sourcemap uploads with %s', async (option, property) => {
+    const result = await compilePlugin(projectBuildGradle, { [option]: true }, 'kotlin')
+
+    expect(result.app).toContain('apply(from = File(')
+    expect(result.app).toContain(`extra["${property}"] = true`)
+    expect(result.app).not.toContain('apply from:')
+    expect(result.app).not.toContain('project.ext.')
+  })
+
+  it.each(['groovy', 'kotlin'] as const)(
+    'keeps a variable plugin classpath compatible without conflict options in %s',
+    async (language) => {
+      const project = projectBuildGradle.replace(
+        'classpath("com.android.tools.build:gradle")',
+        'classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")'
+      )
+      const result = await compilePlugin(project, {}, language)
+
+      expect(result.project).toBe(project)
+      for (const property of ['skipOnConflict', 'force']) {
+        expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
+      }
+    }
+  )
+
+  it.each(['groovy', 'kotlin'] as const)('forwards native upload conflict options in %s', async (language) => {
+    for (const option of ['skipOnConflict', 'force'] as const) {
+      const result = await compilePlugin(
+        projectBuildGradle,
+        { uploadNativeSymbols: { includeSource: true }, [option]: true },
+        language
+      )
+      const otherOption = option === 'skipOnConflict' ? 'force' : 'skipOnConflict'
+      expect(result.app).toContain(language === 'kotlin' ? `setProperty("${option}", true)` : `    ${option} = true`)
+      expect(result.app).not.toContain(language === 'kotlin' ? `setProperty("${otherOption}",` : `    ${otherOption} =`)
+
+      const reset = await compilePlugin(result.project, {}, language, result.app)
+      for (const property of ['skipOnConflict', 'force']) {
+        expect(reset.app).not.toContain(language === 'kotlin' ? `setProperty("${property}",` : `    ${property} =`)
+      }
+      expect(await compilePlugin(reset.project, {}, language, reset.app)).toEqual(reset)
+
+      const disabled = await compilePlugin(reset.project, { uploadNativeSymbols: false }, language, reset.app)
+      expect(disabled.app).not.toContain('posthog-native-symbols')
+    }
+  })
+
+  it('keeps repeated Kotlin prebuilds idempotent and updates upload options', async () => {
+    const props = { uploadNativeSymbols: { includeSource: true }, force: true }
+    const first = await compilePlugin(projectBuildGradle, props, 'kotlin')
+    const second = await compilePlugin(first.project, props, 'kotlin', first.app)
+    expect(second).toEqual(first)
+
+    const changed = await compilePlugin(second.project, { skipOnConflict: true }, 'kotlin', second.app)
+    expect(changed.app).toContain('setProperty("includeNativeSymbolSources", false)')
+    expect(changed.app).toContain('extra["posthogReactNativeSkipOnConflict"] = true')
+    expect(changed.app).not.toContain('posthogReactNativeForce')
+
+    const disabled = await compilePlugin(changed.project, { uploadNativeSymbols: false }, 'kotlin', changed.app)
+    expect(disabled.app).not.toContain('posthog-native-symbols')
+    expect(disabled.app).not.toContain('setProperty("uploadNativeSymbols"')
+    expect(disabled.app).not.toContain('posthogReactNativeSkipOnConflict')
+    expect(disabled.app).toContain('apply(from = File(')
+  })
+
+  it.each(['groovy', 'kotlin'] as const)(
+    'supports a %s project Gradle file with a Kotlin app',
+    async (projectLanguage) => {
+      const result = await compilePlugin(projectBuildGradle, {}, 'kotlin', kotlinAppBuildGradle, projectLanguage)
+      expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:1.8.0")')
+      expect(result.app).toContain('apply(plugin = "com.posthog.android")')
+    }
+  )
+
+  it('does not apply the Kotlin native plugin without a buildscript classpath', async () => {
+    const project = 'plugins {\n    id("com.android.application") version "8.7.0" apply false\n}'
+    const result = await compilePlugin(project, {}, 'kotlin')
+    expect(result.project).toBe(project)
+    expect(result.app).not.toContain('apply(plugin = "com.posthog.android")')
+    expect(result.app).not.toContain('setProperty("uploadNativeSymbols"')
+    expect(result.app).toContain('apply(from = File(')
+  })
+
+  it('does not duplicate a Kotlin native plugin declared in the plugins block', async () => {
+    const app = kotlinAppBuildGradle.replace('    id("com.facebook.react")', '    id("com.posthog.android")')
+    const result = await compilePlugin(projectBuildGradle, {}, 'kotlin', app)
+    expect(result.app).not.toContain('apply(plugin = "com.posthog.android")')
+    expect(result.app).toContain('setProperty("uploadNativeSymbols", true)')
+    const again = await compilePlugin(result.project, {}, 'kotlin', result.app)
+    expect(again).toEqual(result)
   })
 
   it('writes the conflict-behavior ext property the gradle upload reads', async () => {

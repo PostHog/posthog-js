@@ -13,15 +13,67 @@ import type {
     SendRequestInit,
     SessionContext,
 } from '@posthog/browser-common'
-import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { Compression, isUndefined, type Logger } from '@posthog/core'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { getTimezone } from '@posthog/browser-common/utils/timezone'
+import { Compression, isFunction, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
+import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
+import { now } from '../utils/now'
+import { type ResourceTimingWatch, watchResourceTiming } from '../utils/resource-timing'
 import type { PostHog } from '../posthog-core'
-import type { CaptureOptions, EventName, Properties, QueuedRequestWithOptions, RemoteConfigResult } from '../types'
+import type {
+    CaptureOptions,
+    CaptureResult,
+    EventName,
+    MetricAttributes,
+    Properties,
+    QueuedRequestWithOptions,
+    RemoteConfigResult,
+} from '../types'
+
+const FLAGS_REQUEST_DURATION_METRIC = 'posthog.flags.request.duration'
+// Finer than the default bounds between 50ms and 5s, where most browser round trips land.
+// The edges include 150, 300, 500 and 1000 so p95 can be compared with the status page thresholds.
+const FLAGS_REQUEST_DURATION_BOUNDS = [50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]
+// The three parts below add up to the total. Network time comes from the Resource Timing entry.
+const FLAGS_PRE_SEND_DURATION_METRIC = 'posthog.flags.request.pre_send_duration'
+const FLAGS_NETWORK_DURATION_METRIC = 'posthog.flags.request.network_duration'
+const FLAGS_MAIN_THREAD_DURATION_METRIC = 'posthog.flags.request.main_thread_duration'
+// Pre-send and main-thread time are often a few milliseconds, so these bounds add edges below 50ms.
+const FLAGS_SPLIT_DURATION_BOUNDS = [5, 10, 25, ...FLAGS_REQUEST_DURATION_BOUNDS]
+
+// OTel: a 4xx or 5xx response reports its status as the error type. Without a response,
+// the request timed out (an AbortError) or failed for another reason.
+const flagsErrorType = (status: number | undefined, error: unknown): string | undefined => {
+    if (status) {
+        return status >= 400 ? String(status) : undefined
+    }
+    return (error as Error | undefined)?.name === 'AbortError' ? 'timeout' : '_OTHER'
+}
+
+const flagsAttributes = (endpoint: string, response: ApiResponse): MetricAttributes => {
+    const status = response.statusCode || undefined
+    const attributes: MetricAttributes = {
+        'server.address': (convertToURL(endpoint)?.hostname ?? endpoint).replace(/^\[(.*)\]$/, '$1'),
+    }
+    if (status) {
+        attributes['http.response.status_code'] = status
+    }
+    const errorType = flagsErrorType(status, response.error)
+    if (errorType) {
+        attributes['error.type'] = errorType
+    }
+    const timezone = getTimezone()
+    if (timezone) {
+        attributes['client.timezone'] = timezone
+    }
+    return attributes
+}
 
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
@@ -60,27 +112,36 @@ class BrowserClientKeyValueStore implements KeyValueStore {
 
 const REMOTE_CONFIG_EVENT = 'extensionsRemoteConfig'
 
-/** One shared extension client and lifecycle host per browser-v1 PostHog instance. */
-export class BrowserClientAdapter implements Client, Disposable {
+/** A capability view of a PostHog instance. The instance owns extension lifecycle. */
+export class BrowserClientAdapter implements Client {
     readonly kv: KeyValueStore
+    readonly onSession: Listener<string>
     readonly onEvent: Listener<CapturedEventInfo>
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     private readonly _logger: Logger
-    private readonly _runtime: ExtensionRuntime
-    private _latestRemoteConfigResult: RemoteConfigResult | undefined
-    private _disposed = false
 
     constructor(readonly instance: PostHog) {
         this._logger = logger
-        this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
+        this.onSession = (handler) => {
+            return createDisposable(
+                this.instance.onSessionId((sessionId) => {
+                    try {
+                        handler(sessionId)
+                    } catch (error) {
+                        this._logger.error('Browser extension session listener failed', error)
+                    }
+                })
+            )
+        }
         this.onEvent = (handler) => {
-            const unsubscribe = this.instance.on('eventCaptured', (event) => {
+            const unsubscribe = this.instance._addCaptureHook((event, payload) => {
+                if (!payload) return
                 try {
                     handler({
-                        event: event.event,
-                        properties: event.properties,
+                        event,
+                        properties: payload.properties,
                     })
                 } catch (error) {
                     this._logger.error('Browser extension event listener failed', error)
@@ -89,10 +150,6 @@ export class BrowserClientAdapter implements Client, Disposable {
             return createDisposable(unsubscribe)
         }
         this.onRemoteConfig = (handler) => {
-            if (this._disposed) {
-                return createDisposable(() => {})
-            }
-
             const invoke = (result: RemoteConfigResult): void => {
                 try {
                     handler(result)
@@ -101,12 +158,11 @@ export class BrowserClientAdapter implements Client, Disposable {
                 }
             }
             const unsubscribe = this.instance._internalEventEmitter.on(REMOTE_CONFIG_EVENT, invoke)
-            if (this._latestRemoteConfigResult) {
-                invoke(this._latestRemoteConfigResult)
+            if (this.instance._lastRemoteConfig) {
+                invoke(this.instance._lastRemoteConfig)
             }
             return createDisposable(unsubscribe)
         }
-        this._runtime = new ExtensionRuntime(logger.createLogger('[BrowserExtensions]'), this)
     }
 
     get logger(): Logger {
@@ -145,34 +201,55 @@ export class BrowserClientAdapter implements Client, Disposable {
                 sessionId: current?.sessionId ?? '',
                 windowId: current?.windowId ?? '',
                 sessionStartTimestamp: current?.sessionStartTimestamp ?? 0,
+                lastActivityTimestamp: current?.lastActivityTimestamp ?? 0,
             }
         } catch {
-            return { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
+            return { sessionId: '', windowId: '', sessionStartTimestamp: 0, lastActivityTimestamp: 0 }
         }
     }
 
+    get isOptedOut(): boolean {
+        return this.instance.has_opted_out_capturing()
+    }
+
     get canCapture(): boolean {
-        return this.instance.is_capturing()
+        // Older cores have no is_capturing() or cookieless mode.
+        return isFunction(this.instance.is_capturing) ? this.instance.is_capturing() : !this.isOptedOut
+    }
+
+    get isRateLimited(): boolean {
+        return !!this.instance.rateLimiter?.isClientRateLimited
     }
 
     get projectToken(): string {
         return this.instance.config.token
     }
 
-    add(extension: Extension): Promise<void> {
-        return this._runtime.add(extension)
-    }
-
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined {
-        return this._runtime.getExtension<T>(name)
+        let extension: Extension | undefined
+        switch (name) {
+            case FeatureFlagsExtension:
+            case FeatureFlagsCommonExtension:
+                extension = this.instance.featureFlags
+                break
+            case LogsExtension:
+                extension = this.instance.logs
+                break
+            case SurveysExtension:
+                extension = this.instance.surveys
+                break
+            case AutocaptureExtension:
+                extension = this.instance.autocapture
+                break
+        }
+        return extension as T | undefined
     }
 
-    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
+    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): boolean {
         if (!options) {
-            this.instance.capture(event as EventName, properties)
-            return
+            return this._notRateLimited(this.instance.capture(event as EventName, properties))
         }
 
         const captureOptions: CaptureOptions = {
@@ -180,28 +257,29 @@ export class BrowserClientAdapter implements Client, Disposable {
             uuid: options.uuid,
             $set: options.set as Properties | undefined,
             $set_once: options.setOnce as Properties | undefined,
+            ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
         }
-        this.instance.capture(event as EventName, properties, captureOptions)
+        return this._notRateLimited(this.instance.capture(event as EventName, properties, captureOptions))
+    }
+
+    private _notRateLimited(result: CaptureResult | undefined): boolean {
+        // capture() returns undefined for every dropped event. The rate limiter tells a rate limit drop apart from
+        // a drop the app chose, for example in before_send.
+        return !isUndefined(result) || !this.instance.rateLimiter?.lastEventRateLimited
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
         return createDisposable(this.instance._registerExtensionEventProperties(producer))
     }
 
-    handleRemoteConfig(result: RemoteConfigResult): void {
-        if (this._disposed) {
-            return
-        }
-
-        this._latestRemoteConfigResult = result
-        this.instance._internalEventEmitter.emit(REMOTE_CONFIG_EVENT, result)
-    }
-
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
-        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
+        const target = init.target ?? 'api'
+        const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
+        const endpoint = this.instance.requestRouter.endpointFor(target, pathWithQuery)
+        const isLogsRequest = target === 'api' && path === '/i/v1/logs'
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
-            url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
+            url: endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,
             timeout: init.timeoutMs,
@@ -213,6 +291,10 @@ export class BrowserClientAdapter implements Client, Disposable {
             timestampMode: init.sentAt,
         }
 
+        if (isLogsRequest) {
+            requestOptions.batchKey = 'logs'
+        }
+
         if (init.transport === 'sendBeacon') {
             this.instance._send_request(requestOptions)
             return { statusCode: 202 }
@@ -221,15 +303,89 @@ export class BrowserClientAdapter implements Client, Disposable {
         // oxlint-disable-next-line compat/compat -- The shared Client transport is intentionally awaitable.
         return new Promise((resolve) => {
             requestOptions.callback = resolve
+            if (target === 'flags' && this.instance.config.metrics?.flags) {
+                let dispatchedAt: number | undefined
+                let resourceTiming: ResourceTimingWatch | undefined
+                requestOptions.onDispatch = () => {
+                    dispatchedAt = now()
+                }
+                requestOptions.onSend = (url) => {
+                    resourceTiming = watchResourceTiming(url)
+                }
+                requestOptions.callback = (response) => {
+                    resolve(response)
+                    if (isUndefined(dispatchedAt)) {
+                        return
+                    }
+                    const startedAt = dispatchedAt
+                    const completedAt = now()
+                    try {
+                        const attributes = flagsAttributes(endpoint, response)
+                        this._recordFlagsHistogram(
+                            FLAGS_REQUEST_DURATION_METRIC,
+                            completedAt - startedAt,
+                            FLAGS_REQUEST_DURATION_BOUNDS,
+                            attributes
+                        )
+                        // Without a response there is no response end to split at.
+                        if (response.statusCode && resourceTiming) {
+                            resourceTiming.take(completedAt, (entry) =>
+                                this._recordFlagsSplit(entry, startedAt, completedAt, attributes)
+                            )
+                            return
+                        }
+                    } catch (e) {
+                        logger.error('Failed to record the /flags request timing', e)
+                    }
+                    resourceTiming?.stop()
+                }
+            }
             this.instance._send_request(requestOptions)
         })
     }
 
-    dispose(): void {
-        if (this._disposed) {
+    private _recordFlagsSplit(
+        entry: PerformanceResourceTiming,
+        dispatchedAt: number,
+        completedAt: number,
+        attributes: MetricAttributes
+    ): void {
+        // A responseEnd before startTime, such as 0, would make network time negative.
+        if (entry.responseEnd < entry.startTime) {
             return
         }
-        this._disposed = true
-        this._runtime.dispose()
+        try {
+            const responseEnd = Math.min(entry.responseEnd, completedAt)
+            this._recordFlagsHistogram(
+                FLAGS_PRE_SEND_DURATION_METRIC,
+                entry.startTime - dispatchedAt,
+                FLAGS_SPLIT_DURATION_BOUNDS,
+                attributes
+            )
+            this._recordFlagsHistogram(
+                FLAGS_NETWORK_DURATION_METRIC,
+                responseEnd - entry.startTime,
+                FLAGS_REQUEST_DURATION_BOUNDS,
+                attributes
+            )
+            this._recordFlagsHistogram(
+                FLAGS_MAIN_THREAD_DURATION_METRIC,
+                completedAt - responseEnd,
+                FLAGS_SPLIT_DURATION_BOUNDS,
+                attributes
+            )
+        } catch (e) {
+            logger.error('Failed to record the /flags request timing split', e)
+        }
+    }
+
+    private _recordFlagsHistogram(
+        metric: string,
+        durationMs: number,
+        bounds: number[],
+        attributes: MetricAttributes
+    ): void {
+        // Core passes attributes to `beforeSend` by reference, so each histogram gets its own copy.
+        this.instance.metrics?.histogram(metric, durationMs, { unit: 'ms', attributes: { ...attributes }, bounds })
     }
 }

@@ -15,6 +15,11 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
+        range: '<1.443.0',
+        test: 'restyles the widget when setTheme\\(\\) is called',
+        reason: 'posthog.conversations.setTheme() added with conversations theming',
+    },
+    {
         range: '<1.431.0',
         test: 'records customer fetch and XHR durations without changing them, and skips its own requests',
         reason: 'metrics.network option added in #4918',

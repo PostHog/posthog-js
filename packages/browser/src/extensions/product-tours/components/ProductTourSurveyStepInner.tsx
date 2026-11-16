@@ -1,14 +1,14 @@
 import { h } from 'preact'
 import { useState, useRef, useEffect } from 'preact/hooks'
 import { ProductTourStep, ProductTourAppearance, ProductTourSurveyQuestion } from '../../../posthog-product-tours-types'
-import { cancelSVG, IconPosthogLogo } from '../../surveys/icons'
+import { cancelSVG, IconPosthogLogo } from '@posthog/browser-common/surveys/icons'
 import {
     dissatisfiedEmoji,
     neutralEmoji,
     satisfiedEmoji,
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
-} from '../../surveys/icons'
+} from '@posthog/browser-common/surveys/icons'
 
 export interface ProductTourSurveyStepInnerProps {
     step: ProductTourStep

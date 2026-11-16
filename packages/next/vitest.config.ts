@@ -17,6 +17,10 @@ export default defineConfig({
                 ),
             },
             {
+                find: /^posthog-node\/otel$/,
+                replacement: fileURLToPath(new URL('../node/src/entrypoints/otel.ts', import.meta.url)),
+            },
+            {
                 find: /^posthog-node\/edge$/,
                 replacement: fileURLToPath(new URL('../node/src/entrypoints/index.edge.ts', import.meta.url)),
             },

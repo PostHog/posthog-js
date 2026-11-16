@@ -1,5 +1,125 @@
 # @posthog/types
 
+## 1.425.1
+
+### Patch Changes
+
+- [#5721](https://github.com/PostHog/posthog-js/pull/5721) [`6cebc6c`](https://github.com/PostHog/posthog-js/commit/6cebc6cdeddc7356fed62247f3736a91a2543bed) Thanks [@haacked](https://github.com/haacked)! - When the experimental `metrics.flags` option is on, the browser SDK splits each `/flags` attempt that gets a response into three histograms with the same attributes as `posthog.flags.request.duration`. `posthog.flags.request.pre_send_duration` runs from dispatch until the request starts, which includes body compression. `posthog.flags.request.network_duration` runs from the request start until the last byte of the response arrives, taken from the request's Resource Timing entry. `posthog.flags.request.main_thread_duration` runs from that last byte until the SDK's callback runs, which includes reading and parsing the response body. The three add up to the total. An attempt records them only when the browser reports its Resource Timing entry within 5 seconds of the callback and that entry can't belong to another `/flags` request that this copy of the SDK sends to the same URL, so it may record the total without them. `posthog.flags.request.duration` is unchanged. The option, the metric names, and their attributes may change or be removed in any release.
+  (2026-11-13)
+
+## 1.425.0
+
+### Minor Changes
+
+- [#5675](https://github.com/PostHog/posthog-js/pull/5675) [`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add `trace_propagation_targets`: an opt-in allowlist of hostnames or origins that receive a W3C `traceparent` header on `fetch` and `XMLHttpRequest` requests, so backend traces can continue from the browser. Unlisted hosts never get the header, and a `traceparent` set by the app or by OpenTelemetry instrumentation is never overwritten or duplicated.
+  (2026-11-13)
+
+## 1.424.1
+
+### Patch Changes
+
+- [#5685](https://github.com/PostHog/posthog-js/pull/5685) [`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): export browser metrics once a minute by default instead of every 10 seconds. Every tab of an app writes to the same series, so busy series exceeded the backend's per-series point limit and were undercounted. An explicit `metrics.flushIntervalMs` still wins.
+  (2026-11-12)
+
+- [#5686](https://github.com/PostHog/posthog-js/pull/5686) [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): `metrics.network` no longer records server-sent event streams. A `text/event-stream` response stays open for as long as the page listens, so it was timed as a request lasting minutes and pinned the duration percentiles to the top bucket.
+  (2026-11-12)
+
+## 1.424.0
+
+### Minor Changes
+
+- [#5663](https://github.com/PostHog/posthog-js/pull/5663) [`d6dbd3a`](https://github.com/PostHog/posthog-js/commit/d6dbd3a6f7aa9ac91f7c5ed6217c45768604bae9) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Add `imageUrl` to the `EarlyAccessFeature` type
+  (2026-11-11)
+
+## 1.423.0
+
+### Minor Changes
+
+- [#5599](https://github.com/PostHog/posthog-js/pull/5599) [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-10)
+
+### Patch Changes
+
+- [#5595](https://github.com/PostHog/posthog-js/pull/5595) [`b5e9b69`](https://github.com/PostHog/posthog-js/commit/b5e9b69437837064210974577c1351be21c88ca3) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Warn once in the console, even outside debug mode, when the bot user agent filter drops events, and document that `captureLog` logs bypass the filter.
+  (2026-11-10)
+
+## 1.422.0
+
+### Minor Changes
+
+- [#5594](https://github.com/PostHog/posthog-js/pull/5594) [`bfbaff7`](https://github.com/PostHog/posthog-js/commit/bfbaff7e597428cdd6f683c78e60e651f6d2c590) Thanks [@DanielVisca](https://github.com/DanielVisca)! - feat(node): expose `traceId` and `spanId` getters on the `Span` handle, for correlating logs from other loggers with a trace without parsing `traceparent()`
+  (2026-11-09)
+
+## 1.421.1
+
+### Patch Changes
+
+- [#5561](https://github.com/PostHog/posthog-js/pull/5561) [`ab49034`](https://github.com/PostHog/posthog-js/commit/ab49034bb69cdf840318c6ab824492e76a72751d) Thanks [@adityareddy-dev](https://github.com/adityareddy-dev)! - Mask hidden input values in session replay when `maskAllInputs` is enabled, and accept `hidden` in `maskInputOptions`.
+  (2026-11-06)
+
+## 1.421.0
+
+### Minor Changes
+
+- [#5580](https://github.com/PostHog/posthog-js/pull/5580) [`aa66d4c`](https://github.com/PostHog/posthog-js/commit/aa66d4c676a87298f26b66e36a222b49c582ed0f) Thanks [@haacked](https://github.com/haacked)! - `metrics.histogram()` accepts a `bounds` option that sets the histogram's bucket boundaries, and `beforeSend` sees and can change them. The first sample of a histogram (name and unit) fixes its bounds until the client resets. A later sample with different bounds is recorded in the fixed buckets and logs a warning, and a sample with invalid bounds is dropped. The experimental `posthog.flags.request.duration` histogram now uses the bounds `[50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000]` ms, so its p50 and p95 resolve between 50ms and 5s. This changes the metric's buckets, which its experimental status allows.
+  (2026-11-05)
+
+## 1.420.0
+
+### Minor Changes
+
+- [#5547](https://github.com/PostHog/posthog-js/pull/5547) [`742f73f`](https://github.com/PostHog/posthog-js/commit/742f73f01e05fe6413704840d2ba6c0ad5cdf6ec) Thanks [@haacked](https://github.com/haacked)! - Add the experimental `metrics.flags` option. When it is on, the browser SDK records the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, with the server host, the response status or error type, and the browser's timezone as attributes. The option, the metric name, and its attributes may change or be removed in any release.
+  (2026-11-04)
+
+## 1.419.0
+
+### Minor Changes
+
+- [#5480](https://github.com/PostHog/posthog-js/pull/5480) [`9bd0e80`](https://github.com/PostHog/posthog-js/commit/9bd0e807d019f06b08cd998b0bb72bac6dd2352e) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add support widget theming: `conversations.theme` init option, `posthog.conversations.setTheme()`, dark mode, and `--ph-conv-*` CSS custom properties
+  (2026-10-30)
+
+## 1.418.0
+
+### Minor Changes
+
+- [#5269](https://github.com/PostHog/posthog-js/pull/5269) [`950d034`](https://github.com/PostHog/posthog-js/commit/950d03423605d1567c90a3f27f50d4603a89ae45) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `$input_value` to autocapture `change` events for fields marked `data-ph-capture-value`, or matched by the new `autocapture.capture_value_css_selector_allowlist` option (CSS selectors or an `(element) => boolean` predicate).
+  (2026-10-28)
+
+## 1.417.0
+
+### Minor Changes
+
+- [#5405](https://github.com/PostHog/posthog-js/pull/5405) [`3150079`](https://github.com/PostHog/posthog-js/commit/31500798797e35187ca0a61bcf2af24d6ba45a96) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `defaults: 'latest'` to follow the newest defaults and report the applied date in events.
+  (2026-10-27)
+
+## 1.416.1
+
+### Patch Changes
+
+- [#5335](https://github.com/PostHog/posthog-js/pull/5335) [`cb34fe0`](https://github.com/PostHog/posthog-js/commit/cb34fe03c49feb636ea4537f6f6b05144d163dac) Thanks [@hpouillot](https://github.com/hpouillot)! - Correct the documented default for synchronous session replay fetch capture.
+  (2026-10-26)
+
+## 1.416.0
+
+### Minor Changes
+
+- [#5291](https://github.com/PostHog/posthog-js/pull/5291) [`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Attach trace exemplars to metrics recorded inside sampled spans.
+  (2026-10-13)
+
+## 1.415.3
+
+### Patch Changes
+
+- [#5281](https://github.com/PostHog/posthog-js/pull/5281) [`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `before_send` callback types to accept non-null events while still allowing `null` returns to drop events.
+  (2026-10-12)
+
+## 1.415.2
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+
 ## 1.415.1
 
 ### Patch Changes

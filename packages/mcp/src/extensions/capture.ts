@@ -42,7 +42,7 @@ export function captureEvent(
   const sessionInfo = requestAttribution ?? getSessionInfo(server, data, eventInput.sessionId)
 
   const duration =
-    eventInput.duration || (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
+    eventInput.duration ?? (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
 
   const fullEvent: McpEvent = {
     id: eventInput.id || '',
@@ -95,6 +95,7 @@ export function captureEvent(
     // downstream in posthog-events.ts.
     error: eventInput.error,
     errorType: eventInput.errorType,
+    errorStatus: eventInput.errorStatus,
     conversationId: eventInput.conversationId,
     properties: eventInput.properties,
   }

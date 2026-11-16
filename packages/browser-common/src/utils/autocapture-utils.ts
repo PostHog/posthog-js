@@ -3,7 +3,6 @@ import { each, entries } from './general-utils'
 
 import { isArray, isBoolean, isNullish, isString, isUndefined, includes, trim } from '@posthog/core'
 import { logger } from './logger'
-import { window } from './globals'
 import { getTargetingUrl, type UrlTargetingInstance } from './url-targeting-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './element-utils'
 
@@ -190,10 +189,16 @@ const DEFAULT_CONTENT_IGNORELIST = [
     '❮',
 ]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
-export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
+export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = /* @__PURE__ */ (() => [
+    ...DEFAULT_CONTENT_IGNORELIST,
+    '+',
+    '-',
+    '−',
+    '–',
+])()
 // the cap guards against over-long user lists. it clears our own longest default list with room
 // to spare, so copying the defaults and adding a few keywords of your own still works
-const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
+const MAX_CONTENT_IGNORELIST_ENTRIES = /* @__PURE__ */ (() => DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10)()
 
 interface ElementWithText {
     safeText: string
@@ -294,7 +299,8 @@ function controlLabelText(control: Element): ElementWithText {
 // so we include it here so that ph-no-capture also suppresses dead click capture
 const DEFAULT_DEAD_CLICK_IGNORE_LIST = ['.ph-no-deadclick', '.ph-no-capture']
 export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfig['capture_dead_clicks']) {
-    if (!window || cannotCheckForAutocapture(el)) {
+    const win = typeof window === 'undefined' ? undefined : window
+    if (!win || cannotCheckForAutocapture(el)) {
         return false
     }
 
@@ -337,7 +343,8 @@ export function isTextSelectionTarget(el: Element | null): boolean {
 }
 
 export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
-    if (!window || cannotCheckForAutocapture(el)) {
+    const win = typeof window === 'undefined' ? undefined : window
+    if (!win || cannotCheckForAutocapture(el)) {
         return false
     }
 
@@ -379,7 +386,8 @@ const cannotCheckForAutocapture = (el: Element | null) => {
 }
 
 const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
-    if (!window || cannotCheckForAutocapture(el)) {
+    const win = typeof window === 'undefined' ? undefined : window
+    if (!win || cannotCheckForAutocapture(el)) {
         return { parentIsUsefulElement: false, targetElementList: [] }
     }
 
@@ -398,7 +406,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
             parentIsUsefulElement = true
         } else {
             try {
-                const compStyles = window.getComputedStyle(parentNode)
+                const compStyles = win.getComputedStyle(parentNode)
                 if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
                     parentIsUsefulElement = true
                 }
@@ -419,7 +427,8 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 // app's JS handler ran, those catch the effect; if it didn't, dead-click correctly
 // surfaces the bug. A click on a broken <button> with no handler should still flag.
 export function shouldSkipDeadClick(el: Element | null): boolean {
-    if (!window || cannotCheckForAutocapture(el)) {
+    const win = typeof window === 'undefined' ? undefined : window
+    if (!win || cannotCheckForAutocapture(el)) {
         return false
     }
     const { targetElementList } = getElementAndParentsForElement(el, false)
@@ -444,7 +453,8 @@ export function shouldCaptureDomEvent(
     allowedEventTypes?: string[],
     instance?: UrlTargetingInstance
 ): boolean {
-    if (!window || cannotCheckForAutocapture(el)) {
+    const win = typeof window === 'undefined' ? undefined : window
+    if (!win || cannotCheckForAutocapture(el)) {
         return false
     }
 
@@ -485,7 +495,7 @@ export function shouldCaptureDomEvent(
     }
 
     try {
-        const compStyles = window.getComputedStyle(el)
+        const compStyles = win.getComputedStyle(el)
         if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
             return true
         }

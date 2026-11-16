@@ -742,6 +742,27 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_output_choices']).toBeNull()
     })
 
+    test('streaming chat completions capture an error event when the request fails before the stream opens', async () => {
+      const ChatMock: any = openaiModule.Chat
+      const providerError = Object.assign(new Error('Access denied'), { status: 401 })
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockRejectedValue(providerError)
+
+      await expect(
+        client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Hello' }],
+          stream: true,
+          posthogDistinctId: 'stream-user',
+        })
+      ).rejects.toBe(providerError)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_http_status']).toBe(401)
+      expect(properties['$ai_is_error']).toBe(true)
+    })
+
     test('embeddings error handling', async () => {
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
       const testError = new Error('API Error') as Error & { status: number }

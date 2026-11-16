@@ -307,10 +307,31 @@ describe('PostHogProvider', () => {
       const posthog = onClient.mock.calls[0][0] as PostHog
       expect(posthog.isDisabled).toEqual(true)
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "You must pass your PostHog project's api key. The client will be disabled."
+        'You must pass your PostHog project token. The client will be disabled.'
       )
     } finally {
       consoleErrorSpy.mockRestore()
     }
+  })
+
+  it.each([
+    ['projectToken', { projectToken: 'phc_token' }, 'phc_token'],
+    ['deprecated apiKey', { apiKey: 'phc_legacy' }, 'phc_legacy'],
+    ['projectToken over apiKey', { projectToken: 'phc_token', apiKey: 'phc_legacy' }, 'phc_token'],
+  ])('should create the client with %s', (_case, props, expected) => {
+    const onClient = vi.fn()
+
+    render(
+      React.createElement(
+        PostHogProvider,
+        { ...props, autocapture: false, options: { persistence: 'memory' } },
+        React.createElement(CaptureClient, { onClient })
+      )
+    )
+
+    const posthog = onClient.mock.calls[0][0] as PostHog
+    expect(posthog.projectToken).toEqual(expected)
+    expect(posthog.apiKey).toEqual(expected)
+    expect(posthog.isDisabled).toEqual(false)
   })
 })

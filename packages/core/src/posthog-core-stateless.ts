@@ -15,6 +15,7 @@ import {
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
+  PostHogFeatureFlagsResponse,
   FeatureFlagDetail,
   SurveyResponse,
   PostHogFetchResponse,
@@ -333,7 +334,7 @@ const DEFAULT_QUEUE_ROUTE = 'default'
 
 export abstract class PostHogCoreStateless {
   // options
-  readonly apiKey: string
+  readonly projectToken: string
   readonly host: string
   readonly flushAt: number
   readonly preloadFeatureFlags: boolean
@@ -413,21 +414,42 @@ export abstract class PostHogCoreStateless {
     return undefined
   }
 
+  /**
+   * The `/flags` response this client requests and how it reads it. `version` is sent as the `v`
+   * query parameter, and `read` reads the response body that version selects. The two are one
+   * seam, so a client cannot request one version and read another. The default requests `v=2`
+   * and reads the v1 and v2 responses. This is an SDK seam, not a user option.
+   */
+  protected getFlagsResponseFormat(): {
+    version: 2 | 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    return {
+      version: 2,
+      read: (body) => normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse),
+    }
+  }
+
   // This is our abstracted storage. Each implementation should handle its own
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
 
-  constructor(apiKey: string, options: PostHogCoreOptions = {}) {
-    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+  /** The project token the client was created with. Same value as `projectToken`. */
+  get apiKey(): string {
+    return this.projectToken
+  }
+
+  constructor(projectToken: string, options: PostHogCoreOptions = {}) {
+    const normalizedProjectToken = typeof projectToken === 'string' ? projectToken.trim() : ''
     const normalizedHost = typeof options.host === 'string' ? options.host.trim() : ''
-    const missingApiKey = !normalizedApiKey
+    const missingProjectToken = !normalizedProjectToken
 
     this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
-    if (missingApiKey) {
-      this._logger.error("You must pass your PostHog project's api key. The client will be disabled.")
+    if (missingProjectToken) {
+      this._logger.error('You must pass your PostHog project token. The client will be disabled.')
     }
 
-    this.apiKey = normalizedApiKey
+    this.projectToken = normalizedProjectToken
     this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
     this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
     this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
@@ -448,7 +470,7 @@ export abstract class PostHogCoreStateless {
     this.featureFlagsRequestMaxRetries = options.featureFlagsRequestMaxRetries ?? 1
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
-    this.disabled = (options.disabled ?? false) || missingApiKey
+    this.disabled = (options.disabled ?? false) || missingProjectToken
     this.historicalMigration = options?.historicalMigration ?? false
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
@@ -561,10 +583,7 @@ export abstract class PostHogCoreStateless {
     properties?: PostHogEventProperties
   }): PostHogEventProperties {
     const userProperties = payload.properties || {}
-    let properties: PostHogEventProperties = {
-      ...userProperties,
-      ...this.getCommonEventProperties(), // Common PH props
-    }
+    let properties = this.mergeCommonEventProperties(userProperties)
     applyCallerFeatureFlagOverrides(properties, userProperties)
     // Customer hooks (before_send) run after this filter and may deliberately re-add stripped
     // properties; the SDK itself must not enrich beyond allowlisted keys past this point.
@@ -579,6 +598,17 @@ export abstract class PostHogCoreStateless {
       distinct_id: payload.distinct_id,
       event: payload.event,
       properties,
+    }
+  }
+
+  /**
+   * Merges the common PostHog properties into an event's properties. Stateless clients stamp them
+   * last, so callers can't override them.
+   */
+  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    return {
+      ...properties,
+      ...this.getCommonEventProperties(),
     }
   }
 
@@ -760,7 +790,7 @@ export abstract class PostHogCoreStateless {
       host = 'https://eu-assets.i.posthog.com'
     }
 
-    const url = `${host}/array/${this.apiKey}/config`
+    const url = `${host}/array/${this.projectToken}/config`
     const fetchOptions: PostHogFetchOptions = {
       method: 'GET',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
@@ -793,10 +823,11 @@ export abstract class PostHogCoreStateless {
   ): Promise<GetFlagsResult> {
     await this._initPromise
 
+    const responseFormat = this.getFlagsResponseFormat()
     const configParam = fetchConfig ? '&config=true' : ''
-    const url = `${this.host}/flags/?v=2${configParam}`
+    const url = `${this.host}/flags/?v=${responseFormat.version}${configParam}`
     const requestData: Record<string, any> = {
-      token: this.apiKey,
+      token: this.projectToken,
       distinct_id: distinctId,
       groups,
       person_properties: personProperties,
@@ -844,7 +875,7 @@ export abstract class PostHogCoreStateless {
       { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
       this.featureFlagsRequestTimeoutMs
     )
-      .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
+      .then((response) => ({ success: true as const, response: responseFormat.read(response) }))
       .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
         return { success: false, error: this.categorizeRequestError(error) }
@@ -1137,7 +1168,7 @@ export abstract class PostHogCoreStateless {
       return []
     }
 
-    const url = `${this.host}/api/surveys/?token=${this.apiKey}`
+    const url = `${this.host}/api/surveys/?token=${this.projectToken}`
     const fetchOptions: PostHogFetchOptions = {
       method: 'GET',
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
@@ -1583,7 +1614,7 @@ export abstract class PostHogCoreStateless {
     route: string = DEFAULT_QUEUE_ROUTE
   ): Promise<void> {
     const data: Record<string, any> = {
-      api_key: this.apiKey,
+      api_key: this.projectToken,
       batch: batchMessages.map((message) => {
         if (!message) {
           return message
@@ -1797,7 +1828,7 @@ export abstract class PostHogCoreStateless {
     const url =
       auth === 'bearer'
         ? `${this.host}/i/v1/${path}`
-        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
+        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.projectToken)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const body = gzippedPayload || serialized
@@ -1807,7 +1838,7 @@ export abstract class PostHogCoreStateless {
       headers: {
         ...this.getCustomHeaders(),
         'Content-Type': 'application/json',
-        ...(auth === 'bearer' && { Authorization: `Bearer ${this.apiKey}` }),
+        ...(auth === 'bearer' && { Authorization: `Bearer ${this.projectToken}` }),
         ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
       },
       body,

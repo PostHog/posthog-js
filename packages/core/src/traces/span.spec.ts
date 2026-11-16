@@ -1,4 +1,4 @@
-import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
+import { NOOP_SPAN, PassThroughSpan, PostHogSpan, describeError, truncateAttributeValue } from './span'
 import { buildOtlpSpan } from './otlp'
 import { resolveTracesConfig } from './config'
 import type { SpanInit } from './span'
@@ -962,6 +962,18 @@ describe('PostHogSpan', () => {
       expect(createSpan().traceparent()).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`)
     })
 
+    it('exposes the trace and span ids as getters', () => {
+      const span = createSpan()
+      expect(span.traceId).toBe(TRACE_ID)
+      expect(span.spanId).toBe(SPAN_ID)
+    })
+
+    it('reads the ids of a pass-through span from its traceparent', () => {
+      const span = new PassThroughSpan(`00-${TRACE_ID}-${SPAN_ID}-01`)
+      expect(span.traceId).toBe(TRACE_ID)
+      expect(span.spanId).toBe(SPAN_ID)
+    })
+
     it('returns null tracestate when it has none', () => {
       expect(createSpan().tracestate()).toBeNull()
     })
@@ -1008,6 +1020,8 @@ describe('NoopSpan', () => {
     // An id that was never recorded must not propagate to another service.
     expect(NOOP_SPAN.traceparent()).toBeNull()
     expect(NOOP_SPAN.tracestate()).toBeNull()
+    expect(NOOP_SPAN.traceId).toBeNull()
+    expect(NOOP_SPAN.spanId).toBeNull()
   })
 })
 

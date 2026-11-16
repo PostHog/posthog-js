@@ -61,6 +61,55 @@ describe('bot detection and pageview collection', () => {
         })
     }
 
+    describe('Lightpanda', () => {
+        it.each(['$pageview', 'custom_event', '$exception', '$snapshot', '$$heatmap'])(
+            'drops %s at the capture boundary by default',
+            async (event) => {
+                setBotUserAgent('Lightpanda/1.0')
+                posthog = await createPostHog()
+
+                expect(posthog.capture(event)).toBeUndefined()
+                expect(beforeSendMock).not.toHaveBeenCalled()
+            }
+        )
+
+        it('drops exceptions reported through captureException', async () => {
+            setBotUserAgent('Lightpanda/1.0')
+            posthog = await createPostHog()
+
+            posthog.captureException(new Error('synthetic exception'))
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+        })
+
+        it.each(['$pageview', 'custom_event', '$exception', '$snapshot', '$$heatmap'])(
+            'respects the explicit user agent filter opt-out for %s',
+            async (event) => {
+                setBotUserAgent('Lightpanda/1.0')
+                posthog = await createPostHog({ opt_out_useragent_filter: true })
+
+                expect(posthog.capture(event)).toBeDefined()
+
+                expect(beforeSendMock).toHaveBeenCalled()
+                expect(beforeSendMock.mock.calls[0][0].event).toBe(event)
+                // Replay snapshots bypass regular event property enrichment.
+                if (event !== '$snapshot') {
+                    expect(beforeSendMock.mock.calls[0][0].properties.$browser_type).toBe('bot')
+                }
+            }
+        )
+
+        it('captures exceptions when the user agent filter is disabled', async () => {
+            setBotUserAgent('Lightpanda/1.0')
+            posthog = await createPostHog({ opt_out_useragent_filter: true })
+
+            posthog.captureException(new Error('synthetic exception'))
+
+            expect(beforeSendMock).toHaveBeenCalled()
+            expect(beforeSendMock.mock.calls[0][0].event).toBe('$exception')
+        })
+    })
+
     describe('default behavior (without preview flag)', () => {
         it('should drop pageview events from bots', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')

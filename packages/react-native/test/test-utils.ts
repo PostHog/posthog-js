@@ -24,6 +24,12 @@ export const waitForNativePluginEvaluation = async (posthog: unknown): Promise<v
   await (posthog as { _sessionReplayEvalChain: Promise<void> })._sessionReplayEvalChain
 }
 
+// Awaits the serialized JS->native command chain (identify, consent, push, and the replay
+// debug-property refresh) so tests observe a settled native call, e.g. a refresh landing.
+export const waitForNativeChain = async (posthog: unknown): Promise<void> => {
+  await (posthog as { _nativeChain: Promise<void> })._nativeChain
+}
+
 export const setupFetch = (): void => {
   ;(globalThis as any).window = (globalThis as any).window ?? {}
   ;(globalThis as any).window.fetch = vi.fn(async (url: unknown) => {

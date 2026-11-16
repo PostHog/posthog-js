@@ -3,20 +3,20 @@ import { isArray } from '@posthog/core'
 import { h } from 'preact'
 import { cleanup, render } from '@testing-library/preact'
 
-import { BrowserSurveys } from '../browser-surveys'
+import { getSurveyRenderContext, BrowserSurveys } from '../browser-surveys'
 import { SURVEYS } from '../constants'
-import { SurveyManager, SurveyPopup } from '../extensions/surveys'
+import { SurveyManager, SurveyPopup } from '@posthog/browser-common/surveys-renderer'
 import {
     dismissedSurveyEvent,
     sendSurveyEvent,
     setInProgressSurveyState,
     getInProgressSurveyState,
-} from '../extensions/surveys/surveys-extension-utils'
+} from '@posthog/browser-common/surveys/surveys-extension-utils'
 import type { PostHog } from '../posthog-core'
-import { Survey, SurveyEventName, SurveyEventProperties, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveyEventProperties, SurveyType } from '@posthog/browser-common'
 import type { CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { setSurveySeenOnLocalStorage } from '../utils/survey-utils'
+import { setSurveySeenOnLocalStorage } from '@posthog/browser-common/utils/survey-utils'
 import { createMockConfig, createMockPersistence, createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
@@ -101,6 +101,8 @@ describe('active matching survey subscription lifecycle consumption', () => {
                 endpointFor: () => 'https://test.com/api/surveys/',
             } as unknown as PostHog['requestRouter'],
             featureFlags: {
+                reloadFeatureFlags: vi.fn(),
+                onFeatureFlags: (callback) => posthog.onFeatureFlags(callback),
                 hasLoadedFlags: true,
                 isFeatureEnabled: vi.fn(),
                 getFeatureFlag: vi.fn(),
@@ -112,7 +114,7 @@ describe('active matching survey subscription lifecycle consumption', () => {
         posthog.getSurveys = surveys.getSurveys.bind(surveys)
         posthog.cancelPendingSurvey = vi.fn()
         assignableWindow.__PosthogExtensions__ = {
-            generateSurveys: () => new SurveyManager(posthog),
+            generateSurveys: () => new SurveyManager(getSurveyRenderContext(posthog)!),
         }
 
         surveys.setup(createSurveysClient(posthog))
@@ -149,14 +151,14 @@ describe('active matching survey subscription lifecycle consumption', () => {
             expect(callback.mock.lastCall?.[0]).toEqual([startedSurvey])
 
             if (operation === 'dismiss') {
-                dismissedSurveyEvent(startedSurvey, posthog)
+                dismissedSurveyEvent(startedSurvey, getSurveyRenderContext(posthog)!)
             } else {
                 sendSurveyEvent({
                     responses: { $survey_response: 'First answer' },
                     survey: startedSurvey,
                     surveySubmissionId: 'submission-1',
                     isSurveyCompleted: operation === 'complete',
-                    posthog,
+                    posthog: getSurveyRenderContext(posthog)!,
                 })
             }
 
@@ -196,7 +198,7 @@ describe('active matching survey subscription lifecycle consumption', () => {
             render(
                 h(SurveyPopup, {
                     survey: shownSurvey,
-                    posthog,
+                    posthog: getSurveyRenderContext(posthog)!,
                     isPopup: true,
                     removeSurveyFromFocus: vi.fn(),
                     skipShownEvent,
@@ -234,7 +236,7 @@ describe('active matching survey subscription lifecycle consumption', () => {
         surveys.onActiveMatchingSurveysChanged(callback)
         expect(callback.mock.lastCall?.[0]).toEqual([untargetedSurvey])
 
-        dismissedSurveyEvent(untargetedSurvey, posthog)
+        dismissedSurveyEvent(untargetedSurvey, getSurveyRenderContext(posthog)!)
 
         expectConsumed(callback)
     })
@@ -249,7 +251,7 @@ describe('active matching survey subscription lifecycle consumption', () => {
             survey: untargetedSurvey,
             surveySubmissionId: 'submission-1',
             isSurveyCompleted: true,
-            posthog,
+            posthog: getSurveyRenderContext(posthog)!,
         })
 
         expectConsumed(callback)

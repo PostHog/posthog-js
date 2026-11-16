@@ -28,72 +28,57 @@ describe('local evaluation', () => {
     await posthog.shutdown()
   })
 
-  it('evaluates person properties with undefined property values', async () => {
-    const flags = {
-      flags: [
-        {
-          id: 1,
-          name: 'Beta Feature',
-          key: 'person-flag',
-          active: true,
-          filters: {
-            groups: [
-              {
-                variant: null,
-                properties: [
-                  {
-                    key: 'latestBuildVersion',
-                    type: 'person',
-                    value: '.+',
-                    operator: 'regex',
-                  },
-                  {
-                    key: 'latestBuildVersionMajor',
-                    type: 'person',
-                    value: '23',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionMinor',
-                    type: 'person',
-                    value: '31',
-                    operator: 'gt',
-                  },
-                  {
-                    key: 'latestBuildVersionPatch',
-                    type: 'person',
-                    value: '0',
-                    operator: 'gt',
-                  },
-                ],
-                rollout_percentage: 100,
-              },
-            ],
+  it.each(['not_icontains', 'not_starts_with', 'not_ends_with', 'not_regex', 'is_not', 'regex', 'gt'])(
+    'falls back remotely for undefined with %s unless local-only evaluation is requested',
+    async (operator) => {
+      const flags = {
+        flags: [
+          {
+            id: 1,
+            name: 'Beta Feature',
+            key: 'person-flag',
+            active: true,
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'latestBuildVersion', type: 'person', value: '23', operator }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
           },
-        },
-      ],
-    }
-    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+        ],
+      }
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: flags, decideFlags: { 'person-flag': 'server-fallback' } })
+      )
 
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      ...posthogImmediateResolveOptions,
-    })
-
-    expect(
-      await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
-        personProperties: {
-          latestBuildVersion: undefined,
-          latestBuildVersionMajor: undefined,
-          latestBuildVersionMinor: undefined,
-          latestBuildVersionPatch: undefined,
-        },
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
       })
-    ).toEqual(false)
+      const personProperties = { latestBuildVersion: undefined, retained: 'value', explicitNull: null }
 
-    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-  })
+      expect(
+        await posthog.getFeatureFlag('person-flag', 'some-distinct-id', {
+          personProperties,
+          onlyEvaluateLocally: true,
+        })
+      ).toBeUndefined()
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+
+      expect(await posthog.getFeatureFlag('person-flag', 'some-distinct-id', { personProperties })).toEqual(
+        'server-fallback'
+      )
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')
+      expect(flagsCalls).toHaveLength(1)
+      const requestBody = JSON.parse(flagsCalls[0][1]?.body as string)
+      expect(requestBody.person_properties).toEqual({ retained: 'value', explicitNull: null })
+      expect(requestBody.person_properties).not.toHaveProperty('latestBuildVersion')
+    }
+  )
 
   it('evaluates numeric person properties with comparison operators', async () => {
     const flags = {
@@ -1054,7 +1039,7 @@ describe('local evaluation', () => {
       })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -1078,7 +1063,7 @@ describe('local evaluation', () => {
       await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', { personProperties: { doesnt_matter: '1' } })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -2123,6 +2108,107 @@ describe('local evaluation', () => {
     // All evaluated locally; the /flags (decide) API must not be consulted.
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
+
+  it.each([
+    { groupType: 'AND', operator: 'not_in', negation: false, cohortId: 2, memberMatches: false },
+    { groupType: 'OR', operator: 'not_in', negation: false, cohortId: 2, memberMatches: false },
+    { groupType: 'AND', operator: 'not_in', negation: true, cohortId: 2, memberMatches: true },
+    { groupType: 'OR', operator: 'not_in', negation: true, cohortId: 2, memberMatches: true },
+    { groupType: 'AND', operator: 'not_in', negation: false, cohortId: 1, memberMatches: true },
+    { groupType: 'AND', operator: 'in', negation: false, cohortId: 2, memberMatches: true },
+    { groupType: 'AND', operator: undefined, negation: false, cohortId: 2, memberMatches: true },
+  ])(
+    'matches nested cohort $operator in $groupType with negation=$negation referencing cohort $cohortId',
+    async ({ groupType, operator, negation, cohortId, memberMatches }) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                key: 'nested-cohort',
+                active: true,
+                filters: { groups: [{ properties: [{ key: 'id', value: 98, type: 'cohort' }] }] },
+              },
+            ],
+            cohorts: {
+              '98': {
+                type: groupType,
+                values: [{ key: 'id', value: cohortId, type: 'cohort', operator, negation }],
+              },
+              '1': { type: 'AND', values: [{ key: 'id', value: 2, type: 'cohort', operator: 'not_in' }] },
+              '2': { type: 'AND', values: [{ key: 'plan', value: 'pro', type: 'person', operator: 'exact' }] },
+            },
+          },
+        })
+      )
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      for (const [plan, expected] of [
+        ['pro', memberMatches],
+        ['free', !memberMatches],
+      ] as const) {
+        expect(
+          await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id', {
+            personProperties: { plan },
+            onlyEvaluateLocally: true,
+          })
+        ).toBe(expected)
+      }
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    }
+  )
+
+  it.each([
+    { missingDefinition: true, negation: false },
+    { missingDefinition: true, negation: true },
+    { missingDefinition: false, negation: false },
+    { missingDefinition: false, negation: true },
+  ])(
+    'keeps nested not_in unresolved with missingDefinition=$missingDefinition and negation=$negation',
+    async ({ missingDefinition, negation }) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                key: 'nested-cohort',
+                active: true,
+                filters: { groups: [{ properties: [{ key: 'id', value: 98, type: 'cohort' }] }] },
+              },
+            ],
+            cohorts: {
+              '98': {
+                type: 'AND',
+                values: [{ key: 'id', value: 1, type: 'cohort', operator: 'not_in', negation }],
+              },
+              ...(missingDefinition
+                ? {}
+                : { '1': { type: 'AND', values: [{ key: 'plan', value: 'pro', type: 'person', operator: 'exact' }] } }),
+            },
+          },
+          decideFlags: { 'nested-cohort': 'server-fallback' },
+        })
+      )
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      expect(
+        await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id', { onlyEvaluateLocally: true })
+      ).toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+      expect(await posthog.getFeatureFlag('nested-cohort', 'some-distinct-id')).toBe('server-fallback')
+      expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+    }
+  )
 
   it('gets feature flag with variant overrides', async () => {
     const flags = {
@@ -3568,7 +3654,7 @@ describe('match properties', () => {
 
     expect(matchProperty(property_a, { key: 'value2' })).toBe(false)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3594,7 +3680,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'value' })).toBe(false)
     expect(matchProperty(property_a, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_a, { key: '' })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -3607,7 +3693,7 @@ describe('match properties', () => {
     expect(matchProperty(property_c, { key: 'value4' })).toBe(true)
     expect(matchProperty(property_c, { key: 'value5' })).toBe(true)
     expect(matchProperty(property_c, { key: '' })).toBe(true)
-    expect(matchProperty(property_c, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
 
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
   })
@@ -3634,7 +3720,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: '343tfvalUe5' })).toBe(true)
 
     expect(matchProperty(property_a, { key: '' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 1234 })).toBe(false)
     expect(matchProperty(property_a, { key: '1234' })).toBe(false)
 
@@ -3683,12 +3769,10 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator ends_with', () => {
@@ -3725,12 +3809,10 @@ describe('match properties', () => {
     expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
 
-    // The null guard fires before operator dispatch, so the not_ variant is not a pure
-    // negation here — both directions return false, matching icontains.
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
-    expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
+    expect(matchProperty(property_c, { key: null })).toBe(true)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
   })
 
   it('with operator regex', () => {
@@ -3742,7 +3824,7 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: 'valuecom' })).toBe(false)
     expect(matchProperty(property_a, { key: '.com343tfvalue5' })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: '' })).toBe(false)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
@@ -3938,7 +4020,7 @@ describe('match properties', () => {
   it('null or undefined property value', () => {
     const property_a = { key: 'key', value: 'null', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(false)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(false)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -3950,37 +4032,37 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'undefined', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
 
     const property_d = { key: 'key', value: 'undefined', operator: 'regex' }
     expect(matchProperty(property_d, { key: null })).toBe(false)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
 
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -3992,7 +4074,7 @@ describe('match properties', () => {
   it('null or undefined override value', () => {
     const property_a = { key: 'key', value: 'ab', operator: 'is_not' }
     expect(matchProperty(property_a, { key: null })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(true)
+    expect(() => matchProperty(property_a, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_a, { key: 'null' })).toBe(true)
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
@@ -4004,44 +4086,44 @@ describe('match properties', () => {
 
     const property_c = { key: 'key', value: 'app.posthog.com', operator: 'icontains' }
     expect(matchProperty(property_c, { key: null })).toBe(false)
-    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_c, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_c, { key: 'lol' })).toBe(false)
     expect(matchProperty(property_c, { key: 'https://app.posthog.com' })).toBe(true)
 
     const property_d = { key: 'key', value: '.+', operator: 'regex' }
-    expect(matchProperty(property_d, { key: null })).toBe(false)
-    expect(matchProperty(property_d, { key: undefined })).toBe(false)
+    expect(matchProperty(property_d, { key: null })).toBe(true)
+    expect(() => matchProperty(property_d, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_d, { key: 'i_am_a_value' })).toBe(true)
 
     const property_e = { key: 'key', value: 1, operator: 'gt' }
     expect(matchProperty(property_e, { key: null })).toBe(false)
-    expect(matchProperty(property_e, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_e, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_e, { key: 1 })).toBe(false)
     expect(matchProperty(property_e, { key: 2 })).toBe(true)
 
     const property_f = { key: 'key', value: 1, operator: 'lt' }
     expect(matchProperty(property_f, { key: null })).toBe(false)
-    expect(matchProperty(property_f, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_f, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_f, { key: 0 })).toBe(true)
 
     const property_g = { key: 'key', value: 'xyz', operator: 'gte' }
     expect(matchProperty(property_g, { key: null })).toBe(false)
-    expect(matchProperty(property_g, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_g, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_g, { key: 'xyz' })).toBe(true)
 
     const property_h = { key: 'key', value: 'Oo', operator: 'lte' }
     expect(matchProperty(property_h, { key: null })).toBe(false)
-    expect(matchProperty(property_h, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h, { key: 'Oo' })).toBe(true)
 
     const property_h_lower = { key: 'key', value: 'oo', operator: 'lte' }
     expect(matchProperty(property_h_lower, { key: null })).toBe(false)
-    expect(matchProperty(property_h_lower, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_h_lower, { key: undefined })).toThrow(InconclusiveMatchError)
     expect(matchProperty(property_h_lower, { key: 'oo' })).toBe(true)
 
     const property_i = { key: 'key', value: '2022-05-01', operator: 'is_date_before' }
     expect(matchProperty(property_i, { key: null })).toBe(false)
-    expect(matchProperty(property_i, { key: undefined })).toBe(false)
+    expect(() => matchProperty(property_i, { key: undefined })).toThrow(InconclusiveMatchError)
 
     const property_j = { key: 'key', value: '2022-05-01', operator: 'is_date_after' }
     expect(matchProperty(property_j, { key: null })).toBe(false)
@@ -4473,10 +4555,10 @@ describe('semver operators', () => {
       )
     })
 
-    it('returns false for undefined property value', () => {
-      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })).toBe(
-        false
-      )
+    it('throws InconclusiveMatchError for undefined property value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })
+      ).toThrow(InconclusiveMatchError)
     })
 
     it('throws InconclusiveMatchError for invalid override value', () => {
@@ -7883,7 +7965,7 @@ describe('error handling and backoff', () => {
   })
 })
 
-describe('experience continuity warning', () => {
+describe('unresolvable flag warning', () => {
   let posthog: PostHog
   let warnSpy: vi.SpyInstance
 
@@ -7937,6 +8019,139 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience continuity'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('incompatible with local evaluation'))
+  })
+
+  describe.each(['api', 'cache'] as const)('%s definitions', (source) => {
+    it.each(['client', 'server', 'all', null, undefined] as const)(
+      'scopes eager warnings to server-applicable flags with runtime %s',
+      async (runtime) => {
+        const flags = {
+          flags: [
+            {
+              id: 1,
+              name: 'Continuity flag',
+              key: 'continuity-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: runtime,
+              ensure_experience_continuity: true,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+            {
+              id: 2,
+              name: 'Unsupported flag',
+              key: 'unsupported-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: runtime,
+              ensure_experience_continuity: false,
+              filters: { groups: [{ properties: [{ key: 'id', type: 'cohort' as const, value: 999 }] }] },
+            },
+            {
+              id: 3,
+              name: 'Normal client flag',
+              key: 'normal-client-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: 'client' as const,
+              ensure_experience_continuity: false,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+            {
+              id: 4,
+              name: 'Client-only continuity flag',
+              key: 'client-only-continuity-flag',
+              active: true,
+              deleted: false,
+              rollout_percentage: null,
+              experiment_set: [],
+              evaluation_runtime: 'client' as const,
+              ensure_experience_continuity: true,
+              filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+            },
+          ],
+          group_type_mapping: {},
+          cohorts: {},
+        }
+        mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+        posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          ...(source === 'cache'
+            ? {
+                flagDefinitionCacheProvider: {
+                  shouldFetchFlagDefinitions: () => false,
+                  getFlagDefinitions: () => flags,
+                  onFlagDefinitionsReceived: () => {},
+                },
+              }
+            : {}),
+          ...posthogImmediateResolveOptions,
+        })
+
+        await posthog.reloadFeatureFlags()
+        await posthog.reloadFeatureFlags()
+
+        if (runtime === 'client') {
+          expect(warnSpy).not.toHaveBeenCalled()
+        } else {
+          expect(warnSpy).toHaveBeenCalledTimes(2)
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: experience_continuity'))
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason: unsupported_definition'))
+          for (const [message] of warnSpy.mock.calls) {
+            expect(message).toContain('1 flag(s)')
+            expect(message).not.toContain('client-only-continuity-flag')
+          }
+        }
+        expect(posthog.getFeatureFlagEvaluationRuntime('continuity-flag')).toBe(runtime ?? 'all')
+        expect(posthog.getFeatureFlagEvaluationRuntime('unsupported-flag')).toBe(runtime ?? 'all')
+        const snapshot = await posthog.evaluateFlags('user', {
+          flagKeys: ['normal-client-flag'],
+          onlyEvaluateLocally: true,
+        })
+        expect(snapshot.getFlag('normal-client-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+        if (source === 'cache') {
+          expect(mockedFetch).not.toHaveBeenCalledWith(...anyLocalEvalCall)
+        } else {
+          expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        }
+      }
+    )
+  })
+
+  it('warns again when a continuity flag returns to a server runtime', async () => {
+    const flag = {
+      id: 1,
+      key: 'continuity-flag',
+      active: true,
+      evaluation_runtime: 'server' as 'client' | 'server',
+      ensure_experience_continuity: true,
+      filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [flag] } }))
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    flag.evaluation_runtime = 'client'
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    flag.evaluation_runtime = 'server'
+    await posthog.reloadFeatureFlags()
+    expect(warnSpy).toHaveBeenCalledTimes(2)
   })
 
   it('does not emit warning when no experience continuity flags exist', async () => {
@@ -8007,7 +8222,7 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 flag(s)'))
   })
 
-  it('does not emit warning when strictLocalEvaluation is enabled', async () => {
+  it('emits warning when strictLocalEvaluation is enabled', async () => {
     const flags = {
       flags: [
         {
@@ -8033,7 +8248,80 @@ describe('experience continuity warning', () => {
 
     await vi.runOnlyPendingTimersAsync()
 
-    // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
+    // The flag is never resolved in local-only mode either, so the warning still applies.
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('left unresolved'))
+  })
+
+  it('warns once per flag until its definition changes', async () => {
+    const continuityFlag = {
+      id: 1,
+      name: 'Exp Cont Flag',
+      key: 'exp-cont-flag',
+      active: true,
+      ensure_experience_continuity: true,
+      filters: {
+        groups: [{ properties: [], rollout_percentage: 100 }],
+      },
+    }
+    let flags: any = { flags: [continuityFlag] }
+    mockedFetch.mockImplementation((url) => apiImplementation({ localFlags: flags })(url))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+
+    const halfRolloutFlag = { ...continuityFlag, filters: { groups: [{ properties: [], rollout_percentage: 50 }] } }
+    flags = { flags: [halfRolloutFlag] }
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+
+    flags = { flags: [{ ...halfRolloutFlag, active: false }] }
+    await posthog.reloadFeatureFlags()
+    flags = { flags: [halfRolloutFlag] }
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not warn about inactive experience continuity flags', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: false,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
@@ -8080,6 +8368,61 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 flag(s)'))
     // The context-excluded flag never takes the server-fallback path here, so it must not be named.
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('excluded-cont-flag'))
+  })
+
+  it('warns once about flags whose definition local evaluation does not support', async () => {
+    const flag = (
+      key: string,
+      properties: Record<string, any>[],
+      extra: Record<string, any> = {}
+    ): Record<string, any> => ({
+      id: 1,
+      name: key,
+      key,
+      active: true,
+      filters: { groups: [{ properties, rollout_percentage: 100 }] },
+      ...extra,
+    })
+    const dependsOn = (dependencyChain: string[]): Record<string, any>[] => [
+      { key: 'dep', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: dependencyChain },
+    ]
+    const flags = {
+      flags: [
+        flag('static-cohort-flag', [{ key: 'id', type: 'cohort', value: 999 }]),
+        flag('nested-static-cohort-flag', [{ key: 'id', type: 'cohort', value: 1 }]),
+        flag('missing-dependency-flag', dependsOn(['gone'])),
+        flag('circular-dependency-flag', dependsOn([])),
+        flag('unknown-group-flag', [], { filters: { aggregation_group_type_index: 9, groups: [] } }),
+        flag('unknown-operator-flag', [{ key: 'plan', type: 'person', value: 'pro', operator: 'not_a_real_operator' }]),
+        flag('invalid-semver-flag', [{ key: 'version', type: 'person', value: 'x.y', operator: 'semver_gt' }]),
+        flag('local-cohort-flag', [{ key: 'id', type: 'cohort', value: 2 }]),
+        flag('frontend-only-flag', [], { evaluation_contexts: ['frontend'] }),
+        flag('filtered-dependency-flag', dependsOn(['frontend-only-flag'])),
+      ],
+      cohorts: {
+        '1': { type: 'AND', values: [{ key: 'id', type: 'cohort', value: 999 }] },
+        '2': { type: 'AND', values: [{ key: 'plan', type: 'person', value: 'pro', operator: 'exact' }] },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const [message] = warnSpy.mock.calls[0]
+    expect(message).toContain('reason: unsupported_definition')
+    expect(message).toContain(
+      ': static-cohort-flag, nested-static-cohort-flag, missing-dependency-flag, circular-dependency-flag, ' +
+        'unknown-group-flag, unknown-operator-flag, invalid-semver-flag. '
+    )
   })
 })
 

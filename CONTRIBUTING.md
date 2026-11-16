@@ -11,6 +11,10 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 - TypeScript Catalogs: `catalog:native` pins `7.0.2`; the default `catalog:` retains `5.8.2` for legacy tooling (see `pnpm-workspace.yaml`)
 - Main Branch: `main`
 
+## Commit signing
+
+This repo requires all commits to be signed. To configure commit signing, see the [PostHog handbook](https://posthog.com/handbook/engineering/security#commit-signing). Set `commit.gpgsign` to `true` in your git config so that every commit is signed, not only the ones you sign by hand.
+
 ## Tooling
 
 - Install [corepack](https://github.com/nodejs/corepack), if it is not already available
@@ -41,7 +45,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
-| `browser-next/`              | `@posthog/browser`                   | Private experimental browser SDK                         |
+| `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
@@ -140,8 +144,8 @@ pnpm package
 # Watch mode - auto-regenerate tarballs on changes
 pnpm package:watch
 
-# Generate API reference documentation
-pnpm generate-references
+# Generate the Markdown SDK references (SDK_SPECS is a PostHog/sdk-specs checkout)
+SDK_SPECS=../sdk-specs pnpm generate-references
 
 # Clean all build artifacts
 pnpm clean
@@ -154,7 +158,7 @@ pnpm clean:dep
 
 Every workspace package under `packages/` exposes `check-types`. Run `pnpm check-types` for all SDKs and rrweb, or `pnpm turbo run check-types --filter=posthog-node` for one SDK. Turbo builds workspace dependencies first, using the existing build graph once. Browser-next additionally builds itself because its check includes consumer fixtures. Direct package commands assume dependency outputs already exist.
 
-The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
+The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Browser also runs `test:typecheck`, because Vitest does not check the types of its unit tests. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
 
 Builds already perform different kinds of checking: browser, React Native and Convex compile with TypeScript, Next compiles with tsgo, the native plugin uses Bob's TypeScript target, Rslib generates declarations, and AI/React/web use tsdown declaration generation. These build paths remain unchanged. The explicit command provides consistent whole-source coverage independent of which bundler emits declarations; do not add a second Turbo invocation inside package scripts or prepend redundant checks to SDK builds. rrweb retains its mandatory pre-build semantic gate described below.
 
@@ -239,6 +243,7 @@ Common package scripts are listed below. Availability and build output directori
 - `test:built` - Run dedicated built-output assertions (if available)
 - `test:rrweb` - Run vendored rrweb suites, including real-browser and built-output tests
 - `test:functional` - Run functional/integration tests (if applicable)
+- Root `test:nextjs-integration` - Build and test real Next.js 14/15/16 consumers, including release metadata, worker detection and browser cache compatibility. See the [fixture guide](packages/nextjs-config/tests/integration/README.md) for Chromium setup and diagnostics.
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
 ### Using Turbo to Target Specific Packages
@@ -339,8 +344,6 @@ This section is for external contributors. PostHog maintainers (members of the P
 - Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
 - If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
 
-`pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
-
 ## Opening a new PR
 
 - PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
@@ -353,15 +356,14 @@ Follow [RELEASING.md](./RELEASING.md) for changeset requirements and writing gui
 
 ### Key GitHub Actions Workflows
 
-| Workflow                  | Purpose                                                  | Trigger                                                   |
-| ------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `library-ci.yml`          | Main testing pipeline (unit + E2E tests)                 | PR + Push to main                                         |
-| `release.yml`             | Publishes browser assets and npm packages after approval | Push to main affecting `.changeset/**`; workflow dispatch |
-| `integration.yml`         | Playwright tests across browsers                         | PR                                                        |
-| `lint-pr.yml`             | Validates PR titles (Conventional Commits)               | PR events                                                 |
-| `es-check.yml`            | Validates ES5/ES6 bundle compatibility                   | PR + Push to main                                         |
-| `bundled-size.yaml`       | Monitors bundle size changes                             | PR                                                        |
-| `generate-references.yml` | Generates API documentation                              | Workflow dispatch                                         |
+| Workflow            | Purpose                                                  | Trigger                                                   |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `library-ci.yml`    | Main testing pipeline (unit + E2E tests)                 | PR + Push to main                                         |
+| `release.yml`       | Publishes browser assets and npm packages after approval | Push to main affecting `.changeset/**`; workflow dispatch |
+| `integration.yml`   | Playwright tests across browsers                         | PR                                                        |
+| `lint-pr.yml`       | Validates PR titles (Conventional Commits)               | PR events                                                 |
+| `es-check.yml`      | Validates ES5/ES6 bundle compatibility                   | PR + Push to main                                         |
+| `bundled-size.yaml` | Monitors bundle size changes                             | PR                                                        |
 
 ### CI credentials and restricted PRs
 
@@ -379,30 +381,7 @@ Bundle-size, compatibility, incident-risk, description, and versioning checks sk
 
 The main unit, functional, local Playwright, MCP, SDK compliance, and native plugin checks do not require live API credentials. AI live-provider tests already skip without their respective `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Next.js CI smoke builds use dummy configuration and disable real sourcemap uploads.
 
-Publishing, S3 recovery, reference-generation, downstream-upgrade, and watcher worker/sweep workflows run in trusted push, manual, or scheduled contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, Slack, and OpenAI configuration must not be bypassed to make a release or automation run appear successful.
-
-### CI egress auditing
-
-Credential-bearing GitHub-hosted Ubuntu jobs run the SHA-pinned `step-security/harden-runner` action as their first step, before checkout, dependency installation, or token creation. Coverage includes jobs with write-capable `GITHUB_TOKEN` permissions, OIDC access, GitHub App credentials, or service secrets, including secrets used only in failure notifications. Read-only jobs without service secrets are intentionally outside this rollout.
-
-The initial policy is `egress-policy: audit`. It reports network activity to StepSecurity but does not enforce a job-specific outbound allowlist. Audit mode requires StepSecurity telemetry; review the service's data handling before adding sensitive destinations. Do not interpret a successful audit step as proof that exfiltration is prevented, and do not add token permissions just for auditing.
-
-Before enabling `egress-policy: block` for a job:
-
-1. Review the report linked from the job summary after representative successful runs, including cold dependency downloads, matrix variants, and relevant failure/recovery paths. Do not trigger a production release solely to collect a baseline.
-2. Review every observed destination and commit a narrow `allowed-endpoints` list for that job. Do not automatically approve unexplained traffic or share publishing destinations with unrelated build jobs.
-3. Verify required traffic succeeds and an unlisted destination is blocked in a disposable, credential-free job on the same runner type before using the policy with real credentials.
-
-The following credential-bearing jobs are not covered by this setup:
-
-| Jobs                                                                                                      | Reason and follow-up                                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `integration.yml` / `browsers`                                                                            | Runs in a job container. Harden-Runner does not support this layout on standard GitHub-hosted runners. Move enforcement to a supported host or runner image.                                                           |
-| Feature Flags project board, changeset hygiene, release approval notification, and SDK compliance callers | Their steps live in pinned reusable workflows in `PostHog/.github` or `PostHog/posthog-sdk-test-harness`. Add monitoring there, then update the caller pins. A caller cannot prepend steps to a reusable workflow job. |
-
-The local S3 recovery reusable workflow is covered inside its credential-bearing jobs. macOS native builds currently have no declared service secrets or write permissions and remain outside this rollout. Hosted macOS/Windows monitoring does not provide the same blocking support as hosted Linux. See the [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner#environment-compatibility-matrix) and [limitations](https://github.com/step-security/harden-runner/blob/main/docs/limitations.md) before expanding coverage.
-
-Network auditing or blocking does not replace least-privilege tokens or build/publish separation. An allowed destination such as the GitHub API can still be abused with a stolen token.
+Publishing, S3 recovery, reference-generation, and downstream-upgrade workflows run in trusted push or manual contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, and Slack configuration must not be bypassed to make a release or automation run appear successful.
 
 ## Configuration Files
 

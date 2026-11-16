@@ -6,6 +6,7 @@ export type {
   MetricType,
   MetricsConfig,
   CaptureMetricOptions,
+  HistogramOptions,
   MetricSample,
   BeforeSendMetricFn,
   Metrics,
@@ -13,9 +14,10 @@ export type {
   OtlpHistogramDataPoint,
   OtlpMetric,
   OtlpMetricsPayload,
+  OtlpExemplar,
 } from '@posthog/types'
 
-import type { BeforeSendMetricFn, MetricAttributeValue, OtlpMetricsPayload } from '@posthog/types'
+import type { BeforeSendMetricFn, MetricAttributeValue, OtlpMetricsPayload, Span } from '@posthog/types'
 
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for both signals. */
 export type SendMetricsBatchOutcome =
@@ -43,6 +45,11 @@ export interface MetricsHost {
   _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome>
   getLibraryId(): string
   getLibraryVersion(): string
+  /**
+   * The span active where a sample is recorded. A sampled one stamps the
+   * sample's series with an exemplar. Hosts without tracing leave it out.
+   */
+  getActiveSpan?(): Span | null
 }
 
 /**

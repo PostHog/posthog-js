@@ -4,7 +4,7 @@ import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId, encodeSessionId } from '../extensions/session-token'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
-import { EventCapture, fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog, RecordingTransport } from './test-utils'
 
 interface Deferred<T = void> {
   promise: Promise<T>
@@ -76,10 +76,6 @@ function handshake(name: string, version: string): MCPRequestLike {
     method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name, version } },
   }
-}
-
-function setFakeTransport(server: MCPServerLike, transport: unknown): void {
-  ;(server as unknown as { _transport?: unknown })._transport = transport
 }
 
 describe('concurrent request attribution', () => {
@@ -240,6 +236,20 @@ describe('concurrent request attribution', () => {
     expect(initializes.map((event) => event.properties.$mcp_client_version)).toEqual(['1.0.0', '2.0.0'])
   })
 
+  it('lets the host clientInfo callback outrank the handshake body on initialize', async () => {
+    const server = createServer({ clientInfo: () => ({ name: 'host-client', version: '9.9.9' }) })
+
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+    await flushCaptures()
+
+    const initializes = capture.findCapturesByEvent('$mcp_initialize')
+    expect(initializes).toHaveLength(1)
+    expect(initializes[0].properties).toMatchObject({
+      $mcp_client_name: 'host-client',
+      $mcp_client_version: '9.9.9',
+    })
+  })
+
   it('stamps the handshaking client before a slow identify lets another handshake replace it', async () => {
     const identifyBStarted = deferred()
     const releaseIdentifyB = deferred()
@@ -367,35 +377,6 @@ describe('concurrent request attribution', () => {
     })
   })
 
-  it("uses each request's pre-await session source when deciding whether to publish identify", async () => {
-    const identifyAStarted = deferred()
-    const releaseIdentifyA = deferred()
-    const server = createServer({
-      identify: async (request) => {
-        const requestLabel = String(request.params?.arguments?.requestLabel)
-        if (requestLabel === 'A') {
-          identifyAStarted.resolve()
-          await releaseIdentifyA.promise
-        }
-        return { distinctId: `user-${requestLabel}` }
-      },
-    })
-    const tokenB = encodeSessionId({ sessionId: 'ses_b', clientName: 'client-b', clientVersion: '2.0.0' })
-
-    const requestA = invokeTool(server, 'A')
-    await identifyAStarted.promise
-    await invokeTool(server, 'B', {
-      requestInfo: { headers: { 'mcp-session-id': tokenB } },
-    })
-    releaseIdentifyA.resolve()
-    await requestA
-    await flushCaptures()
-
-    const identifyCaptures = capture.findCapturesByEvent('$identify')
-    expect(identifyCaptures).toHaveLength(1)
-    expect(identifyCaptures[0].distinct_id).toBe('user-A')
-  })
-
   it('keeps a delayed initialize token and shared state scoped to their requests', async () => {
     const initializeMetadataStarted = deferred()
     const releaseInitializeMetadata = deferred()
@@ -408,16 +389,8 @@ describe('concurrent request attribution', () => {
         return null
       },
     })
-    const transport: { sessionId?: string } = {}
-    setFakeTransport(server, transport)
-    const initializeRequest: MCPRequestLike = {
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'client-a', version: '1.0.0' },
-      },
-    }
+    const transport = new RecordingTransport()
+    await (server as unknown as Server).connect(transport)
     const tokenB = encodeSessionId({
       sessionId: 'ses_b',
       clientName: 'client-b',
@@ -425,21 +398,22 @@ describe('concurrent request attribution', () => {
       protocolVersion: '2099-token-b',
     })
 
-    const initializeA = invokeInitialize(server, initializeRequest, { requestInfo: { headers: {} } })
+    const initializeA = transport.request({
+      id: 1,
+      method: 'initialize',
+      params: handshake('client-a', '1.0.0').params,
+    })
     await initializeMetadataStarted.promise
-    const initialToken = decodeSessionId(transport.sessionId)
-    expect(initialToken?.clientName).toBe('client-a')
+    expect(transport.sessionId).toBeUndefined()
 
     await invokeTool(server, 'B', {
       requestInfo: { headers: { 'mcp-session-id': tokenB } },
     })
     releaseInitializeMetadata.resolve()
-    await initializeA
+    const initialToken = decodeSessionId((await initializeA).sessionId)
     await flushCaptures()
 
-    const upgradedToken = decodeSessionId(transport.sessionId)
-    expect(upgradedToken).toMatchObject({
-      sessionId: initialToken?.sessionId,
+    expect(initialToken).toMatchObject({
       clientName: 'client-a',
       clientVersion: '1.0.0',
       protocolVersion: '2025-06-18',

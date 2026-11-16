@@ -1,13 +1,13 @@
 import type { ApiResponse } from '@posthog/browser-common'
 
-import { BrowserSurveys } from '../browser-surveys'
+import { getSurveyRenderContext, BrowserSurveys } from '../browser-surveys'
 import { BrowserAutocapture } from '../browser-autocapture'
 import { ProductTourEventReceiver } from '../utils/product-tour-event-receiver'
 import type { ProductTour } from '../posthog-product-tours-types'
 import { SURVEYS } from '../constants'
-import { SurveyManager } from '../extensions/surveys'
+import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import type { PostHog } from '../posthog-core'
-import { Survey, SurveyEventName, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveyType } from '@posthog/browser-common'
 import type { CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { createMockConfig, createMockPersistence, createMockPostHog } from './helpers/posthog-instance'
@@ -94,6 +94,8 @@ describe('active matching survey definition refreshes', () => {
                 endpointFor: () => 'https://test.com/api/surveys/',
             } as unknown as PostHog['requestRouter'],
             featureFlags: {
+                reloadFeatureFlags: vi.fn(),
+                onFeatureFlags: (callback) => posthog.onFeatureFlags(callback),
                 hasLoadedFlags: true,
                 isFeatureEnabled: vi.fn(),
                 getFeatureFlag: vi.fn(),
@@ -105,7 +107,7 @@ describe('active matching survey definition refreshes', () => {
         posthog.getSurveys = surveys.getSurveys.bind(surveys)
         posthog.cancelPendingSurvey = vi.fn()
         assignableWindow.__PosthogExtensions__ = {
-            generateSurveys: () => new SurveyManager(posthog),
+            generateSurveys: () => new SurveyManager(getSurveyRenderContext(posthog)!),
         }
 
         surveys.setup(createSurveysClient(posthog))

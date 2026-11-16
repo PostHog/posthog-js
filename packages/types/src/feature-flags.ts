@@ -51,6 +51,8 @@ export interface EarlyAccessFeature {
     description: string
     stage: 'concept' | 'alpha' | 'beta'
     documentationUrl: string | null
+    /** URL of an image that shows the feature, such as a screenshot. Empty when the feature has no image. */
+    imageUrl?: string | null
     payload: JsonType
     flagKey: string | null
 }

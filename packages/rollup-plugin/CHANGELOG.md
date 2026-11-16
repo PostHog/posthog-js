@@ -1,5 +1,26 @@
 # @posthog/rollup-plugin
 
+## 1.6.4
+
+### Patch Changes
+
+- [#5664](https://github.com/PostHog/posthog-js/pull/5664) [`a7485da`](https://github.com/PostHog/posthog-js/commit/a7485da691c5eaaa1e318c04b781a1394a0835f1) Thanks [@ioannisj](https://github.com/ioannisj)! - Bump `@posthog/cli` to 0.19.1 so builds outside a git checkout that set only a release version upload source maps with a warning instead of failing with "Release fields are incomplete".
+  (2026-11-11)
+
+## 1.6.3
+
+### Patch Changes
+
+- [#5571](https://github.com/PostHog/posthog-js/pull/5571) [`2eccf01`](https://github.com/PostHog/posthog-js/commit/2eccf019896b2938ca2b98243859a8fd26217451) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep event-mode chunk IDs stable when unrelated lazy chunks are added in Rollup and Vite builds.
+  (2026-11-06)
+
+## 1.6.2
+
+### Patch Changes
+
+- [#5351](https://github.com/PostHog/posthog-js/pull/5351) [`4182940`](https://github.com/PostHog/posthog-js/commit/4182940bf5f715bef16a0740cc9d08354040bdd8) Thanks [@hpouillot](https://github.com/hpouillot)! - Require PostHog CLI 0.18.11 or newer within the 0.18 release line.
+  (2026-10-21)
+
 ## 1.6.1
 
 ### Patch Changes

@@ -4,7 +4,6 @@ import {
   sentryIntegration,
   type SentryIntegrationOptions,
 } from '@/extensions/sentry-integration'
-import { waitForPromises } from '../utils'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 
@@ -115,9 +114,7 @@ describe('PostHogSentryIntegration', () => {
 
     processorFunction(createMockSentryException())
 
-    await waitForPromises() // First flush
-    vi.runOnlyPendingTimers() // Flush timer
-    await waitForPromises() // Second flush
+    await posthog.flush()
     const batchEvents = getLastBatchEvents()
 
     expect(batchEvents).toEqual([

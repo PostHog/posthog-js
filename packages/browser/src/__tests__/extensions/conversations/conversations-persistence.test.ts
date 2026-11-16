@@ -108,6 +108,22 @@ describe('ConversationsPersistence', () => {
             expect(readStorage()?.widgetSessionId).toBeUndefined()
         })
 
+        it('should report a new widget_session_id only when it was generated', () => {
+            persistence.getOrCreateWidgetSessionId()
+            expect(persistence.isNewWidgetSession()).toBe(true)
+
+            persistence = new ConversationsPersistence(mockPosthog)
+            persistence.getOrCreateWidgetSessionId()
+            expect(persistence.isNewWidgetSession()).toBe(false)
+        })
+
+        it('should not report a restored widget_session_id as new', () => {
+            persistence.getOrCreateWidgetSessionId()
+            persistence.setWidgetSessionId('restored-session-id-123')
+
+            expect(persistence.isNewWidgetSession()).toBe(false)
+        })
+
         it('should set widget_session_id from restore flow', () => {
             persistence.setWidgetSessionId('restored-session-id-123')
 

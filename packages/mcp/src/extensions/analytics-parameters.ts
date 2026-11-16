@@ -50,7 +50,7 @@ export interface AnalyticsInjectableTool {
 }
 
 /**
- * Adds a required string parameter to a tool's JSON Schema. Called AFTER the MCP
+ * Adds a string parameter to a tool's JSON Schema. Called AFTER the MCP
  * SDK has converted Zod schemas to JSON Schema, so only JSON Schema needs
  * handling.
  *
@@ -67,6 +67,7 @@ export function addAnalyticsParameterToTool<TTool extends AnalyticsInjectableToo
   parameterName: string,
   description: string,
   injectionLabel: string,
+  required: boolean,
   logger: LoggerFn = log
 ): TTool {
   const modifiedTool = { ...tool }
@@ -85,11 +86,7 @@ export function addAnalyticsParameterToTool<TTool extends AnalyticsInjectableToo
   }
 
   if (!modifiedTool.inputSchema) {
-    modifiedTool.inputSchema = {
-      type: 'object',
-      properties: {},
-      required: [],
-    }
+    modifiedTool.inputSchema = { type: 'object', properties: {} }
   }
 
   // Deep copy: the server may reuse or freeze the schema object it handed us.
@@ -101,23 +98,16 @@ export function addAnalyticsParameterToTool<TTool extends AnalyticsInjectableToo
     inputSchema.properties = {}
   }
 
-  // The MCP SDK emits `additionalProperties: false` when converting Zod schemas;
-  // left in place it would make the injected key invalid.
-  if (inputSchema.additionalProperties === false) {
-    inputSchema.additionalProperties = undefined
-  }
-
   inputSchema.properties[parameterName] = {
     type: 'string',
     description,
   }
 
-  if (Array.isArray(inputSchema.required)) {
-    if (!inputSchema.required.includes(parameterName)) {
-      inputSchema.required.push(parameterName)
+  if (required) {
+    const existing = Array.isArray(inputSchema.required) ? inputSchema.required : []
+    if (!existing.includes(parameterName)) {
+      inputSchema.required = [...existing, parameterName]
     }
-  } else {
-    inputSchema.required = [parameterName]
   }
 
   return modifiedTool

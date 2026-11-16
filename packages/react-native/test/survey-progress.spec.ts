@@ -27,7 +27,7 @@ function setup() {
   function open(project = 'project') {
     const storage = createEventsStorage(backend)
     const client = {
-      apiKey: project,
+      projectToken: project,
       getPersistedProperty: (key: PostHogPersistedProperty) => storage.getItem(key),
       setPersistedProperty: (key: PostHogPersistedProperty, value: unknown) => storage.setItem(key, value),
     } as unknown as PostHog

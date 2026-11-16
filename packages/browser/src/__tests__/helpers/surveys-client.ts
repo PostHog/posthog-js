@@ -29,6 +29,14 @@ class SurveysTestKeyValueStore implements KeyValueStore {
 }
 
 class SurveysTestClient extends BrowserClientAdapter {
+    override get session() {
+        return {
+            sessionId: this.instance.get_session_id(),
+            windowId: '',
+            sessionStartTimestamp: 0,
+            lastActivityTimestamp: 0,
+        }
+    }
     override readonly kv = new SurveysTestKeyValueStore(this.instance)
     // Remote outcomes in these tests are driven directly on BrowserSurveys.
     override readonly onRemoteConfig: Client['onRemoteConfig'] = () => ({ dispose: () => {} })

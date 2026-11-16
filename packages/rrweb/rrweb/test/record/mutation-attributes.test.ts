@@ -4,7 +4,7 @@ import type { attributeCursor, mutationRecord } from '@posthog/rrweb-types';
 import MutationBuffer from '../../src/record/mutation';
 
 type AttributeProbe = {
-  attributes: attributeCursor[];
+  attributes: Map<Node, attributeCursor>;
   processMutation: (m: mutationRecord) => void;
 };
 
@@ -39,7 +39,9 @@ function attributeMutation(
 }
 
 function recordedNames(buffer: AttributeProbe): string[] {
-  return buffer.attributes.flatMap((item) => Object.keys(item.attributes));
+  return Array.from(buffer.attributes.values()).flatMap((item) =>
+    Object.keys(item.attributes),
+  );
 }
 
 function mutate(target: Element, name: string, value: string) {
@@ -64,11 +66,15 @@ describe('attribute mutations', () => {
 
   it('records other attributes on media elements', () => {
     const buffer = mutate(document.createElement('video'), 'width', '320');
-    expect(buffer.attributes[0].attributes).toEqual({ width: '320' });
+    expect(Array.from(buffer.attributes.values())[0].attributes).toEqual({
+      width: '320',
+    });
   });
 
   it('records autoplay on elements that are not media elements', () => {
     const buffer = mutate(document.createElement('div'), 'autoplay', '');
-    expect(buffer.attributes[0].attributes).toEqual({ autoplay: '' });
+    expect(Array.from(buffer.attributes.values())[0].attributes).toEqual({
+      autoplay: '',
+    });
   });
 });

@@ -33,6 +33,7 @@ const STRONG_CONTEXT_TYPES = new Set([
 ])
 
 const FILE_FAMILY_TYPES = new Set(['file', 'input_file', 'document', 'media', 'file-data'])
+const TYPED_BINARY_DATA_TYPES = new Set(['image', 'audio', 'video', 'document'])
 
 const KNOWN_AUDIO_FORMATS = new Set(['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'webm'])
 
@@ -91,7 +92,14 @@ export class MediaTypeContext {
     return undefined
   }
 
-  hasExplicitBinaryMediaType(): boolean {
+  hasDefiniteBinaryData(): boolean {
+    if (
+      this.parent &&
+      this.key === 'data' &&
+      typeof this.parent.type === 'string' &&
+      TYPED_BINARY_DATA_TYPES.has(this.parent.type)
+    )
+      return true
     if (!this.explicitMediaType && (!this.parent || !this.key || !STRONG_CONTEXT_KEYS.has(this.key))) return false
     const mediaType = this.inferFromSiblingMime()
     return mediaType !== undefined && !mediaType.toLowerCase().startsWith('text/')

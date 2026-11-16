@@ -7,7 +7,7 @@ export default defineConfig({
     lib: [{ format: 'esm' }],
     source: {
         entry: {
-            index: 'src/index.ts',
+            index: ['src/**/*', '!src/**/*.spec.ts'],
         },
         tsconfigPath: './tsconfig.build.json',
     },

@@ -1,19 +1,24 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/analytics'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import { createAnalyticsDelivery } from '../src/analytics-delivery'
-import { isAnalyticsExtension, type AnalyticsDeliveryFactory, type AnalyticsExtension } from '../src/analytics-internal'
-import { createPostHog } from '../src'
-import { createPostHog as createCorePostHog } from '../src/core'
-import type { AutomaticAnalyticsOptions, CorePostHogOptions, PostHog } from '../src/types'
+import { analytics } from '../src/products/analytics/analytics'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { createAnalyticsDelivery } from '../src/products/analytics/delivery/analytics-delivery'
+import {
+    isAnalyticsExtension,
+    type AnalyticsDeliveryFactory,
+    type IAnalyticsExtension,
+} from '../src/products/analytics/analytics-internal'
+import { createPostHog } from '../src/composition/npm'
+import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
+import type { AutomaticAnalyticsOptions, CorePostHogOptions, IPostHog } from '../src/core/types'
 import { createFetch, type SentRequest } from './helpers'
 
 const automaticAnalytics = (
     load: () => Promise<AnalyticsDeliveryFactory>,
     options: AutomaticAnalyticsOptions = { flushAt: 100, flushInterval: 0 }
-): AnalyticsExtension => createAnalyticsExtension(options, load)
+): IAnalyticsExtension => createAnalyticsExtension(options, load)
 
-const createWithAnalytics = (options: CorePostHogOptions, extension?: AnalyticsExtension): Promise<PostHog> => {
+const createWithAnalytics = (options: CorePostHogOptions, extension?: IAnalyticsExtension): Promise<IPostHog> => {
     const configured = options.extensions ?? []
     const extensions = extension && !configured.some(isAnalyticsExtension) ? [extension, ...configured] : configured
     return createCorePostHog({ ...options, extensions })
@@ -30,6 +35,60 @@ const deferred = <T>() => {
 }
 
 describe('@posthog/browser automatic analytics', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+    it('runs pre-teardown subscribers registered before lazy delivery, contains failures, and removes disposed subscriptions', async () => {
+        const events = new EventTarget()
+        vi.stubGlobal('addEventListener', events.addEventListener.bind(events))
+        vi.stubGlobal('removeEventListener', events.removeEventListener.bind(events))
+        vi.stubGlobal('onpagehide', null)
+        const imported = deferred<AnalyticsDeliveryFactory>()
+        const extension = automaticAnalytics(() => imported.promise)
+        const requests: SentRequest[] = []
+        const client = await createWithAnalytics(
+            {
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                capturePageview: false,
+                fetch: createFetch(requests),
+            },
+            extension
+        )
+        const failure = extension.onBeforeTeardown!(() => {
+            throw new Error('product callback')
+        })
+        const callback = vi.fn(() => requireInstalledExtension(client.analytics).capture('product teardown'))
+        const subscription = extension.onBeforeTeardown!(callback)
+        const skipped = vi.fn()
+        const remover = extension.onBeforeTeardown!(() => removed.dispose())
+        const removed = extension.onBeforeTeardown!(skipped)
+        expect(subscription.deliveryAvailable).toBe(false)
+        requireInstalledExtension(client.analytics).capture('initial')
+        imported.resolve(createAnalyticsDelivery)
+        await client.flush()
+        expect(subscription.deliveryAvailable).toBe(true)
+        events.dispatchEvent(new Event('pagehide'))
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(skipped).not.toHaveBeenCalled()
+        remover.dispose()
+        expect(requests.filter(({ init }) => init.keepalive).flatMap(({ body }) => body?.batch ?? [])).toEqual([
+            expect.objectContaining({ event: 'product teardown' }),
+        ])
+        subscription.dispose()
+        subscription.dispose()
+        failure.dispose()
+        events.dispatchEvent(new Event('pagehide'))
+        expect(callback).toHaveBeenCalledTimes(1)
+        const disposed = vi.fn()
+        const stopped = extension.onBeforeTeardown!(disposed)
+        await client.dispose()
+        events.dispatchEvent(new Event('pagehide'))
+        expect(stopped.deliveryAvailable).toBe(false)
+        expect(disposed).not.toHaveBeenCalled()
+    })
+
     it('keeps the same analytics instance and finalized events while delivery loads', async () => {
         const requests: SentRequest[] = []
         const imported = deferred<AnalyticsDeliveryFactory>()
@@ -45,14 +104,14 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(load)
         )
-        const extension = posthog.getExtension('analytics')
+        const extension = posthog.analytics
         const observed = vi.fn()
         const property = vi.fn(() => 'original')
-        posthog.onEvent(observed)
+        requireInstalledExtension(posthog.analytics).onEvent(observed)
         expect(extension).toBeDefined()
         expect(load).not.toHaveBeenCalled()
         const timestamp = new Date('2026-01-01T00:00:00.000Z')
-        posthog.capture(
+        requireInstalledExtension(posthog.analytics).capture(
             'before-load',
             {
                 get value() {
@@ -62,12 +121,12 @@ describe('@posthog/browser automatic analytics', () => {
             { uuid: 'stable-uuid', timestamp }
         )
         const originalIdentity = posthog.distinctId
-        const originalSession = posthog.session.sessionId
-        await posthog.identify('identified-later')
+        const originalSession = posthog.session!.sessionId
+        await requireInstalledExtension(posthog.analytics).identify('identified-later')
         expect(requests).toHaveLength(0)
         imported.resolve(createAnalyticsDelivery)
         await posthog.flush()
-        expect(posthog.getExtension('analytics')).toBe(extension)
+        expect(posthog.analytics).toBe(extension)
         expect(load).toHaveBeenCalledTimes(1)
         expect(property).toHaveBeenCalledTimes(1)
         expect(observed.mock.calls.map(([event]) => event.event)).toEqual(['before-load', '$identify'])
@@ -79,9 +138,9 @@ describe('@posthog/browser automatic analytics', () => {
             session_id: originalSession,
             properties: { value: 'original' },
         })
-        posthog.capture('after-load')
+        requireInstalledExtension(posthog.analytics).capture('after-load')
         await posthog.flush()
-        expect(posthog.getExtension('analytics')).toBe(extension)
+        expect(posthog.analytics).toBe(extension)
         expect(load).toHaveBeenCalledTimes(1)
         await posthog.shutdown()
     })
@@ -101,7 +160,7 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(load)
         )
-        const immediate = posthog.captureImmediate('before-denial')
+        const immediate = requireInstalledExtension(posthog.analytics).captureImmediate('before-denial')
         const cancelled = expect(immediate).resolves.toMatchObject({
             submitted: 0,
             notPersisted: 0,
@@ -110,7 +169,7 @@ describe('@posthog/browser automatic analytics', () => {
         })
         posthog.optOut()
         posthog.optIn()
-        posthog.capture('after-grant')
+        requireInstalledExtension(posthog.analytics).capture('after-grant')
         const flush = posthog.flush()
         imported.resolve(createAnalyticsDelivery)
         await Promise.all([cancelled, flush])
@@ -138,16 +197,16 @@ describe('@posthog/browser automatic analytics', () => {
                 },
                 automaticAnalytics(() => imported.promise)
             )
-            const extension = posthog.getExtension('analytics')
-            posthog.capture('expired')
+            const extension = posthog.analytics
+            requireInstalledExtension(posthog.analytics).capture('expired')
             await Promise.resolve()
             expect(vi.getTimerCount()).toBe(0)
             await vi.advanceTimersByTimeAsync(60 * 60 * 1_000 + 1)
-            posthog.capture('fresh')
+            requireInstalledExtension(posthog.analytics).capture('fresh')
             const flush = posthog.flush()
             imported.resolve(createAnalyticsDelivery)
             await flush
-            expect(posthog.getExtension('analytics')).toBe(extension)
+            expect(posthog.analytics).toBe(extension)
             expect((requests[0]?.body?.batch as Array<{ event: string }>).map(({ event }) => event)).toEqual(['fresh'])
             await posthog.shutdown()
             expect(vi.getTimerCount()).toBe(0)
@@ -170,8 +229,8 @@ describe('@posthog/browser automatic analytics', () => {
                 {
                     name: 'captures-during-setup',
                     setup(client) {
-                        expect(client.getExtension('analytics')).toBe(extension)
-                        client.capture('during-setup')
+                        expect(client.analytics).toBe(extension)
+                        client.sharedClient.capture('during-setup')
                     },
                 },
                 extension,
@@ -179,22 +238,24 @@ describe('@posthog/browser automatic analytics', () => {
         })
         await posthog.flush()
         expect((requests[0]?.body?.batch as Array<{ event: string }>)[0]?.event).toBe('during-setup')
-        expect(posthog.getExtension('analytics')).toBe(extension)
+        expect(posthog.analytics).toBe(extension)
         await posthog.shutdown()
     })
 
-    it('loads analytics after the first admitted event and flushes it', async () => {
+    it('acquires full default analytics and flushes its admitted event', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
+            flags: false,
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
         })
 
-        await posthog.capture('automatic')
+        const product = requireInstalledExtension(await posthog.resolveExtension('analytics'))
+        product.capture('automatic')
         await posthog.flush()
 
         expect(requests).toHaveLength(1)
@@ -213,15 +274,22 @@ describe('@posthog/browser automatic analytics', () => {
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
+            flags: false,
             analytics: configuration,
         })
         configuration.flushAt = 100
         configuration.flushInterval = 60_000
 
-        await posthog.capture('snapshotted')
+        const product = requireInstalledExtension(await posthog.resolveExtension('analytics'))
+        product.capture('snapshotted')
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
 
-        expect(requests).toHaveLength(1)
+        expect(
+            requests.map((request) => [
+                request.url.pathname,
+                (request.body?.batch as Array<{ event: string }> | undefined)?.map((event) => event.event),
+            ])
+        ).toEqual([['/i/v1/analytics/events', ['snapshotted']]])
         await posthog.shutdown()
     })
 
@@ -237,8 +305,8 @@ describe('@posthog/browser automatic analytics', () => {
             analytics: { load: 'eager', flushAt: 1, flushInterval: 0 },
         })
 
-        expect(posthog.getExtension('analytics')).toBeDefined()
-        await posthog.capture('eager')
+        expect(posthog.analytics).toBeDefined()
+        await requireInstalledExtension(posthog.analytics).capture('eager')
         await posthog.flush()
         expect(requests).toHaveLength(1)
         await posthog.shutdown()
@@ -273,7 +341,7 @@ describe('@posthog/browser automatic analytics', () => {
         }
     })
 
-    it('retains analytics buffering without delivery when automatic loading is disabled', async () => {
+    it('omits implicit analytics when automatic inclusion is disabled', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             remoteConfig: localRemoteConfig,
@@ -285,7 +353,8 @@ describe('@posthog/browser automatic analytics', () => {
             analytics: false,
         })
 
-        await posthog.capture('buffered')
+        expect(posthog.analytics).toBeUndefined()
+        expect(await posthog.resolveExtension('analytics')).toBeUndefined()
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
@@ -308,9 +377,9 @@ describe('@posthog/browser automatic analytics', () => {
             automaticAnalytics(load)
         )
 
-        await posthog.capture('first')
+        await requireInstalledExtension(posthog.analytics).capture('first')
         expect(requests).toHaveLength(0)
-        await posthog.capture('second')
+        await requireInstalledExtension(posthog.analytics).capture('second')
         await posthog.flush()
 
         expect(load).not.toHaveBeenCalled()
@@ -333,7 +402,7 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(eagerLoad, { load: 'eager' })
         )
-        await denied.capture('denied')
+        await requireInstalledExtension(denied.analytics).capture('denied')
 
         const bot = await createWithAnalytics(
             {
@@ -345,7 +414,7 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(lazyLoad)
         )
-        await bot.capture('bot')
+        await requireInstalledExtension(bot.analytics).capture('bot')
 
         const rejected = await createWithAnalytics(
             {
@@ -359,7 +428,7 @@ describe('@posthog/browser automatic analytics', () => {
         )
         const circular: Record<string, unknown> = {}
         circular.circular = circular
-        await rejected.capture('rejected', circular)
+        await requireInstalledExtension(rejected.analytics).capture('rejected', circular)
 
         expect(eagerLoad).toHaveBeenCalledTimes(1)
         expect(lazyLoad).not.toHaveBeenCalled()
@@ -382,9 +451,9 @@ describe('@posthog/browser automatic analytics', () => {
             automaticAnalytics(load, { flushAt: 100, flushInterval: 0 })
         )
 
-        posthog.capture('one')
-        posthog.capture('two')
-        posthog.capture('three')
+        requireInstalledExtension(posthog.analytics).capture('one')
+        requireInstalledExtension(posthog.analytics).capture('two')
+        requireInstalledExtension(posthog.analytics).capture('three')
         expect(load).not.toHaveBeenCalled()
         await Promise.resolve()
         expect(load).toHaveBeenCalledTimes(1)
@@ -420,10 +489,10 @@ describe('@posthog/browser automatic analytics', () => {
             automaticAnalytics(load)
         )
 
-        await posthog.capture('retained_one')
+        await requireInstalledExtension(posthog.analytics).capture('retained_one')
         await Promise.resolve()
         await Promise.resolve()
-        await posthog.capture('retained_two')
+        await requireInstalledExtension(posthog.analytics).capture('retained_two')
         expect(load).toHaveBeenCalledTimes(1)
 
         await posthog.flush()
@@ -450,7 +519,7 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(load)
         )
-        await posthog.capture('concurrent_flush')
+        await requireInstalledExtension(posthog.analytics).capture('concurrent_flush')
         await Promise.resolve()
 
         let firstSettled = false
@@ -490,7 +559,7 @@ describe('@posthog/browser automatic analytics', () => {
             automaticAnalytics(load)
         )
 
-        await posthog.capture('purged')
+        await requireInstalledExtension(posthog.analytics).capture('purged')
         await Promise.resolve()
         posthog.optOut()
         extension.resolve(createAnalyticsDelivery)
@@ -499,10 +568,10 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
-        expect(posthog.getExtension('analytics')).toBeDefined()
+        expect(posthog.analytics).toBeDefined()
 
         posthog.optIn()
-        await posthog.capture('after-grant')
+        await requireInstalledExtension(posthog.analytics).capture('after-grant')
         await posthog.flush()
         expect(requests).toHaveLength(1)
         expect((requests[0]?.body?.batch as Array<{ event: string }>)[0]?.event).toBe('after-grant')
@@ -523,7 +592,7 @@ describe('@posthog/browser automatic analytics', () => {
             },
             automaticAnalytics(() => extension.promise)
         )
-        await posthog.capture('shutdown_load')
+        await requireInstalledExtension(posthog.analytics).capture('shutdown_load')
 
         const shutdown = posthog.shutdown(1_000)
         extension.resolve(createAnalyticsDelivery)
@@ -548,12 +617,12 @@ describe('@posthog/browser automatic analytics', () => {
                 fetch: false,
                 extensions: [extension],
             })
-            posthog.capture('pending_import')
+            requireInstalledExtension(posthog.analytics).capture('pending_import')
             const shutdown = posthog.shutdown(5)
             await vi.advanceTimersByTimeAsync(5)
             await shutdown
             expect(dispose).toHaveBeenCalledTimes(1)
-            expect(posthog.getExtension('analytics')).toBeUndefined()
+            expect(posthog.analytics).toBeUndefined()
             imported.resolve(createDelivery)
             await vi.advanceTimersByTimeAsync(0)
             expect(createDelivery).not.toHaveBeenCalled()
@@ -578,7 +647,7 @@ describe('@posthog/browser automatic analytics', () => {
                 },
                 automaticAnalytics(load)
             )
-            await posthog.capture('pending')
+            await requireInstalledExtension(posthog.analytics).capture('pending')
 
             const shutdown = posthog.shutdown(5)
             await vi.advanceTimersByTimeAsync(5)

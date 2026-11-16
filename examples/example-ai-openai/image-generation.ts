@@ -29,7 +29,7 @@ async function main() {
     })
 
     const response = await client.images.generate({
-        model: 'gpt-image-1',
+        model: 'gpt-image-2.5-flare',
         prompt: 'A hedgehog wearing a PostHog t-shirt, pixel art style',
         size: '1024x1024',
     })

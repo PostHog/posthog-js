@@ -5,7 +5,7 @@
 
 ## Context
 
-The differentiator of MCP analytics is **intent** — not "ran `query_run` 14 times" but "was trying to find a churn cohort". The agent is the only party that knows its intent, and the only channel the SDK controls to ask for it is the tool schemas the server advertises. Separately, we want to learn about capabilities agents *looked for but didn't find*, which by definition never show up as tool calls.
+The differentiator of MCP analytics is **intent** — not "ran `query_run` 14 times" but "was trying to find a churn cohort". The agent is the only party that knows its intent, and the only channel the SDK controls to ask for it is the tool schemas the server advertises. Separately, we want to learn about capabilities agents _looked for but didn't find_, which by definition never show up as tool calls.
 
 ## Decision
 
@@ -16,7 +16,7 @@ The SDK decorates every `tools/list` response it intercepts:
 
 Two deliberate limits:
 
-- **Schema mutation is conservative.** Tools whose schema already declares the parameter, or is composed (`oneOf`/`allOf`/`anyOf`/`$ref`), are skipped with a warning — there is no single `properties` bag to extend safely. `additionalProperties: false` is lifted only on schemas we do extend, since the injected key would otherwise invalidate them.
+- **Schema mutation is conservative.** Tools whose schema already declares the parameter, or is composed (`oneOf`/`allOf`/`anyOf`/`$ref`), are skipped with a warning — there is no single `properties` bag to extend safely. `additionalProperties: false` is lifted only on schemas we do extend, since the injected key would otherwise invalidate them. **Update:** `additionalProperties: false` is now kept. It constrains only keys not listed under `properties`, and the injected key is listed there, so it stays valid. Keeping it follows the spec's "Arguments the SDK injects" ("preserve the order and content of the server's tool list otherwise") and matches posthog-python and posthog-ruby.
 - **"Required" is advisory.** The MCP SDK validates calls against the Zod schema the tool was registered with, and the SDK cannot safely re-derive Zod from the mutated JSON Schema — so a call without `context` still succeeds, just without intent. The `intentFallback` option exists for exactly those clients (tagged `$mcp_intent_source: "inferred"`); the SDK deliberately does no inference itself.
 
 ## Consequences

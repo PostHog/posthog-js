@@ -5,55 +5,80 @@
 import type { StackParser } from './types'
 
 type StackString = string
-type CachedResult = [string, string]
+type CachedResult = string
 
 type ChunkIdMapType = Record<string, string>
 
 let parsedStackResults: Record<StackString, CachedResult> | undefined
-let lastKeysCount: number | undefined
+let lastPostHogChunkIds: ChunkIdMapType | undefined
+let lastNativeDebugIds: ChunkIdMapType | undefined
 let cachedFilenameChunkIds: ChunkIdMapType | undefined
 
 export function getFilenameToChunkIdMap(stackParser: StackParser): ChunkIdMapType | undefined {
-  const chunkIdMap = (globalThis as any)._posthogChunkIds as ChunkIdMapType | undefined
-  if (!chunkIdMap) {
+  const posthogChunkIds = (globalThis as any)._posthogChunkIds as ChunkIdMapType | undefined
+  const nativeDebugIds = (globalThis as any)._debugIds as ChunkIdMapType | undefined
+  if (!posthogChunkIds && !nativeDebugIds) {
     return undefined
   }
 
-  const chunkIdKeys = Object.keys(chunkIdMap)
+  const posthogKeys = posthogChunkIds ? Object.keys(posthogChunkIds) : []
+  const nativeKeys = nativeDebugIds ? Object.keys(nativeDebugIds) : []
 
-  if (cachedFilenameChunkIds && chunkIdKeys.length === lastKeysCount) {
+  if (
+    cachedFilenameChunkIds &&
+    matchesSnapshot(posthogChunkIds, posthogKeys, lastPostHogChunkIds) &&
+    matchesSnapshot(nativeDebugIds, nativeKeys, lastNativeDebugIds)
+  ) {
     return cachedFilenameChunkIds
   }
 
-  lastKeysCount = chunkIdKeys.length
+  lastPostHogChunkIds = posthogChunkIds ? { ...posthogChunkIds } : undefined
+  lastNativeDebugIds = nativeDebugIds ? { ...nativeDebugIds } : undefined
+  cachedFilenameChunkIds = {}
+  parsedStackResults ??= {}
 
-  cachedFilenameChunkIds = chunkIdKeys.reduce<Record<string, string>>((acc, stackKey) => {
-    if (!parsedStackResults) {
-      parsedStackResults = {}
-    }
+  const addChunkIds = (keys: string[], chunkIds: ChunkIdMapType): void => {
+    for (const stackKey of keys) {
+      const chunkId = chunkIds[stackKey]
+      if (!chunkId) {
+        continue
+      }
 
-    const result = parsedStackResults[stackKey]
+      const cachedFilename = parsedStackResults?.[stackKey]
+      if (cachedFilename) {
+        cachedFilenameChunkIds![cachedFilename] = chunkId
+        continue
+      }
 
-    if (result) {
-      acc[result[0]] = result[1]
-    } else {
       const parsedStack = stackParser(stackKey)
-
       for (let i = parsedStack.length - 1; i >= 0; i--) {
-        const stackFrame = parsedStack[i]
-        const filename = stackFrame?.filename
-        const chunkId = chunkIdMap[stackKey]
-
-        if (filename && chunkId) {
-          acc[filename] = chunkId
-          parsedStackResults[stackKey] = [filename, chunkId]
+        const filename = parsedStack[i]?.filename
+        if (filename) {
+          cachedFilenameChunkIds![filename] = chunkId
+          parsedStackResults![stackKey] = filename
           break
         }
       }
     }
+  }
 
-    return acc
-  }, {})
+  if (nativeDebugIds) {
+    addChunkIds(nativeKeys, nativeDebugIds)
+  }
+  if (posthogChunkIds) {
+    addChunkIds(posthogKeys, posthogChunkIds)
+  }
 
   return cachedFilenameChunkIds
+}
+
+function matchesSnapshot(
+  chunkIds: ChunkIdMapType | undefined,
+  keys: string[],
+  snapshot: ChunkIdMapType | undefined
+): boolean {
+  if (!chunkIds || !snapshot) {
+    return chunkIds === snapshot
+  }
+  return keys.length === Object.keys(snapshot).length && keys.every((key) => chunkIds[key] === snapshot[key])
 }

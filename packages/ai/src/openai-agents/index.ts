@@ -47,13 +47,7 @@ export type InstrumentOptions = PostHogTracingProcessorOptions
 export async function instrument(options: InstrumentOptions): Promise<PostHogTracingProcessor> {
   const { addTraceProcessor } = await import('@openai/agents')
 
-  const processor = new PostHogTracingProcessor({
-    client: options.client,
-    distinctId: options.distinctId,
-    privacyMode: options.privacyMode,
-    groups: options.groups,
-    properties: options.properties,
-  })
+  const processor = new PostHogTracingProcessor(options)
 
   addTraceProcessor(processor)
   return processor

@@ -132,6 +132,10 @@ async function runLegacy() {
 
   // --- identity ---
   check('identify() resolved a user', echoCall?.distinctId === `user_${TOKEN}`, `distinct_id=${echoCall?.distinctId}`)
+  check(
+    'no standalone $identify event',
+    events.every((e) => e.event !== '$identify')
+  )
   check('client name recorded', !!echoCall?.properties?.$mcp_client_name, echoCall?.properties?.$mcp_client_name)
   check(
     'protocol version recorded',

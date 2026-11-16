@@ -323,6 +323,97 @@ describe('cross origin iframes', function (this: ISuite) {
       await assertSnapshot(snapshots);
     });
 
+    it.each(['play', 'seek', 'seek-real'])(
+      'maps selected option IDs through the iframe mirror (%s)',
+      async (mode) => {
+        const iframe = await ctx.page.$('iframe[src]');
+        const frame = (await iframe!.contentFrame())!;
+        expect(
+          await frame.evaluate(() => {
+            try {
+              void window.parent.document;
+              return false;
+            } catch (error) {
+              return (
+                error instanceof DOMException && error.name === 'SecurityError'
+              );
+            }
+          }),
+        ).toBe(true);
+        await frame.evaluate(async () => {
+          const select = document.createElement('select');
+          select.id = 'multiple';
+          select.multiple = true;
+          select.innerHTML =
+            '<option value="a" selected>A</option><option value="b">B</option><option value="c" selected>C</option>';
+          document.body.appendChild(select);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          select.options[0].selected = false;
+          select.options[1].selected = true;
+        });
+        await ctx.page.waitForFunction(() =>
+          (window as unknown as IWindow).snapshots.some(
+            (event) =>
+              event.type === 3 &&
+              event.data.source === 5 &&
+              event.data.selectedOptionIds,
+          ),
+        );
+        const live = await frame.evaluate(() =>
+          Array.from(
+            (document.querySelector('#multiple') as HTMLSelectElement)
+              .selectedOptions,
+            (option) => option.value,
+          ),
+        );
+        expect(live).toEqual(['b', 'c']);
+        await ctx.page.evaluate(() =>
+          (window as unknown as IWindow).rrweb.addCustomEvent('end', null),
+        );
+        const events = await ctx.page.evaluate(
+          () => (window as unknown as IWindow).snapshots,
+        );
+        await ctx.page.goto('about:blank');
+        await ctx.page.evaluate(ctx.code);
+        const replayed = await ctx.page.evaluate(
+          async ({ events, mode }) => {
+            const { Replayer } = (
+              window as unknown as { rrweb: typeof import('../../src') }
+            ).rrweb;
+            const replayer = new Replayer(events, {
+              useVirtualDom: mode !== 'seek-real',
+            });
+            if (mode === 'play') {
+              await new Promise<void>((resolve) => {
+                replayer.on('finish', () => resolve());
+                replayer.play();
+              });
+            } else {
+              replayer.pause(
+                events[events.length - 1].timestamp - events[0].timestamp + 1,
+              );
+            }
+            await new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+            );
+            const doc =
+              replayer.iframe.contentDocument!.querySelector(
+                'iframe',
+              )!.contentDocument!;
+            const select = doc.querySelector('#multiple') as HTMLSelectElement;
+            const values = Array.from(
+              select.selectedOptions,
+              (option) => option.value,
+            );
+            replayer.destroy();
+            return values;
+          },
+          { events, mode },
+        );
+        expect(replayed).toEqual(['b', 'c']);
+      },
+    );
+
     it('should map scroll events correctly', async () => {
       // force scrollbars in iframe
       ctx.page.evaluate(() => {

@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rrweb-all",
-    "version": "0.0.27",
+    "version": "0.0.28",
     "scripts": {
         "dev": "pnpm turbo run build --filter='@posthog/rrweb-all^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",

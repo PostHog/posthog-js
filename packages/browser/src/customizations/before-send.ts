@@ -14,11 +14,7 @@ import { logger } from '@posthog/browser-common/utils/logger'
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
 export function sampleByDistinctId(percent: number): BeforeSendFn {
-    return (captureResult: CaptureResult | null): CaptureResult | null => {
-        if (!captureResult) {
-            return null
-        }
-
+    return (captureResult: CaptureResult): CaptureResult | null => {
         return sampleOnProperty(captureResult.properties.distinct_id, percent)
             ? {
                   ...captureResult,
@@ -43,11 +39,7 @@ export function sampleByDistinctId(percent: number): BeforeSendFn {
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
 export function sampleBySessionId(percent: number): BeforeSendFn {
-    return (captureResult: CaptureResult | null): CaptureResult | null => {
-        if (!captureResult) {
-            return null
-        }
-
+    return (captureResult: CaptureResult): CaptureResult | null => {
         return sampleOnProperty(captureResult.properties.$session_id, percent)
             ? {
                   ...captureResult,
@@ -70,11 +62,7 @@ export function sampleBySessionId(percent: number): BeforeSendFn {
  * @param percent a number from 0 to 1, 1 means always send, 0 means never send the event
  */
 export function sampleByEvent(eventNames: (KnownEventName | string)[], percent: number): BeforeSendFn {
-    return (captureResult: CaptureResult | null): CaptureResult | null => {
-        if (!captureResult) {
-            return null
-        }
-
+    return (captureResult: CaptureResult): CaptureResult | null => {
         if (!includes(eventNames, captureResult.event)) {
             return captureResult
         }

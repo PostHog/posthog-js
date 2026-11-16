@@ -19,5 +19,12 @@
             ]
         }
     },
-    "include": ["src/**/*", "tests/**/*", "fixtures/**/*", "playwright/**/*", "playwright.config.ts"]
+    "include": [
+        "src/**/*",
+        "tests/**/*",
+        "fixtures/**/*",
+        "playwright/**/*",
+        "playwright.config.ts",
+        "playwright.snippet.config.ts"
+    ]
 }

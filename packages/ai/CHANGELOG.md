@@ -1,5 +1,236 @@
 # posthog-ai
 
+## 8.20.0
+
+### Minor Changes
+
+- [#5678](https://github.com/PostHog/posthog-js/pull/5678) [`22d5e11`](https://github.com/PostHog/posthog-js/commit/22d5e11dd3703428407dec60d7ff47c33e93c43f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Support versioned composite scorers, formula validation, and dependency-safe offline evaluation uploads.
+  (2026-11-12)
+
+## 8.19.3
+
+### Patch Changes
+
+- [#5691](https://github.com/PostHog/posthog-js/pull/5691) [`3e62421`](https://github.com/PostHog/posthog-js/commit/3e62421400861f2b5a60718bc67c542bd2ffccfd) Thanks [@shehjaddev](https://github.com/shehjaddev)! - Streamed OpenAI chat completions now keep custom tool calls in `$ai_output_choices`, the same way non-streaming completions do.
+  (2026-11-12)
+
+## 8.19.2
+
+### Patch Changes
+
+- [#5604](https://github.com/PostHog/posthog-js/pull/5604) [`a516cf3`](https://github.com/PostHog/posthog-js/commit/a516cf35e2d038dde186c3302c0a72c3252f5c4d) Thanks [@smitp1402](https://github.com/smitp1402)! - Capture reasoning tokens from OpenAI Agents SDK Responses API spans in `$ai_reasoning_tokens`
+  (2026-11-10)
+
+- [#5622](https://github.com/PostHog/posthog-js/pull/5622) [`7d96fa3`](https://github.com/PostHog/posthog-js/commit/7d96fa3c69247dc7e7cfc9969099864a2ac17451) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture custom tool calls in OpenAI Responses API output.
+  (2026-11-10)
+
+## 8.19.1
+
+### Patch Changes
+
+- [#5624](https://github.com/PostHog/posthog-js/pull/5624) [`567c5b7`](https://github.com/PostHog/posthog-js/commit/567c5b73c8125bad4baf69549ea3387b604e9190) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - OpenAI Agents `instrument()` now passes `onError` to the tracing processor it registers. It was accepted but ignored, so processor failures stayed silent.
+  (2026-11-10)
+- Updated dependencies [[`fb313fe`](https://github.com/PostHog/posthog-js/commit/fb313fe7f5259fc104cff213aa07c24d03fbfd23), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082), [`fee9bee`](https://github.com/PostHog/posthog-js/commit/fee9bee95c7978fd81c0e2dde6d3ec8a766e7082)]:
+  - posthog-node@5.65.0
+  - @posthog/core@1.66.0
+
+## 8.19.0
+
+### Minor Changes
+
+- [#5625](https://github.com/PostHog/posthog-js/pull/5625) [`a93bee2`](https://github.com/PostHog/posthog-js/commit/a93bee2f32562f0f901c97d89aa8fa7e09b39cf5) Thanks [@tokerson](https://github.com/tokerson)! - Support `openai` 7 alongside 6, and type `embeddings.create` with `encoding_format: 'base64'` as returning base64 strings.
+  (2026-11-09)
+
+## 8.18.6
+
+### Patch Changes
+
+- [#5609](https://github.com/PostHog/posthog-js/pull/5609) [`eb11f00`](https://github.com/PostHog/posthog-js/commit/eb11f00d30c734d2de3a5f71aa7d814343588a9f) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Report `$ai_reasoning_tokens` for Anthropic calls from `usage.output_tokens_details.thinking_tokens`, in the wrapper (streaming and non-streaming) and in the Claude Agent SDK processor.
+  (2026-11-09)
+
+## 8.18.5
+
+### Patch Changes
+
+- [#5556](https://github.com/PostHog/posthog-js/pull/5556) [`b63702f`](https://github.com/PostHog/posthog-js/commit/b63702f5ae225e7a4b1b8cc9e5bbbb9aa32422d9) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Genkit: redact credentials in model messages, so a credential that a tool returns no longer reaches `$ai_input`.
+  (2026-11-05)
+
+## 8.18.4
+
+### Patch Changes
+
+- [#5563](https://github.com/PostHog/posthog-js/pull/5563) [`b1bbf31`](https://github.com/PostHog/posthog-js/commit/b1bbf31ab34b99bca0da47ee031fc7b420504f19) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Keep the refusal text of OpenAI Responses API outputs instead of dropping it from the captured `$ai_output_choices`
+  (2026-11-05)
+
+- [#5555](https://github.com/PostHog/posthog-js/pull/5555) [`a129e9f`](https://github.com/PostHog/posthog-js/commit/a129e9f726c52aa9ab15db949c42b1292df21c84) Thanks [@smitp1402](https://github.com/smitp1402)! - Count Gemini Interactions tool-use tokens in the captured input tokens.
+  (2026-11-05)
+
+## 8.18.3
+
+### Patch Changes
+
+- [#5530](https://github.com/PostHog/posthog-js/pull/5530) [`9909fee`](https://github.com/PostHog/posthog-js/commit/9909feeefd495083690af31b4c77227c2778af2a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix loading and constructing the OpenTelemetry span processor in bundled Cloudflare Workers.
+  (2026-11-03)
+
+## 8.18.2
+
+### Patch Changes
+
+- [#5520](https://github.com/PostHog/posthog-js/pull/5520) [`af74347`](https://github.com/PostHog/posthog-js/commit/af743477efddf80180d06c09c9b3bd9b12280f07) Thanks [@bernatixer](https://github.com/bernatixer)! - Vercel AI SDK file capture: keep provider file IDs like `file-abc123` as they are instead of turning them into data URLs, use the same placeholder for an over-budget file however it was passed, and skip encoding output files in privacy mode
+  (2026-11-02)
+- Updated dependencies [[`3fbb667`](https://github.com/PostHog/posthog-js/commit/3fbb66717cd21013241fdb9b81639e2b4730ad85)]:
+  - @posthog/core@1.62.1
+
+## 8.18.1
+
+### Patch Changes
+
+- [#5496](https://github.com/PostHog/posthog-js/pull/5496) [`3611fd2`](https://github.com/PostHog/posthog-js/commit/3611fd2fab0559cb59046114493726619c8e14c2) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture Vercel AI SDK file parts passed as bytes instead of recording "raw files not supported"
+  (2026-11-02)
+
+## 8.18.0
+
+### Minor Changes
+
+- [#5381](https://github.com/PostHog/posthog-js/pull/5381) [`bac61c2`](https://github.com/PostHog/posthog-js/commit/bac61c26d5b5f16b60936dc6cbb823364e1f9c48) Thanks [@Brian-1812](https://github.com/Brian-1812)! - Add a Genkit integration that captures flows, model calls, embedder calls and tool calls as AI observability events
+  (2026-11-02)
+
+## 8.17.2
+
+### Patch Changes
+
+- [#5439](https://github.com/PostHog/posthog-js/pull/5439) [`a22cbec`](https://github.com/PostHog/posthog-js/commit/a22cbecd47f5a727747e1113c5c0be992cbeda1d) Thanks [@posthog](https://github.com/apps/posthog)! - Fix `@posthog/ai/otel` so that it loads with OpenTelemetry JS 3.x, which has no `@opentelemetry/sdk-trace-base`.
+  (2026-10-29)
+
+## 8.17.1
+
+### Patch Changes
+
+- [#5478](https://github.com/PostHog/posthog-js/pull/5478) [`aa4ed5d`](https://github.com/PostHog/posthog-js/commit/aa4ed5deb82510af1b684988e4fe83739f02b7c2) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture an `$ai_generation` error event when an OpenAI, Azure OpenAI or Anthropic call with `stream: true` fails before the stream opens (for example a 401, 429 or invalid model). Before, only the non-streaming call captured those errors.
+  (2026-10-29)
+
+## 8.17.0
+
+### Minor Changes
+
+- [#5438](https://github.com/PostHog/posthog-js/pull/5438) [`acdbdd2`](https://github.com/PostHog/posthog-js/commit/acdbdd2123cb379fae9f0615ee0e9ef627fbe8f9) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add per-item model attribution to offline evaluations and dataset execution conversion.
+  (2026-10-26)
+
+## 8.16.3
+
+### Patch Changes
+
+- [#5353](https://github.com/PostHog/posthog-js/pull/5353) [`6970c88`](https://github.com/PostHog/posthog-js/commit/6970c88fad3500e385d5d33f8f6cf30684224be5) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture streamed OpenAI-compatible tool calls that arrive without an index.
+  (2026-10-23)
+
+## 8.16.2
+
+### Patch Changes
+
+- [#5385](https://github.com/PostHog/posthog-js/pull/5385) [`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Apply the client `privacyMode` option to AI integrations, keep prompts out of errors, provider metadata and OTel spans in privacy mode, and redact MCP tool credentials
+  (2026-10-23)
+- Updated dependencies [[`faacff0`](https://github.com/PostHog/posthog-js/commit/faacff022eb958e3c2180c6d9867f5568fdf4237), [`f827137`](https://github.com/PostHog/posthog-js/commit/f82713756db5bc351f6e2ac4e3653b4ba23e904d)]:
+  - posthog-node@5.57.1
+  - @posthog/core@1.60.1
+
+## 8.16.1
+
+### Patch Changes
+
+- [#5355](https://github.com/PostHog/posthog-js/pull/5355) [`e027825`](https://github.com/PostHog/posthog-js/commit/e027825e387902b79e84703ca32ca4afbc0446b8) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Capture the refusal text of OpenAI chat completions, streamed or not, in `$ai_output_choices` instead of an empty output.
+  (2026-10-22)
+
+## 8.16.0
+
+### Minor Changes
+
+- [#5360](https://github.com/PostHog/posthog-js/pull/5360) [`26e65ec`](https://github.com/PostHog/posthog-js/commit/26e65ec6abd38b6401d98a531f95733e1402f1d8) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add datasets, versioned scorers, and resumable offline evaluation uploads.
+  (2026-10-22)
+
+### Patch Changes
+
+- [#5121](https://github.com/PostHog/posthog-js/pull/5121) [`0f5d25a`](https://github.com/PostHog/posthog-js/commit/0f5d25a4356e2ac1186958bcb82cd7492e30158f) Thanks [@breken-ai](https://github.com/breken-ai)! - Failed Vercel AI SDK `generateText` calls report the same `$ai_provider` as successful ones.
+  (2026-10-22)
+
+## 8.15.2
+
+### Patch Changes
+
+- [#5368](https://github.com/PostHog/posthog-js/pull/5368) [`3e46e4c`](https://github.com/PostHog/posthog-js/commit/3e46e4c90673e0fee73cd74a013afa340011a47c) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - Count Gemini tool-use prompt tokens in the captured input tokens.
+  (2026-10-22)
+
+## 8.15.1
+
+### Patch Changes
+
+- [#5375](https://github.com/PostHog/posthog-js/pull/5375) [`def5ab4`](https://github.com/PostHog/posthog-js/commit/def5ab411d75338849ebb9ee0a9d2c1af7e8c8ed) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Anthropic extended thinking blocks as `reasoning` content in captured output, streamed and not, and start time to first token at the first thinking delta.
+  (2026-10-22)
+
+## 8.15.0
+
+### Minor Changes
+
+- [#5091](https://github.com/PostHog/posthog-js/pull/5091) [`2192bb1`](https://github.com/PostHog/posthog-js/commit/2192bb1281508a4574c60cfd6fb6bd58ad7245b4) Thanks [@gouveags](https://github.com/gouveags)! - Trace foreground Gemini Interactions API model calls.
+  (2026-10-22)
+
+## 8.14.5
+
+### Patch Changes
+
+- [#5357](https://github.com/PostHog/posthog-js/pull/5357) [`b5e99d1`](https://github.com/PostHog/posthog-js/commit/b5e99d17464712412592b0b2de68fe2d57cbbb7c) Thanks [@shehjaddev](https://github.com/shehjaddev)! - fix: Capture Gemini thought summaries (`thinkingConfig.includeThoughts`) as `reasoning` content blocks instead of answer text, in responses, streamed output, replayed input and the ADK plugin.
+  (2026-10-22)
+
+## 8.14.4
+
+### Patch Changes
+
+- [#5352](https://github.com/PostHog/posthog-js/pull/5352) [`dd58d50`](https://github.com/PostHog/posthog-js/commit/dd58d504da2b27df36363ecf742191348988fb46) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix: Use the cumulative input and cache token counts from Anthropic's final `message_delta` when streaming with server tools.
+  (2026-10-21)
+
+## 8.14.3
+
+### Patch Changes
+
+- [#5251](https://github.com/PostHog/posthog-js/pull/5251) [`717d2fc`](https://github.com/PostHog/posthog-js/commit/717d2fca88abbcffd81ca20839343f7f439ab952) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Chat Completions responses that contain custom tool calls instead of throwing from the wrapped `create()` call.
+  (2026-10-20)
+
+## 8.14.2
+
+### Patch Changes
+
+- [#5155](https://github.com/PostHog/posthog-js/pull/5155) [`a9d29f1`](https://github.com/PostHog/posthog-js/commit/a9d29f1d7500340d02f94769b7a0e635a1fedddc) Thanks [@gouveags](https://github.com/gouveags)! - Normalize AI tool-result capture and redact binary content while preserving existing provider limits.
+  (2026-10-19)
+
+## 8.14.1
+
+### Patch Changes
+
+- [#5305](https://github.com/PostHog/posthog-js/pull/5305) [`7319620`](https://github.com/PostHog/posthog-js/commit/73196206fa975dcefb8db023330c7f3629ba52d0) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.135.0`, so installs can pick 0.134.0, the first version with OpenTelemetry tracing.
+  (2026-10-15)
+
+## 8.14.0
+
+### Minor Changes
+
+- [#5299](https://github.com/PostHog/posthog-js/pull/5299) [`7587be3`](https://github.com/PostHog/posthog-js/commit/7587be3705abcc5db80ee9fa5cd875f6869fbf9c) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add per-request PostHog context to AI spans through the PostHogSpanProcessor client option.
+  (2026-10-14)
+
+## 8.13.7
+
+### Patch Changes
+
+- [#5266](https://github.com/PostHog/posthog-js/pull/5266) [`411d364`](https://github.com/PostHog/posthog-js/commit/411d3646a511e7aea77ca9bc27add1c2a42bdddb) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.get()` now makes one request when several callers ask for the same prompt at once, instead of one request per caller. Prompt fetches also time out after 10 seconds instead of hanging on a stalled connection, and `PromptFetchError` is exported so callers can tell a timeout or server error from a missing prompt.
+  (2026-10-14)
+- Updated dependencies [[`e6598be`](https://github.com/PostHog/posthog-js/commit/e6598be4d3f4c09c47d4c052987fafd33fc3f59e)]:
+  - posthog-node@5.56.1
+
+## 8.13.6
+
+### Patch Changes
+
+- [#5286](https://github.com/PostHog/posthog-js/pull/5286) [`4f739c6`](https://github.com/PostHog/posthog-js/commit/4f739c6ee8890798f6f9c8a09499f86f3c7a0c8f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.134.0`.
+  (2026-10-13)
+
 ## 8.13.5
 
 ### Patch Changes

@@ -9,7 +9,6 @@ import { MCPAnalyticsEventType } from './event-types'
 
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
-  [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
   [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
@@ -19,6 +18,7 @@ const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.mcpResourcesRead]: PostHogMCPAnalyticsEvent.ResourceRead,
   [MCPAnalyticsEventType.mcpToolsCall]: PostHogMCPAnalyticsEvent.ToolCall,
   [MCPAnalyticsEventType.mcpToolsList]: PostHogMCPAnalyticsEvent.ToolsList,
+  [MCPAnalyticsEventType.mcpUnknownTool]: PostHogMCPAnalyticsEvent.UnknownTool,
 } satisfies Record<MCPAnalyticsEventType, PostHogMCPAnalyticsEvent>
 
 function getDistinctId(event: Event): string {
@@ -60,6 +60,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   const timestamp = getTimestamp(event)
 
   const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
     [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
   }
   addSessionIdProperty(event, properties)
@@ -121,7 +122,10 @@ function addPersonProcessingProperty(event: Event, properties: Record<string, un
 function addCommonEventProperties(event: Event, properties: Record<string, unknown>): void {
   if (event.resourceName) {
     properties[PostHogMCPAnalyticsProperty.ResourceName] = event.resourceName
-    if (event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
+    if (
+      event.eventType === MCPAnalyticsEventType.mcpToolsCall ||
+      event.eventType === MCPAnalyticsEventType.mcpUnknownTool
+    ) {
       properties[PostHogMCPAnalyticsProperty.ToolName] = event.resourceName
     }
   }
@@ -197,6 +201,9 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
       // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList`.
       properties[PostHogMCPAnalyticsProperty.ErrorMessage] = firstException.value
     }
+    if (event.errorStatus !== undefined) {
+      properties[PostHogMCPAnalyticsProperty.ErrorStatus] = event.errorStatus
+    }
   }
 
   if (event.parameters !== undefined) {
@@ -230,7 +237,9 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
 
-  const properties: Record<string, unknown> = {}
+  const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
+  }
   addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)

@@ -1,5 +1,5 @@
 import { BrowserAutocapture } from '../browser-autocapture'
-import { ActionMatcher } from '../extensions/surveys/action-matcher'
+import { ActionMatcher } from '@posthog/browser-common/survey-action-matcher'
 import { createMockConfig, createMockPostHog } from './helpers/posthog-instance'
 
 describe('action matcher selector ownership', () => {
@@ -22,8 +22,14 @@ describe('action matcher selector ownership', () => {
         })
         autocapture = new BrowserAutocapture(posthog)
         posthog.autocapture = autocapture
-        survey = new ActionMatcher(posthog)
-        tour = new ActionMatcher(posthog)
+        survey = new ActionMatcher({
+            subscribeCapture: (listener) => posthog._addCaptureHook(listener),
+            setElementSelectors: (selectors, owner) => autocapture.setElementSelectors(selectors, owner),
+        })
+        tour = new ActionMatcher({
+            subscribeCapture: (listener) => posthog._addCaptureHook(listener),
+            setElementSelectors: (selectors, owner) => autocapture.setElementSelectors(selectors, owner),
+        })
         survey.init()
         tour.init()
         button = document.createElement('button')

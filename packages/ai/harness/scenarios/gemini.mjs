@@ -1,6 +1,6 @@
 import Gemini from '@posthog/ai/gemini'
 import { PostHog } from 'posthog-node'
-import { geminiClientOptions, geminiOperations, generationResult } from '../gemini-scenarios.mjs'
+import { geminiClientOptions, geminiOperations, generationResult, interactionResult } from '../gemini-scenarios.mjs'
 
 const posthog = new PostHog('phc_cassette_test', {
   host: process.env.COLLECTOR_URL,
@@ -14,7 +14,16 @@ try {
   const client = new Gemini({ ...geminiClientOptions(process.env.PROVIDER_URL, 'fake-gemini-key'), posthog })
   const request = { posthogDistinctId: 'cassette-test', ...JSON.parse(process.env.GEMINI_REQUEST) }
   let result
-  if (operation === 'generateContentStream') {
+  if (operation === 'interactions.create') {
+    const interaction = await client.interactions.create(request)
+    if (request.stream) {
+      const events = []
+      for await (const event of interaction) events.push(event)
+      result = events
+    } else {
+      result = interactionResult(interaction)
+    }
+  } else if (operation === 'generateContentStream') {
     const chunks = []
     let text = ''
     for await (const chunk of client.models.generateContentStream(request)) {

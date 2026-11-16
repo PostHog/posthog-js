@@ -154,7 +154,7 @@ export interface PostHogCustomAppProperties {
   $timezone?: string | null
   /** Whether the app is running on an emulator/simulator */
   $is_emulator?: boolean | null
-  /** React Native version like "0.79.6" */
+  /** React Native version like "0.79.6". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated` */
   $react_native_version?: string | null | undefined
 }
 
@@ -252,7 +252,7 @@ export type PostHogSessionReplayConfig = {
    * Does not enable session replay or change compression quality or color mode.
    *
    * @experimental
-   * @default 1.0
+   * @default undefined, which uses the native default: one pixel per dp with posthog-android 3.74.0 or later, native resolution with older versions.
    */
   screenshotScale?: number
   /**

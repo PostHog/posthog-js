@@ -1,4 +1,3 @@
-import { PostHog } from 'posthog-node'
 import type OpenAIOrignal from 'openai'
 import type AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
@@ -13,6 +12,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
+import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
+
+export { isPrivacyModeEnabled }
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -160,6 +162,9 @@ export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
   for (const choice of response.content ?? []) {
     if (choice?.type === 'text' && choice?.text) {
       content.push({ type: 'text', text: choice.text })
+    } else if (choice?.type === 'thinking' && choice?.thinking) {
+      // redacted_thinking blocks only carry encrypted data, so they are not captured
+      content.push({ type: 'reasoning', text: choice.thinking })
     } else if (choice?.type === 'tool_use' && choice?.name && choice?.id) {
       content.push({
         type: 'function',
@@ -199,14 +204,24 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
           content.push({ type: 'text', text: choice.message.content })
         }
 
+        // A refused request carries its text in `refusal` and leaves `content` empty
+        if (choice.message.refusal) {
+          content.push({ type: 'refusal', refusal: choice.message.refusal })
+        }
+
         if (choice.message.tool_calls) {
           for (const toolCall of choice.message.tool_calls) {
+            // Custom tools carry their free-form text in `custom.input`, with no `function` object.
+            const call = toolCall.type === 'custom' ? toolCall.custom : toolCall.function
+            if (!call) {
+              continue
+            }
             content.push({
               type: 'function',
               id: toolCall.id,
               function: {
-                name: toolCall.function.name,
-                arguments: toolCall.function.arguments,
+                name: call.name,
+                arguments: toolCall.type === 'custom' ? call.input : call.arguments,
               },
             })
           }
@@ -245,6 +260,8 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
               content.push({ type: 'text', text: contentItem.text })
             } else if (contentItem.text) {
               content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.type === 'refusal' && contentItem.refusal) {
+              content.push({ type: 'refusal', refusal: contentItem.refusal })
             } else if (contentItem.type === 'input_image' && contentItem.image_url) {
               content.push({
                 type: 'image',
@@ -255,13 +272,13 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
         } else if (item.content) {
           content.push({ type: 'text', text: String(item.content) })
         }
-      } else if (item.type === 'function_call') {
+      } else if (item.type === 'function_call' || item.type === 'custom_tool_call') {
         content.push({
           type: 'function',
           id: item.call_id || item.id || '',
           function: {
             name: item.name,
-            arguments: item.arguments || {},
+            arguments: item.type === 'custom_tool_call' ? item.input : item.arguments || {},
           },
         })
       } else if (item.type === 'image_generation_call' && item.result) {
@@ -293,6 +310,17 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
+export const uint8ArrayToBase64 = (data: Uint8Array): string => {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(data).toString('base64')
+  }
+  let binary = ''
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i])
+  }
+  return btoa(binary)
+}
+
 export const formatInlineDataBlock = (
   inlineData: { mimeType?: string; mime_type?: string; data?: unknown },
   client?: FullAiCaptureGate
@@ -301,15 +329,7 @@ export const formatInlineDataBlock = (
   let data = inlineData.data
 
   if (data instanceof Uint8Array) {
-    if (typeof Buffer !== 'undefined') {
-      data = Buffer.from(data).toString('base64')
-    } else {
-      let binary = ''
-      for (let i = 0; i < data.length; i++) {
-        binary += String.fromCharCode(data[i])
-      }
-      data = btoa(binary)
-    }
+    data = uint8ArrayToBase64(data)
   }
 
   data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)
@@ -325,7 +345,9 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
         const content: FormattedContent = []
 
         for (const part of candidate.content.parts) {
-          if (part.text) {
+          if (part.thought === true && part.text) {
+            content.push({ type: 'reasoning', text: part.text })
+          } else if (part.text) {
             content.push({ type: 'text', text: part.text })
           } else if (part.functionCall) {
             content.push({
@@ -376,8 +398,8 @@ export const mergeSystemPrompt = (params: MessageCreateParams & MonitoringParams
   return params.messages
 }
 
-export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: any): any => {
-  return (client as any).privacy_mode || privacyMode ? null : input
+export const withPrivacyMode = (client: PrivacyModeGate, privacyMode: boolean, input: any): any => {
+  return isPrivacyModeEnabled(client, privacyMode) ? null : input
 }
 
 function toSafeString(input: unknown): string {

@@ -53,8 +53,8 @@ import { getTimezone } from './utils/timezone'
 import { continueWith } from './utils/promise-utils'
 import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-reachability'
 
-const logger = createLogger('[FeatureFlags]')
-const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
+const logger = /* @__PURE__ */ createLogger('[FeatureFlags]')
+const forceDebugLogger = /* @__PURE__ */ createLogger('[FeatureFlags]', { debugEnabled: true })
 const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // Mirrors the event retry queue's status-0 budget: repeated requests that die
 // before any HTTP response while the browser reports itself online are usually
@@ -116,12 +116,42 @@ type FeatureFlagsState = {
 export const FeatureFlagError = {
     ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
     FLAG_MISSING: 'flag_missing',
+    EVALUATION_FAILED: 'evaluation_failed',
     QUOTA_LIMITED: 'quota_limited',
     TIMEOUT: 'timeout',
     CONNECTION_ERROR: 'connection_error',
     UNKNOWN_ERROR: 'unknown_error',
     apiError: (status: number | string) => `api_error_${status}`,
 } as const
+
+const filterFailedFlagValues = <T>(
+    values: Record<string, T> | undefined,
+    details: Record<string, FeatureFlagDetail> | undefined
+): Record<string, T> => {
+    const failedKeys = Object.keys(details || {}).filter((key) => details?.[key]?.failed)
+    if (!failedKeys.length) {
+        return values || {}
+    }
+    const filtered = { ...values }
+    failedKeys.forEach((key) => delete filtered[key])
+    return filtered
+}
+
+const withoutFailedDetails = (
+    details: Record<string, FeatureFlagDetail>,
+    evaluatedKeys: string[]
+): Record<string, FeatureFlagDetail> => {
+    const remainingDetails = { ...details }
+    evaluatedKeys.forEach((key) => {
+        if (remainingDetails[key]?.failed) {
+            delete remainingDetails[key]
+        }
+    })
+    return remainingDetails
+}
+
+const mergesIntoCurrentState = (response: Partial<FlagsResponse>, options?: { partialResponse?: boolean }): boolean =>
+    !!options?.partialResponse || !!response.errorsWhileComputingFlags
 
 /** Converts an array of flag names to a Record where each flag is set to true. */
 const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
@@ -174,6 +204,9 @@ export const parseFlagsResponse = (
         return {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
             [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: withoutFailedDetails(currentFlagDetails, featureFlags),
+            // A recovered key must not inherit a failed placeholder's payload.
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: filterFailedFlagValues(currentFlagPayloads, currentFlagDetails),
             // Legacy responses never carry the gate — fail safe to full events.
             [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
         }
@@ -183,55 +216,30 @@ export const parseFlagsResponse = (
     let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
-    if (options?.partialResponse) {
-        // The response is intentionally partial (e.g., only survey flags were requested via
-        // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
-        // bootstrapped or previously loaded non-survey flags are preserved.
+    if (mergesIntoCurrentState(response, options)) {
+        const hasOwnCachedValue = (key: string): boolean =>
+            Object.prototype.hasOwnProperty.call(currentFlags, key) && !isUndefined(currentFlags[key])
+        // Only partial or response-wide errored refreshes retain prior successful values.
+        // Normalization has already removed failed values and payloads from the incoming maps.
         const evaluatedFlagKeys = Object.keys(newFeatureFlags)
         const evaluatedPayloads = newFeatureFlagPayloads || {}
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...evaluatedPayloads }
-        evaluatedFlagKeys.forEach((key) => {
-            if (!(key in evaluatedPayloads)) {
-                delete newFeatureFlagPayloads?.[key]
-            }
-        })
-        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
-    } else if (response.errorsWhileComputingFlags) {
-        // if not all flags were computed, we upsert flags instead of replacing them
-        // but filter out flags that failed to evaluate so they don't overwrite cached values
-        if (flagDetails) {
-            const successfulKeys = new Set(Object.keys(flagDetails).filter((key) => !flagDetails[key]?.failed))
-
-            newFeatureFlags = {
-                ...currentFlags,
-                ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
-            }
-            const successfulPayloads = Object.fromEntries(
-                Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
-            )
-            newFeatureFlagPayloads = {
-                ...currentFlagPayloads,
-                ...successfulPayloads,
-            }
-            successfulKeys.forEach((key) => {
-                if (!(key in successfulPayloads)) {
+        if (options?.partialResponse || flagDetails) {
+            evaluatedFlagKeys.forEach((key) => {
+                if (!(key in evaluatedPayloads)) {
                     delete newFeatureFlagPayloads?.[key]
                 }
             })
-            newFeatureFlagDetails = {
-                ...currentFlagDetails,
-                ...Object.fromEntries(
-                    Object.entries(newFeatureFlagDetails || {}).filter(([key]) => successfulKeys.has(key))
-                ),
-            }
-        } else {
-            // v1 responses don't have flagDetails, so we can't filter by failed field
-            // Fall back to the original merge behavior
-            newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-            newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-            newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
         }
+        newFeatureFlagDetails = flagDetails
+            ? {
+                  ...currentFlagDetails,
+                  ...Object.fromEntries(
+                      Object.entries(flagDetails).filter(([key, detail]) => !detail.failed || !hasOwnCachedValue(key))
+                  ),
+              }
+            : withoutFailedDetails(currentFlagDetails, evaluatedFlagKeys)
     }
 
     return {
@@ -255,12 +263,14 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>, responseLogger
 
         // Map of flag keys to flag values: Record<string, string | boolean>
         const featureFlags = Object.fromEntries(
-            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag]!.variant ?? flagDetails[flag]!.enabled])
+            Object.keys(flagDetails)
+                .filter((flag) => !flagDetails[flag]!.failed)
+                .map((flag) => [flag, flagDetails[flag]!.variant ?? flagDetails[flag]!.enabled])
         )
         // Map of flag keys to flag payloads: Record<string, JsonType>
         const featureFlagPayloads = Object.fromEntries(
             Object.keys(flagDetails)
-                .filter((flag) => flagDetails[flag]!.enabled)
+                .filter((flag) => !flagDetails[flag]!.failed && flagDetails[flag]!.enabled)
                 .filter((flag) => !isUndefined(flagDetails[flag]!.metadata?.payload))
                 .map((flag) => [flag, flagDetails[flag]!.metadata?.payload])
         )
@@ -290,6 +300,27 @@ export interface FeatureFlagsReloadResult {
 
 type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
 
+/** Who read a flag, and where. An exposure is reported only in the context of its read. */
+type FlagCallContext = {
+    distinctId: string | undefined
+    groups: Readonly<Record<string, string>>
+    sessionId: string | undefined
+}
+
+/** A flag read that is not reported yet. */
+type PendingFlagCall = {
+    value: string
+    context: FlagCallContext
+}
+
+const haveSameGroups = (a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean => {
+    const keys = Object.keys(a)
+    return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
+}
+
+const isSameFlagCallContext = (a: FlagCallContext, b: FlagCallContext): boolean =>
+    a.distinctId === b.distinctId && a.sessionId === b.sessionId && haveSameGroups(a.groups, b.groups)
+
 export class PostHogFeatureFlags implements Extension {
     readonly name: string = 'featureFlags'
     _override_warning: boolean = false
@@ -315,6 +346,10 @@ export class PostHogFeatureFlags implements Extension {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
+    private _firingFeatureFlagsCallbacks: boolean = false
+    // Flags read while capture was off or the client rate limit was on
+    private _flagCallsPendingCapture = new Map<string, PendingFlagCall>()
+    private _sendingFlagCallsPendingCapture: boolean = false
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -334,6 +369,7 @@ export class PostHogFeatureFlags implements Extension {
         | {
               onCrossTabFeatureFlagChange(handler: () => void): () => void
               markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[] | true>): void
+              reconcileFeatureFlagsBeforeMerge?(): boolean
           }
         | undefined {
         return undefined
@@ -573,11 +609,12 @@ export class PostHogFeatureFlags implements Extension {
                   .map(([key]) => key)
             : []
         const isIncompleteResponse = !!response.errorsWhileComputingFlags && !!response.flags
-        const ownedFlagKeys = isIncompleteResponse
-            ? successfulResponseFlagKeys
-            : partialResponse && !isArray(responseFlags)
-              ? Object.keys(responseFlags || {})
-              : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
+        const ownedFlagKeys =
+            isIncompleteResponse || (partialResponse && !!response.flags)
+                ? successfulResponseFlagKeys
+                : partialResponse && !isArray(responseFlags)
+                  ? Object.keys(responseFlags || {})
+                  : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
         const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
         const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
         const ownedPayloadKeys =
@@ -622,20 +659,24 @@ export class PostHogFeatureFlags implements Extension {
 
     private _rebuildEventProperties(): void {
         const common: Record<string, unknown> = {}
-        for (const key of [
-            PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-            PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-            PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
-        ] as const) {
+        const flagDetails = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        for (const key of [PERSISTENCE_FEATURE_FLAG_REQUEST_ID, PERSISTENCE_OVERRIDE_FEATURE_FLAGS] as const) {
             const value = this._prop(key)
             if (!isUndefined(value)) {
                 common[key] = value
             }
         }
+        const activeFlags = this._prop(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
+        if (activeFlags) {
+            common[PERSISTENCE_ACTIVE_FEATURE_FLAGS] = activeFlags.filter((key) => !flagDetails?.[key]?.failed)
+        }
+        const payloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        if (payloads) {
+            common[PERSISTENCE_FEATURE_FLAG_PAYLOADS] = filterFailedFlagValues(payloads, flagDetails)
+        }
         this._baseEventProperties = common
         const withFlagValues = { ...common }
-        const flags = this._prop(ENABLED_FEATURE_FLAGS)
+        const flags = filterFailedFlagValues(this._prop(ENABLED_FEATURE_FLAGS), flagDetails)
         if (flags) {
             for (const [key, value] of Object.entries(flags)) {
                 withFlagValues[`$feature/${key}`] = value
@@ -738,10 +779,13 @@ export class PostHogFeatureFlags implements Extension {
     ): void {
         // Merge against the raw stored flags/payloads, not the override-applied getters.
         const existingFlags: Record<string, boolean | string> = options?.merge
-            ? (this._prop(ENABLED_FEATURE_FLAGS) ?? {})
+            ? filterFailedFlagValues(this._prop(ENABLED_FEATURE_FLAGS), this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS))
             : {}
         const existingPayloads: Record<string, JsonType> = options?.merge
-            ? (this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) ?? {})
+            ? filterFailedFlagValues(
+                  this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS),
+                  this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+              )
             : {}
         const finalFlags: Record<string, boolean | string> = { ...existingFlags, ...flags }
         const finalPayloads: Record<string, JsonType> = { ...existingPayloads, ...payloads }
@@ -858,7 +902,10 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this._prop(ENABLED_FEATURE_FLAGS)
+        const enabledFlags = filterFailedFlagValues(
+            this._prop(ENABLED_FEATURE_FLAGS),
+            this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        )
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
@@ -881,7 +928,10 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     getFlagPayloads(): Record<string, JsonType> {
-        const flagPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        const flagPayloads = filterFailedFlagValues(
+            this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS),
+            this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        )
         const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
         if (!overriddenPayloads) {
@@ -922,6 +972,13 @@ export class PostHogFeatureFlags implements Extension {
 
         if (this._hasStatusZeroCircuitBreakerTripped()) {
             return
+        }
+
+        if (this._firingFeatureFlagsCallbacks) {
+            this._logger.warn(
+                'reloadFeatureFlags() was called inside an onFeatureFlags callback. ' +
+                    'This callback also runs when flags change in other tabs, so this can cause a request loop.'
+            )
         }
 
         if (this._requestInFlight) {
@@ -1005,6 +1062,51 @@ export class PostHogFeatureFlags implements Extension {
 
     resetFlagCallReported(): void {
         this._remove(FLAG_CALL_REPORTED)
+        this._flagCallsPendingCapture = new Map()
+    }
+
+    /** Sends `$feature_flag_called` for the flags read while capture was off, once the client can capture. */
+    sendFlagCallsPendingCapture(): void {
+        // Each replay calls capture(), which calls this method again.
+        // Wait for a spare rate limit token. A retry without one is dropped again and makes the client send a rate
+        // limit warning.
+        if (
+            this._flagCallsPendingCapture.size === 0 ||
+            this._sendingFlagCallsPendingCapture ||
+            !this._client?.canCapture ||
+            this._client.isRateLimited
+        ) {
+            return
+        }
+        this._sendingFlagCallsPendingCapture = true
+        try {
+            const flagVariants = this.getFlagVariants()
+            // A read that the rate limit drops goes back into the map. Iterate over a copy, so that read waits for the
+            // next capture instead of looping here.
+            for (const key of Array.from(this._flagCallsPendingCapture.keys())) {
+                const pending = this._flagCallsPendingCapture.get(key)
+                if (!pending) {
+                    continue
+                }
+                // An exposure must not be reported outside the context of its read, or with a value the user did not
+                // see. Check the context for each read, because a capture listener can call identify() during this loop.
+                if (
+                    pending.value !== String(flagVariants[key]) ||
+                    !isSameFlagCallContext(pending.context, this._flagCallContext())
+                ) {
+                    this._flagCallsPendingCapture.delete(key)
+                    continue
+                }
+                this.getFeatureFlagResult(key)
+                // A read stays pending when the rate limit applies or the flag cache is expired. Both conditions also
+                // apply to the reads after it, so they wait for the next capture.
+                if (this._flagCallsPendingCapture.has(key)) {
+                    break
+                }
+            }
+        } finally {
+            this._sendingFlagCallsPendingCapture = false
+        }
     }
 
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
@@ -1205,6 +1307,10 @@ export class PostHogFeatureFlags implements Extension {
         )
     }
 
+    private _flagsNotLoaded(key: string): boolean {
+        return !this._hasLoadedFlags && !this.getFlags().length && !this.getFeatureFlagDetails(key)?.failed
+    }
+
     /**
      * Get feature flag's value for user.
      *
@@ -1236,7 +1342,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('getFeatureFlag for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1309,7 +1415,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return undefined
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('getFeatureFlagResult for key "' + key + FLAG_TIMEOUT_MSG)
             return undefined
         }
@@ -1318,11 +1424,18 @@ export class PostHogFeatureFlags implements Extension {
             return undefined
         }
 
-        const flagVariants = this.getFlagVariants()
-        const flagExists = key in flagVariants
-        const flagValue = flagVariants[key]!
-        const payloads = this.getFlagPayloads()
-        const payload = payloads[key]
+        const failed = this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS)?.[key]?.failed
+        const storedFlags = failed ? undefined : this._prop(ENABLED_FEATURE_FLAGS)
+        const storedPayloads = failed ? undefined : this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        const hasOverride = !!overriddenFlags && Object.prototype.hasOwnProperty.call(overriddenFlags, key)
+        const flagExists = hasOverride || (!!storedFlags && key in storedFlags)
+        const flagValue = hasOverride ? overriddenFlags[key] : storedFlags?.[key]
+        const overriddenPayloads = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+        const payload =
+            overriddenPayloads && Object.prototype.hasOwnProperty.call(overriddenPayloads, key)
+                ? overriddenPayloads[key]
+                : storedPayloads?.[key]
         const flagReportValue = String(flagValue)
         const requestId = this._prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._prop(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
@@ -1331,7 +1444,7 @@ export class PostHogFeatureFlags implements Extension {
         let sessionIdToPersist: string | undefined
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
         if (this._config.deduplicateCallsPerSession) {
-            const currentSessionId = this._client?.session.sessionId
+            const currentSessionId = this._client?.session?.sessionId
             const storedSessionId = this._prop(FLAG_CALL_REPORTED_SESSION_ID)
             if (currentSessionId && currentSessionId !== storedSessionId) {
                 flagCallReported = {}
@@ -1340,7 +1453,29 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         if (options.send_event || !('send_event' in options)) {
-            if (!(key in flagCallReported) || !flagCallReported[key]!.includes(flagReportValue)) {
+            const captureOff = !this._client?.canCapture
+            // While the client rate limit applies, the client drops the event. Hold the read without capturing or
+            // marking it, so repeated reads stay cheap until sendFlagCallsPendingCapture() sends it.
+            const canCapture = !captureOff && !this._client?.isRateLimited
+            if (canCapture) {
+                this._flagCallsPendingCapture.delete(key)
+            } else {
+                // Older SDK versions marked flags as reported while capture was off, but the client dropped the event.
+                // Clear those marks so the exposure is sent after consent is granted.
+                if (captureOff && Object.keys(flagCallReported).length > 0) {
+                    flagCallReported = {}
+                    this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
+                }
+                // Callers such as the React hooks do not read the flag again after consent, so
+                // sendFlagCallsPendingCapture() reports this read. A value that is already reported needs no exposure,
+                // and with per-session deduplication a later send can land in a session that did not read the flag.
+                if (!flagCallReported[key]?.includes(flagReportValue)) {
+                    this._holdFlagCall(key, flagReportValue)
+                }
+            }
+            // The client drops the event while capture is off, so marking the flag as reported would suppress the
+            // exposure after consent is granted.
+            if (canCapture && !flagCallReported[key]?.includes(flagReportValue)) {
                 if (isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
@@ -1354,7 +1489,9 @@ export class PostHogFeatureFlags implements Extension {
                 const flagDetails = this.getFeatureFlagDetails(key)
                 const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
                 if (isUndefined(flagValue)) {
-                    errors.push(FeatureFlagError.FLAG_MISSING)
+                    errors.push(
+                        flagDetails?.failed ? FeatureFlagError.EVALUATION_FAILED : FeatureFlagError.FLAG_MISSING
+                    )
                 }
 
                 const properties: Record<string, any | undefined> = {
@@ -1403,7 +1540,11 @@ export class PostHogFeatureFlags implements Extension {
                     properties.$feature_flag_error = errors.join(',')
                 }
 
-                this._captureFeatureFlagCalled(properties)
+                if (!this._captureFeatureFlagCalled(properties)) {
+                    // The client rate limit dropped the event. Remove the mark so the next capture sends the exposure.
+                    this._unmarkFlagCallReported(key, flagReportValue)
+                    this._holdFlagCall(key, flagReportValue)
+                }
             } else if (sessionIdToPersist) {
                 this._set({
                     [FLAG_CALL_REPORTED]: flagCallReported,
@@ -1429,12 +1570,38 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
+    /** Returns `false` when the client rate limit dropped the event. */
+    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): boolean {
         try {
-            this._client?.capture('$feature_flag_called', properties)
+            return this._client?.capture('$feature_flag_called', properties) !== false
         } catch (error) {
             this._logger.error('Failed to capture feature flag call', error)
+            return true
         }
+    }
+
+    private _holdFlagCall(key: string, value: string): void {
+        this._flagCallsPendingCapture.set(key, { value, context: this._flagCallContext() })
+    }
+
+    private _flagCallContext(): FlagCallContext {
+        return {
+            distinctId: this._client?.distinctId,
+            groups: { ...this._client?.groups },
+            // Exposures belong to a session only with per-session deduplication. Without it, a read stays valid
+            // across a session rotation.
+            sessionId: this._config.deduplicateCallsPerSession ? this._client?.session?.sessionId : undefined,
+        }
+    }
+
+    private _unmarkFlagCallReported(key: string, flagReportValue: string): void {
+        const flagCallReported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
+        const reportedValues = flagCallReported[key]
+        if (!isArray(reportedValues) || !reportedValues.includes(flagReportValue)) {
+            return
+        }
+        flagCallReported[key] = reportedValues.filter((value) => value !== flagReportValue)
+        this._set({ [FLAG_CALL_REPORTED]: flagCallReported })
     }
 
     /*
@@ -1533,7 +1700,7 @@ export class PostHogFeatureFlags implements Extension {
         if (options.fresh && !this._flagsLoadedFromRemote) {
             return options.defaultValue
         }
-        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (this._flagsNotLoaded(key)) {
             this._logger.warn('isFeatureEnabled for key "' + key + FLAG_TIMEOUT_MSG)
             return options.defaultValue
         }
@@ -1567,9 +1734,22 @@ export class PostHogFeatureFlags implements Extension {
         }
         this._hasLoadedFlags = true
 
+        if (options?.persist !== false && mergesIntoCurrentState(response, options)) {
+            // Reconcile before deriving writes: failed diagnostics or placeholder cleanup must not
+            // claim ownership over an unobserved successful sibling value.
+            if (this._crossTabPersistence?.reconcileFeatureFlagsBeforeMerge?.()) {
+                this._clearBootstrapState()
+            }
+        }
         const currentFlags = this.getFlagVariants()
-        const currentFlagPayloads = this.getFlagPayloads()
-        const currentFlagDetails = this.getFlagsWithDetails()
+        // Legacy array responses merge against the raw stored payloads and details, not the override-applied getters.
+        const isLegacyArrayResponse = !response.flags && isArray(response.featureFlags)
+        const currentFlagPayloads = isLegacyArrayResponse
+            ? this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
+            : this.getFlagPayloads()
+        const currentFlagDetails = isLegacyArrayResponse
+            ? this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS) || {}
+            : this.getFlagsWithDetails()
         const statePatch = parseFlagsResponse(
             response,
             currentFlags,
@@ -1766,14 +1946,27 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        const flagDetails = { ...this._prop(PERSISTENCE_FEATURE_FLAG_DETAILS) }
+        const replacesFailure = flagDetails[key]?.failed
+        const payloads = { ...this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) }
+        if (replacesFailure) {
+            delete flagDetails[key]
+            delete payloads[key]
+        }
         this._crossTabPersistence?.markCrossTabFeatureFlagChanges({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [key],
             [ENABLED_FEATURE_FLAGS]: [key],
+            ...(replacesFailure
+                ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: [key], [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: [key] }
+                : {}),
             [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
         })
         this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
+            ...(replacesFailure
+                ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: flagDetails, [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloads }
+                : {}),
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
                 ...enrollmentPersonProp,
@@ -1858,6 +2051,8 @@ export class PostHogFeatureFlags implements Extension {
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        const wasFiring = this._firingFeatureFlagsCallbacks
+        this._firingFeatureFlagsCallbacks = true
         this.featureFlagEventHandlers.forEach((handler) => {
             // Isolate each handler: a user-provided onFeatureFlags callback that throws must not
             // break the callback chain (preventing later handlers from firing) or surface as a
@@ -1870,6 +2065,7 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.error('Error while running feature flags callback', error)
             }
         })
+        this._firingFeatureFlagsCallbacks = wasFiring
     }
 
     /**
@@ -1986,5 +2182,6 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._override_warning = false
         this._consecutiveStatusZeroFailures = 0
+        this._flagCallsPendingCapture = new Map()
     }
 }

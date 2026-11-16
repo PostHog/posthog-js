@@ -1,0 +1,50 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-24T08:44:05.979Z",
+    "providerSdkVersion": "2.18.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gemini-3.1-flash-lite",
+          "input": "Reply with a short greeting.",
+          "store": false,
+          "stream": true,
+          "generation_config": {
+            "max_output_tokens": 64,
+            "thinking_level": "minimal"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": {
+          "kind": "sse",
+          "chunks": [
+            "event: interaction.created\ndata: {\"interaction\":{\"id\":\"\",\"status\":\"in_progress\",\"object\":\"interaction\",\"model\":\"gemini-3.1-flash-lite\"},\"event_type\":\"interaction.created\"}\n\n",
+            "event: interaction.status_update\ndata: {\"interaction_id\":\"\",\"status\":\"in_progress\",\"event_type\":\"interaction.status_update\"}\n\n",
+            "event: step.start\ndata: {\"index\":0,\"step\":{\"type\":\"thought\"},\"event_type\":\"step.start\"}\n\n",
+            "event: step.delta\ndata: {\"index\":0,\"delta\":{\"signature\":\"EnEKbwFpFH0T3Ppwza4OAKYK5BzCkG4XuioL/mdsy5vVrljkAR0WXl8fEAXF8UyAizKKoRk3MPz4krLE4WdYxFJqGpYHri2gjkDDiS0UX9GkJIuV2CJ4zaFa0m/3NWmQbIkEDUmX1MATlFNnbqk5rFbjMA==\",\"type\":\"thought_signature\"},\"event_type\":\"step.delta\"}\n\n",
+            "event: step.stop\ndata: {\"index\":0,\"event_type\":\"step.stop\"}\n\n",
+            "event: step.start\ndata: {\"index\":1,\"step\":{\"type\":\"model_output\"},\"event_type\":\"step.start\"}\n\n",
+            "event: step.delta\ndata: {\"index\":1,\"delta\":{\"text\":\"Hello! How can I help you today?\",\"type\":\"text\"},\"event_type\":\"step.delta\"}\n\n",
+            "event: step.stop\ndata: {\"index\":1,\"event_type\":\"step.stop\"}\n\n",
+            "event: interaction.completed\ndata: {\"interaction\":{\"id\":\"\",\"status\":\"completed\",\"usage\":{\"total_tokens\":16,\"total_input_tokens\":7,\"input_tokens_by_modality\":[{\"modality\":\"text\",\"tokens\":7}],\"total_cached_tokens\":0,\"total_output_tokens\":9,\"total_tool_use_tokens\":0,\"total_thought_tokens\":0,\"raw_prompt_token\":36,\"model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":36}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":13}]}],\"non_grounding_model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":36}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":13}]}]},\"created\":\"2026-09-24T08:44:10Z\",\"updated\":\"2026-09-24T08:44:10Z\",\"service_tier\":\"standard\",\"object\":\"interaction\",\"model\":\"gemini-3.1-flash-lite\"},\"event_type\":\"interaction.completed\"}\n\n",
+            "event: done\ndata: [DONE]\n\n"
+          ]
+        }
+      }
+    }
+  ]
+}

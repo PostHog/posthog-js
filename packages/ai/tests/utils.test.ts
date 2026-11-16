@@ -1,4 +1,4 @@
-import { toContentString, getTokensSource, getModelParams } from '../src/utils'
+import { toContentString, getTokensSource, getModelParams, formatResponseOpenAI } from '../src/utils'
 
 describe('getTokensSource', () => {
   it.each([
@@ -230,5 +230,41 @@ describe('getModelParams', () => {
     const params = { model: 'gpt-4o', temperature: 0.5 } as any
     const result = getModelParams(params)
     expect(result).not.toHaveProperty('service_tier')
+  })
+})
+
+describe('formatResponseOpenAI Responses custom tools', () => {
+  it.each(['print("hello")\n', ''])('preserves free-form input %j', (input) => {
+    expect(
+      formatResponseOpenAI({
+        output: [{ type: 'custom_tool_call', id: 'ctc_1', call_id: 'call_1', name: 'code_exec', input }],
+      })
+    ).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'function', id: 'call_1', function: { name: 'code_exec', arguments: input } }],
+      },
+    ])
+  })
+
+  it('keeps custom tools in order with function calls and text', () => {
+    expect(
+      formatResponseOpenAI({
+        output: [
+          { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{"key":1}' },
+          { type: 'custom_tool_call', id: 'ctc_2', name: 'code_exec', input: '1 + 1' },
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Done' }] },
+        ],
+      })
+    ).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'function', id: 'call_1', function: { name: 'lookup', arguments: '{"key":1}' } },
+          { type: 'function', id: 'ctc_2', function: { name: 'code_exec', arguments: '1 + 1' } },
+          { type: 'text', text: 'Done' },
+        ],
+      },
+    ])
   })
 })

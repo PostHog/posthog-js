@@ -572,10 +572,11 @@ describe('push notifications', () => {
       // The consent check runs before the init await; withdrawing consent in that window must
       // not let the queued call register after opt-out.
       const registerPromise = posthog.registerPushNotificationToken('a-token')
-      await posthog.optOut()
+      // optOut() resolves once replay has stopped, which waits for the native setup.
+      const optOut = posthog.optOut()
 
       resolveSetup()
-      await registerPromise
+      await Promise.all([optOut, registerPromise])
 
       expect(mockPlugin.registerPushNotificationToken).not.toHaveBeenCalled()
 

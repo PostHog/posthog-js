@@ -1,9 +1,11 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
-import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
+import type { CaptureMetricOptions, HistogramOptions, OtlpMetricsPayload } from './types'
+import { PostHogMetrics as CorePostHogMetrics, isUndefined, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { Extension } from './extensions/types'
 import { startNetworkMetrics } from './extensions/network-metrics'
 
@@ -12,6 +14,14 @@ const METRICS_ENDPOINT = '/i/v1/metrics'
 // as logs: above the request layer's own 60s timeout so a real request
 // always settles via its callback first.
 const METRICS_SEND_TIMEOUT_MS = 90000
+// Every tab of an app writes to the same series, and the backend keeps a
+// bounded number of points per series per hour. One export a minute per tab,
+// instead of core's 10s, gives six times the headroom with no extra series, and
+// folds more requests into each histogram point. A closing tab's partial window
+// still goes out through the pagehide `sendBeacon` drain, and a backgrounded
+// tab's through the `visibilitychange` flush below, since mobile browsers can
+// kill a hidden tab without firing `pagehide`.
+const BROWSER_DEFAULT_FLUSH_INTERVAL_MS = 60000
 
 /**
  * The `posthog.metrics` extension: a statsd-style pre-aggregating client.
@@ -33,13 +43,31 @@ export class PostHogMetrics implements Extension {
     private _resolvedFrom: PostHog['config']['metrics']
     private _stopNetworkMetrics: (() => void) | undefined
     private _disposed = false
+    private _visibilityListening = false
 
     constructor(private readonly _instance: PostHog) {}
 
     // The aggregator builds lazily on the first capture so it sees post-init
-    // config; only the network wrappers need to be installed eagerly.
+    // config; only the network wrappers and the hidden-page drain need to be
+    // installed eagerly.
     initialize(): void {
         this.onConfigChange()
+        if (!this._disposed && !this._visibilityListening && document?.addEventListener) {
+            addEventListener(document, 'visibilitychange', this._onVisibilityChange)
+            this._visibilityListening = true
+        }
+    }
+
+    // A hidden page may never come back or fire `pagehide` (mobile tab
+    // switches, app backgrounding), so send the pending window while we can.
+    // This is the normal retryable flush, not the unload drain: the page is
+    // usually still alive, so a transient failure keeps the window for the
+    // next attempt, and the request carries `request_headers`, which
+    // `sendBeacon` cannot.
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'hidden') {
+            void this.flush()
+        }
     }
 
     onConfigChange(): void {
@@ -59,29 +87,37 @@ export class PostHogMetrics implements Extension {
     // core lazily and rebuild when `config.metrics` is swapped (e.g. via
     // `set_config`). A rebuild drops the old core's pending window — acceptable
     // for a config swap, which is rare and usually happens at startup.
-    private _getCore(): CorePostHogMetrics {
+    // A disposed extension returns no core, so a late capture cannot restart the flush timer.
+    private _getCore(): CorePostHogMetrics | undefined {
+        if (this._disposed) {
+            return undefined
+        }
         const metricsConfig = this._instance?.config?.metrics
         if (!this._core || this._resolvedFrom !== metricsConfig) {
             this._core?.reset()
             this._resolvedFrom = metricsConfig
-            this._core = new CorePostHogMetrics(this._createHost(), resolveMetricsConfig(metricsConfig), this._logger)
+            const resolved = resolveMetricsConfig(metricsConfig)
+            if (isUndefined(metricsConfig?.flushIntervalMs)) {
+                resolved.flushIntervalMs = BROWSER_DEFAULT_FLUSH_INTERVAL_MS
+            }
+            this._core = new CorePostHogMetrics(this._createHost(), resolved, this._logger)
         }
         return this._core
     }
 
     /** Add to a counter — things that only go up. Value defaults to 1. */
     count(name: string, value: number = 1, options?: CaptureMetricOptions): void {
-        this._getCore().count(name, value, options)
+        this._getCore()?.count(name, value, options)
     }
 
     /** Record the current value of something that goes up and down. */
     gauge(name: string, value: number, options?: CaptureMetricOptions): void {
-        this._getCore().gauge(name, value, options)
+        this._getCore()?.gauge(name, value, options)
     }
 
     /** Record one observation of a distribution (latency, payload size). */
-    histogram(name: string, value: number, options?: CaptureMetricOptions): void {
-        this._getCore().histogram(name, value, options)
+    histogram(name: string, value: number, options?: HistogramOptions): void {
+        this._getCore()?.histogram(name, value, options)
     }
 
     /**
@@ -119,6 +155,8 @@ export class PostHogMetrics implements Extension {
      */
     dispose(): void {
         this._disposed = true
+        document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+        this._visibilityListening = false
         this._stopNetworkMetrics?.()
         this._stopNetworkMetrics = undefined
         this._core?.reset()
@@ -173,6 +211,10 @@ export class PostHogMetrics implements Extension {
                 compression: 'best-available',
                 batchKey: 'metrics',
                 ...(transport && { transport }),
+                // A hidden tab can be frozen before async CompressionStream
+                // finishes, so the request would never reach fetch. Metrics
+                // payloads are small, so synchronous gzip is cheap.
+                ...(document?.visibilityState === 'hidden' && { preferSyncCompression: true }),
                 // Notify on the drop paths (not loaded, rate limited) so they retry, not stall.
                 fireCallbackOnDrop: true,
                 callback: (response) => {

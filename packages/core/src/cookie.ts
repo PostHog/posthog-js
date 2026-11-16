@@ -40,6 +40,10 @@ export interface PostHogCookieState {
   distinctId: string
   isIdentified: boolean
   sessionId?: string
+  /** When the session last had activity (`$sesid[0]`), in milliseconds since the Unix epoch. */
+  sessionLastActivityTimestamp?: number
+  /** When the session started (`$sesid[2]`), in milliseconds since the Unix epoch. */
+  sessionStartTimestamp?: number
   deviceId?: string
 }
 
@@ -126,17 +130,24 @@ export function parsePostHogCookie(cookieValue: string): PostHogCookieState | nu
     }
 
     // $sesid is stored as [lastActivityTimestamp, sessionId, sessionStartTimestamp]
-    const sesid = isArray(parsed.$sesid) ? parsed.$sesid[1] : undefined
+    const sesid: unknown[] = isArray(parsed.$sesid) ? parsed.$sesid : []
+    const sessionId = sesid[1]
 
     return {
       distinctId: String(parsed.distinct_id),
       isIdentified: parsed.$user_state === 'identified',
-      sessionId: typeof sesid === 'string' ? sesid : undefined,
+      sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+      sessionLastActivityTimestamp: toTimestamp(sesid[0]),
+      sessionStartTimestamp: toTimestamp(sesid[2]),
       deviceId: typeof parsed.$device_id === 'string' ? parsed.$device_id : undefined,
     }
   } catch {
     return null
   }
+}
+
+function toTimestamp(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 export interface ConsentCookieConfig {

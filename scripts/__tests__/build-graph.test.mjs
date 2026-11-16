@@ -52,6 +52,19 @@ function prerequisites(tasks, taskId) {
 
 const executable = (tasks) => tasks.filter((task) => task.command !== '<NONEXISTENT>')
 
+test('browser fixture test commands build their shared mock before importing it', () => {
+    const scripts = readJson('packages/browser-next/package.json').scripts
+    for (const [script, runner] of [
+        ['test:browser', 'playwright test --config playwright.config.ts'],
+        ['test:fixture-server', 'node --test scripts/serve-browser-tests.test.mjs'],
+    ]) {
+        assert.deepEqual(scripts[script].split(' && '), [
+            'pnpm --filter @posthog-tooling/sdk-mock-server build',
+            runner,
+        ])
+    }
+})
+
 test('concurrent version generation never exposes an empty module to builds', async () => {
     const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-version-race-'))
     const targets = []
@@ -202,12 +215,73 @@ test('shared rrweb tooling hashes without Git metadata or installed dependency d
     }
 })
 
+test('changing only the loader method generator invalidates the browser build cache', () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-loader-build-inputs-'))
+    try {
+        const scripts = resolve(fixture, 'packages/browser/scripts')
+        mkdirSync(scripts, { recursive: true })
+        writeFileSync(
+            resolve(fixture, 'package.json'),
+            JSON.stringify({ name: 'loader-input-fixture', private: true, packageManager: rootPackage.packageManager })
+        )
+        writeFileSync(resolve(fixture, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+        writeFileSync(
+            resolve(fixture, 'pnpm-lock.yaml'),
+            "lockfileVersion: '9.0'\nimporters:\n  .: {}\n  packages/browser: {}\n"
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/browser/package.json'),
+            JSON.stringify({ name: 'posthog-js', scripts: { build: 'echo build' } })
+        )
+        writeFileSync(
+            resolve(fixture, 'turbo.json'),
+            JSON.stringify({ tasks: { build: { inputs: turbo.tasks.build.inputs } } })
+        )
+        const generator = resolve(scripts, 'loader-methods.mjs')
+        const original = readFileSync(resolve(root, 'packages/browser/scripts/loader-methods.mjs'), 'utf8')
+        writeFileSync(generator, original)
+        const control = resolve(scripts, 'check-sourcemap-ignore-list.js')
+        writeFileSync(control, 'export const marker = true\n')
+        const hash = () =>
+            JSON.parse(
+                execFileSync(
+                    resolve(root, 'node_modules/.bin/turbo'),
+                    ['run', 'build', '--filter=posthog-js', '--dry=json'],
+                    { cwd: fixture, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 }
+                )
+            ).tasks[0].hash
+        const initial = hash()
+        writeFileSync(control, 'export const marker = false\n')
+        assert.notEqual(hash(), initial, 'the listed control script must change the cache key')
+        writeFileSync(control, 'export const marker = true\n')
+        writeFileSync(generator, original + '\n')
+        assert.notEqual(hash(), initial, 'the method generator must change the browser build cache key')
+    } finally {
+        rmSync(fixture, { recursive: true, force: true })
+    }
+})
+
 test('type checks use dependency builds without scheduling a second compilation graph', () => {
     const tasks = dryRun(['run', 'check-types'])
     assert.ok(!tasks.some((task) => task.task === 'prepublish'))
     assert.ok(prerequisites(tasks, '@posthog/rrweb-utils#check-types').has('@posthog/core#build'))
     assert.ok(prerequisites(tasks, '@posthog/browser#check-types').has('@posthog/browser#build'))
     assert.match(readJson('packages/browser-common/package.json').scripts['check-types'], /tsc --noEmit/)
+})
+
+test('the browser type check hashes the sibling sources that its test typecheck compiles', () => {
+    const task = dryRun(['run', 'check-types']).find((task) => task.taskId === 'posthog-js#check-types')
+    assert.equal(task.command, 'pnpm typecheck && pnpm test:typecheck')
+    const inputs = Object.keys(task.inputs)
+    for (const file of [
+        'browser-next/src/products/analytics/delivery/lane.ts',
+        'browser-common/tests/helpers/client-conformance.ts',
+    ]) {
+        assert.ok(
+            inputs.some((input) => input.endsWith(file)),
+            `${file} must invalidate the check-types cache`
+        )
+    }
 })
 
 test('root tests schedule leaf suites once, including every existing rrweb suite', () => {
@@ -256,13 +330,6 @@ test('browser unit tests wait for the React output included in their package tar
     }
 })
 
-test('Node references consume the graph build without rebuilding inside the task', () => {
-    const tasks = dryRun(['run', 'generate-references', '--filter=posthog-node'])
-    const id = 'posthog-node#generate-references'
-    assert.ok(prerequisites(tasks, id).has('posthog-node#build'))
-    assert.doesNotMatch(tasks.find((task) => task.taskId === id).command, /pnpm build/)
-})
-
 test('rrweb dev bootstraps dependency builds before starting its single watcher', () => {
     for (const pkg of rrwebPackages) {
         assert.equal(pkg.scripts.dev, `pnpm turbo run build --filter='${pkg.name}^...' && vite build --watch`)
@@ -287,8 +354,10 @@ test('rrweb dev bootstraps dependency builds before starting its single watcher'
 test('every SDK and rrweb package participates in the root semantic check contract', () => {
     const sdkPackages = globSync('packages/*/package.json', { cwd: root }).map(readJson)
     const tasks = rootScriptGraph('check-types')
-    const checks = executable(tasks).filter((task) => task.task === 'check-types')
     const packages = [...sdkPackages, ...rrwebPackages]
+    const checks = executable(tasks).filter(
+        (task) => task.task === 'check-types' && packages.some((pkg) => task.package === pkg.name)
+    )
     assert.equal(checks.length, packages.length)
     for (const pkg of packages) {
         const id = `${pkg.name}#check-types`

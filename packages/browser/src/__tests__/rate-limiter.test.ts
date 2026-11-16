@@ -69,6 +69,32 @@ describe('Rate Limiter', () => {
             })
         })
 
+        it('does not subtract tokens when the clock moves backward', () => {
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+
+            moveTimeForward(-143_000)
+
+            expect(rateLimiter.clientRateLimitContext()).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(143_000)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(100)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
+        })
+
         it('adds tokens if time has passed ', () => {
             range(50).forEach(() => {
                 expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
@@ -118,6 +144,16 @@ describe('Rate Limiter', () => {
             moveTimeForward(1000000)
             expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(99) // limit - 1
+        })
+
+        it('reports the limit without using a token or holding back the next warning', () => {
+            range(99).forEach(() => rateLimiter.clientRateLimitContext())
+            expect(rateLimiter.isClientRateLimited).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
+
+            expect(rateLimiter.isClientRateLimited).toBe(true)
+            rateLimiter.clientRateLimitContext()
+            expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
         })
 
         it('captures a rate limit event the first time it is rate limited', () => {

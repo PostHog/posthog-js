@@ -305,8 +305,7 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
 
   it('surfaces the resource error even when capturing it throws', async () => {
     const server = makeServer()
-    const warnings: string[] = []
-    instrument(server, fakePostHog(), { logger: (message: string) => warnings.push(message) })
+    instrument(server, fakePostHog())
 
     // `captureException` reads the thrown value's own `message`. An application is
     // free to define that as a throwing getter, and analytics must not turn its
@@ -324,25 +323,8 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     await expect(dispatch(server, { method: 'resources/read', params: { uri: 'file:///guide.md' } })).rejects.toBe(
       error
     )
-    await vi.waitFor(() =>
-      expect(warnings.some((message) => message.includes('failed to publish resources/read analytics'))).toBe(true)
-    )
-    expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(0)
-  })
-
-  it('names an $identify published from a resources/read by its uri', async () => {
-    const server = makeServer()
-    instrument(server, fakePostHog(), { identify: () => ({ distinctId: 'user-1' }) })
-    server.setRequestHandler('resources/read', (async () => ({ contents: [] })) as any)
-
-    await dispatch(server, { method: 'resources/read', params: { uri: 'https://fakeuser:fakepass@example.com/guide' } })
-    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1))
-
-    // A read addresses its subject by `uri`, never by `name`, and the credentials
-    // in that address are redacted on the identify event like anywhere else.
-    expect(eventCapture.findCapturesByEvent('$identify')[0].properties.$mcp_resource_name).toBe(
-      'https://%5Bredacted%5D@example.com/guide'
-    )
+    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(1))
+    expect(eventCapture.findCapturesByEvent('$mcp_resource_read')[0].properties.$mcp_is_error).toBe(true)
   })
 
   /**

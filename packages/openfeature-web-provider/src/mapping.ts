@@ -141,7 +141,7 @@ export function resolveNumberDetails(
     throw new TypeMismatchError(`Flag '${flagKey}' has no variant to parse as a number.`)
   }
   const value = Number(resolved.variant)
-  if (!Number.isFinite(value)) {
+  if (resolved.variant.trim() === '' || !Number.isFinite(value)) {
     throw new TypeMismatchError(`Flag '${flagKey}' variant '${resolved.variant}' is not a valid number.`)
   }
   return { value, variant: resolved.variant, reason: reasonFor(resolved) }

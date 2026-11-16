@@ -5,7 +5,7 @@ import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
 import { IntroMessage } from './IntroMessage'
 import { createSafeStyleSheet } from '../safeStyleSheet'
-import { SurveyAppearanceTheme, resolveSurveyAlignment } from '../surveys-utils'
+import { SurveyAppearanceTheme, resolveSurveyAlignment, shouldShowConfirmationMessage } from '../surveys-utils'
 import { Survey, type SurveyResponses } from '@posthog/core'
 import { useOptionalSafeAreaInsets } from '../../optional/OptionalReactNativeSafeArea'
 import { Questions } from './Surveys'
@@ -96,13 +96,21 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { vertical, horizontal } = resolveSurveyAlignment(appearance.position)
   const isBottom = vertical === 'flex-end'
 
-  const shouldShowConfirmation = isSurveySent && appearance.thankYouMessageHeader
+  const shouldShowConfirmation = shouldShowConfirmationMessage(appearance)
 
   useEffect(() => {
     if (isVisible) {
       onShow()
     }
   }, [isVisible, onShow])
+
+  // The survey is over and it has no confirmation message, so close the modal. Without this the
+  // modal stays up as an empty box with only the close button in it.
+  useEffect(() => {
+    if (isSurveySent && !shouldShowConfirmation) {
+      onClose()
+    }
+  }, [isSurveySent, shouldShowConfirmation, onClose])
 
   // Track keyboard height so we can cap the modal to the visible viewport.
   // KAV alone lifts the modal but doesn't shrink it — a tall modal would

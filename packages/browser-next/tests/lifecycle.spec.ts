@@ -1,8 +1,11 @@
+import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Mock } from 'vitest'
 
-import { analytics } from '../src/analytics'
-import { createPostHog, type BrowserFetch } from '../src/core'
+import { analytics } from '../src/products/analytics/analytics'
+import { Analytics, type AnalyticsMessage } from '../src/products/analytics/analytics-internal'
+import { CAPTURE_V1_TEARDOWN_BUDGET_BYTES } from '../src/products/analytics/delivery/capture-v1'
+import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'
 
 interface MutableNavigator {
     onLine: boolean
@@ -55,8 +58,8 @@ describe('browser-next analytics lifecycle', () => {
             fetch,
             extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
         })
-        await posthog.capture('first', { value: 'one' }, { uuid: 'first-uuid' })
-        await posthog.capture('second', { value: 'two' }, { uuid: 'second-uuid' })
+        await requireInstalledExtension(posthog.analytics).capture('first', { value: 'one' }, { uuid: 'first-uuid' })
+        await requireInstalledExtension(posthog.analytics).capture('second', { value: 'two' }, { uuid: 'second-uuid' })
         expect(fetch).not.toHaveBeenCalled()
 
         events.dispatchEvent(new Event('pagehide'))
@@ -105,9 +108,9 @@ describe('browser-next analytics lifecycle', () => {
             fetch,
             extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
         })
-        await posthog.capture('active', undefined, { uuid: 'active-uuid' })
+        await requireInstalledExtension(posthog.analytics).capture('active', undefined, { uuid: 'active-uuid' })
         await Promise.resolve()
-        await posthog.capture('queued', undefined, { uuid: 'queued-uuid' })
+        await requireInstalledExtension(posthog.analytics).capture('queued', undefined, { uuid: 'queued-uuid' })
 
         events.dispatchEvent(new Event('pagehide'))
 
@@ -118,6 +121,83 @@ describe('browser-next analytics lifecycle', () => {
         expect(teardown.batch.map(({ uuid }) => uuid)).toEqual(['active-uuid', 'queued-uuid'])
         posthog.optOut()
         await posthog.dispose()
+    })
+
+    it('shares outstanding keepalive bytes across direct unload calls and pagehide', async () => {
+        const bodies: string[] = []
+        const pending: Array<(response: Response) => void> = []
+        const fetch: BrowserFetch = (_input, init) => {
+            bodies.push(String(init?.body))
+            return new Promise<Response>((resolve) => pending.push(resolve))
+        }
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch,
+            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+        })
+        try {
+            requireInstalledExtension(posthog.analytics).capture('buffered', { value: 'x'.repeat(20_000) })
+            requireInstalledExtension(posthog.analytics).capture(
+                'first',
+                { value: 'x'.repeat(40_000) },
+                { delivery: 'unload' }
+            )
+            requireInstalledExtension(posthog.analytics).capture(
+                'second',
+                { value: 'x'.repeat(40_000) },
+                { delivery: 'unload' }
+            )
+            events.dispatchEvent(new Event('pagehide'))
+            expect(bodies).toHaveLength(1)
+            expect(
+                bodies.reduce((total, body) => total + new TextEncoder().encode(body).length, 0)
+            ).toBeLessThanOrEqual(CAPTURE_V1_TEARDOWN_BUDGET_BYTES)
+            pending.shift()!(new Response(''))
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            events.dispatchEvent(new Event('pagehide'))
+            expect(bodies).toHaveLength(2)
+            expect(JSON.parse(bodies[1]!).batch.map(({ event }: AnalyticsMessage) => event)).toEqual(['buffered'])
+        } finally {
+            for (const resolve of pending) resolve(new Response(''))
+            await posthog.shutdown(0)
+        }
+    })
+
+    it('includes unload captures from pre-teardown subscribers in the queued handoff', async () => {
+        const requests: Array<{ batch: AnalyticsMessage[] }> = []
+        const fetch: BrowserFetch = async (_input, init) => {
+            requests.push(JSON.parse(String(init?.body)))
+            return new Response('{}')
+        }
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch,
+            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+        })
+        try {
+            requireInstalledExtension(posthog.analytics).capture('buffered')
+            const internalAnalytics = requireInstalledExtension(await posthog.resolveExtension(Analytics))
+            const beforeTeardown = requireInstalledExtension(internalAnalytics.onBeforeTeardown)
+            beforeTeardown(() => {
+                requireInstalledExtension(posthog.analytics).capture(
+                    'abandonment',
+                    { answer: 'partial' },
+                    { delivery: 'unload' }
+                )
+            })
+            events.dispatchEvent(new Event('pagehide'))
+            expect(requests.map(({ batch }) => batch.map(({ event }) => event))).toEqual([['buffered', 'abandonment']])
+        } finally {
+            await posthog.shutdown(0)
+        }
     })
 
     it('uses unload only when pagehide is unavailable', async () => {
@@ -134,7 +214,7 @@ describe('browser-next analytics lifecycle', () => {
             fetch,
             extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
         })
-        await posthog.capture('queued')
+        await requireInstalledExtension(posthog.analytics).capture('queued')
 
         events.dispatchEvent(new Event('pagehide'))
         expect(fetch).not.toHaveBeenCalled()
@@ -160,7 +240,7 @@ describe('browser-next analytics lifecycle', () => {
             extensions: [analytics({ flushAt: 1, flushInterval: 10 })],
         })
 
-        await posthog.capture('offline')
+        await requireInstalledExtension(posthog.analytics).capture('offline')
         await Promise.resolve()
         expect(fetch).not.toHaveBeenCalled()
 
@@ -191,7 +271,7 @@ describe('browser-next analytics lifecycle', () => {
             extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
         })
 
-        posthog.capture('staged')
+        requireInstalledExtension(posthog.analytics).capture('staged')
         navigator.onLine = false
         events.dispatchEvent(new Event('offline'))
         await Promise.resolve()
@@ -221,7 +301,7 @@ describe('browser-next analytics lifecycle', () => {
                 { name: 'stalled-cleanup', setup() {}, dispose: () => new Promise(() => {}) },
             ],
         })
-        await posthog.capture('shutdown')
+        await requireInstalledExtension(posthog.analytics).capture('shutdown')
 
         const shutdown = posthog.shutdown(5)
         await vi.advanceTimersByTimeAsync(5)
@@ -250,8 +330,8 @@ describe('browser-next analytics lifecycle', () => {
             debug: true,
             extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
         })
-        await posthog.capture('oversized_head', { value: 'x'.repeat(53_000) })
-        await posthog.capture('small_tail')
+        await requireInstalledExtension(posthog.analytics).capture('oversized_head', { value: 'x'.repeat(53_000) })
+        await requireInstalledExtension(posthog.analytics).capture('small_tail')
 
         events.dispatchEvent(new Event('pagehide'))
 
@@ -281,8 +361,8 @@ describe('browser-next analytics lifecycle', () => {
             debug: true,
             extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
         })
-        await posthog.capture('first', { value: 'é'.repeat(15_000) })
-        await posthog.capture('second', { value: 'é'.repeat(15_000) })
+        await requireInstalledExtension(posthog.analytics).capture('first', { value: 'é'.repeat(15_000) })
+        await requireInstalledExtension(posthog.analytics).capture('second', { value: 'é'.repeat(15_000) })
 
         events.dispatchEvent(new Event('pagehide'))
 

@@ -77,8 +77,31 @@ describe('parsePostHogCookie', () => {
       distinctId: 'user_123',
       isIdentified: false,
       sessionId: 'session-uuid-v7',
+      sessionLastActivityTimestamp: 1708700000000,
+      sessionStartTimestamp: 1708700000000,
       deviceId: 'device_abc',
     })
+  })
+
+  it('extracts the session activity and start timestamps from $sesid', () => {
+    const cookieValue = JSON.stringify({
+      distinct_id: 'user_123',
+      $sesid: [1708700900000, 'session-uuid-v7', 1708700000000],
+    })
+    const result = parsePostHogCookie(cookieValue)
+    expect(result?.sessionLastActivityTimestamp).toBe(1708700900000)
+    expect(result?.sessionStartTimestamp).toBe(1708700000000)
+  })
+
+  it.each([
+    ['missing', '[null, "session-uuid-v7"]'],
+    ['strings', '["1708700000000", "session-uuid-v7", "1708700000000"]'],
+    ['not finite', '[1e400, "session-uuid-v7", -1e400]'],
+  ])('returns undefined session timestamps when they are %s', (_label, sesid) => {
+    const result = parsePostHogCookie(`{"distinct_id": "user_123", "$sesid": ${sesid}}`)
+    expect(result?.sessionId).toBe('session-uuid-v7')
+    expect(result?.sessionLastActivityTimestamp).toBeUndefined()
+    expect(result?.sessionStartTimestamp).toBeUndefined()
   })
 
   it('returns undefined sessionId when $sesid is missing', () => {

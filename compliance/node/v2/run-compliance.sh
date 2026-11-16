@@ -11,7 +11,7 @@ adapter_image=${1:?adapter image required}
 harness_image=${2:?harness image required}
 mode=${3:?v0 or v1 required}
 reports=${4:?new absolute report directory required}
-suite=${5:-migration}
+suite=${5:-acceptance}
 case "$suite" in
     migration|acceptance) ;;
     *) echo 'Unknown compliance suite' >&2; exit 2 ;;

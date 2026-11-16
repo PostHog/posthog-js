@@ -8,6 +8,7 @@ export {
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
+  assertFeatureFlagFilterSupported,
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,
@@ -26,6 +27,7 @@ export type {
   FeatureFlagVariant,
   FeatureFlagVariantLookupEntry,
   MatchFeatureFlagPropertyOptions,
+  UnresolvedFlagReason,
 } from './featureFlagLocalEvaluation'
 export {
   gzipCompress,
@@ -81,6 +83,7 @@ export type {
 // Same barrel convention as logs for the user-facing metric types.
 export type {
   CaptureMetricOptions,
+  HistogramOptions,
   MetricAttributes,
   MetricAttributeValue,
   MetricSample,

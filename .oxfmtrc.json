@@ -13,6 +13,8 @@
         "**/_generated/**",
         "packages/react-native/src/version.ts",
         "packages/core/src/vendor/*",
-        "**/references/*.json"
+        "**/references/*.json",
+        "**/references/*.md",
+        "packages/browser/playwright/compatibility/goldens/*.json"
     ]
 }

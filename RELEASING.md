@@ -21,37 +21,85 @@ Keep each changeset description to one short, user-facing line, similar to a PR 
 Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml). It can also be started through workflow dispatch. The workflow:
 
 1. Waits for approval and creates the version-bump commit on `main`.
-2. If the version of the `posthog-js` browser package changed, builds and uploads its browser and toolbar assets to the US and EU S3 buckets.
+2. If the version of the `posthog-js` browser package changed, builds and uploads its immutable browser and toolbar assets to the US and EU S3 buckets. Only after both regions verify successfully does a second phase promote the major-version and compatibility aliases, using the same build artifacts.
 3. Publishes the changed packages to npm.
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
 
-### Browser S3/CDN gate
+### `posthog-js` S3/CDN gate
 
-The browser S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
+The `posthog-js` S3 release happens before npm publishing. When `posthog-js` changes, every npm publish job is gated on:
 
 - successfully identifying the new browser version;
 - building the browser distribution;
 - building the toolbar for both regional asset hosts; and
-- successfully uploading to both the US and EU S3 buckets.
+- successfully uploading and verifying immutable assets in both the US and EU S3 buckets; and
+- successfully promoting and verifying aliases in both regions (prereleases verify immutable assets but do not write aliases).
 
-If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, the S3 jobs are skipped and npm publishing proceeds normally.
+If any of that work fails, no package from the coordinated npm release is published. If `posthog-js` did not change, its S3 jobs are skipped and npm publishing proceeds normally.
 
-A stable browser release uploads:
+A stable `posthog-js` release uploads:
 
 - immutable versioned assets under `/static/<version>/`;
 - mutable major-version aliases under `/static/<major>/`; and
 - top-level compatibility aliases under `/static/`.
 
+The integrity manifest is published only under `/static/<version>/integrity.json`, never at the mutable aliases.
+
 Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
+### `@posthog/browser` S3 publication
+
+S3 publication runs independently of npm publication. The workflow compares `packages/browser-next/package.json` at the pinned Changesets version-bump commit with its parent and publishes S3 assets when its version changed. This decision remains the same on retries, regardless of npm publication status.
+
+The workflow builds `pnpm --filter @posthog/browser build:cdn` once from the pinned Changesets version-bump commit, after building workspace dependencies. Both regions and phases consume the same `posthog-browser-dist` artifact, containing `script.js`, deferred chunks, and source maps.
+
+Stable releases publish byte-identical trees at:
+
+- `/static/browser/<exact-package-version>/` with `Cache-Control: public, max-age=31536000, immutable`;
+- `/static/browser/<major>/` with `Cache-Control: public, max-age=300`.
+
+Prereleases publish only the exact-version tree. Dependencies are uploaded and verified before `script.js` in both phases. Historical hashed chunks are retained for cached entries. Alias promotion is not atomic across objects or regions and does not purge CDN caches.
+
+Before stable alias promotion, the workflow requires the release version to match the current package version on `main`. Superseded retries can repair immutable URLs but cannot promote aliases, even if the newer version's S3 publication failed; retry the latest release instead. When running the phases manually, confirm the target version matches `main` before promoting aliases.
+
+```sh
+node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --immutable-only
+# After immutable uploads succeed in both US and EU:
+node tooling/release/src/cli.ts upload-browser-s3 "$BUCKET" "$VERSION" --aliases-only
+```
+
+Both phases use the shared checksum, metadata, conditional-write, concurrency, and retry helpers below. Alias promotion re-verifies immutable assets. Keep the original artifact for retries; it is retained for 30 days. If it is unavailable, publish a new version rather than rebuilding into an immutable path. The manual recovery workflow below applies to `posthog-js`.
+
+**Deployment prerequisite:** confirm both asset-bucket OIDC roles can HEAD/GET and conditionally PUT the `static/browser/` prefix, and both asset CDNs serve it with the uploaded MIME/cache metadata. Local tests do not establish IAM authorization or public availability.
+
+### Retry and resume behavior
+
+S3 operations run with at most eight assets in flight per job. Each PUT uses a replayable buffer and the AWS SDK's standard retry strategy (exponential backoff with jitter, at most four attempts). Started operations drain before a failed phase exits; subsequent phases do not start on failure.
+
+A retry checks existing immutable objects against the local artifact's SHA-256, length, content type, cache control, and absence of content encoding. Identical objects are skipped, missing objects are uploaded with `If-None-Match: *`, and conflicting objects fail without overwriting. Older objects without a full-object SHA-256 are downloaded and hashed; ETag is not treated as a content checksum. Permission and lookup failures are not treated as missing objects. A conditional-write conflict after a lost acknowledgement is accepted only after verifying the existing object matches.
+
+For `posthog-js`, keep the original SDK and regional toolbar artifacts when retrying. A rebuild from the same commit is not necessarily byte-identical, and a different toolbar revision must not silently replace immutable assets. Only explicitly approved recovery may force replacement of conflicting objects.
+
+The `posthog-js` CLI retains its combined upload mode for compatibility. Workflows use `upload-s3 <bucket> <version> --immutable-only`, followed by `--aliases-only` behind a cross-region barrier. Alias-only mode re-verifies the complete immutable set before writing aliases and cannot be combined with `--force-overwrite` or `--immutable-only`. No compressed asset format, public path, or cache lifetime changes are introduced.
+
 PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C07HTMN9X47) for release workflow failure notifications.
+
+### Failed or cancelled release
+
+The independent [release failure notification workflow](.github/workflows/release-failure-notification.yml) checks every completed release attempt on `main` and on the `posthog-node-5` maintenance branch, and alerts if a job failed, timed out, or was cancelled. This includes runner startup failures and cancellations with job records. It also alerts when the run did not succeed, no job failed, and an npm publish job (`Publish packages` or `Publish posthog-js`) was never created, for example when GitHub Actions stops a run before the publish jobs start. Maintenance runs skip `Publish posthog-js`, so only `Publish packages` counts there. Once every npm publish job succeeds, alerts describe follow-up problems rather than claiming the release failed, and the workflow alerts if the released Slack notification was skipped. It only acts on runs that a push or a manual dispatch started in this repository.
+
+Cancelled runs with no jobs are ignored, including superseded queued runs and manual cancellations before any job is created. A version-bump failure before any steps ran is also ignored when the rejection-reply step confirms an explicit rejection in the same attempt and no other job failed.
+
+Job inspection retries transient GitHub API failures up to three times. If inspection still fails, it logs the HTTP status or error type and message, then posts a fallback alert with the overall run status and logs link so the release can be checked manually. Error diagnostics stay in the run log, not in the Slack message.
+
+Alerts reply to the approval thread in the release approvals Slack channel. The release workflow preserves the thread timestamp in a run artifact for 30 days, independently of release approval. Failed-job reruns reuse the latest available thread from the same or an earlier attempt. If the timestamp is missing, invalid, or unavailable, the alert falls back to a new channel message, so it does not depend on the approval notification succeeding. The failure message surfaces Slack API errors rather than silently ignoring them. The notification workflow must be present on the default branch to run.
 
 ## Manual S3 recovery
 
 S3 recovery is an exceptional path for repairing a failed or incomplete browser release. If the failure was transient and the original run is still safe to resume, first retry its failed jobs. Use recovery when the original run cannot be completed safely, for example when one regional upload succeeded before the other failed or an existing release is missing immutable assets.
 
-Recovery always rebuilds and uploads the browser SDK and toolbar. It is not an npm-only, alias-only, artifact-promotion, rollback, or S3 deletion mechanism. If a bad version is already live, ship a corrected patch and deprecate the bad npm version if needed. Do not use recovery to point mutable aliases at an earlier release.
+Recovery always rebuilds the browser SDK and toolbar, then uploads missing assets or verifies matching ones. It is not an npm-only, alias-only, artifact-promotion, rollback, or S3 deletion mechanism. If a bad version is already live, ship a corrected patch and deprecate the bad npm version if needed. Do not use recovery to point mutable aliases at an earlier release.
 
 ### Starting recovery
 
@@ -74,11 +122,11 @@ After validation, the workflow notifies `#approvals-client-libraries` with the t
 | `region`                | `all`   | `all`, `us`, or `eu`. Updating latest aliases or publishing to npm requires `all`.                                                                                                                                                                                                                                                                                          |
 | `update_latest_aliases` | `false` | Also updates `/static/` and `/static/<major>/`. Leave disabled for an older release or immutable-only repair.                                                                                                                                                                                                                                                               |
 | `publish_to_npm`        | `false` | After both S3 regions succeed, publish and finalize an unpublished current `posthog-js` version. This requires latest aliases, both regions, `NPM Release` approval, and OIDC.                                                                                                                                                                                              |
-| `force_overwrite`       | `false` | Allows existing immutable `/static/<version>/` objects to be replaced. By default the workflow refuses existing immutable assets and protects writes against races. Overwriting does not purge CDN caches.                                                                                                                                                                  |
+| `force_overwrite`       | `false` | Allows existing immutable `/static/<version>/` objects to be replaced. By default identical immutable assets are verified and skipped; conflicting assets are refused, and conditional writes protect against races. Overwriting does not purge CDN caches.                                                                                                                 |
 
 S3-only recovery permits the selected SDK package version to differ from `target_version` so an explicitly reviewed source can repair a destination path. The resolved source version appears in the approval summary and Slack message. Approve a mismatch only when it is intentional; otherwise the destination path would identify bytes from a different package version.
 
-Use `force_overwrite` only after checking which objects the earlier attempt created and confirming the selected SDK and toolbar commits. If immutable assets already exist, `force_overwrite=true` is required before the workflow writes anything, including aliases. Recovery still rebuilds and rewrites the immutable assets even when only the aliases are wrong.
+Use `force_overwrite` only after checking which objects the earlier attempt created and confirming the selected SDK and toolbar commits. Matching immutable assets no longer require overwrite permission; different bytes or HTTP metadata still require an explicitly reviewed `force_overwrite=true` repair. Recovery rebuilds artifacts and uploads or verifies the immutable assets before alias promotion. Force applies only to the immutable phase; alias promotion always verifies the rebuilt artifacts match the stored immutable objects.
 
 ### Approval and publication safeguards
 
@@ -94,7 +142,7 @@ Optional npm finalization is allowed only when the source and target versions ma
 
 ### Regional failures
 
-US and EU builds and uploads run independently. Requiring both regions before npm publishing prevents an npm-ahead-of-S3 release, but it does not make regional S3 writes atomic. One region can succeed before the other fails.
+US and EU immutable uploads run independently. Neither region starts alias promotion until every requested region's immutable upload and verification succeeds. Recovery uses the same barrier; alias updates still require `region=all`. This prevents an immutable-upload failure from exposing new aliases in just one region, but alias promotion itself remains non-atomic across objects and regions. If an alias phase fails, some aliases may already be updated; npm remains blocked until both regions succeed.
 
 For an immutable-only retry, select only the failed region and leave latest aliases disabled. If a stable-alias update partially succeeds, inspect both regions and ask `#team-client-libraries` before retrying; alias updates require `region=all`.
 
