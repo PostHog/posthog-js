@@ -24,7 +24,7 @@ const surveysInput =
 const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput =
-    /(^|\/)(capture-(?:v1|properties)|analytics(?:-buffer|-extension|-delivery)?|event-buffer|rate-limiter|lane)\.(m?js|ts)$/
+    /(^|\/)(capture-(?:v1|properties)|analytics(?:-buffer|-extension|-delivery|-session-properties)?|event-buffer|rate-limiter|lane)\.(m?js|ts)$/
 const deliveryInputs = [
     /(^|\/)analytics-delivery\.(m?js|ts)$/,
     /(^|\/)lane\.(m?js|ts)$/,
