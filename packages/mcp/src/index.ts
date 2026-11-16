@@ -213,13 +213,19 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   }
 
   const toolSession = currentToolSession(trackingData)
+  const session = toolSession?.pending?.settled ?? toolSession
   const event: McpEvent = {
-    sessionId: toolSession?.sessionId ?? trackingData.sessionId,
-    sessionSource: toolSession ? toolSession.sessionSource : instanceSessionSource(trackingData),
+    sessionId: session?.sessionId ?? trackingData.sessionId,
+    sessionSource: session ? session.sessionSource : instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
     properties: eventData.properties,
+  }
+  if (toolSession?.pending && !toolSession.pending.settled) {
+    // Sent once the call settles; its duration is still the moment it was captured.
+    toolSession.pending.events.push({ ...event, duration: 0 })
+    return
   }
 
   // Re-use the same per-server publish path so the event picks up session info,

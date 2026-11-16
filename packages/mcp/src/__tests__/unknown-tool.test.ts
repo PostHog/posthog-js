@@ -126,24 +126,29 @@ describe('a tools/call for a tool the server does not have', () => {
   })
 
   it.each([
-    ['MCP SDK v1 McpServer', () => v1HighLevel(false), /^result: .*Tool no_such_tool not found/],
-    ['MCP SDK v2 McpServer', () => v2HighLevel(false), /^thrown: Tool no_such_tool not found/],
+    // A result carries the minted handle back to the agent; a throw delivers nothing,
+    // so the session falls back to the connection's own.
+    ['MCP SDK v1 McpServer', () => v1HighLevel(false), /^result: .*Tool no_such_tool not found/, 'conversation'],
+    ['MCP SDK v2 McpServer', () => v2HighLevel(false), /^thrown: Tool no_such_tool not found/, 'generated'],
     [
       'MCP SDK v1 McpServer with tools registered after instrument()',
       v1HighLevelRegisteredAfterInstrument,
       /^result: .*Tool no_such_tool not found/,
+      'conversation',
     ],
     [
       'low-level Server with no tools/call handler',
       () => lowLevel({ dispatcher: false, registry: false }),
       /^thrown: Unknown tool: no_such_tool/,
+      'generated',
     ],
     [
       'low-level Server whose resolveOriginalTool has no such tool',
       () => lowLevel({ dispatcher: true, registry: true }),
       /^thrown: No tool named no_such_tool/,
+      'generated',
     ],
-  ])('on a %s, emits $mcp_unknown_tool and no tool call', async (_, setup, clientSees) => {
+  ])('on a %s, emits $mcp_unknown_tool and no tool call', async (_, setup, clientSees, sessionSource) => {
     const outcome = await callTool(setup(), 'no_such_tool')
 
     expect(outcome).toMatch(clientSees)
@@ -155,7 +160,7 @@ describe('a tools/call for a tool the server does not have', () => {
       $mcp_tool_name: 'no_such_tool',
       $mcp_server_name: expect.any(String),
       $session_id: expect.stringMatching(/.+/),
-      $mcp_session_source: 'conversation',
+      $mcp_session_source: sessionSource,
     })
   })
 
