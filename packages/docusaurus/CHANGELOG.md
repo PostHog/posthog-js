@@ -1,5 +1,12 @@
 # posthog-docusaurus
 
+## 2.0.7
+
+### Patch Changes
+
+- [#5755](https://github.com/PostHog/posthog-js/pull/5755) [`89d7726`](https://github.com/PostHog/posthog-js/commit/89d7726384bf1f73ee186a9f91c6ea0c3d4295bf) Thanks [@marandaneto](https://github.com/marandaneto)! - Publish the 2.0.6 changes as 2.0.7 because npm does not allow 2.0.6 to be published again.
+  (2026-11-16)
+
 ## 2.0.6
 
 ### Patch Changes

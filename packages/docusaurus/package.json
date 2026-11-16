@@ -1,6 +1,6 @@
 {
     "name": "posthog-docusaurus",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "description": "🦔 PostHog plugin for Docusaurus",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
