@@ -378,3 +378,124 @@ describe('a minted handle the agent never received', () => {
     expect(called.$mcp_conversation_id).toBeUndefined()
   })
 })
+
+describe('a custom event captured on a minted handle', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const outcomes = {
+    delivered: async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
+    undelivered: async () => ({ structuredContent: { ok: true } }),
+    raised: async () => {
+      throw new Error('tool failed')
+    },
+  }
+
+  it.each([
+    ['delivered', 'in the tool'],
+    ['undelivered', 'in the tool'],
+    ['raised', 'in the tool'],
+    ['delivered', 'after it settles'],
+    ['undelivered', 'after it settles'],
+    ['raised', 'after it settles'],
+  ] as const)('takes the session its call settles on: %s, captured %s', async (outcome, when) => {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    let late: Promise<void> | undefined
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      if (when === 'in the tool') {
+        await analytics.capture({ event: 'inside_tool' })
+        await new Promise((r) => setTimeout(r, 40))
+      } else {
+        late = new Promise<void>((resolve) => setTimeout(resolve, 20)).then(() =>
+          analytics.capture({ event: 'inside_tool' })
+        )
+      }
+      return outcomes[outcome]()
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    ).catch(() => undefined)
+    await late
+    await new Promise((r) => setTimeout(r, 50))
+
+    const [custom] = capture.findCapturesByEvent('inside_tool')
+    const [call] = capture.findCapturesByEvent('$mcp_tool_call')
+    expect(custom?.properties.$session_id).toBe(call?.properties.$session_id)
+    expect(custom?.properties.$mcp_duration_ms).toBeLessThan(20)
+  })
+
+  it('drops a held-back custom event that fails to build without an unhandled rejection', async () => {
+    let reads = 0
+    // The first read (truncation) is guarded; the second, while the event is built, is not.
+    const properties = {
+      get value(): number {
+        reads += 1
+        if (reads >= 2) {
+          throw new Error('property getter threw')
+        }
+        return 1
+      },
+    }
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+      const lowLevel = server as unknown as MCPServerLike
+      lowLevel._requestHandlers.set('tools/call', async () => {
+        await analytics.capture({ event: 'inside_tool', properties })
+        return { content: [{ type: 'text' as const, text: 'ok' }] }
+      })
+      const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+
+      await lowLevel._requestHandlers.get('tools/call')!(
+        { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+        { requestInfo: { headers: {} } } as never
+      )
+      await new Promise((r) => setTimeout(r, 50))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+  })
+
+  it('returns the result without waiting for held-back custom events to be sent', async () => {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      void analytics.capture({ event: 'inside_tool' })
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), {
+      enableConversationId: true,
+      beforeSend: async (event) => {
+        await new Promise((r) => setTimeout(r, 300))
+        return event
+      },
+    })
+
+    const started = Date.now()
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    )
+
+    expect(Date.now() - started).toBeLessThan(150)
+  })
+})

@@ -6,6 +6,17 @@ export interface RequestScope {
   sessionSource: MCPAnalyticsSessionSource | undefined
   /** Snapshot: a later request on the same session may replace the shared identity. */
   attribution: SessionInfo
+  pending?: PendingCustomEvents
+}
+
+/**
+ * Custom events captured while a call's session is a handle minted for it. That
+ * handle groups the call only once its result delivers it, so the events wait
+ * until the call settles and then take the call's own session.
+ */
+export interface PendingCustomEvents {
+  events: McpEvent[]
+  settled?: { sessionId: string | undefined; sessionSource: MCPAnalyticsSessionSource | undefined }
 }
 
 interface AsyncLocalStorageLike<T> {
@@ -80,7 +91,8 @@ export async function canScopeRequests(): Promise<boolean> {
 export async function runInRequestScope<R>(
   data: MCPAnalyticsData,
   prepared: { event: McpEvent; requestAttribution: SessionInfo } | null,
-  fn: () => Promise<R>
+  fn: () => Promise<R>,
+  pending?: PendingCustomEvents
 ): Promise<R> {
   const store = await requestScopes()
   const sessionId = prepared?.event.sessionId
@@ -88,7 +100,7 @@ export async function runInRequestScope<R>(
     return fn()
   }
   return store.run(
-    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution },
+    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution, pending },
     fn
   )
 }
