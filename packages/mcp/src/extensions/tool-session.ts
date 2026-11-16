@@ -6,6 +6,17 @@ interface ToolSession {
   sessionSource: MCPAnalyticsSessionSource | undefined
   /** The identity and client this call resolved, which a later request on the same session may replace. */
   attribution: SessionInfo
+  pending?: PendingCustomEvents
+}
+
+/**
+ * Custom events captured while a call's session is a handle minted for it. That
+ * handle groups the call only once its result delivers it, so the events wait
+ * until the call settles and then take the call's own session.
+ */
+export interface PendingCustomEvents {
+  events: McpEvent[]
+  settled?: { sessionId: string | undefined; sessionSource: MCPAnalyticsSessionSource | undefined }
 }
 
 interface AsyncLocalStorageLike<T> {
@@ -39,6 +50,7 @@ const toolSessions = AsyncLocalStorageImpl ? new AsyncLocalStorageImpl<ToolSessi
 export function runInToolSession<R>(
   data: MCPAnalyticsData,
   prepared: { event: McpEvent; requestAttribution: SessionInfo } | null,
+  pending: PendingCustomEvents | undefined,
   fn: () => R
 ): R {
   const sessionId = prepared?.event.sessionId
@@ -46,7 +58,7 @@ export function runInToolSession<R>(
     return fn()
   }
   return toolSessions.run(
-    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution },
+    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution, pending },
     fn
   )
 }

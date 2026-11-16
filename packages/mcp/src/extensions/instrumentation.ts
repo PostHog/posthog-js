@@ -44,7 +44,7 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
-import { runInToolSession } from './tool-session'
+import { runInToolSession, type PendingCustomEvents } from './tool-session'
 import {
   deriveSessionIdFromMCPSession,
   getSessionInfo,
@@ -242,13 +242,15 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     preparedEvent.event.parameters = undefined
   }
 
+  const pendingCustomEvents: PendingCustomEvents | undefined = conversation.minted ? { events: [] } : undefined
   let result: unknown
   try {
-    result = await runInToolSession(data, preparedEvent, () => execute(downstreamRequest))
+    result = await runInToolSession(data, preparedEvent, pendingCustomEvents, () => execute(downstreamRequest))
   } catch (error) {
     if (conversation.minted) {
       dropUndeliveredHandle(preparedEvent)
     }
+    settleCustomEvents(server, pendingCustomEvents, preparedEvent, data.logger)
     if (isUnknownTool) {
       publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
     } else {
@@ -258,6 +260,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   }
 
   const finalResult = applyConversationInstructions(preparedEvent, result, conversation, ownership)
+  settleCustomEvents(server, pendingCustomEvents, preparedEvent, data.logger)
   if (isUnknownTool && isToolResultError(result)) {
     publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
@@ -293,6 +296,34 @@ interface PreparedToolEvent {
   requestAttribution: SessionInfo
   /** Set when a minted handle chose the session: the one the event falls back to if the agent never receives it. */
   sessionWithoutHandle?: ResolvedSession
+}
+
+/**
+ * Sends the custom events a call held back, with the session its own event settled
+ * on. Not awaited, like the call's own event, so the tool's result never waits on it.
+ */
+function settleCustomEvents(
+  server: MCPServerLike,
+  pending: PendingCustomEvents | undefined,
+  preparedEvent: PreparedToolEvent | null,
+  logger: LoggerFn
+): void {
+  if (!pending || !preparedEvent) {
+    return
+  }
+  const { sessionId, sessionSource } = preparedEvent.event
+  pending.settled = { sessionId, sessionSource }
+  const dropped = (error: unknown): void =>
+    logger(`Warning: dropped a custom event while settling a tool call - ${error}`)
+  for (const event of pending.events.splice(0)) {
+    try {
+      captureEvent(server, { ...event, sessionId, sessionSource }, logger, preparedEvent.requestAttribution)?.catch(
+        dropped
+      )
+    } catch (error) {
+      dropped(error)
+    }
+  }
 }
 
 /**
