@@ -44,6 +44,7 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
+import { runInToolSession } from './tool-session'
 import {
   deriveSessionIdFromMCPSession,
   getSessionInfo,
@@ -240,7 +241,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 
   let result: unknown
   try {
-    result = await execute(downstreamRequest)
+    result = await runInToolSession(data, preparedEvent, () => execute(downstreamRequest))
   } catch (error) {
     if (preparedEvent && conversation.minted) {
       preparedEvent.event.conversationId = undefined
