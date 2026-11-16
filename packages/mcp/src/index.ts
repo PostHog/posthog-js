@@ -10,6 +10,7 @@ import { MCPAnalyticsEventType } from './extensions/event-types'
 import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
+import { currentToolSession } from './extensions/tool-session'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import {
   deriveSessionIdFromMCPSession,
@@ -206,9 +207,10 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     return
   }
 
+  const toolSession = currentToolSession(trackingData)
   const event: McpEvent = {
-    sessionId: trackingData.sessionId,
-    sessionSource: instanceSessionSource(trackingData),
+    sessionId: toolSession?.sessionId ?? trackingData.sessionId,
+    sessionSource: toolSession ? toolSession.sessionSource : instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
@@ -217,8 +219,8 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
-  await captureEvent(lowLevelServer, event, trackingData.logger)
-  trackingData.logger(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
+  await captureEvent(lowLevelServer, event, trackingData.logger, toolSession?.attribution)
+  trackingData.logger(`Captured event "${eventData.event}" for session ${event.sessionId}`)
 }
 
 export { deriveSessionIdFromMCPSession, newSessionId }

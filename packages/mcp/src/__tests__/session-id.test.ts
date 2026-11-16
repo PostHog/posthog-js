@@ -451,3 +451,97 @@ describe('a request that carries no session', () => {
     expect(new Set(events.map((p) => p.$session_id)).size).toBe(expected === 'fresh' ? 2 : 1)
   })
 })
+
+describe('a stateless HTTP request with a fresh session', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const headers = (caller: string, token?: string): CompatibleRequestHandlerExtra =>
+    ({
+      requestInfo: { headers: { 'x-caller': caller, ...(token ? { [MCP_SESSION_HEADER]: token } : {}) } },
+    }) as CompatibleRequestHandlerExtra
+
+  const createServer = (
+    pause: (caller: string) => Promise<void> = async () => {},
+    sessionId?: () => string
+  ): { lowLevel: MCPServerLike; call: (extra: CompatibleRequestHandlerExtra) => Promise<unknown> } => {
+    const server = new Server({ name: 'fresh-session', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    const callerOf = (extra?: CompatibleRequestHandlerExtra): string =>
+      String(extra?.requestInfo?.headers?.['x-caller'])
+    const analytics = instrument(lowLevel, fakePostHog(), {
+      enableConversationId: false,
+      sessionId,
+      identify: async (_request, extra) => ({ distinctId: callerOf(extra), groups: { org: `${callerOf(extra)}-org` } }),
+    })
+    server.setRequestHandler(CallToolRequestSchema, async (_request, extra) => {
+      await pause(callerOf(extra as CompatibleRequestHandlerExtra))
+      await analytics.capture({ event: 'domain_action' })
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: 'search', inputSchema: { type: 'object' as const, properties: { query: { type: 'string' } } } }],
+    }))
+    const handler = lowLevel._requestHandlers.get('tools/call')!
+    return {
+      lowLevel,
+      call: (extra) =>
+        handler({ method: 'tools/call', params: { name: 'search', arguments: { query: 'flags' } } }, extra),
+    }
+  }
+
+  const expectCustomEventOf = (caller: string): void => {
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call').find((e) => e.distinct_id === caller)
+    const custom = capture.findCapturesByEvent('domain_action').filter((e) => e.distinct_id === caller)
+    expect(custom).toHaveLength(1)
+    expect(custom[0].properties.$groups).toEqual({ org: `${caller}-org` })
+    expect(custom[0].properties.$session_id).toBe(toolCall?.properties.$session_id)
+  }
+
+  it.each([
+    ['after another caller presented its token', true],
+    ['as the first request', false],
+  ])('attributes a custom event inside the tool to its own caller %s', async (_case, aliceFirst) => {
+    const { call } = createServer()
+    if (aliceFirst) {
+      await call(headers('alice', encodeSessionId({ sessionId: 'ses_alice' })))
+    }
+    await call(headers('bob'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expectCustomEventOf('bob')
+  })
+
+  it.each([
+    ['the first caller has a token', encodeSessionId({ sessionId: 'ses_alice' }), undefined],
+    ['the first caller has no token', undefined, undefined],
+    ['the host puts both in one session', undefined, () => 'host-shared'],
+  ])('keeps a custom event with its caller while another call runs: %s', async (_case, token, sessionId) => {
+    const gates = new Map<string, () => void>()
+    const { call } = createServer((caller) => new Promise<void>((resolve) => gates.set(caller, resolve)), sessionId)
+    const until = async (caller: string): Promise<void> => {
+      while (!gates.has(caller)) await new Promise((r) => setTimeout(r, 5))
+    }
+
+    const alice = call(headers('alice', token))
+    await until('alice')
+    const bob = call(headers('bob'))
+    await until('bob')
+    gates.get('alice')!()
+    await alice
+    gates.get('bob')!()
+    await bob
+    await new Promise((r) => setTimeout(r, 50))
+
+    expectCustomEventOf('alice')
+    expectCustomEventOf('bob')
+  })
+})
