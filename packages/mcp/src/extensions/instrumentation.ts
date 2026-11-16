@@ -85,11 +85,17 @@ type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHand
 /** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 
+// Requests that carry no session share one schema cache entry: each gets a fresh
+// session, so keying by it would never let a call find its listing's schemas.
+const UNBOUND_HTTP_SCHEMA_KEY = 'unbound-http'
+
+/** The transport-level key a listing caches its tools' schemas under, and a call reads them back from. */
 function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string {
-  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  const headers = getRequestHeaders(extra)
+  const token = decodeSessionId(readMcpSessionHeader(headers))
   if (token) return token.sessionId
   if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
-  return data.sessionId
+  return headers ? UNBOUND_HTTP_SCHEMA_KEY : data.sessionId
 }
 
 function resolveInputAliases(data: MCPAnalyticsData, toolName: string | undefined): InputAliasMap | undefined {
@@ -216,10 +222,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const sessionSchemas =
-      (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
-      data.toolInputSchemas.get(schemaSessionId) ??
-      data.toolInputSchemas.get(SEEDED_LISTING)
+    const sessionSchemas = data.toolInputSchemas.get(schemaSessionId) ?? data.toolInputSchemas.get(SEEDED_LISTING)
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
@@ -985,13 +988,12 @@ async function getTracedToolsList(
 
     if (data) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-      if (event.sessionId) {
-        const sessionSchemas = data.toolInputSchemas.get(event.sessionId) ?? new Map<string, unknown>()
-        for (const tool of tools) {
-          if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
-        }
-        data.toolInputSchemas.set(event.sessionId, sessionSchemas)
+      const schemaSessionId = resolveToolSchemaSessionId(data, extra)
+      const sessionSchemas = data.toolInputSchemas.get(schemaSessionId) ?? new Map<string, unknown>()
+      for (const tool of tools) {
+        if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
       }
+      data.toolInputSchemas.set(schemaSessionId, sessionSchemas)
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
