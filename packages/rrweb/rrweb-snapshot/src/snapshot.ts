@@ -25,8 +25,6 @@ import {
   isElement,
   isShadowRoot,
   maskInputValue,
-  getInputMaskOptions,
-  isMaskedSelectedContent,
   maskAttributeValue,
   isNativeShadowDom,
   stringifyStylesheet,
@@ -39,6 +37,12 @@ import {
   absolutifyURLs,
   SCRIPT_PLACEHOLDER,
 } from './utils';
+import {
+  getInputMaskOptions,
+  getHtmlTagName,
+  isMaskedSelectedContent,
+  type SelectMaskingCache,
+} from './select-masking';
 import dom from '@posthog/rrweb-utils';
 import {
   beginSnapshotCostTracking,
@@ -681,7 +685,7 @@ function serializeNode(
      */
     newlyAddedElement?: boolean;
   },
-  selectMaskingCache?: WeakMap<Element, MaskInputOptions>,
+  selectMaskingCache?: SelectMaskingCache,
 ): serializedNode | false {
   const {
     doc,
@@ -896,7 +900,7 @@ function serializeElementNode(
     newlyAddedElement?: boolean;
     rootId: number | undefined;
   },
-  selectMaskingCache?: WeakMap<Element, MaskInputOptions>,
+  selectMaskingCache?: SelectMaskingCache,
 ): serializedNode | false {
   const {
     doc,
@@ -917,13 +921,12 @@ function serializeElementNode(
     rootId,
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
+  const localName = selectMaskingFn && getHtmlTagName(n);
   const tagName =
-    selectMaskingFn &&
-    n.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
-    (n.localName === 'select' ||
-      n.localName === 'option' ||
-      n.localName === 'selectedcontent')
-      ? n.localName
+    localName === 'select' ||
+    localName === 'option' ||
+    localName === 'selectedcontent'
+      ? localName
       : getValidTagName(n);
   let inputMaskOptions = maskInputOptions;
   if (
@@ -934,11 +937,7 @@ function serializeElementNode(
     let owner: Element | null = n;
     if (tagName === 'option') {
       owner = dom.parentElement(n);
-      while (
-        owner &&
-        (owner.localName !== 'select' ||
-          owner.namespaceURI !== 'http://www.w3.org/1999/xhtml')
-      )
+      while (owner && getHtmlTagName(owner) !== 'select')
         owner = dom.parentElement(owner);
     }
     if (owner) {
@@ -1490,10 +1489,7 @@ export function serializeNodeWithId(
     maxDepth?: number;
     onMaxDepthReached?: () => void;
   },
-  selectMaskingCache:
-    | WeakMap<Element, MaskInputOptions>
-    | undefined = undefined,
-  selectedContentCache?: WeakMap<Node, boolean>,
+  selectMaskingCache: SelectMaskingCache | undefined = undefined,
 ): serializedNodeWithId | null {
   const {
     doc,
@@ -1528,10 +1524,8 @@ export function serializeNodeWithId(
   } = options;
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
-  if (selectMaskingFn) {
-    selectMaskingCache ??= new WeakMap();
-    selectedContentCache ??= new WeakMap();
-  }
+  if (selectMaskingFn && !selectMaskingCache)
+    selectMaskingCache = { input: new WeakMap(), content: new WeakMap() };
   if (
     selectMaskingFn &&
     isMaskedSelectedContent(
@@ -1539,7 +1533,6 @@ export function serializeNodeWithId(
       maskInputOptions,
       selectMaskingFn,
       selectMaskingCache,
-      selectedContentCache,
     )
   )
     return null;
@@ -1695,7 +1688,6 @@ export function serializeNodeWithId(
           childN,
           bypassOptions,
           selectMaskingCache,
-          selectedContentCache,
         );
         if (serializedChildNode) {
           serializedNode.childNodes.push(serializedChildNode);
@@ -1710,7 +1702,6 @@ export function serializeNodeWithId(
           childN,
           bypassOptions,
           selectMaskingCache,
-          selectedContentCache,
         );
         if (serializedChildNode) {
           isNativeShadowDom(shadowRootEl) &&

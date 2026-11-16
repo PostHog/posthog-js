@@ -130,48 +130,60 @@ it.each([
   },
 );
 
-it.each([false, true])(
-  'rechecks policy after a reentrant unfreeze (opt-in=%s)',
-  async (optIn) => {
-    const result = await page.evaluate(async (optIn) => {
-      const { record } = (window as unknown as TestWindow).rrweb;
-      document.body.innerHTML =
-        '<select data-private="false"><option value="seed">Seed</option></select>';
-      const select = document.querySelector('select')!;
-      let flipped = false;
-      const inputs: eventWithTime[] = [];
-      const stop = record({
-        maskAllInputs: false,
-        maskInputFn: () => 'redacted',
-        selectMaskingFn: optIn
-          ? (element) =>
-              element.dataset.private === 'true' ? 'masked' : 'unmasked'
-          : undefined,
-        emit: (event) => {
-          if (
-            event.type === 3 &&
-            event.data.source === 0 &&
-            event.data.adds.length &&
-            !flipped
-          ) {
-            flipped = true;
-            select.dataset.private = 'true';
-            select.value = 'private-choice';
-          }
-          if (flipped && event.type === 3 && event.data.source === 5)
-            inputs.push(event);
-        },
-      })!;
-      record.freezePage();
-      select.add(new Option('Public', 'public-choice'));
-      const privateOption = new Option('Private', 'private-choice');
-      select.add(privateOption);
-      select.value = 'public-choice';
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const privateId = record.mirror.getId(privateOption);
-      stop();
-      return { flipped, privateId, inputs };
-    }, optIn);
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])(
+  'rechecks policy after a reentrant unfreeze (opt-in=%s, mirrored=%s)',
+  async (optIn, mirrored) => {
+    const result = await page.evaluate(
+      async ({ optIn, mirrored }) => {
+        const { record } = (window as unknown as TestWindow).rrweb;
+        document.body.innerHTML =
+          '<select data-private="false"><option value="seed">Seed</option></select>';
+        const select = document.querySelector('select')!;
+        const publicOption = new Option('Public', 'public-choice');
+        const privateOption = new Option('Private', 'private-choice');
+        if (mirrored) select.append(publicOption, privateOption);
+        let flipped = false;
+        const inputs: eventWithTime[] = [];
+        const stop = record({
+          maskAllInputs: false,
+          maskInputFn: () => 'redacted',
+          selectMaskingFn: optIn
+            ? (element) =>
+                element.dataset.private === 'true' ? 'masked' : 'unmasked'
+            : undefined,
+          emit: (event) => {
+            if (
+              event.type === 3 &&
+              event.data.source === 0 &&
+              (event.data.adds.length || event.data.attributes.length) &&
+              !flipped
+            ) {
+              flipped = true;
+              select.dataset.private = 'true';
+              select.value = 'private-choice';
+            }
+            if (flipped && event.type === 3 && event.data.source === 5)
+              inputs.push(event);
+          },
+        })!;
+        const initialPrivateId = record.mirror.getId(privateOption);
+        record.freezePage();
+        if (mirrored) select.dataset.pending = 'true';
+        else select.append(publicOption, privateOption);
+        select.value = 'public-choice';
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const privateId = record.mirror.getId(privateOption);
+        stop();
+        return { flipped, privateId, initialPrivateId, inputs };
+      },
+      { optIn, mirrored },
+    );
+    expect(result.initialPrivateId > 0).toBe(mirrored);
     expect(result.flipped).toBe(true);
     expect(result.privateId).toBeGreaterThan(0);
     expect(result.inputs.length).toBeGreaterThan(0);

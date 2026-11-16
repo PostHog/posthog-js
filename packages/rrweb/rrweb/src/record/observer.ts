@@ -522,6 +522,12 @@ function initInputObserver({
   ) {
     const tagName =
       target && (isSelectTarget(target) ? 'SELECT' : target.tagName);
+    if (selectMaskingFn && tagName === 'SELECT') {
+      // Flush callbacks before reading policy or selection, even with known IDs.
+      if (mutationBuffers[0]?.isFrozen())
+        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+      if (!active) return;
+    }
     if (
       !target ||
       !tagName ||
@@ -538,7 +544,7 @@ function initInputObserver({
       return;
     }
     const type: Lowercase<string> = getInputType(target) || '';
-    let inputMaskOptions = getInputMaskOptions(
+    const inputMaskOptions = getInputMaskOptions(
       target,
       maskInputOptions,
       selectMaskingFn,
@@ -549,7 +555,7 @@ function initInputObserver({
     ) {
       return;
     }
-    let shouldMaskInput =
+    const shouldMaskInput =
       inputMaskOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
       inputMaskOptions[type as keyof MaskInputOptions];
     let selectedOptions =
@@ -565,16 +571,6 @@ function initInputObserver({
       if (mutationBuffers[0]?.isFrozen()) {
         mutationBuffers.forEach((buffer) => buffer.unfreeze());
         if (!active) return;
-        if (selectMaskingFn) {
-          inputMaskOptions = getInputMaskOptions(
-            target,
-            maskInputOptions,
-            selectMaskingFn,
-          );
-          if (!active || isBlocked(target, blockClass, blockSelector, true))
-            return;
-          shouldMaskInput = inputMaskOptions.select;
-        }
         // Emission callbacks can change the selection or its blocking rules.
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);
       }

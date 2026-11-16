@@ -3,7 +3,6 @@ import type {
   MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
-  SelectMaskingFn,
   nodeMetaMap,
 } from './types';
 
@@ -875,80 +874,6 @@ export function restoreSelectState(node: Node | null, mirror: Mirror): void {
   ) {
     select.selectedIndex = -1;
   }
-}
-
-export function getInputMaskOptions(
-  element: Element,
-  options: MaskInputOptions,
-  selectMaskingFn?: SelectMaskingFn,
-  cache: WeakMap<Element, MaskInputOptions> | undefined = undefined,
-): MaskInputOptions {
-  if (
-    !selectMaskingFn ||
-    element.localName !== 'select' ||
-    element.namespaceURI !== 'http://www.w3.org/1999/xhtml'
-  )
-    return options;
-  const cached = cache?.get(element);
-  if (cached) return cached;
-  let masked: boolean;
-  try {
-    masked = selectMaskingFn(element as HTMLSelectElement) !== 'unmasked';
-  } catch {
-    masked = true;
-  }
-  const result = { ...options, select: masked };
-  cache?.set(element, result);
-  return result;
-}
-
-export function isMaskedSelectedContent(
-  node: Node,
-  options: MaskInputOptions,
-  selectMaskingFn?: SelectMaskingFn,
-  cache?: WeakMap<Element, MaskInputOptions>,
-  ancestryCache?: WeakMap<Node, boolean>,
-): boolean {
-  if (!selectMaskingFn) return false;
-  // Cache inclusive ancestor context, but query the parent to keep the container.
-  let ancestor = dom.parentNode(node);
-  const visited: Node[] = [];
-  let masked = false;
-  while (ancestor) {
-    const cached = ancestryCache?.get(ancestor);
-    if (cached !== undefined) {
-      masked = cached;
-      break;
-    }
-    visited.push(ancestor);
-    if (
-      isElement(ancestor) &&
-      ancestor.localName === 'selectedcontent' &&
-      ancestor.namespaceURI === 'http://www.w3.org/1999/xhtml'
-    ) {
-      let owner = dom.parentElement(ancestor);
-      while (owner) {
-        const tagName = owner.localName;
-        // An authored selectedcontent inside an option is static option content.
-        if (tagName === 'option') break;
-        if (tagName === 'select') {
-          if (
-            owner.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
-            getInputMaskOptions(owner, options, selectMaskingFn, cache).select
-          )
-            masked = true;
-          break;
-        }
-        owner = dom.parentElement(owner);
-      }
-      if (masked) break;
-    }
-    ancestor = isShadowRoot(ancestor)
-      ? dom.host(ancestor)
-      : dom.parentNode(ancestor);
-  }
-  for (const ancestor of visited) ancestryCache?.set(ancestor, masked);
-  return masked;
 }
 
 export function maskInputValue({
