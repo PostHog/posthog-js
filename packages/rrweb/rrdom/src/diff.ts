@@ -1,6 +1,7 @@
 import {
   type Mirror as NodeMirror,
   attachShadowRootSafely,
+  restoreSelectState,
 } from '@posthog/rrweb-snapshot';
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
 import type {
@@ -237,6 +238,7 @@ function diffAfterUpdatingChildren(
        * Input data need to get applied after all children of this node are updated.
        * Otherwise when we set a value for a select element whose options are empty, the value won't actually update.
        */
+      restoreSelectState(oldElement, replayer.mirror);
       newRRElement.inputData && replayer.applyInput(newRRElement.inputData);
       switch (newRRElement.tagName) {
         case 'AUDIO':

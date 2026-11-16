@@ -88,6 +88,34 @@ describe('options.sessionId and options.clientInfo', () => {
     expect(event.clientVersion).toBe('3.2.1')
   })
 
+  it.each([
+    ['numbers', { name: 42, version: 7 }],
+    ['objects', { name: { id: 'x' }, version: ['1'] }],
+    ['empty strings', { name: '', version: '' }],
+  ])('ignores host fields that are %s and keeps what the SDK resolved', (_label, value) => {
+    instrument(server, fakePostHog(), { clientInfo: () => value as never })
+    const withMeta: MCPRequestLike = {
+      ...request,
+      params: { ...request.params, _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'meta', version: '1' } } },
+    }
+    const event: McpEvent = {}
+    stampClientIdentity(event, withMeta, undefined, lowLevel())
+    expect(event.clientName).toBe('meta')
+    expect(event.clientVersion).toBe('1')
+  })
+
+  it('takes a valid host field and ignores an invalid sibling', () => {
+    instrument(server, fakePostHog(), { clientInfo: () => ({ name: 'host-client', version: 3 }) as never })
+    const withMeta: MCPRequestLike = {
+      ...request,
+      params: { ...request.params, _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'meta', version: '1' } } },
+    }
+    const event: McpEvent = {}
+    stampClientIdentity(event, withMeta, undefined, lowLevel())
+    expect(event.clientName).toBe('host-client')
+    expect(event.clientVersion).toBe('1')
+  })
+
   it('stamps a host client even when the SDK resolved nothing', () => {
     withoutHandshakeIdentity()
     instrument(server, fakePostHog(), { clientInfo: () => ({ name: 'host-client' }) })

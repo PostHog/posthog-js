@@ -199,7 +199,11 @@ export function resolveClientIdentity({ request, extra, server }: ClientIdentity
   return result.clientName || result.clientVersion || result.protocolVersion ? result : undefined
 }
 
-/** The host's `options.clientInfo` callback, which outranks the whole chain. Never throws. */
+/**
+ * The host's `options.clientInfo` callback, which outranks the whole chain.
+ * Only non-empty string fields are kept, so a JS host returning a number or an
+ * object can't put it in `$mcp_client_name` / `$mcp_client_version`. Never throws.
+ */
 export function readHostClientInfo(
   server: MCPServerLike | undefined,
   request: MCPRequestLike,
@@ -210,8 +214,8 @@ export function readHostClientInfo(
     return undefined
   }
   try {
-    const value = resolver(request, extra)
-    return value && typeof value === 'object' ? value : undefined
+    const info = readClientInfoValue(resolver(request, extra))
+    return info ? { name: info.clientName, version: info.clientVersion } : undefined
   } catch {
     return undefined
   }

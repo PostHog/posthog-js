@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { lookup } from 'node:dns/promises'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { routes, failure } from './binding.mjs'
@@ -127,6 +128,17 @@ class Fixture {
     }
 }
 
+// The installed client's own /flags version decides the capability. Clients without the
+// response format method, and consumers that cannot load, send the default v=2.
+function requestsFlagsV4(consumer) {
+    try {
+        const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-node')
+        return PostHog.prototype.getFlagsResponseFormat?.().version === 4
+    } catch {
+        return false
+    }
+}
+
 export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1', port = 8080 }) {
     requireRequest(['cjs', 'esm'].includes(format), 'Invalid POSTHOG_NODE_MODULE')
     requireRequest(typeof consumer === 'string' && consumer.length > 0, 'POSTHOG_NODE_CONSUMER required')
@@ -138,7 +150,10 @@ export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1'
             'capture_v1',
             'encoding_gzip',
             'flags_v2',
+            ...(requestsFlagsV4(consumer) ? ['flags_response_v4'] : []),
             'flags_getter_remote_uncached',
+            // The legacy payload getter returns the decoded JSON payload.
+            'feature_flag_payloads',
             'flag_snapshot_value_scalar',
             'flag_snapshot_payload_decoded',
             'flag_snapshot_missing_undefined',

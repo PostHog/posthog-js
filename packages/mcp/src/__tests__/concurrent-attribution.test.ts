@@ -4,7 +4,7 @@ import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId, encodeSessionId } from '../extensions/session-token'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
-import { EventCapture, fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog, RecordingTransport } from './test-utils'
 
 interface Deferred<T = void> {
   promise: Promise<T>
@@ -76,10 +76,6 @@ function handshake(name: string, version: string): MCPRequestLike {
     method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name, version } },
   }
-}
-
-function setFakeTransport(server: MCPServerLike, transport: unknown): void {
-  ;(server as unknown as { _transport?: unknown })._transport = transport
 }
 
 describe('concurrent request attribution', () => {
@@ -393,16 +389,8 @@ describe('concurrent request attribution', () => {
         return null
       },
     })
-    const transport: { sessionId?: string } = {}
-    setFakeTransport(server, transport)
-    const initializeRequest: MCPRequestLike = {
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'client-a', version: '1.0.0' },
-      },
-    }
+    const transport = new RecordingTransport()
+    await (server as unknown as Server).connect(transport)
     const tokenB = encodeSessionId({
       sessionId: 'ses_b',
       clientName: 'client-b',
@@ -410,21 +398,22 @@ describe('concurrent request attribution', () => {
       protocolVersion: '2099-token-b',
     })
 
-    const initializeA = invokeInitialize(server, initializeRequest, { requestInfo: { headers: {} } })
+    const initializeA = transport.request({
+      id: 1,
+      method: 'initialize',
+      params: handshake('client-a', '1.0.0').params,
+    })
     await initializeMetadataStarted.promise
-    const initialToken = decodeSessionId(transport.sessionId)
-    expect(initialToken?.clientName).toBe('client-a')
+    expect(transport.sessionId).toBeUndefined()
 
     await invokeTool(server, 'B', {
       requestInfo: { headers: { 'mcp-session-id': tokenB } },
     })
     releaseInitializeMetadata.resolve()
-    await initializeA
+    const initialToken = decodeSessionId((await initializeA).sessionId)
     await flushCaptures()
 
-    const upgradedToken = decodeSessionId(transport.sessionId)
-    expect(upgradedToken).toMatchObject({
-      sessionId: initialToken?.sessionId,
+    expect(initialToken).toMatchObject({
       clientName: 'client-a',
       clientVersion: '1.0.0',
       protocolVersion: '2025-06-18',

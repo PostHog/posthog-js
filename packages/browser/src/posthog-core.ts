@@ -465,7 +465,6 @@ class DeprecatedWebPerformanceObserver {
     }
 
     private __forceAllowLocalhost: boolean = false
-    private _botFilterWarned: boolean = false
 }
 
 /**

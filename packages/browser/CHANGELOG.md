@@ -1,5 +1,88 @@
 # posthog-js
 
+## 1.450.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/core@1.68.0
+  - @posthog/browser-common@0.12.0
+
+## 1.449.2
+
+### Patch Changes
+
+- [#5737](https://github.com/PostHog/posthog-js/pull/5737) [`9852049`](https://github.com/PostHog/posthog-js/commit/9852049ec29819e6ac5e3609077a2bdd458f2253) Thanks [@TueHaulund](https://github.com/TueHaulund)! - record: throttle scroll events per element, so a resting scroll offset is no longer dropped when another element scrolls in the same 100ms window (e.g. Silk sheets on Safari before 26.2, which has no `scrollend`).
+  (2026-11-14)
+
+## 1.449.1
+
+### Patch Changes
+
+- Updated dependencies [[`ec79e8a`](https://github.com/PostHog/posthog-js/commit/ec79e8a47db0bff6de7f3fbcb3ef7bcd24991097)]:
+  - @posthog/browser-common@0.11.0
+
+## 1.449.0
+
+### Minor Changes
+
+- [#5721](https://github.com/PostHog/posthog-js/pull/5721) [`6cebc6c`](https://github.com/PostHog/posthog-js/commit/6cebc6cdeddc7356fed62247f3736a91a2543bed) Thanks [@haacked](https://github.com/haacked)! - When the experimental `metrics.flags` option is on, the browser SDK splits each `/flags` attempt that gets a response into three histograms with the same attributes as `posthog.flags.request.duration`. `posthog.flags.request.pre_send_duration` runs from dispatch until the request starts, which includes body compression. `posthog.flags.request.network_duration` runs from the request start until the last byte of the response arrives, taken from the request's Resource Timing entry. `posthog.flags.request.main_thread_duration` runs from that last byte until the SDK's callback runs, which includes reading and parsing the response body. The three add up to the total. An attempt records them only when the browser reports its Resource Timing entry within 5 seconds of the callback and that entry can't belong to another `/flags` request that this copy of the SDK sends to the same URL, so it may record the total without them. `posthog.flags.request.duration` is unchanged. The option, the metric names, and their attributes may change or be removed in any release.
+  (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`6cebc6c`](https://github.com/PostHog/posthog-js/commit/6cebc6cdeddc7356fed62247f3736a91a2543bed)]:
+  - @posthog/types@1.425.1
+
+## 1.448.0
+
+### Minor Changes
+
+- [#5675](https://github.com/PostHog/posthog-js/pull/5675) [`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add `trace_propagation_targets`: an opt-in allowlist of hostnames or origins that receive a W3C `traceparent` header on `fetch` and `XMLHttpRequest` requests, so backend traces can continue from the browser. Unlisted hosts never get the header, and a `traceparent` set by the app or by OpenTelemetry instrumentation is never overwritten or duplicated.
+  (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15)]:
+  - @posthog/types@1.425.0
+
+## 1.447.15
+
+### Patch Changes
+
+- [#5670](https://github.com/PostHog/posthog-js/pull/5670) [`753e5bf`](https://github.com/PostHog/posthog-js/commit/753e5bfda9aa216337f6b59a806666cf43f861a7) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown selection masking without changing custom multiselect behavior.
+  (2026-11-12)
+
+## 1.447.14
+
+### Patch Changes
+
+- [#5618](https://github.com/PostHog/posthog-js/pull/5618) [`f2af66f`](https://github.com/PostHog/posthog-js/commit/f2af66f094f748ba20fe3c60f20f588290ba1171) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dropdown replay updates and blocked-value leaks, and preserve custom mask passthrough.
+  (2026-11-12)
+
+## 1.447.13
+
+### Patch Changes
+
+- [#5685](https://github.com/PostHog/posthog-js/pull/5685) [`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): export browser metrics once a minute by default instead of every 10 seconds. Every tab of an app writes to the same series, so busy series exceeded the backend's per-series point limit and were undercounted. An explicit `metrics.flushIntervalMs` still wins.
+  (2026-11-12)
+
+- [#5686](https://github.com/PostHog/posthog-js/pull/5686) [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(metrics): `metrics.network` no longer records server-sent event streams. A `text/event-stream` response stays open for as long as the page listens, so it was timed as a request lasting minutes and pinned the duration percentiles to the top bucket.
+  (2026-11-12)
+
+- [#5687](https://github.com/PostHog/posthog-js/pull/5687) [`fbadce0`](https://github.com/PostHog/posthog-js/commit/fbadce05632fef7574a39994ab2cb9e5d06823a3) Thanks [@miguel-heygen](https://github.com/miguel-heygen)! - Session replay: in browsers that cannot encode WebP (Safari), send opaque canvas frames as JPEG at the configured quality instead of the lossless PNG the browser falls back to
+  (2026-11-12)
+
+- [#5677](https://github.com/PostHog/posthog-js/pull/5677) [`14e5893`](https://github.com/PostHog/posthog-js/commit/14e589340b6b20306d9082aad3e823ce10c8fd4e) Thanks [@DanielVisca](https://github.com/DanielVisca)! - chore(browser): remove an unused `_botFilterWarned` field that was declared on the internal `DeprecatedWebPerformanceObserver` class
+  (2026-11-12)
+- Updated dependencies [[`d669687`](https://github.com/PostHog/posthog-js/commit/d6696875ef18c1fe64e79938a23d2a37dc2e7dee), [`9e97237`](https://github.com/PostHog/posthog-js/commit/9e97237013bbc6ab00f8d5389521c19234344b8b)]:
+  - @posthog/types@1.424.1
+
 ## 1.447.12
 
 ### Patch Changes

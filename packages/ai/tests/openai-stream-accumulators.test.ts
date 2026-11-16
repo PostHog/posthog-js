@@ -198,6 +198,70 @@ describe('OpenAI-compatible stream accumulators', () => {
     })
   })
 
+  describe('chat custom tool calls', () => {
+    const chunk = (toolCalls: unknown[], finishReason: string | null = null): any => ({
+      id: 'chatcmpl-custom',
+      model: 'gpt-4o',
+      object: 'chat.completion.chunk',
+      created: 1,
+      choices: [{ index: 0, finish_reason: finishReason, logprobs: null, delta: { tool_calls: toolCalls } }],
+    })
+    const toolCallContent = (accumulator: OpenAIChatStreamAccumulator) => accumulator.result().output[0].content
+
+    test('keeps a streamed custom call next to a function call, in the non-streaming shape', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ index: 0, id: 'call_1', type: 'custom', custom: { name: 'code_exec', input: '' } }]))
+      accumulator.consume(chunk([{ index: 0, custom: { input: 'print(1)' } }]))
+      accumulator.consume(
+        chunk([
+          {
+            index: 1,
+            id: 'call_2',
+            type: 'function',
+            function: { name: 'get_weather', arguments: '{"city":"Paris"}' },
+          },
+        ])
+      )
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call_1', function: { name: 'code_exec', arguments: 'print(1)' } },
+        { type: 'function', id: 'call_2', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+      ])
+    })
+
+    test('keeps a custom call whose input stays empty', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ index: 0, id: 'call_1', type: 'custom', custom: { name: 'code_exec', input: '' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call_1', function: { name: 'code_exec', arguments: '' } },
+      ])
+    })
+
+    test('joins custom input when later deltas omit the index, and still opens the next function call', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ id: 'call_1', type: 'custom', custom: { name: 'code_exec', input: 'print(' } }]))
+      accumulator.consume(chunk([{ custom: { input: '1)' } }]))
+      accumulator.consume(chunk([{ id: 'call_2', type: 'function', function: { name: 'lookup', arguments: '{}' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: 'call_1', function: { name: 'code_exec', arguments: 'print(1)' } },
+        { type: 'function', id: 'call_2', function: { name: 'lookup', arguments: '{}' } },
+      ])
+    })
+
+    test('opens a new call from a custom name when the provider sends neither id nor index', () => {
+      const accumulator = new OpenAIChatStreamAccumulator()
+      accumulator.consume(chunk([{ type: 'custom', custom: { name: 'code_exec', input: '1' } }]))
+      accumulator.consume(chunk([{ type: 'custom', custom: { name: 'run_sql', input: 'SELECT 1' } }]))
+
+      expect(toolCallContent(accumulator)).toEqual([
+        { type: 'function', id: '', function: { name: 'code_exec', arguments: '1' } },
+        { type: 'function', id: '', function: { name: 'run_sql', arguments: 'SELECT 1' } },
+      ])
+    })
+  })
+
   test('chat exposes partial metadata and output after an interrupted stream', () => {
     const accumulator = new OpenAIChatStreamAccumulator()
     accumulator.consume({

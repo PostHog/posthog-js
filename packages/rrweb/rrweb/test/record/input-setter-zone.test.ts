@@ -99,6 +99,55 @@ describe('input setter hooks under a zone.js-patched setTimeout', () => {
     await ctx.browser?.close();
   });
 
+  it('coalesces select scans without using the patched timer', async () => {
+    await ctx.page.evaluate(() => {
+      document.body.innerHTML = '<select multiple></select>';
+      const select = document.querySelector('select')!;
+      for (let i = 0; i < 50; i++) select.add(new Option(String(i), String(i)));
+    });
+    await ctx.page.evaluate(installZoneLikeTimerPatch);
+    await ctx.page.evaluate(() => {
+      const win = window as unknown as IWindow;
+      win.rrweb.record({ emit: win.emit });
+    });
+    const scans = await ctx.page.evaluate(async () => {
+      const globals = window as unknown as Record<string, unknown>;
+      const counts = globals.__zone_timer_counts__ as {
+        patched: number;
+        unpatched: number;
+      };
+      const select = document.querySelector('select')!;
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype,
+        'selectedOptions',
+      )!;
+      let scans = 0;
+      Object.defineProperty(select, 'selectedOptions', {
+        get() {
+          scans++;
+          return descriptor.get!.call(this);
+        },
+      });
+      const patchedBefore = counts.patched;
+      for (const option of select.options) option.selected = true;
+      const applied = Array.from(select.options).every(
+        (option) => option.selected,
+      );
+      const nativeTimer =
+        globals.__zone_symbol__setTimeout as typeof setTimeout;
+      await new Promise((resolve) => nativeTimer(resolve, 20));
+      return { scans, applied, patched: counts.patched - patchedBefore };
+    });
+    expect(scans).toEqual({ scans: 1, applied: true, patched: 0 });
+    await waitForCondition(() =>
+      ctx.events.some(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.Input,
+      ),
+    );
+  });
+
   it('schedules no work on the patched timer and still records the writes', async () => {
     await ctx.page.evaluate(installZoneLikeTimerPatch);
     await ctx.page.evaluate(() => {

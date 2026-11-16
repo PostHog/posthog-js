@@ -447,7 +447,8 @@ export type PostHogOptions = Omit<
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` request.
+   * Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,
+   * so raise it when large files upload slowly.
    *
    * @default 15000
    */
@@ -717,6 +718,7 @@ export type PostHogFeatureFlag = {
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
+  EVALUATION_FAILED: 'evaluation_failed',
   LOCAL_EVALUATION_INCONCLUSIVE: 'local_evaluation_inconclusive',
   QUOTA_LIMITED: 'quota_limited',
   UNKNOWN_ERROR: 'unknown_error',

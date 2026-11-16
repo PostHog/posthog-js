@@ -96,3 +96,43 @@ export function fakePostHog(): any {
     shutdown: async () => undefined,
   }
 }
+
+interface SentMessage {
+  message: { id?: unknown; result?: unknown; error?: unknown }
+  /** The transport's session id when the message was sent: what an HTTP transport puts in the `Mcp-Session-Id` response header. */
+  sessionId: string | undefined
+}
+
+/**
+ * An in-process MCP transport that a real SDK server connects to, recording the
+ * session id each message went out with. `request` delivers one client request
+ * the way an HTTP transport does and resolves with its response.
+ */
+export class RecordingTransport {
+  sessionId?: string
+  onmessage?: (message: unknown, extra?: unknown) => void
+  onclose?: () => void
+  onerror?: (error: Error) => void
+  private readonly waiting = new Map<unknown, (sent: SentMessage) => void>()
+
+  async start(): Promise<void> {}
+
+  async close(): Promise<void> {}
+
+  async send(message: SentMessage['message']): Promise<void> {
+    const sent = { message, sessionId: this.sessionId }
+    this.waiting.get(message.id)?.(sent)
+    this.waiting.delete(message.id)
+  }
+
+  request(
+    message: { id: number; method: string; params?: Record<string, unknown> },
+    /** `null` delivers it the way stdio does: no HTTP request info. */
+    requestInfo: { headers: Record<string, string> } | null = { headers: {} }
+  ): Promise<SentMessage> {
+    return new Promise((resolve) => {
+      this.waiting.set(message.id, resolve)
+      this.onmessage?.({ jsonrpc: '2.0', ...message }, requestInfo ? { requestInfo } : undefined)
+    })
+  }
+}

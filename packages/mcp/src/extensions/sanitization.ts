@@ -59,6 +59,10 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.llmModel = sanitizeCapturedValue(result.llmModel) as string
   }
 
+  if (result.errorType != null) {
+    result.errorType = sanitizeCapturedValue(result.errorType) as string
+  }
+
   if (result.error != null) {
     result.error = sanitizeExceptionValues(result.error)
   }
@@ -67,8 +71,8 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 }
 
 /**
- * Sanitizes exception messages before they fan out to both the primary MCP
- * event's error-message property and the `$exception` sibling.
+ * Sanitizes exception types, messages and stack frames before they fan out to both the primary MCP
+ * event's error properties and the `$exception` sibling.
  */
 function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
   if (!Array.isArray(error.$exception_list)) {
@@ -79,7 +83,9 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
     ...error,
     $exception_list: error.$exception_list.map((exception) => ({
       ...exception,
+      type: sanitizeCapturedValue(exception.type) as string,
       value: sanitizeCapturedValue(exception.value) as string,
+      stacktrace: sanitizeCapturedValue(exception.stacktrace) as typeof exception.stacktrace,
     })),
   }
 }

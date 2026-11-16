@@ -1,5 +1,26 @@
 # posthog-ai
 
+## 8.20.1
+
+### Patch Changes
+
+- [#5728](https://github.com/PostHog/posthog-js/pull/5728) [`74013ba`](https://github.com/PostHog/posthog-js/commit/74013ba51f537a0bf09bfbf1289f5d932471e5ab) Thanks [@mindulle](https://github.com/mindulle)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <2.0.0` and `@google/genai` to `^1.52.0 || ^2.18.0 || ^3.0.0` to support current SDK majors.
+  (2026-11-16)
+
+## 8.20.0
+
+### Minor Changes
+
+- [#5678](https://github.com/PostHog/posthog-js/pull/5678) [`22d5e11`](https://github.com/PostHog/posthog-js/commit/22d5e11dd3703428407dec60d7ff47c33e93c43f) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Support versioned composite scorers, formula validation, and dependency-safe offline evaluation uploads.
+  (2026-11-12)
+
+## 8.19.3
+
+### Patch Changes
+
+- [#5691](https://github.com/PostHog/posthog-js/pull/5691) [`3e62421`](https://github.com/PostHog/posthog-js/commit/3e62421400861f2b5a60718bc67c542bd2ffccfd) Thanks [@shehjaddev](https://github.com/shehjaddev)! - Streamed OpenAI chat completions now keep custom tool calls in `$ai_output_choices`, the same way non-streaming completions do.
+  (2026-11-12)
+
 ## 8.19.2
 
 ### Patch Changes

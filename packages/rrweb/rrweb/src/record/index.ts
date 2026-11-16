@@ -15,6 +15,7 @@ import {
   initObservers,
   mutationBuffers,
   findAndRemoveIframeBuffer,
+  resetSelectInputDeduplication,
 } from './observer';
 import {
   type IdleDeadline,
@@ -792,6 +793,8 @@ function record<T = eventWithTime>(
         return console.warn('Failed to snapshot the document');
       }
 
+      // The snapshot replaces replay's select state, even without input events.
+      resetSelectInputDeduplication();
       wrappedEmit(
         {
           type: EventType.FullSnapshot,

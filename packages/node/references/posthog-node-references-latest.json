@@ -513,7 +513,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the first time each flag value is read for a user. Experiments use these events as exposures. The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override it, so one snapshot can serve both experiment flags and flags that should send no events. `getFlagPayload()` never sends events.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the first time each flag value is read for a user. Experiments use these events as exposures. When a remotely evaluated config version 2 flag assigns an experiment variant, the read also sends `$experiment_exposure`, once per user, groups, flag, rule and variant. The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override it, so one snapshot can serve both experiment flags and flags that should send no events. The option governs both events. `getFlagPayload()` never sends events.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -2075,9 +2075,24 @@
       "name": "CodeEmailFields",
       "properties": [
         {
+          "description": "Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing.",
+          "type": "EmailAttachment[]",
+          "name": "attachments"
+        },
+        {
+          "description": "Bare addresses that get a copy the other recipients never see.",
+          "type": "string | string[]",
+          "name": "bcc"
+        },
+        {
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting.",
           "type": "boolean",
           "name": "captureEngagement"
+        },
+        {
+          "description": "Bare addresses, such as `'finance@example.com'`, that get a copy.",
+          "type": "string | string[]",
+          "name": "cc"
         },
         {
           "description": "A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender.",
@@ -2186,6 +2201,38 @@
       "path": "../core/src/cookie.ts"
     },
     {
+      "id": "EmailAttachment",
+      "name": "EmailAttachment",
+      "properties": [
+        {
+          "description": "The file's bytes, or its content already Base64 encoded. At least one byte.",
+          "type": "Uint8Array | string",
+          "name": "content"
+        },
+        {
+          "description": "Shows the file inline where the HTML has `<img src=\"cid:...\">` with this id.",
+          "type": "string",
+          "name": "contentId"
+        },
+        {
+          "description": "A MIME type, such as `'application/pdf'`.",
+          "type": "string",
+          "name": "contentType"
+        },
+        {
+          "description": "The name the recipient sees, such as `'invoice.pdf'`.",
+          "type": "string",
+          "name": "filename"
+        },
+        {
+          "description": "PostHog can't fetch a file from a path or URL: read the file and pass its `content`.",
+          "type": "never",
+          "name": "path"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
       "id": "EmailDeliveryStatus",
       "name": "EmailDeliveryStatus",
       "properties": [],
@@ -2253,6 +2300,27 @@
         {
           "type": "unknown",
           "name": "type"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "EmailPreferences",
+      "name": "EmailPreferences",
+      "properties": [
+        {
+          "description": "`false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose.",
+          "type": "boolean | null",
+          "name": "allMarketing"
+        },
+        {
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose.",
+          "type": "Record<string, boolean>",
+          "name": "topics"
         }
       ],
       "path": "src/emails/types.ts"
@@ -4094,7 +4162,7 @@
           "name": "appHost"
         },
         {
-          "description": "Timeout in milliseconds for each `emails.send` request.",
+          "description": "Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,\nso raise it when large files upload slowly.",
           "type": "number",
           "name": "emailRequestTimeoutMs"
         },
@@ -4726,6 +4794,21 @@
           "name": "replyTo"
         },
         {
+          "description": "Bare addresses, such as `'finance@example.com'`, that get a copy.",
+          "type": "never",
+          "name": "cc"
+        },
+        {
+          "description": "Bare addresses that get a copy the other recipients never see.",
+          "type": "never",
+          "name": "bcc"
+        },
+        {
+          "description": "Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64\nencoding, about 29 MB of files. The SDK checks both before any request. It uploads each file\nPostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing.",
+          "type": "never",
+          "name": "attachments"
+        },
+        {
           "description": "Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked,\nbounced) as events of the recipient. Defaults to `true`. A project whose admin turned\nengagement capture off captures nothing, whatever the send asks. A template made in PostHog\nfollows the project's setting.",
           "type": "never",
           "name": "captureEngagement"
@@ -4778,6 +4861,35 @@
         }
       ],
       "path": "src/extensions/sentry-integration.ts"
+    },
+    {
+      "id": "SetEmailPreferencesOptions",
+      "name": "SetEmailPreferencesOptions",
+      "properties": [
+        {
+          "description": "`false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`.",
+          "type": "boolean",
+          "name": "allMarketing"
+        },
+        {
+          "description": "The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients.",
+          "type": "string",
+          "name": "to"
+        },
+        {
+          "description": "Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice.",
+          "type": "Record<string, boolean>",
+          "name": "topics"
+        }
+      ],
+      "path": "src/emails/types.ts"
+    },
+    {
+      "id": "SetEmailPreferencesResponse",
+      "name": "SetEmailPreferencesResponse",
+      "properties": [],
+      "path": "src/emails/types.ts",
+      "example": "{\n    data: EmailPreferences;\n    error: null;\n} | {\n    data: null;\n    error: EmailError;\n}"
     },
     {
       "id": "SetPersonPropertiesMessage",

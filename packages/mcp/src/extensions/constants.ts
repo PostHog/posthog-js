@@ -48,6 +48,7 @@ export const PostHogMCPAnalyticsProperty = {
   ConversationId: '$mcp_conversation_id',
   DurationMs: '$mcp_duration_ms',
   ErrorMessage: '$mcp_error_message',
+  ErrorStatus: '$mcp_error_status',
   ErrorType: '$mcp_error_type',
   FeedbackDetails: '$mcp_feedback_details',
   FeedbackFrictionPoints: '$mcp_feedback_friction_points',

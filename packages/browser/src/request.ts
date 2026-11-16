@@ -329,6 +329,7 @@ const xhr = (options: TransportRequestOptions) => {
             readRetryAfter(() => req.getResponseHeader('Retry-After'))
         )
     }
+    options.onSend?.(url)
     req.send(body)
 }
 
@@ -440,6 +441,7 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
             signal: aborter?.signal,
             ...options.fetchOptions,
         }
+        options.onSend?.(url)
         const requestSize = estimatedSize ?? (isUndefined(body) ? 0 : undefined)
         // Respect runtime opt-out, but do not let untyped options override the safety budget
         // or beacon-rejection fallback. A replaced body has no trustworthy encoded size.

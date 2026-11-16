@@ -42,7 +42,7 @@ import {
 } from './context-parameters'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException } from './exceptions'
+import { captureException, httpStatus } from './exceptions'
 import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
@@ -210,6 +210,7 @@ export class PostHogMCP extends PostHog {
     setEventModel(event, data.llmModel, data.llmModelSource)
     if (data.isError) {
       event.error = captureException(data.error ?? `Tool ${data.toolName} returned an error`)
+      event.errorStatus = httpStatus(data.error)
     }
     this.#emit(event)
   }
