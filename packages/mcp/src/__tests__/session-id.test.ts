@@ -544,4 +544,13 @@ describe('a stateless HTTP request with a fresh session', () => {
     expectCustomEventOf('alice')
     expectCustomEventOf('bob')
   })
+
+  it('records the argument names a fresh-session listing declared', async () => {
+    const { lowLevel, call } = createServer()
+    await lowLevel._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, headers('bob'))
+    await call(headers('bob'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[0]?.properties.$mcp_input_keys).toEqual(['query'])
+  })
 })
