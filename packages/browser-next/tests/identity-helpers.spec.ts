@@ -268,6 +268,32 @@ describe('analytics group helpers', () => {
         expect(reloaded.client.kv.get('retained')).toBe(true)
     })
 
+    it('clears persisted featureFlags group properties when flags extension is absent (#5673)', async () => {
+        const storage = new MemoryStorage()
+        const { client, product } = await create({}, storage)
+        await product.group('company', 'company-1')
+        expect(client.groups).toEqual({ company: 'company-1' })
+
+        const flagsStore = (client as any)._state.keyValueStore('featureFlags')
+        flagsStore.set('$stored_group_properties', { company: { plan: 'paid' } })
+        flagsStore.set('retained_flag', true)
+
+        expect(flagsStore.get('$stored_group_properties')).toEqual({ company: { plan: 'paid' } })
+        expect(flagsStore.get('retained_flag')).toBe(true)
+
+        product.resetGroups()
+        expect(client.groups).toEqual({})
+        expect(flagsStore.get('$stored_group_properties')).toBeUndefined()
+        expect(flagsStore.get('retained_flag')).toBe(true)
+
+        await client.dispose()
+        const reloaded = await create({}, storage)
+        const reloadedFlagsStore = (reloaded.client as any)._state.keyValueStore('featureFlags')
+        expect(reloaded.client.groups).toEqual({})
+        expect(reloadedFlagsStore.get('$stored_group_properties')).toBeUndefined()
+        expect(reloadedFlagsStore.get('retained_flag')).toBe(true)
+    })
+
     it.each(['denied', 'never'] as const)(
         'permits group cleanup but suppresses profile updates when %s',
         async (mode) => {
