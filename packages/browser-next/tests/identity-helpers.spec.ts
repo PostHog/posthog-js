@@ -1,7 +1,7 @@
-import { analytics, type AnalyticsOptions } from '../src/analytics'
-import { createPostHog } from '../src/core'
-import { BrowserState } from '../src/state'
-import { EventBuffer } from '../src/event-buffer'
+import { analytics, type AnalyticsOptions } from '../src/products/analytics/analytics'
+import { createPostHog } from '../src/composition/npm/core'
+import { BrowserState } from '../src/core/state/state'
+import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
 import { createFetch, localRemoteConfig, MemoryStorage, requireInstalledExtension, type SentRequest } from './helpers'
 
 const options = {
@@ -266,6 +266,32 @@ describe('analytics group helpers', () => {
         expect(reloaded.client.groups).toEqual({})
         expect(reloaded.client.distinctId).toBe('member')
         expect(reloaded.client.kv.get('retained')).toBe(true)
+    })
+
+    it('clears persisted featureFlags group properties when flags extension is absent (#5673)', async () => {
+        const storage = new MemoryStorage()
+        const { client, product } = await create({}, storage)
+        await product.group('company', 'company-1')
+        expect(client.groups).toEqual({ company: 'company-1' })
+
+        const flagsStore = (client as any)._state.keyValueStore('featureFlags')
+        flagsStore.set('$stored_group_properties', { company: { plan: 'paid' } })
+        flagsStore.set('retained_flag', true)
+
+        expect(flagsStore.get('$stored_group_properties')).toEqual({ company: { plan: 'paid' } })
+        expect(flagsStore.get('retained_flag')).toBe(true)
+
+        product.resetGroups()
+        expect(client.groups).toEqual({})
+        expect(flagsStore.get('$stored_group_properties')).toBeUndefined()
+        expect(flagsStore.get('retained_flag')).toBe(true)
+
+        await client.dispose()
+        const reloaded = await create({}, storage)
+        const reloadedFlagsStore = (reloaded.client as any)._state.keyValueStore('featureFlags')
+        expect(reloaded.client.groups).toEqual({})
+        expect(reloadedFlagsStore.get('$stored_group_properties')).toBeUndefined()
+        expect(reloadedFlagsStore.get('retained_flag')).toBe(true)
     })
 
     it.each(['denied', 'never'] as const)(

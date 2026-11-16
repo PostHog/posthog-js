@@ -5,7 +5,7 @@ import {
   resolveClientIdentity,
   stampClientIdentity,
 } from '../extensions/client-identity'
-import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike } from '../types'
+import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
 
 function requestWithMeta(meta: Record<string, unknown> | undefined): MCPRequestLike {
   return { method: 'tools/call', params: { name: 'echo', arguments: {}, _meta: meta } }
@@ -251,7 +251,7 @@ describe('client-identity', () => {
         undefined,
         serverWith({
           getNegotiatedProtocolVersion: () => '2026-07-28',
-        })
+        }) as unknown as MCPServerLike
       )
       expect(event.protocolVersion).toBe('2026-07-28')
     })

@@ -15,7 +15,7 @@ describe('Session ID Management', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     cleanup = setup.cleanup
   })
 

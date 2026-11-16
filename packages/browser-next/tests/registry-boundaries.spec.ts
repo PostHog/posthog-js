@@ -1,5 +1,5 @@
 import type { Client, Extension } from '@posthog/browser-common'
-import { ExtensionRegistry } from '../src/extensions/registry'
+import { ExtensionRegistry } from '../src/core/extensions/registry'
 
 const deferred = <T>() => {
     let resolve!: (value: T) => void

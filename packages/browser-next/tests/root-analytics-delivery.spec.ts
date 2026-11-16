@@ -1,5 +1,5 @@
-import type { AnalyticsDeliveryFactory } from '../src/analytics-internal'
-import type { IPostHog, PostHogOptions } from '../src/types'
+import type { AnalyticsDeliveryFactory } from '../src/products/analytics/analytics-internal'
+import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, requireInstalledExtension } from './helpers'
 
 const options = {
@@ -28,10 +28,12 @@ const gate = () => {
 const observeDelivery = (pending = Promise.resolve(), failures = 0) => {
     const evaluated = vi.fn()
     const initialized = vi.fn<Parameters<AnalyticsDeliveryFactory>, ReturnType<AnalyticsDeliveryFactory>>()
-    vi.doMock('../src/analytics-delivery', async () => {
+    vi.doMock('../src/products/analytics/delivery/analytics-delivery', async () => {
         evaluated()
         await pending
-        const actual = await vi.importActual<typeof import('../src/analytics-delivery')>('../src/analytics-delivery')
+        const actual = await vi.importActual<typeof import('../src/products/analytics/delivery/analytics-delivery')>(
+            '../src/products/analytics/delivery/analytics-delivery'
+        )
         initialized.mockImplementation((...args) => {
             if (failures > 0) {
                 failures--
@@ -45,7 +47,7 @@ const observeDelivery = (pending = Promise.resolve(), failures = 0) => {
 }
 const create = async (settings: Partial<PostHogOptions> = {}) => {
     const batches: Array<Array<Record<string, unknown>>> = []
-    const { createPostHog } = await import('../src')
+    const { createPostHog } = await import('../src/composition/npm')
     const client = await createPostHog({
         ...options,
         fetch: async (_input, init) => {
@@ -70,7 +72,7 @@ afterEach(async () => {
     releases.splice(0).forEach((release) => release())
     await Promise.all(clients.splice(0).map((client) => client.shutdown(0)))
     await vi.dynamicImportSettled()
-    vi.doUnmock('../src/analytics-delivery')
+    vi.doUnmock('../src/products/analytics/delivery/analytics-delivery')
     vi.resetModules()
 })
 
@@ -161,7 +163,7 @@ it('retains admission after an inner import rejection and retries the recovered 
     const rejected = vi.fn(() => {
         throw new Error('chunk unavailable')
     })
-    vi.doMock('../src/analytics-delivery', rejected)
+    vi.doMock('../src/products/analytics/delivery/analytics-delivery', rejected)
     const { client, batches } = await create()
     const product = requireInstalledExtension(await client.resolveExtension('analytics'))
     product.capture('before-recovery')

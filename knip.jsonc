@@ -46,6 +46,10 @@
             // Playwright's webServer command builds and serves these without importing them.
             "entry": ["src/{index,core,analytics}.ts", "playwright/fixture.ts", "scripts/serve-browser-tests.mjs"],
         },
+        "packages/docusaurus": {
+            "entry": ["src/index.js", "src/posthog.js"],
+            "ignoreUnresolved": ["@docusaurus/ExecutionEnvironment"],
+        },
         "packages/nuxt": {
             // Nuxt registers composables and version-selected Nitro plugins by path at runtime.
             "entry": ["src/module.ts", "src/runtime/nitro-plugin-v*.ts", "src/runtime/composables/*.ts"],
