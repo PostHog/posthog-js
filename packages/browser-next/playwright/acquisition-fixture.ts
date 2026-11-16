@@ -1,6 +1,6 @@
-import { createPostHog } from '../src'
-import { createPostHog as createCore } from '../src/core'
-import type { IPostHog, PostHogOptions } from '../src/types'
+import { createPostHog } from '../src/composition/npm'
+import { createPostHog as createCore } from '../src/composition/npm/core'
+import type { IPostHog, PostHogOptions } from '../src/core/types'
 
 const options = {
     projectToken: 'ph_native_acquisition',

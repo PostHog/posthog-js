@@ -542,7 +542,7 @@ describe('concurrent request attribution', () => {
       }),
     })
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const requestLabel = String(request.params.arguments?.requestLabel)
+      const requestLabel = String(request.params?.arguments?.requestLabel)
       if (requestLabel === 'A') {
         toolAStarted.resolve()
         await releaseToolA.promise
