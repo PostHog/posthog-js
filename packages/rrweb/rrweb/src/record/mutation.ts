@@ -309,7 +309,7 @@ export default class MutationBuffer {
     const addedIds = new Set<number>();
     const selectMaskingCache: SelectMaskingCache | undefined = this
       .selectMaskingFn
-      ? { input: new WeakMap(), content: new WeakMap() }
+      ? { input: new WeakMap(), content: new WeakMap(), owner: new WeakMap() }
       : undefined;
 
     const getNextId = (n: Node): number | null => {

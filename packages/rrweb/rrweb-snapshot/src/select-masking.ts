@@ -11,7 +11,27 @@ export function getHtmlTagName(element: Element): string | undefined {
 export type SelectMaskingCache = {
   input: WeakMap<Element, MaskInputOptions>;
   content: WeakMap<Node, boolean>;
+  owner: WeakMap<Element, Element | null>;
 };
+
+export function getOptionOwner(
+  option: Element,
+  cache?: SelectMaskingCache,
+): Element | null {
+  let owner: Element | null = dom.parentElement(option);
+  const visited: Element[] = [];
+  while (owner && getHtmlTagName(owner) !== 'select') {
+    const cached = cache?.owner.get(owner);
+    if (cached !== undefined) {
+      owner = cached;
+      break;
+    }
+    visited.push(owner);
+    owner = dom.parentElement(owner);
+  }
+  for (const parent of visited) cache?.owner.set(parent, owner);
+  return owner;
+}
 
 export function getInputMaskOptions(
   element: Element,

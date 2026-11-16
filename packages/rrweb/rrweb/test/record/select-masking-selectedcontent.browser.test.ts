@@ -14,7 +14,11 @@ const markup =
 let browser: Browser;
 let page: Page;
 beforeAll(async () => {
-  browser = await launchPuppeteer();
+  // CI's legacy browser predates selectedcontent; other suites keep that browser.
+  const executablePath = process.env.RRWEB_SELECTED_CONTENT_BROWSER;
+  browser = await launchPuppeteer(
+    executablePath ? { executablePath } : undefined,
+  );
 });
 beforeEach(async () => {
   page = await browser.newPage();

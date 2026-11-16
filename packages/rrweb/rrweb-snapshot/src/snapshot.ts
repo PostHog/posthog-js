@@ -40,6 +40,7 @@ import {
 import {
   getInputMaskOptions,
   getHtmlTagName,
+  getOptionOwner,
   isMaskedSelectedContent,
   type SelectMaskingCache,
 } from './select-masking';
@@ -934,12 +935,8 @@ function serializeElementNode(
     !needBlock &&
     (tagName === 'select' || tagName === 'option')
   ) {
-    let owner: Element | null = n;
-    if (tagName === 'option') {
-      owner = dom.parentElement(n);
-      while (owner && getHtmlTagName(owner) !== 'select')
-        owner = dom.parentElement(owner);
-    }
+    const owner =
+      tagName === 'option' ? getOptionOwner(n, selectMaskingCache) : n;
     if (owner) {
       inputMaskOptions = getInputMaskOptions(
         owner,
@@ -1525,7 +1522,11 @@ export function serializeNodeWithId(
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
   if (selectMaskingFn && !selectMaskingCache)
-    selectMaskingCache = { input: new WeakMap(), content: new WeakMap() };
+    selectMaskingCache = {
+      input: new WeakMap(),
+      content: new WeakMap(),
+      owner: new WeakMap(),
+    };
   if (
     selectMaskingFn &&
     isMaskedSelectedContent(
