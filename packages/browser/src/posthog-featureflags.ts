@@ -986,7 +986,8 @@ export class PostHogFeatureFlags implements Extension {
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
-                const flagPayloads = response.json?.['featureFlagPayloads']
+                const normalized = normalizeFlagsResponse(response.json ?? {})
+                const flagPayloads = normalized.featureFlagPayloads
                 callback(flagPayloads?.[key] || undefined)
             },
         })

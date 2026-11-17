@@ -3578,6 +3578,56 @@ describe('getRemoteConfigPayload', () => {
             )
         })
     })
+
+    it('should extract payload from v2 flags response shape', () => {
+        // Modern PostHog servers return a `flags` object, not a top-level
+        // `featureFlagPayloads` key. Without normalization the callback always
+        // receives undefined on current servers.
+        instance._send_request = jest.fn().mockImplementation(({ callback: cb }) =>
+            cb({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'test-flag': {
+                            enabled: true,
+                            variant: undefined,
+                            metadata: { payload: { color: 'blue' } },
+                        },
+                        'other-flag': {
+                            enabled: false,
+                            metadata: {},
+                        },
+                    },
+                },
+            })
+        )
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(callback).toHaveBeenCalledWith({ color: 'blue' })
+    })
+
+    it('should return undefined for a flag not present in v2 response', () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback: cb }) =>
+            cb({
+                statusCode: 200,
+                json: {
+                    flags: {
+                        'other-flag': {
+                            enabled: true,
+                            metadata: { payload: 'some-value' },
+                        },
+                    },
+                },
+            })
+        )
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(callback).toHaveBeenCalledWith(undefined)
+    })
 })
 
 describe('updateFlags', () => {
