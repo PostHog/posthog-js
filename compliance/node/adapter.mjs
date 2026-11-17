@@ -185,6 +185,7 @@ app.get('/health', (req, res) => {
             // Remote /flags requests send ?v=4 and read the v4 flag record.
             'flags_response_v4',
             'feature_flags_local_evaluation_v1',
+            'feature_flag_payloads',
         ],
     })
 })
@@ -402,6 +403,44 @@ app.post('/get_feature_flag', async (req, res) => {
         await client.flush()
 
         res.json({ success: true, value })
+    } catch (error) {
+        state.lastError = error.message
+        res.status(500).json({ error: error.message })
+    }
+})
+
+app.post('/get_feature_flag_payload', async (req, res) => {
+    if (!state.client) {
+        return res.status(400).json({ error: 'SDK not initialized' })
+    }
+    const {
+        key,
+        distinct_id,
+        person_properties,
+        groups,
+        group_properties,
+        disable_geoip,
+        only_evaluate_locally = false,
+    } = req.body || {}
+    const force_remote = req.body?.force_remote ?? !only_evaluate_locally
+    if (only_evaluate_locally && force_remote) {
+        return res.status(400).json({ error: 'only_evaluate_locally conflicts with force_remote' })
+    }
+    if (!key || !distinct_id) {
+        return res.status(400).json({ error: 'key and distinct_id are required' })
+    }
+
+    try {
+        const client = force_remote ? (state.remoteClient ?? state.client) : state.client
+        const payload = await client.getFeatureFlagPayload(key, distinct_id, undefined, {
+            groups,
+            personProperties: person_properties,
+            groupProperties: group_properties,
+            disableGeoip: disable_geoip,
+            onlyEvaluateLocally: !force_remote,
+        })
+        await client.flush()
+        res.json({ success: true, value: payload ?? null })
     } catch (error) {
         state.lastError = error.message
         res.status(500).json({ error: error.message })
