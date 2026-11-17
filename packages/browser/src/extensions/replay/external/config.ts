@@ -3,7 +3,7 @@ import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
-import { each, find } from '@posthog/browser-common/utils/general-utils'
+import { each } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -106,13 +106,61 @@ const PAYLOAD_CONTENT_DENY_LIST = [
     'passwd',
     'api_key',
     'apikey',
+    'authorization',
     'auth',
-    'credentials',
+    'credential',
     'mysql_pwd',
     'privatekey',
     'private_key',
     'token',
 ]
+
+const deniedWordRegex = new RegExp(PAYLOAD_CONTENT_DENY_LIST.join('|'), 'gi')
+const identifierCharacterRegex = /[0-9A-Za-z]/
+const letterRegex = /[A-Za-z]/
+const upperCaseLetterRegex = /[A-Z]/
+const paginationTokenPrefixRegex = /page[_-]?$/i
+
+const startsIdentifierWord = (payload: string, start: number): boolean => {
+    const before = payload.charAt(start - 1)
+    return (
+        !identifierCharacterRegex.test(before) ||
+        (!upperCaseLetterRegex.test(before) && upperCaseLetterRegex.test(payload.charAt(start)))
+    )
+}
+
+const endsIdentifierWord = (payload: string, end: number): boolean => {
+    const after = payload.charAt(end)
+    return (
+        !letterRegex.test(after) ||
+        (upperCaseLetterRegex.test(after) && !upperCaseLetterRegex.test(payload.charAt(end - 1)))
+    )
+}
+
+const isPluralSuffix = (payload: string, end: number): boolean => {
+    const after = payload.charAt(end)
+    return after === 's' || (after === 'S' && upperCaseLetterRegex.test(payload.charAt(end - 1)))
+}
+
+function findDeniedWord(payload: string): string | undefined {
+    deniedWordRegex.lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = deniedWordRegex.exec(payload))) {
+        const end = match.index + match[0].length
+        const endsWord =
+            endsIdentifierWord(payload, end) || (isPluralSuffix(payload, end) && endsIdentifierWord(payload, end + 1))
+        const deniedWord = match[0].toLowerCase()
+        const isPaginationToken =
+            deniedWord === 'token' &&
+            paginationTokenPrefixRegex.test(payload.slice(Math.max(0, match.index - 5), match.index))
+        if (startsIdentifierWord(payload, match.index) && endsWord && !isPaginationToken) {
+            return deniedWord
+        }
+    }
+
+    return undefined
+}
 
 // substrings that mark a header as credential-bearing - catches custom names
 // (e.g. x-gist-encoded-user-token) that aren't in the exact deny list above
@@ -236,10 +284,9 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     if (!shouldCaptureValue(scrubbed, false)) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED
     }
-    const lower = scrubbed.toLowerCase()
-    const deniedText = find(PAYLOAD_CONTENT_DENY_LIST, (text) => lower.includes(text))
-    if (deniedText) {
-        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + deniedText
+    const deniedWord = findDeniedWord(scrubbed)
+    if (deniedWord) {
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + deniedWord
     }
 
     return scrubbed

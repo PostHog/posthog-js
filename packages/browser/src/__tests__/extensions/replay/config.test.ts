@@ -427,7 +427,16 @@ describe('config', () => {
             ['PascalCase', '{"Username":"jane","Password":"hunter2"}', 'password'],
             ['upper case', '{"ChallengeResponses":{"PASSWORD":"hunter2"}}', 'password'],
             ['camelCase', '{"refreshToken":"abc"}', 'token'],
-            ['PascalCase', '{"AuthenticationResult":{"AccessToken":"abc"}}', 'auth'],
+            ['nested PascalCase', '{"AuthenticationResult":{"AccessToken":"abc"}}', 'token'],
+            ['snake_case', '{"new_password":"hunter2"}', 'password'],
+            ['camelCase prefix', '{"passwordHash":"abc"}', 'password'],
+            ['plural', '{"passwords":["hunter2"]}', 'password'],
+            ['upper case plural', '{"PASSWORDS":["hunter2"]}', 'password'],
+            ['camelCase', '{"clientSecret":"abc"}', 'secret'],
+            ['hyphenated', 'x-auth=abc', 'auth'],
+            ['lower case', '{"authorization":"Bearer abc"}', 'authorization'],
+            ['singular', '{"credential":"abc"}', 'credential'],
+            ['plural', '{"credentials":{"user":"jane"}}', 'credential'],
         ])('case insensitively redacts a %s body key on the deny list', (_casing, body, deniedText) => {
             const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
             const cleaned = networkOptions.maskRequestFn!({
@@ -439,6 +448,33 @@ describe('config', () => {
                 name: 'something',
                 requestBody: '[SessionRecording] Request body redacted as might contain: ' + deniedText,
                 responseBody: '[SessionRecording] Response body redacted as might contain: ' + deniedText,
+            })
+        })
+
+        it.each([
+            '{"author":"Ada"}',
+            '{"Author":"Ada"}',
+            '{"isAuthenticated":true}',
+            '{"title":"secretary"}',
+            '{"tokenizer":"bpe"}',
+            '{"passwordless":true}',
+            '{"nextPageToken":"CAESAggB"}',
+            '{"pageToken":"CAESAggB"}',
+            '{"next_page_token":"CAESAggB"}',
+            '{"PAGE_TOKEN":"CAESAggB"}',
+            'page-token=CAESAggB',
+            '{"pagetoken":"CAESAggB"}',
+        ])('does not redact a body where a deny-listed word is part of a longer word: %s', (body) => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
             })
         })
 
