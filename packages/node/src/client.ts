@@ -108,6 +108,7 @@ import {
   fillLibraryProperties,
   fillOptions,
   fillProperties,
+  isMergeableObject,
   isUnsetProperty,
   snapshotLayer,
 } from './event-defaults'
@@ -4268,7 +4269,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     if (isPlainObject(groups) && Object.keys(groups).length > 0) {
       const existingGroups = eventProperties.$groups
-      eventProperties.$groups = isPlainObject(existingGroups) ? { ...existingGroups, ...groups } : { ...groups }
+      eventProperties.$groups = isMergeableObject(existingGroups) ? { ...existingGroups, ...groups } : { ...groups }
     }
     if (disableGeoip !== undefined && disableGeoip !== null) {
       fillProperties(eventProperties, [{ $geoip_disable: disableGeoip }])

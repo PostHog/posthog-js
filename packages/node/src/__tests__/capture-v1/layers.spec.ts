@@ -222,6 +222,25 @@ describe('layered event values', () => {
       expect(hookSaw.properties.$groups).toStrictEqual(expected)
     })
 
+    it('typed groups replace a $groups property with its own toJSON, so the fields it hides are never sent', async () => {
+      class Redacting {
+        constructor(
+          readonly company: string,
+          readonly secret: string
+        ) {}
+        toJSON(): Record<string, string> {
+          return { company: this.company }
+        }
+      }
+      const { event } = await sendWithPropertyLayers(
+        { event: { $groups: new Redacting('property', 'hidden') as any } },
+        { groups: { org: 'typed' } }
+      )
+
+      expect(event.properties.$groups).toStrictEqual({ org: 'typed' })
+      expect(JSON.stringify(event)).not.toContain('hidden')
+    })
+
     describe('SDK values', () => {
       it('fill $lib, $lib_version, $is_server and $geoip_disable when no layer sets them, before beforeSend', async () => {
         const { event, hookSaw } = await sendWithPropertyLayers({})

@@ -147,7 +147,7 @@ export function dropIdentifyStyleLegacyPersonProfile(
  * An object whose inner keys can be filled. A value with its own `toJSON` is sent as it encodes
  * itself, which can hide some of its fields, so copying its entries would bypass that encoding.
  */
-function isMergeableObject(value: unknown): value is Record<string, unknown> {
+export function isMergeableObject(value: unknown): value is Record<string, unknown> {
   if (!isPlainObject(value)) {
     return false
   }
