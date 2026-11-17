@@ -1084,7 +1084,7 @@ describe('PostHog Node.js', () => {
         _resetDeprecationWarningsForTests()
       })
 
-      it('runs a before_send hook and warns once that the name is deprecated', async () => {
+      it('runs a before_send hook and logs once that the name is deprecated', async () => {
         const options = {
           host: 'http://example.com',
           fetchRetryCount: 0,
@@ -1109,14 +1109,14 @@ describe('PostHog Node.js', () => {
         expect(batchEvents!.map((event) => event.event)).toEqual(['with-email'])
         expect(batchEvents![0].properties).not.toHaveProperty('email')
         expect(batchEvents![0].properties).toHaveProperty('plan', 'pro')
-        expect(warnSpy.mock.calls.filter((call) => String(call[0]).includes('before_send'))).toEqual([
+        expect(errorSpy.mock.calls.filter((call) => String(call[0]).includes('before_send'))).toEqual([
           [
             '[PostHog] `before_send` is deprecated: use `beforeSend` instead. The old name will be removed in the next major version.',
           ],
         ])
       })
 
-      it('uses beforeSend and ignores before_send when both are set', async () => {
+      it('uses beforeSend when both names are set', async () => {
         const oldHook = vi.fn((event) => event)
         const newHook = vi.fn((event) => event)
         // A JavaScript caller: TypeScript rejects the 5.x names.
@@ -1133,9 +1133,7 @@ describe('PostHog Node.js', () => {
 
         expect(newHook).toHaveBeenCalledTimes(1)
         expect(oldHook).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith(
-          '[PostHog] `before_send` is ignored because `beforeSend` is set. Remove `before_send`.'
-        )
+        expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('before_send'))
       })
 
       it('maps the other renamed options to their camelCase names', () => {
@@ -1149,9 +1147,6 @@ describe('PostHog Node.js', () => {
         expect(ph.options.customBlockedUserAgents).toEqual(['MyCustomBot'])
         expect(ph.options.disableCaptureUrlHashes).toBe(true)
         expect(ph.options.__previewCaptureBotPageviews).toBe(true)
-        expect(ph.options).not.toHaveProperty('custom_blocked_useragents')
-        expect(ph.options).not.toHaveProperty('disable_capture_url_hashes')
-        expect(ph.options).not.toHaveProperty('__preview_capture_bot_pageviews')
       })
     })
   })

@@ -146,9 +146,9 @@ const posthog = new PostHog('<project_api_key>', {
 })
 ```
 
-TypeScript rejects the 5.x.x names. JavaScript calls with them still work in 6.x.x after 6.0.0, and each name logs one deprecation warning per process. They will be removed in the next major version.
+TypeScript rejects the 5.x.x names. JavaScript calls with them still work in 6.x.x after 6.0.0, and each name logs one deprecation error per process. They will be removed in the next major version. If you set both names, the camelCase one wins.
 
-6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there. If you set both names, the camelCase one wins, and the old one is ignored with one warning per process.
+6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there.
 
 Event options sent directly to capture, such as `process_person_profile`, and event properties such as `$session_id` keep their existing names.
 

@@ -150,7 +150,7 @@ export function _resetDeprecationWarningsForTests(): void {
 
 /**
  * 6.0 renamed these options to camelCase. TypeScript rejects the old names, but JavaScript passes
- * them through, so they still work in 6.x and log one deprecation warning per process. Without
+ * them through, so they still work in 6.x and log one deprecation error per process. Without
  * this, a JavaScript app that keeps `before_send` silently stops running its hook.
  */
 const RENAMED_OPTIONS = [
@@ -163,22 +163,14 @@ const RENAMED_OPTIONS = [
 function resolveRenamedOptions(options: PostHogOptions): PostHogOptions {
   const resolved: Record<string, unknown> = { ...options }
   for (const [oldName, newName] of RENAMED_OPTIONS) {
-    if (resolved[oldName] === undefined) {
-      continue
-    }
-    if (resolved[newName] === undefined) {
+    if (resolved[oldName] !== undefined && resolved[newName] === undefined) {
       resolved[newName] = resolved[oldName]
       emitDeprecationWarningOnce(
         `option ${oldName}`,
-        `\`${oldName}\` is deprecated: use \`${newName}\` instead. The old name will be removed in the next major version.`
-      )
-    } else {
-      emitDeprecationWarningOnce(
-        `option ${oldName} ignored`,
-        `\`${oldName}\` is ignored because \`${newName}\` is set. Remove \`${oldName}\`.`
+        `\`${oldName}\` is deprecated: use \`${newName}\` instead. The old name will be removed in the next major version.`,
+        console.error
       )
     }
-    delete resolved[oldName]
   }
   return resolved as PostHogOptions
 }
