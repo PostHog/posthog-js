@@ -27,6 +27,7 @@ Read the checklist first, then the sections that apply to you.
 
 - [ ] You set `POSTHOG_CAPTURE_MODE` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from TypeScript with positional arguments after `error` → [Fix removed APIs](#fix-removed-apis)
+- [ ] You call `enterContext()` → [Use callback-scoped context](#use-callback-scoped-context)
 - [ ] You read the result of `prepareEventMessage()` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You rely on `flush()` rejecting when delivery fails → [Update error handling](#update-error-handling)
 - [ ] You listen for the `'error'` event and inspect the error's type or fields → [Update error handling](#update-error-handling)
@@ -131,6 +132,7 @@ List `posthog-node` in your dependencies so you choose when to move to 6.x.x.
 | `captureExceptionImmediate()` positional arguments | An options object |
 | `prepareEventMessage()` nested result              | A flat message    |
 | `fetchRetryDelay` for capture                      | Ignored           |
+| `enterContext()`                                   | `withContext()`   |
 
 6.x.x doesn't read the `POSTHOG_CAPTURE_MODE` environment variable. Capture v1 is the only path. Each client logs one warning when it is created with the variable set.
 
@@ -175,6 +177,23 @@ The result is built in the same order as a real event, including `before_send`. 
 `$session_id` and `$window_id` stay in `properties`. The SDK moves them only when it sends the event.
 
 `prepareEventMessage()` still rejects with `null` when `before_send` drops the event.
+
+### Use callback-scoped context
+
+6.x.x removes `enterContext()`. Use `withContext(data, callback, options)` to run work in an isolated async context. Return or await its result when the callback is asynchronous.
+
+```ts
+// 5.x.x
+posthog.enterContext({ distinctId: 'user_123' })
+await handleRequest()
+
+// 6.x.x
+await posthog.withContext({ distinctId: 'user_123' }, async () => {
+  await handleRequest()
+})
+```
+
+The context applies to the callback and async work it starts; the caller's context is restored when the callback returns. Nested contexts still inherit values unless you pass `{ fresh: true }`. For request-bound lifetimes, pass an abort signal and abort it when the request ends.
 
 ### Update error handling
 
@@ -274,7 +293,7 @@ The AI lane has its own settings. It doesn't read `maxQueueSize`, `requestTimeou
 Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [Check SDK identity](#check-sdk-identity)):
 
 1. The call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`). An identify-style event also gets its `process_person_profile` option here (see [Identify-style events](#identify-style-events)).
-2. Context `properties` and `options`, from `withContext()`, `enterContext()`, or the Express, NestJS, Hono, and `instrumentRequest` integrations.
+2. Context `properties` and `options`, from `withContext()` or the Express, NestJS, Hono, and `instrumentRequest` integrations.
 3. `register()` properties and `registerOptions()` options.
 4. Values the SDK adds:
    - `$lib` and `$lib_version`, the client's library name and version (see [Check SDK identity](#check-sdk-identity))
@@ -448,7 +467,7 @@ posthog.capture({
 ```
 
 - **Every event.** `registerOptions(options)` (new) sets options on every event, like `register()` does for properties. `unregisterOptions(key)` removes one. Both return a promise.
-- **One context.** `withContext()` and `enterContext()` accept `options`, which apply to every event in the context.
+- **One context.** `withContext()` accepts `options`, which apply to every event in the context.
 - **Validation.** The SDK sends options as given and no longer converts their values. PostHog validates them and drops an event whose option value it can't read, which reaches `'error'` with `details: 'invalid_options'`.
 - **Boolean options.** Capture reads common forms of a boolean option value, such as the strings `"true"`, `"yes"`, `"on"`, or `"1"`, but a value it can't read drops the whole event (`invalid_options`). Pass `true` or `false`.
 - **Values that aren't an object.** The SDK logs an `options` value that isn't an object as an error and ignores it. It still sends the event.

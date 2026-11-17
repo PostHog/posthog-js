@@ -2269,31 +2269,6 @@ The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
 gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
 periodically. Configure via the `metrics` client option.
 
-### `PostHog.enterContext`
-
-> **enterContext**(`data`, `options?`): `void`
-
-Set context without a callback wrapper.
-
-Uses `AsyncLocalStorage.enterWith()` to attach context to the current
-async execution context. The context lives until that async context ends.
-
-Must be called in the same async scope that makes PostHog calls.
-Calling this outside a request-scoped async context will leak context
-across unrelated work. Prefer `withContext()` when you can wrap code
-in a callback — it creates an isolated scope that cleans up automatically.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `data` | `Partial`\<`ContextData`\> | Context data to apply (distinctId, sessionId, properties, options) |
-| `options?` | `ContextOptions` | Context options (fresh: true to start with clean context instead of inheriting) |
-
-#### Returns
-
-`void`
-
 ### `PostHog.getContext`
 
 > **getContext**(): `ContextData` \| `undefined`
@@ -3885,27 +3860,6 @@ Capture an exception as a $exception event immediately.
 ###### Description
 
 Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-
-##### enterContext()
-
-> **enterContext**(`data`, `options?`): `void`
-
-###### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `data` | `Partial`\<`ContextData`\> | Context data to apply (distinctId, sessionId, properties, options) |
-| `options?` | `ContextOptions` | Context options (fresh) |
-
-###### Returns
-
-`void`
-
-###### Description
-
-Set context without a callback wrapper. Must be called in the same
-async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
-code in a callback.
 
 ##### evaluateFlags()
 

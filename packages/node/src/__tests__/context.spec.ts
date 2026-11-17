@@ -35,7 +35,7 @@ describe('PostHog Context', () => {
   })
 
   describe('context lifetime signals', () => {
-    it.each(['withContext', 'enterContext'] as const)('expires %s without cancelling its callback', async (method) => {
+    it('expires a context without cancelling its callback', async () => {
       const controller = new AbortController()
       const data = { distinctId: 'request-user', sessionId: 'request-session' }
       const callback = async (): Promise<string> => {
@@ -45,13 +45,7 @@ describe('PostHog Context', () => {
         expect(posthog.getContext()).toBeUndefined()
         return 'handler completed'
       }
-      const result =
-        method === 'withContext'
-          ? posthog.withContext(data, callback, { signal: controller.signal })
-          : posthog.withContext({}, () => {
-              posthog.enterContext(data, { signal: controller.signal })
-              return callback()
-            })
+      const result = posthog.withContext(data, callback, { signal: controller.signal })
       expect(await result).toBe('handler completed')
       expect(posthog.getContext()).toBeUndefined()
     })
@@ -382,55 +376,6 @@ describe('PostHog Context', () => {
     })
     expect(eventAfterC2?.properties.contextC1).toBeUndefined()
     expect(eventAfterC2?.properties.contextC2).toBeUndefined()
-  })
-
-  describe('enterContext', () => {
-    it('should set context without a callback wrapper', async () => {
-      posthog.enterContext({ distinctId: 'entered-user', properties: { source: 'test' } })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events).toHaveLength(1)
-      expect(events?.[0].distinct_id).toBe('entered-user')
-      expect(events?.[0].properties).toMatchObject({
-        source: 'test',
-      })
-    })
-
-    it('should merge with existing context by default', async () => {
-      posthog.enterContext({ distinctId: 'user-1', properties: { outer: 'value1' } })
-      posthog.enterContext({ properties: { inner: 'value2' } })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events?.[0].distinct_id).toBe('user-1')
-      expect(events?.[0].properties).toMatchObject({
-        outer: 'value1',
-        inner: 'value2',
-      })
-    })
-
-    it('should replace context when fresh: true', async () => {
-      posthog.enterContext({ distinctId: 'user-1', properties: { outer: 'value1' } })
-      posthog.enterContext({ distinctId: 'user-2', properties: { inner: 'value2' } }, { fresh: true })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events?.[0].distinct_id).toBe('user-2')
-      expect(events?.[0].properties).toMatchObject({
-        inner: 'value2',
-      })
-      expect(events?.[0].properties.outer).toBeUndefined()
-    })
   })
 
   describe('feature flag methods with context', () => {
