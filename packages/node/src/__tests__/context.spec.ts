@@ -1,6 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { apiImplementation } from './utils'
-import { waitForPromises } from './utils'
+import { apiImplementation, lastSentBatch, sentEvents, v1Response, waitForPromises } from './utils'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -12,14 +11,7 @@ const waitForFlush = async (): Promise<void> => {
   await waitForPromises()
 }
 
-const getLastBatchEvents = (): any[] | undefined => {
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) return undefined
-  return JSON.parse((call[1] as any).body as any).batch
-}
+const getLastBatchEvents = (): any[] | undefined => lastSentBatch(mockedFetch)
 
 describe('PostHog Context', () => {
   let posthog: PostHog
@@ -35,11 +27,7 @@ describe('PostHog Context', () => {
       disableCompression: true,
     })
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 'ok' }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
@@ -47,7 +35,7 @@ describe('PostHog Context', () => {
   })
 
   describe('context lifetime signals', () => {
-    it.each(['withContext', 'enterContext'] as const)('expires %s without cancelling its callback', async (method) => {
+    it('expires a context without cancelling its callback', async () => {
       const controller = new AbortController()
       const data = { distinctId: 'request-user', sessionId: 'request-session' }
       const callback = async (): Promise<string> => {
@@ -57,13 +45,7 @@ describe('PostHog Context', () => {
         expect(posthog.getContext()).toBeUndefined()
         return 'handler completed'
       }
-      const result =
-        method === 'withContext'
-          ? posthog.withContext(data, callback, { signal: controller.signal })
-          : posthog.withContext({}, () => {
-              posthog.enterContext(data, { signal: controller.signal })
-              return callback()
-            })
+      const result = posthog.withContext(data, callback, { signal: controller.signal })
       expect(await result).toBe('handler completed')
       expect(posthog.getContext()).toBeUndefined()
     })
@@ -303,13 +285,7 @@ describe('PostHog Context', () => {
 
     await waitForFlush()
 
-    const allEvents: any[] = []
-    mockedFetch.mock.calls.forEach((call) => {
-      if ((call[0] as string).includes('/batch/')) {
-        const batch = JSON.parse((call[1] as any).body as any).batch
-        allEvents.push(...batch)
-      }
-    })
+    const allEvents = sentEvents(mockedFetch)
 
     expect(allEvents).toHaveLength(50)
 
@@ -357,13 +333,7 @@ describe('PostHog Context', () => {
 
     await waitForFlush()
 
-    const allEvents: any[] = []
-    mockedFetch.mock.calls.forEach((call) => {
-      if ((call[0] as string).includes('/batch/')) {
-        const batch = JSON.parse((call[1] as any).body as any).batch
-        allEvents.push(...batch)
-      }
-    })
+    const allEvents = sentEvents(mockedFetch)
 
     expect(allEvents).toHaveLength(4)
 
@@ -406,55 +376,6 @@ describe('PostHog Context', () => {
     })
     expect(eventAfterC2?.properties.contextC1).toBeUndefined()
     expect(eventAfterC2?.properties.contextC2).toBeUndefined()
-  })
-
-  describe('enterContext', () => {
-    it('should set context without a callback wrapper', async () => {
-      posthog.enterContext({ distinctId: 'entered-user', properties: { source: 'test' } })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events).toHaveLength(1)
-      expect(events?.[0].distinct_id).toBe('entered-user')
-      expect(events?.[0].properties).toMatchObject({
-        source: 'test',
-      })
-    })
-
-    it('should merge with existing context by default', async () => {
-      posthog.enterContext({ distinctId: 'user-1', properties: { outer: 'value1' } })
-      posthog.enterContext({ properties: { inner: 'value2' } })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events?.[0].distinct_id).toBe('user-1')
-      expect(events?.[0].properties).toMatchObject({
-        outer: 'value1',
-        inner: 'value2',
-      })
-    })
-
-    it('should replace context when fresh: true', async () => {
-      posthog.enterContext({ distinctId: 'user-1', properties: { outer: 'value1' } })
-      posthog.enterContext({ distinctId: 'user-2', properties: { inner: 'value2' } }, { fresh: true })
-
-      posthog.capture({ event: 'test_event' })
-
-      await waitForFlush()
-
-      const events = getLastBatchEvents()
-      expect(events?.[0].distinct_id).toBe('user-2')
-      expect(events?.[0].properties).toMatchObject({
-        inner: 'value2',
-      })
-      expect(events?.[0].properties.outer).toBeUndefined()
-    })
   })
 
   describe('feature flag methods with context', () => {
@@ -637,7 +558,7 @@ describe('PostHog Context', () => {
   ])(
     'captureException $label',
     async ({ contextDistinctId, explicitDistinctId, expectedDistinctId, expectedProcessPersonProfile }) => {
-      const run = () => posthog.captureException(new Error('test error'), explicitDistinctId)
+      const run = () => posthog.captureException(new Error('test error'), { distinctId: explicitDistinctId })
       contextDistinctId ? posthog.withContext({ distinctId: contextDistinctId }, run) : run()
 
       // captureException uses addPendingPromise around an async buildEventMessage that
