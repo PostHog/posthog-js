@@ -695,6 +695,44 @@ describe('PostHogAnthropic', () => {
       ])
     })
 
+    it('should not log a parse error for a streamed tool call with no arguments', async () => {
+      mockStreamChunks = [
+        {
+          type: 'message_start',
+          message: { id: 'msg_test_123', type: 'message', role: 'assistant', usage: { input_tokens: 20 } as any },
+        },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tool_123', name: 'get_time' } as any,
+        },
+        { type: 'content_block_stop', index: 0 },
+        {
+          type: 'message_delta',
+          delta: { type: 'stop_reason', stop_reason: 'tool_use' },
+          usage: { output_tokens: 10 },
+        },
+        { type: 'message_stop' },
+      ]
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const stream = await client.messages.create({
+        model: 'claude-sonnet-4-5',
+        messages: [{ role: 'user', content: 'What time is it?' }],
+        max_tokens: 2048,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch sees every block.
+      }
+      await waitForAsyncCapture()
+
+      expect(errorSpy).not.toHaveBeenCalled()
+      errorSpy.mockRestore()
+    })
+
     it('should capture streamed thinking as reasoning and time the first token from it', async () => {
       const chunks: MockStreamChunk[] = [
         {
