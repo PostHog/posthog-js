@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 // Every PostHogExtensionKind except `toolbar` and `remote-config`, which are not release-pinned assets.
-// src/__tests__/utils/extension-integrity.test.ts keeps this list in sync with the type.
+// src/__tests__/entrypoints/extension-integrity.test.ts keeps this list in sync with the type.
 export const EXTENSION_FILES = [
     'conversations.js',
     'crisp-chat-integration.js',
