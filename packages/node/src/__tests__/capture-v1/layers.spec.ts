@@ -714,17 +714,6 @@ describe('layered event values', () => {
 
         expect(event.options).toStrictEqual(expected)
       })
-
-      it('enterContext sets options', async () => {
-        const event = await sendOne((client) =>
-          client.withContext({}, () => {
-            client.enterContext({ options: { a: 1 } })
-            client.capture({ distinctId: 'u', event: 'e' })
-          })
-        )
-
-        expect(event.options).toStrictEqual({ a: 1 })
-      })
     })
   })
 

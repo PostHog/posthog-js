@@ -18,10 +18,6 @@ export class PostHogContext implements IPostHogContext {
     return this.storage.run(this.resolve(context, options), fn)
   }
 
-  enter(context: ContextData, options?: ContextOptions): void {
-    this.storage.enterWith(this.resolve(context, options))
-  }
-
   private resolve(context: ContextData, options?: ContextOptions): ContextData {
     const current = this.get()
     if (options?.fresh === true) {
