@@ -12,12 +12,14 @@ export type Properties = PostHogEventProperties
 export type { FeatureFlagValue, FeatureFlagResult, JsonType }
 
 export interface FeatureFlagReadOptions {
+    /** Report a deduplicated exposure by default; false suppresses it. Takes precedence over sendEvent. */
     sendFeatureFlagEvent?: boolean
     /** Compatibility option; prefer sendFeatureFlagEvent. */
     sendEvent?: boolean
 }
 
 export interface IsFeatureEnabledOptions extends FeatureFlagReadOptions {
+    /** Fallback for unknown or unavailable flags; never overrides a known false or empty variant. */
     defaultValue?: boolean
 }
 
@@ -61,6 +63,15 @@ export type Command =
     | { type: 'loadAutocaptureConfig' }
     | { type: 'flush' }
     | { type: 'exception'; properties: Properties }
+
+export function isFlagContextCommand(command: Command): command is Extract<Command, { reloadFeatureFlags: boolean }> {
+    return (
+        command.type === 'setPersonPropertiesForFlags' ||
+        command.type === 'setGroupPropertiesForFlags' ||
+        command.type === 'resetPersonPropertiesForFlags' ||
+        command.type === 'resetGroupPropertiesForFlags'
+    )
+}
 
 export interface Request {
     version: number

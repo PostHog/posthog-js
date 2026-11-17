@@ -9,6 +9,7 @@ import {
 import {
     BRIDGE_KEY,
     PROTOCOL_VERSION,
+    isFlagContextCommand,
     type FeatureFlagReadOptions,
     type IsFeatureEnabledOptions,
     type FeatureFlagResult,
@@ -134,11 +135,7 @@ export class PostHog {
             command.type === 'flush' ||
             command.type === 'reloadFeatureFlags' ||
             command.type === 'loadAutocaptureConfig' ||
-            ((command.type === 'setPersonPropertiesForFlags' ||
-                command.type === 'setGroupPropertiesForFlags' ||
-                command.type === 'resetPersonPropertiesForFlags' ||
-                command.type === 'resetGroupPropertiesForFlags') &&
-                command.reloadFeatureFlags)
+            (isFlagContextCommand(command) && command.reloadFeatureFlags)
         this._tail = (networkBound ? dispatched : operation).catch(() => {})
         return operation
     }
@@ -164,16 +161,29 @@ export class PostHog {
         if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'capture', event, ...(properties ? { properties } : {}) })
     }
+    /**
+     * Link the current distinct ID to an alias without switching identity or reloading flags.
+     * Ignored when opted out or personProfiles is 'never'. Resolves after local persistence, not delivery.
+     */
     alias(alias: string): Promise<void> {
         if (!alias?.trim()) return Promise.resolve()
         if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'alias', alias })
     }
+    /**
+     * Capture an event-only $screen; name wins over properties.$screen_name without setting persistent screen context.
+     * Resolves after local persistence, not delivery; ignored when opted out.
+     */
     screen(name: string, properties?: Properties): Promise<void> {
         if (!name?.trim()) return Promise.resolve()
         if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({ type: 'screen', name, ...(properties ? { properties } : {}) })
     }
+    /**
+     * Update the current person's $set/$set_once properties without changing identity; empty updates do nothing.
+     * Also updates flag context. Resolves after local persistence, not delivery or the background flag refresh.
+     * Ignored when opted out or personProfiles is 'never'.
+     */
     setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
         if (this.hasOptedOutCapturing()) return Promise.resolve()
         return this._send({
@@ -182,15 +192,33 @@ export class PostHog {
             ...(propertiesOnce ? { propertiesOnce } : {}),
         })
     }
+    /**
+     * Merge a call-time copy of local person overrides for flag evaluation, without updating the person profile.
+     * Accepts nested $set/$set_once; empty input does nothing. Otherwise awaits persistence and, by default, a refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
         return this._send({ type: 'setPersonPropertiesForFlags', properties, reloadFeatureFlags })
     }
+    /**
+     * Merge a call-time copy of local overrides by group type, without changing profiles or group membership.
+     * Empty input does nothing. Otherwise awaits persistence and, by default, a flag refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
     setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
         return this._send({ type: 'setGroupPropertiesForFlags', properties, reloadFeatureFlags })
     }
+    /**
+     * Clear all local person flag overrides, not profile data or identity. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
     resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
         return this._send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags })
     }
+    /**
+     * Clear local flag overrides for every group type, not profiles or membership. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
     resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
         return this._send({ type: 'resetGroupPropertiesForFlags', reloadFeatureFlags })
     }
@@ -216,9 +244,14 @@ export class PostHog {
     optOut(): Promise<void> {
         return this._pauseAutocapture({ type: 'optOut' })
     }
+    /**
+     * Refresh flags using the shared identity/context after earlier mutations, then persist and synchronize the cache.
+     * A failed fetch normally retains cached flags and resolves; completion does not guarantee fresh values.
+     */
     reloadFeatureFlags(): Promise<void> {
         return this._send({ type: 'reloadFeatureFlags' })
     }
+    /** Compatibility alias for reloadFeatureFlags(), with the same completion and failure semantics. */
     reloadFeatureFlagsAsync(): Promise<void> {
         return this.reloadFeatureFlags()
     }
@@ -235,9 +268,11 @@ export class PostHog {
     getDistinctId(): string {
         return this._state?.distinctId ?? ''
     }
+    /** Return the shared anonymous ID, stable across identify and rotated by reset; '' before synchronization. */
     getAnonymousId(): string {
         return this._state?.anonymousId ?? ''
     }
+    /** Cached consent state; conservatively true until the first synchronized snapshot. */
     get optedOut(): boolean {
         return this.hasOptedOutCapturing()
     }
@@ -248,6 +283,10 @@ export class PostHog {
         return this._state?.optedOut ?? true
     }
 
+    /**
+     * Read the cached value without fetching. A missing key is false with a nonempty cache, otherwise undefined.
+     * Reports a deduplicated exposure for the observed snapshot by default; sendFeatureFlagEvent: false suppresses it.
+     */
     getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
         const flags = this._state?.featureFlags
         const value =
@@ -271,7 +310,16 @@ export class PostHog {
         }
         return value
     }
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. defaultValue applies only to
+     * unknown/unavailable flags. Without it, missing-key behavior matches getFeatureFlag().
+     * Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. Missing keys follow getFeatureFlag()
+     * unless defaultValue is supplied. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
         if (options?.defaultValue !== undefined) {
@@ -281,6 +329,10 @@ export class PostHog {
         const value = this.getFeatureFlag(key, options)
         return value === undefined ? undefined : Boolean(value)
     }
+    /**
+     * Return a copied cached result, or undefined for unknown/unavailable flags; never fetches.
+     * Empty variants are disabled. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     getFeatureFlagResult(key: string, options?: FeatureFlagReadOptions): FeatureFlagResult | undefined {
         // Exposure commands retain the observed snapshot revision, including missing-key reads.
         this.getFeatureFlag(key, options)
@@ -293,11 +345,16 @@ export class PostHog {
             payload: this.getFeatureFlagPayload(key) ?? null,
         }
     }
+    /** Return copied cached results (empty when unavailable), without fetching or reporting exposures. */
     getAllFeatureFlags(): FeatureFlagResult[] {
         return Object.keys(this._state?.featureFlags ?? {}).map((key) =>
             this.getFeatureFlagResult(key, { sendFeatureFlagEvent: false })!
         )
     }
+    /**
+     * Read a copied, decoded cached payload without fetching or reporting exposure.
+     * Missing payloads are null once flags are loaded, otherwise undefined; strings are not decoded again.
+     */
     getFeatureFlagPayload(key: string): JsonType | undefined {
         const payloads = this._state?.featureFlagPayloads
         const value = payloads && Object.prototype.hasOwnProperty.call(payloads, key) ? payloads[key] : undefined
