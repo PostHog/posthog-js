@@ -48,7 +48,8 @@ export function transport(payloadBytes = 0, capacity = 1000) {
         state.definitions++
         return { status: 200, headers: new Headers(), json: async () => JSON.parse(serializedDefinitions) }
       }
-      if (path === '/i/v1/analytics/events' && options.method === 'POST') {
+      // /batch/ serves the merge-base SDK in a paired run, which still posts legacy batches.
+      if ((path === '/i/v1/analytics/events' || path === '/batch/') && options.method === 'POST') {
         const { batch } = JSON.parse(options.body)
         assert.ok(Array.isArray(batch))
         state.requests++
@@ -70,6 +71,9 @@ export function transport(payloadBytes = 0, capacity = 1000) {
             seen[sequence] = 1
             deliveredByUser[event.distinct_id]++
           }
+        }
+        if (path === '/batch/') {
+          return { status: 200, text: async () => 'ok', json: async () => ({ status: 1 }) }
         }
         // Capture v1 reports a result per event uuid; anything else is an unreadable response to the SDK.
         const body = JSON.stringify({
