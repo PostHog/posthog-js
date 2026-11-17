@@ -1,7 +1,9 @@
 import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
+import { ConsentStatus } from '../../consent'
 import posthogErrorWrappingFunctions from './error-wrapping-functions'
 import { PostHog } from '../../posthog-core'
-import { RemoteConfigResult } from '../../types'
+import { PostHogConfig, Properties, RemoteConfigResult } from '../../types'
 
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
@@ -23,6 +25,9 @@ export class ExceptionObserver {
         properties: ErrorTracking.ErrorProperties
         timestamp: Date
         captureType: ExceptionCaptureType
+        capturedProperties: Properties
+        consent: ConsentStatus
+        cookielessMode: PostHogConfig['cookieless_mode']
     }[] = []
     private _disposed = false
     private _unwrapOnError: (() => void) | undefined
@@ -49,6 +54,14 @@ export class ExceptionObserver {
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
         const providedConfig = this._instance.config.capture_exceptions
+        if (
+            isUndefined(providedConfig) &&
+            isUndefined(this._remoteEnabled) &&
+            this._instance._shouldDisableFlags() &&
+            !assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.config
+        ) {
+            this._remoteEnabled = !!this._instance.get_property(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE)
+        }
         let config: Required<ExceptionAutoCaptureConfig> = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
@@ -79,7 +92,17 @@ export class ExceptionObserver {
             this._startCapturing()
             while (this._buffer.length && this.isEnabled && !this._isWaitingForRemoteConfig()) {
                 const pending = this._buffer.shift()!
-                this.captureException(pending.properties, pending.captureType, pending.timestamp)
+                if (
+                    pending.consent === this._instance.consent.consent &&
+                    pending.cookielessMode === this._instance.config.cookieless_mode
+                ) {
+                    this.captureException(
+                        pending.properties,
+                        pending.captureType,
+                        pending.timestamp,
+                        pending.capturedProperties
+                    )
+                }
             }
         } else {
             this._stopCapturing()
@@ -109,26 +132,19 @@ export class ExceptionObserver {
         const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
         try {
-            if (!this._config.capture_unhandled_errors) {
-                this._unwrapOnError?.()
-                this._unwrapOnError = undefined
-            } else if (!this._unwrapOnError) {
+            // Re-wrap the current handlers in case application code replaced them after init.
+            this._stopCapturing()
+            if (this._config.capture_unhandled_errors) {
                 this._unwrapOnError = wrapOnError((properties) =>
                     this.captureException(properties, 'capture_unhandled_errors')
                 )
             }
-            if (!this._config.capture_unhandled_rejections) {
-                this._unwrapUnhandledRejection?.()
-                this._unwrapUnhandledRejection = undefined
-            } else if (!this._unwrapUnhandledRejection) {
+            if (this._config.capture_unhandled_rejections) {
                 this._unwrapUnhandledRejection = wrapUnhandledRejection((properties) =>
                     this.captureException(properties, 'capture_unhandled_rejections')
                 )
             }
-            if (!this._config.capture_console_errors) {
-                this._unwrapConsoleError?.()
-                this._unwrapConsoleError = undefined
-            } else if (!this._unwrapConsoleError) {
+            if (this._config.capture_console_errors) {
                 this._unwrapConsoleError = wrapConsoleError((properties) =>
                     this.captureException(properties, 'capture_console_errors')
                 )
@@ -151,39 +167,41 @@ export class ExceptionObserver {
     }
 
     onRemoteConfig(result: RemoteConfigResult) {
-        if (!result.ok) {
-            // Failure behaves like a response without an autocaptureExceptions key.
-            return
-        }
-
-        const response = result.config
-        if (!('autocaptureExceptions' in response)) {
-            return
-        }
-
-        const autocaptureExceptionsResponse = response.autocaptureExceptions
-
-        // store this in-memory in case persistence is disabled
-        this._remoteEnabled = !!autocaptureExceptionsResponse || false
-
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (result.ok && 'autocaptureExceptions' in result.config) {
+            // Store this in memory too, in case persistence is disabled.
+            this._remoteEnabled = !!result.config.autocaptureExceptions
+            this._instance.persistence?.register({
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this._remoteEnabled,
             })
+        } else if (isUndefined(this._remoteEnabled)) {
+            // A completed request without enablement must not leave startup events waiting forever.
+            this._remoteEnabled = !!this._instance.get_property(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE)
         }
 
         this._config = this._requiredConfig()
         this.startIfEnabledOrStop()
     }
 
-    onConfigChange() {
+    onConfigChange(config: Partial<PostHogConfig> = {}) {
+        if (
+            [
+                'property_denylist',
+                'sanitize_properties',
+                'mask_personal_data_properties',
+                'custom_personal_data_properties',
+                'disable_capture_url_hashes',
+            ].some((key) => key in config)
+        ) {
+            this.reset()
+        }
         this._config = this._requiredConfig()
     }
 
     captureException(
         errorProperties: ErrorTracking.ErrorProperties,
         captureType: ExceptionCaptureType = 'capture_unhandled_errors',
-        timestamp?: Date
+        timestamp?: Date,
+        capturedProperties?: Properties
     ) {
         try {
             if (!this._instance.is_capturing()) {
@@ -195,7 +213,21 @@ export class ExceptionObserver {
             }
             if (this._isWaitingForRemoteConfig()) {
                 if (this._buffer.length < MAX_BUFFERED_EXCEPTIONS) {
-                    this._buffer.push({ properties: errorProperties, timestamp: timestamp ?? new Date(), captureType })
+                    const occurredAt = timestamp ?? new Date()
+                    const properties = this._instance.exceptions?.prepareExceptionProperties(
+                        errorProperties,
+                        occurredAt
+                    )
+                    if (properties) {
+                        this._buffer.push({
+                            properties: errorProperties,
+                            capturedProperties: properties,
+                            timestamp: occurredAt,
+                            captureType,
+                            consent: this._instance.consent.consent,
+                            cookielessMode: this._instance.config.cookieless_mode,
+                        })
+                    }
                 }
                 return
             }
@@ -210,7 +242,7 @@ export class ExceptionObserver {
                 return
             }
 
-            this._instance.exceptions?.sendExceptionEvent(errorProperties, timestamp)
+            this._instance.exceptions?.sendExceptionEvent(errorProperties, timestamp, capturedProperties)
         } catch {
             // Exception autocapture must never throw into customer code. Do not log here because
             // console.error may be instrumented and would re-enter this method.

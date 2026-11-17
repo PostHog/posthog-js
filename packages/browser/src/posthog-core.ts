@@ -1836,6 +1836,16 @@ export class PostHog implements PostHogInterface {
         properties?: Properties | null,
         options?: CaptureOptions
     ): CaptureResult | undefined {
+        return this._captureEvent(event_name, properties, options)
+    }
+
+    /** @internal Capture an event, optionally using properties snapshotted before deferred delivery. */
+    _captureEvent(
+        event_name: EventName,
+        properties?: Properties | null,
+        options?: CaptureOptions,
+        capturedProperties?: Properties
+    ): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
@@ -1857,6 +1867,13 @@ export class PostHog implements PostHogInterface {
         }
 
         this._syncCookielessIdentity()
+        if (capturedProperties) {
+            this.persistence.syncCookieProperties()
+            const adoptedIdentityChange = this._processCookieIdentityChange()
+            if (adoptedIdentityChange && this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+                return
+            }
+        }
         if (event_name === '$snapshot' && this._inCookielessMode()) {
             return
         }
@@ -1931,7 +1948,8 @@ export class PostHog implements PostHogInterface {
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties:
+                capturedProperties ?? this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2218,6 +2236,7 @@ export class PostHog implements PostHogInterface {
             // reconciling the reset snapshot. Clear the separate session store
             // here before assembling an event under the anonymous identity.
             this.sessionPersistence?.clear()
+            this.exceptionObserver?.reset()
             this._sessionRegisteredPropKeys.clear()
             this._persistSessionRegisteredPropKeys()
         }
@@ -4359,7 +4378,8 @@ export class PostHog implements PostHogInterface {
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (isObject(config)) {
-            extend(this.config, configRenames(config))
+            const updatedConfig = configRenames(config)
+            extend(this.config, updatedConfig)
 
             const isPersistenceDisabled = this._is_persistence_disabled()
             // _init creates persistence after applying the initial configuration.
@@ -4412,7 +4432,7 @@ export class PostHog implements PostHogInterface {
 
             this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
 
-            this.exceptionObserver?.onConfigChange()
+            this.exceptionObserver?.onConfigChange(updatedConfig)
             this.exceptions?.onConfigChange()
             this.metrics?.onConfigChange()
             this.webMCP?.startIfEnabled()

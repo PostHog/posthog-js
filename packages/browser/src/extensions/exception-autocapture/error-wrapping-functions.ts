@@ -6,6 +6,7 @@ import { buildErrorPropertiesBuilder } from '../../posthog-exceptions'
 
 const logger = /* @__PURE__ */ createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = /* @__PURE__ */ buildErrorPropertiesBuilder()
+const stoppedWrappers = new WeakMap<object, unknown>()
 
 // Exception autocapture must never throw into customer code. Do not log in the catch because
 // console.error may be instrumented and would re-enter exception autocapture.
@@ -37,11 +38,16 @@ const markInstrumented = (owner: any, key: string): void =>
 // Another SDK or PostHog instance may have wrapped our handler in the meantime.
 // Only restore the property if we still own it; otherwise leave that handler's chain intact.
 const restore = (owner: any, key: string, original: unknown, wrapper: any): void => {
+    stoppedWrappers.set(wrapper, original)
     safely(() => {
         delete wrapper.__POSTHOG_INSTRUMENTED__
     }, undefined)
     safely(() => {
         if (owner[key] === wrapper) {
+            // Instances may stop out of installation order. Never reinstall a stopped wrapper.
+            while (isFunction(original) && stoppedWrappers.has(original)) {
+                original = stoppedWrappers.get(original)
+            }
             owner[key] = original
         }
     }, undefined)
@@ -62,16 +68,15 @@ const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventAr
     return event
 }
 
-const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapOnError = (captureFn: ((props: ErrorTracking.ErrorProperties) => void) | undefined) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
     }
     const originalOnError = safely(() => win.onerror, undefined)
 
-    let active = true
     const wrapper = (win.onerror = function (...args: ErrorEventArgs): boolean {
-        if (active) {
+        if (captureFn) {
             safelyBuildAndCapture(captureFn, () =>
                 errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
                     mechanism: { handled: false },
@@ -86,13 +91,13 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     markInstrumented(win, 'onerror')
 
     return () => {
-        active = false
+        captureFn = undefined
         restore(win, 'onerror', originalOnError, wrapper)
     }
 }
 
 const wrapUnhandledRejection = (
-    captureFn: (props: ErrorTracking.ErrorProperties) => void,
+    captureFn: ((props: ErrorTracking.ErrorProperties) => void) | undefined,
     defaultReturnValue = false
 ) => {
     const win = window as any
@@ -102,9 +107,8 @@ const wrapUnhandledRejection = (
 
     const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
 
-    let active = true
     const wrapper = (win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        if (active) {
+        if (captureFn) {
             safelyBuildAndCapture(captureFn, () =>
                 errorPropertiesBuilder.buildFromUnknown(ev, {
                     mechanism: { handled: false },
@@ -119,12 +123,12 @@ const wrapUnhandledRejection = (
     markInstrumented(win, 'onunhandledrejection')
 
     return () => {
-        active = false
+        captureFn = undefined
         restore(win, 'onunhandledrejection', originalOnUnhandledRejection, wrapper)
     }
 }
 
-const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapConsoleError = (captureFn: ((props: ErrorTracking.ErrorProperties) => void) | undefined) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')
@@ -132,7 +136,6 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
 
     const originalConsoleError = safely(() => con.error, undefined)
 
-    let active = true
     const wrapper = (con.error = function (...args: any[]): void {
         // Check before selecting an Error argument, which loses the diagnostic prefix.
         // SDK loggers pass the prefix and diagnostic separately, including in older bundles.
@@ -143,7 +146,7 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
                 (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
             false
         )
-        if (active && !isInternalDiagnostic) {
+        if (captureFn && !isInternalDiagnostic) {
             safelyBuildAndCapture(captureFn, () => {
                 let event
                 if (args.length == 1) {
@@ -166,7 +169,7 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     markInstrumented(con, 'error')
 
     return () => {
-        active = false
+        captureFn = undefined
         restore(con, 'error', originalConsoleError, wrapper)
     }
 }

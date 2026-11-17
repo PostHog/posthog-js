@@ -59,6 +59,8 @@ for (const entrypoint of ['module', 'module.slim']) {
                                 return event
                             },
                         })
+                        ph.capture('$pageview')
+                        ph.addExceptionStep('before startup error')
                         const script = document.createElement('script')
                         script.textContent = 'throw new Error("startup error")'
                         document.head.appendChild(script)
@@ -74,6 +76,14 @@ for (const entrypoint of ['module', 'module.slim']) {
                     .toBe(3)
                 await expect.poll(() => events.countByName('$exception')).toBe(mode === 'local' ? 3 : 0)
 
+                const originalPageview = events.filterByName('$pageview')[0]
+                await page.evaluate(() => {
+                    const ph = (window as WindowWithPostHog).posthog!
+                    history.pushState({}, '', '/after-startup')
+                    ph.capture('$pageview')
+                    ph.addExceptionStep('after startup error')
+                })
+                await expect.poll(() => events.countByName('$pageview')).toBe(2)
                 const response = page.waitForResponse(configPattern)
                 releaseConfig()
                 await response
@@ -96,6 +106,15 @@ for (const entrypoint of ['module', 'module.slim']) {
                     )
                     for (const exception of exceptions) {
                         expect(exception.mechanism.handled).toBe(false)
+                    }
+                    if (mode === 'remote-on') {
+                        for (const event of events.filterByName('$exception')) {
+                            expect(event.properties.$current_url).toBe(originalPageview.properties.$current_url)
+                            expect(event.properties.$pageview_id).toBe(originalPageview.properties.$pageview_id)
+                            expect(event.properties.$exception_steps).toEqual([
+                                expect.objectContaining({ $message: 'before startup error' }),
+                            ])
+                        }
                     }
                 }
                 expect(exceptionScriptRequests).toEqual([])
