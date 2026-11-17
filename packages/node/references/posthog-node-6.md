@@ -2485,7 +2485,7 @@ Remove an option added with `registerOptions()`.
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `key` | keyof `V1EventOptions` | The option name to remove |
+| `key` | `string` | The option name to remove |
 
 #### Returns
 
@@ -5903,13 +5903,19 @@ The `options` object on a Capture V1 event: the caller's options plus any legacy
 `$`-prefixed option properties lifted by the transform. Values are sent unchanged.
 Always serialized as an object (`{}` when empty), never `null`.
 
+#### Indexable
+
+> \[`key`: `string`\]: `JsonType` \| `undefined`
+
+Additional capture options, sent to capture v1 unchanged.
+
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="property-cookieless_mode"></a> `cookieless_mode?` | `boolean` |
-| <a id="property-disable_skew_correction"></a> `disable_skew_correction?` | `boolean` |
-| <a id="property-process_person_profile"></a> `process_person_profile?` | `boolean` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-cookieless_mode"></a> `cookieless_mode?` | `boolean` | Whether to process this event in cookieless mode. |
+| <a id="property-disable_skew_correction"></a> `disable_skew_correction?` | `boolean` | Whether to disable server-side timestamp skew correction for this event. |
+| <a id="property-process_person_profile"></a> `process_person_profile?` | `boolean` | Whether to create or update a person profile for this event. |
 
 ### `Without`
 

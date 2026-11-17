@@ -470,17 +470,20 @@ posthog.capture({
 })
 ```
 
-TypeScript accepts these event options:
+TypeScript checks the known boolean options and accepts additional options with JSON values:
 
 ```ts
-interface EventOptions {
-  cookieless_mode?: boolean
-  disable_skew_correction?: boolean
-  process_person_profile?: boolean
+import type { EventOptions } from 'posthog-node'
+
+const options: EventOptions = {
+  cookieless_mode: true,
+  disable_skew_correction: false,
+  process_person_profile: false,
+  custom_option: { enabled: true },
 }
 ```
 
-Use booleans for event options. TypeScript rejects misspelled option names and invalid values.
+Use booleans for `cookieless_mode`, `disable_skew_correction`, and `process_person_profile`. Additional string-keyed options accept JSON values and are sent to capture unchanged.
 
 - **Every event.** `registerOptions(options)` (new) sets options on every event, like `register()` does for properties. `unregisterOptions(key)` removes one. Both return a promise.
 - **One context.** `withContext()` and `enterContext()` accept `options`, which apply to every event in the context.

@@ -3680,7 +3680,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param key - The option name to remove
    */
-  async unregisterOptions(key: keyof EventOptions): Promise<void> {
+  async unregisterOptions(key: string): Promise<void> {
     const remaining = { ...this._globalOptions }
     delete remaining[key]
     this._globalOptions = remaining
