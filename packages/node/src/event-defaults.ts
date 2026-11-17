@@ -130,7 +130,7 @@ export function fillIdentifyStylePersonProfile(
 
 /**
  * Remove `$process_person_profile` from an identify-style event whose option is set, after every
- * fill. The option already wins when the event is sent, and a `before_send` hook that drops
+ * fill. The option already wins when the event is sent, and a `beforeSend` hook that drops
  * `options` must not bring back a layered `false`.
  */
 export function dropIdentifyStyleLegacyPersonProfile(

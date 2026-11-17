@@ -45,6 +45,7 @@ import {
   AllFlagsOptions,
   CaptureExceptionOptions,
   EventMessage,
+  EventOptions,
   FeatureFlagError,
   FeatureFlagErrorType,
   FeatureFlagEvaluationRuntime,
@@ -265,7 +266,7 @@ function readCallerValues<T>(read: () => T): T {
 }
 
 /**
- * A copy of the event for `before_send`, so a hook that mutates it cannot change the caller's
+ * A copy of the event for `beforeSend`, so a hook that mutates it cannot change the caller's
  * objects or the `register()` and context defaults. Plain objects and arrays are copied all the
  * way down; class instances (`Date`, `Buffer`, custom classes) stay shared. The hook always gets
  * an `options` object it can write to.
@@ -336,8 +337,8 @@ type PrepareEventOptions = {
   /** How a config version 2 flag event fixes its properties; see `flag-events.ts`. */
   flagEvent?: FlagEventCapture
   /**
-   * Called when capture fails: `before_send` throws, or the event cannot be prepared or queued.
-   * Not called when `before_send` discards the event.
+   * Called when capture fails: `beforeSend` throws, or the event cannot be prepared or queued.
+   * Not called when `beforeSend` discards the event.
    */
   onCaptureFailed?: () => void
 }
@@ -350,7 +351,7 @@ function presentDistinctId(value: unknown): string | undefined {
   if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
     return undefined
   }
-  // Stringified before before_send, so a hook that leaves the id alone never sends a non-string.
+  // Stringified before beforeSend, so a hook that leaves the id alone never sends a non-string.
   return typeof value === 'string' ? value : String(value)
 }
 
@@ -418,7 +419,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly privacyMode: boolean
 
   // Options from registerOptions(). Replaced, never mutated, so an event can keep the object it read.
-  private _globalOptions: Record<string, JsonType> = {}
+  private _globalOptions: Record<string, unknown> = {}
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -631,7 +632,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private _prepareLaneMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties | null {
     const { _invalidUuidWarned, ...captureOptions } = (options ?? {}) as LaneCaptureOptions
-    // before_send already ran, so this is the hook's uuid; check it again, warning at most once per call.
+    // beforeSend already ran, so this is the hook's uuid; check it again, warning at most once per call.
     // A missing uuid is generated here, not by core's generator.
     const uuid = this._canonicalEventUuid(captureOptions.uuid, !_invalidUuidWarned) ?? eventUuidv7()
     const prepared = this.processBeforeEnqueue(this.prepareMessage(message, { ...captureOptions, uuid }))
@@ -1588,13 +1589,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           }
           const captureOptions: LaneCaptureOptions = {
             timestamp,
-            // `$geoip_disable` is already set before before_send; core must not add it after.
+            // `$geoip_disable` is already set before beforeSend; core must not add it after.
             disableGeoip: false,
             uuid,
             _invalidUuidWarned: invalidUuidWarned,
           }
           const message = {
-            // Set directly, not as `distinctId`: core drops a falsy `distinctId`, which would hide what before_send left.
+            // Set directly, not as `distinctId`: core drops a falsy `distinctId`, which would hide what beforeSend left.
             distinct_id: distinctId,
             event,
             properties,
@@ -1605,7 +1606,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
-          // A `before_send` discard rejects with null; it is not a failure.
+          // A `beforeSend` discard rejects with null; it is not a failure.
           // Only a caller value that threw is a local drop; anything else is an SDK failure.
           if (err instanceof UnreadableEventError) {
             this._dropUnreadableEvent(uuid, immediate, explicitRoute)
@@ -1907,7 +1908,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The alias data containing distinctId and alias
    */
-  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void {
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: EventOptions }): void {
     this._sendPreparedEvent(
       'alias',
       {
@@ -1943,7 +1944,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string
     alias: string
     disableGeoip?: boolean
-    options?: Record<string, JsonType>
+    options?: EventOptions
   }): Promise<void> {
     await this._sendPreparedEvent(
       'alias',
@@ -3296,7 +3297,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * The key is reserved before capture and stays reserved while capture runs, so a read during
    * capture does not send the event again. It is released when capture fails, so a later read
    * sends the event: the capture call throws, the client is disabled or opted out (also while the
-   * event is prepared), `before_send` throws, or the event cannot be prepared or queued. An event that `before_send` discards keeps
+   * event is prepared), `beforeSend` throws, or the event cannot be prepared or queued. An event that `beforeSend` discards keeps
    * its key: the application chose to drop it, and later reads would be dropped the same way.
    * A failure is logged and never reaches the read.
    */
@@ -3611,7 +3612,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @remarks
    * Each event fills the keys it left unset in this order: the event's own values, then context
    * properties, then these, then the values the SDK adds (such as `$is_server` and
-   * `$geoip_disable`). `before_send` sees the result and can change it.
+   * `$geoip_disable`). `beforeSend` sees the result and can change it.
    *
    * A `$process_person_profile` registered here never reaches `$identify`, `$create_alias`,
    * `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events (see `registerOptions()`).
@@ -3646,7 +3647,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @remarks
    * Each event fills the options it left unset (missing or `null`) in this order: the event's own
    * `options`, then context options, then these, then the options the SDK adds (such as
-   * `process_person_profile: false` for an event with no distinct id). `before_send` sees the
+   * `process_person_profile: false` for an event with no distinct id). `beforeSend` sees the
    * result and can change it. Values are sent to capture unchanged. Capture drops an event whose
    * option value it cannot read, so a bad value registered here drops every event.
    *
@@ -3663,7 +3664,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param options - The options to add to every event
    */
-  async registerOptions(options: Record<string, JsonType>): Promise<void> {
+  async registerOptions(options: EventOptions): Promise<void> {
     if (!isPlainObject(options)) {
       // console.error, not this._logger: the logger only prints in debug mode, and the options are lost.
       console.error('[PostHog] registerOptions takes an object; ignoring the value')
@@ -3679,7 +3680,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param key - The option name to remove
    */
-  async unregisterOptions(key: string): Promise<void> {
+  async unregisterOptions(key: keyof EventOptions): Promise<void> {
     const remaining = { ...this._globalOptions }
     delete remaining[key]
     this._globalOptions = remaining
@@ -3696,7 +3697,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @remarks
    * Context `properties` and `options` fill only what an event left unset: the event's own values
    * win, and context values beat `register()` and `registerOptions()` values and the values the SDK
-   * adds. `before_send` sees the result and can change it.
+   * adds. `beforeSend` sees the result and can change it.
    *
    * On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
    * events, a context `process_person_profile` option applies only when the distinct id is
@@ -4212,7 +4213,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @remarks
    * The result has the same shape as the message passed in: `options` holds the event's options
    * after every layer filled them, and `uuid`, `timestamp` and `disableGeoip` are top-level fields.
-   * Rejects with `null` when `before_send` drops the event.
+   * Rejects with `null` when `beforeSend` drops the event.
    *
    * @example
    * ```ts
@@ -4223,7 +4224,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Capture}
    *
    * @param props - The event to build
-   * @returns The event with its properties and options filled, after `before_send`
+   * @returns The event with its properties and options filled, after `beforeSend`
    */
   public async prepareEventMessage(props: EventMessage): Promise<PreparedEventMessage> {
     try {
@@ -4236,7 +4237,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Build an event in the canonical order: identity, the call's own values, then the values it left
    * unset from context, then `register()` / `registerOptions()`, then the SDK, then the SDK's own
-   * `$lib` / `$lib_version`, then the minimal `$feature_flag_called` allowlist, then `before_send`,
+   * `$lib` / `$lib_version`, then the minimal `$feature_flag_called` allowlist, then `beforeSend`,
    * which has the final say.
    */
   private async _prepareEventMessage(
@@ -4318,7 +4319,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const flagEvent = prepareOptions.flagEvent
     const enrichedProperties = flagEvent ? applyFlagEventCapture(eventProperties, flagEvent) : eventProperties
 
-    // Runs after every fill and before before_send, so no default can re-add a stripped property
+    // Runs after every fill and before beforeSend, so no default can re-add a stripped property
     // but a hook still can. A config version 2 event also keeps its attribution.
     const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, enrichedProperties)
       ? flagEvent
@@ -4329,9 +4330,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let finalEvent = event
     if (
       event === '$pageview' &&
-      this.options.__preview_capture_bot_pageviews &&
+      this.options.__previewCaptureBotPageviews &&
       typeof finalProperties.$raw_user_agent === 'string' &&
-      isBlockedUA(finalProperties.$raw_user_agent, this.options.custom_blocked_useragents || [])
+      isBlockedUA(finalProperties.$raw_user_agent, this.options.customBlockedUserAgents || [])
     ) {
       finalEvent = '$bot_pageview'
       finalProperties.$browser_type = 'bot'
@@ -4371,7 +4372,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // `onError` is called when a hook throws. A hook that returns null discards the event, which
   // is not an error.
   private _runBeforeSend(eventMessage: EventMessage, onError?: () => void): EventMessage | null {
-    const beforeSend = this.options.before_send
+    const beforeSend = this.options.beforeSend
     if (!beforeSend) {
       return eventMessage
     }
@@ -4394,7 +4395,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         // The error's message can carry the data the hook was redacting, so only its type is logged.
         const errorType = error instanceof Error ? error.name : typeof error
         // console.error, not this._logger: the logger only prints in debug mode, and the event is lost.
-        console.error(`[PostHog] Error in before_send function for event '${eventMessage.event}' (${errorType})`)
+        console.error(`[PostHog] Error in beforeSend function for event '${eventMessage.event}' (${errorType})`)
         onError?.()
         return null
       }

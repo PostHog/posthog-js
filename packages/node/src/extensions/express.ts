@@ -45,7 +45,7 @@ function buildRequestContextData(posthog: PostHogBackendClient, req: Request): P
   const sessionId = context?.sessionId ?? headers.sessionId
   const distinctId = context?.distinctId ?? headers.distinctId
   const properties: Record<string, any> = {}
-  const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
+  const disableCaptureUrlHashes = posthog.options.disableCaptureUrlHashes === true
 
   addProperty(
     properties,

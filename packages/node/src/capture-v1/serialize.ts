@@ -33,7 +33,7 @@ export function wireProblem(message: PostHogEventProperties): string | undefined
   if (typeof event !== 'string' || event === '') {
     return 'event name is missing, empty or not a string'
   }
-  // Caller ids are already strings, so only a before_send hook can leave a non-string here.
+  // Caller ids are already strings, so only a beforeSend hook can leave a non-string here.
   if (typeof distinctId !== 'string') {
     return 'distinct id is missing or not a string'
   }

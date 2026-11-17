@@ -111,7 +111,7 @@ describe('lib identity', () => {
 
   it.each(['PostHogMCP', 'instrument()'])('%s keeps shared properties on tool calls and exceptions', async (path) => {
     const beforeSend = vi.fn(() => null)
-    const posthog = new PostHogMCP('phc_test', { ...options, before_send: beforeSend })
+    const posthog = new PostHogMCP('phc_test', { ...options, beforeSend })
     const { server, client, cleanup } = await setupTestServerAndClient()
     try {
       await posthog.register({ $mcp_server_build: 'example-build', environment: 'test' })
@@ -147,7 +147,7 @@ describe('lib identity', () => {
     const beforeSend = vi.fn(() => null)
     const posthog = new PostHogMCP('phc_test', {
       ...options,
-      before_send: beforeSend,
+      beforeSend,
       serverBuild: 'client-build',
     })
     const { server, client, cleanup } = await setupTestServerAndClient()

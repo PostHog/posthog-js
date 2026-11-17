@@ -17,6 +17,10 @@ import type {
   TracesConfig,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
+import type { V1EventOptions } from './capture-v1/types'
+
+/** Processing options sent with an event to capture v1. */
+export type EventOptions = V1EventOptions
 
 import type { Emails } from './emails/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
@@ -27,12 +31,9 @@ export type IdentifyMessage = {
   properties?: Record<string | number, any>
   disableGeoip?: boolean
   /**
-   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
-   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
-   * reports the drop through the `'error'` event.
+   * Processing options sent with this event to capture v1.
    */
-  options?: Record<string, JsonType>
+  options?: EventOptions
 }
 
 export type SetPersonPropertiesMessage = {
@@ -40,24 +41,18 @@ export type SetPersonPropertiesMessage = {
   properties?: Record<string | number, any>
   propertiesOnce?: Record<string | number, any>
   /**
-   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
-   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
-   * reports the drop through the `'error'` event.
+   * Processing options sent with this event to capture v1.
    */
-  options?: Record<string, JsonType>
+  options?: EventOptions
 }
 
 export type UnsetPersonPropertiesMessage = {
   distinctId: string
   properties: string | string[]
   /**
-   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
-   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
-   * reports the drop through the `'error'` event.
+   * Processing options sent with this event to capture v1.
    */
-  options?: Record<string, JsonType>
+  options?: EventOptions
 }
 
 export type SendFeatureFlagsOptions = {
@@ -109,7 +104,7 @@ export type CaptureExceptionOptions = {
    */
   properties?: Record<string | number, any>
   /** Per-event options, as in `capture()`. */
-  options?: Record<string, JsonType>
+  options?: EventOptions
   /** Overrides the generated event UUID. Must be a valid UUID. */
   uuid?: string
   /** A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events. */
@@ -124,14 +119,14 @@ export type CaptureExceptionOptions = {
 
 /**
  * An event as `prepareEventMessage()` builds it: the shape of `EventMessage`, with the distinct id
- * resolved and the properties and options filled from every layer, after `before_send`.
+ * resolved and the properties and options filled from every layer, after `beforeSend`.
  */
 export type PreparedEventMessage = {
   distinctId: string
   event: string
   properties: PostHogEventProperties
   /** The event's options, sent to capture unchanged. */
-  options?: Record<string, JsonType>
+  options?: EventOptions
   uuid?: string
   timestamp?: Date
   disableGeoip?: boolean
@@ -148,12 +143,9 @@ export type GroupIdentifyMessage = {
   distinctId?: string
   disableGeoip?: boolean
   /**
-   * Per-event options, sent to capture unchanged. The known keys are `process_person_profile`,
-   * `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through.
-   * Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK
-   * reports the drop through the `'error'` event.
+   * Processing options sent with this event to capture v1.
    */
-  options?: Record<string, JsonType>
+  options?: EventOptions
 }
 
 export type PropertyGroup = {
@@ -247,6 +239,7 @@ export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 export type PostHogOptions = Omit<
   PostHogCoreOptions,
   | 'before_send'
+  | 'disable_capture_url_hashes'
   | 'disableGeoip'
   | 'flushInterval'
   | 'maxQueueSize'
@@ -256,6 +249,12 @@ export type PostHogOptions = Omit<
   | 'requestTimeout'
 > & {
   persistence?: 'memory'
+  /**
+   * Whether to strip URL fragments (`#...`) from automatically captured request URLs.
+   *
+   * @default false
+   */
+  disableCaptureUrlHashes?: boolean
   /**
    * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
    * gets `$geoip_disable: true` unless the event, its context or `register()` sets
@@ -532,7 +531,7 @@ export type PostHogOptions = Omit<
    * Those events get their default from the event name the call used, so a hook that renames an
    * event to one of them must set `options.process_person_profile` itself.
    */
-  before_send?: BeforeSendFn | BeforeSendFn[]
+  beforeSend?: BeforeSendFn | BeforeSendFn[]
   /**
    * Evaluation contexts for feature flags.
    * When set, only feature flags that have at least one matching evaluation tag
@@ -555,7 +554,7 @@ export type PostHogOptions = Omit<
    *
    * @default []
    */
-  custom_blocked_useragents?: string[]
+  customBlockedUserAgents?: string[]
   /**
    * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
    * Enables collection of bot traffic as $bot_pageview events instead of dropping them.
@@ -573,7 +572,7 @@ export type PostHogOptions = Omit<
    * })
    * ```
    */
-  __preview_capture_bot_pageviews?: boolean
+  __previewCaptureBotPageviews?: boolean
   /**
    * When enabled, all feature flag evaluations will use local evaluation only,
    * never falling back to server-side evaluation. This prevents unexpected server
@@ -856,7 +855,7 @@ export interface IPostHog {
    * @param distinctId the current unique id
    * @param alias the unique ID of the user before
    */
-  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: Record<string, JsonType> }): void
+  alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: EventOptions }): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
@@ -868,7 +867,7 @@ export interface IPostHog {
     distinctId: string
     alias: string
     disableGeoip?: boolean
-    options?: Record<string, JsonType>
+    options?: EventOptions
   }): Promise<void>
 
   /**

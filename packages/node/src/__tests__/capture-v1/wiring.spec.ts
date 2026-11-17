@@ -191,13 +191,13 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
   })
 
-  describe('before_send interaction', () => {
+  describe('beforeSend interaction', () => {
     it.each([
       ['into', 'custom', '$ai_generation'],
       ['out of', '$ai_generation', 'renamed'],
-    ])('keeps an event renamed %s $ai_* by before_send on the analytics endpoint', async (_, original, renamed) => {
+    ])('keeps an event renamed %s $ai_* by beforeSend on the analytics endpoint', async (_, original, renamed) => {
       const posthog = makeClient({
-        before_send: (event) => (event ? { ...event, event: renamed } : event),
+        beforeSend: (event) => (event ? { ...event, event: renamed } : event),
       })
       posthog.capture({ distinctId: 'u', event: original, properties: { x: 1 } })
       await waitForFlushTimer()
@@ -211,10 +211,10 @@ describe('capture v1 wiring (Node SDK)', () => {
       ['an object', (event) => (event.distinctId = { id: 'user-123' })],
       ['null', (event) => (event.distinctId = null)],
       ['no', (event) => delete event.distinctId],
-    ])('drops only the event whose before_send leaves %s distinct id, as a local drop', async (_, breakId) => {
+    ])('drops only the event whose beforeSend leaves %s distinct id, as a local drop', async (_, breakId) => {
       const brokenUuid = '0189dcd5-5311-7d40-8db0-9496a2eef37b'
       const posthog = makeClient({
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event?.event === 'Broken') {
             breakId(event as unknown as Record<string, unknown>)
           }
@@ -234,8 +234,8 @@ describe('capture v1 wiring (Node SDK)', () => {
       expect((errors[0] as CaptureError).drops).toEqual([{ uuid: brokenUuid, details: 'invalid event' }])
     })
 
-    it('sends an empty distinct id that before_send sets, for capture to drop and report', async () => {
-      const posthog = makeClient({ before_send: (event) => (event ? { ...event, distinctId: '' } : event) })
+    it('sends an empty distinct id that beforeSend sets, for capture to drop and report', async () => {
+      const posthog = makeClient({ beforeSend: (event) => (event ? { ...event, distinctId: '' } : event) })
       const errors: Error[] = []
       posthog.on('error', (error) => errors.push(error))
 
@@ -246,10 +246,10 @@ describe('capture v1 wiring (Node SDK)', () => {
       expect(errors).toEqual([])
     })
 
-    it('gives before_send a non-string caller distinct id as a string, so a pass-through hook still sends it', async () => {
+    it('gives beforeSend a non-string caller distinct id as a string, so a pass-through hook still sends it', async () => {
       const seen: unknown[] = []
       const posthog = makeClient({
-        before_send: (event) => {
+        beforeSend: (event) => {
           seen.push(event?.distinctId)
           return event
         },

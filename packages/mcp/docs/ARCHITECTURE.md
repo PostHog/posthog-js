@@ -183,7 +183,7 @@ The SDK does not normalize arguments; the map only describes what the server's o
 
 The helper adds no request values to the event.
 Existing parameter and response capture remains unchanged.
-Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+Use `beforeSend` to remove `$mcp_input_keys` when needed. The underlying PostHog client also exposes `beforeSend` in Node 6 (`before_send` in Node 5).
 No session store or additional network request is required.
 
 ## 4. Session & identity
@@ -207,7 +207,7 @@ The server supplies it from its deployment configuration; the SDK does not read 
 Registered properties apply to MCP events sent through `posthog.capture()`, including tool calls and their exception events, and to ordinary `capture()` events from the client.
 Do not depend on them for inherited `identify()`, `groupIdentify()`, or `alias()` events, or for minimized `$feature_flag_called` events.
 An event's own properties take precedence over registered properties.
-The underlying client's `before_send` hook receives the merged properties.
+The underlying client's `beforeSend` hook (`before_send` in Node 5) receives the merged properties.
 The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties or registered options.
 Use a separate client when servers need different shared properties.
 Keep user and request data on individual events, because a shared client can serve concurrent requests.

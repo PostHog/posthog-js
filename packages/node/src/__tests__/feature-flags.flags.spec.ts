@@ -1569,13 +1569,13 @@ describe('minimal $feature_flag_called events', () => {
       await posthog.shutdown()
     })
 
-    it('lets before_send re-add a property stripped by minimization', async () => {
+    it('lets beforeSend re-add a property stripped by minimization', async () => {
       mockedFetch.mockImplementation(
         apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
       )
       let beforeSendProperties: Record<string, any> | undefined
       const { posthog, captured } = createClient({
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event.event === '$feature_flag_called') {
             beforeSendProperties = event.properties
             return { ...event, properties: { ...event.properties, super_prop: 're-added' } }
@@ -1588,7 +1588,7 @@ describe('minimal $feature_flag_called events', () => {
       await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
       await waitForPromises()
 
-      // before_send sees the already-minimized properties, not the pre-filter merged set
+      // beforeSend sees the already-minimized properties, not the pre-filter merged set
       expect(beforeSendProperties).toBeDefined()
       expect(beforeSendProperties).not.toHaveProperty('super_prop')
 

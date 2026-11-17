@@ -1,6 +1,6 @@
 import { EVENT_OPTION_LEGACY_PROPERTIES, type JsonType, type PostHogEventProperties } from '@posthog/core'
 
-import type { V1Event, V1EventOptions } from './types'
+import type { V1Event } from './types'
 
 /** Property -> top-level string field; any value that is not a string is dropped. */
 const TOPLEVEL_SENTINELS: ReadonlyArray<{ property: string; field: 'session_id' | 'window_id' }> = [
@@ -20,7 +20,7 @@ function jsonTypeName(value: JsonType): string {
  * A copy of the caller's per-event options, or undefined when there are none. Any value that
  * is not an object is reported and ignored, so the event is still sent.
  */
-export function readEventOptions(value: unknown): V1EventOptions | undefined {
+export function readEventOptions(value: unknown): Record<string, JsonType> | undefined {
   if (value === undefined || value === null) {
     return undefined
   }
@@ -91,7 +91,7 @@ export function buildV1Event(message: PostHogEventProperties): V1Event {
   const sourceProperties = isRecord(message.properties) ? message.properties : {}
   const properties: PostHogEventProperties = { ...sourceProperties }
 
-  const options: V1EventOptions = readEventOptions(message.options) ?? {}
+  const options = readEventOptions(message.options) ?? {}
   for (const [optionKey, property] of Object.entries(EVENT_OPTION_LEGACY_PROPERTIES)) {
     if (!(property in properties)) {
       continue
