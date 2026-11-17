@@ -25,11 +25,29 @@ export class RemoteConfigLoader {
     }
 
     private _loadRemoteConfigJSON(cb: (response: RequestResponse) => void): void {
-        this._instance._send_request({
-            method: 'GET',
-            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
-            callback: cb,
-        })
+        // Concurrent loads (e.g. replay refreshing stale config during init) share one JSON request, as they
+        // previously shared one config.js script tag. Stored unmangled on the instance so slim bundles share it.
+        const pending = this._instance.__pending_remote_config_callbacks
+        if (pending) {
+            pending.push(cb)
+            return
+        }
+        const callbacks = [cb]
+        this._instance.__pending_remote_config_callbacks = callbacks
+        try {
+            this._instance._send_request({
+                method: 'GET',
+                url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
+                fireCallbackOnDrop: true,
+                callback: (response) => {
+                    this._instance.__pending_remote_config_callbacks = undefined
+                    callbacks.forEach((callback) => callback(response))
+                },
+            })
+        } catch (error) {
+            this._instance.__pending_remote_config_callbacks = undefined
+            throw error
+        }
     }
 
     load(): void {
@@ -44,6 +62,20 @@ export class RemoteConfigLoader {
             if (this._instance._shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
+                return
+            }
+
+            // config.js is executable and only adds site-app code over the JSON endpoint, so prefer JSON unless site apps are enabled.
+            // Status 0 (network error or CSP connect-src block) falls back to config.js, which may still be allowed by script-src.
+            if (!this._instance.config.opt_in_site_apps) {
+                this._loadRemoteConfigJSON((response) => {
+                    if (response.statusCode !== 0) {
+                        this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
+                        return
+                    }
+                    logger.info('Failed to fetch remote config JSON. Falling back to JS.')
+                    this._loadRemoteConfigJs((config) => this._onRemoteConfig(config, config ? undefined : response))
+                })
                 return
             }
 
