@@ -47,7 +47,7 @@ jobs:
             group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.compression }}
             cancel-in-progress: ${{ github.event_name == 'pull_request' }}
         env:
-            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness:1.26.0@sha256:9db022b5729dcf1557b9e622a36b6d6afa42e1b42653f031b0da6d73ca5d77fe
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness:1.31.1@sha256:f84d5c70dd72ea4436957ea6dbbc1f6836b6f6cbb472c749711d0f3659d85377
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
