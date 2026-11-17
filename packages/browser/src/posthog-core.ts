@@ -1869,9 +1869,7 @@ export class PostHog implements PostHogInterface {
                 // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
                 // oxlint-disable-next-line no-console
                 console.warn(
-                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
-                        event_name +
-                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot. Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
                 )
             }
             logger.info(
