@@ -472,10 +472,6 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"external_dependency_integrity\\": [
-    \\"undefined\\",
-    \\"Record<string, string>\\"
-  ],
   \\"asset_host\\": [
     \\"null\\",
     \\"string\\"

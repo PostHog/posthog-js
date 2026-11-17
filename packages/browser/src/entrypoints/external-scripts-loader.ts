@@ -2,7 +2,7 @@ import type { PostHog } from '../posthog-core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isString, isUndefined } from '@posthog/core'
+import { isString } from '@posthog/core'
 import { EXTENSION_INTEGRITY } from '../utils/extension-integrity'
 import { SUBRESOURCE_INTEGRITY_PATTERN } from '../utils/loader-script'
 
@@ -169,25 +169,17 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     kind: PostHogExtensionKind,
     callback: LoadCallback
 ): void => {
-    const config = posthog.config
-    const file = `${kind}.js`
-    const pin = config.external_dependency_integrity?.[file]
-    if (config.require_subresource_integrity || !isUndefined(pin)) {
+    if (posthog.config.require_subresource_integrity) {
         if (kind === 'remote-config' || kind === 'toolbar') {
             return refuse(
                 callback,
-                `${kind} can't be integrity-verified, so it is not loaded with require_subresource_integrity or an external_dependency_integrity pin`
+                `${kind} can't be integrity-verified, so it is not loaded with require_subresource_integrity`
             )
         }
-        const integrity = isUndefined(pin) ? EXTENSION_INTEGRITY[file] : pin
+        const file = `${kind}.js`
+        const integrity = EXTENSION_INTEGRITY[file]
         if (!isString(integrity) || !SUBRESOURCE_INTEGRITY_PATTERN.test(integrity)) {
-            return refuse(
-                callback,
-                isUndefined(pin)
-                    ? `No integrity hash for ${file}: pin it in external_dependency_integrity`
-                    : `Invalid external_dependency_integrity value for ${file}: expected sha384- and 64 base64 characters`,
-                true
-            )
+            return refuse(callback, `No integrity hash for ${file}`, true)
         }
         // Never fall back to a mutable URL: integrity applies to the exact-version bytes.
         loadScript(

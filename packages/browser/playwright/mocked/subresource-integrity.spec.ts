@@ -23,6 +23,7 @@ type Options = {
     tamper?: string[]
     config?: Record<string, unknown>
     host?: string
+    loader?: boolean
     instances?: { name: string; config: Record<string, unknown> }[]
 }
 
@@ -57,6 +58,7 @@ async function setup(
         config = {},
         host = 'https://customer.example',
         instances,
+        loader = false,
     }: Options = {}
 ) {
     const staticRequests: string[] = []
@@ -64,7 +66,12 @@ async function setup(
     const events: { event: string; token: string }[] = []
     const errors: string[] = []
     const configs = instances ?? [{ name: '', config: { require_subresource_integrity: true, ...config } }]
-    const html = `<!doctype html><html><head><script>
+    // The customer pins loader.js natively; its data-core-integrity pins array.js, whose embedded
+    // map pins every extension.
+    const loaderTag = `<script src="https://us-assets.i.posthog.com/static/${version}/loader.js?project_token=phc_sri" integrity="${integrityOf('loader.js')}" crossorigin="anonymous" data-core-integrity="${integrityOf('array.js')}" data-config='${JSON.stringify({ ...baseConfig, api_host: apiHost, require_subresource_integrity: true, ...config })}'></script>`
+    const html = loader
+        ? `<!doctype html><html><head><script>window.sriTampered = [];</script>${loaderTag}</head><body></body></html>`
+        : `<!doctype html><html><head><script>
         window.sriTampered = [];
     </script><script src="https://us-assets.i.posthog.com/static/${version}/array.js" crossorigin="anonymous" integrity="${integrityOf('array.js')}"></script></head><body>
         <script>
@@ -98,9 +105,9 @@ async function setup(
         if (request.url() === `${host}/`) {
             return route.fulfill({ contentType: 'text/html', body: html })
         }
-        if (url.pathname === `/static/${version}/array.js`) {
+        if (url.pathname === `/static/${version}/array.js` || url.pathname === `/static/${version}/loader.js`) {
             return route.fulfill({
-                path: path.join(dist, 'array.js'),
+                path: path.join(dist, path.basename(url.pathname)),
                 contentType: 'application/javascript',
                 headers: { 'access-control-allow-origin': '*' },
             })
@@ -181,6 +188,24 @@ test.describe('require_subresource_integrity', () => {
         expect(state.staticRequests.some((request) => request.includes('?v='))).toBe(false)
         await page.evaluate(() => (window as any).posthog.capture('still capturing'))
         await expect.poll(() => state.events.map(({ event }) => event)).toContain('still capturing')
+        expect(state.errors).toEqual([])
+    })
+
+    test('pinning loader.js and data-core-integrity pins every extension', async ({ page }) => {
+        const state = await setup(page, { loader: true, tamper: ['surveys.js'] })
+
+        await expect.poll(() => extensions(page)).toEqual({ recorder: true, surveys: false })
+        await page.waitForTimeout(500)
+        expect(await page.evaluate(() => window.sriTampered)).toEqual([])
+        expect([...state.staticRequests].sort()).toEqual(
+            [`/static/${version}/lazy-recorder.js`, `/static/${version}/surveys.js`].sort()
+        )
+        expect(state.configJsRequests).toEqual([])
+        expect(
+            await page.evaluate(() => document.querySelector<HTMLScriptElement>('script[src$="/array.js"]')?.integrity)
+        ).toBe(integrityOf('array.js'))
+        await page.evaluate(() => (window as any).posthog.capture('loader event'))
+        await expect.poll(() => state.events.map(({ event }) => event)).toContain('loader event')
         expect(state.errors).toEqual([])
     })
 

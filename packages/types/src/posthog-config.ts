@@ -1843,10 +1843,9 @@ export interface PostHogConfig {
      * recorder.js, surveys.js or web-vitals.js.
      *
      * When enabled, each extension loads only from the exact-version path
-     * `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set.
-     * The hash comes from {@link external_dependency_integrity} if pinned, otherwise from the
-     * hash built into this SDK bundle. A missing hash, an integrity failure or a
-     * `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin`
+     * `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set,
+     * using the SHA-384 hashes built into this SDK bundle. A missing hash, an integrity failure
+     * or a `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin`
      * disables only that feature. The SDK never retries through the mutable legacy path,
      * whatever {@link strict_script_versioning} says. The asset host, or a reverse proxy in
      * front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`).
@@ -1855,30 +1854,17 @@ export interface PostHogConfig {
      * `/array/<token>/config.js` remote config. Remote config is then fetched as JSON.
      *
      * The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK
-     * code you already trust: an npm build or an `array.js` you pin yourself, for example with
-     * `data-core-integrity`. It does not cover an unpinned initial loader, site apps, the toolbar,
-     * third-party widgets such as Intercom or Crisp, or a malicious release with valid hashes.
+     * code you already trust: an npm build, or an `array.js` you pin yourself. Because the
+     * extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an
+     * exact-version `loader.js` that itself has an `integrity` attribute pins every extension too.
+     * It does not cover an unpinned initial loader, site apps, the toolbar, third-party widgets
+     * such as Intercom or Crisp, or a malicious release with valid hashes.
      * Extensions share page globals, so if another PostHog instance or any other code on the page
      * already ran unverified extension code, this instance reuses it and the guarantee does not hold.
      *
      * @default false
      */
     require_subresource_integrity?: boolean
-
-    /**
-     * SHA-384 Subresource Integrity hashes for extension scripts, keyed by asset file name relative
-     * to `/static/<sdk version>/`, for example `{ 'recorder.js': 'sha384-...' }`. Take them from the
-     * release's `/static/<sdk version>/integrity.json`, after verifying it.
-     *
-     * A pinned extension always loads from the exact-version path with this hash, never from a
-     * mutable or legacy URL, even when {@link require_subresource_integrity} is off. A pin overrides
-     * the hash built into the SDK. A value that is not `sha384-` followed by 64 base64 characters is
-     * a configuration error: it is logged and that extension does not load. The toolbar and remote
-     * config cannot be pinned.
-     *
-     * @default undefined
-     */
-    external_dependency_integrity?: Record<string, string>
 
     /**
      * Optional host override for static assets loaded by PostHog, such as
