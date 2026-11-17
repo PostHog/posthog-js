@@ -1694,7 +1694,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   sendFeatureFlags: {
    *     onlyEvaluateLocally: true,
    *     personProperties: { plan: 'premium' },
-   *     groupProperties: { org: { tier: 'enterprise' } }
+   *     groupProperties: { org: { tier: 'enterprise' } },
    *     flagKeys: ['flag1', 'flag2']
    *   }
    * })
@@ -1784,7 +1784,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   distinctId: 'user_123',
    *   properties: {
    *     $set: { name: 'John Doe', email: 'john@example.com' },
-   *     $set_once: { first_login: new Date().toISOString() }
+   *     $set_once: { first_login: new Date().toISOString() },
    *     $anon_distinct_id: 'anonymous_user_456'
    *   }
    * })
