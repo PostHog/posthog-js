@@ -61,7 +61,9 @@ export interface CompatibleToolsListLike {
  * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
  * `CallToolResult` — the direction that would silently break callers.
  */
-export interface CompatibleTextToolResult {
+// A type alias, not an interface: only an alias gets the implicit index signature
+// that `CallToolResult`'s `[x: string]: unknown` requires.
+export type CompatibleTextToolResult = {
   content: { type: 'text'; text: string }[]
   isError?: boolean
 }
@@ -491,6 +493,8 @@ export interface CompatibleHttpRequestLike {
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
+  /** MCP SDK v1's id of the request being handled; v2 puts it on `mcpReq.id`. */
+  requestId?: string | number
   /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
   requestInfo?: CompatibleRequestInfoLike
   /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */

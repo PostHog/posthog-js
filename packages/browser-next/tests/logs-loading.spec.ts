@@ -1,4 +1,5 @@
-import type { Extension } from '@posthog/browser-common'
+import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
+import type { Extension } from '../src/core/types'
 
 const options = {
     projectToken: 'test',
@@ -11,12 +12,37 @@ const options = {
 } as const
 
 afterEach(() => {
-    vi.doUnmock('../src/logs')
+    vi.doUnmock('../src/products/logs/logs')
     vi.resetModules()
     vi.restoreAllMocks()
 })
 
 describe('automatic logs module loading', () => {
+    it('constructs the core host before importing an automatic product implementation', async () => {
+        let hostCreated = false
+        const importStates: boolean[] = []
+        const extension = { name: 'logs', setup: vi.fn() }
+        vi.doMock('../src/products/logs/logs', () => {
+            importStates.push(hostCreated)
+            return { logs: () => extension }
+        })
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog({
+            ...options,
+            logs: {},
+            get storage(): false {
+                hostCreated = true
+                return false
+            },
+        })
+        try {
+            expect(importStates).toEqual([true])
+            expect(client.logs).toBe(extension)
+        } finally {
+            await client.dispose()
+        }
+    })
+
     it('waits for the dynamic module and extension setup before returning the client', async () => {
         let loaded!: (module: { logs: () => Extension }) => void
         let setupFinished!: () => void
@@ -25,13 +51,13 @@ describe('automatic logs module loading', () => {
         })
         const setup = vi.fn(() => setupGate)
         vi.doMock(
-            '../src/logs',
+            '../src/products/logs/logs',
             () =>
                 new Promise((resolve) => {
                     loaded = resolve
                 })
         )
-        const { createPostHog } = await import('../src')
+        const { createPostHog } = await import('../src/composition/npm')
         const finished = vi.fn()
         const configuration = { serviceName: 'original' }
         const pending = createPostHog({ ...options, logs: configuration }).then((client) => {
@@ -48,21 +74,21 @@ describe('automatic logs module loading', () => {
         expect(factory).toHaveBeenCalledWith({ serviceName: 'original' })
         setupFinished()
         const client = await pending
-        expect(client.getExtension('logs')).toBeDefined()
+        expect(client.logs).toBeDefined()
         await client.dispose()
     })
 
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
-        vi.doMock('../src/logs', () => {
+        vi.doMock('../src/products/logs/logs', () => {
             throw new Error('chunk unavailable')
         })
-        const { createPostHog } = await import('../src')
-        const client = await createPostHog(options)
-        expect(client.getExtension('logs')).toBeUndefined()
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog(withBufferedAnalytics({ ...options, logs: {} }))
+        expect(client.logs).toBeUndefined()
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.capture('still usable')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.analytics).capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })
@@ -71,15 +97,15 @@ describe('automatic logs module loading', () => {
         const imported = vi.fn(() => {
             throw new Error('must not load')
         })
-        vi.doMock('../src/logs', imported)
-        const { createPostHog } = await import('../src')
+        vi.doMock('../src/products/logs/logs', imported)
+        const { createPostHog } = await import('../src/composition/npm')
         const explicit: Extension = { name: 'logs', setup() {} }
         const client = await createPostHog({
             ...options,
             ...(mode === 'disabled' ? { logs: false as const } : { extensions: [explicit] }),
         })
         expect(imported).not.toHaveBeenCalled()
-        expect(client.getExtension('logs')).toBe(mode === 'disabled' ? undefined : explicit)
+        expect(client.logs).toBe(mode === 'disabled' ? undefined : explicit)
         await client.dispose()
     })
 })
