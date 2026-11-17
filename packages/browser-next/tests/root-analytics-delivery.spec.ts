@@ -242,7 +242,8 @@ it.each([false, true])(
             ready = true
             return result
         })
-        await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
+        // The first eager load imports the analytics module, which can take over 1 s on a busy CI runner.
+        await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce(), { timeout: 5_000 })
         expect(ready).toBe(false)
         expect(initialized).not.toHaveBeenCalled()
         pending.release()
