@@ -25,7 +25,6 @@ Read the checklist first, then the sections that apply to you.
 
 **During your upgrade**
 
-- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` from TypeScript → [Rename configuration options](#rename-configuration-options)
 - [ ] You set `POSTHOG_CAPTURE_MODE` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from TypeScript with positional arguments after `error` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `enterContext()` → [Use callback-scoped context](#use-callback-scoped-context)
@@ -50,7 +49,7 @@ Read the checklist first, then the sections that apply to you.
 - [ ] You set `$process_person_profile`, `$cookieless_mode`, or `$ignore_sent_at` as a property → [Move to event options](#move-to-event-options)
 - [ ] You send `$ai_` events with `capture()` or `captureImmediate()` instead of `captureAi()` → [Send AI events with captureAi](#send-ai-events-with-captureai)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from JavaScript with positional arguments after `error` → [Move captureException arguments](#move-captureexception-arguments)
-- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` from JavaScript → [Rename configuration options](#rename-configuration-options)
+- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` → [Rename configuration options](#rename-configuration-options)
 
 ## Before you upgrade
 
@@ -121,32 +120,6 @@ These versions accept both posthog-node 5.x.x and 6.x.x. If your app doesn't lis
 List `posthog-node` in your dependencies so you choose when to move to 6.x.x.
 
 ## During your upgrade
-
-### Rename configuration options
-
-SDK configuration options now use camelCase. Update these names when upgrading to 6.x.x:
-
-| 5.x.x                             | 6.x.x                          |
-| --------------------------------- | ------------------------------ |
-| `before_send`                     | `beforeSend`                   |
-| `custom_blocked_useragents`       | `customBlockedUserAgents`      |
-| `disable_capture_url_hashes`      | `disableCaptureUrlHashes`      |
-| `__preview_capture_bot_pageviews` | `__previewCaptureBotPageviews` |
-
-```ts
-const posthog = new PostHog('<project_api_key>', {
-  beforeSend: (event) => (event.event === 'sensitive' ? null : event),
-  customBlockedUserAgents: ['MyCustomBot'],
-  disableCaptureUrlHashes: true,
-  __previewCaptureBotPageviews: true,
-})
-```
-
-TypeScript rejects the 5.x.x names. JavaScript calls with them still work in 6.x.x after 6.0.0, and each name logs one deprecation error per process. They will be removed in the next major version. If you set both names, the camelCase one wins.
-
-6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there.
-
-Event options sent directly to capture, such as `process_person_profile`, and event properties such as `$session_id` keep their existing names.
 
 ### Fix removed APIs
 
@@ -559,3 +532,29 @@ JavaScript positional calls to `captureException()` and `captureExceptionImmedia
 The positional form logs one deprecation error per method per process. It will be removed in the next major version.
 
 Arguments after the options object are ignored, with one warning per process.
+
+### Rename configuration options
+
+SDK configuration options now use camelCase:
+
+| 5.x.x                             | 6.x.x                          |
+| --------------------------------- | ------------------------------ |
+| `before_send`                     | `beforeSend`                   |
+| `custom_blocked_useragents`       | `customBlockedUserAgents`      |
+| `disable_capture_url_hashes`      | `disableCaptureUrlHashes`      |
+| `__preview_capture_bot_pageviews` | `__previewCaptureBotPageviews` |
+
+```ts
+const posthog = new PostHog('<project_api_key>', {
+  beforeSend: (event) => (event.event === 'sensitive' ? null : event),
+  customBlockedUserAgents: ['MyCustomBot'],
+  disableCaptureUrlHashes: true,
+  __previewCaptureBotPageviews: true,
+})
+```
+
+The 5.x.x names are deprecated aliases. They still work in 6.x.x after 6.0.0, and each one logs one deprecation error per process. They will be removed in the next major version. If you set both names, the camelCase one wins.
+
+6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there.
+
+Event options sent directly to capture, such as `process_person_profile`, and event properties such as `$session_id` keep their existing names.

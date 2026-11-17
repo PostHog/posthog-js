@@ -61,13 +61,14 @@ export function checkEventOptions(posthog: PostHog): void {
   const invalidHook: PostHogOptions = { beforeSend: (event) => ({ ...event, options: { process_person_profile: [] } }) }
   void invalidHook
 
-  // @ts-expect-error Configuration names use camelCase in Node 6.
+  // The 5.x configuration names are deprecated aliases until the next major.
   const oldHook: PostHogOptions = { before_send: () => null }
-  // @ts-expect-error Configuration names use camelCase in Node 6.
   const oldUserAgents: PostHogOptions = { custom_blocked_useragents: [] }
-  // @ts-expect-error Inherited core options must not expose the old name.
   const oldUrlHashes: PostHogOptions = { disable_capture_url_hashes: true }
-  // @ts-expect-error Preview configuration names also use camelCase.
   const oldBotPageviews: PostHogOptions = { __preview_capture_bot_pageviews: true }
-  void [oldHook, oldUserAgents, oldUrlHashes, oldBotPageviews]
+  const invalidOldHook: PostHogOptions = {
+    // @ts-expect-error The deprecated hook name uses the same narrow type as beforeSend.
+    before_send: (event) => ({ ...event, options: { process_person_profile: [] } }),
+  }
+  void [oldHook, oldUserAgents, oldUrlHashes, oldBotPageviews, invalidOldHook]
 }

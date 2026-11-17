@@ -1085,21 +1085,20 @@ describe('PostHog Node.js', () => {
       })
 
       it('runs a before_send hook and logs once that the name is deprecated', async () => {
-        const options = {
+        const options: PostHogOptions = {
           host: 'http://example.com',
           fetchRetryCount: 0,
           disableCompression: true,
-          before_send: (event: any) => {
+          before_send: (event) => {
             if (event.event === 'sensitive') {
               return null
             }
-            delete event.properties.email
+            delete event.properties?.email
             return event
           },
         }
-        // A JavaScript caller: TypeScript rejects the 5.x names.
-        const ph = new PostHog('TEST_API_KEY', options as PostHogOptions)
-        new PostHog('TEST_API_KEY', options as PostHogOptions)
+        const ph = new PostHog('TEST_API_KEY', options)
+        new PostHog('TEST_API_KEY', options)
 
         ph.capture({ distinctId: '123', event: 'with-email', properties: { email: 'a@b.c', plan: 'pro' } })
         ph.capture({ distinctId: '123', event: 'sensitive' })
@@ -1119,14 +1118,13 @@ describe('PostHog Node.js', () => {
       it('uses beforeSend when both names are set', async () => {
         const oldHook = vi.fn((event) => event)
         const newHook = vi.fn((event) => event)
-        // A JavaScript caller: TypeScript rejects the 5.x names.
         const ph = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           fetchRetryCount: 0,
           disableCompression: true,
           before_send: oldHook,
           beforeSend: newHook,
-        } as PostHogOptions)
+        })
 
         ph.capture({ distinctId: '123', event: 'test-event' })
         await waitForFlushTimer()
@@ -1142,7 +1140,7 @@ describe('PostHog Node.js', () => {
           custom_blocked_useragents: ['MyCustomBot'],
           disable_capture_url_hashes: true,
           __preview_capture_bot_pageviews: true,
-        } as PostHogOptions)
+        })
 
         expect(ph.options.customBlockedUserAgents).toEqual(['MyCustomBot'])
         expect(ph.options.disableCaptureUrlHashes).toBe(true)

@@ -149,9 +149,8 @@ export function _resetDeprecationWarningsForTests(): void {
 }
 
 /**
- * 6.0 renamed these options to camelCase. TypeScript rejects the old names, but JavaScript passes
- * them through, so they still work in 6.x and log one deprecation error per process. Without
- * this, a JavaScript app that keeps `before_send` silently stops running its hook.
+ * 6.0 renamed these options to camelCase. The old names are deprecated aliases: they still work
+ * in 6.x and log one deprecation error per process, and the camelCase name wins when both are set.
  */
 const RENAMED_OPTIONS = [
   ['before_send', 'beforeSend'],
