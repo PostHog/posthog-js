@@ -17,6 +17,8 @@ import {
 } from './attachments'
 import { EmailError } from './errors'
 import type {
+  CancelEmailResponse,
+  CancelEmailResult,
   CodeEmailForm,
   EmailPreferences,
   EmailReactElement,
@@ -24,6 +26,10 @@ import type {
   EmailWarning,
   Emails,
   GetEmailResponse,
+  ListEmailsOptions,
+  ListEmailsResponse,
+  ListEmailsResult,
+  ScheduledEmail,
   SendEmailBase,
   SendEmailOptions,
   SendEmailResponse,
@@ -32,11 +38,17 @@ import type {
   SetEmailPreferencesOptions,
   SetEmailPreferencesResponse,
   TemplateEmailForm,
+  UpdateEmailOptions,
+  UpdateEmailResponse,
+  UpdateEmailResult,
 } from './types'
 
 const SEND_PATH = '/api/projects/@current/messaging/send/email/'
 const UPLOADS_PATH = '/api/projects/@current/messaging/attachments/uploads/'
 const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
+const CANCEL_PATH = '/api/projects/@current/messaging/emails/{messageId}/cancel/'
+const LIST_PATH = '/api/projects/@current/messaging/emails/'
+const MAX_LIST_LIMIT = 100
 const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
@@ -51,6 +63,17 @@ const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const MOVE_FAILED = 'Moving the email failed unexpectedly.'
+const DAY_MS = 24 * 60 * 60 * 1_000
+const LONGEST_POSTHOG_HOLDS_AN_EMAIL_MS = 30 * DAY_MS
+const UNCONFIRMED_MOVE_GUARD_MS = LONGEST_POSTHOG_HOLDS_AN_EMAIL_MS + DAY_MS
+const SCHEDULING_UNSUPPORTED: EmailWarning = {
+  code: 'scheduling_unsupported',
+  message: 'This PostHog predates scheduled sends, so it ignored scheduledAt and sent the email now.',
+  fix: 'Update PostHog before you schedule emails with it.',
+}
+const OFFSET_TIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 
 type EveryField<Form> = Record<keyof Form, true>
 interface ReactRenderer {
@@ -71,6 +94,7 @@ const SHARED_FIELDS: EveryField<SendEmailBase> = {
   distinctId: true,
   idempotencyKey: true,
   maxRetries: true,
+  scheduledAt: true,
 }
 const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
 const CODE_FIELDS: EveryField<CodeEmailForm> = {
@@ -132,6 +156,20 @@ interface PreparedSend {
   react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
+  scheduled: boolean
+}
+
+interface PreparedMove {
+  messageId: string
+  url: string
+  headers: Record<string, string>
+  body: string
+  instant: string
+}
+
+interface UnconfirmedMove {
+  instant: string
+  refusedUntil: number
 }
 
 interface Upload {
@@ -148,14 +186,18 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, reads the
- * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
- * attempt of a send carries the same idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, now or at a
+ * later time, reads the status of a sent email, moves, cancels and lists scheduled emails, and sets
+ * a recipient's topic preferences. Owns the attempt loop, so every attempt of a send carries the
+ * same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
+  private readonly latestMoveByEmail = new Map<string, Promise<UpdateEmailResponse>>()
+  private readonly unconfirmedMoveByEmail = new Map<string, UnconfirmedMove>()
+  private readonly canceledWhileMovesPending = new Set<string>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -170,6 +212,33 @@ export class EmailSender implements Emails {
     return this.track(this.getUntracked(id))
   }
 
+  update(options: UpdateEmailOptions): Promise<UpdateEmailResponse> {
+    let move: PreparedMove
+    try {
+      move = this.prepareMove(options)
+    } catch (error) {
+      return this.track(Promise.resolve({ data: null, error: asEmailError(error, MOVE_FAILED) }))
+    }
+    const earlierMove = this.latestMoveByEmail.get(move.messageId) ?? Promise.resolve()
+    const pending = earlierMove.then(() => this.sendMove(move))
+    this.latestMoveByEmail.set(move.messageId, pending)
+    void pending.finally(() => {
+      if (this.latestMoveByEmail.get(move.messageId) === pending) {
+        this.latestMoveByEmail.delete(move.messageId)
+        this.canceledWhileMovesPending.delete(move.messageId)
+      }
+    })
+    return this.track(pending)
+  }
+
+  cancel(id: string): Promise<CancelEmailResponse> {
+    return this.track(this.cancelUntracked(id))
+  }
+
+  list(options: ListEmailsOptions): Promise<ListEmailsResponse> {
+    return this.track(this.listUntracked(options))
+  }
+
   setPreferences(options: SetEmailPreferencesOptions): Promise<SetEmailPreferencesResponse> {
     return this.track(this.setPreferencesUntracked(options))
   }
@@ -181,7 +250,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Resolves when every send, status read and preferences change in flight, retries included, has settled.
+   * Resolves when every email request in flight, retries included, has settled.
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
@@ -212,7 +281,7 @@ export class EmailSender implements Emails {
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body), prepared.scheduled)
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -225,14 +294,12 @@ export class EmailSender implements Emails {
 
   private async getUntracked(id: string): Promise<GetEmailResponse> {
     try {
-      if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
-        throw invalid('invalid_message_id', 'id must be the message ID that send() returned.', 'id')
-      }
+      const messageId = messageIdOf(id)
       const { appHost, secretKey } = this.connect(
         'no email status was read',
         'Reading an email status needs secretKey, a project secret API key with the transactional_email:read or transactional_email:write scope.'
       )
-      const url = appHost + STATUS_PATH.replace('{messageId}', id.toLowerCase())
+      const url = appHost + STATUS_PATH.replace('{messageId}', messageId)
       const headers = this.headers(secretKey, {})
       const status = await this.withRetries(this.config.maxRetries, async () =>
         parseStatusReply(await this.request(url, 'GET', headers))
@@ -240,6 +307,130 @@ export class EmailSender implements Emails {
       return { data: status, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Reading the email status failed unexpectedly.') }
+    }
+  }
+
+  private prepareMove(options: UpdateEmailOptions): PreparedMove {
+    const update: { [Field in keyof UpdateEmailOptions]?: unknown } = options ?? {}
+    const messageId = messageIdOf(update.id)
+    const time = scheduledTime(update.scheduledAt, 'Nothing was changed.')
+    const body = safeJsonStringify({ scheduled_at: time })
+    const otherChange = Object.entries(update).find(
+      ([name, value]) => value !== undefined && name !== 'id' && name !== 'scheduledAt'
+    )?.[0]
+    if (otherChange !== undefined) {
+      throw new EmailError({
+        code: 'invalid_form',
+        message: `update changes only scheduledAt, so it doesn't take ${otherChange}. Nothing was changed.`,
+        field: otherChange,
+        fix: 'To change the content, the recipient or the sender, cancel the email and send it again.',
+      })
+    }
+    const { appHost, secretKey } = this.connect(
+      'no email was moved',
+      'Moving a scheduled email needs secretKey, a project secret API key with the transactional_email:write scope.'
+    )
+    return {
+      messageId,
+      url: appHost + STATUS_PATH.replace('{messageId}', messageId),
+      headers: this.headers(secretKey, { 'Content-Type': 'application/json' }),
+      body,
+      instant: instantToTheMicrosecondOf(time),
+    }
+  }
+
+  private async sendMove({ messageId, url, headers, body, instant }: PreparedMove): Promise<UpdateEmailResponse> {
+    const unconfirmedInstant = this.unconfirmedInstantOf(messageId)
+    if (unconfirmedInstant !== undefined && unconfirmedInstant !== instant) {
+      return {
+        data: null,
+        error: new EmailError({
+          code: 'move_unconfirmed',
+          message:
+            "An earlier move of this email to another time wasn't confirmed, so PostHog may still apply it after this one. Nothing was changed.",
+          fix: "To move the email, cancel it, which a late move can't undo, and send it again at the new time.",
+        }),
+      }
+    }
+    try {
+      const result = await this.withRetries(this.config.maxRetries, async () => {
+        let reply: Reply
+        try {
+          reply = await this.request(url, 'PATCH', headers, body)
+        } catch (error) {
+          this.rememberUnconfirmedMove(messageId, instant)
+          throw error
+        }
+        if (mayStillApplyLater(reply)) {
+          this.rememberUnconfirmedMove(messageId, instant)
+        }
+        return parseUpdateReply(reply)
+      })
+      return { data: result, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, MOVE_FAILED) }
+    }
+  }
+
+  private unconfirmedInstantOf(messageId: string): string | undefined {
+    const move = this.unconfirmedMoveByEmail.get(messageId)
+    return move !== undefined && Date.now() < move.refusedUntil ? move.instant : undefined
+  }
+
+  private rememberUnconfirmedMove(messageId: string, instant: string): void {
+    if (this.canceledWhileMovesPending.has(messageId)) {
+      return
+    }
+    const now = Date.now()
+    this.forgetLapsedGuardsOldestFirst(now)
+    this.unconfirmedMoveByEmail.delete(messageId)
+    this.unconfirmedMoveByEmail.set(messageId, { instant, refusedUntil: now + UNCONFIRMED_MOVE_GUARD_MS })
+  }
+
+  private forgetLapsedGuardsOldestFirst(now: number): void {
+    for (const [email, move] of this.unconfirmedMoveByEmail) {
+      if (move.refusedUntil > now) {
+        return
+      }
+      this.unconfirmedMoveByEmail.delete(email)
+    }
+  }
+
+  private async cancelUntracked(id: string): Promise<CancelEmailResponse> {
+    try {
+      const messageId = messageIdOf(id)
+      const { appHost, secretKey } = this.connect(
+        'no email was canceled',
+        'Canceling a scheduled email needs secretKey, a project secret API key with the transactional_email:write scope.'
+      )
+      const url = appHost + CANCEL_PATH.replace('{messageId}', messageId)
+      const headers = this.headers(secretKey, {})
+      const result = await this.withRetries(this.config.maxRetries, async () =>
+        parseCancelReply(await this.request(url, 'POST', headers))
+      )
+      this.unconfirmedMoveByEmail.delete(messageId)
+      if (this.latestMoveByEmail.has(messageId)) {
+        this.canceledWhileMovesPending.add(messageId)
+      }
+      return { data: result, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Canceling the email failed unexpectedly.') }
+    }
+  }
+
+  private async listUntracked(options: ListEmailsOptions): Promise<ListEmailsResponse> {
+    try {
+      const query = listQuery(options)
+      const { appHost, secretKey } = this.connect(
+        'no emails were listed',
+        'Listing scheduled emails needs secretKey, a project secret API key with the transactional_email:read or transactional_email:write scope.'
+      )
+      const url = `${appHost}${LIST_PATH}?${query}`
+      const headers = this.headers(secretKey, {})
+      const page = await this.withRetries(0, async () => parseListReply(await this.request(url, 'GET', headers)))
+      return { data: page, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, 'Listing the scheduled emails failed unexpectedly.') }
     }
   }
 
@@ -410,7 +601,7 @@ export class EmailSender implements Emails {
 
   private async request(
     url: string,
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     headers: Record<string, string>,
     body?: string | Uint8Array<ArrayBuffer>,
     redirect?: 'manual'
@@ -503,14 +694,78 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
+  const scheduledAt = send.scheduledAt === undefined ? undefined : scheduledTime(send.scheduledAt, 'Nothing was sent.')
 
   return {
-    content: snapshotOf({ ...content, to }),
+    content: snapshotOf({ ...content, to, ...(scheduledAt !== undefined && { scheduled_at: scheduledAt }) }),
     files,
     react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+    scheduled: scheduledAt !== undefined,
   }
+}
+
+function scheduledTime(value: unknown, nothingDone: string): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString()
+  }
+  if (typeof value === 'string' && OFFSET_TIME_PATTERN.test(value) && isCalendarDate(value.slice(0, 10))) {
+    return value
+  }
+  throw new EmailError({
+    code: 'invalid_scheduled_at',
+    message: `scheduledAt must be a Date, or an ISO 8601 string with an offset, such as 2026-12-01T09:00:00Z. ${nothingDone}`,
+    field: 'scheduledAt',
+    fix: 'Pass a Date, or add an offset such as Z or +02:00 to the time.',
+  })
+}
+
+function instantToTheMicrosecondOf(time: string): string {
+  const digitsPastTheMillisecond = (/\.\d{3}(\d+)/.exec(time)?.[1] ?? '').replace(/0+$/, '')
+  return `${Date.parse(time)}${digitsPastTheMillisecond ? `.${digitsPastTheMillisecond}` : ''}`
+}
+
+function mayStillApplyLater(gatewayOrServerReply: Reply): boolean {
+  return gatewayOrServerReply.status >= 500
+}
+
+function isCalendarDate(isoDate: string): boolean {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+function messageIdOf(id: unknown): string {
+  if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
+    throw invalid('invalid_message_id', 'id must be the message ID that send() returned.', 'id')
+  }
+  return id.toLowerCase()
+}
+
+function listQuery(options: ListEmailsOptions): string {
+  const list: { [Field in keyof ListEmailsOptions]?: unknown } = options ?? {}
+  const { status, cursor, limit } = list
+  if (status !== 'scheduled') {
+    throw invalid('invalid_list_options', "status must be 'scheduled': only scheduled emails can be listed.", 'status')
+  }
+  if (cursor !== undefined && (typeof cursor !== 'string' || !cursor)) {
+    throw invalid('invalid_list_options', 'cursor must be the next cursor of the page before.', 'cursor')
+  }
+  if (
+    limit !== undefined &&
+    !(typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 && limit <= MAX_LIST_LIMIT)
+  ) {
+    throw invalid('invalid_list_options', `limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`, 'limit')
+  }
+  const query = new URLSearchParams({ status })
+  if (cursor !== undefined) {
+    query.set('cursor', cursor)
+  }
+  if (limit !== undefined) {
+    query.set('limit', String(limit))
+  }
+  return query.toString()
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -794,7 +1049,7 @@ function replyFields(payload: unknown): Record<string, unknown> {
   >
 }
 
-function parseSendReply({ status, text: body, retryAfterMs }: Reply): SendEmailResult {
+function parseSendReply({ status, text: body, retryAfterMs }: Reply, scheduled: boolean): SendEmailResult {
   const fields = replyFields(parseJson(body))
   if (status >= 200 && status < 300) {
     const id = text(fields.message_id)
@@ -817,9 +1072,76 @@ function parseSendReply({ status, text: body, retryAfterMs }: Reply): SendEmailR
         }
       }
     }
-    return { id, replayed: fields.replayed === true, warnings }
+    if (scheduled && fields.status === undefined) {
+      warnings.push({ ...SCHEDULING_UNSUPPORTED })
+    }
+    return {
+      id,
+      replayed: fields.replayed === true,
+      warnings,
+      status: text(fields.status) ?? 'queued',
+      scheduledAt: text(fields.scheduled_at) ?? null,
+    }
   }
   throw replyError(fields, status, retryAfterMs)
+}
+
+function parseUpdateReply({ status, text: body, retryAfterMs }: Reply): UpdateEmailResult {
+  const fields = replyFields(parseJson(body))
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const id = text(fields.id)
+  const emailStatus = text(fields.status)
+  const scheduledAt = text(fields.scheduled_at)
+  if (!id || !emailStatus || !scheduledAt) {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without the new send time.',
+      statusCode: status,
+    })
+  }
+  return { id, status: emailStatus, scheduledAt }
+}
+
+function parseCancelReply({ status, text: body, retryAfterMs }: Reply): CancelEmailResult {
+  const fields = replyFields(parseJson(body))
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const id = text(fields.id)
+  if (!id || fields.status !== 'canceled') {
+    throw new EmailError({
+      code: 'api_error',
+      message: 'PostHog answered without a canceled email.',
+      statusCode: status,
+    })
+  }
+  return { id, status: 'canceled' }
+}
+
+function parseListReply({ status, text: body, retryAfterMs }: Reply): ListEmailsResult {
+  const fields = replyFields(parseJson(body))
+  if (status < 200 || status >= 300) {
+    throw replyError(fields, status, retryAfterMs)
+  }
+  const noPage = (): EmailError =>
+    new EmailError({ code: 'api_error', message: 'PostHog answered without a page of emails.', statusCode: status })
+  const next = fields.next === null ? null : text(fields.next)
+  if (next === undefined || !Array.isArray(fields.results)) {
+    throw noPage()
+  }
+  const results = fields.results.map((row: unknown): ScheduledEmail => {
+    const email = replyFields(row)
+    const id = text(email.id)
+    const scheduledAt = text(email.scheduled_at)
+    const createdAt = text(email.created_at)
+    if (!id || !scheduledAt || !createdAt) {
+      throw noPage()
+    }
+    return { id, scheduledAt, createdAt }
+  })
+  return { results, next }
 }
 
 function parseStatusReply({ status, text: body, retryAfterMs }: Reply): EmailStatus {

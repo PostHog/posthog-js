@@ -58,6 +58,7 @@ export class EmailError extends Error {
   }
 }
 
+const CONFLICTS_A_RETRY_CANT_RESOLVE = ['template_outdated', 'already_sending', 'canceled']
 const ATTACHMENT_LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
 
 function emailErrorName(status: number | undefined, code: string): EmailErrorName {
@@ -81,7 +82,7 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     case 404:
       return 'not_found'
     case 409:
-      return code === 'template_outdated' ? 'validation_error' : 'concurrent_idempotent_requests'
+      return CONFLICTS_A_RETRY_CANT_RESOLVE.includes(code) ? 'validation_error' : 'concurrent_idempotent_requests'
     case 422:
       // The template send route also answers 422 for send checks such as recipient_suppressed.
       return code === 'idempotency_key_reused' ? 'invalid_idempotent_request' : 'validation_error'

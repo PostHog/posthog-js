@@ -19,6 +19,20 @@ export interface SendEmailBase {
   idempotencyKey?: string
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
+  /**
+   * Send the email later, at most 30 days after this call: a `Date`, or an ISO 8601 string with
+   * an offset, such as `'2026-12-01T09:00:00Z'` or `'2026-12-01T10:00:00+01:00'`. A string without
+   * an offset fails before any request, so the email never goes out in a timezone you didn't pick.
+   * A time at or before now sends at once. The idempotency key covers the time, so the same key
+   * with another time sends nothing and returns `idempotency_key_reused`.
+   *
+   * Move the email with `emails.update()`, or stop it with `emails.cancel()`, until PostHog starts
+   * sending it. posthog-node releases from before this option don't take it: from 5.62.0 they
+   * refuse it before any request, and before 5.62.0 they drop it and send the email at once. A
+   * self-hosted PostHog from before scheduled sends also sends it at once, and the result carries
+   * the warning `scheduling_unsupported`.
+   */
+  scheduledAt?: Date | string
 }
 
 /** A template made transactional in PostHog, sent by its ID. */
@@ -174,6 +188,13 @@ export interface SendEmailResult {
   /** True when PostHog had already accepted this idempotency key and returned the first send's result. */
   replayed: boolean
   warnings: EmailWarning[]
+  /**
+   * `scheduled` when the email waits for its `scheduledAt`, else `queued`. A replay returns the
+   * first send's status; read the current one with `emails.get()`.
+   */
+  status: 'queued' | 'scheduled' | (string & {})
+  /** When PostHog will send a scheduled email, as an ISO 8601 timestamp. Null for an email sent now. */
+  scheduledAt: string | null
 }
 
 /**
@@ -185,13 +206,23 @@ export type SendEmailResponse = { data: SendEmailResult; error: null } | { data:
 /**
  * What happened to an email. Later SDK versions can see values this list does not have yet.
  *
+ * - `scheduled`: the email waits for its `scheduledAt`, and stays `scheduled` after a move.
+ * - `canceled`: `emails.cancel()` stopped the email before PostHog started sending it.
  * - `queued`: the email waits to go out.
  * - `sent`: PostHog handed the email to the email provider.
  * - `failed`: the email was not sent, and `reason` says why.
  * - `delivered`: the recipient's mail server accepted the email.
  * - `bounced` and `complained`: the recipient's mail provider reported them after delivery.
  */
-export type EmailDeliveryStatus = 'queued' | 'sent' | 'failed' | 'delivered' | 'bounced' | 'complained'
+export type EmailDeliveryStatus =
+  | 'scheduled'
+  | 'canceled'
+  | 'queued'
+  | 'sent'
+  | 'failed'
+  | 'delivered'
+  | 'bounced'
+  | 'complained'
 
 /** The status of an email that `posthog.emails.send()` queued. */
 export interface EmailStatus {
@@ -214,6 +245,77 @@ export interface EmailStatus {
  * The promise does not reject.
  */
 export type GetEmailResponse = { data: EmailStatus; error: null } | { data: null; error: EmailError }
+
+/** Options for `posthog.emails.update()`. Only the time of a scheduled email can change. */
+export interface UpdateEmailOptions {
+  /** The message ID that `send()` returned. */
+  id: string
+  /**
+   * The new send time: a `Date`, or an ISO 8601 string with an offset. It must stay within 30 days
+   * of the first send call. A time at or before now sends the email at once.
+   */
+  scheduledAt: Date | string
+}
+
+/** A scheduled email after its move. */
+export interface UpdateEmailResult {
+  id: string
+  /** `scheduled` until PostHog sends the email. */
+  status: 'scheduled' | (string & {})
+  /** When PostHog will send the email, as an ISO 8601 timestamp. */
+  scheduledAt: string
+}
+
+/**
+ * What `posthog.emails.update()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type UpdateEmailResponse = { data: UpdateEmailResult; error: null } | { data: null; error: EmailError }
+
+/** A canceled email. */
+export interface CancelEmailResult {
+  id: string
+  status: 'canceled'
+}
+
+/**
+ * What `posthog.emails.cancel()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type CancelEmailResponse = { data: CancelEmailResult; error: null } | { data: null; error: EmailError }
+
+/** Options for `posthog.emails.list()`. */
+export interface ListEmailsOptions {
+  /** Which emails to list. Only `scheduled` emails can be listed. */
+  status: 'scheduled'
+  /** The `next` cursor of the page before. Leave it out for the first page. */
+  cursor?: string
+  /** At most this many emails, 1 to 100. Defaults to 100. */
+  limit?: number
+}
+
+/** A scheduled email that waits to go out. */
+export interface ScheduledEmail {
+  /** The message ID that `send()` returned. */
+  id: string
+  /** When PostHog will send the email, as an ISO 8601 timestamp, after any move. */
+  scheduledAt: string
+  /** When PostHog accepted the send, as an ISO 8601 timestamp. */
+  createdAt: string
+}
+
+/** One page of scheduled emails, in send-time order. */
+export interface ListEmailsResult {
+  results: ScheduledEmail[]
+  /** Pass it as `cursor` to read the next page. Null on the last page. */
+  next: string | null
+}
+
+/**
+ * What `posthog.emails.list()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type ListEmailsResponse = { data: ListEmailsResult; error: null } | { data: null; error: EmailError }
 
 /**
  * Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
@@ -252,8 +354,8 @@ export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null 
 
 /**
  * The `posthog.emails` API: sends transactional email from PostHog email templates or from
- * content your code rendered, reads the status of each email it sent, and sets a recipient's
- * topic preferences.
+ * content your code rendered, now or at a later time, reads the status of each email it sent,
+ * moves, cancels and lists scheduled emails, and sets a recipient's topic preferences.
  */
 export interface Emails {
   /**
@@ -261,18 +363,68 @@ export interface Emails {
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
-   * an unavailable service are retried with the same idempotency key.
+   * an unavailable service are retried with the same idempotency key. With `scheduledAt`, the
+   * email waits until that time, and `data.status` is `scheduled`.
    */
   send(options: SendEmailOptions): Promise<SendEmailResponse>
 
   /**
-   * Read the status of an email that `send()` queued, for 30 days after the send.
+   * Read the status of an email that `send()` queued, for 30 days after the send. Every
+   * status change, such as a cancel or PostHog sending the email, can take a few seconds to show.
    *
    * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when no
    * email of this project has the ID, when the email is older than 30 days, or for a few
    * seconds after the send. Network errors, rate limits and an unavailable service are retried.
    */
   get(id: string): Promise<GetEmailResponse>
+
+  /**
+   * Move a scheduled email to a new time. Only the time changes: to change the content, the
+   * recipient or the sender, cancel the email and send it again.
+   *
+   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
+   * PostHog sends the email, `not_found` a few seconds after it went out, `canceled` after a
+   * cancel, and `invalid_scheduled_at` for a time more than 30 days after the first send call. A time at or before now sends the
+   * email at once. Network errors, rate limits and an unavailable service are retried, because
+   * the same move twice ends the same; after a move to now, the retry can answer `already_sending`,
+   * which means the email is going out. Moves of one email from this client run one after another,
+   * in call order.
+   *
+   * A move that wasn't confirmed, such as after a timeout or a server error, may still reach
+   * PostHog later. So until this client cancels the email, or 31 days pass and it has gone out, this
+   * client refuses to move that email to another time, with the error code `move_unconfirmed` and
+   * without a request; a move to the same time still goes out. To move it, cancel the email, which a
+   * late move can't undo, and send it again. Moves of the email that are out or queued when PostHog
+   * confirms the cancel guard nothing, and the cancel doesn't wait for them. Moves from another
+   * client aren't ordered with this client's.
+   */
+  update(options: UpdateEmailOptions): Promise<UpdateEmailResponse>
+
+  /**
+   * Stop a scheduled email before PostHog starts sending it. Its result reads `canceled` at once;
+   * `emails.get()` can take a few seconds to show it, and `emails.list()` usually shows it within a minute.
+   *
+   * Resolves to `{ data, error }` and does not reject. The error code is `already_sending` while
+   * PostHog sends the email, and `not_found` a few seconds after it went out. Network errors,
+   * rate limits and an unavailable service are retried.
+   *
+   * For a few seconds after a cancel or a send, until the email's status catches up, PostHog can
+   * answer unavailable. When that outlasts the retries, the error's name is `service_unavailable`,
+   * and the next call can answer the same until the status catches up. Once it has, a second
+   * cancel answers the same as the first while PostHog can still tell, and `not_found` after that.
+   */
+  cancel(id: string): Promise<CancelEmailResponse>
+
+  /**
+   * List the project's scheduled emails that wait to go out, in send-time order, one page per call.
+   * A new email, a cancel, a move, or PostHog sending an email usually shows here within a
+   * minute. For the current state, `emails.update()` returns the new time, `emails.cancel()`
+   * returns `canceled`, and `emails.get()` can take a few seconds to show any other status change.
+   *
+   * Resolves to `{ data, error }` and does not reject. Never retried: call it again to read the
+   * page again.
+   */
+  list(options: ListEmailsOptions): Promise<ListEmailsResponse>
 
   /**
    * Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
