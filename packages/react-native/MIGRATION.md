@@ -19,6 +19,7 @@ You need to change code or configuration if your app does any of these:
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header in `requestHeaders` and expects capture requests to carry it
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events (see [AI events](#ai-events))
+- registers `$is_identified` or `$process_person_profile`, or sends `null` property values, including in `$set` (see [Event properties](#event-properties))
 
 ## Reverse proxies and self-hosted PostHog
 
@@ -152,6 +153,16 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 - Event uuids are sent in lowercase.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
+
+## Event properties
+
+5.0 sets person properties on events the way posthog-ios 4.0, posthog-android 4.0 and posthog_flutter 6.0 do:
+
+- A registered or caller `$is_identified` replaces the SDK's value on that event. In 4.x the SDK's value always won.
+- `$identify`, `$create_alias` and `$groupidentify` events leave off a registered `$process_person_profile`. In 4.x, registering `false` sent it on them, and PostHog dropped them, so `identify()`, `alias()` and `group()` had no effect. A `before_send` hook can still set it.
+- `$autocapture` events carry `$process_person_profile` and `$is_identified` like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
+- `null` and `undefined` property values are left off events, including inside `$set` and `$set_once`. Array elements keep their positions. In 4.x a `null` in `$set` set the person property to null; to clear a person property, use `$unset`.
+- A caller or registered `$process_person_profile` still doesn't change the `personProfiles` policy, as in 4.x.
 
 ## AI events
 
