@@ -150,6 +150,32 @@ export function _resetDeprecationWarningsForTests(): void {
   _emittedDeprecations.clear()
 }
 
+/**
+ * 6.0 renamed these options to camelCase. The old names are deprecated aliases: they still work
+ * in 6.x and log one deprecation error per process, and the camelCase name wins when both are set.
+ */
+const RENAMED_OPTIONS = [
+  ['before_send', 'beforeSend'],
+  ['custom_blocked_useragents', 'customBlockedUserAgents'],
+  ['disable_capture_url_hashes', 'disableCaptureUrlHashes'],
+  ['__preview_capture_bot_pageviews', '__previewCaptureBotPageviews'],
+] as const
+
+function resolveRenamedOptions(options: PostHogOptions): PostHogOptions {
+  const resolved: Record<string, unknown> = { ...options }
+  for (const [oldName, newName] of RENAMED_OPTIONS) {
+    if (resolved[oldName] !== undefined && resolved[newName] === undefined) {
+      resolved[newName] = resolved[oldName]
+      emitDeprecationWarningOnce(
+        `option ${oldName}`,
+        `\`${oldName}\` is deprecated: use \`${newName}\` instead. The old name will be removed in the next major version.`,
+        console.error
+      )
+    }
+  }
+  return resolved as PostHogOptions
+}
+
 function normalizeApiKey(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -498,6 +524,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Configuration options for the client
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
+    options = resolveRenamedOptions(options)
     const normalizedApiKey = normalizeApiKey(apiKey)
     const keyProblem = apiKeyProblem(normalizedApiKey)
     const normalizedOptions = {
@@ -1733,7 +1760,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   sendFeatureFlags: {
    *     onlyEvaluateLocally: true,
    *     personProperties: { plan: 'premium' },
-   *     groupProperties: { org: { tier: 'enterprise' } }
+   *     groupProperties: { org: { tier: 'enterprise' } },
    *     flagKeys: ['flag1', 'flag2']
    *   }
    * })
@@ -1823,7 +1850,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   distinctId: 'user_123',
    *   properties: {
    *     $set: { name: 'John Doe', email: 'john@example.com' },
-   *     $set_once: { first_login: new Date().toISOString() }
+   *     $set_once: { first_login: new Date().toISOString() },
    *     $anon_distinct_id: 'anonymous_user_456'
    *   }
    * })

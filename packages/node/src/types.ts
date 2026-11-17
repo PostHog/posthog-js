@@ -257,6 +257,10 @@ export type PostHogOptions = Omit<
    */
   disableCaptureUrlHashes?: boolean
   /**
+   * @deprecated Use `disableCaptureUrlHashes` instead. This property will be removed in the next major version.
+   */
+  disable_capture_url_hashes?: boolean
+  /**
    * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
    * gets `$geoip_disable: true` unless the event, its context or `register()` sets
    * `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's
@@ -534,6 +538,10 @@ export type PostHogOptions = Omit<
    */
   beforeSend?: BeforeSendFn | BeforeSendFn[]
   /**
+   * @deprecated Use `beforeSend` instead. This property will be removed in the next major version.
+   */
+  before_send?: BeforeSendFn | BeforeSendFn[]
+  /**
    * Evaluation contexts for feature flags.
    * When set, only feature flags that have at least one matching evaluation tag
    * will be evaluated for this SDK instance. Feature flags with no evaluation tags
@@ -557,6 +565,10 @@ export type PostHogOptions = Omit<
    */
   customBlockedUserAgents?: string[]
   /**
+   * @deprecated Use `customBlockedUserAgents` instead. This property will be removed in the next major version.
+   */
+  custom_blocked_useragents?: string[]
+  /**
    * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
    * Enables collection of bot traffic as $bot_pageview events instead of dropping them.
    * When enabled, events with a $raw_user_agent property that matches the bot detection list
@@ -574,6 +586,10 @@ export type PostHogOptions = Omit<
    * ```
    */
   __previewCaptureBotPageviews?: boolean
+  /**
+   * @deprecated Use `__previewCaptureBotPageviews` instead. This property will be removed in the next major version.
+   */
+  __preview_capture_bot_pageviews?: boolean
   /**
    * When enabled, all feature flag evaluations will use local evaluation only,
    * never falling back to server-side evaluation. This prevents unexpected server
