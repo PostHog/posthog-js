@@ -1,5 +1,61 @@
 # posthog-node
 
+## 5.74.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/core@1.68.0
+
+## 5.73.1
+
+### Patch Changes
+
+- [#5676](https://github.com/PostHog/posthog-js/pull/5676) [`e8e850a`](https://github.com/PostHog/posthog-js/commit/e8e850af9ffbb8eb57cd3f86eed8fc379c90180a) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(node): `shutdown()` now also sends logs captured while its logs flush was in flight, instead of dropping them
+  (2026-11-14)
+
+## 5.73.0
+
+### Minor Changes
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-13)
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters and `$feature_flag_called` events return the same values as before. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A flag record with a field of the wrong JSON type, such as a string `metadata.version`, now reads as disabled: flag getters return `false` and it has no payload. Other flags in the same response are not affected. This applies to both response versions, so tests that mock `/flags` may need to match the new URL and send correctly typed fields. (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87)]:
+  - @posthog/core@1.67.3
+
+## 5.72.0
+
+### Minor Changes
+
+- [#5514](https://github.com/PostHog/posthog-js/pull/5514) [`4a2cbe7`](https://github.com/PostHog/posthog-js/commit/4a2cbe7d8344a3acbe613cce68be217e84df1a55) Thanks [@Silthus](https://github.com/Silthus)! - Send cc, bcc and attachments with email from code. The SDK uploads each file PostHog doesn't have yet, then sends the email with the files' hashes. An email carries at most 10 files and 40 MB after Base64 encoding, about 29 MB of files.
+  (2026-11-13)
+
+## 5.71.0
+
+### Minor Changes
+
+- [#5630](https://github.com/PostHog/posthog-js/pull/5630) [`2877954`](https://github.com/PostHog/posthog-js/commit/287795495f5c7be2462c02714338ac0ddf964b1c) Thanks [@Silthus](https://github.com/Silthus)! - A send with `templateKey` now takes `tracking` and `sensitive`.
+
+  `tracking` chooses what PostHog tracks for the email. `tracking: true` turns on opens, clicks and engagement events. `tracking: false` turns them all off. An object such as `{ clicks: true }` or `{ engagement: false }` turns each kind on or off, and a key you leave out keeps its default. Without it, PostHog counts opens, captures engagement events, and counts clicks only when the email isn't sensitive.
+
+  `sensitive` marks an email that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs. Without it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when the matching template is sensitive. A send that sets neither option works exactly as before.
+
+  `captureEngagement` is deprecated in favor of `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both.
+
+  `tracking` and `sensitive` need PostHog's API support, which is rolling out. Until it reaches your PostHog instance, PostHog refuses a send that sets either one. (2026-11-12)
+
 ## 5.70.0
 
 ### Minor Changes

@@ -2,14 +2,16 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  type CallToolRequest,
   CallToolRequestSchema,
+  type CallToolResult,
   CallToolResultSchema,
   ListToolsRequestSchema,
   type ListToolsResult,
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
-import type { MCPAnalyticsOptions, MCPRequestLike } from '../types'
+import type { MCPAnalyticsOptions } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -30,7 +32,7 @@ import { EventCapture, fakePostHog } from './test-utils'
  * server, then handlers attached at `server.server` afterwards.
  */
 
-const TOOLS = [
+const TOOLS: ListToolsResult['tools'] = [
   {
     name: 'get_trends',
     description: 'Return a trends time series for an event.',
@@ -45,7 +47,7 @@ const TOOLS = [
 async function setupLateRegisteredServer(
   options: MCPAnalyticsOptions = { context: true },
   tools: ListToolsResult['tools'] = TOOLS,
-  callHandler?: (request: MCPRequestLike) => Promise<unknown>
+  callHandler?: (request: CallToolRequest) => Promise<CallToolResult>
 ) {
   // Capability is declared at construction — mcp-nest does this before the
   // serverMutator (where instrument runs) is invoked.
@@ -122,7 +124,7 @@ describe('Late handler registration (mcp-nest ordering)', () => {
   })
 
   it('preserves a colliding real tool registered directly on the low-level server', async () => {
-    const collisionTools = [
+    const collisionTools: ListToolsResult['tools'] = [
       {
         name: 'get_more_tools',
         description: 'A real adapter-owned tool',

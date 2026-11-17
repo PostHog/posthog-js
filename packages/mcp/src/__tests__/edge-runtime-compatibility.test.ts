@@ -12,6 +12,9 @@
 
 import { captureException } from '../extensions/exceptions'
 
+// Not in this package's `lib`; present at runtime only on Cloudflare Workers and other edge runtimes.
+declare const caches: object | undefined
+
 describe('Edge Runtime Compatibility', () => {
   describe('Exception Capture - Graceful Degradation', () => {
     it('should capture basic exception info without filesystem access', () => {

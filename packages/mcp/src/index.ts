@@ -115,8 +115,13 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
  * @param options - Optional configuration. See `MCPAnalyticsOptions`.
  * @returns A `(server) => server` mutator that instruments the server and returns it.
  */
-function instrumentMutator<TServer>(posthog: PostHog, options?: MCPAnalyticsOptions): (server: TServer) => TServer {
-  return (server: TServer): TServer => {
+// The returned function is generic so a direct `instrumentMutator(posthog)(server)` keeps
+// the server's type; `TServer` stays as an optional upper bound for existing callers.
+function instrumentMutator<TServer = unknown>(
+  posthog: PostHog,
+  options?: MCPAnalyticsOptions
+): <T extends TServer>(server: T) => T {
+  return <T extends TServer>(server: T): T => {
     instrument(server, posthog, options)
     return server
   }

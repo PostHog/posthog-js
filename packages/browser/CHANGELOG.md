@@ -1,5 +1,63 @@
 # posthog-js
 
+## 1.450.1
+
+### Patch Changes
+
+- [#5735](https://github.com/PostHog/posthog-js/pull/5735) [`ea89609`](https://github.com/PostHog/posthog-js/commit/ea89609c816e40fc47d6dfbe44dac02dd1b80e2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Send base64 beacon bodies as bare `text/plain` so `/i/v0/e/` accepts page-unload events when gzip compression is disabled or unavailable
+  (2026-11-17)
+
+## 1.450.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/core@1.68.0
+  - @posthog/browser-common@0.12.0
+
+## 1.449.2
+
+### Patch Changes
+
+- [#5737](https://github.com/PostHog/posthog-js/pull/5737) [`9852049`](https://github.com/PostHog/posthog-js/commit/9852049ec29819e6ac5e3609077a2bdd458f2253) Thanks [@TueHaulund](https://github.com/TueHaulund)! - record: throttle scroll events per element, so a resting scroll offset is no longer dropped when another element scrolls in the same 100ms window (e.g. Silk sheets on Safari before 26.2, which has no `scrollend`).
+  (2026-11-14)
+
+## 1.449.1
+
+### Patch Changes
+
+- Updated dependencies [[`ec79e8a`](https://github.com/PostHog/posthog-js/commit/ec79e8a47db0bff6de7f3fbcb3ef7bcd24991097)]:
+  - @posthog/browser-common@0.11.0
+
+## 1.449.0
+
+### Minor Changes
+
+- [#5721](https://github.com/PostHog/posthog-js/pull/5721) [`6cebc6c`](https://github.com/PostHog/posthog-js/commit/6cebc6cdeddc7356fed62247f3736a91a2543bed) Thanks [@haacked](https://github.com/haacked)! - When the experimental `metrics.flags` option is on, the browser SDK splits each `/flags` attempt that gets a response into three histograms with the same attributes as `posthog.flags.request.duration`. `posthog.flags.request.pre_send_duration` runs from dispatch until the request starts, which includes body compression. `posthog.flags.request.network_duration` runs from the request start until the last byte of the response arrives, taken from the request's Resource Timing entry. `posthog.flags.request.main_thread_duration` runs from that last byte until the SDK's callback runs, which includes reading and parsing the response body. The three add up to the total. An attempt records them only when the browser reports its Resource Timing entry within 5 seconds of the callback and that entry can't belong to another `/flags` request that this copy of the SDK sends to the same URL, so it may record the total without them. `posthog.flags.request.duration` is unchanged. The option, the metric names, and their attributes may change or be removed in any release.
+  (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`6cebc6c`](https://github.com/PostHog/posthog-js/commit/6cebc6cdeddc7356fed62247f3736a91a2543bed)]:
+  - @posthog/types@1.425.1
+
+## 1.448.0
+
+### Minor Changes
+
+- [#5675](https://github.com/PostHog/posthog-js/pull/5675) [`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add `trace_propagation_targets`: an opt-in allowlist of hostnames or origins that receive a W3C `traceparent` header on `fetch` and `XMLHttpRequest` requests, so backend traces can continue from the browser. Unlisted hosts never get the header, and a `traceparent` set by the app or by OpenTelemetry instrumentation is never overwritten or duplicated.
+  (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`6af1863`](https://github.com/PostHog/posthog-js/commit/6af1863c12ed5755d8caf13fd878b594d5bc6b15)]:
+  - @posthog/types@1.425.0
+
 ## 1.447.15
 
 ### Patch Changes

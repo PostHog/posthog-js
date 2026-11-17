@@ -117,7 +117,7 @@ exports[`server wire snapshots > snapshots a maximal flags request body 1`] = `
     "User-Agent": "posthog-node/<sdk-version>",
   },
   "method": "POST",
-  "url": "https://us.example.test/flags/?v=2",
+  "url": "https://us.example.test/flags/?v=4",
 }
 `;
 

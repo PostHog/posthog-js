@@ -79,6 +79,33 @@ describe('PostHog.prepareEventMessage', () => {
       expect(message.properties.service_name).toBe('billing-worker')
     })
 
+    it('prefers the traces name when traces and metrics name different services', async () => {
+      const message = await prepare({
+        traces: { serviceName: 'checkout-api' },
+        metrics: { serviceName: 'billing-worker' },
+      })
+      expect(message.properties.service_name).toBe('checkout-api')
+    })
+
+    it('prefers traces resource attributes over a metrics resource attribute', async () => {
+      const message = await prepare({
+        traces: { resourceAttributes: { 'service.name': 'checkout-api' } },
+        metrics: { resourceAttributes: { 'service.name': 'billing-worker' } },
+      })
+      expect(message.properties.service_name).toBe('checkout-api')
+    })
+
+    it('falls back to metrics when traces is configured without a name', async () => {
+      const message = await prepare({ traces: {}, metrics: { serviceName: 'billing-worker' } })
+      expect(message.properties.service_name).toBe('billing-worker')
+    })
+
+    it('does not take a name from host resource attributes', async () => {
+      // The Node entrypoint adds host attributes (os.*) to spans; none of them is service.name.
+      const message = await prepare({ traces: {} })
+      expect(message.properties).not.toHaveProperty('service_name')
+    })
+
     it('stamps events prepared without context properties (identify, alias, groupIdentify)', async () => {
       const client = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
