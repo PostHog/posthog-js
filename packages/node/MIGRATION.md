@@ -25,7 +25,7 @@ Read the checklist first, then the sections that apply to you.
 
 **During your upgrade**
 
-- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` → [Rename configuration options](#rename-configuration-options)
+- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` from TypeScript → [Rename configuration options](#rename-configuration-options)
 - [ ] You set `POSTHOG_CAPTURE_MODE` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from TypeScript with positional arguments after `error` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `enterContext()` → [Use callback-scoped context](#use-callback-scoped-context)
@@ -50,6 +50,7 @@ Read the checklist first, then the sections that apply to you.
 - [ ] You set `$process_person_profile`, `$cookieless_mode`, or `$ignore_sent_at` as a property → [Move to event options](#move-to-event-options)
 - [ ] You send `$ai_` events with `capture()` or `captureImmediate()` instead of `captureAi()` → [Send AI events with captureAi](#send-ai-events-with-captureai)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from JavaScript with positional arguments after `error` → [Move captureException arguments](#move-captureexception-arguments)
+- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` from JavaScript → [Rename configuration options](#rename-configuration-options)
 
 ## Before you upgrade
 
@@ -140,6 +141,10 @@ const posthog = new PostHog('<project_api_key>', {
   __previewCaptureBotPageviews: true,
 })
 ```
+
+TypeScript rejects the 5.x.x names. JavaScript calls with them still work in 6.x.x after 6.0.0, and each name logs one deprecation warning per process. They will be removed in the next major version.
+
+6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there. If you set both names, the camelCase one wins, and the old one is ignored with one warning per process.
 
 Event options sent directly to capture, such as `process_person_profile`, and event properties such as `$session_id` keep their existing names.
 

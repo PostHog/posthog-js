@@ -1,4 +1,5 @@
 import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { _resetDeprecationWarningsForTests } from '@/client'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import {
@@ -1076,6 +1077,82 @@ describe('PostHog Node.js', () => {
 
       expect(logSpy).toHaveBeenCalledWith('[PostHog]', "Event 'test-event' was rejected in beforeSend function")
       logSpy.mockRestore()
+    })
+
+    describe('5.x option names', () => {
+      beforeEach(() => {
+        _resetDeprecationWarningsForTests()
+      })
+
+      it('runs a before_send hook and warns once that the name is deprecated', async () => {
+        const options = {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: (event: any) => {
+            if (event.event === 'sensitive') {
+              return null
+            }
+            delete event.properties.email
+            return event
+          },
+        }
+        // A JavaScript caller: TypeScript rejects the 5.x names.
+        const ph = new PostHog('TEST_API_KEY', options as PostHogOptions)
+        new PostHog('TEST_API_KEY', options as PostHogOptions)
+
+        ph.capture({ distinctId: '123', event: 'with-email', properties: { email: 'a@b.c', plan: 'pro' } })
+        ph.capture({ distinctId: '123', event: 'sensitive' })
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents!.map((event) => event.event)).toEqual(['with-email'])
+        expect(batchEvents![0].properties).not.toHaveProperty('email')
+        expect(batchEvents![0].properties).toHaveProperty('plan', 'pro')
+        expect(warnSpy.mock.calls.filter((call) => String(call[0]).includes('before_send'))).toEqual([
+          [
+            '[PostHog] `before_send` is deprecated: use `beforeSend` instead. The old name will be removed in the next major version.',
+          ],
+        ])
+      })
+
+      it('uses beforeSend and ignores before_send when both are set', async () => {
+        const oldHook = vi.fn((event) => event)
+        const newHook = vi.fn((event) => event)
+        // A JavaScript caller: TypeScript rejects the 5.x names.
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: oldHook,
+          beforeSend: newHook,
+        } as PostHogOptions)
+
+        ph.capture({ distinctId: '123', event: 'test-event' })
+        await waitForFlushTimer()
+
+        expect(newHook).toHaveBeenCalledTimes(1)
+        expect(oldHook).not.toHaveBeenCalled()
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[PostHog] `before_send` is ignored because `beforeSend` is set. Remove `before_send`.'
+        )
+      })
+
+      it('maps the other renamed options to their camelCase names', () => {
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          custom_blocked_useragents: ['MyCustomBot'],
+          disable_capture_url_hashes: true,
+          __preview_capture_bot_pageviews: true,
+        } as PostHogOptions)
+
+        expect(ph.options.customBlockedUserAgents).toEqual(['MyCustomBot'])
+        expect(ph.options.disableCaptureUrlHashes).toBe(true)
+        expect(ph.options.__previewCaptureBotPageviews).toBe(true)
+        expect(ph.options).not.toHaveProperty('custom_blocked_useragents')
+        expect(ph.options).not.toHaveProperty('disable_capture_url_hashes')
+        expect(ph.options).not.toHaveProperty('__preview_capture_bot_pageviews')
+      })
     })
   })
 
