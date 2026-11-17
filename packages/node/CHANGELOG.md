@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.0.2
+
+### Patch Changes
+
+- [#5776](https://github.com/PostHog/posthog-js/pull/5776) [`4495a66`](https://github.com/PostHog/posthog-js/commit/4495a6658501de3aa6b7e7a2d37500bb965c40e4) Thanks [@gewenyu99](https://github.com/gewenyu99)! - Accept the 5.x option names `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, and `__preview_capture_bot_pageviews` again as deprecated aliases. Each one maps to its camelCase name and logs one deprecation error per process. When both names are set, the camelCase one wins. In 6.0.0 the old names were ignored without a warning, so a `before_send` hook stopped running.
+  (2026-11-17)
+
 ## 6.0.1
 
 ### Patch Changes
