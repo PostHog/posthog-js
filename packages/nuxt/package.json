@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -40,7 +40,7 @@
   "dependencies": {
     "@posthog/cli": "catalog:",
     "@nuxt/kit": ">=3.7.0",
-    "posthog-node": "workspace:^",
+    "posthog-node": "^5.58.0",
     "@posthog/core": "workspace:^",
     "@posthog/plugin-utils": "workspace:^",
     "posthog-js": "workspace:^"

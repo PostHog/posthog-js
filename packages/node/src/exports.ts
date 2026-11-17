@@ -5,6 +5,9 @@ export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { CaptureError } from './capture-v1/errors'
+export type { CaptureDroppedEvent, CaptureErrorParams } from './capture-v1/errors'
+export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export type {

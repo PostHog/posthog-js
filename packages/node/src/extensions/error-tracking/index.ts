@@ -11,6 +11,45 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
+/**
+ * Exception properties that the SDK or PostHog owns (sdk-specs `exception-event-metadata`), so
+ * a caller's properties never set them.
+ */
+const RESERVED_EXCEPTION_PROPERTIES: ReadonlySet<string> = new Set([
+  '$exception_list',
+  '$exception_level',
+  '$exception_source',
+  '$debug_images',
+  '$exception_types',
+  '$exception_values',
+  '$exception_sources',
+  '$exception_functions',
+  '$exception_fingerprint_version',
+  '$exception_fingerprint_record',
+  '$exception_issue_id',
+  '$exception_release',
+  '$cymbal_errors',
+])
+
+/**
+ * The `$exception_level` values a caller may set (sdk-specs `exception-event-metadata`), read
+ * case-insensitively with the same aliases as posthog-python. Any other value keeps the default.
+ */
+const EXCEPTION_LEVELS: ReadonlyMap<string, CoreErrorTracking.SeverityLevel> = new Map([
+  ['fatal', 'fatal'],
+  ['critical', 'fatal'],
+  ['alert', 'fatal'],
+  ['emergency', 'fatal'],
+  ['error', 'error'],
+  ['warning', 'warning'],
+  ['warn', 'warning'],
+  ['log', 'log'],
+  ['notice', 'info'],
+  ['info', 'info'],
+  ['trace', 'debug'],
+  ['debug', 'debug'],
+])
+
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
@@ -53,23 +92,27 @@ export default class ErrorTracking {
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>,
+    level?: CoreErrorTracking.SeverityLevel,
     context?: ContextData
   ): Promise<EventMessage> {
     const applyContextSnapshot = snapshotEventContext(context)
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const properties: EventMessage['properties'] = {}
+    for (const [key, value] of Object.entries(additionalProperties ?? {})) {
+      if (!RESERVED_EXCEPTION_PROPERTIES.has(key)) {
+        properties[key] = value
+      }
+    }
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
-
-    const injectedReleaseId = CoreErrorTracking.getInjectedReleaseId()
-    if (injectedReleaseId) {
-      properties.$release_id = injectedReleaseId
+    const exceptionLevel = typeof level === 'string' ? EXCEPTION_LEVELS.get(level.toLowerCase()) : undefined
+    if (exceptionLevel !== undefined) {
+      exceptionProperties.$exception_level = exceptionLevel
     }
 
     return applyContextSnapshot({
       event: '$exception',
-      // Leave distinctId resolution to prepareEventMessage which checks request context
-      // and falls back to a random UUID with $process_person_profile = false
+      // The client resolves a missing id: the context id, else a personless id.
       distinctId: distinctId,
       properties: {
         ...exceptionProperties,
@@ -128,6 +171,7 @@ export default class ErrorTracking {
             this.client.getErrorPropertiesBuilder(),
             exception,
             hint,
+            undefined,
             undefined,
             undefined,
             this.client.getContext()

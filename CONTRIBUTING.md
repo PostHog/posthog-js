@@ -48,6 +48,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
+| `docusaurus/`                | `posthog-docusaurus`                 | Docusaurus analytics plugin                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
 | `node/`                      | `posthog-node`                       | Node.js backend SDK (see its `engines.node` requirement) |
 | `mcp/`                       | `@posthog/mcp`                       | MCP server analytics                                     |

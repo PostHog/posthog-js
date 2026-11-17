@@ -49,8 +49,12 @@ const EXPOSURE_LEAVES_OUT = [
 const ajv = new Ajv2020({ strict: false, allErrors: true })
 ajv.addFormat('uuid', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
-function contractSchema(name: string): (properties: Record<string, any>) => void {
+function contractSchema(name: string, allowUnevaluated = false): (properties: Record<string, any>) => void {
   const schema = load(name)
+  if (allowUnevaluated) {
+    delete schema.$id
+    schema.required = schema.required.filter((key: string) => key !== '$feature_flag_response')
+  }
   const validate = ajv.compile(schema)
   const declared = new Set(Object.keys(schema.properties))
   return (properties) => {
@@ -64,6 +68,9 @@ function contractSchema(name: string): (properties: Record<string, any>) => void
 }
 
 const checkFlagCalled = contractSchema('feature_flag_called_context.schema.json')
+// A failed record's $feature_flag_called omits $feature_flag_response (sdk-specs#211).
+// This validator drops only that requirement from the pinned schema.
+const checkUnevaluatedFlagCalled = contractSchema('feature_flag_called_context.schema.json', true)
 const checkExposure = contractSchema('experiment_exposure_properties.schema.json')
 
 // --- Responses ------------------------------------------------------------------------------
@@ -275,12 +282,12 @@ function withoutTransport(properties: Record<string, any>): Record<string, any> 
   return rest
 }
 
-/** A `before_send` hook that records each event it sees and keeps it. */
-function recordingBeforeSend(): { seen: any[]; before_send: (event: any) => any } {
+/** A `beforeSend` hook that records each event it sees and keeps it. */
+function recordingBeforeSend(): { seen: any[]; beforeSend: (event: any) => any } {
   const seen: any[] = []
   return {
     seen,
-    before_send: (event) => {
+    beforeSend: (event) => {
       seen.push(structuredClone(event))
       return event
     },
@@ -423,11 +430,20 @@ describe('$experiment_exposure', () => {
     it.each(ATTRIBUTION_CASES.flatMap(([source, expected]) => TWO_PATHS.map((path) => [source, path, expected])))(
       '%s through %s',
       async (source, path, expected) => {
-        const events = await readEvents(path as string, [readerResponse(source as string)], { key: 'garden-layout' })
+        const body = readerResponse(source as string)
+        const events = await readEvents(path as string, [body], { key: 'garden-layout' })
 
         const [called] = named(events, FLAG_CALLED, 'garden-layout')
         expect(attribution(called.properties)).toEqual(expected)
-        checkFlagCalled(called.properties)
+        if (body.flags['garden-layout'].failed === true) {
+          expect(called.properties.$feature_flag_response).toBeUndefined()
+          expect(called.properties.$feature_flag_error).toBe(
+            body.errorsWhileComputingFlags ? 'errors_while_computing_flags,evaluation_failed' : 'evaluation_failed'
+          )
+          checkUnevaluatedFlagCalled(called.properties)
+        } else {
+          checkFlagCalled(called.properties)
+        }
         expect(named(events, EXPOSURE, 'garden-layout')).toHaveLength(
           '$feature_flag_variant_key' in (expected as object) ? 1 : 0
         )
@@ -469,7 +485,11 @@ describe('$experiment_exposure', () => {
           $feature_flag_reason_code: code,
         })
         expect(named(events, EXPOSURE)).toEqual([])
-        if (validOutcome) {
+        if (record.failed === true) {
+          expect(called.properties.$feature_flag_response).toBeUndefined()
+          expect(called.properties.$feature_flag_error).toBe('evaluation_failed')
+          checkUnevaluatedFlagCalled(called.properties)
+        } else if (validOutcome) {
           checkFlagCalled(called.properties)
         }
       }
@@ -744,6 +764,34 @@ describe('$experiment_exposure', () => {
       expect(exposure.event).toBe(EXPOSURE)
       expect(exposure.properties.plan).toBe('team')
       expect(attribution(exposure.properties)).toEqual(attribution(EXPECTED_EXPOSURE))
+    })
+
+    it('a minimized config version 2 call keeps the properties that set options', async () => {
+      const { client, events } = createClient([
+        response([split({ hasExperiment: false })], { minimalFlagCalledEvents: true }),
+      ])
+      await client.register({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+        plan: 'team',
+      })
+
+      ;(await client.evaluateFlags(DISTINCT_ID)).getFlag(FLAG)
+      await client.shutdown()
+
+      const [called] = events
+      expect(called.event).toBe(FLAG_CALLED)
+      expect(called.properties).not.toHaveProperty('plan')
+      expect(attribution(called.properties)).toEqual(EXPECTED_ATTRIBUTION)
+      // The send step moves these into options, so the minimized event must keep them.
+      expect(called.properties).toMatchObject({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+      })
     })
 
     it('a minimized config version 1 call drops super properties named like the attribution', async () => {
@@ -1180,9 +1228,9 @@ describe('$experiment_exposure', () => {
     }
 
     it.each([FLAG_CALLED, EXPOSURE].flatMap((event) => VALUE_PATHS.map((path) => [event, path])))(
-      'a %s that before_send drops keeps its dedupe key (%s)',
+      'a %s that beforeSend drops keeps its dedupe key (%s)',
       async (event, path) => {
-        const { client, events } = createClient([response([split()])], { before_send: dropping(event) })
+        const { client, events } = createClient([response([split()])], { beforeSend: dropping(event) })
 
         // The application dropped the event, so the second read does not send it again. The other
         // event of the first read is still sent, once.
@@ -1191,9 +1239,9 @@ describe('$experiment_exposure', () => {
     )
 
     it.each([FLAG_CALLED, EXPOSURE].flatMap((event) => VALUE_PATHS.map((path) => [event, path])))(
-      'a %s whose before_send throws keeps no dedupe key (%s)',
+      'a %s whose beforeSend throws keeps no dedupe key (%s)',
       async (event, path) => {
-        const { client, events } = createClient([response([split()])], { before_send: throwingOnce(event) })
+        const { client, events } = createClient([response([split()])], { beforeSend: throwingOnce(event) })
 
         // The other event of the first read is still sent, and the failed one is sent by the second
         // read, once.
@@ -1273,7 +1321,7 @@ describe('$experiment_exposure', () => {
 
     it('a failed exposure capture does not change the read', async () => {
       const { client } = createClient([response([split()])], {
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event?.event === EXPOSURE) {
             throw new Error('rejected')
           }
@@ -1408,11 +1456,11 @@ describe('$experiment_exposure', () => {
     })
   })
 
-  it('before_send sees both events and may still change them', async () => {
-    const { seen, before_send } = recordingBeforeSend()
+  it('beforeSend sees both events and may still change them', async () => {
+    const { seen, beforeSend } = recordingBeforeSend()
     const { client, events } = createClient([response([split()])], {
-      before_send: (event) => {
-        before_send(event)
+      beforeSend: (event) => {
+        beforeSend(event)
         return event && { ...event, properties: { ...event.properties, edited: true } }
       },
     })

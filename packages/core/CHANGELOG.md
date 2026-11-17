@@ -1,5 +1,30 @@
 # @posthog/core
 
+## 1.69.0
+
+### Minor Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Debug mode logs an emitted event's payload through an overridable `describeDebugPayload`, so an SDK can log a summary instead. The default is unchanged.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogFetchOptions` has an optional `redirect` field, so a custom `fetch` sees how capture asks it to handle redirects.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export `V7Generator`, so an SDK can generate v7 uuids from its own random source.
+  (2026-11-17)
+
+## 1.68.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
 ## 1.67.3
 
 ### Patch Changes
