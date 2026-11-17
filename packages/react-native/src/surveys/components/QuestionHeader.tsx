@@ -7,6 +7,7 @@ import {
   closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getFontFamily,
   getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
@@ -25,19 +26,20 @@ export function QuestionHeader({
 }): JSX.Element {
   // Use textColor override if provided, otherwise auto-calculate from background
   const textColor = appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor)
+  const fontFamily = getFontFamily(appearance)
 
   return (
     <View style={styles.container}>
       <Text
         maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'question')}
-        style={[styles.question, { color: textColor }]}
+        style={[styles.question, { color: textColor, fontFamily }]}
       >
         {question}
       </Text>
       {shouldRenderDescription(description, descriptionContentType) && (
         <Text
           maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
-          style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}
+          style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity, fontFamily }]}
         >
           {description}
         </Text>
