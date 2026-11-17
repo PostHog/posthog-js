@@ -254,7 +254,7 @@ Events from a session with no resolved identity are personless by default: they 
 over that default.
 
 `beforeSend` receives the options as `event.options` and can change them. The SDK sends what it
-returns. On posthog-node 6.x.x, the client's own `before_send` sees them too. posthog-node 5.x.x has no
+returns. On posthog-node 6.x.x, the client's own `beforeSend` sees them too. posthog-node 5.x.x has no
 per-event options, so the SDK sends the known options the way that version reads them and drops
 other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
 `options` field instead of `eventOptions`.

@@ -96,10 +96,10 @@ describe('event uuids on the client', () => {
     expect(uuidWarnings()).toEqual([])
   })
 
-  it('shows before_send the canonical uuid', async () => {
+  it('shows beforeSend the canonical uuid', async () => {
     const seen: (string | undefined)[] = []
     await wireUuid(`{${CANONICAL.toUpperCase()}}`, {
-      before_send: (event) => {
+      beforeSend: (event) => {
         seen.push(event?.uuid)
         return event
       },
@@ -111,22 +111,22 @@ describe('event uuids on the client', () => {
   it.each<[string, string, string | RegExp, unknown[][]]>([
     ['canonicalizes', `urn:uuid:${CANONICAL.toUpperCase()}`, CANONICAL, []],
     ['replaces, with one warning,', 'not-a-uuid', UUID_V7, [[WARNING]]],
-  ])('%s a uuid that before_send sets', async (_label, hookUuid, expected, warnings) => {
-    const sent = await wireUuid(undefined, { before_send: (event) => event && { ...event, uuid: hookUuid } })
+  ])('%s a uuid that beforeSend sets', async (_label, hookUuid, expected, warnings) => {
+    const sent = await wireUuid(undefined, { beforeSend: (event) => event && { ...event, uuid: hookUuid } })
 
     expect(sent).toMatch(expected)
     expect(uuidWarnings()).toEqual(warnings)
   })
 
-  it('warns once when the caller and before_send set different invalid uuids', async () => {
-    const sent = await wireUuid('bad-uuid', { before_send: (event) => event && { ...event, uuid: 'other-bad-uuid' } })
+  it('warns once when the caller and beforeSend set different invalid uuids', async () => {
+    const sent = await wireUuid('bad-uuid', { beforeSend: (event) => event && { ...event, uuid: 'other-bad-uuid' } })
 
     expect(sent).toMatch(UUID_V7)
     expect(uuidWarnings()).toEqual([[WARNING]])
   })
 
-  it('warns once when the caller and before_send both keep an invalid uuid', async () => {
-    const sent = await wireUuid('bad-uuid', { before_send: (event) => event })
+  it('warns once when the caller and beforeSend both keep an invalid uuid', async () => {
+    const sent = await wireUuid('bad-uuid', { beforeSend: (event) => event })
 
     expect(sent).toMatch(UUID_V7)
     expect(uuidWarnings()).toEqual([[WARNING]])

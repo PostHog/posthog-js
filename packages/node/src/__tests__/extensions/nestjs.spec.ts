@@ -179,8 +179,8 @@ describe('PostHogInterceptor', () => {
         expectedRequestPath: '/api/test#details',
       },
       {
-        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
-        options: { disable_capture_url_hashes: true },
+        name: 'strips request URL hashes when disableCaptureUrlHashes is enabled',
+        options: { disableCaptureUrlHashes: true },
         expectedCurrentUrl: '/api/test?token=secret',
         expectedRequestPath: '/api/test',
       },
@@ -342,41 +342,44 @@ describe('PostHogInterceptor', () => {
           }),
       })
 
-      posthog.enterContext({
-        sessionId: 'ambient-session',
-        distinctId: 'ambient-user',
-        properties: { ambient: true },
-      })
+      await posthog.withContext(
+        {
+          sessionId: 'ambient-session',
+          distinctId: 'ambient-user',
+          properties: { ambient: true },
+        },
+        async () => {
+          const headerRequest = interceptor.intercept(
+            createMockContext({
+              headers: {
+                'x-posthog-session-id': 'request-session',
+                'x-posthog-distinct-id': 'request-user',
+              },
+            }),
+            createHandler('with-headers')
+          )
+          const headerlessRequest = interceptor.intercept(
+            createMockContext({ headers: {}, path: '/headerless' }),
+            createHandler('headerless')
+          )
 
-      const headerRequest = interceptor.intercept(
-        createMockContext({
-          headers: {
-            'x-posthog-session-id': 'request-session',
-            'x-posthog-distinct-id': 'request-user',
-          },
-        }),
-        createHandler('with-headers')
+          await lastValueFrom(headerRequest)
+          await lastValueFrom(headerlessRequest)
+
+          expect(capturedContexts['with-headers']).toMatchObject({
+            sessionId: 'request-session',
+            distinctId: 'request-user',
+          })
+          expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
+          // Without headers, identity already in the context fills in, but its properties don't leak.
+          expect(capturedContexts.headerless).toMatchObject({
+            sessionId: 'ambient-session',
+            distinctId: 'ambient-user',
+            properties: { $request_path: '/headerless' },
+          })
+          expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
+        }
       )
-      const headerlessRequest = interceptor.intercept(
-        createMockContext({ headers: {}, path: '/headerless' }),
-        createHandler('headerless')
-      )
-
-      await lastValueFrom(headerRequest)
-      await lastValueFrom(headerlessRequest)
-
-      expect(capturedContexts['with-headers']).toMatchObject({
-        sessionId: 'request-session',
-        distinctId: 'request-user',
-      })
-      expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
-      // Without headers, identity already in the context fills in, but its properties don't leak.
-      expect(capturedContexts.headerless).toMatchObject({
-        sessionId: 'ambient-session',
-        distinctId: 'ambient-user',
-        properties: { $request_path: '/headerless' },
-      })
-      expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
     })
 
     it('should pass through successful responses', async () => {

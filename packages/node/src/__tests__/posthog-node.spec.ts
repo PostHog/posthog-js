@@ -716,14 +716,14 @@ describe('PostHog Node.js', () => {
     })
   })
 
-  describe('before_send', () => {
-    it('should allow events through when before_send returns the event', async () => {
+  describe('beforeSend', () => {
+    it('should allow events through when beforeSend returns the event', async () => {
       const beforeSendFn = vi.fn((event) => event)
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: beforeSendFn,
+        beforeSend: beforeSendFn,
       })
 
       ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
@@ -752,13 +752,13 @@ describe('PostHog Node.js', () => {
       })
     })
 
-    it('should drop events when before_send returns null', async () => {
+    it('should drop events when beforeSend returns null', async () => {
       const beforeSendFn = vi.fn(() => null)
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: beforeSendFn,
+        beforeSend: beforeSendFn,
       })
 
       ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
@@ -768,7 +768,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
     })
 
-    it('should support array of before_send functions', async () => {
+    it('should support array of beforeSend functions', async () => {
       const beforeSend1 = vi.fn((event) => ({ ...event, properties: { ...event.properties, added1: true } }))
       const beforeSend2 = vi.fn((event) => ({ ...event, properties: { ...event.properties, added2: true } }))
 
@@ -776,7 +776,7 @@ describe('PostHog Node.js', () => {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: [beforeSend1, beforeSend2],
+        beforeSend: [beforeSend1, beforeSend2],
       })
 
       ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
@@ -794,7 +794,7 @@ describe('PostHog Node.js', () => {
       })
     })
 
-    it('should stop processing if any before_send returns null', async () => {
+    it('should stop processing if any beforeSend returns null', async () => {
       const beforeSend1 = vi.fn((event) => event)
       const beforeSend2 = vi.fn(() => null)
       const beforeSend3 = vi.fn((event) => event)
@@ -803,7 +803,7 @@ describe('PostHog Node.js', () => {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: [beforeSend1, beforeSend2, beforeSend3],
+        beforeSend: [beforeSend1, beforeSend2, beforeSend3],
       })
 
       ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
@@ -815,14 +815,14 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
     })
 
-    it('should fail closed when a before_send function throws', async () => {
-      const error = new Error('before_send failed')
+    it('should fail closed when a beforeSend function throws', async () => {
+      const error = new Error('beforeSend failed')
       const sentinel = vi.fn((event) => event)
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: [
+        beforeSend: [
           (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
           () => {
             throw error
@@ -838,7 +838,7 @@ describe('PostHog Node.js', () => {
 
       expect(sentinel).not.toHaveBeenCalled()
       expect(errorSpy).toHaveBeenCalledTimes(1)
-      expect(errorSpy).toHaveBeenCalledWith("[PostHog] Error in before_send function for event 'test-event' (Error)")
+      expect(errorSpy).toHaveBeenCalledWith("[PostHog] Error in beforeSend function for event 'test-event' (Error)")
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(error.message)
       expect(mockedFetch).not.toHaveBeenCalledWith(anyCaptureUrl, expect.anything())
       errorSpy.mockRestore()
@@ -850,7 +850,7 @@ describe('PostHog Node.js', () => {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: beforeSendFn,
+        beforeSend: beforeSendFn,
       })
 
       await ph.captureImmediate({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
@@ -929,7 +929,7 @@ describe('PostHog Node.js', () => {
         { distinct_id: '123', alias: '1234', beforeSend: true },
       ],
     ] as Array<[string, (ph: PostHog) => Promise<void>, string, string, Record<string, any>]>)(
-      'should run before_send for %s',
+      'should run beforeSend for %s',
       async (_, send, expectedEvent, expectedDistinctId, expectedProperties) => {
         const beforeSendFn = vi.fn((event) => ({
           ...event,
@@ -939,7 +939,7 @@ describe('PostHog Node.js', () => {
           host: 'http://example.com',
           fetchRetryCount: 0,
           disableCompression: true,
-          before_send: beforeSendFn,
+          beforeSend: beforeSendFn,
         })
 
         await send(ph)
@@ -991,14 +991,14 @@ describe('PostHog Node.js', () => {
       ],
       ['aliasImmediate', (ph: PostHog) => ph.aliasImmediate({ distinctId: '123', alias: '1234' })],
     ] as Array<[string, (ph: PostHog) => Promise<void>]>)(
-      'should drop %s when before_send returns null',
+      'should drop %s when beforeSend returns null',
       async (_, send) => {
         const beforeSendFn = vi.fn(() => null)
         const ph = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           fetchRetryCount: 0,
           disableCompression: true,
-          before_send: beforeSendFn,
+          beforeSend: beforeSendFn,
         })
 
         await send(ph)
@@ -1043,7 +1043,7 @@ describe('PostHog Node.js', () => {
           host: 'http://example.com',
           fetchRetryCount: 0,
           disableCompression: true,
-          before_send: (event) => event,
+          beforeSend: (event) => event,
         })
         ph.register({ registered_prop: 'registered_value' })
 
@@ -1067,7 +1067,7 @@ describe('PostHog Node.js', () => {
         host: 'http://example.com',
         fetchRetryCount: 0,
         disableCompression: true,
-        before_send: beforeSendFn,
+        beforeSend: beforeSendFn,
       })
       ph.debug(true)
 
