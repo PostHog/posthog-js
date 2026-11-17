@@ -3228,7 +3228,8 @@ export class PostHog extends PostHogCore {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
-      screenshotModeBackgroundCapture = false,
+      iOSCaptureMethod: localIOSCaptureMethod,
+      screenshotModeBackgroundCapture: legacyBackgroundCapture = false,
       sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
@@ -3243,6 +3244,16 @@ export class PostHog extends PostHogCore {
         )
       }
     }
+
+    const iOSCaptureMethod = localIOSCaptureMethod ?? (legacyBackgroundCapture ? 'background' : 'standard')
+    if (iOSCaptureMethod === 'gpu' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
+      this._logger.warn(
+        `sessionReplayConfig.iOSCaptureMethod: 'gpu' requires @posthog/react-native-plugin 3.0.0 or later. ` +
+          `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) captures with 'standard'.`
+      )
+    }
+    // Plugins before 3.0 only read the boolean.
+    const screenshotModeBackgroundCapture = iOSCaptureMethod === 'background'
 
     let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
@@ -3326,6 +3337,7 @@ export class PostHog extends PostHogCore {
       ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
       ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
       ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
+      iOSCaptureMethod,
       screenshotModeBackgroundCapture,
       sampleRate,
       iOSdebouncerDelayMs,
