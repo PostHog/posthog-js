@@ -47,17 +47,17 @@ function diagnostics(
     }
 }
 
-function report(mode, status = 'passed', origin = 'migration') {
+function report(mode, status = 'passed', suite = 'migration') {
     const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
-    const caseSource = origin === 'acceptance' ? { ...source, path: 'acceptance/public/identify.feature' } : source
+    const caseSource = suite === 'acceptance' ? { ...source, path: 'acceptance/public/identify.feature' } : source
     return {
         contract_version: 'sdk-compliance-v2-draft2',
-        run_id: `run-${mode}`,
+        run_id: `run-${suite}-${mode}`,
         profiles: [{ id: profile }],
         results: [
             {
                 profile_id: profile,
-                case_id: origin === 'acceptance' ? 'identify-example' : 'example',
+                case_id: suite === 'acceptance' ? 'identify-example' : 'example',
                 source: caseSource,
                 result: {
                     status,
@@ -136,32 +136,37 @@ async function exercise(options = {}) {
         },
     }
     try {
-        for (const mode of ['v0', 'v1']) {
+        for (const mode of ['v1']) {
             if (options.missing?.includes(mode)) continue
             const dir = join(root, `node-v2-${mode}`)
             mkdirSync(dir)
             writeFileSync(join(dir, 'source.txt'), options.source || sha)
-            if (options.missingReports?.includes(mode)) continue
-            const folder = join(dir, 'acceptance')
-            mkdirSync(folder)
-            const data = options.reports?.[mode] || report(mode)
-            writeFileSync(join(folder, 'report.json'), typeof data === 'string' ? data : JSON.stringify(data))
-            const candidate = options.diagnostics?.[mode]
-            if (candidate !== null && typeof data !== 'string') {
-                const diagnostic = candidate ?? diagnostics(data)
+            for (const suite of ['acceptance', 'migration']) {
+                if (suite === 'acceptance' && options.missingAcceptance?.includes(mode)) continue
+                const folder = suite === 'acceptance' ? 'acceptance' : 'reports'
+                mkdirSync(join(dir, folder), { recursive: true })
+                const data =
+                    (suite === 'acceptance' ? options.acceptanceReports : options.reports)?.[mode] ||
+                    report(mode, 'passed', suite)
+                writeFileSync(join(dir, folder, 'report.json'), typeof data === 'string' ? data : JSON.stringify(data))
+                const candidate =
+                    suite === 'acceptance' ? options.acceptanceDiagnostics?.[mode] : options.diagnostics?.[mode]
+                if (candidate !== null && typeof data !== 'string') {
+                    const diagnostic = candidate ?? diagnostics(data)
+                    writeFileSync(
+                        join(dir, folder, 'report.json.diagnostics.json'),
+                        typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
+                    )
+                }
                 writeFileSync(
-                    join(folder, 'report.json.diagnostics.json'),
-                    typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
+                    join(dir, folder, 'cli-exit.txt'),
+                    (suite === 'acceptance' ? options.acceptanceExit : options.exit) || '0'
+                )
+                writeFileSync(
+                    join(dir, folder, 'report-check-exit.txt'),
+                    (suite === 'acceptance' ? options.acceptanceValidation : options.validation) || '0'
                 )
             }
-            writeFileSync(
-                join(folder, 'cli-exit.txt'),
-                typeof options.exit === 'string' ? options.exit : options.exit?.[mode] || '0'
-            )
-            writeFileSync(
-                join(folder, 'report-check-exit.txt'),
-                typeof options.validation === 'string' ? options.validation : options.validation?.[mode] || '0'
-            )
         }
         let error
         try {
@@ -175,20 +180,12 @@ async function exercise(options = {}) {
     }
 }
 
-test('workflow invokes unified acceptance once per capture profile', () => {
-    assert.equal((workflow.match(/bash compliance\/node\/v2\/run-compliance\.sh/g) || []).length, 1)
-    assert.match(workflow, /mode: \[v0, v1\]/)
-    assert.match(workflow, /timeout-minutes: 60/)
-    assert.match(workflow, /SDK_COMPLIANCE_RUN_TIMEOUT_MS: '2400000'/)
-    assert.match(workflow, /"\$CAPTURE_MODE" "\$RUNNER_TEMP\/node-compliance\/acceptance"/)
-})
-
-test('creates one combined comment for both profiles and writes the same summary', async () => {
+test('creates one combined comment for both suites and writes the same summary', async () => {
     const { summary, calls, error } = await exercise()
     assert.equal(error, undefined)
-    assert.match(summary, /Capture v0/)
-    assert.match(summary, /Capture v1/)
-    assert.equal((summary.match(/^## Capture /gm) || []).length, 2)
+    assert.doesNotMatch(summary, /Capture v0/)
+    assert.match(summary, /Capture v1 — acceptance/)
+    assert.match(summary, /Capture v1 — migration/)
     assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
     assert.doesNotMatch(summary, /example|<details>/)
     assert.equal(calls[0], 'summary')
@@ -207,44 +204,40 @@ test('updates the existing bot comment, ignoring a matching human comment', asyn
     assert.equal(calls.at(-1)[1].comment_id, 2)
 })
 
-test('combines canonical and migrated outcomes in one acceptance section per profile', async () => {
-    const combined = report('v1')
-    combined.results.push(...report('v1', 'failed_assertion', 'acceptance').results)
+test('shows acceptance failures without losing migration results', async () => {
     const { summary, error } = await exercise({
-        reports: { v1: combined },
-        exit: { v0: '0', v1: '1' },
-        validation: { v0: '0', v1: '1' },
+        acceptanceReports: { v1: report('v1', 'failed_assertion', 'acceptance') },
+        acceptanceExit: '1',
+        acceptanceValidation: '1',
     })
     assert.equal(error, undefined)
-    assert.match(summary, /Capture v1[\s\S]*✅ 1 passed \/ ❌ 1 non-passing/)
+    assert.match(summary, /Capture v1 — acceptance[\s\S]*❌ 1 non-passing/)
     assert.match(summary, /acceptance\/report.json.diagnostics.json/)
     assert.match(summary, /identify-example/)
-    assert.match(summary, /Harness exit: 1; report validation exit: 1/)
-    assert.equal((summary.match(/^## Capture /gm) || []).length, 2)
+    assert.match(summary, /Capture v1 — migration/)
     assert.equal((summary.match(/All selected cases passed/g) || []).length, 1)
 })
 
-test('shows failed cases without losing the other profile', async () => {
+test('shows migration failures without losing acceptance results', async () => {
     const { summary, error } = await exercise({
-        reports: { v0: report('v0', 'failed_assertion') },
-        exit: { v0: '1', v1: '0' },
-        validation: { v0: '1', v1: '0' },
+        reports: { v1: report('v1', 'failed_assertion') },
+        exit: '1',
+        validation: '1',
     })
     assert.equal(error, undefined)
-    assert.match(summary, /✅ 0 passed \/ ❌ 1 non-passing/)
+    assert.match(summary, /Capture v1 — migration[\s\S]*✅ 0 passed \/ ❌ 1 non-passing/)
     assert.match(summary, /Unexpected flag value/)
-    assert.match(summary, /Capture v1/)
+    assert.match(summary, /Capture v1 — acceptance/)
     assert.equal((summary.match(/All selected cases passed/g) || []).length, 1)
 })
 
 for (const options of [
-    { missing: ['v0'] },
-    { missing: ['v0', 'v1'] },
-    { reports: { v0: 'not json' } },
+    { missing: ['v1'] },
     { reports: { v1: 'not json' } },
-    { missingReports: ['v0'] },
+    { acceptanceReports: { v1: 'not json' } },
+    { missingAcceptance: ['v1'] },
     { source: 'wrong-sha' },
-    { reports: { v0: report('v1') } },
+    { reports: { v1: report('v0') } },
 ]) {
     test(`reports unavailable/incomplete data: ${JSON.stringify(options)}`, async () => {
         const { summary, calls, error } = await exercise(options)
@@ -257,7 +250,7 @@ for (const options of [
 for (const options of [{ noPr: true }, { fork: true }, { actor: 'dependabot[bot]' }, { currentSha: 'b'.repeat(40) }]) {
     test(`retains summary without posting: ${JSON.stringify(options)}`, async () => {
         const { summary, calls } = await exercise(options)
-        assert.match(summary, /Capture v0/)
+        assert.match(summary, /Capture v1/)
         assert.ok(!calls.some((call) => Array.isArray(call)))
     })
 }
@@ -269,30 +262,27 @@ test('preserves summary when comment publication fails', async () => {
 })
 
 test('escapes artifact markup and mentions and bounds the comment size', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     data.results[0].case_id = '<script>@someone **bad**</script>'
     data.results[0].result.failure.message = '[click](https://example.com)'.repeat(1000)
     data.results = Array(100).fill(data.results[0])
-    const v1 = JSON.parse(JSON.stringify(data))
-    v1.profiles[0].id = 'node-analytics-v1'
-    for (const result of v1.results) result.profile_id = 'node-analytics-v1'
-    const { summary } = await exercise({ reports: { v0: data, v1 }, diagnostics: { v0: null, v1: null } })
+    const { summary } = await exercise({ reports: { v1: data }, diagnostics: { v1: null } })
     assert.doesNotMatch(summary, /<script>|@someone|\[click\]/)
     assert.match(summary, /80 more non-passing/)
     assert.ok(summary.length < 65536)
 })
 
 test('empty selections retain zero totals and harness errors', async () => {
-    const data = report('v0')
+    const data = report('v1')
     data.results = []
     data.errors = [{ message: 'fixture startup failed' }]
-    const { summary } = await exercise({ reports: { v0: data } })
+    const { summary } = await exercise({ reports: { v1: data } })
     assert.match(summary, /fixture startup failed/)
     assert.match(summary, /✅ 0 passed \/ ❌ 0 non-passing/)
 })
 
 test('renders attributed getter failure, public arguments, expected/actual, specs commit and artifact drill-down', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     const diagnostic = diagnostics(data)
     diagnostic.cases[0].wire_requests = [{ headers: { authorization: 'wire-secret' } }]
     Object.assign(diagnostic.cases[0].failure.details, { headers: 'header-secret', unknown: 'unknown-secret' })
@@ -301,7 +291,7 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
         config: { token: 'config-secret' },
     })
     diagnostic.cases[0].failure.details.arguments.person_properties.token = 'nested-secret'
-    const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
+    const { summary } = await exercise({ reports: { v1: data }, diagnostics: { v1: diagnostic } })
     assert.match(summary, /<details>\n<summary>❌ example/)
     assert.match(summary, /Then the local flag value is false/)
     assert.match(summary, /Operation: <code>\/get&#95;feature&#95;flag<\/code>/)
@@ -310,8 +300,8 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
     assert.match(summary, /Actual value:<pre>true<\/pre>/)
     assert.ok(summary.includes(`https://github.com/PostHog/sdk-specs/blob/${specsCommit}/${source.path}#L1187`))
     assert.doesNotMatch(summary, /-secret|cccccccccccccccc|unknown|wire_requests/)
-    assert.match(summary, /node-v2-v0/)
-    assert.match(summary, /acceptance\/report.json.diagnostics.json/)
+    assert.match(summary, /node-v2-v1/)
+    assert.match(summary, /reports\/report.json.diagnostics.json/)
     assert.match(summary, /actions\/runs\/123#artifacts/)
 })
 
@@ -334,10 +324,10 @@ for (const [expected, actual, rendered] of [
     [0, { kind: 'value', value: { kind: 'value', value: 1 } }, 'Actual value:<pre>{"kind":"value","value":1}</pre>'],
 ]) {
     test(`renders actual values distinctly from field states and SDK outcomes: ${JSON.stringify(actual)}`, async () => {
-        const data = report('v0', 'failed_assertion')
+        const data = report('v1', 'failed_assertion')
         const { summary } = await exercise({
-            reports: { v0: data },
-            diagnostics: { v0: diagnostics(data, { operation: '/get_feature_flag', expected, actual }) },
+            reports: { v1: data },
+            diagnostics: { v1: diagnostics(data, { operation: '/get_feature_flag', expected, actual }) },
         })
         const decode = (text) => text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
         assert.ok(decode(summary).includes(`Expected:<pre>${JSON.stringify(expected)}</pre>`))
@@ -346,11 +336,11 @@ for (const [expected, actual, rendered] of [
 }
 
 test('retains bounded, escaped error details for a thrown outcome', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     const { summary } = await exercise({
-        reports: { v0: data },
+        reports: { v1: data },
         diagnostics: {
-            v0: diagnostics(data, {
+            v1: diagnostics(data, {
                 operation: '/get_feature_flag',
                 expected: true,
                 actual: { kind: 'thrown', error: { message: '<failure>', token: 'secret-token' } },
@@ -364,11 +354,11 @@ test('retains bounded, escaped error details for a thrown outcome', async () => 
 
 for (const operation of ['/flags', '/flags/']) {
     test(`renders remote wire assertion fields and missing values for ${operation}`, async () => {
-        const data = report('v0', 'failed_assertion')
+        const data = report('v1', 'failed_assertion')
         const { summary } = await exercise({
-            reports: { v0: data },
+            reports: { v1: data },
             diagnostics: {
-                v0: diagnostics(data, {
+                v1: diagnostics(data, {
                     operation,
                     field: 'person_properties.email',
                     expected: 'user@example.com',
@@ -384,10 +374,10 @@ for (const operation of ['/flags', '/flags/']) {
 }
 
 test('old diagnostics preserve exact failed step without invented values', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     const diagnostic = diagnostics(data)
     delete diagnostic.cases[0].failure
-    const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
+    const { summary } = await exercise({ reports: { v1: data }, diagnostics: { v1: diagnostic } })
     assert.match(summary, /Unexpected flag value/)
     assert.match(summary, /local-evaluation-v1.feature:1187/)
     assert.doesNotMatch(summary, /Expected:|Actual (value|field|outcome):|Arguments:|Detailed diagnostics unavailable/)
@@ -403,7 +393,7 @@ for (const [name, mutate] of [
     [
         'profile',
         (d) => {
-            d.cases[0].profile_id = 'node-analytics-v1'
+            d.cases[0].profile_id = 'node-legacy'
         },
     ],
     [
@@ -429,12 +419,12 @@ for (const [name, mutate] of [
     ['missing', () => null],
 ]) {
     test(`rejects ${name} diagnostics without losing report totals and source`, async () => {
-        const data = report('v0', 'failed_assertion')
+        const data = report('v1', 'failed_assertion')
         const diagnostic = diagnostics(data)
         const replacement = mutate(diagnostic)
         const { summary } = await exercise({
-            reports: { v0: data },
-            diagnostics: { v0: replacement === undefined ? diagnostic : replacement },
+            reports: { v1: data },
+            diagnostics: { v1: replacement === undefined ? diagnostic : replacement },
         })
         assert.match(summary, /Detailed diagnostics unavailable or mismatched/)
         assert.match(summary, /❌ 1 non-passing/)
@@ -444,10 +434,10 @@ for (const [name, mutate] of [
 }
 
 test('rejects failure details attributed to a different step', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     const diagnostic = diagnostics(data)
     diagnostic.cases[0].failure.failed_step = { ...failedStep, index: 6 }
-    const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
+    const { summary } = await exercise({ reports: { v1: data }, diagnostics: { v1: diagnostic } })
     assert.match(summary, /Unexpected flag value/)
     assert.doesNotMatch(summary, /Expected:|Actual (value|field|outcome):|Then the local/)
 })
@@ -460,10 +450,10 @@ for (const provenance of [
     { dirty: false, commit: 'https://example.com' },
 ]) {
     test(`does not link uncertain specs provenance: ${JSON.stringify(provenance)}`, async () => {
-        const data = report('v0', 'failed_assertion')
+        const data = report('v1', 'failed_assertion')
         const diagnostic = diagnostics(data)
         diagnostic.distribution.source = provenance
-        const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
+        const { summary } = await exercise({ reports: { v1: data }, diagnostics: { v1: diagnostic } })
         assert.match(summary, /local-evaluation-v1.feature:1187/)
         assert.doesNotMatch(summary, /sdk-specs\/blob/)
     })
@@ -478,23 +468,23 @@ for (const path of [
     'a\nbad.feature',
 ]) {
     test(`does not link unsafe source path: ${JSON.stringify(path)}`, async () => {
-        const data = report('v0', 'failed_assertion')
+        const data = report('v1', 'failed_assertion')
         data.results[0].result.failure.failed_step = { index: 5, source: { ...source, path } }
-        const { summary } = await exercise({ reports: { v0: data } })
+        const { summary } = await exercise({ reports: { v1: data } })
         assert.doesNotMatch(summary, /sdk-specs\/blob/)
     })
 }
 
 test('encodes source URL path segments', async () => {
-    const data = report('v0', 'failed_assertion')
+    const data = report('v1', 'failed_assertion')
     data.results[0].result.failure.failed_step = { index: 5, source: { ...source, path: 'migration/a b#(c).feature' } }
-    const { summary } = await exercise({ reports: { v0: data } })
+    const { summary } = await exercise({ reports: { v1: data } })
     assert.match(summary, /\/migration\/a%20b%23%28c%29.feature#L1118/)
 })
 
-test('bounds worst-case escaped and multibyte failures across both profiles without broken details', async () => {
+test('bounds worst-case escaped and multibyte failures across both suites without broken details', async () => {
     const reports = {}
-    for (const mode of ['v0', 'v1']) {
+    for (const mode of ['v1']) {
         const data = report(mode, 'failed_assertion')
         const failure = data.results[0]
         failure.result.failure.message = '<@[`&\\*_\n'.repeat(1000)
@@ -514,10 +504,15 @@ test('bounds worst-case escaped and multibyte failures across both profiles with
             return [mode, d]
         })
     )
-    const { summary } = await exercise({ reports, diagnostics: allDiagnostics })
+    const { summary } = await exercise({
+        reports,
+        diagnostics: allDiagnostics,
+        acceptanceReports: reports,
+        acceptanceDiagnostics: allDiagnostics,
+    })
     assert.ok(Buffer.byteLength(summary, 'utf8') <= 60000)
-    assert.match(summary, /Capture v0/)
-    assert.match(summary, /Capture v1/)
+    assert.match(summary, /Capture v1 — acceptance/)
+    assert.match(summary, /Capture v1 — migration/)
     assert.match(summary, /more non-passing cases/)
     assert.doesNotMatch(summary, /<script>|@mention|&#\d*…/)
     assert.equal((summary.match(/<details>/g) || []).length, (summary.match(/<\/details>/g) || []).length)
@@ -527,7 +522,7 @@ test('bounds worst-case escaped and multibyte failures across both profiles with
 test('enforces the overall UTF-8 comment budget with an explicit artifact truncation notice', async () => {
     const reports = {}
     const allDiagnostics = {}
-    for (const mode of ['v0', 'v1']) {
+    for (const mode of ['v1']) {
         const data = report(mode, 'failed_assertion')
         data.results[0].result.failure.message = 'x'.repeat(400)
         data.results = Array.from({ length: 100 }, (_, i) => ({
@@ -539,11 +534,15 @@ test('enforces the overall UTF-8 comment budget with an explicit artifact trunca
         allDiagnostics[mode] = diagnostics(data)
         for (const c of allDiagnostics[mode].cases) delete c.failure
     }
-    const { summary, calls } = await exercise({ reports, diagnostics: allDiagnostics })
+    const { summary, calls } = await exercise({
+        reports,
+        diagnostics: allDiagnostics,
+        acceptanceReports: reports,
+        acceptanceDiagnostics: allDiagnostics,
+    })
     assert.ok(Buffer.byteLength(summary, 'utf8') <= 60000)
     assert.match(summary, /Report truncated; see \[workflow artifacts\]/)
-    assert.match(summary, /Capture v0/)
-    assert.match(summary, /Capture v1/)
+    assert.match(summary, /Capture v1 — acceptance/)
     assert.equal((summary.match(/<details>/g) || []).length, (summary.match(/<\/details>/g) || []).length)
     assert.equal(calls.at(-1)[1].body, summary)
 })

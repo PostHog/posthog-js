@@ -86,7 +86,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         flagDefinitionCacheProvider: mockCacheProvider,
         featureFlagsPollingInterval: null,
         fetchRetryCount: 0,
-        before_send: () => null,
+        beforeSend: () => null,
         ...options,
       })
       posthog.on('error', onErrorMock)
@@ -183,7 +183,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         flagDefinitionCacheProvider: mockCacheProvider,
         featureFlagsPollingInterval: 1000,
         fetchRetryCount: 0,
-        before_send: () => null,
+        beforeSend: () => null,
       })
       try {
         expect(await publisher.waitForLocalEvaluationReady()).toBe(true)
