@@ -423,6 +423,25 @@ describe('config', () => {
             })
         })
 
+        it.each([
+            ['PascalCase', '{"Username":"jane","Password":"hunter2"}', 'password'],
+            ['upper case', '{"ChallengeResponses":{"PASSWORD":"hunter2"}}', 'password'],
+            ['camelCase', '{"refreshToken":"abc"}', 'token'],
+            ['PascalCase', '{"AuthenticationResult":{"AccessToken":"abc"}}', 'auth'],
+        ])('case insensitively redacts a %s body key on the deny list', (_casing, body, deniedText) => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: '[SessionRecording] Request body redacted as might contain: ' + deniedText,
+                responseBody: '[SessionRecording] Response body redacted as might contain: ' + deniedText,
+            })
+        })
+
         it('mask request fn replaces scrubPayload functionality', () => {
             const posthogConfig = defaultConfig()
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {

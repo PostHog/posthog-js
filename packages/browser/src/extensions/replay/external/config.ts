@@ -236,11 +236,16 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     if (!shouldCaptureValue(scrubbed, false)) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED
     }
+    const lowercased = scrubbed.toLowerCase()
+    let deniedText: string | undefined
     each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
-        if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
-            scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + text
+        if (isUndefined(deniedText) && lowercased.indexOf(text) !== -1) {
+            deniedText = text
         }
     })
+    if (!isUndefined(deniedText)) {
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + deniedText
+    }
 
     return scrubbed
 }
