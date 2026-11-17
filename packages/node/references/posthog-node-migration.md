@@ -335,7 +335,7 @@ A property set to `undefined` counts as unset, and one set to `null` counts as s
 
 A `$lib` or `$lib_version` counts as unset unless it's a non-empty string.
 
-`$set`, `$set_once`, `$groups`, and `$group_set` fill one level deep. When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
+`$set`, `$set_once`, `$groups`, and `$group_set` fill one level deep. When the call and a later step both set one of them to an object, the later step adds only the keys the call left out. An object with its own `toJSON` is kept whole, so its `toJSON` decides what is sent.
 
 For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`. A `$set` in `register()` or a context sets those person properties on every event it reaches.
 
@@ -345,7 +345,7 @@ These changes follow from this order:
 
 - **SDK values.** A `$lib`, `$is_server`, `$geoip_disable`, or feature flag property set on the event, in context, or with `register()` now wins over the SDK's value. In 5.x.x the SDK overwrote some of them. For `$lib_version`, see [Check SDK identity](#check-sdk-identity).
 - **The `disableGeoip` setting.** `disableGeoip` still defaults to `true`, so events get `$geoip_disable: true` unless something else sets it.
-- **`$geoip_disable` properties.** A `$geoip_disable` property set on the event, in context, with `register()`, or in `beforeSend` now wins over the client setting. For example, `register({ $geoip_disable: false })` turns GeoIP lookup on for events.
+- **`$geoip_disable` properties.** A `$geoip_disable` property set on the event, in context, with `register()`, or in `beforeSend` now wins over the client setting. For example, `register({ $geoip_disable: false })` turns GeoIP lookup on for events. A `null` value does the same: a `null` property counts as set, so the SDK adds no `true`.
 - **The `disableGeoip` argument.** A per-call `disableGeoip` argument belongs to that event, so it wins over context and `register()`. A `$geoip_disable` in the call's own `properties` still wins over it.
 - **`disableGeoip: false`.** A per-call `disableGeoip: false` now sends `$geoip_disable: false`.
 - **Feature flag requests.** Feature flag requests still follow the `disableGeoip` client setting.
