@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.0.1
+
+### Patch Changes
+
+- [#5775](https://github.com/PostHog/posthog-js/pull/5775) [`a410583`](https://github.com/PostHog/posthog-js/commit/a41058375e0bf01a9c2b131ffd43492c5aef8b3e) Thanks [@gewenyu99](https://github.com/gewenyu99)! - Add the missing commas to the `captureImmediate` and `identify` doc comment examples, so the examples parse when you copy them.
+  (2026-11-17)
+
 ## 6.0.0
 
 ### Major Changes
