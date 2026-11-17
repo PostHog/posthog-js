@@ -50,7 +50,7 @@ Read the checklist first, then the sections that apply to you.
 
 **Follow ups**
 
-- [ ] You set `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at`, or `$product_tour_id` as a property → [Move to event options](#move-to-event-options)
+- [ ] You set `$process_person_profile`, `$cookieless_mode`, or `$ignore_sent_at` as a property → [Move to event options](#move-to-event-options)
 - [ ] You send `$ai_` events with `capture()` or `captureImmediate()` instead of `captureAi()` → [Send AI events with captureAi](#send-ai-events-with-captureai)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from JavaScript with positional arguments after `error` → [Move captureException arguments](#move-captureexception-arguments)
 
@@ -481,11 +481,10 @@ interface EventOptions {
   cookieless_mode?: boolean
   disable_skew_correction?: boolean
   process_person_profile?: boolean
-  product_tour_id?: string
 }
 ```
 
-Use booleans for the boolean options and a string for `product_tour_id`. TypeScript rejects misspelled option names and invalid values.
+Use booleans for event options. TypeScript rejects misspelled option names and invalid values.
 
 - **Every event.** `registerOptions(options)` (new) sets options on every event, like `register()` does for properties. `unregisterOptions(key)` removes one. Both return a promise.
 - **One context.** `withContext()` and `enterContext()` accept `options`, which apply to every event in the context.
@@ -500,7 +499,6 @@ Legacy option properties still work, but an option overrides its legacy property
 | `$process_person_profile` | `process_person_profile`  |
 | `$cookieless_mode`        | `cookieless_mode`         |
 | `$ignore_sent_at`         | `disable_skew_correction` |
-| `$product_tour_id`        | `product_tour_id`         |
 
 ### Send AI events with captureAi
 

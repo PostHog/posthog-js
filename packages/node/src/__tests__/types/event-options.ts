@@ -15,7 +15,6 @@ const options: EventOptions = {
   cookieless_mode: true,
   disable_skew_correction: false,
   process_person_profile: false,
-  product_tour_id: 'tour',
 }
 
 export const capture: EventMessage = { event: 'event', options }
@@ -46,8 +45,8 @@ export function checkEventOptions(posthog: PostHog): void {
   posthog.captureAi({ event: '$ai_generation', options: { cookieless_mode: 'true' } })
   // @ts-expect-error Skew correction takes a boolean.
   posthog.identify({ distinctId: 'user', options: { disable_skew_correction: 1 } })
-  // @ts-expect-error Product tour IDs are strings.
-  posthog.captureException(new Error('test'), { options: { product_tour_id: 123 } })
+  // @ts-expect-error Exception event options use the same boolean types.
+  posthog.captureException(new Error('test'), { options: { process_person_profile: 'false' } })
   // @ts-expect-error Register only known event options.
   void posthog.registerOptions({ cookieless_mdoe: true })
   // @ts-expect-error Unregister only known event options.
@@ -55,7 +54,7 @@ export function checkEventOptions(posthog: PostHog): void {
   // @ts-expect-error Context options use the same narrow type.
   posthog.withContext({ options: { process_person_profile: [] } }, () => {})
   // @ts-expect-error Hook edits use the same narrow type.
-  const invalidHook: PostHogOptions = { beforeSend: (event) => ({ ...event, options: { product_tour_id: [] } }) }
+  const invalidHook: PostHogOptions = { beforeSend: (event) => ({ ...event, options: { process_person_profile: [] } }) }
   void invalidHook
 
   // @ts-expect-error Configuration names use camelCase in Node 6.

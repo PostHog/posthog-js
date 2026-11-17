@@ -5910,7 +5910,6 @@ Always serialized as an object (`{}` when empty), never `null`.
 | <a id="property-cookieless_mode"></a> `cookieless_mode?` | `boolean` |
 | <a id="property-disable_skew_correction"></a> `disable_skew_correction?` | `boolean` |
 | <a id="property-process_person_profile"></a> `process_person_profile?` | `boolean` |
-| <a id="property-product_tour_id"></a> `product_tour_id?` | `string` |
 
 ### `Without`
 
