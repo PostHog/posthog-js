@@ -24,5 +24,6 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 - Pause iOS native uploads (session replay, native crash reports) while the device is on cellular and cellular data is turned off for the app, instead of sending requests that fail
 - Wait at most 30 seconds on `Retry-After` for session replay and native uploads, and double the wait after each failed upload up to 30 seconds
 - Drop native crashes recorded while the user was opted out instead of sending them after `optIn()`
+- Mark iOS native crash frames from dynamic frameworks, such as Hermes, as not in-app, so some native crash issues may be grouped again once
 - Mask content a masked view draws outside its bounds on iOS, and stop recording touches inside `ph-no-capture` views on iOS and Android
 - Stop bundling posthog-ios's native surveys in apps that use React Native's Swift Package Manager integration

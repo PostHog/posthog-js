@@ -168,6 +168,10 @@ Session replay and native event uploads wait at most 30 seconds when PostHog ans
 
 A native crash that happens while the user is opted out is no longer sent after `optIn()`. A crash recorded while the user was opted in is still sent.
 
+#### iOS crash frames from dynamic frameworks aren't in-app
+
+In iOS native crash reports, a stack frame is in-app only when it comes from your app's executable. Your app's code and statically linked pods stay in-app. Frames from dynamic frameworks, such as Hermes and pods built with `use_frameworks! :linkage => :dynamic`, are no longer marked as your code. Some existing native crash issues may be grouped again once. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#check-in-app-frames).
+
 #### Native events go to capture v1
 
 `posthog-ios` 4.0 and `posthog-android` 4.0 send the events the plugin captures natively to `/i/v1/analytics/events` instead of `/batch`: native crash reports, fatal JavaScript crashes reported natively, iOS rage clicks (`$rageclick`), and push notification opens. Events captured in JavaScript still go to `/batch`.
