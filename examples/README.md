@@ -1,3 +1,7 @@
+## Docusaurus
+
+[example-docusaurus](./example-docusaurus) demonstrates `posthog-docusaurus` and tests the installed plugin with production builds, development servers, and client-side navigation using Brave and the locally built browser SDK.
+
 ## Edge runtime examples
 
 All four use the explicit `posthog-node/edge` import and request-scoped clients:

@@ -1,6 +1,7 @@
 import { createPostHog, FeatureFlagsExtension } from '@posthog/browser/core'
 import { flags } from '@posthog/browser/flags'
 
-void createPostHog({ projectToken: 'ph_test', extensions: [flags()] }).then((posthog) =>
-    posthog.getExtension(FeatureFlagsExtension)?.getFeatureFlag('test')
-)
+void createPostHog({ projectToken: 'ph_test', extensions: [flags()] }).then(async (posthog) => {
+    const featureFlags = await posthog.resolveExtension(FeatureFlagsExtension)
+    featureFlags?.getFeatureFlag('test')
+})

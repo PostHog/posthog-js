@@ -1,5 +1,23 @@
 # @posthog/mcp
 
+## 1.2.3
+
+### Patch Changes
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `instrumentMutator(posthog)(server)` now returns the server's own type instead of `unknown`, so no type argument or cast is needed. Explicit `instrumentMutator<McpServer>(posthog)` calls and typed `serverMutator` hooks keep working.
+  (2026-11-16)
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `getMoreToolsResult()` and `sendFeedbackResult()` are now typed so they can be returned from an MCP SDK tool handler (v1 and v2 `CallToolResult`) without a cast.
+  (2026-11-16)
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5732](https://github.com/PostHog/posthog-js/pull/5732) [`5e5cb86`](https://github.com/PostHog/posthog-js/commit/5e5cb861182edee8d101dda1794464fa0bd094dd) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix stateless servers on `@modelcontextprotocol/server` 2.0 to 2.2 that reuse one transport for every client: the session token minted at `initialize` now rides only that client's `initialize` response. Before, it stayed on the transport, so every later client's `initialize` failed with 400 "Server already initialized" and later responses handed the first client's token to other clients. Per-request and multi-pod stateless servers still get a stable session token.
+
+  The token is no longer left on `transport.sessionId` after the response. Host code that read it there should read the `Mcp-Session-Id` header the client replays instead. (2026-11-13)
+
 ## 1.2.1
 
 ### Patch Changes

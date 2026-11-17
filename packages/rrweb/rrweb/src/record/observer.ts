@@ -373,12 +373,21 @@ export function initScrollObserver({
     lastEmitted.set(id, key);
     scrollCb({ id, x, y });
   };
-  const updatePosition = callbackWrapper(
-    throttle<UIEvent>(
-      callbackWrapper((evt) => emitScrollPosition(evt)),
-      sampling.scroll || 100,
-    ),
-  );
+  // A shared throttle drops one element's resting offset when another scrolls in the same window.
+  const emit = callbackWrapper(emitScrollPosition);
+  const throttledByTarget = new WeakMap<EventTarget, (evt: UIEvent) => void>();
+  const updatePosition = callbackWrapper((evt: UIEvent) => {
+    const target = evt.target;
+    if (!target) {
+      return;
+    }
+    let throttled = throttledByTarget.get(target);
+    if (!throttled) {
+      throttled = throttle<UIEvent>(emit, sampling.scroll || 100);
+      throttledByTarget.set(target, throttled);
+    }
+    throttled(evt);
+  });
   const handlers: listenerHandler[] = [on('scroll', updatePosition, doc)];
   // scrollend captures the resting offset when scroll alone recorded 0.
   if ('onscrollend' in doc) {

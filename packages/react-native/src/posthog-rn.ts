@@ -3311,9 +3311,16 @@ export class PostHog extends PostHogCoreBase {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
-      screenshotModeBackgroundCapture = false,
+      iOSCaptureMethod = 'standard',
       sampleRate: localSampleRate,
     } = options?.sessionReplayConfig ?? {}
+
+    if (iOSCaptureMethod !== 'standard' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
+      this._logger.warn(
+        `sessionReplayConfig.iOSCaptureMethod: '${iOSCaptureMethod}' requires @posthog/react-native-plugin 3.0.0 or later. ` +
+          `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) captures with 'standard'.`
+      )
+    }
 
     if (captureTouches === false && !isMacOS()) {
       if (!this._pluginVersionAtLeast(2, 9)) {
@@ -3399,7 +3406,7 @@ export class PostHog extends PostHogCoreBase {
       ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
       ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
       ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
-      screenshotModeBackgroundCapture,
+      iOSCaptureMethod,
       sampleRate,
       throttleDelayMs,
     }

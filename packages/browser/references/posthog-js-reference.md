@@ -2959,7 +2959,7 @@ only the browser SDK implements to the shared metrics options.
 | ------ | ------ | ------ | ------ |
 | <a id="property-beforesend"></a> `beforeSend?` | `BeforeSendMetricFn` \| `BeforeSendMetricFn`[] | Pre-aggregation filter for metric samples, as a single function or a left-to-right chain. Each function inspects, mutates, or drops a sample (return `null` to drop) before it is aggregated. | `MetricsConfig`.`beforeSend` |
 | <a id="property-environment"></a> `environment?` | `string` | The deployment environment for metric series (e.g. 'production', 'staging'). Maps to the OTel resource attribute 'deployment.environment'. | `MetricsConfig`.`environment` |
-| <a id="property-flags"></a> `flags?` | `boolean` | **`Experimental`** EXPERIMENTAL: Record the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, in milliseconds. Each retry is a separate sample. The timer starts when the SDK hands the request to the transport, so the duration includes compressing the request body. Samples carry the server host, the response status or error type, and the browser's IANA timezone as `client.timezone`. Requests that the SDK drops before they reach the network are not recorded. This option, the metric name, and its attributes may change or be removed in any release. **Default** `undefined @experimental` | - |
+| <a id="property-flags"></a> `flags?` | `boolean` | **`Experimental`** EXPERIMENTAL: Record the round trip of every `/flags` HTTP attempt as the histogram `posthog.flags.request.duration`, in milliseconds. Each retry is a separate sample. The timer starts when the SDK hands the request to the transport, so the duration includes compressing the request body. Samples carry the server host, the response status or error type, and the browser's IANA timezone as `client.timezone`. Requests that the SDK drops before they reach the network are not recorded. An attempt that gets a response also splits that duration into three histograms with the same attributes: `posthog.flags.request.pre_send_duration` (until the request starts), `posthog.flags.request.network_duration` (until the last byte of the response arrives, from the request's Resource Timing entry) and `posthog.flags.request.main_thread_duration` (until the SDK's callback runs). The attempt records them only when the browser reports a Resource Timing entry within 5 seconds of the callback that no other `/flags` request from this copy of the SDK to the same URL can own. This option, the metric names, and their attributes may change or be removed in any release. **Default** `undefined @experimental` | - |
 | <a id="property-flushintervalms"></a> `flushIntervalMs?` | `number` | How often the aggregated window is flushed, in milliseconds. Samples are folded into per-series aggregates in memory between flushes — one data point per series per window, no matter how many calls. The browser SDK defaults to 60000: every tab of an app writes to the same series, so a longer window keeps busy series under the backend's per-series point limit. **Default** `10000 (60000 in the browser)` | `MetricsConfig`.`flushIntervalMs` |
 | <a id="property-maxseriesperflush"></a> `maxSeriesPerFlush?` | `number` | Cardinality guardrail: maximum distinct series (name + type + unit + attribute combination) held per flush window. Samples for series beyond the cap are dropped with a single warning per window. **Default** `1000` | `MetricsConfig`.`maxSeriesPerFlush` |
 | <a id="property-network"></a> `network?` | `boolean` \| `NetworkMetricsConfig` | Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as a histogram. `true` uses the defaults. Requests to PostHog itself, URLs with other protocols, and server-sent event streams (`text/event-stream` responses) are not recorded. Long-polling requests look like ordinary requests; skip them with a `name` function that returns `null`. Each transport is measured to the boundary its API exposes: a `fetch` to its response headers, an `XMLHttpRequest` to the end of its response body. **Default** `undefined` | - |
@@ -3156,7 +3156,7 @@ Returns the extension registered under a typed stable name, or `undefined` when 
 
 | Type Parameter |
 | ------ |
-| <a id="type-parameter-t-4"></a> `T` *extends* `Extension` |
+| <a id="type-parameter-t-4"></a> `T` *extends* `Extension`\<`Client`\> |
 
 ###### Parameters
 
@@ -3178,7 +3178,7 @@ Returns the extension registered under a stable name, or `undefined` when it is 
 
 | Type Parameter | Default type |
 | ------ | ------ |
-| <a id="type-parameter-t-5"></a> `T` *extends* `Extension` | `Extension` |
+| <a id="type-parameter-t-5"></a> `T` *extends* `Extension`\<`Client`\> | `Extension`\<`Client`\> |
 
 ###### Parameters
 
@@ -3634,7 +3634,7 @@ NOTE: This type is also defined in `@posthog/core` (exception-steps.ts). Keep bo
 
 A shared browser extension. The client calls `setup(client)` once to start it
 and optional `dispose()` once for final best-effort resource cleanup.
-Everything an extension consumes flows through Client.
+Everything an extension consumes flows through its host, Client by default.
 
 `setup` may be async so an extension can read async KV state or remote config
 before it is ready. Async extensions must guard work after each `await` so
@@ -3652,11 +3652,17 @@ interface SessionReplayExtension extends Extension {
 }
 ```
 
+#### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-host"></a> `Host` | `Client` |
+
 #### Properties
 
 | Property | Modifier | Type | Description |
 | ------ | ------ | ------ | ------ |
-| <a id="property-bindings"></a> `bindings?` | `readonly` | `Readonly`\<`Record`\<`string`, `Extension`\>\> | Additional lookup targets whose lifecycle belongs to this extension. |
+| <a id="property-bindings"></a> `bindings?` | `readonly` | `Readonly`\<`Record`\<`string`, `Extension`\<`Client`\>\>\> | Additional lookup targets whose lifecycle belongs to this extension. |
 | <a id="property-name-2"></a> `name` | `readonly` | `string` | Stable extension name used for diagnostics and de-duplication within a client instance. |
 
 #### Methods
@@ -3698,7 +3704,7 @@ after construction; return a promise when setup needs asynchronous state.
 
 | Parameter | Type |
 | ------ | ------ |
-| `client` | `Client` |
+| `client` | `Host` |
 
 ###### Returns
 
@@ -6137,6 +6143,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-surveys"></a> `surveys?` | `SurveyConfig` | Survey-specific configuration options. **Default** `undefined` |
 | <a id="property-surveys_request_timeout_ms"></a> `surveys_request_timeout_ms` | `number` | Sets timeout for fetching surveys **Default** `10000` |
 | <a id="property-token"></a> `token` | `string` | The token for your PostHog project. It should NOT be provided manually in the config, but rather passed as the first parameter to `posthog.init()`. |
+| <a id="property-trace_propagation_targets"></a> `trace_propagation_targets?` | `string`[] | Hosts that should receive a W3C Trace Context `traceparent` header on `fetch` and `XMLHttpRequest` requests, so your backend can continue the trace started in the browser. Each request gets a new trace id and span id, with the sampled flag set (`00-<trace-id>-<span-id>-01`). The browser does not record a span of its own, so the span id in the header is the parent of your server's root span. Matching is exact and nothing is sent to unlisted hosts: - an entry with a scheme (`https://api.example.com`, `http://localhost:8000`) matches that origin only - any other entry (`api.example.com`) matches that hostname on any scheme or port Only list hosts that accept the header. A cross-origin request with a `traceparent` header triggers a CORS preflight, and fails if the server's `Access-Control-Allow-Headers` doesn't include `traceparent`. A `traceparent` header already set by your app or by OpenTelemetry's instrumentation is never overwritten or duplicated. If OpenTelemetry's XHR instrumentation also propagates to a cross-origin host (its `propagateTraceHeaderCorsUrls`), list that host in only one of the two. **Example** `posthog.init('<token>', { trace_propagation_targets: ['https://api.example.com', 'internal.example.com'] })` |
 | <a id="property-tracing_headers"></a> `tracing_headers?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers to all requests (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay). |
 | <a id="property-ui_host"></a> `ui_host` | `string` \| `null` | If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com). This ensures that links to PostHog point to the correct host. **Default** `null` |
 | <a id="property-upgrade"></a> `upgrade` | `boolean` | Determines whether PostHog should upgrade old cookies. If set to `true`, the library will check for a cookie from our old js library and import super properties from it, then the old cookie is deleted. This option only works in the initialization, so make sure you set it when you create the library. **Default** `false` |
@@ -6876,7 +6883,7 @@ are unset so flags re-evaluate without the removed values.
 
 A shared browser extension. The client calls `setup(client)` once to start it
 and optional `dispose()` once for final best-effort resource cleanup.
-Everything an extension consumes flows through Client.
+Everything an extension consumes flows through its host, Client by default.
 
 `setup` may be async so an extension can read async KV state or remote config
 before it is ready. Async extensions must guard work after each `await` so
@@ -7866,6 +7873,7 @@ Common types shared across PostHog SDKs
 | <a id="property-method-1"></a> `method?` | `"POST"` \| `"GET"` | - | `RequestWithOptions`.`method` |
 | <a id="property-noretries"></a> `noRetries?` | `boolean` | - | `RequestWithOptions`.`noRetries` |
 | <a id="property-ondispatch"></a> `onDispatch?` | () => `void` | Called each time `_send_request` hands the request to the transport. It is not called on the paths that drop the request before the network. | `RequestWithOptions`.`onDispatch` |
+| <a id="property-onsend"></a> `onSend?` | (`url`) => `void` | Called by the fetch and XHR transports with the final request URL, just before they send it. Body encoding can run between `onDispatch` and this call. | `RequestWithOptions`.`onSend` |
 | <a id="property-prefersynccompression"></a> `preferSyncCompression?` | `boolean` | Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload. | `RequestWithOptions`.`preferSyncCompression` |
 | <a id="property-timeout"></a> `timeout?` | `number` | - | `RequestWithOptions`.`timeout` |
 | <a id="property-timestampmode"></a> `timestampMode?` | `"body"` \| `"capture-body"` \| `"query"` | Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests. | `RequestWithOptions`.`timestampMode` |
@@ -8048,6 +8056,7 @@ Browser transport requested for a send.
 | <a id="property-method-2"></a> `method?` | `"POST"` \| `"GET"` | - |
 | <a id="property-noretries-1"></a> `noRetries?` | `boolean` | - |
 | <a id="property-ondispatch-1"></a> `onDispatch?` | () => `void` | Called each time `_send_request` hands the request to the transport. It is not called on the paths that drop the request before the network. |
+| <a id="property-onsend-1"></a> `onSend?` | (`url`) => `void` | Called by the fetch and XHR transports with the final request URL, just before they send it. Body encoding can run between `onDispatch` and this call. |
 | <a id="property-prefersynccompression-1"></a> `preferSyncCompression?` | `boolean` | Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload. |
 | <a id="property-timeout-1"></a> `timeout?` | `number` | - |
 | <a id="property-timestampmode-1"></a> `timestampMode?` | `"body"` \| `"capture-body"` \| `"query"` | Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests. |
@@ -8123,6 +8132,7 @@ Response from restore token exchange endpoint
 | <a id="property-method-3"></a> `method?` | `"POST"` \| `"GET"` | - | `QueuedRequestWithOptions`.`method` |
 | <a id="property-noretries-2"></a> `noRetries?` | `boolean` | - | `QueuedRequestWithOptions`.`noRetries` |
 | <a id="property-ondispatch-2"></a> `onDispatch?` | () => `void` | Called each time `_send_request` hands the request to the transport. It is not called on the paths that drop the request before the network. | `QueuedRequestWithOptions`.`onDispatch` |
+| <a id="property-onsend-2"></a> `onSend?` | (`url`) => `void` | Called by the fetch and XHR transports with the final request URL, just before they send it. Body encoding can run between `onDispatch` and this call. | `QueuedRequestWithOptions`.`onSend` |
 | <a id="property-prefersynccompression-2"></a> `preferSyncCompression?` | `boolean` | Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload. | `QueuedRequestWithOptions`.`preferSyncCompression` |
 | <a id="property-retriesperformedsofar"></a> `retriesPerformedSoFar?` | `number` | - | - |
 | <a id="property-timeout-2"></a> `timeout?` | `number` | - | `QueuedRequestWithOptions`.`timeout` |
