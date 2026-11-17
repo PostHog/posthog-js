@@ -135,6 +135,9 @@ class PosthogReactNativePluginModule(
               // React Native apps usually translate in JS, so the resources' locale often isn't
               // the language on screen. JS reports the language it displays through setAppLanguage.
               detectAppLanguage = false
+              // Surveys render in JS. posthog-android otherwise turns native surveys on and shows
+              // them through posthog-android-surveys-compose when that module is on the classpath.
+              surveys = false
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
               captureScreenViews = false
