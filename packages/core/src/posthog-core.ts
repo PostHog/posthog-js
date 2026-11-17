@@ -269,6 +269,40 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
+  /**
+   * Whether events use the posthog-js-lite / React Native 4.x person state: the SDK's `$is_identified` replaces a
+   * registered or caller value, identity events carry a registered `$process_person_profile`, and `$autocapture`
+   * events get neither. {@link PostHogCore} keeps it for posthog-js-lite.
+   */
+  protected usesLegacyEventPersonState(): boolean {
+    return false
+  }
+
+  // Person processing follows the SDK policy, even over a registered or caller `$process_person_profile`;
+  // `before_send` can still change it. A registered or caller `$is_identified` wins.
+  private stampPersonState(properties: PostHogEventProperties): void {
+    const hasPersonProcessing = this._hasPersonProcessing()
+    properties['$process_person_profile'] = hasPersonProcessing
+    if (this.usesLegacyEventPersonState() || properties['$is_identified'] === undefined) {
+      properties['$is_identified'] = this._isIdentified()
+    }
+    // If the event has person processing, ensure that all future events will too
+    if (hasPersonProcessing) {
+      this._requirePersonProcessing('capture')
+    }
+  }
+
+  // A registered `$process_person_profile` is left off identity events: PostHog drops `$identify`, `$create_alias`
+  // and `$groupidentify` when person processing is off, so a registered `false` would break identify, alias and
+  // group. `before_send` can still set it.
+  private enrichIdentityProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    const enriched = this.enrichProperties(properties)
+    if (!this.usesLegacyEventPersonState()) {
+      delete enriched['$process_person_profile']
+    }
+    return enriched
+  }
+
   // enrichProperties already merged the common properties under the caller's, so only fill in
   // the ones that are missing instead of overriding the caller.
   protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
@@ -404,7 +438,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       // if no $set is provided we assume all properties are $set
       const userProps = properties?.$set || properties
 
-      const allProperties = this.enrichProperties({
+      const allProperties = this.enrichIdentityProperties({
         $anon_distinct_id: this.getAnonymousId(),
         ...maybeAdd('$set', userProps),
         ...maybeAdd('$set_once', userPropsOnce),
@@ -474,16 +508,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const allProperties = this.enrichProperties(properties)
-
-      // Add $process_person_profile flag to event properties
-      const hasPersonProcessing = this._hasPersonProcessing()
-      allProperties['$process_person_profile'] = hasPersonProcessing
-      allProperties['$is_identified'] = this._isIdentified()
-
-      // If the event has person processing, ensure that all future events will too
-      if (hasPersonProcessing) {
-        this._requirePersonProcessing('capture')
-      }
+      this.stampPersonState(allProperties)
 
       super.captureStateless(distinctId, event, allProperties, options)
     })
@@ -496,7 +521,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const allProperties = this.enrichProperties({})
+      const allProperties = this.enrichIdentityProperties({})
 
       super.aliasStateless(alias, distinctId, allProperties)
     })
@@ -510,14 +535,18 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   ): void {
     this.wrap(() => {
       const distinctId = this.getDistinctId()
+      const autocaptureProperties: PostHogEventProperties = {
+        ...this.enrichProperties(properties),
+        $event_type: eventType,
+        $elements: elements,
+      }
+      if (!this.usesLegacyEventPersonState()) {
+        this.stampPersonState(autocaptureProperties)
+      }
       const payload = {
         distinct_id: distinctId,
         event: '$autocapture',
-        properties: {
-          ...this.enrichProperties(properties),
-          $event_type: eventType,
-          $elements: elements,
-        },
+        properties: autocaptureProperties,
       }
 
       this.enqueue('autocapture', payload, options)
@@ -585,7 +614,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const eventProperties = this.enrichProperties({})
+      const eventProperties = this.enrichIdentityProperties({})
       super.groupIdentifyStateless(groupType, groupKey, groupProperties, options, distinctId, eventProperties)
     })
   }
@@ -1786,6 +1815,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
 /** The PostHog client core, including the deprecated feature flag getters. */
 export abstract class PostHogCore extends PostHogCoreBase {
+  protected usesLegacyEventPersonState(): boolean {
+    return true
+  }
+
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
     return this.on('featureflags', async () => {
       const flags = this.getFeatureFlagValues()

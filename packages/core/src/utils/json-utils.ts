@@ -186,3 +186,43 @@ export function assignUserAttributes<T extends Record<string, any>>(
   }
   return target
 }
+
+/**
+ * Removes object members whose value is `null` or `undefined`, recursively, without touching array positions: a null
+ * array element stays `null` and an object inside an array is cleaned in place. Returns the input when nothing
+ * changes. Only plain objects are cleaned; a value already being visited (a cycle) is returned as it is.
+ */
+export function withoutNullMembers<T>(value: T, ancestors: WeakSet<object> = new WeakSet()): T {
+  if (value === null || typeof value !== 'object' || ancestors.has(value as object)) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    ancestors.add(value)
+    let changed = false
+    const cleaned = value.map((item) => {
+      const next = withoutNullMembers(item, ancestors)
+      changed = changed || next !== item
+      return next
+    })
+    ancestors.delete(value)
+    return (changed ? cleaned : value) as T
+  }
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value
+  }
+  ancestors.add(value as object)
+  let changed = false
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, member] of Object.entries(value as Record<string, unknown>)) {
+    if (member === null || member === undefined) {
+      changed = true
+      continue
+    }
+    const next = withoutNullMembers(member, ancestors)
+    changed = changed || next !== member
+    cleaned[key] = next
+  }
+  ancestors.delete(value as object)
+  return (changed ? cleaned : value) as T
+}

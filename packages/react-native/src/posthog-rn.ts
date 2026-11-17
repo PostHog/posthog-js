@@ -27,6 +27,7 @@ import {
   ErrorTracking as CoreErrorTracking,
   isObject,
   uuidv7,
+  withoutNullMembers,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import {
@@ -111,6 +112,13 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
   '$sdk_debug_replay_pending_trigger_conditions',
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
+
+// Null and undefined property members are left off the wire and the persisted queue, as native 4.0 does. This runs
+// after `before_send`, so members a hook sets to null are removed too.
+const withoutNullProperties = (message: PostHogEventProperties | null): PostHogEventProperties | null =>
+  message && message.properties !== undefined
+    ? { ...message, properties: withoutNullMembers(message.properties) }
+    : message
 
 const isReplayDebugEvent = (eventName: unknown): boolean =>
   typeof eventName === 'string' &&
@@ -3762,7 +3770,7 @@ export class PostHog extends PostHogCoreBase {
       const observation = this._fatalCaptureObservation
       const isObservedFatal =
         observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
-      const processed = super.processBeforeEnqueue(message)
+      const processed = withoutNullProperties(super.processBeforeEnqueue(message))
       let backdated = false
       if (processed) {
         try {
