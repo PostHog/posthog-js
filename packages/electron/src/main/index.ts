@@ -19,6 +19,7 @@ import {
     validateRequest,
     trustedUrl,
     normalizeFlagResult,
+    isFlagContextCommand,
     type FeatureFlagReadOptions,
     type IsFeatureEnabledOptions,
     type FeatureFlagResult,
@@ -283,6 +284,10 @@ export class PostHog {
         if (!event.trim() || event === '$snapshot') return Promise.resolve()
         return this._run(() => this._core.capture(event, properties))
     }
+    /**
+     * Link the current distinct ID to an alias without switching identity or reloading flags.
+     * Ignored when opted out or personProfiles is 'never'. Resolves after local persistence, not delivery.
+     */
     alias(alias: string): Promise<void> {
         if (!alias?.trim()) return Promise.resolve()
         return this._run(() => this._alias(alias))
@@ -303,6 +308,10 @@ export class PostHog {
         }
         return properties === undefined ? undefined : snapshot(properties)
     }
+    /**
+     * Capture an event-only $screen; name wins over properties.$screen_name without setting persistent screen context.
+     * Resolves after local persistence, not delivery; ignored when opted out.
+     */
     async screen(name: string, properties?: Properties): Promise<void> {
         if (!name?.trim()) return Promise.resolve()
         const copy = this._snapshotEventProperties(properties)
@@ -313,6 +322,11 @@ export class PostHog {
             }
         })
     }
+    /**
+     * Update the current person's $set/$set_once properties without changing identity; empty updates do nothing.
+     * Also updates flag context. Resolves after local persistence, not delivery or the background flag refresh.
+     * Ignored when opted out or personProfiles is 'never'.
+     */
     async setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
         const set = this._snapshotEventProperties(properties)
         const once = this._snapshotEventProperties(propertiesOnce)
@@ -324,6 +338,11 @@ export class PostHog {
         const once = propertiesOnce === undefined ? undefined : snapshot(propertiesOnce)
         this._core.setPersonProperties(set, once)
     }
+    /**
+     * Merge a call-time copy of local person overrides for flag evaluation, without updating the person profile.
+     * Accepts nested $set/$set_once; empty input does nothing. Otherwise awaits persistence and, by default, a refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
     async setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
         const copy = snapshot(properties)
         return this._runFlagContext(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
@@ -333,6 +352,11 @@ export class PostHog {
         this._core.setPersonPropertiesForFlags(properties, false)
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
+    /**
+     * Merge a call-time copy of local overrides by group type, without changing profiles or group membership.
+     * Empty input does nothing. Otherwise awaits persistence and, by default, a flag refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
     async setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
         const copy = snapshot(properties)
         return this._runFlagContext(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
@@ -342,6 +366,10 @@ export class PostHog {
         this._core.setGroupPropertiesForFlags(properties)
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
+    /**
+     * Clear all local person flag overrides, not profile data or identity. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
     resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
         return this._runFlagContext(() => this._resetPersonPropertiesForFlags(reloadFeatureFlags))
     }
@@ -349,6 +377,10 @@ export class PostHog {
         this._core.resetPersonPropertiesForFlags()
         if (reload) await this._core.reloadFeatureFlagsAsync()
     }
+    /**
+     * Clear local flag overrides for every group type, not profiles or membership. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
     resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
         return this._runFlagContext(() => this._resetGroupPropertiesForFlags(reloadFeatureFlags))
     }
@@ -462,19 +494,34 @@ export class PostHog {
     getDistinctId(): string {
         return this._core.getDistinctId()
     }
+    /** Return the shared anonymous ID, stable across identify and rotated by reset; await ready() first. */
     getAnonymousId(): string {
         return this._core.getAnonymousId()
     }
+    /** Read cached consent; await ready() before relying on persisted consent. */
     hasOptedOutCapturing(): boolean {
         return this._core.optedOut
     }
     getSessionId(): string {
         return this._core.isDisabled ? '' : this._core.getSessionId()
     }
+    /**
+     * Read the cached value without fetching. A missing key is false with a nonempty cache, otherwise undefined.
+     * Reports a deduplicated exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
         return this._core.getFeatureFlag(key, { sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent })
     }
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. defaultValue applies only to
+     * unknown/unavailable flags. Without it, missing-key behavior matches getFeatureFlag().
+     * Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. Missing keys follow getFeatureFlag()
+     * unless defaultValue is supplied. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
         return this._core.isFeatureEnabled(key, {
@@ -482,6 +529,10 @@ export class PostHog {
             defaultValue: options?.defaultValue,
         })
     }
+    /**
+     * Return a copied cached result, or undefined for unknown/unavailable flags; never fetches.
+     * Empty variants are disabled. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
     getFeatureFlagResult(key: string, options?: FeatureFlagReadOptions): FeatureFlagResult | undefined {
         const result = this._core.getFeatureFlagResult(key, {
             sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent,
@@ -491,6 +542,7 @@ export class PostHog {
     private _copyFlagResult(result: FeatureFlagResult): FeatureFlagResult {
         return normalizeFlagResult({ ...result, payload: this.getFeatureFlagPayload(result.key) ?? null })
     }
+    /** Return copied cached results (empty when unavailable), without fetching or reporting exposures. */
     getAllFeatureFlags(): FeatureFlagResult[] {
         const details = this._core.getFeatureFlagDetails()
         this._prunePayloadErrors(details)
@@ -498,6 +550,10 @@ export class PostHog {
             normalizeFlagResult({ ...result, payload: this._decodeFlagPayload(result.key, details) ?? null })
         )
     }
+    /**
+     * Read a copied, decoded cached payload without fetching or reporting exposure.
+     * Missing payloads are null once flags are loaded, otherwise undefined; strings are not decoded again.
+     */
     getFeatureFlagPayload(key: string): JsonType | undefined {
         const details = this._core.getFeatureFlagDetails()
         this._prunePayloadErrors(details)
@@ -536,9 +592,14 @@ export class PostHog {
     get optedOut(): boolean {
         return this._core.optedOut
     }
+    /**
+     * Refresh flags using the shared identity/context after earlier mutations, then persist and synchronize the cache.
+     * A failed fetch normally retains cached flags and resolves; completion does not guarantee fresh values.
+     */
     reloadFeatureFlags(): Promise<void> {
         return this._reloadFeatureFlags()
     }
+    /** Compatibility alias for reloadFeatureFlags(), with the same completion and failure semantics. */
     reloadFeatureFlagsAsync(): Promise<void> {
         return this.reloadFeatureFlags()
     }
@@ -796,12 +857,7 @@ export class PostHog {
                         )
                 }
             })
-        if (
-            command.type === 'setPersonPropertiesForFlags' ||
-            command.type === 'setGroupPropertiesForFlags' ||
-            command.type === 'resetPersonPropertiesForFlags' ||
-            command.type === 'resetGroupPropertiesForFlags'
-        ) {
+        if (isFlagContextCommand(command)) {
             return this._runFlagContext(operation, generation, authorize)
         }
         return this._run(operation, generation, authorize, command.type === 'optIn')

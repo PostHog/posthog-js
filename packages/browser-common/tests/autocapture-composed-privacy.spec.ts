@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { Autocapture, autocapturePropertiesForElement, getPropertiesFromElement } from '../src/autocapture'
-import { getSafeText, shouldCaptureElement, shouldCaptureDomEvent } from '../src/utils/autocapture-utils'
+import {
+    getSafeText,
+    shouldCaptureElement,
+    shouldCaptureDomEvent,
+    shouldCaptureDeadClick,
+    shouldCaptureRageclick,
+    shouldSkipDeadClick,
+} from '../src/utils/autocapture-utils'
 import { createTestClient } from './helpers/test-client'
 
 const canary = 'COMPOSED_PRIVATE_CANARY'
@@ -51,8 +58,56 @@ describe('autocapture composed-tree privacy', () => {
         })
         Object.defineProperty(first, 'attributes', { get: read })
         expect(shouldCaptureElement(first)).toBe(false)
+        expect(shouldCaptureDomEvent(first, new MouseEvent('click'))).toBe(false)
+        expect(shouldCaptureDeadClick(first, true)).toBe(false)
+        expect(shouldCaptureRageclick(first, true)).toBe(false)
+        expect(shouldSkipDeadClick(first)).toBe(true)
         expect(getPropertiesFromElement(first, false, false, undefined)).toMatchObject({ tag_name: 'button' })
         expect(read).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        { depth: 70, excluded: false, captures: 1 },
+        { depth: 70, excluded: true, captures: 0 },
+        { depth: 997, excluded: false, captures: 1 },
+        { depth: 997, excluded: true, captures: 0 },
+        { depth: 1001, excluded: false, captures: 0 },
+        { depth: 1001, excluded: true, captures: 0 },
+    ])('admits $captures events at depth $depth with excluded=$excluded', ({ depth, excluded, captures }) => {
+        const style = window.getComputedStyle(document.body)
+        vi.spyOn(window, 'getComputedStyle').mockReturnValue(style)
+        const client = createTestClient()
+        const extension = new Autocapture({
+            refresh: (config) => Object.assign(config, { enabled: true, remoteRequestsDisabled: true }),
+        })
+        extension.setup(client)
+        try {
+            const wrapper = document.createElement('div')
+            if (excluded) wrapper.className = 'ph-no-autocapture'
+            document.body.append(wrapper)
+            let parent = wrapper
+            for (let i = 0; i < depth; i++) {
+                const div = document.createElement('div')
+                if (i === 500) div.setAttribute('data-ph-capture-attribute-private', canary)
+                parent.append(div)
+                parent = div
+            }
+            const button = document.createElement('button')
+            button.textContent = 'Public control'
+            parent.append(button)
+            button.click()
+            if (!captures) expect(JSON.stringify(client.capturedEvents)).not.toContain(canary)
+            expect(client.capturedEvents).toHaveLength(captures)
+            if (captures) {
+                expect(client.capturedEvents[0]).toMatchObject({
+                    event: '$autocapture',
+                    properties: { $event_type: 'click' },
+                })
+            }
+        } finally {
+            extension.dispose()
+            client.dispose()
+        }
     })
 
     it('applies selector exclusions across slots', () => {
