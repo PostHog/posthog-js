@@ -1,5 +1,12 @@
 # @posthog/browser
 
+## 0.4.1
+
+### Patch Changes
+
+- [#5668](https://github.com/PostHog/posthog-js/pull/5668) [`6b5843e`](https://github.com/PostHog/posthog-js/commit/6b5843e0b203e5cf3f80010d95d65c5b1b6f4a20) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reorganize browser SDK modules while retaining supported package import paths.
+  (2026-11-16)
+
 ## 0.4.0
 
 ### Minor Changes

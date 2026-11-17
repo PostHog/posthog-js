@@ -6,11 +6,11 @@ window.autocaptureHarness = autocaptureHarness
 
 import { surveysHarness } from './surveys-fixture'
 window.surveysHarness = surveysHarness
-import { logs } from '../src/logs'
-import type { IPostHog } from '../src/types'
-import { flags } from '../src/flags'
-import { analytics } from '../src/analytics'
-import { createPostHog, type CaptureSummary, type SessionContext } from '../src/core'
+import { logs } from '../src/products/logs/logs'
+import type { IPostHog } from '../src/core/types'
+import { flags } from '../src/products/flags/flags'
+import { analytics } from '../src/products/analytics/analytics'
+import { createPostHog, type CaptureSummary, type SessionContext } from '../src/composition/npm/core'
 
 interface ConsentHarness {
     updateFlags(values: Record<string, boolean | string>): Promise<void>

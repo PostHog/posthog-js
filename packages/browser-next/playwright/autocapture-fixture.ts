@@ -1,10 +1,10 @@
 import { requireInstalledExtension } from '../tests/helpers'
-import { createPostHog } from '../src'
-import { autocapture } from '../src/autocapture'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import { surveys } from '../src/surveys'
-import type { IPostHog } from '../src/types'
-import type { Survey } from '../src/surveys-options'
+import { createPostHog } from '../src/composition/npm'
+import { autocapture } from '../src/products/autocapture/autocapture'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { surveys } from '../src/products/surveys/surveys'
+import type { IPostHog } from '../src/core/types'
+import type { Survey } from '../src/products/surveys/surveys-options'
 
 let client: IPostHog | undefined
 let captured: { event: string; properties: Record<string, unknown> }[] = []

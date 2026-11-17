@@ -1,9 +1,9 @@
-import { createPostHog } from '../src'
-import { createAnalyticsExtension } from '../src/analytics-buffer'
-import { analytics } from '../src/automatic-analytics'
-import type { AutomaticAnalyticsOptions } from '../src/types'
+import { createPostHog } from '../src/composition/npm'
+import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { analytics } from '../src/products/analytics/automatic-analytics'
+import type { AutomaticAnalyticsOptions } from '../src/core/types'
 
-vi.mock('../src/automatic-analytics', () => ({ analytics: vi.fn() }))
+vi.mock('../src/products/analytics/automatic-analytics', () => ({ analytics: vi.fn() }))
 
 const options = {
     projectToken: 'ph_test',

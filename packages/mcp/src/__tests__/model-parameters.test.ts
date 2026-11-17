@@ -5,7 +5,12 @@ import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotoc
 import { z } from 'zod'
 import { instrument } from '../index'
 import { DEFAULT_MODEL_PARAMETER_DESCRIPTION } from '../extensions/constants'
-import { addModelParameterToTool, addModelParameterToTools, resolveModel } from '../extensions/model-parameters'
+import {
+  addModelParameterToTool,
+  addModelParameterToTools,
+  type ModelInjectableTool,
+  resolveModel,
+} from '../extensions/model-parameters'
 import { log } from '../extensions/logger'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -59,7 +64,7 @@ describe('addModelParameterToTool', () => {
   })
 
   it('keeps additionalProperties:false, since the injected param is a declared property', () => {
-    const result = addModelParameterToTool({
+    const result = addModelParameterToTool<ModelInjectableTool>({
       name: 'strict-tool',
       inputSchema: {
         type: 'object',
@@ -97,9 +102,11 @@ describe('addModelParameterToTool', () => {
 
   it('uses a custom description when provided', () => {
     const customDescription = 'State your model identifier'
-    const result = addModelParameterToTool({ name: 'tool' }, customDescription)
+    const result = addModelParameterToTool<ModelInjectableTool>({ name: 'tool' }, customDescription)
 
-    expect(result.inputSchema?.properties?.llm_model?.description).toBe(customDescription)
+    expect((result.inputSchema?.properties?.llm_model as { description?: string } | undefined)?.description).toBe(
+      customDescription
+    )
   })
 })
 
@@ -227,7 +234,9 @@ describe('Model capture — integration with an instrumented server', () => {
     try {
       instrument(advertising.server, fakePostHog(), { captureModel: true, reportMissing: true })
       const listed = await advertising.client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-      expect(listed.tools.find((t: any) => t.name === 'get_more_tools').inputSchema.properties.llm_model).toBeDefined()
+      expect(
+        listed.tools.find((t: any) => t.name === 'get_more_tools')!.inputSchema.properties!.llm_model
+      ).toBeDefined()
     } finally {
       await advertising.cleanup()
     }

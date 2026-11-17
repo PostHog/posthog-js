@@ -1,9 +1,9 @@
 import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
-import { createPostHog as createCore } from '../src/core'
-import { flags } from '../src/flags'
-import type { FlagsOptions } from '../src/flags'
-import type { IPostHog, PostHogOptions } from '../src/types'
+import { createPostHog as createCore } from '../src/composition/npm/core'
+import { flags } from '../src/products/flags/flags'
+import type { FlagsOptions } from '../src/products/flags/flags'
+import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, MemoryStorage } from './helpers'
 
 const base = {

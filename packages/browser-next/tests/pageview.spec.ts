@@ -1,11 +1,11 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
 import { requireInstalledExtension } from './helpers'
-import type { Extension } from '../src/types'
+import type { Extension } from '../src/core/types'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { IPostHogInternal } from '../src/browser-client'
+import type { IPostHogInternal } from '../src/core/context/browser-client'
 
-import { analytics as createAnalytics } from '../src/analytics'
+import { analytics as createAnalytics } from '../src/products/analytics/analytics'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
