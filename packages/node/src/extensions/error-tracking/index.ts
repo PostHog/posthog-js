@@ -45,7 +45,9 @@ function withoutNullObjectProperties(value: any): any {
   const root = copyValue(value)
   while (pending.length) {
     const { source, target, array } = pending.pop()!
-    for (const key of Object.keys(source)) {
+    const keys = array ? Array.prototype.keys.call(source) : Object.keys(source)
+    for (const key of keys) {
+      if (array && !(key in source)) continue
       const entry = source[key]
       if (entry !== null || array) {
         Object.defineProperty(target, key, {
@@ -58,6 +60,14 @@ function withoutNullObjectProperties(value: any): any {
     }
   }
   return root
+}
+
+function isReservedExceptionProperty(key: string): boolean {
+  return (
+    (key.startsWith('$exception_') && key !== '$exception_fingerprint') ||
+    key === '$debug_images' ||
+    key === '$cymbal_errors'
+  )
 }
 
 export default class ErrorTracking {
@@ -96,6 +106,16 @@ export default class ErrorTracking {
     return isObject(x) && '__posthog_previously_captured_error' in x && x.__posthog_previously_captured_error === true
   }
 
+  static prepareEventProperties(
+    properties: NonNullable<EventMessage['properties']>
+  ): NonNullable<EventMessage['properties']> {
+    const entries = Object.entries(properties)
+    return {
+      ...Object.fromEntries(entries.filter(([key]) => isReservedExceptionProperty(key))),
+      ...withoutNullObjectProperties(Object.fromEntries(entries.filter(([key]) => !isReservedExceptionProperty(key)))),
+    }
+  }
+
   static async buildEventMessage(
     builder: CoreErrorTracking.ErrorPropertiesBuilder,
     error: unknown,
@@ -105,17 +125,11 @@ export default class ErrorTracking {
     context?: ContextData
   ): Promise<EventMessage> {
     const applyContextSnapshot = snapshotEventContext(context)
-    const customProperties = Object.fromEntries(
+    const properties: NonNullable<EventMessage['properties']> = Object.fromEntries(
       Object.keys(additionalProperties ?? {})
-        .filter(
-          (key) =>
-            !(key.startsWith('$exception_') && key !== '$exception_fingerprint') &&
-            key !== '$debug_images' &&
-            key !== '$cymbal_errors'
-        )
+        .filter((key) => !isReservedExceptionProperty(key))
         .map((key) => [key, additionalProperties![key]])
     )
-    const properties: NonNullable<EventMessage['properties']> = withoutNullObjectProperties(customProperties)
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)

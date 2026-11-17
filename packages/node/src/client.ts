@@ -3849,6 +3849,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return Promise.reject(null)
     }
 
+    // Keep custom serializers editable by before_send until all privacy hooks have run.
+    if (props._originatedFromCaptureException && eventMessage.properties) {
+      eventMessage.properties = ErrorTracking.prepareEventProperties(eventMessage.properties)
+    }
+
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
     const eventProperties = await Promise.resolve()
       .then(async () => {

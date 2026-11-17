@@ -1,6 +1,7 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import ErrorTracking from '@/extensions/error-tracking'
-import { PostHog } from '@/entrypoints/index.node'
+import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { routeByUrl } from '../utils/v1-wiring'
 
 const builder = new CoreErrorTracking.ErrorPropertiesBuilder(
   [new CoreErrorTracking.ErrorCoercer()],
@@ -12,22 +13,204 @@ describe('public exception custom-property delivery', () => {
   let client: PostHog
   let requests: Record<string, any>[]
 
-  beforeEach(() => {
-    requests = []
-    client = new PostHog('test-token', {
+  const makeClient = (options: PostHogOptions = {}) =>
+    new PostHog('test-token', {
       host: 'http://example.test',
       flushInterval: 0,
       disableCompression: true,
       fetchRetryCount: 0,
-      fetch: async (_url, options) => {
+      fetch: async (url, options) => {
         requests.push(JSON.parse(options.body as string))
-        return { status: 200, text: async () => '{}', json: async () => ({}) }
+        return routeByUrl(url)
       },
+      ...options,
     })
+
+  beforeEach(() => {
+    requests = []
+    client = makeClient()
   })
 
   afterEach(async () => {
+    try {
+      await client.shutdown()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  const deliveries = [
+    ['v0', 'immediate'],
+    ['v0', 'batched'],
+    ['v1', 'immediate'],
+    ['v1', 'batched'],
+  ] as const
+
+  it.each(
+    deliveries.flatMap(([mode, delivery]) =>
+      (['delete', 'replace'] as const).map((redaction) => ({ mode, delivery, redaction }))
+    )
+  )('honors before_send $redaction redaction in $mode $delivery delivery', async ({ mode, delivery, redaction }) => {
     await client.shutdown()
+    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
+    client = makeClient({
+      before_send: (event) => {
+        if (event?.properties) {
+          if (redaction === 'delete') {
+            delete event.properties.data.secret
+          } else {
+            event.properties.data.secret = '[REDACTED]'
+          }
+        }
+        return event
+      },
+    })
+    const secret = ['private', 'before', 'send', 'value'].join('-')
+    const data = {
+      secret,
+      toJSON() {
+        return { secret: this.secret, drop: null }
+      },
+    }
+
+    if (delivery === 'immediate') {
+      await client.captureExceptionImmediate(new Error('boom'), 'user', { data })
+    } else {
+      client.captureException(new Error('boom'), 'user', { data })
+      await client.flush()
+    }
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].batch[0].properties.data).toEqual(redaction === 'delete' ? {} : { secret: '[REDACTED]' })
+    expect(JSON.stringify(requests)).not.toContain(secret)
+  })
+
+  it.each(
+    deliveries.flatMap(([mode, delivery]) =>
+      (['object', 'primitive'] as const).map((representation) => ({ mode, delivery, representation }))
+    )
+  )(
+    'redacts backing fields for a $representation serializer in $mode $delivery delivery',
+    async ({ mode, delivery, representation }) => {
+      await client.shutdown()
+      vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
+      client = makeClient({
+        before_send: (event) => {
+          if (event?.properties) delete event.properties.data.secret
+          return event
+        },
+      })
+      const secret = ['private', 'serializer', 'backing', 'value'].join('-')
+      const data = {
+        secret,
+        toJSON() {
+          return representation === 'object' ? { token: this.secret } : this.secret
+        },
+      }
+
+      if (delivery === 'immediate') {
+        await client.captureExceptionImmediate(new Error('boom'), 'user', { data })
+      } else {
+        client.captureException(new Error('boom'), 'user', { data })
+        await client.flush()
+      }
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0].batch[0].properties.data).toEqual(representation === 'object' ? {} : undefined)
+      expect(JSON.stringify(requests)).not.toContain(secret)
+    }
+  )
+
+  it.each(deliveries)('ignores non-index array getters in %s %s delivery', async (mode, delivery) => {
+    await client.shutdown()
+    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
+    client = makeClient()
+    const ignoredGetter = vi.fn(() => {
+      throw new Error('non-index array getter evaluated')
+    })
+    const data = ['valid']
+    Object.defineProperty(data, 'metadata', { enumerable: true, get: ignoredGetter })
+    expect(JSON.stringify(data)).toBe('["valid"]')
+
+    if (delivery === 'immediate') {
+      await client.captureExceptionImmediate(new Error('boom'), 'user', { data })
+    } else {
+      client.captureException(new Error('boom'), 'user', { data })
+      await client.flush()
+    }
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].batch[0].properties.data).toEqual(['valid'])
+    expect(ignoredGetter).not.toHaveBeenCalled()
+  })
+
+  it('preserves non-enumerable array elements that JSON serialization includes', async () => {
+    const data = new Array(2)
+    Object.defineProperty(data, '0', { value: { keep: true, drop: null } })
+    data[1] = null
+    expect(JSON.stringify(data)).toBe('[{"keep":true,"drop":null},null]')
+
+    await client.captureExceptionImmediate(new Error('boom'), 'user', { data })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].batch[0].properties.data).toEqual([{ keep: true }, null])
+  })
+
+  it('drops null custom object properties on delivery without changing arrays, native values or caller input', async () => {
+    const properties = {
+      test: null,
+      nested: { drop: null, enabled: false, attempt: 0, text: '' },
+      items: ['1', null, { drop: null }],
+      date: new Date('2025-01-01T00:00:00Z'),
+    }
+    const original = structuredClone(properties)
+    await client.captureExceptionImmediate(new TypeError('boom'), 'user', properties)
+
+    expect(requests).toHaveLength(1)
+    const delivered = requests[0].batch[0].properties
+    expect(delivered).not.toHaveProperty('test')
+    expect(delivered).toMatchObject({
+      nested: { enabled: false, attempt: 0, text: '' },
+      items: ['1', null, {}],
+      date: '2025-01-01T00:00:00.000Z',
+    })
+    expect(delivered.nested).not.toHaveProperty('drop')
+    expect(delivered.$exception_list[0]).toMatchObject({ type: 'TypeError', value: 'boom' })
+    expect(properties).toEqual(original)
+  })
+
+  it('delivers sparse arrays and circular references without mutating them', async () => {
+    const items = new Array(3)
+    items[1] = null
+    const properties: Record<string, any> = { items, drop: null }
+    properties.self = properties
+    await client.captureExceptionImmediate(new Error('boom'), 'user', properties)
+
+    expect(requests).toHaveLength(1)
+    const delivered = requests[0].batch[0].properties
+    expect(delivered.items).toEqual([null, null, null])
+    expect(delivered.self.self).toBe('[Circular]')
+    expect(delivered).not.toHaveProperty('drop')
+    expect(delivered.self).not.toHaveProperty('drop')
+    expect(properties.drop).toBeNull()
+    expect(properties.self).toBe(properties)
+    expect(items).toHaveLength(3)
+    expect(0 in items).toBe(false)
+    expect(items[1]).toBeNull()
+    expect(2 in items).toBe(false)
+  })
+
+  it('does not invoke a custom serializer when before_send discards the event', async () => {
+    await client.shutdown()
+    client = makeClient({ before_send: () => null })
+    const toJSON = vi.fn(() => {
+      throw new Error('discarded serializer evaluated')
+    })
+
+    await client.captureExceptionImmediate(new Error('boom'), 'user', { data: { toJSON } })
+
+    expect(requests).toEqual([])
+    expect(toJSON).not.toHaveBeenCalled()
   })
 
   it('respects toJSON without reading hidden properties and cleans its serialized representation', async () => {
@@ -143,42 +326,6 @@ describe('public exception custom-property delivery', () => {
 })
 
 describe('ErrorTracking.buildEventMessage', () => {
-  it('drops null custom object properties without changing arrays, other values or caller input', async () => {
-    const properties = {
-      test: null,
-      nested: { drop: null, enabled: false, attempt: 0, text: '' },
-      items: ['1', null, { drop: null }],
-      date: new Date('2025-01-01T00:00:00Z'),
-    }
-    const original = structuredClone(properties)
-    const event = await ErrorTracking.buildEventMessage(builder, new TypeError('boom'), {}, 'user', properties)
-
-    expect(event.properties).not.toHaveProperty('test')
-    expect(event.properties).toMatchObject({
-      nested: { enabled: false, attempt: 0, text: '' },
-      items: ['1', null, {}],
-      date: properties.date,
-    })
-    expect(event.properties?.nested).not.toHaveProperty('drop')
-    expect(event.properties?.$exception_list[0]).toMatchObject({ type: 'TypeError', value: 'boom' })
-    expect(properties).toEqual(original)
-  })
-
-  it('keeps sparse array positions and circular references without mutating them', async () => {
-    const items = new Array(3)
-    items[1] = null
-    const properties: Record<string, any> = { items, drop: null }
-    properties.self = properties
-    const event = await ErrorTracking.buildEventMessage(builder, new Error('boom'), {}, 'user', properties)
-
-    expect(event.properties?.items).toHaveLength(3)
-    expect(event.properties?.items[1]).toBeNull()
-    expect(event.properties?.self.self).toBe(event.properties?.self)
-    expect(event.properties?.self).not.toHaveProperty('drop')
-    expect(properties.drop).toBeNull()
-    expect(properties.self).toBe(properties)
-  })
-
   it('does not let custom properties forge generated or processor-owned exception metadata', async () => {
     const properties = {
       $exception_list: [{ type: 'ForgedError', value: 'forged' }],
