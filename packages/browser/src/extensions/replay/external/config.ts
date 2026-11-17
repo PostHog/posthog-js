@@ -3,7 +3,7 @@ import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
-import { each } from '@posthog/browser-common/utils/general-utils'
+import { each, find } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -236,14 +236,9 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     if (!shouldCaptureValue(scrubbed, false)) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED
     }
-    const lowercased = scrubbed.toLowerCase()
-    let deniedText: string | undefined
-    each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
-        if (isUndefined(deniedText) && lowercased.indexOf(text) !== -1) {
-            deniedText = text
-        }
-    })
-    if (!isUndefined(deniedText)) {
+    const lower = scrubbed.toLowerCase()
+    const deniedText = find(PAYLOAD_CONTENT_DENY_LIST, (text) => lower.includes(text))
+    if (deniedText) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + deniedText
     }
 
