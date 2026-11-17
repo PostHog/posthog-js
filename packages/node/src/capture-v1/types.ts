@@ -13,7 +13,16 @@ export type CaptureEndpoint = typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPT
  * `$`-prefixed option properties lifted by the transform. Values are sent unchanged.
  * Always serialized as an object (`{}` when empty), never `null`.
  */
-export type V1EventOptions = Record<string, JsonType>
+export interface V1EventOptions {
+  /** Whether to process this event in cookieless mode. */
+  cookieless_mode?: boolean
+  /** Whether to disable server-side timestamp skew correction for this event. */
+  disable_skew_correction?: boolean
+  /** Whether to create or update a person profile for this event. */
+  process_person_profile?: boolean
+  /** Additional capture options, sent to capture v1 unchanged. */
+  [key: string]: JsonType | undefined
+}
 
 /**
  * A single event in a Capture V1 batch.

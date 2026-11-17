@@ -681,11 +681,11 @@ Create an alias to link two distinct IDs together.
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
-| `data.options?` | `Record`\<`string`, `JsonType`\> | - |
+| `data.options?` | `V1EventOptions` | - |
 
 #### Returns
 
@@ -711,11 +711,11 @@ Create an alias to link two distinct IDs together immediately (synchronously).
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
-| `data.options?` | `Record`\<`string`, `JsonType`\> | - |
+| `data.options?` | `V1EventOptions` | - |
 
 #### Returns
 
@@ -2000,7 +2000,7 @@ Register properties that every event sent by this client carries.
 
 Each event fills the keys it left unset in this order: the event's own values, then context
 properties, then these, then the values the SDK adds (such as `$is_server` and
-`$geoip_disable`). `before_send` sees the result and can change it.
+`$geoip_disable`). `beforeSend` sees the result and can change it.
 
 A `$process_person_profile` registered here never reaches `$identify`, `$create_alias`,
 `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events (see `registerOptions()`).
@@ -2426,7 +2426,7 @@ Register options that every event sent by this client carries.
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `options` | `Record`\<`string`, `JsonType`\> | The options to add to every event |
+| `options` | `V1EventOptions` | The options to add to every event |
 
 #### Returns
 
@@ -2436,7 +2436,7 @@ Register options that every event sent by this client carries.
 
 Each event fills the options it left unset (missing or `null`) in this order: the event's own
 `options`, then context options, then these, then the options the SDK adds (such as
-`process_person_profile: false` for an event with no distinct id). `before_send` sees the
+`process_person_profile: false` for an event with no distinct id). `beforeSend` sees the
 result and can change it. Values are sent to capture unchanged. Capture drops an event whose
 option value it cannot read, so a bad value registered here drops every event.
 
@@ -2499,7 +2499,7 @@ The return value of the function
 
 Context `properties` and `options` fill only what an event left unset: the event's own values
 win, and context values beat `register()` and `registerOptions()` values and the values the SDK
-adds. `before_send` sees the result and can change it.
+adds. `beforeSend` sees the result and can change it.
 
 On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
 events, a context `process_person_profile` option applies only when the distinct id is
@@ -2955,7 +2955,7 @@ Options for `captureException()` and `captureExceptionImmediate()`.
 | <a id="distinctid"></a> `distinctId?` | `string` | The event's distinct id. Without one, the context distinct id is used, else a personless id. |
 | <a id="flags"></a> `flags?` | `FeatureFlagEvaluations` | A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events. |
 | <a id="level"></a> `level?` | `SeverityLevel` | The exception's severity, sent as `$exception_level`. An unknown value is ignored. **Default** `'error'` |
-| <a id="options-1"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, as in `capture()`. |
+| <a id="options-1"></a> `options?` | `EventOptions` | Per-event options, as in `capture()`. |
 | <a id="properties"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Properties to add to the event. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored: use `level` to set the level. |
 | <a id="uuid"></a> `uuid?` | `string` | Overrides the generated event UUID. Must be a valid UUID. |
 
@@ -3020,7 +3020,7 @@ the client renders. PostHog sends it as is and never stores it. PostHog derives 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-distinctid"></a> `distinctId?` | `string` | - |
-| <a id="property-options"></a> `options?` | `Record`\<`string`, `JsonType`\> | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
+| <a id="property-options"></a> `options?` | `V1EventOptions` | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
 | <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Properties that fill the keys an event left unset. The event's own values win. |
 | <a id="property-sessionid"></a> `sessionId?` | `string` | - |
 
@@ -3269,6 +3269,12 @@ A warning PostHog returned with a queued email.
 | `sendFeatureFlags?` | `boolean` \| `SendFeatureFlagsOptions` | **Deprecated** Use the `flags` option with a `FeatureFlagEvaluations` object obtained from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags` request on capture and may return different values than the ones the code branched on. |
 | `timestamp?` | `Date` | If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. |
 | `uuid?` | `string` | If provided overrides the auto-generated event UUID. Must be a valid UUID. |
+
+### `EventOptions`
+
+> **EventOptions** = `V1EventOptions`
+
+Processing options sent with an event to capture v1.
 
 ### `ExceptionRateLimiterConfig`
 
@@ -3630,7 +3636,7 @@ The promise does not reject.
 | <a id="distinctid-1"></a> `distinctId?` | `string` | The event's distinct id. When it is missing, empty or only whitespace, the context distinct id is used, then `$<groupType>_<groupKey>`. |
 | <a id="groupkey"></a> `groupKey` | `string` | - |
 | <a id="grouptype"></a> `groupType` | `string` | - |
-| <a id="options-2"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-2"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-2"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 
 ### `HistogramOptions`
@@ -3673,7 +3679,7 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 | ------ | ------ | ------ |
 | <a id="disablegeoip-2"></a> `disableGeoip?` | `boolean` | - |
 | <a id="distinctid-2"></a> `distinctId` | `string` | - |
-| <a id="options-3"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-3"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-3"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 
 ### `InstrumentRequestOptions`
@@ -3700,11 +3706,11 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 
 | Parameter | Type |
 | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
 | `data.alias` | `string` |
 | `data.disableGeoip?` | `boolean` |
 | `data.distinctId` | `string` |
-| `data.options?` | `Record`\<`string`, `JsonType`\> |
+| `data.options?` | `V1EventOptions` |
 
 ###### Returns
 
@@ -3728,11 +3734,11 @@ The same concept applies for when a user logs in. If you're using PostHog in the
 
 | Parameter | Type |
 | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
 | `data.alias` | `string` |
 | `data.disableGeoip?` | `boolean` |
 | `data.distinctId` | `string` |
-| `data.options?` | `Record`\<`string`, `JsonType`\> |
+| `data.options?` | `V1EventOptions` |
 
 ###### Returns
 
@@ -5030,22 +5036,23 @@ differently for cellular cost vs tab-suspension behavior).
 
 ### `PostHogOptions`
 
-> **PostHogOptions** = `Omit`\<`PostHogCoreOptions`, `"before_send"` \| `"disableGeoip"` \| `"flushInterval"` \| `"maxQueueSize"` \| `"fetchRetryCount"` \| `"fetchRetryDelay"` \| `"disableCompression"` \| `"requestTimeout"`\> & `object` & `ExceptionRateLimiterConfig`
+> **PostHogOptions** = `Omit`\<`PostHogCoreOptions`, `"before_send"` \| `"disable_capture_url_hashes"` \| `"disableGeoip"` \| `"flushInterval"` \| `"maxQueueSize"` \| `"fetchRetryCount"` \| `"fetchRetryDelay"` \| `"disableCompression"` \| `"requestTimeout"`\> & `object` & `ExceptionRateLimiterConfig`
 
 #### Type Declaration
 
 | Name | Type | Description |
 | ------ | ------ | ------ |
-| `__preview_capture_bot_pageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
+| `__previewCaptureBotPageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
 | `appHost?` | `string` | Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there. Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or `https://eu.posthog.com` from `host`. |
-| `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events it sees `options.process_person_profile` and no `$process_person_profile` property. Those events get their default from the event name the call used, so a hook that renames an event to one of them must set `options.process_person_profile` itself. |
+| `beforeSend?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events it sees `options.process_person_profile` and no `$process_person_profile` property. Those events get their default from the event name the call used, so a hook that renames an event to one of them must set `options.process_person_profile` itself. |
 | `captureAiCompression?` | `"none"` \| `"gzip"` \| `"deflate"` \| `"zstd"` | How `captureAi` requests compress their body, with the same values as `captureCompression`. It does not read `captureCompression` or `disableCompression`. **Default** `'gzip'` |
 | `captureAiMaxQueueSize?` | `number` | The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is full, the oldest AI event is dropped and reported through the `'error'` event. **Default** `1000` |
 | `captureAiRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`. **Default** `30000` |
 | `captureCompression?` | `"none"` \| `"gzip"` \| `"deflate"` \| `"zstd"` | How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set, `disableCompression: true` means `'none'`. **Default** `'gzip'` |
 | `captureMaxRetries?` | `number` | How many times a capture request is retried after its first attempt, on both capture lanes. Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After` header can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried. When not set, `fetchRetryCount` is used. **Default** `3` |
 | `captureTracingHeaders?` | `boolean` | Whether the Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id you pass explicitly always wins over these headers, and they are never used for authentication. Turning it off does not turn off `readPostHogCookie`. To stop all request linking, set `captureTracingHeaders: false` and leave `readPostHogCookie` off (its default). **Default** `true` |
-| `custom_blocked_useragents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
+| `customBlockedUserAgents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
+| `disableCaptureUrlHashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured request URLs. **Default** `false` |
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
 | `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
@@ -5101,7 +5108,7 @@ differently for cellular cost vs tab-suspension behavior).
 > **PreparedEventMessage** = `object`
 
 An event as `prepareEventMessage()` builds it: the shape of `EventMessage`, with the distinct id
-resolved and the properties and options filled from every layer, after `before_send`.
+resolved and the properties and options filled from every layer, after `beforeSend`.
 
 #### Properties
 
@@ -5110,7 +5117,7 @@ resolved and the properties and options filled from every layer, after `before_s
 | <a id="disablegeoip-3"></a> `disableGeoip?` | `boolean` | - |
 | <a id="distinctid-3"></a> `distinctId` | `string` | - |
 | <a id="event"></a> `event` | `string` | - |
-| <a id="options-4"></a> `options?` | `Record`\<`string`, `JsonType`\> | The event's options, sent to capture unchanged. |
+| <a id="options-4"></a> `options?` | `EventOptions` | The event's options, sent to capture unchanged. |
 | <a id="properties-4"></a> `properties` | `PostHogEventProperties` | - |
 | <a id="timestamp"></a> `timestamp?` | `Date` | - |
 | <a id="uuid-1"></a> `uuid?` | `string` | - |
@@ -5275,7 +5282,7 @@ The promise does not reject.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="distinctid-4"></a> `distinctId` | `string` | - |
-| <a id="options-5"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-5"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-5"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 | <a id="propertiesonce"></a> `propertiesOnce?` | `Record`\<`string` \| `number`, `any`\> | - |
 
@@ -5841,8 +5848,28 @@ evaluation call, and `unresolved_dependency` from a flag the definition depends 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="distinctid-5"></a> `distinctId` | `string` | - |
-| <a id="options-6"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-6"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-6"></a> `properties` | `string` \| `string`[] | - |
+
+### `V1EventOptions`
+
+The `options` object on a Capture V1 event: the caller's options plus any legacy
+`$`-prefixed option properties lifted by the transform. Values are sent unchanged.
+Always serialized as an object (`{}` when empty), never `null`.
+
+#### Indexable
+
+> \[`key`: `string`\]: `JsonType` \| `undefined`
+
+Additional capture options, sent to capture v1 unchanged.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-cookieless_mode"></a> `cookieless_mode?` | `boolean` | Whether to process this event in cookieless mode. |
+| <a id="property-disable_skew_correction"></a> `disable_skew_correction?` | `boolean` | Whether to disable server-side timestamp skew correction for this event. |
+| <a id="property-process_person_profile"></a> `process_person_profile?` | `boolean` | Whether to create or update a person profile for this event. |
 
 ### `Without`
 

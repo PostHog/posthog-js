@@ -1,4 +1,4 @@
-import type { JsonType } from '@posthog/core'
+import type { EventOptions } from '../../types'
 
 export interface ContextData {
   distinctId?: string
@@ -11,7 +11,7 @@ export interface ContextData {
    * reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or
    * `$set_once` events unless their distinct id is generated.
    */
-  options?: Record<string, JsonType>
+  options?: EventOptions
 }
 
 export interface ContextOptions {

@@ -34,7 +34,7 @@ const libPair = (properties: Record<string, any>): Record<string, any> =>
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-/** What `before_send` received, copied so later changes cannot alter it. */
+/** What `beforeSend` received, copied so later changes cannot alter it. */
 type HookView = { event: string; properties: Record<string, any>; options?: Record<string, JsonType> }
 
 /** A `flags` snapshot with one enabled flag `x` set to variant `v`, built without a network call. */
@@ -101,7 +101,7 @@ describe('layered event values', () => {
 
   /**
    * Sends one event whose properties come from the event, a context and `register()`, and returns
-   * the wire event plus what `before_send` saw.
+   * the wire event plus what `beforeSend` saw.
    */
   const sendWithPropertyLayers = async (
     layers: Layers,
@@ -120,7 +120,7 @@ describe('layered event values', () => {
       },
       {
         ...clientOptions,
-        before_send: (hookEvent) => {
+        beforeSend: (hookEvent) => {
           seen.push(
             structuredClone({
               event: hookEvent!.event,
@@ -205,7 +205,7 @@ describe('layered event values', () => {
     })
 
     describe('SDK values', () => {
-      it('fill $lib, $lib_version, $is_server and $geoip_disable when no layer sets them, before before_send', async () => {
+      it('fill $lib, $lib_version, $is_server and $geoip_disable when no layer sets them, before beforeSend', async () => {
         const { event, hookSaw } = await sendWithPropertyLayers({})
 
         const expected = {
@@ -325,9 +325,9 @@ describe('layered event values', () => {
         )
       })
 
-      it('before_send can change $lib and $lib_version', async () => {
+      it('beforeSend can change $lib and $lib_version', async () => {
         const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
-          before_send: (hookEvent) => {
+          beforeSend: (hookEvent) => {
             Object.assign(hookEvent!.properties!, { $lib: 'hook-lib', $lib_version: 'hook-version' })
             return hookEvent
           },
@@ -336,9 +336,9 @@ describe('layered event values', () => {
         expect(event.properties).toMatchObject({ $lib: 'hook-lib', $lib_version: 'hook-version' })
       })
 
-      it('before_send can remove $lib and $lib_version', async () => {
+      it('beforeSend can remove $lib and $lib_version', async () => {
         const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
-          before_send: (hookEvent) => {
+          beforeSend: (hookEvent) => {
             delete hookEvent!.properties!.$lib
             delete hookEvent!.properties!.$lib_version
             return hookEvent
@@ -354,9 +354,9 @@ describe('layered event values', () => {
         ['removing only $lib', (p) => delete p.$lib, { $lib_version: version }],
         ['setting $lib to null', (p) => (p.$lib = null), { $lib: null, $lib_version: version }],
         ['setting $lib alone', (p) => (p.$lib = 'hook-lib'), { $lib: 'hook-lib', $lib_version: version }],
-      ])('the SDK never refills after before_send, so %s is sent as is', async (_label, edit, expected) => {
+      ])('the SDK never refills after beforeSend, so %s is sent as is', async (_label, edit, expected) => {
         const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
-          before_send: (hookEvent) => {
+          beforeSend: (hookEvent) => {
             edit(hookEvent!.properties!)
             return hookEvent
           },
@@ -409,7 +409,7 @@ describe('layered event values', () => {
       })
 
       describe('feature flag properties from a flags snapshot', () => {
-        it('fill before before_send', async () => {
+        it('fill before beforeSend', async () => {
           const { event, hookSaw } = await sendWithPropertyLayers({}, { flags: flagSnapshot() })
 
           for (const properties of [event.properties, hookSaw.properties]) {
@@ -428,7 +428,7 @@ describe('layered event values', () => {
       })
 
       describe('trace ids on $exception', () => {
-        it('fill as a pair before before_send', async () => {
+        it('fill as a pair before beforeSend', async () => {
           const { event, hookSaw } = await sendWithPropertyLayers({}, { event: '$exception' })
 
           for (const properties of [event.properties, hookSaw.properties]) {
@@ -463,7 +463,7 @@ describe('layered event values', () => {
           vi.unstubAllEnvs()
         })
 
-        it('fills before before_send', async () => {
+        it('fills before beforeSend', async () => {
           const { event, hookSaw } = await sendWithPropertyLayers({}, { event: '$exception' })
 
           expect(event.properties.$release_id).toBe('injected-release')
@@ -486,7 +486,7 @@ describe('layered event values', () => {
       })
     })
 
-    it('before_send sees the $bot_pageview rename and has the final say', async () => {
+    it('beforeSend sees the $bot_pageview rename and has the final say', async () => {
       const seen: HookView[] = []
       const event = await sendOne(
         (client) =>
@@ -496,8 +496,8 @@ describe('layered event values', () => {
             properties: { $raw_user_agent: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
           }),
         {
-          __preview_capture_bot_pageviews: true,
-          before_send: (hookEvent) => {
+          __previewCaptureBotPageviews: true,
+          beforeSend: (hookEvent) => {
             seen.push(structuredClone({ event: hookEvent!.event, properties: hookEvent!.properties! }))
             delete hookEvent!.properties!.$browser_type
             return hookEvent
@@ -511,11 +511,11 @@ describe('layered event values', () => {
       expect(event.properties).not.toHaveProperty('$browser_type')
     })
 
-    it('before_send can remove every SDK value and nothing re-adds it', async () => {
+    it('beforeSend can remove every SDK value and nothing re-adds it', async () => {
       const event = await sendOne(
         (client) => client.capture({ distinctId: 'u', event: '$exception', flags: flagSnapshot() }),
         {
-          before_send: (hookEvent) => {
+          beforeSend: (hookEvent) => {
             hookEvent!.properties = {}
             hookEvent!.options = {}
             return hookEvent
@@ -636,7 +636,7 @@ describe('layered event values', () => {
       expect(event.properties).not.toHaveProperty('$cookieless_mode')
     })
 
-    it('before_send sees the filled options and can remove one', async () => {
+    it('beforeSend sees the filled options and can remove one', async () => {
       const seen: EventMessage[] = []
       const event = await sendOne(
         async (client) => {
@@ -644,7 +644,7 @@ describe('layered event values', () => {
           client.capture({ distinctId: 'u', event: 'e' })
         },
         {
-          before_send: (message) => {
+          beforeSend: (message) => {
             seen.push(structuredClone(message))
             delete message!.options!.product_tour_id
             return message

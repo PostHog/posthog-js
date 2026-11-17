@@ -218,12 +218,12 @@ describe('capture loss summary', () => {
     })
 
     // Where the value throws: while the lane serializes the event, or while the client first reads
-    // the call's properties (their spread, or the copy made for before_send).
+    // the call's properties (their spread, or the copy made for beforeSend).
     const unserializable: [string, () => Record<string, any>, PostHogOptions][] = [
       ['a nested getter that throws', () => ({ nested: throwingGetter() }), {}],
       ['a toJSON that throws', () => ({ value: throwingToJson() }), {}],
       ['a getter directly on properties that throws', throwingGetter as () => Record<string, any>, {}],
-      ['a nested getter copied for before_send', () => ({ nested: throwingGetter() }), { before_send: (e) => e }],
+      ['a nested getter copied for beforeSend', () => ({ nested: throwingGetter() }), { beforeSend: (e) => e }],
     ]
     const cases = unserializable.flatMap(([label, properties, options]) =>
       [false, true].flatMap((immediate) =>

@@ -179,8 +179,8 @@ describe('PostHogInterceptor', () => {
         expectedRequestPath: '/api/test#details',
       },
       {
-        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
-        options: { disable_capture_url_hashes: true },
+        name: 'strips request URL hashes when disableCaptureUrlHashes is enabled',
+        options: { disableCaptureUrlHashes: true },
         expectedCurrentUrl: '/api/test?token=secret',
         expectedRequestPath: '/api/test',
       },

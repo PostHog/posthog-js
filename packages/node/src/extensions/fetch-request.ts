@@ -110,7 +110,7 @@ async function instrument(
     getPostHogCookieReadOptions(posthog)
   )
   const existing = posthog.getContext()
-  const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
+  const disableCaptureUrlHashes = posthog.options.disableCaptureUrlHashes === true
   const pathname = safePathname(request)
   const properties: Record<string, any> = {}
   addProperty(properties, '$request_method', request.method)

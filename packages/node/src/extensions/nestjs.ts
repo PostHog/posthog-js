@@ -111,7 +111,7 @@ export class PostHogInterceptor implements NestInterceptor {
     )
 
     const properties: Record<string, any> = {}
-    const disableCaptureUrlHashes = this.posthog.options.disable_capture_url_hashes === true
+    const disableCaptureUrlHashes = this.posthog.options.disableCaptureUrlHashes === true
     addProperty(properties, '$current_url', normalizeRequestCurrentUrl(request?.url, disableCaptureUrlHashes))
     addProperty(properties, '$request_method', request?.method)
     addProperty(

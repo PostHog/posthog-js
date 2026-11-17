@@ -216,7 +216,7 @@ app.post('/init', async (req, res) => {
         historicalMigration: historical_migration ?? undefined,
         ...(before_send
             ? {
-                  before_send: (event) => ({
+                  beforeSend: (event) => ({
                       ...event,
                       properties: { ...event.properties, ...before_send.set_properties },
                   }),

@@ -151,10 +151,10 @@ describe('per-event capture options', () => {
       expect(optionsErrors()).toHaveLength(1)
     })
 
-    it('logs one error when before_send returns one', async () => {
+    it('logs one error when beforeSend returns one', async () => {
       const event = await sendOne(
         (client) => client.capture({ distinctId: 'u', event: 'e', options: { cookieless_mode: true } }),
-        { before_send: (e) => (e ? { ...e, options: 'bad' as unknown as Record<string, JsonType> } : e) }
+        { beforeSend: (e) => (e ? { ...e, options: 'bad' as unknown as Record<string, JsonType> } : e) }
       )
 
       expect(event.options).toStrictEqual({})
@@ -172,10 +172,10 @@ describe('per-event capture options', () => {
   })
 
   describe('personless events', () => {
-    it('sets the process_person_profile option, not the legacy property, before before_send', async () => {
+    it('sets the process_person_profile option, not the legacy property, before beforeSend', async () => {
       const seen: EventMessage[] = []
       const event = await sendOne((client) => client.capture({ event: 'e', properties: { keep: 'me' } }), {
-        before_send: (e) => {
+        beforeSend: (e) => {
           seen.push(structuredClone(e!))
           return e
         },
@@ -300,7 +300,7 @@ describe('per-event capture options', () => {
       contextProperties: { $process_person_profile: true },
     }
 
-    /** Sends one call under `layers` and returns the wire event plus what `before_send` saw. */
+    /** Sends one call under `layers` and returns the wire event plus what `beforeSend` saw. */
     const sendWithLayers = async (
       send: (client: PostHog) => unknown,
       layers: Layers,
@@ -324,7 +324,7 @@ describe('per-event capture options', () => {
           return client.withContext(context, () => send(client))
         },
         {
-          before_send: (message) => {
+          beforeSend: (message) => {
             seen.push(structuredClone(message!))
             return hook(message!)
           },
@@ -427,7 +427,7 @@ describe('per-event capture options', () => {
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
 
-      it('a call option beats the call legacy property, which is removed before before_send', async () => {
+      it('a call option beats the call legacy property, which is removed before beforeSend', async () => {
         const { event, hookSaw } = await sendWithLayers(
           (client) =>
             emit(client, { options: { process_person_profile: false }, properties: { $process_person_profile: true } }),
@@ -440,7 +440,7 @@ describe('per-event capture options', () => {
         expect(event.properties).not.toHaveProperty('$process_person_profile')
       })
 
-      it('treats a null call property as unset, and removes it before before_send', async () => {
+      it('treats a null call property as unset, and removes it before beforeSend', async () => {
         const { event, hookSaw } = await sendWithLayers(
           (client) => emit(client, { properties: { $process_person_profile: null } }),
           LAYERED_FALSE,
@@ -461,24 +461,21 @@ describe('per-event capture options', () => {
       ]
       const dropOptions = ({ options: _options, ...message }: EventMessage): EventMessage => message
 
-      it.each(LAYERED_LEGACY_FALSE)(
-        'from %s is removed before before_send sees the option',
-        async (_source, layers) => {
-          const { event, hookSaw } = await sendWithLayers(
-            (client) => client.identify({ distinctId: 'u' }),
-            layers,
-            ANALYTICS_CAPTURE_PATH
-          )
+      it.each(LAYERED_LEGACY_FALSE)('from %s is removed before beforeSend sees the option', async (_source, layers) => {
+        const { event, hookSaw } = await sendWithLayers(
+          (client) => client.identify({ distinctId: 'u' }),
+          layers,
+          ANALYTICS_CAPTURE_PATH
+        )
 
-          expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
-          expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
-          expect(event.options).toStrictEqual({ process_person_profile: true })
-          expect(event.properties).not.toHaveProperty('$process_person_profile')
-        }
-      )
+        expect(hookSaw.properties).not.toHaveProperty('$process_person_profile')
+        expect(hookSaw.options).toStrictEqual({ process_person_profile: true })
+        expect(event.options).toStrictEqual({ process_person_profile: true })
+        expect(event.properties).not.toHaveProperty('$process_person_profile')
+      })
 
       it.each(LAYERED_LEGACY_FALSE)(
-        'from %s is not sent when before_send drops the options',
+        'from %s is not sent when beforeSend drops the options',
         async (_source, layers) => {
           const { event } = await sendWithLayers(
             (client) => client.identify({ distinctId: 'u' }),
@@ -551,7 +548,7 @@ describe('per-event capture options', () => {
       })
     })
 
-    it('before_send sees true and can set false, which is sent', async () => {
+    it('beforeSend sees true and can set false, which is sent', async () => {
       const { event, hookSaw } = await sendWithLayers(
         (client) => client.identify({ distinctId: 'u' }),
         {},
@@ -576,7 +573,7 @@ describe('per-event capture options', () => {
       expect(event.options).toStrictEqual({ process_person_profile: false })
     })
 
-    it('gives no default to an event before_send renames to $identify', async () => {
+    it('gives no default to an event beforeSend renames to $identify', async () => {
       const { event } = await sendWithLayers(
         (client) => client.capture({ distinctId: 'u', event: 'signed_up' }),
         { registerOptions: { process_person_profile: false } },
@@ -598,7 +595,7 @@ describe('per-event capture options', () => {
     })
   })
 
-  describe('before_send', () => {
+  describe('beforeSend', () => {
     it('receives copies, so a hook that mutates the event cannot change the caller objects', async () => {
       const options: Record<string, JsonType> = { cookieless_mode: false }
       const properties = {
@@ -612,7 +609,7 @@ describe('per-event capture options', () => {
       const snapshot = structuredClone({ options, properties })
 
       const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e', properties, options }), {
-        before_send: (e) => {
+        beforeSend: (e) => {
           e!.options!.cookieless_mode = true
           e!.options!.added = 'hook'
           e!.properties!.$set.name = 'hook'
@@ -640,7 +637,7 @@ describe('per-event capture options', () => {
     it('cannot change register() defaults for later events', async () => {
       let first = true
       const posthog = makeClient({
-        before_send: (e) => {
+        beforeSend: (e) => {
           if (first) {
             e!.properties!.app.version = 'hook'
             first = false
@@ -659,7 +656,7 @@ describe('per-event capture options', () => {
 
     it('gets an options object when the caller passes none', async () => {
       const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
-        before_send: (e) => {
+        beforeSend: (e) => {
           e!.options!.process_person_profile = false
           return e
         },
@@ -688,7 +685,7 @@ describe('per-event capture options', () => {
         when: new Date(0),
       })
 
-      for (const client of [makeClient(), makeClient({ before_send: (e) => e })]) {
+      for (const client of [makeClient(), makeClient({ beforeSend: (e) => e })]) {
         await send(client, properties())
         await client.flush()
       }
@@ -705,7 +702,7 @@ describe('per-event capture options', () => {
       const callerProperties = { name: 'caller' }
 
       await sendOne((client) => send(client, callerProperties), {
-        before_send: (e) => {
+        beforeSend: (e) => {
           for (const key of ['$set', '$group_set']) {
             if (e!.properties![key]) {
               e!.properties![key].name = 'hook'
@@ -738,7 +735,7 @@ describe('per-event capture options', () => {
     ])('%s', async (_label, hook, expected) => {
       const event = await sendOne(
         (client) => client.capture({ distinctId: 'u', event: 'e', options: { cookieless_mode: true } }),
-        { before_send: (e) => hook(e!) }
+        { beforeSend: (e) => hook(e!) }
       )
 
       expect(event.options).toStrictEqual(expected)
@@ -749,7 +746,7 @@ describe('per-event capture options', () => {
       const event = await sendOne(
         (client) => client.capture({ distinctId: 'u', event: 'e', properties: { $lib: 'caller-lib', keep: 'me' } }),
         {
-          before_send: (e) => {
+          beforeSend: (e) => {
             seenLib.push(e!.properties!.$lib)
             return { ...e!, properties: { ...e!.properties, $lib: 'hook-lib', $lib_version: 'hook-version' } }
           },
@@ -762,7 +759,7 @@ describe('per-event capture options', () => {
 
     it('can add $session_id and $window_id, which move to the top level', async () => {
       const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
-        before_send: (e) => ({ ...e!, properties: { ...e!.properties, $session_id: 's', $window_id: 'w' } }),
+        beforeSend: (e) => ({ ...e!, properties: { ...e!.properties, $session_id: 's', $window_id: 'w' } }),
       })
 
       expect(event.session_id).toBe('s')

@@ -161,8 +161,8 @@ describe('Express extension', () => {
         expectedRequestPath: '/api/test#details',
       },
       {
-        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
-        options: { disable_capture_url_hashes: true },
+        name: 'strips request URL hashes when disableCaptureUrlHashes is enabled',
+        options: { disableCaptureUrlHashes: true },
         expectedCurrentUrl: '/api/test?token=secret',
         expectedRequestPath: '/api/test',
       },
@@ -436,10 +436,10 @@ describe('Express extension', () => {
       expect(mockedFetch).toHaveBeenCalledOnce()
     })
 
-    it('should expose the final status to before_send filtering', async () => {
+    it('should expose the final status to beforeSend filtering', async () => {
       await posthog.shutdown()
       const beforeSend = vi.fn((event) => (event.properties.$response_status_code < 500 ? null : event))
-      posthog = createPostHog({ before_send: beforeSend })
+      posthog = createPostHog({ beforeSend: beforeSend })
       const res = createMockResponse()
 
       createErrorHandlerMiddleware(posthog)(new Error('Not found'), createMockRequest(), res, vi.fn())
