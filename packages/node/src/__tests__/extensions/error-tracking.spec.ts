@@ -121,6 +121,51 @@ describe('public exception custom-property delivery', () => {
     }
   )
 
+  it.each(deliveries)('snapshots array length in %s %s delivery', async (mode, delivery) => {
+    await client.shutdown()
+    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
+    client = makeClient()
+    const makeArray = () => {
+      const data = ['initial']
+      Object.defineProperty(data, '0', {
+        get() {
+          data.push('ignored')
+          return 'valid'
+        },
+      })
+      return data
+    }
+    expect(JSON.stringify(makeArray())).toBe('["valid"]')
+
+    if (delivery === 'immediate') {
+      await client.captureExceptionImmediate(new Error('boom'), 'user', { data: makeArray() })
+    } else {
+      client.captureException(new Error('boom'), 'user', { data: makeArray() })
+      await client.flush()
+    }
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].batch[0].properties.data).toEqual(['valid'])
+  })
+
+  it.each(deliveries)('accepts a frozen before_send result in %s %s delivery', async (mode, delivery) => {
+    await client.shutdown()
+    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
+    client = makeClient({ before_send: (event) => event && Object.freeze(event) })
+    const data = Object.freeze({ keep: true, drop: null })
+
+    if (delivery === 'immediate') {
+      await client.captureExceptionImmediate(new Error('boom'), 'user', { data })
+    } else {
+      client.captureException(new Error('boom'), 'user', { data })
+      await client.flush()
+    }
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].batch[0].properties.data).toEqual({ keep: true })
+    expect(data).toEqual({ keep: true, drop: null })
+  })
+
   it.each(deliveries)('ignores non-index array getters in %s %s delivery', async (mode, delivery) => {
     await client.shutdown()
     vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)

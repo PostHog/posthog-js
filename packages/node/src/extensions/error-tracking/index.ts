@@ -45,7 +45,8 @@ function withoutNullObjectProperties(value: any): any {
   const root = copyValue(value)
   while (pending.length) {
     const { source, target, array } = pending.pop()!
-    const keys = array ? Array.prototype.keys.call(source) : Object.keys(source)
+    // The allocated array snapshots length before source getters can extend it.
+    const keys = array ? Array.prototype.keys.call(target) : Object.keys(source)
     for (const key of keys) {
       if (array && !(key in source)) continue
       const entry = source[key]

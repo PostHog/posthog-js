@@ -3850,9 +3850,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     // Keep custom serializers editable by before_send until all privacy hooks have run.
-    if (props._originatedFromCaptureException && eventMessage.properties) {
-      eventMessage.properties = ErrorTracking.prepareEventProperties(eventMessage.properties)
-    }
+    const preparedProperties =
+      props._originatedFromCaptureException && eventMessage.properties
+        ? ErrorTracking.prepareEventProperties(eventMessage.properties)
+        : eventMessage.properties
 
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
     const eventProperties = await Promise.resolve()
@@ -3903,7 +3904,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
         return {
           ...additionalProperties,
-          ...(eventMessage.properties || {}),
+          ...(preparedProperties || {}),
           // Only stamp $groups from the top-level `groups` when present — otherwise a
           // caller-provided properties.$groups would be clobbered with undefined (#3888).
           ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
