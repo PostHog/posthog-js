@@ -19,6 +19,8 @@ import {
 const pagePoll = (state: CspPage, predicate: () => unknown) =>
     expect.poll(() => state.page.evaluate(predicate).then(Boolean)).toBe(true)
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 const survey = {
     id: 'csp-survey',
     name: 'CSP survey',
@@ -335,7 +337,9 @@ test.describe('strict CSP: toolbar', () => {
             )
             .toEqual([
                 `${ASSETS_HOST}/static/${version}/toolbar.js`,
-                expect.stringMatching(new RegExp(`^${ASSETS_HOST}/static/toolbar\\.js\\?v=${version}&t=\\d+$`)),
+                expect.stringMatching(
+                    new RegExp(`^${escapeRegExp(`${ASSETS_HOST}/static/toolbar.js?v=${version}&t=`)}\\d+$`)
+                ),
             ])
         expect(await page.evaluate(() => (window as any).__cspToolbarLoaded)).toBeUndefined()
         expect(state.requests.filter((url) => url.includes('toolbar'))).toEqual([])
