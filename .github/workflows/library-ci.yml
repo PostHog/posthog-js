@@ -645,6 +645,15 @@ jobs:
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
 
+      # Core bundles embed the SHA-384 of every extension, so the build must be byte-for-byte reproducible.
+      - name: Check posthog-js build is deterministic
+        working-directory: packages/browser
+        run: |
+          cp -R dist "$RUNNER_TEMP/first-dist"
+          pnpm build
+          diff -r "$RUNNER_TEMP/first-dist" dist
+          node scripts/embed-extension-integrity.mjs verify
+
   generate-references:
     # Runs the generator the release workflow uses, so a doc comment or type that breaks it
     # surfaces on the PR instead of blocking the release.

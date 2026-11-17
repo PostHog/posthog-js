@@ -3,6 +3,13 @@ import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import '../../entrypoints/external-scripts-loader'
 
+const BUILT_RECORDER = `sha384-${'B'.repeat(64)}`
+const PINNED_RECORDER = `sha384-${'P'.repeat(64)}`
+
+vi.mock('../../utils/extension-integrity', () => ({
+    EXTENSION_INTEGRITY: { 'recorder.js': `sha384-${'B'.repeat(64)}`, 'surveys.js': `sha384-${'S'.repeat(64)}` },
+}))
+
 describe('external-scripts-loader', () => {
     afterEach(() => {
         vi.useRealTimers()
@@ -584,6 +591,267 @@ describe('external-scripts-loader', () => {
             const scripts = document!.getElementsByTagName('script')
             expect(scripts.length).toBe(1)
             expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/array/test-token/config.js')
+        })
+    })
+
+    describe('subresource integrity', () => {
+        const callback = vi.fn()
+        let posthog: PostHog
+        const scripts = () => document!.getElementsByTagName('script')
+
+        let consoleError: ReturnType<typeof vi.spyOn>
+
+        beforeEach(() => {
+            callback.mockClear()
+            consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+            posthog = {
+                config: {
+                    api_host: 'https://us.posthog.com',
+                    token: 'test-token',
+                    external_scripts_inject_target: 'body',
+                    strict_script_versioning: 'fallback',
+                    require_subresource_integrity: true,
+                },
+                version: '1.0.0',
+            } as PostHog
+            posthog.requestRouter = new RequestRouter(posthog)
+        })
+
+        afterEach(() => {
+            consoleError.mockRestore()
+        })
+
+        const load = (kind: Parameters<typeof assignableWindow.__PosthogExtensions__.loadExternalDependency>[1]) =>
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, kind, callback)
+
+        it('loads the exact-version path with the built-in hash and anonymous CORS', () => {
+            load('recorder')
+
+            expect(scripts()).toHaveLength(1)
+            expect(scripts()[0].src).toBe('https://us-assets.i.posthog.com/static/1.0.0/recorder.js')
+            expect(scripts()[0].integrity).toBe(BUILT_RECORDER)
+            expect(scripts()[0].crossOrigin).toBe('anonymous')
+            scripts()[0].dispatchEvent(new Event('load'))
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
+        })
+
+        it('applies a customer pin without hardened mode', () => {
+            posthog.config.require_subresource_integrity = false
+            posthog.config.external_dependency_integrity = { 'recorder.js': PINNED_RECORDER }
+
+            load('recorder')
+
+            expect(scripts()[0].src).toBe('https://us-assets.i.posthog.com/static/1.0.0/recorder.js')
+            expect(scripts()[0].integrity).toBe(PINNED_RECORDER)
+        })
+
+        it('prefers a customer pin over the built-in hash', () => {
+            posthog.config.external_dependency_integrity = { 'recorder.js': PINNED_RECORDER }
+
+            load('recorder')
+
+            expect(scripts()[0].integrity).toBe(PINNED_RECORDER)
+        })
+
+        it('leaves unpinned kinds unchanged without hardened mode', () => {
+            posthog.config.require_subresource_integrity = false
+            posthog.config.external_dependency_integrity = { 'recorder.js': PINNED_RECORDER }
+
+            load('surveys')
+
+            expect(scripts()[0].src).toBe('https://us-assets.i.posthog.com/static/1.0.0/surveys.js')
+            expect(scripts()[0].integrity).toBeFalsy()
+        })
+
+        it.each([
+            ['not a hash', true],
+            [`sha256-${'A'.repeat(43)}=`, false],
+            [`sha384-${'A'.repeat(63)}`, true],
+            [`sha384-${'A'.repeat(64)} `, false],
+        ])('fails closed on an invalid pin %j (hardened: %s)', (value, hardened) => {
+            posthog.config.require_subresource_integrity = hardened
+            posthog.config.external_dependency_integrity = { 'recorder.js': value }
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toContain('Invalid external_dependency_integrity value for recorder.js')
+            expect(consoleError).toHaveBeenCalledWith(expect.any(String), callback.mock.calls[0][0])
+        })
+
+        it('fails closed without inserting a script when no hash is available', () => {
+            load('logs')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toContain('No integrity hash for logs.js')
+        })
+
+        it.each(
+            [false, true, 'fallback'].flatMap((strictScriptVersioning) =>
+                [true, false].map((hardened) => ({ strictScriptVersioning, hardened }))
+            )
+        )(
+            'never falls back after an integrity failure (strict_script_versioning: $strictScriptVersioning, hardened: $hardened)',
+            ({ strictScriptVersioning, hardened }) => {
+                posthog.config.strict_script_versioning = strictScriptVersioning as boolean | 'fallback'
+                posthog.config.require_subresource_integrity = hardened
+                posthog.config.external_dependency_integrity = { 'recorder.js': PINNED_RECORDER }
+
+                load('recorder')
+                const error = new Event('error')
+                scripts()[0].dispatchEvent(error)
+                load('recorder')
+
+                expect(scripts()).toHaveLength(1)
+                expect(scripts()[0].src).toBe('https://us-assets.i.posthog.com/static/1.0.0/recorder.js')
+                expect(callback).toHaveBeenCalledTimes(2)
+                expect(callback).toHaveBeenNthCalledWith(1, error)
+                expect(callback).toHaveBeenNthCalledWith(2, error)
+            }
+        )
+
+        it('keeps the hash when the preparation hook rewrites src', () => {
+            posthog.config.prepare_external_dependency_script = (script) => {
+                script.src = 'https://self-hosted.example.com/posthog/recorder.js'
+                script.nonce = 'nonce'
+                return script
+            }
+
+            load('recorder')
+
+            expect(scripts()[0].src).toBe('https://self-hosted.example.com/posthog/recorder.js')
+            expect(scripts()[0].integrity).toBe(BUILT_RECORDER)
+            expect(scripts()[0].crossOrigin).toBe('anonymous')
+        })
+
+        it('exposes the expected integrity and crossOrigin to the preparation hook', () => {
+            const prepare = vi.fn((script: HTMLScriptElement) => script)
+            posthog.config.prepare_external_dependency_script = prepare
+
+            load('recorder')
+
+            expect(prepare.mock.calls[0][0].integrity).toBe(BUILT_RECORDER)
+            expect(prepare.mock.calls[0][0].crossOrigin).toBe('anonymous')
+        })
+
+        it.each([
+            ['removes integrity', (script: HTMLScriptElement) => (script.integrity = '')],
+            ['changes integrity', (script: HTMLScriptElement) => (script.integrity = PINNED_RECORDER)],
+            ['removes crossOrigin', (script: HTMLScriptElement) => script.removeAttribute('crossorigin')],
+            ['changes crossOrigin', (script: HTMLScriptElement) => (script.crossOrigin = 'use-credentials')],
+        ])('rejects a preparation hook that %s', (_, mutate) => {
+            posthog.config.prepare_external_dependency_script = (script) => {
+                mutate(script)
+                return script
+            }
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toContain('must keep integrity')
+        })
+
+        it('rejects a preparation hook that returns a different element without the hash', () => {
+            posthog.config.prepare_external_dependency_script = () => {
+                const replacement = document!.createElement('script')
+                replacement.src = 'https://us-assets.i.posthog.com/static/1.0.0/recorder.js'
+                return replacement
+            }
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback.mock.calls[0][0]).toContain('must keep integrity')
+        })
+
+        it('reports a preparation hook returning null', () => {
+            posthog.config.prepare_external_dependency_script = () => null
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledWith('prepare_external_dependency_script returned null')
+        })
+
+        it.each([false, true])(
+            'rejects a shared unverified script at the same URL (already loaded: %s)',
+            (alreadyLoaded) => {
+                const existing = document!.createElement('script')
+                existing.src = 'https://us-assets.i.posthog.com/static/1.0.0/recorder.js'
+                existing.crossOrigin = 'anonymous'
+                ;(existing as any).__posthog_loading_callback_fired = alreadyLoaded
+                document!.body.appendChild(existing)
+
+                load('recorder')
+
+                expect(scripts()).toHaveLength(1)
+                expect(existing.integrity).toBeFalsy()
+                expect(callback).toHaveBeenCalledWith('Existing script conflicts with prepared script policy')
+            }
+        )
+
+        it('shares a matching verified script between hardened instances', () => {
+            const other = { ...posthog, config: { ...posthog.config } } as PostHog
+            const otherCallback = vi.fn()
+
+            load('recorder')
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(other, 'recorder', otherCallback)
+            scripts()[0].dispatchEvent(new Event('load'))
+
+            expect(scripts()).toHaveLength(1)
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
+            expect(otherCallback).toHaveBeenCalledWith(undefined, expect.any(Event))
+        })
+
+        it('does not let a hardened instance reuse an unverified script loaded by a non-hardened instance', () => {
+            const plain = { ...posthog, config: { ...posthog.config, require_subresource_integrity: false } } as PostHog
+            plain.config.strict_script_versioning = true
+            const plainCallback = vi.fn()
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(plain, 'recorder', plainCallback)
+            load('recorder')
+
+            expect(scripts()).toHaveLength(1)
+            expect(scripts()[0].integrity).toBeFalsy()
+            expect(callback).toHaveBeenCalledWith('Existing script conflicts with prepared script policy')
+        })
+
+        it.each(['remote-config', 'toolbar'] as const)('refuses %s in hardened mode', (kind) => {
+            load(kind)
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toContain(`${kind} can't be integrity-verified`)
+        })
+
+        it.each(['remote-config', 'toolbar'] as const)('refuses a pin for %s', (kind) => {
+            posthog.config.require_subresource_integrity = false
+            posthog.config.external_dependency_integrity = { [`${kind}.js`]: PINNED_RECORDER }
+
+            load(kind)
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback.mock.calls[0][0]).toContain(`${kind} can't be integrity-verified`)
+        })
+
+        it('refuses site apps in hardened mode', () => {
+            assignableWindow.__PosthogExtensions__.loadSiteApp(posthog, '/site_app/1/abc/def/', callback)
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0]).toContain("Site apps can't be integrity-verified")
+        })
+
+        it('still respects disable_external_dependency_loading', () => {
+            posthog.config.disable_external_dependency_loading = true
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledWith('Loading of external scripts is disabled')
         })
     })
 })

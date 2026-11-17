@@ -1,11 +1,13 @@
 import { isUndefined } from '@posthog/core'
 
+export const SUBRESOURCE_INTEGRITY_PATTERN = /^sha384-[A-Za-z0-9+/]{64}$/
+
 export function getCoreIntegrity(script: Element): string | null | undefined {
     const value = script.getAttribute('data-core-integrity')?.trim()
     if (isUndefined(value)) {
         return undefined
     }
-    return /^sha384-[A-Za-z0-9+/]{64}$/.test(value) ? value : null
+    return SUBRESOURCE_INTEGRITY_PATTERN.test(value) ? value : null
 }
 
 export function getSDKScriptURL(url: HTMLAnchorElement): string {
