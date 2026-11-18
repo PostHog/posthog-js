@@ -76,5 +76,6 @@ export type {
     WebVitalsConfiguration,
     WebVitalsMetric,
 } from '../../products/web-vitals/web-vitals-options'
+export type { TracingHeadersOptions } from '../../products/tracing-headers/tracing-headers-options'
 
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'

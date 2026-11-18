@@ -43,6 +43,11 @@
             "require": "./dist/products/surveys/surveys.js",
             "import": "./dist/products/surveys/surveys.mjs"
         },
+        "./tracing-headers": {
+            "types": "./dist/products/tracing-headers/tracing-headers.d.ts",
+            "require": "./dist/products/tracing-headers/tracing-headers.js",
+            "import": "./dist/products/tracing-headers/tracing-headers.mjs"
+        },
         "./autocapture": {
             "types": "./dist/products/autocapture/autocapture.d.ts",
             "require": "./dist/products/autocapture/autocapture.js",

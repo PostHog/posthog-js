@@ -374,6 +374,37 @@ The manual core entrypoint never loads surveys automatically. Extension lookup r
 
 Definitions and event activation state use the client's shared `core` key-value store. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
+## Tracing headers
+
+Tracing headers link backend events and traces to the frontend user and session. List the backend hostnames to receive `X-POSTHOG-DISTINCT-ID`, `X-POSTHOG-SESSION-ID` and `X-POSTHOG-WINDOW-ID`, and the hosts to receive a W3C `traceparent` header:
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    tracingHeaders: {
+        hostnames: ['api.example.com'],
+        tracePropagationTargets: ['https://api.example.com'],
+    },
+})
+```
+
+The root entrypoint loads the implementation as a separate chunk during initialization when `tracingHeaders` lists a hostname or propagation target, and `createPostHog()` resolves after it is installed. For static inclusion, or with the manual core entrypoint, pass the extension instead:
+
+```ts
+import { tracingHeaders } from '@posthog/browser/tracing-headers'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [tracingHeaders({ hostnames: ['api.example.com'] })],
+})
+```
+
+The extension wraps `fetch` and `XMLHttpRequest` during setup and restores them on disposal. Hostnames are trimmed and matched exactly against the request hostname, ignoring case; schemes, ports, paths and wildcards are not supported. A propagation target with a scheme matches that origin only; any other target matches that hostname on any scheme or port. Each matching request gets a new `traceparent`, and a `traceparent` already on the request is kept. Requests to other hosts are unchanged.
+
+Values are read for each request: `fetch` reads them when called, XHR when `open()` is called. Requests use the session saved by this or another tab without extending it or rotating it for inactivity, so background requests neither keep a session alive nor start new ones. If no session exists, for example after `reset()`, or it has reached its maximum length, the request starts one, as a capture would. Requests do not capture events. While capture is not permitted, for example after `optOut()`, requests receive no PostHog headers; `traceparent` carries no identity and is still added.
+
+Cross-origin backends must allow these headers in CORS preflight responses. Tracing headers are untrusted analytics context, not authentication.
+
 ## Capture and delivery
 
 Capture, immediate capture, identity, reset and event-property registration are client methods, backed by the client's capture pipeline and the delivery its entrypoint selects. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.

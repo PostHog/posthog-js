@@ -4,6 +4,7 @@ import type { DeepReadonly } from '@posthog/browser-common'
 import { snapshotAutocaptureOptions } from '../../products/autocapture/autocapture-options'
 import { snapshotSurveysOptions } from '../../products/surveys/surveys-options'
 import { snapshotLogsOptions } from '../../products/logs/logs-options'
+import { snapshotTracingHeadersOptions } from '../../products/tracing-headers/tracing-headers-options'
 import type { BrowserExtension } from '../../core/context/browser-client'
 import type { IPostHog, PostHogOptions, RemoteConfig } from '../../core/types'
 import type { WebVitalsOptions } from '../../products/web-vitals/web-vitals-options'
@@ -125,6 +126,17 @@ const configureWebVitals = (options: PostHogOptions): ProductDefinition | undefi
     }
 }
 
+const configureTracingHeaders = (options: PostHogOptions): ProductDefinition | undefined => {
+    const snapshot = snapshotTracingHeadersOptions(options?.tracingHeaders)
+    if (!snapshot) return
+    return {
+        load: () =>
+            import('../../products/tracing-headers/tracing-headers').then(({ tracingHeaders }) =>
+                tracingHeaders(snapshot)
+            ),
+    }
+}
+
 export const createProductComposition = (options: PostHogOptions): ProductComposition => {
     const composition: ProductComposition = {
         extensions: [...(options?.extensions ?? [])],
@@ -137,5 +149,6 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
     registerProduct(composition, 'surveys', 'surveys', () => configureSurveys(options))
     registerProduct(composition, 'autocapture', 'autocapture', () => configureAutocapture(options))
     registerProduct(composition, 'webVitals', 'web vitals', () => configureWebVitals(options))
+    registerProduct(composition, 'tracingHeaders', 'tracing headers', () => configureTracingHeaders(options))
     return composition
 }

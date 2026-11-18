@@ -30,7 +30,8 @@ const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|automatic-surveys|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
 const webVitalsInput = /(^|\/)(products\/web-vitals\/[^/]+|web-vitals)\.(m?js|ts)$/
-const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput, webVitalsInput]
+const tracingHeadersInput = /(^|\/)(products\/tracing-headers\/tracing-headers|utils\/tracing-headers)\.(m?js|ts)$/
+const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput, webVitalsInput, tracingHeadersInput]
 
 // Client modules selected by entrypoint or explicit import.
 const analyticsCoreInput = /(^|\/)products\/analytics\/analytics-core\.(m?js|ts)$/
@@ -226,6 +227,7 @@ const measureRoot = async () => {
         /\/products\/surveys\/automatic-surveys\.mjs$/,
         /\/products\/autocapture\/autocapture\.mjs$/,
         /\/products\/web-vitals\/web-vitals\.mjs$/,
+        /\/products\/tracing-headers\/tracing-headers\.mjs$/,
     ]) {
         assert(
             loaded.some((entryPoint) => product.test(entryPoint)),
@@ -275,6 +277,8 @@ await measureSplit('dynamic autocapture', 'fixtures/dynamic-autocapture.ts')
 // A static product keeps its third-party library behind the product's own dynamic import.
 await measureSplit('static web vitals', 'fixtures/static-web-vitals.ts', { initialProducts: true })
 await measureSplit('dynamic web vitals', 'fixtures/dynamic-web-vitals.ts')
+await measureStatic('static tracing headers', 'fixtures/static-tracing-headers.ts', undefined, { allowProducts: true })
+await measureSplit('root tracing headers', 'fixtures/root-tracing-headers.ts', { surveys: true })
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.
 for (const [guard, boundary, inputs, graph] of [['core', coreBoundary, staticFlagsInputs, 'static flags']]) {
