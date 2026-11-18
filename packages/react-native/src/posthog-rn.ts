@@ -2044,6 +2044,7 @@ export class PostHog extends PostHogCore {
   // Replay is intentionally off: remotely (project setting or quota) or locally (opted out, or the
   // app does not want it). A start/stop made by the app flips `_sessionReplayWanted`; internal
   // stops (linked flag, sampling) leave it alone, so a recording that is merely held stays on.
+  // A running recorder is never off: an automatic start can resume one after the app stopped it.
   private _isSessionReplayOff(): boolean {
     const remoteConfig = this.getPersistedProperty<{ sessionRecording?: unknown; quotaLimited?: unknown }>(
       PostHogPersistedProperty.RemoteConfig
@@ -2055,7 +2056,12 @@ export class PostHog extends PostHogCore {
     ) {
       return true
     }
-    return this.optedOut || !this._sessionReplayWanted
+    return this.optedOut || (!this._sessionReplayWanted && !this._isNativeRecorderRunning())
+  }
+
+  private _isNativeRecorderRunning(): boolean {
+    const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
+    return status === 'active' || status === 'buffering'
   }
 
   private _isNativeSessionOwner(): boolean {

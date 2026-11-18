@@ -1293,6 +1293,29 @@ describe('PostHog RN session replay debug properties', () => {
       expectOffShape(captureOne(client, '$screen').properties)
     })
 
+    it('a linked flag resuming the recorder after an app stop restores the replay keys', async () => {
+      currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+      currentFlags = { 'replay-flag': true }
+      await warmup()
+      const client = await readyClient({ enableSessionReplay: true })
+      await waitForNativeChain(client)
+
+      await client.stopSessionRecording()
+      await waitForNativeChain(client)
+      expectOffShape(captureOne(client, '$screen').properties)
+
+      currentFlags = { 'replay-flag': false }
+      await reloadAndSettle(client)
+      currentFlags = { 'replay-flag': true }
+      await reloadAndSettle(client)
+      expect(nativeRecording).toBe(true)
+
+      advanceClock(WINDOW_MS)
+      const { properties } = captureOne(client, '$screen')
+      expectOnShape(properties)
+      expect(properties.$recording_status).toBe('active')
+    })
+
     it('being opted out reads as off', async () => {
       const client = await readyClient({ enableSessionReplay: true })
       await client.optOut()
