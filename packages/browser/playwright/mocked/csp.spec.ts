@@ -299,7 +299,10 @@ test.describe('strict CSP: lazy extensions', () => {
     for (const scenario of coreScenarios) {
         for (const extension of extensionCases) {
             test(`${extension.name} under ${scenario.name}`, async ({ page }) => {
-                const state = await openCspPage(page, { ...extension.options, scenario: allowSelfConnect(scenario) })
+                const state = await openCspPage(page, {
+                    ...extension.options,
+                    scenario: extension.name === 'tracing headers' ? allowSelfConnect(scenario) : scenario,
+                })
                 await state.waitForLoaded()
                 await extension.exercise(state)
                 await expectNoUnexpectedActivity(state, {
