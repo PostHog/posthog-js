@@ -1,7 +1,11 @@
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
-import { addContextParameterToTool, addContextParameterToTools } from '../extensions/context-parameters'
+import {
+  addContextParameterToTool,
+  addContextParameterToTools,
+  type ContextInjectableTool,
+} from '../extensions/context-parameters'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { log } from '../extensions/logger'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -70,7 +74,7 @@ describe('addContextParameterToTool', () => {
     })
 
     it('keeps additionalProperties:false, since the injected param is a declared property', () => {
-      const result = addContextParameterToTool({
+      const result = addContextParameterToTool<ContextInjectableTool>({
         name: 'strict-tool',
         inputSchema: {
           type: 'object',
@@ -140,16 +144,18 @@ describe('addContextParameterToTool', () => {
   describe('uses custom description when provided', () => {
     it('overrides the default description', () => {
       const customDescription = 'Explain your reasoning for this action'
-      const result = addContextParameterToTool({ name: 'tool' }, customDescription)
+      const result = addContextParameterToTool<ContextInjectableTool>({ name: 'tool' }, customDescription)
 
-      expect(result.inputSchema?.properties?.context?.description).toBe(customDescription)
+      expect((result.inputSchema?.properties?.context as { description?: string } | undefined)?.description).toBe(
+        customDescription
+      )
     })
   })
 })
 
 describe('addContextParameterToTools (batch)', () => {
   it('treats get_more_tools like a normal tool when it is already in the batch', () => {
-    const result = addContextParameterToTools([
+    const result = addContextParameterToTools<ContextInjectableTool>([
       { name: 'get_more_tools', inputSchema: {} },
       { name: 'other-tool', inputSchema: {} },
     ])

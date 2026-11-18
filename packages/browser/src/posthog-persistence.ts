@@ -329,6 +329,14 @@ export class PostHogPersistence {
         }
     }
 
+    /** @internal Adopt shared flag state before deriving a partial/error merge, preserving pending local writes. */
+    reconcileFeatureFlagsBeforeMerge(): boolean {
+        if (this._disabled || this._cookieSyncSuppressed || this._storageMigrationInProgress) {
+            return false
+        }
+        return this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
+    }
+
     markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[] | true>): void {
         Object.entries(changes).forEach(([key, properties]) => {
             const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)

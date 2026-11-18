@@ -31152,7 +31152,7 @@
                                     }
                                 ],
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/s",
                                 "query": {
@@ -31582,7 +31582,7 @@
                                     "sent_at": "2024-01-01T00:00:04.200Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
@@ -57879,7 +57879,7 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
@@ -99419,7 +99419,7 @@
                                     }
                                 ],
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/s",
                                 "query": {
@@ -99849,7 +99849,7 @@
                                     "sent_at": "2024-01-01T00:00:04.200Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
@@ -126146,7 +126146,7 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
@@ -167770,7 +167770,7 @@
                                     }
                                 ],
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/s",
                                 "query": {
@@ -168200,7 +168200,7 @@
                                     "sent_at": "2024-01-01T00:00:04.200Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
@@ -194497,7 +194497,7 @@
                                     "sent_at": "2024-01-01T00:00:00.000Z"
                                 },
                                 "contentEncoding": null,
-                                "contentType": "application/x-www-form-urlencoded",
+                                "contentType": "text/plain",
                                 "method": "POST",
                                 "path": "/e",
                                 "query": {
