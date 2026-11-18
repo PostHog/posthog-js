@@ -1,13 +1,13 @@
 import { h, Component } from 'preact'
-import {
-    ConversationsRemoteConfig,
+import type { ConversationsRemoteConfig } from '../../types/remote-config'
+import type {
     Message,
     ConversationsWidgetState,
     RequestRestoreLinkResponse,
     UserProvidedTraits,
     Ticket,
-} from '../../../../posthog-conversations-types'
-import { createLogger } from '@posthog/browser-common/utils/logger'
+} from '../../types/conversations'
+import { createLogger } from '../../utils/logger'
 import { getStyles } from './styles'
 import { DEFAULT_PRIMARY_COLOR } from '../theme'
 import { OpenChatButton } from './OpenChatButton'

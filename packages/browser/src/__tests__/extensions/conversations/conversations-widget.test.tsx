@@ -1,8 +1,8 @@
 import { render, fireEvent, waitFor } from '@testing-library/preact'
 import '@testing-library/jest-dom'
-import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'
+import { ConversationsWidget } from '@posthog/browser-common/conversations/components/ConversationsWidget'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
-import { createConversationsError } from '../../../extensions/conversations/external/errors'
+import { createConversationsError } from '@posthog/browser-common/conversations/errors'
 import Config from '../../../config'
 
 describe('ConversationsWidget', () => {

@@ -1,8 +1,4 @@
-import {
-    stripMarkdown,
-    truncateText,
-    formatRelativeTime,
-} from '../../../extensions/conversations/external/components/utils'
+import { stripMarkdown, truncateText, formatRelativeTime } from '@posthog/browser-common/conversations/components/utils'
 
 describe('conversations utils', () => {
     describe('stripMarkdown', () => {

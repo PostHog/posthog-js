@@ -1,5 +1,5 @@
-import { h, FunctionComponent } from 'preact'
-import { Ticket, TicketStatus } from '../../../../posthog-conversations-types'
+import { h, type FunctionComponent } from 'preact'
+import type { Ticket, TicketStatus } from '../../types/conversations'
 import { getStyles } from './styles'
 import { formatRelativeTime, truncateText, stripMarkdown } from './utils'
 

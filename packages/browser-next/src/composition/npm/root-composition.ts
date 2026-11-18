@@ -9,6 +9,7 @@ import { snapshotAutocaptureOptions } from '../../products/autocapture/autocaptu
 import { snapshotSurveysOptions } from '../../products/surveys/surveys-options'
 import { snapshotLogsOptions } from '../../products/logs/logs-options'
 import { snapshotTracingHeadersOptions } from '../../products/tracing-headers/tracing-headers-options'
+import { snapshotConversationsOptions } from '../../products/conversations/conversations-options'
 import type { BrowserExtension } from '../../core/context/browser-client'
 import type { IPostHog, PostHogOptions, RemoteConfig } from '../../core/types'
 import type { WebVitalsOptions } from '../../products/web-vitals/web-vitals-options'
@@ -158,6 +159,67 @@ const configureErrorTracking = (options: PostHogOptions): ProductDefinition | un
     }
 }
 
+const configureConversations = (options: PostHogOptions): ProductDefinition | undefined => {
+    const configuration = options?.conversations
+    if (configuration === false) return
+    const snapshot = snapshotConversationsOptions(configuration)
+    return {
+        load: () =>
+            import('../../products/conversations/conversations-extension').then(
+                ({ createConversations, loadConversationsRenderer }) =>
+                    createConversations(snapshot, loadConversationsRenderer)
+            ),
+        activate:
+            configuration === undefined
+                ? activateFromSignals(
+                      () => false,
+                      ({ conversations }) =>
+                          conversations === true ||
+                          (typeof conversations === 'object' && conversations?.enabled === true)
+                  )
+                : undefined,
+    }
+}
+
+const isToolbarAuthorization = (state: string, decode: (value: string) => string): boolean => {
+    try {
+        return JSON.parse(decode(decodeURIComponent(state)))?.action === 'ph_authorize'
+    } catch {
+        return false
+    }
+}
+
+// Read the toolbar signals when the client is created, before an application router can replace the URL hash.
+const configureToolbar = (options: PostHogOptions): ProductDefinition | undefined => {
+    const configuration = options?.toolbar
+    if (configuration === false) return
+    const snapshot = { ...configuration }
+    let stateHash: string | null = null
+    let signal = false
+    try {
+        // Inline equivalents of the shared toolbar helpers keep the toolbar module out of the initial chunk.
+        const hash = globalThis.location?.hash ?? ''
+        stateHash = /(?:^|[#&?])__posthog=([^&]*)/.exec(hash)?.[1] || /(?:^|[#&?])state=([^&]*)/.exec(hash)?.[1] || null
+        // Only a toolbar authorization counts, so an unrelated `state` parameter such as OAuth's loads nothing.
+        signal =
+            (!!stateHash &&
+                (isToolbarAuthorization(stateHash, atob) || isToolbarAuthorization(stateHash, (value) => value))) ||
+            !!globalThis.localStorage?.getItem('_postHogToolbarParams')
+    } catch {
+        // Unavailable location or storage leaves the toolbar to explicit loading.
+    }
+    return {
+        load: () =>
+            import('../../products/toolbar/toolbar-extension').then(({ createToolbar }) =>
+                createToolbar(snapshot, stateHash)
+            ),
+        activate: (_host, acquire) => {
+            // Initialization does not wait for the toolbar.
+            if (signal) void acquire()
+        },
+    }
+}
+
 export const createProductComposition = (options: PostHogOptions): ProductComposition => {
     const composition: ProductComposition = {
         extensions: [...(options?.extensions ?? [])],
@@ -172,5 +234,7 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
     registerProduct(composition, 'webVitals', 'web vitals', () => configureWebVitals(options))
     registerProduct(composition, 'tracingHeaders', 'tracing headers', () => configureTracingHeaders(options))
     registerProduct(composition, 'errorTracking', 'error tracking', () => configureErrorTracking(options))
+    registerProduct(composition, 'conversations', 'conversations', () => configureConversations(options))
+    registerProduct(composition, 'toolbar', 'toolbar', () => configureToolbar(options))
     return composition
 }

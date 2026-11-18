@@ -1,6 +1,6 @@
 import { render } from '@testing-library/preact'
 import '@testing-library/jest-dom'
-import { RichContent } from '../../../extensions/conversations/external/components/RichContent'
+import { RichContent } from '@posthog/browser-common/conversations/components/RichContent'
 import { TipTapDoc } from '../../../posthog-conversations-types'
 
 describe('RichContent', () => {

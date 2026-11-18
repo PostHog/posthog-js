@@ -4,6 +4,8 @@ import type { FeatureFlags } from '../../products/flags/flags-token'
 import type { LogsExtension } from '../../products/logs/logs-internal'
 import type { SurveysExtension } from '../../products/surveys/surveys-internal'
 import type { ErrorTrackingExtension } from '../../products/error-tracking/error-tracking-internal'
+import type { ToolbarExtension } from '../../products/toolbar/toolbar-options'
+import type { ConversationsExtension } from '../../products/conversations/conversations-options'
 import type { ConsentState } from '../state/state'
 
 export interface IdentifyInfo {
@@ -43,4 +45,6 @@ export interface BrowserProducts {
     autocapture: BrowserExtension & { setElementSelectors(selectors: Set<string>): void }
     webVitals: BrowserExtension
     errorTracking: ErrorTrackingExtension
+    toolbar: ToolbarExtension
+    conversations: ConversationsExtension
 }

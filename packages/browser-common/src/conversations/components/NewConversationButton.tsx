@@ -1,4 +1,4 @@
-import { h, FunctionComponent } from 'preact'
+import { h, type FunctionComponent } from 'preact'
 import { getStyles } from './styles'
 
 interface NewConversationButtonProps {
