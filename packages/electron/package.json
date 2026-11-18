@@ -64,7 +64,7 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@types/node": "^22.19.1",
-        "electron": "42.4.0",
+        "electron": "42.11.16",
         "tsdown": "catalog:",
         "typescript": "catalog:native",
         "vitest": "catalog:"
