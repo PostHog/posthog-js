@@ -1,5 +1,5 @@
-import { createLogger } from '@posthog/browser-common/utils/logger'
-import { window } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '../utils/logger'
+import { window } from '../utils/globals'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -10,7 +10,7 @@ export const RESTORE_QUERY_PARAM = 'ph_conv_restore'
  */
 function extractHostname(domain: string): string | null {
     let hostname = domain.replace(/^https?:\/\//, '')
-    hostname = hostname.split('/')[0].split('?')[0].split(':')[0]
+    hostname = hostname.split('/')[0]!.split('?')[0]!.split(':')[0]!
     return hostname || null
 }
 

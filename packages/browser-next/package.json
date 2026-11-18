@@ -67,6 +67,16 @@
             "types": "./dist/products/error-tracking/error-tracking.d.ts",
             "require": "./dist/products/error-tracking/error-tracking.js",
             "import": "./dist/products/error-tracking/error-tracking.mjs"
+        },
+        "./conversations": {
+            "types": "./dist/products/conversations/conversations.d.ts",
+            "require": "./dist/products/conversations/conversations.js",
+            "import": "./dist/products/conversations/conversations.mjs"
+        },
+        "./toolbar": {
+            "types": "./dist/products/toolbar/toolbar.d.ts",
+            "require": "./dist/products/toolbar/toolbar.js",
+            "import": "./dist/products/toolbar/toolbar.mjs"
         }
     },
     "scripts": {

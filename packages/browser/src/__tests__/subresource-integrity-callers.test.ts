@@ -184,6 +184,6 @@ describe('require_subresource_integrity callers', () => {
 
         expect(loadedKinds()).toContain('toolbar')
         expect(document.getElementsByTagName('script')).toHaveLength(0)
-        expect(posthog.toolbar['_getToolbarState']()).toBe(0)
+        expect(assignableWindow.ph_toolbar_state).toBe(0)
     })
 })

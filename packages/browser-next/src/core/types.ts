@@ -13,6 +13,8 @@ import type { AutocaptureConfiguration } from '../products/autocapture/autocaptu
 import type { WebVitalsConfiguration } from '../products/web-vitals/web-vitals-options'
 import type { TracingHeadersOptions } from '../products/tracing-headers/tracing-headers-options'
 import type { ErrorTrackingConfiguration } from '../products/error-tracking/error-tracking-options'
+import type { ToolbarConfiguration } from '../products/toolbar/toolbar-options'
+import type { ConversationsConfiguration } from '../products/conversations/conversations-options'
 import type { AnalyticsOptions, PersonProfileMode } from '../products/analytics/analytics-options'
 
 import type {
@@ -142,6 +144,10 @@ export interface PostHogOptions {
     tracingHeaders?: TracingHeadersOptions
     /** Acquire error tracking from saved/fresh exception autocapture signals, or during initialization when configured explicitly. */
     errorTracking?: ErrorTrackingConfiguration
+    /** Load the toolbar when the URL or a previous toolbar session authorizes it. Pass `false` to disable. */
+    toolbar?: ToolbarConfiguration
+    /** Acquire conversations when remote configuration enables them, or during initialization when configured explicitly. */
+    conversations?: ConversationsConfiguration
     /** Install extensions before the factory resolves. Explicit instances take precedence over automatic product options. */
     extensions?: readonly Extension[]
 }
@@ -160,7 +166,15 @@ export interface RuntimeOptions {
 /** Options for the manually composed `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<
     PostHogOptions,
-    'flags' | 'logs' | 'surveys' | 'autocapture' | 'webVitals' | 'tracingHeaders' | 'errorTracking'
+    | 'flags'
+    | 'logs'
+    | 'surveys'
+    | 'autocapture'
+    | 'webVitals'
+    | 'tracingHeaders'
+    | 'errorTracking'
+    | 'toolbar'
+    | 'conversations'
 >
 
 /** Capture V1's terminal verdict for one reported event. */

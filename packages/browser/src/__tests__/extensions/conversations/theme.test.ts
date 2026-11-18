@@ -1,10 +1,5 @@
-import {
-    buildThemeCss,
-    cssVar,
-    getContrastTextColor,
-    mergeThemes,
-} from '../../../extensions/conversations/external/theme'
-import { getStyles } from '../../../extensions/conversations/external/components/styles'
+import { buildThemeCss, cssVar, getContrastTextColor, mergeThemes } from '@posthog/browser-common/conversations/theme'
+import { getStyles } from '@posthog/browser-common/conversations/components/styles'
 
 const SELECTOR = '[id="ph-conversations-widget-container"]'
 

@@ -31,7 +31,13 @@ export const prepareStylesheet = (
 
     const prepareExternalDependencyStylesheet = getStylesheetPreparer(context)
     if (prepareExternalDependencyStylesheet) {
-        stylesheet = prepareExternalDependencyStylesheet(stylesheet)
+        try {
+            stylesheet = prepareExternalDependencyStylesheet(stylesheet)
+        } catch (error) {
+            // A failing customer callback leaves the UI unstyled rather than breaking its rendering.
+            logger.error('prepare_external_dependency_stylesheet failed', error)
+            return null
+        }
     }
 
     if (!stylesheet) {
