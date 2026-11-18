@@ -4,7 +4,8 @@
 
 // import { patch } from 'rrweb/typings/utils'
 // copied from https://github.com/rrweb-io/rrweb/blob/8aea5b00a4dfe5a6f59bd2ae72bb624f45e51e81/packages/rrweb/src/utils.ts#L129
-import { isFunction } from '@posthog/core'
+// @posthog/core is not side-effect free, so its barrel would add unrelated modules to standalone consumers.
+/* oxlint-disable posthog-js/no-direct-function-check */
 
 // Each call to `patch` installs a "layer" in the wrapper chain. A wrapper calls
 // down through its layer's mutable `next` reference rather than closing over the
@@ -27,7 +28,7 @@ const noop = () => {
 }
 
 const spliceableLayer = (method: unknown): PatchLayer | undefined => {
-    if (!isFunction(method)) {
+    if (typeof method !== 'function') {
         return undefined
     }
     return ((method as any).__posthog_layer__ ?? (method as any).__rrweb_layer__) as PatchLayer | undefined
@@ -59,7 +60,7 @@ export function patch(
 
         // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
         // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
-        if (isFunction(wrapped)) {
+        if (typeof wrapped === 'function') {
             wrapped.prototype = wrapped.prototype || {}
             Object.defineProperties(wrapped, {
                 __posthog_wrapped__: {

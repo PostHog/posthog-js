@@ -403,6 +403,17 @@ The default consent key is `__ph_opt_in_out_<project-token>` in the configured s
 
 Do not assume that installing the client or reading `session` starts recording. The new core's initial `$pageview` also does not by itself replace legacy SPA navigation tracking, page-leave capture, or URL/title enrichment.
 
+## Tracing headers
+
+| Before                                                             | After                                                                      |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `tracing_headers: ['api.example.com']`                             | `tracingHeaders: { hostnames: ['api.example.com'] }`                       |
+| `addTracingHeaders` / `__add_tracing_headers` (deprecated aliases) | `tracingHeaders: { hostnames: [...] }`                                     |
+| `trace_propagation_targets: ['https://api.example.com']`           | `tracingHeaders: { tracePropagationTargets: ['https://api.example.com'] }` |
+| `set_config({ tracing_headers, trace_propagation_targets })`       | **Not supported:** configuration is fixed when the client is created.      |
+
+The headers and matching rules are unchanged, except that hostnames are trimmed and matched ignoring case. Requests made while capture is not permitted receive no PostHog headers, unlike the legacy SDK; `traceparent` is still added. With the manual core entrypoint, pass `tracingHeaders(options)` from `@posthog/browser/tracing-headers` in `extensions`.
+
 ## Error tracking and other integrations
 
 These facade APIs do not yet have equivalents on the supported browser entrypoints:
