@@ -32,29 +32,17 @@ describe('public exception custom-property delivery', () => {
   })
 
   afterEach(async () => {
-    try {
-      await client.shutdown()
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    await client.shutdown()
   })
 
-  const deliveries = [
-    ['v0', 'immediate'],
-    ['v0', 'batched'],
-    ['v1', 'immediate'],
-    ['v1', 'batched'],
-  ] as const
+  const deliveries = ['immediate', 'batched'] as const
 
   it.each(
-    deliveries.flatMap(([mode, delivery]) =>
-      (['delete', 'replace'] as const).map((redaction) => ({ mode, delivery, redaction }))
-    )
-  )('honors before_send $redaction redaction in $mode $delivery delivery', async ({ mode, delivery, redaction }) => {
+    deliveries.flatMap((delivery) => (['delete', 'replace'] as const).map((redaction) => ({ delivery, redaction })))
+  )('honors beforeSend $redaction redaction in $delivery delivery', async ({ delivery, redaction }) => {
     await client.shutdown()
-    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
     client = makeClient({
-      before_send: (event) => {
+      beforeSend: (event) => {
         if (event?.properties) {
           if (redaction === 'delete') {
             delete event.properties.data.secret
@@ -86,16 +74,15 @@ describe('public exception custom-property delivery', () => {
   })
 
   it.each(
-    deliveries.flatMap(([mode, delivery]) =>
-      (['object', 'primitive'] as const).map((representation) => ({ mode, delivery, representation }))
+    deliveries.flatMap((delivery) =>
+      (['object', 'primitive'] as const).map((representation) => ({ delivery, representation }))
     )
   )(
-    'redacts backing fields for a $representation serializer in $mode $delivery delivery',
-    async ({ mode, delivery, representation }) => {
+    'redacts backing fields for a $representation serializer in $delivery delivery',
+    async ({ delivery, representation }) => {
       await client.shutdown()
-      vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
       client = makeClient({
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event?.properties) delete event.properties.data.secret
           return event
         },
@@ -121,9 +108,8 @@ describe('public exception custom-property delivery', () => {
     }
   )
 
-  it.each(deliveries)('snapshots array length in %s %s delivery', async (mode, delivery) => {
+  it.each(deliveries)('snapshots array length in %s delivery', async (delivery) => {
     await client.shutdown()
-    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
     client = makeClient()
     const makeArray = () => {
       const data = ['initial']
@@ -148,10 +134,9 @@ describe('public exception custom-property delivery', () => {
     expect(requests[0].batch[0].properties.data).toEqual(['valid'])
   })
 
-  it.each(deliveries)('accepts a frozen before_send result in %s %s delivery', async (mode, delivery) => {
+  it.each(deliveries)('accepts a frozen beforeSend result in %s delivery', async (delivery) => {
     await client.shutdown()
-    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
-    client = makeClient({ before_send: (event) => event && Object.freeze(event) })
+    client = makeClient({ beforeSend: (event) => event && Object.freeze(event) })
     const data = Object.freeze({ keep: true, drop: null })
 
     if (delivery === 'immediate') {
@@ -166,9 +151,8 @@ describe('public exception custom-property delivery', () => {
     expect(data).toEqual({ keep: true, drop: null })
   })
 
-  it.each(deliveries)('ignores non-index array getters in %s %s delivery', async (mode, delivery) => {
+  it.each(deliveries)('ignores non-index array getters in %s delivery', async (delivery) => {
     await client.shutdown()
-    vi.stubEnv('POSTHOG_CAPTURE_MODE', mode)
     client = makeClient()
     const ignoredGetter = vi.fn(() => {
       throw new Error('non-index array getter evaluated')
@@ -245,9 +229,22 @@ describe('public exception custom-property delivery', () => {
     expect(2 in items).toBe(false)
   })
 
-  it('does not invoke a custom serializer when before_send discards the event', async () => {
+  it('preserves explicit severity while cleaning custom properties', async () => {
+    await client.captureExceptionImmediate(new Error('boom'), {
+      distinctId: 'user',
+      level: 'warning',
+      properties: { $exception_level: 'fatal', drop: null, area: 'checkout' },
+    })
+
+    expect(requests).toHaveLength(1)
+    const properties = requests[0].batch[0].properties
+    expect(properties).toMatchObject({ $exception_level: 'warning', area: 'checkout' })
+    expect(properties).not.toHaveProperty('drop')
+  })
+
+  it('does not invoke a custom serializer when beforeSend discards the event', async () => {
     await client.shutdown()
-    client = makeClient({ before_send: () => null })
+    client = makeClient({ beforeSend: () => null })
     const toJSON = vi.fn(() => {
       throw new Error('discarded serializer evaluated')
     })

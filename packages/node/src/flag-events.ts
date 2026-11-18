@@ -154,8 +154,11 @@ export function applyFlagEventCapture(properties: Record<string, any>, capture: 
  *
  * @internal
  */
-export function minimizeConfigVersion2FlagCalledProperties(properties: Record<string, any>): Record<string, any> {
-  const minimal = minimizeFlagCalledEventProperties(properties)
+export function minimizeConfigVersion2FlagCalledProperties(
+  properties: Record<string, any>,
+  transportKeys: readonly string[] = []
+): Record<string, any> {
+  const minimal = minimizeFlagCalledEventProperties(properties, transportKeys)
   for (const name of CONFIG_VERSION_2_ATTRIBUTION_PROPERTIES) {
     if (properties[name] !== undefined) {
       minimal[name] = properties[name]

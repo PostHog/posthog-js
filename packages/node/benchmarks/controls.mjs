@@ -551,28 +551,36 @@ test('receiver accepts reordered delivery and rejects balanced duplication, inva
     distinct_id: users[sequence % 16].distinctId,
     properties: { payload: 'x'.repeat(32), plan: 'pro', sequence },
   }))
-  const send = (network, batch) =>
-    network.fetch('http://benchmark.invalid/batch/', {
-      method: 'POST',
-      body: JSON.stringify({ batch }),
-    })
-  const network = transport(32, 32)
-  await send(network, [...events].reverse())
-  network.verifyDelivery(32)
-  network.reset()
-  await send(network, events.slice(0, 16))
-  network.verifyDelivery(16)
-  for (const batch of [
-    [...events.slice(0, 16), ...events.slice(0, 16)],
-    events.slice(1),
-    events.map((event) => ({ ...event, properties: { ...event.properties, sequence: -1 } })),
-    events.map((event) => ({ ...event, properties: { ...event.properties, sequence: 32 } })),
-    events.map((event) => ({ ...event, properties: { ...event.properties, sequence: 0.5 } })),
-    events.map((event) => ({ ...event, distinct_id: users[(event.properties.sequence + 1) % 16].distinctId })),
-  ]) {
+  // The merge-base SDK in a paired run posts to /batch/; this SDK posts to capture v1.
+  for (const route of ['/batch/', '/i/v1/analytics/events']) {
+    const send = (network, batch) =>
+      network.fetch(`http://benchmark.invalid${route}`, {
+        method: 'POST',
+        body: JSON.stringify({ batch }),
+      })
+    const network = transport(32, 32)
+    const reply = await (await send(network, [...events].reverse())).json()
+    assert.deepEqual(
+      Object.keys(reply),
+      route === '/batch/' ? ['status'] : ['results'],
+      `${route} answers in its own format`
+    )
+    network.verifyDelivery(32)
     network.reset()
-    await send(network, batch)
-    assert.throws(() => network.verifyDelivery(32), { code: 'ERR_ASSERTION' })
+    await send(network, events.slice(0, 16))
+    network.verifyDelivery(16)
+    for (const batch of [
+      [...events.slice(0, 16), ...events.slice(0, 16)],
+      events.slice(1),
+      events.map((event) => ({ ...event, properties: { ...event.properties, sequence: -1 } })),
+      events.map((event) => ({ ...event, properties: { ...event.properties, sequence: 32 } })),
+      events.map((event) => ({ ...event, properties: { ...event.properties, sequence: 0.5 } })),
+      events.map((event) => ({ ...event, distinct_id: users[(event.properties.sequence + 1) % 16].distinctId })),
+    ]) {
+      network.reset()
+      await send(network, batch)
+      assert.throws(() => network.verifyDelivery(32), { code: 'ERR_ASSERTION' })
+    }
   }
 })
 

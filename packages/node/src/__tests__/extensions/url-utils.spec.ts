@@ -10,7 +10,7 @@ describe('url-utils', () => {
         expected: '/api/items?token=secret#details',
       },
       {
-        name: 'preserves search but strips hash when disable_capture_url_hashes is enabled',
+        name: 'preserves search but strips hash when disableCaptureUrlHashes is enabled',
         input: '/api/items?token=secret#details',
         disableCaptureUrlHashes: true,
         expected: '/api/items?token=secret',
@@ -41,7 +41,7 @@ describe('url-utils', () => {
         expected: '/api/items#details',
       },
       {
-        name: 'always strips search and strips hash when disable_capture_url_hashes is enabled',
+        name: 'always strips search and strips hash when disableCaptureUrlHashes is enabled',
         input: '/api/items?token=secret#details',
         disableCaptureUrlHashes: true,
         expected: '/api/items',
@@ -53,7 +53,7 @@ describe('url-utils', () => {
         expected: '/api/items',
       },
       {
-        name: 'strips search without a hash when disable_capture_url_hashes is enabled',
+        name: 'strips search without a hash when disableCaptureUrlHashes is enabled',
         input: '/api/items?token=secret',
         disableCaptureUrlHashes: true,
         expected: '/api/items',
@@ -65,7 +65,7 @@ describe('url-utils', () => {
         expected: '/api/items#details?token=secret',
       },
       {
-        name: 'strips hash before question marks when disable_capture_url_hashes is enabled',
+        name: 'strips hash before question marks when disableCaptureUrlHashes is enabled',
         input: '/api/items#details?token=secret',
         disableCaptureUrlHashes: true,
         expected: '/api/items',
