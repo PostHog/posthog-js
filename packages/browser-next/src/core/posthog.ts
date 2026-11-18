@@ -474,7 +474,15 @@ class PostHog implements IPostHog {
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && !this.hasOptedOut())
+        // Only a body-less GET can be permitted while opted out, so the permission cannot carry event data.
+        const allowWhileOptedOut =
+            init?.allowWhileOptedOut === true && init.body === undefined && (init.method ?? 'GET') === 'GET'
+        return sendRequest(
+            this._requestRuntime,
+            path,
+            init,
+            () => !this._blocked && (allowWhileOptedOut || !this.hasOptedOut())
+        )
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {

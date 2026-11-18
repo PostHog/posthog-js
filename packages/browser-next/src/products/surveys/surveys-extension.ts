@@ -1,13 +1,14 @@
 import type { Client, Disposable } from '@posthog/browser-common'
-import { PostHogSurveys } from '@posthog/browser-common/surveys'
+import { PostHogSurveys, SurveyEventName, SurveyEventProperties } from '@posthog/browser-common/surveys'
 import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
-import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS, setSurveySeenOnLocalStorage } from '@posthog/browser-common/utils/survey-utils'
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import type { AnalyticsTeardownSubscription } from '../analytics/analytics-internal'
 import { analyticsOf } from '../analytics/analytics-core'
 import type { FlagsExtension } from '../flags/flags-internal'
+import type { FeatureFlags } from '../flags/flags-token'
 import type { SurveysExtension } from './surveys-internal'
 import type { IPostHog } from '../../core/types'
 import {
@@ -19,6 +20,14 @@ import {
 } from './surveys-options'
 
 type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): SurveysManager | undefined }
+
+// Captured events after which matching surveys can change: URL targeting, cooldowns and seen state.
+const MATCHING_CONDITION_EVENTS: readonly string[] = [
+    '$pageview',
+    SurveyEventName.SHOWN,
+    SurveyEventName.DISMISSED,
+    SurveyEventName.SENT,
+]
 
 export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
     const config = snapshotSurveysOptions(options)
@@ -36,6 +45,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let loading: Promise<Renderer> | undefined
     let remoteSubscription: Disposable | undefined
     let resetSubscription: Disposable | undefined
+    let seenSubscription: Disposable | undefined
     const getFlagsContext = () => (client?.featureFlags as FlagsExtension | undefined)?.getSurveyContext?.()
     const reset = () => {
         shared.reset()
@@ -74,6 +84,51 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     })
             },
         }),
+        onMatchingConditionsChanged: (callback) => {
+            const subscriptions: Disposable[] = []
+            if (client) {
+                subscriptions.push(
+                    client.onEvent(({ event }) => {
+                        if (MATCHING_CONDITION_EVENTS.includes(event)) callback()
+                    })
+                )
+            }
+            // Rendering updates cooldown state even when shown-event telemetry is not captured.
+            const onShown = () => callback()
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            if (typeof window !== 'undefined') window.addEventListener('PHSurveyShown', onShown)
+            // onFeatureFlags can deliver its current value while subscribing; the shared subscription
+            // establishes its own initial value, so only later flag changes notify.
+            let listening = false
+            let stopped = false
+            const subscribeToFlags = (flags: FeatureFlags) => {
+                subscriptions.push(
+                    flags.onFeatureFlags(() => {
+                        if (listening) callback()
+                    })
+                )
+                listening = true
+            }
+            const flags = client?.featureFlags
+            if (flags) subscribeToFlags(flags)
+            else if (client) {
+                // Flags installed after this subscription can still change the matching set.
+                void client.resolveExtension('featureFlags').then(
+                    (installed) => {
+                        if (stopped || !installed) return
+                        subscribeToFlags(installed)
+                        callback()
+                    },
+                    () => {}
+                )
+            }
+            return () => {
+                stopped = true
+                listening = false
+                subscriptions.splice(0).forEach((subscription) => subscription.dispose())
+                if (typeof window !== 'undefined') window.removeEventListener('PHSurveyShown', onShown)
+            }
+        },
     }
     const shared = new (class extends PostHogSurveys {
         protected override _createEventReceiver(value: Client, onActivationChanged?: () => void): SurveyEventReceiver {
@@ -145,6 +200,19 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             await value.kv.initialize()
             if (disposed) return
             resetSubscription = value.onReset(reset)
+            // Like posthog-js capture, record seen state for any captured dismissal or response, including
+            // those from an application's own survey UI. Registered first so matching re-evaluation sees it.
+            seenSubscription = value.onEvent(({ event, properties }) => {
+                if (event !== SurveyEventName.DISMISSED && event !== SurveyEventName.SENT) return
+                const id = properties[SurveyEventProperties.SURVEY_ID]
+                const iteration = properties[SurveyEventProperties.SURVEY_ITERATION]
+                if (typeof id !== 'string') return
+                setSurveySeenOnLocalStorage({
+                    id,
+                    // oxlint-disable-next-line posthog-js/no-direct-number-check
+                    current_iteration: typeof iteration === 'number' ? iteration : null,
+                })
+            })
             runtimeHost = {
                 client: value,
                 get config() {
@@ -224,6 +292,30 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                 },
             }
         },
+        onActiveMatchingSurveysChanged: (callback) => {
+            let active = true
+            const notify = deliver((surveys, context) => {
+                if (active) callback(surveys, context)
+            })
+            const unsubscribe = shared.onActiveMatchingSurveysChanged(notify)
+            if (!client || typeof document === 'undefined') {
+                notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
+            } else if (!disposed) {
+                manual = true
+                try {
+                    // Loading delivers the initial matching set to this subscription.
+                    shared.loadIfEnabled()
+                } catch (error) {
+                    client.logger.error('Survey renderer loading failed', error)
+                }
+            }
+            return {
+                dispose: () => {
+                    active = false
+                    unsubscribe()
+                },
+            }
+        },
         getElementSelectors: () => new Set(elementSelectors),
         cancelPendingSurvey: (id) => {
             if (!disposed) shared.cancelPendingSurvey(id)
@@ -243,6 +335,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             }
             remoteSubscription?.dispose()
             resetSubscription?.dispose()
+            seenSubscription?.dispose()
             if (typeof window !== 'undefined') window.removeEventListener('pagehide', pagehide)
             teardownSubscription?.dispose()
             shared.dispose()
