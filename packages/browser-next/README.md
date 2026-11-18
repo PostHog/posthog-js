@@ -25,15 +25,14 @@ const posthog = await createPostHog({
 })
 ```
 
-Each entrypoint selects a delivery implementation:
+Both entrypoints deliver through Capture V1 with retries, compression and payload splitting. They differ in how products load:
 
-| Entrypoint              | Delivery                                                                                                               | Products                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `@posthog/browser`      | Capture V1 with retries, compression and payload splitting                                                             | Loaded on demand from options, saved state or remote configuration |
-| `@posthog/browser/core` | Capture V1 with retries, compression and payload splitting                                                             | Only explicitly supplied extensions                                |
-| `@posthog/browser/lite` | Best effort: one attempt per batch, keepalive hand-off on page hide, no compression, splitting or `captureImmediate()` | Only explicitly supplied extensions                                |
+| Entrypoint              | Products                                                           |
+| ----------------------- | ------------------------------------------------------------------ |
+| `@posthog/browser`      | Loaded on demand from options, saved state or remote configuration |
+| `@posthog/browser/core` | Only explicitly supplied extensions                                |
 
-All entrypoints share identity, session, consent and persistence behavior. Installed products are synchronous client properties, such as `posthog.featureFlags`; reading one never starts loading. `await posthog.resolveExtension(token)` waits for a product that is loading, and `posthog.getExtension(name)` returns an installed extension or one of its bindings.
+Both entrypoints share identity, session, consent and persistence behavior. Installed products are synchronous client properties, such as `posthog.featureFlags`; reading one never starts loading. `await posthog.resolveExtension(token)` waits for a product that is loading, and `posthog.getExtension(name)` returns an installed extension or one of its bindings.
 
 `personProfiles: 'always' | 'never' | 'identified_only'` defaults to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. SDK-computed processing metadata takes precedence over caller properties; `$process_person_profile` does not change the SDK's underlying processing state.
 

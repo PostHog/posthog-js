@@ -38,7 +38,7 @@ export interface AnalyticsDelivery extends LaneDelivery<AnalyticsMessage> {
     deliverImmediate(messages: readonly AnalyticsMessage[], canContinue?: () => boolean): Promise<CaptureSummary>
 }
 
-/** Delivery implementation selected by the entrypoint. Lite delivery has no immediate path. */
+/** Delivery driver attached to the client's event buffer. A driver without an immediate path reports immediate capture as unavailable. */
 export interface AnalyticsDriver {
     flush(): Promise<void>
     deliverImmediate?: AnalyticsDelivery['deliverImmediate']
