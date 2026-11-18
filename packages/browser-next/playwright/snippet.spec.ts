@@ -90,8 +90,17 @@ test('a nonce-only CSP permits deferred chunks and real Capture V1 delivery', as
     expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
 })
 
+/** Every optional product the script tag can disable, so tests can assert that no product chunk loads. */
+const allProductsDisabled = {
+    flags: 'false',
+    logs: 'false',
+    surveys: 'false',
+    autocapture: 'false',
+    webVitals: 'false',
+}
+
 test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {
-    await page.goto(location({ flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false' }))
+    await page.goto(location({ ...allProductsDisabled }))
     await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
     const summary = await page.evaluate(() => {
@@ -108,9 +117,7 @@ test('embedded analytics delivers queued and immediate events without optional c
 test('core is embedded in the first response; disabled products do not request chunks before capture', async ({
     page,
 }) => {
-    await page.goto(
-        location({ flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false', optOutByDefault: 'true' })
-    )
+    await page.goto(location({ ...allProductsDisabled, optOutByDefault: 'true' }))
     await expect.poll(() => page.evaluate(() => window.snippetEvidence.readyCount)).toBe(1)
     expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
     expect((await backend.inspect()).events).toHaveLength(0)
@@ -125,7 +132,7 @@ test('core is embedded in the first response; disabled products do not request c
 
 for (const [profile, options] of Object.entries({
     default: {},
-    disabled: { flags: 'false', logs: 'false', surveys: 'false', autocapture: 'false' },
+    disabled: { ...allProductsDisabled },
     denied: { optOutByDefault: 'true' },
 })) {
     test(`records actual startup script bytes for ${profile}`, async ({ page }) => {

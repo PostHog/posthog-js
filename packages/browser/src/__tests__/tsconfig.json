@@ -11,7 +11,9 @@
         "paths": {
             "@posthog/browser-common/tests/client-conformance": [
                 "../../../browser-common/tests/helpers/client-conformance.ts"
-            ]
+            ],
+            "web-vitals/attribution/*": ["../../../browser-next/node_modules/web-vitals/dist/modules/attribution/*"],
+            "web-vitals/*": ["../../../browser-next/node_modules/web-vitals/dist/modules/*"]
         }
     },
     "include": ["./**/*.ts*", "setup.js", "../*.d.ts"],

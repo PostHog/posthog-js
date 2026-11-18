@@ -1,5 +1,6 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
 import type { Client } from '@posthog/browser-common'
+import type { WebVitalsCallbackFlavor, WebVitalsCallbacks } from '@posthog/browser-common/web-vitals'
 import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
@@ -176,36 +177,7 @@ export type AssignableWindow = Window &
 
 export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integration'
 
-/** Subset of the web-vitals library's `ReportOpts` passed to metric observers. */
-export interface WebVitalsReportOpts {
-    reportAllChanges?: boolean
-    reportSoftNavs?: boolean
-}
-
-/**
- * Options only the attribution build understands, so they are passed to attributed
- * observers and never to the observers in the default bundle.
- */
-export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
-    includeProcessedEventEntries?: boolean
-}
-
-export type WebVitalsCallbackFlavor =
-    | 'web-vitals'
-    | 'web-vitals-with-attribution'
-    | 'web-vitals-soft-navs'
-    | 'web-vitals-with-attribution-soft-navs'
-
-export type WebVitalsMetricCallbacks = {
-    onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-}
-
-export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
-    withoutAttribution?: WebVitalsMetricCallbacks
-}
+export type { WebVitalsCallbacks } from '@posthog/browser-common/web-vitals'
 
 export type PostHogExtensionKind =
     | 'toolbar'

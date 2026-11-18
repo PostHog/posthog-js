@@ -1,21 +1,58 @@
-import { PostHog } from '../../posthog-core'
-import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
-import { createLogger } from '@posthog/browser-common/utils/logger'
+import type { PostHogConfig, SupportedWebVitalsMetrics } from '@posthog/types'
 import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
-import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
-import { window, location } from '@posthog/browser-common/utils/globals'
-import {
-    assignableWindow,
-    WebVitalsAttributionReportOpts,
-    WebVitalsCallbackFlavor,
-    WebVitalsReportOpts,
-} from '../../utils/globals'
-import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
-import { PERSONAL_DATA_URL_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
-import { getExtensionLoader } from '../../utils/extension-loader'
 
-const logger = /* @__PURE__ */ createLogger('[Web Vitals]')
+import type { Client, DeepReadonly } from './client'
+import type { Disposable } from './disposable'
+import type { Extension } from './extension'
+import type { RemoteConfigResult } from './types/remote-config'
+import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from './constants'
+import { window, location } from './utils/globals'
+import { addEventListener } from './utils/general-utils'
+import { maskQueryParams } from './utils/request-utils'
+import { PERSONAL_DATA_URL_PARAMS, MASKED } from './utils/event-utils'
+
+export interface WebVitalsReportOpts {
+    reportAllChanges?: boolean
+    reportSoftNavs?: boolean
+}
+
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
+export type WebVitalsCallbackFlavor =
+    | 'web-vitals'
+    | 'web-vitals-with-attribution'
+    | 'web-vitals-soft-navs'
+    | 'web-vitals-with-attribution-soft-navs'
+
+export type WebVitalsMetricCallbacks = {
+    onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
+}
+
+export interface WebVitalsAutocaptureOptions {
+    getConfig: () => Partial<
+        Pick<
+            PostHogConfig,
+            | 'capture_performance'
+            | 'disable_capture_url_hashes'
+            | 'mask_personal_data_properties'
+            | 'custom_personal_data_properties'
+        >
+    >
+    loadObservers: (getFlavor: () => WebVitalsCallbackFlavor, onLoad: (callbacks: WebVitalsCallbacks) => void) => void
+}
 
 // the metric observer registration function from the web-vitals library (onLCP, onCLS, ...).
 // it takes the report callback plus an optional ReportOpts (e.g. `reportSoftNavs`).
@@ -64,9 +101,14 @@ type WebVitalsEventBuffer = {
     firstMetricTimestamp: number | undefined
 }
 
-export class WebVitalsAutocapture {
+export class WebVitalsAutocapture implements Extension {
+    readonly name = 'webVitalsAutocapture'
+    private _client: Client | undefined
+    private _remoteConfigSubscription?: Disposable
+    private _disposed = false
     private _enabledServerSide: boolean = false
     private _initialized = false
+    private _loadRequests = 0
 
     private _buffer: WebVitalsEventBuffer = {
         navigationKey: undefined,
@@ -76,14 +118,43 @@ export class WebVitalsAutocapture {
     }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
-    constructor(private readonly _instance: PostHog) {
-        this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+    constructor(private readonly _options: WebVitalsAutocaptureOptions) {}
 
-        this.startIfEnabled()
+    setup(client: Client): void | Promise<void> {
+        if (this._disposed) return
+
+        this._client = client
+        const start = () => {
+            if (this._disposed) return
+            this._enabledServerSide = !!client.kv.get(WEB_VITALS_ENABLED_SERVER_SIDE)
+            // Subscribe first so a replayed remote config replaces the saved hint before anything starts.
+            const loadRequests = this._loadRequests
+            const subscription = client.onRemoteConfig((result) => this.onRemoteConfig(result))
+            if (this._disposed) {
+                subscription.dispose()
+                return
+            }
+            this._remoteConfigSubscription = subscription
+            // The replay may already have started loading.
+            if (this._loadRequests === loadRequests) this.startIfEnabled()
+        }
+
+        const ready = client.kv.initialize()
+        return ready ? ready.then(start) : start()
+    }
+
+    dispose(): void {
+        if (this._disposed) return
+        this._disposed = true
+        this._remoteConfigSubscription?.dispose()
+        window?.document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+        window?.removeEventListener('pagehide', this._onPageHide)
+        this._clearBuffer()
+        this._client = undefined
     }
 
     private get _perfConfig(): PostHogConfig['capture_performance'] {
-        return this._instance.config.capture_performance
+        return this._options.getConfig().capture_performance
     }
 
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
@@ -92,7 +163,7 @@ export class WebVitalsAutocapture {
             : undefined
         return !isNullish(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
-            : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ALL_WEB_VITALS_METRICS
+            : this._client?.kv.get<SupportedWebVitalsMetrics[]>(WEB_VITALS_ALLOWED_METRICS) || ALL_WEB_VITALS_METRICS
     }
 
     public get flushToCaptureTimeoutMs(): number {
@@ -140,7 +211,7 @@ export class WebVitalsAutocapture {
         // Always disable web vitals if we're not on http or https
         const protocol = location?.protocol
         if (protocol !== 'http:' && protocol !== 'https:') {
-            logger.info('Web Vitals are disabled on non-http/https protocols')
+            this._client?.logger.info('[Web Vitals] disabled on non-http/https protocols')
             return false
         }
 
@@ -154,14 +225,15 @@ export class WebVitalsAutocapture {
     }
 
     public startIfEnabled(): void {
-        if (this.isEnabled && !this._initialized) {
-            logger.info('enabled, starting...')
-            this._loadScript(this._startCapturing)
+        if (this._client && !this._disposed && this.isEnabled && !this._initialized) {
+            this._loadRequests++
+            this._client.logger.info('[Web Vitals] enabled, starting...')
+            this._options.loadObservers(() => this._callbackFlavor, this._startCapturing)
         }
     }
 
-    public onRemoteConfig(result: RemoteConfigResult) {
-        if (!result.ok) {
+    public onRemoteConfig(result: DeepReadonly<RemoteConfigResult>): void {
+        if (!this._client || this._disposed || !result.ok) {
             // Failure behaves like a response without a capturePerformance key.
             return
         }
@@ -177,15 +249,10 @@ export class WebVitalsAutocapture {
             ? response.capturePerformance.web_vitals_allowed_metrics
             : undefined
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
-                [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
-            })
-
-            this._instance.persistence.register({
-                [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
-            })
-        }
+        this._client.kv.set({
+            [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
+            [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
+        })
         // store this in-memory in case persistence is disabled
         this._enabledServerSide = webVitalsOptIn
 
@@ -202,40 +269,19 @@ export class WebVitalsAutocapture {
               : 'web-vitals'
     }
 
-    private _loadScript(cb: () => void): void {
-        const posthogExtensions = assignableWindow.__PosthogExtensions__
-        const flavor = this._callbackFlavor
-        const callbacksByFlavor = posthogExtensions?.postHogWebVitalsCallbacksByFlavor
-        if (
-            callbacksByFlavor?.[flavor] ||
-            (flavor === 'web-vitals' && isUndefined(callbacksByFlavor) && posthogExtensions?.postHogWebVitalsCallbacks)
-        ) {
-            cb()
-            return
-        }
-
-        getExtensionLoader(this._instance)?.(this._instance, flavor, (err) => {
-            if (err) {
-                logger.error('failed to load script', err)
-                return
-            }
-
-            cb()
-        })
-    }
-
     private _maskedURL(url?: string): string | undefined {
         const href = url || window?.location.href
         if (!href) {
-            logger.error('Could not determine current URL')
+            this._client?.logger.error('[Web Vitals] Could not determine current URL')
             return undefined
         }
 
-        const urlWithoutHash = this._instance.config.disable_capture_url_hashes ? stripUrlHash(href) : href
+        const config = this._options.getConfig()
+        const urlWithoutHash = config.disable_capture_url_hashes ? stripUrlHash(href) : href
 
         // mask url query params
-        const maskPersonalDataProperties = this._instance.config.mask_personal_data_properties
-        const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
+        const maskPersonalDataProperties = config.mask_personal_data_properties
+        const customPersonalDataProperties = config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
             ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
@@ -244,18 +290,24 @@ export class WebVitalsAutocapture {
         return maskQueryParams(urlWithoutHash, paramsToMask, MASKED)
     }
 
-    private _flushToCapture = (onPageHide = false) => {
+    private _clearBuffer(): void {
         clearTimeout(this._delayedFlushTimer)
         this._delayedFlushTimer = undefined
-        if (this._buffer.metrics.length === 0) {
+        this._buffer = { navigationKey: undefined, url: undefined, metrics: [], firstMetricTimestamp: undefined }
+    }
+
+    private _flushToCapture = (onPageHide = false) => {
+        const buffer = this._buffer
+        this._clearBuffer()
+        if (buffer.metrics.length === 0) {
             return
         }
 
-        this._instance.capture(
+        this._client?.capture(
             '$web_vitals',
             {
-                $current_url: this._buffer.url,
-                ...this._buffer.metrics.reduce(
+                $current_url: buffer.url,
+                ...buffer.metrics.reduce(
                     (acc, metric) => ({
                         ...acc,
                         // the entire event so we can use it in the future e.g. includes google's rating
@@ -265,12 +317,12 @@ export class WebVitalsAutocapture {
                     {}
                 ),
             },
-            onPageHide ? { transport: 'sendBeacon', send_instantly: true } : undefined
+            onPageHide ? { delivery: 'unload' } : undefined
         )
-        this._buffer = { navigationKey: undefined, url: undefined, metrics: [], firstMetricTimestamp: undefined }
     }
 
     private _addToBuffer = (metric: any) => {
+        if (!this._client || this._disposed) return
         this._buffer = this._buffer || {
             navigationKey: undefined,
             url: undefined,
@@ -279,7 +331,7 @@ export class WebVitalsAutocapture {
         }
 
         if (isNullish(metric?.name) || isNullish(metric?.value)) {
-            logger.error('Invalid metric received', metric)
+            this._client.logger.error('[Web Vitals] Invalid metric received', metric)
             return
         }
 
@@ -294,7 +346,7 @@ export class WebVitalsAutocapture {
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
         if (this._maxAllowedValue && metric.value >= this._maxAllowedValue) {
-            logger.error('Ignoring metric with value >= ' + this._maxAllowedValue, metric)
+            this._client.logger.error('[Web Vitals] Ignoring metric with value >= ' + this._maxAllowedValue, metric)
             return
         }
 
@@ -303,6 +355,7 @@ export class WebVitalsAutocapture {
         if (navigationHasChanged) {
             // we need to send what we have
             this._flushToCapture()
+            if (this._disposed) return
 
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
@@ -319,7 +372,7 @@ export class WebVitalsAutocapture {
             ? Date.now()
             : this._buffer.firstMetricTimestamp
 
-        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        const sessionIds = this._client.session
         const bufferedMetric: Record<string, unknown> = {
             ...metric,
             ...(navigationURL ? { navigationURL: $currentUrl } : {}),
@@ -347,7 +400,7 @@ export class WebVitalsAutocapture {
         } else {
             delete bufferedMetric.attribution
         }
-        if (!isUndefined(sessionIds)) {
+        if (sessionIds?.sessionId && sessionIds.windowId) {
             bufferedMetric.$session_id = sessionIds.sessionId
             bufferedMetric.$window_id = sessionIds.windowId
         }
@@ -360,12 +413,21 @@ export class WebVitalsAutocapture {
         }
     }
 
-    private _startCapturing = () => {
+    private _onVisibilityChange = () => {
+        if (window?.document.visibilityState === 'hidden') {
+            this._flushToCapture(true)
+        }
+    }
+
+    private _onPageHide = () => this._flushToCapture(true)
+
+    private _startCapturing = (callbacks: WebVitalsCallbacks) => {
         // IMPORTANT: web-vitals does not provide cleanup functions and warns against
         // calling functions more than once per page load. Each call creates new
         // PerformanceObservers that persist for the page lifetime.
         // See: https://github.com/GoogleChrome/web-vitals/issues/629
-        if (this._initialized) {
+        // Remote config may have turned capture off while the observers were loading.
+        if (this._disposed || this._initialized || !this.isEnabled) {
             return
         }
 
@@ -377,13 +439,6 @@ export class WebVitalsAutocapture {
         // ones, so its presence tells us the attribution-only opts are understood
         let isAttributionBundle = false
 
-        const posthogExtensions = assignableWindow.__PosthogExtensions__
-        const callbacksByFlavor = posthogExtensions?.postHogWebVitalsCallbacksByFlavor
-        const callbacks =
-            callbacksByFlavor?.[this._callbackFlavor] ||
-            (this._callbackFlavor === 'web-vitals' && isUndefined(callbacksByFlavor)
-                ? posthogExtensions?.postHogWebVitalsCallbacks
-                : undefined)
         if (!isUndefined(callbacks)) {
             const withoutAttribution = callbacks.withoutAttribution
             const attributionMetrics = this.attributionMetrics
@@ -399,7 +454,7 @@ export class WebVitalsAutocapture {
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
-            logger.error('web vitals callbacks not loaded - not starting')
+            this._client?.logger.error('[Web Vitals] callbacks not loaded - not starting')
             return
         }
 
@@ -431,13 +486,9 @@ export class WebVitalsAutocapture {
 
         // Register after the web-vitals observers so their hidden-page callbacks
         // can place final LCP, CLS and INP reports into the buffer before it drains.
-        const pageDocument = window?.document
-        addEventListener(pageDocument, DOM_EVENT_VISIBILITYCHANGE, () => {
-            if (pageDocument?.visibilityState === 'hidden') {
-                this._flushToCapture(true)
-            }
-        })
-        addEventListener(window, 'pagehide', () => this._flushToCapture(true))
+        if (this._disposed) return
+        addEventListener(window?.document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+        addEventListener(window, 'pagehide', this._onPageHide)
 
         this._initialized = true
     }

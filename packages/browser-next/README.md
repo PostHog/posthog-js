@@ -115,7 +115,7 @@ Only these query options are supported; omitted options use the existing factory
 | `projectToken`                                                       | Required, nonempty project token                                                            |
 | `apiHost`                                                            | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
 | `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection` | Literal `true` or `false`                                                                   |
-| `storage`, `flags`, `logs`, `surveys`, `autocapture`                 | Literal `false` to disable the corresponding default                                        |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`    | Literal `false` to disable the corresponding default                                        |
 
 Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
 
@@ -175,6 +175,30 @@ An explicit instance takes precedence over the top-level option. The manual core
 - `rageclick` accepts false, true, or an options object. Enabled by default, it ignores text-selection surfaces and navigation/stepper content (`next`, `previous`, `prev`, `>`, `<`, `+`, `-`, `−`, `–`). Options are `cssSelectorIgnorelist`, `contentIgnorelist`, `ignoreTextSelection`, `thresholdPx` (30), `clickCount` (3), and `timeoutMs` (1000). Explicit true uses these same defaults.
 
 Configuration arrays and regular expressions are snapshotted before asynchronous loading; callbacks remain callable. Disposal removes all DOM listeners. Survey selector metadata follows the same consent, masking, and exclusion checks as ordinary autocapture; it does not bypass them.
+
+## Web vitals
+
+With no explicit web vitals configuration, its implementation loads when saved state or remote configuration indicates that the project enables web vitals. `enabled: true` loads it during initialization and captures regardless of the project setting; `enabled: false` or `webVitals: false` omits it. Other options apply whichever way capture is enabled. The `web-vitals` library loads in its own chunk only once capture starts, and capture runs only on `http:` and `https:` pages.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    webVitals: { allowedMetrics: ['LCP', 'INP'], attribution: ['INP'] },
+})
+```
+
+To include the implementation statically, use the explicit extension, which takes precedence over the top-level option:
+
+```ts
+import { webVitals } from '@posthog/browser/web-vitals'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [webVitals({ enabled: true })],
+})
+```
+
+The options mirror posthog-js `capture_performance`: `allowedMetrics` (defaults to the project setting, else `LCP`, `CLS`, `FCP` and `INP`), `attribution` (`true`, `false` or a metric list; defaults to `INP` and `LCP`), `delayedFlushMs` (default `5000`), `maxValue` (default 15 minutes; `0` keeps all values) and `previewSoftNavigations` (default `false`). Captured URLs drop fragments (`disableCaptureUrlHashes`, default `true`) and mask person-identifying campaign parameters such as `gclid` (`maskPersonalDataProperties`, default `true`, extended by `customPersonalDataProperties`). Metrics are buffered per navigation and captured as one `$web_vitals` event once every allowed metric is reported, after `delayedFlushMs`, or when the page is hidden. Disposal stops capture; the browser observers themselves cannot be removed.
 
 ## Feature flags
 
