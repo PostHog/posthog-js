@@ -22,10 +22,19 @@ import type { AnalyticsOptions } from '../products/analytics/analytics-options'
 import { isLikelyBot } from './state/bot-filter'
 import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from './extensions/registry'
 import { deepFreeze } from '../primitives/immutable'
-import { createLogger } from '../platform/logger'
+import { createLogger, type LogState } from '../platform/logger'
+import { snapshotPersonProfileMode } from '../products/analytics/properties/person-processing'
 import { sendRequest, type RequestRuntime } from '../platform/request'
 import { BrowserState, CLIENT_KV_NAMESPACE, getDefaultSessionStorage, getDefaultStorage } from './state/state'
-import type { BrowserFetch, BrowserNavigator, CaptureSummary, CorePostHogOptions, IPostHog, StorageLike } from './types'
+import type {
+    BrowserFetch,
+    BrowserNavigator,
+    CaptureSummary,
+    CorePostHogOptions,
+    IPostHog,
+    RuntimeOptions,
+    StorageLike,
+} from './types'
 import { version } from '../primitives/version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
@@ -90,6 +99,7 @@ class PostHog implements IPostHog {
     readonly onSession: Client['onSession']
     readonly projectToken: string
 
+    private readonly _logState: LogState
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     readonly _registry: ExtensionRegistry<IPostHog>
     readonly _requestRuntime: RequestRuntime
@@ -134,7 +144,8 @@ class PostHog implements IPostHog {
         }
         this.projectToken = projectToken
         this._capturePageview = options.capturePageview ?? true
-        this.logger = createLogger('[PostHog]', options.debug ?? false)
+        this._logState = { enabled: options.debug ?? false }
+        this.logger = createLogger('[PostHog]', this._logState)
         if (!projectToken) {
             this.logger.error('A PostHog project token is required')
         }
@@ -367,6 +378,10 @@ class PostHog implements IPostHog {
         return this._analytics.registerDynamicEventProperties(producer)
     }
 
+    getPageViewId(): string | undefined {
+        return this._analytics._pageview?.[0]
+    }
+
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension(name: string): Extension | undefined {
@@ -494,6 +509,24 @@ class PostHog implements IPostHog {
         }
 
         return this._remoteConfigPromise
+    }
+
+    setConfig(options: RuntimeOptions): void {
+        try {
+            const debug = options.debug
+            // oxlint-disable-next-line posthog-js/no-direct-boolean-check
+            if (typeof debug === 'boolean') this._logState.enabled = debug
+            const personProfiles = options.analytics?.personProfiles
+            if (personProfiles !== undefined) {
+                this._analytics._personProfiles = snapshotPersonProfileMode(() => personProfiles)
+            }
+        } catch (error) {
+            this.logger.error('Configuration update failed', error)
+        }
+    }
+
+    debug(enabled = true): void {
+        this.setConfig({ debug: enabled })
     }
 
     resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>

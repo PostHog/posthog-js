@@ -94,6 +94,14 @@ export interface PostHogOptions {
     extensions?: readonly Extension[]
 }
 
+/** Options that `setConfig()` can change after creation. Omitted options keep their current values. */
+export interface RuntimeOptions {
+    /** Enable or disable SDK diagnostic logs, including loggers that extensions already created. */
+    debug?: boolean
+    /** Analytics policy applied to subsequent captures. */
+    analytics?: Pick<AnalyticsOptions, 'personProfiles'>
+}
+
 /** Options for the manually composed `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<PostHogOptions, 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
@@ -134,6 +142,8 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void
     unregister(property: string): void
     getProperty(property: string): unknown
+    /** The UUID of the last `$pageview` captured in the current session, sent on events as `$pageview_id`. */
+    getPageViewId(): string | undefined
     registerForSession(properties: Record<string, unknown>): void
     unregisterForSession(property: string): void
     /** Links another distinct ID to the current person without changing the current identity. */
@@ -180,6 +190,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     optOut(): void
     hasOptedOut(): boolean
     getRemoteConfig(): Promise<RemoteConfig | undefined>
+    /** Change the options in `RuntimeOptions`. Other creation options are fixed for the client's lifetime. */
+    setConfig(options: RuntimeOptions): void
+    /** Enable SDK diagnostic logs, or disable them with `debug(false)`. Equivalent to `setConfig({ debug })`. */
+    debug(enabled?: boolean): void
 }
 
 export type {
