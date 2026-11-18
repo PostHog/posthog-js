@@ -1757,6 +1757,7 @@ describe('featureflags', () => {
                 expect.objectContaining({
                     method: 'GET',
                     sentAt: 'query',
+                    allowWhileOptedOut: true,
                 })
             )
         })

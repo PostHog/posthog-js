@@ -198,7 +198,9 @@ subscription?.dispose()
 
 `FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `resolveExtension(FeatureFlagsExtension)` resolves to undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
-Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+Pass `getFeatureFlag(key, { sendFeatureFlagEvent: false })` for a read without an exposure event. Omitted or undefined `sendFeatureFlagEvent` defaults to sending. `getAllFeatureFlags()` returns a synchronous snapshot of all known structured results, including disabled flags and payloads, without exposure events. Changing the snapshot or its JSON payloads does not change stored flags.
+
+`getFeatureFlag(key, { fresh: true })` returns undefined until this instance has loaded flags from the server, ignoring bootstrap and persisted values before then. Use it to avoid briefly showing a feature that has since been disabled. The `fresh` option does not itself force or await a reload; ordinary stale-cache auto-refresh still applies. Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
 
 ```ts
 if (featureFlags) {
@@ -211,6 +213,8 @@ if (featureFlags) {
 
 The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled or unavailable), or `cancelled` (reset or disposal). It does not reject on request failures. Calls made before a request starts share that evaluation; calls during an active request wait for a follow-up evaluation. Cached values and `updateFlags()` do not complete a reload. `onFeatureFlags` remains a subscription to value changes, separate from reload completion.
 
+`onReloading(callback)` observes automatic and explicit reload starts, before the debounced request. It does not replay an earlier start. A reload requested from the callback joins the starting request. Its returned `Disposable` stops that subscription; disposing the client stops all reload notifications.
+
 For static inclusion, import the factory explicitly and pass the same configuration:
 
 ```ts
@@ -221,6 +225,27 @@ const posthog = await createPostHog({
     extensions: [flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
 })
 ```
+
+Use the local property controls when evaluation needs context that has not reached ingestion yet:
+
+```ts
+posthog.featureFlags?.setPersonPropertiesForFlags({ plan: 'pro' })
+posthog.featureFlags?.setGroupPropertiesForFlags({ organization: { employees: 25 } }, false)
+await posthog.featureFlags?.reloadFeatureFlags()
+posthog.featureFlags?.resetPersonPropertiesForFlags(false)
+posthog.featureFlags?.resetGroupPropertiesForFlags('organization')
+```
+
+Setters merge properties, including within each group type. Setters and person reset reload by default; pass `false` to defer evaluation. Group reset clears one group type, or all group overrides when called without an argument, and does not reload automatically. These controls do not identify a person, associate group membership, update profiles, or emit analytics. Local changes remain available when capture is denied; remote requests retain their existing consent gate. Overrides use the client's configured persistence, survive recreation when storage is enabled, and clear on `reset()`. Disposed flags instances ignore these calls.
+
+Early-access controls are also available on `posthog.featureFlags`:
+
+```ts
+posthog.featureFlags?.getEarlyAccessFeatures((features) => console.log(features), true, ['beta'])
+posthog.featureFlags?.updateEarlyAccessFeatureEnrollment('new-onboarding', true, 'beta')
+```
+
+`getEarlyAccessFeatures(callback, forceReload?, stages?)` reuses cached definitions unless forced. Stage filters apply to requests, not an existing cache; force a reload when changing stages. Listing does not carry person data, so it is also requested while capture is opted out, matching `posthog-js`. Enrollment updates the local flag value and person evaluation context immediately, then captures `$feature_enrollment_update` through ordinary consent gating. The optional stage and cached feature name are included in that event. Listing callbacks are isolated from application exceptions and stop after disposal. `EarlyAccessFeature`, `EarlyAccessFeatureCallback`, and `EarlyAccessFeatureStage` types are exported from the root and `/flags` entrypoints.
 
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
@@ -300,7 +325,9 @@ feedback?.getSurveys((surveys, context) => {
 const eligibility = await feedback?.canRenderSurvey('feedback')
 ```
 
-The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
+The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display.
+
+`onActiveMatchingSurveysChanged(callback)` loads surveys for manual use and returns a disposable subscription to the active matching set. It delivers the current set once loaded, then changes after event and action triggers, cancellation, captured `$pageview` events, survey display, dismissal and responses, feature-flag updates, definition refreshes and reset. Unchanged results are not delivered again. URL conditions are re-evaluated on captured pageviews, so capture `$pageview` after client-side navigation. Selector, device and wait-period conditions are checked on those updates rather than by observing the DOM or time. While surveys are unavailable the callback receives `([], { isLoaded: false })`, with an `error` when a load attempt fails; the subscription remains for later updates. Captured `survey dismissed` and `survey sent` events with a `$survey_id` mark that survey as seen, including events from an application's own survey UI. Capture consent still gates rendering and responses.
 
 Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. Importing the factory below includes orchestration only; rendering, styles, and HTML sanitization still load dynamically when needed. Importing the entrypoint or constructing the extension does not access browser globals.
 

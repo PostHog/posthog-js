@@ -4,11 +4,20 @@ import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-c
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { IPostHog } from '../../core/types'
 import type { FlagsExtension } from './flags-internal'
-import type { FlagsOptions } from './flags-options'
+import type { FeatureFlagResult, FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { FlagsOptions, FlagsCallback, FeatureFlagResult, FeatureFlagsReloadResult } from './flags-options'
+export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
+    FlagsOptions,
+    FlagsCallback,
+    FlagsReadOptions,
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+} from './flags-options'
 
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
@@ -31,6 +40,14 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     let disposed = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
+    // Detached results shared by snapshots and subscriptions, so callers cannot mutate stored payloads.
+    const snapshotFlags = (): FeatureFlagResult[] =>
+        shared.getAllFeatureFlags().map((result) => ({
+            ...result,
+            // Match single reads, which report an empty-string variant as disabled.
+            enabled: result.variant === '' ? false : result.enabled,
+            payload: result.payload === undefined ? undefined : JSON.parse(JSON.stringify(result.payload)),
+        }))
 
     const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
@@ -92,14 +109,39 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                 client?.logger.error('Feature flags bootstrap failed', error)
             }
         },
-        getFeatureFlag: (key) => {
+        getFeatureFlag: (key, options) => {
             if (disposed) return undefined
             try {
-                return shared.getFeatureFlagResult(key)
+                return shared.getFeatureFlagResult(key, {
+                    send_event: options?.sendFeatureFlagEvent ?? true,
+                    fresh: options?.fresh ?? false,
+                })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
             }
+        },
+        getAllFeatureFlags: () => {
+            if (disposed) return []
+            try {
+                return snapshotFlags()
+            } catch (error) {
+                client?.logger.error('Feature flags snapshot failed', error)
+                return []
+            }
+        },
+        onReloading: (callback) => {
+            if (!disposed) {
+                try {
+                    const unsubscribe = shared.onReloading(() => {
+                        if (!disposed) callback()
+                    })
+                    return { dispose: unsubscribe }
+                } catch (error) {
+                    client?.logger.error('Feature flags reloading subscription failed', error)
+                }
+            }
+            return { dispose() {} }
         },
         reloadFeatureFlags: async () => {
             if (disposed) return { status: 'cancelled' }
@@ -114,7 +156,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             if (!disposed) {
                 try {
                     const unsubscribe = shared.onFeatureFlags((_keys, _variants, context) =>
-                        callback(shared.getAllFeatureFlags(), !!context?.errorsLoading)
+                        callback(snapshotFlags(), !!context?.errorsLoading)
                     )
                     return { dispose: unsubscribe }
                 } catch (error) {
@@ -122,6 +164,65 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                 }
             }
             return { dispose() {} }
+        },
+        setPersonPropertiesForFlags: (properties, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties update failed', error)
+            }
+        },
+        resetPersonPropertiesForFlags: (reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.resetPersonPropertiesForFlags(reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties reset failed', error)
+            }
+        },
+        setGroupPropertiesForFlags: (propertiesByGroupType, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.setGroupPropertiesForFlags(propertiesByGroupType, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags group properties update failed', error)
+            }
+        },
+        resetGroupPropertiesForFlags: (groupType) => {
+            if (disposed) return
+            try {
+                shared.resetGroupPropertiesForFlags(groupType)
+            } catch (error) {
+                client?.logger.error('Feature flags group properties reset failed', error)
+            }
+        },
+        getEarlyAccessFeatures: (callback, forceReload, stages) => {
+            if (disposed) return
+            try {
+                shared.getEarlyAccessFeatures(
+                    (features) => {
+                        if (disposed) return
+                        try {
+                            callback(features)
+                        } catch (error) {
+                            client?.logger.error('Early access feature callback failed', error)
+                        }
+                    },
+                    forceReload,
+                    stages
+                )
+            } catch (error) {
+                client?.logger.error('Early access feature listing failed', error)
+            }
+        },
+        updateEarlyAccessFeatureEnrollment: (key, isEnrolled, stage) => {
+            if (disposed) return
+            try {
+                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
+            } catch (error) {
+                client?.logger.error('Early access feature enrollment failed', error)
+            }
         },
         updateFlags: (values, payloads, settings) => {
             if (disposed) return
