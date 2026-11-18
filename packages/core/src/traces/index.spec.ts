@@ -75,6 +75,11 @@ describe('PostHogTraces', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
 
+  afterEach(() => {
+    // Retry timers from earlier tracers must not run during later tests.
+    vi.clearAllTimers()
+  })
+
   describe('startSpan', () => {
     it('enqueues exactly one record per span', async () => {
       const traces = createTraces()

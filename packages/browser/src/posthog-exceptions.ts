@@ -143,7 +143,27 @@ export class PostHogExceptions implements Extension {
         }
     }
 
-    sendExceptionEvent(properties: Properties): CaptureResult | undefined {
+    /** @internal Snapshot properties for exceptions awaiting remote enablement. */
+    prepareExceptionProperties(properties: Properties, timestamp: Date): Properties {
+        const injectedReleaseId = ErrorTracking.getInjectedReleaseId()
+        return this._instance.calculateEventProperties(
+            '$exception',
+            {
+                ...properties,
+                $exception_steps: this._exceptionStepsConfig.enabled ? this._exceptionStepsBuffer.getAttachable() : [],
+                ...(injectedReleaseId ? { $release_id: injectedReleaseId } : {}),
+            },
+            timestamp,
+            undefined,
+            true
+        )
+    }
+
+    sendExceptionEvent(
+        properties: Properties,
+        timestamp?: Date,
+        capturedProperties?: Properties
+    ): CaptureResult | undefined {
         try {
             const exceptionList = properties.$exception_list
 
@@ -187,14 +207,30 @@ export class PostHogExceptions implements Extension {
             }
 
             try {
-                const result = this._instance.capture('$exception', propertiesForExceptionCapture, {
+                const options = {
                     _noTruncate: true,
                     _batchKey: 'exceptionEvent',
                     _originatedFromCaptureException: true,
-                })
+                    timestamp,
+                }
+                const result = capturedProperties
+                    ? this._instance._captureEvent(
+                          '$exception',
+                          propertiesForExceptionCapture,
+                          options,
+                          capturedProperties
+                      )
+                    : this._instance.capture('$exception', propertiesForExceptionCapture, options)
 
                 if (result) {
-                    this._exceptionStepsBuffer.clear()
+                    if (capturedProperties) {
+                        const steps = capturedProperties.$exception_steps
+                        if (isArray(steps) && steps.length) {
+                            this._exceptionStepsBuffer.clearThrough(steps[steps.length - 1])
+                        }
+                    } else {
+                        this._exceptionStepsBuffer.clear()
+                    }
                 }
 
                 return result
@@ -202,7 +238,9 @@ export class PostHogExceptions implements Extension {
                 if (!isStackOverflowError(error)) {
                     logger.error('Failed to capture exception event. Dropping this exception.', error)
                 }
-                this._exceptionStepsBuffer.clear()
+                if (!capturedProperties) {
+                    this._exceptionStepsBuffer.clear()
+                }
                 return
             }
         } catch (error) {

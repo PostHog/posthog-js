@@ -106,6 +106,18 @@ export class ExceptionStepsBuffer {
     this._totalBytes = 0
   }
 
+  /** Remove captured steps without consuming steps added after a deferred exception. */
+  public clearThrough(step: ExceptionStep): void {
+    const index = this._entries.findIndex((entry) => entry.step === step)
+    if (index === -1) {
+      return
+    }
+    for (let i = 0; i <= index; i++) {
+      this._totalBytes -= this._entries[i].bytes
+    }
+    this._entries.splice(0, index + 1)
+  }
+
   public size(): number {
     return this._entries.length
   }

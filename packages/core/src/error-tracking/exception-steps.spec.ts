@@ -80,6 +80,31 @@ describe('exception steps', () => {
       expect(buffer.getAttachable().map((s) => s.$message)).toEqual(expected)
     })
 
+    it('clears captured steps while retaining newer steps and their byte accounting', () => {
+      const budget = bytesOf(makeStep('two')) + bytesOf(makeStep('three'))
+      const buffer = new ExceptionStepsBuffer({ max_bytes: budget })
+      buffer.add(makeStep('one'))
+      const captured = buffer.getAttachable()[0]
+      buffer.add(makeStep('two'))
+      buffer.clearThrough(captured)
+      expect(buffer.getAttachable().map((step) => step.$message)).toEqual(['two'])
+      buffer.add(makeStep('three'))
+      expect(buffer.getAttachable().map((step) => step.$message)).toEqual(['two', 'three'])
+      buffer.clearThrough(captured)
+      expect(buffer.size()).toBe(2)
+      buffer.clearThrough(buffer.getAttachable()[1])
+      expect(buffer.size()).toBe(0)
+    })
+
+    it('leaves newer steps untouched when a captured step has already been evicted', () => {
+      const buffer = new ExceptionStepsBuffer({ max_bytes: bytesOf(makeStep('one')) })
+      buffer.add(makeStep('one'))
+      const captured = buffer.getAttachable()[0]
+      buffer.add(makeStep('two'))
+      buffer.clearThrough(captured)
+      expect(buffer.getAttachable().map((step) => step.$message)).toEqual(['two'])
+    })
+
     it('clears all steps', () => {
       const buffer = new ExceptionStepsBuffer({ max_bytes: 10000 })
       buffer.add(makeStep('one'))

@@ -31,6 +31,45 @@ describe('error wrapping functions', () => {
         captureFn.mockClear()
     })
 
+    it.each([
+        { owner: win, key: 'onerror', wrap: wrapOnError, args: ['message', 'source', 1, 1, new Error('boom')] },
+        {
+            owner: win,
+            key: 'onunhandledrejection',
+            wrap: wrapUnhandledRejection,
+            args: [{ reason: new Error('boom') }],
+        },
+        { owner: console, key: 'error', wrap: wrapConsoleError, args: ['boom'] },
+    ])('restores $key after instances stop out of installation order', ({ owner, key, wrap, args }) => {
+        const previous = owner[key]
+        const original = vi.fn(() => true)
+        owner[key] = original
+        try {
+            for (let i = 0; i < 3; i++) {
+                const firstCapture = vi.fn()
+                const secondCapture = vi.fn()
+                const stopFirst = wrap(firstCapture)
+                const firstWrapper = owner[key]
+                const stopSecond = wrap(secondCapture)
+                try {
+                    stopFirst()
+                    owner[key](...args)
+                    expect(firstCapture).not.toHaveBeenCalled()
+                    expect(secondCapture).toHaveBeenCalledTimes(1)
+                    stopSecond()
+                    expect(owner[key]).toBe(original)
+                    firstWrapper(...args)
+                    expect(firstCapture).not.toHaveBeenCalled()
+                } finally {
+                    stopFirst()
+                    stopSecond()
+                }
+            }
+        } finally {
+            owner[key] = previous
+        }
+    })
+
     describe('wrapOnError', () => {
         let unwrap: () => void
 

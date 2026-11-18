@@ -475,6 +475,7 @@
         "_isSurveysEnabled",
         "_isTourEligible",
         "_isUrlChanging",
+        "_isWaitingForRemoteConfig",
         "_isWidgetEnabled",
         "_isWidgetOpen",
         "_isWidgetRendered",
