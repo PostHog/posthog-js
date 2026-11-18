@@ -133,6 +133,41 @@ export { route as GET, route as POST }
 `instrument()` may come before or after the tools are registered. Every request instruments a new
 server, which is the same per-request cost the SDK v2 `createMcpHandler` already has.
 
+### FastMCP
+
+[FastMCP](https://github.com/punkpeye/fastmcp) builds a new server for every session, or for every
+request when stateless, inside the framework. Hand `instrumentFastMCP` the `fastmcp` module before
+you start the server, and every one of those servers is instrumented:
+
+```ts
+import * as fastmcp from 'fastmcp'
+import { PostHog, getRequestHeaders, instrumentFastMCP } from '@posthog/mcp'
+
+const posthog = new PostHog(process.env.POSTHOG_API_KEY!, { host: 'https://us.i.posthog.com' })
+
+instrumentFastMCP(fastmcp, posthog, {
+  identify: async (_request, extra) => {
+    const token = String(getRequestHeaders(extra)?.authorization ?? '').replace(/^Bearer\s+/i, '')
+    return token ? { distinctId: userIdForToken(token) } : null
+  },
+})
+
+const server = new fastmcp.FastMCP({ name: 'my-server', version: '1.0.0' })
+// server.addTool(...)
+await server.start({
+  transportType: 'httpStream',
+  httpStream: { port: 8080, stateless: true, enableJsonResponse: true },
+})
+```
+
+- Stateless servers need `enableJsonResponse: true` to keep one session per client, for the reason
+  given in [Streamable HTTP](#streamable-http-set-enablejsonresponse-true).
+- FastMCP's HTTP layer does not pass request headers to the server, so `instrumentFastMCP` puts the
+  headers of the HTTP request back on `extra.requestInfo.headers` for your callbacks.
+- FastMCP rewrites a thrown error to `Tool '<name>' execution failed: <message>`, and that is the
+  `$mcp_error_message` you see.
+- It hooks the module, so it covers every FastMCP server in the process with the same options.
+
 ### Reading request headers in a callback
 
 If your `identify`, `intentFallback`, `eventProperties` or `beforeSend` reads HTTP headers, it has
