@@ -6298,18 +6298,41 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
         })
 
-        it('rewrites a sampled-out decision stored with the old `!` prefix, which WAF rules flag in the cookie', () => {
-            posthog.persistence?.register({
-                [SESSION_RECORDING_IS_SAMPLED]: '!' + sessionId,
-                [SESSION_RECORDING_SAMPLE_RATE]: 0,
+        describe('decision stored with the `!` prefix, which WAF rules flag in the cookie', () => {
+            // Single-character IDs hash to their ASCII codes: '0' is sampled in and '2' is sampled out at 0.50.
+            it.each([
+                { id: '2', expectedStatus: 'disabled', expectedIsSampled: 'x2' },
+                { id: '0', expectedStatus: 'sampled', expectedIsSampled: '0' },
+            ])('is decided again by the recorder for session $id', ({ id, expectedStatus, expectedIsSampled }) => {
+                sessionId = id
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: '!' + id,
+                    [SESSION_RECORDING_SAMPLE_RATE]: 0.5,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+
+                expect(sessionRecording.status).toBe(expectedStatus)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled)
             })
 
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
-            )
+            it('is dropped when replay starts up, before the recorder loads', () => {
+                posthog.persistence?.register({ [SESSION_RECORDING_IS_SAMPLED]: '!' + sessionId })
 
-            expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
+                new SessionRecording(posthog)
+
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBeUndefined()
+            })
+
+            it('leaves other stored decisions alone when replay starts up', () => {
+                posthog.persistence?.register({ [SESSION_RECORDING_IS_SAMPLED]: 'x' + sessionId })
+
+                new SessionRecording(posthog)
+
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
+            })
         })
 
         describe('legacy boolean true in persistence', () => {
