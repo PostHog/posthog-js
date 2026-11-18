@@ -13,6 +13,7 @@ import {
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[Web Vitals]')
 
@@ -213,7 +214,7 @@ export class WebVitalsAutocapture {
             return
         }
 
-        posthogExtensions?.loadExternalDependency?.(this._instance, flavor, (err) => {
+        getExtensionLoader(this._instance)?.(this._instance, flavor, (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return

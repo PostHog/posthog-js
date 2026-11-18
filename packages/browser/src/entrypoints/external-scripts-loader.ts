@@ -5,6 +5,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isString } from '@posthog/core'
 import { EXTENSION_INTEGRITY } from '../utils/extension-integrity'
 import { SUBRESOURCE_INTEGRITY_PATTERN } from '../utils/loader-script'
+import { LoadExternalDependency, setBundledExtensionLoader } from '../utils/extension-loader'
 
 const logger = createLogger('[ExternalScriptsLoader]')
 
@@ -168,7 +169,7 @@ const legacyScriptUrl = (posthog: PostHog, kind: PostHogExtensionKind): string =
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.loadExternalDependency = (
+const loadExternalDependency: LoadExternalDependency = (
     posthog: PostHog,
     kind: PostHogExtensionKind,
     callback: LoadCallback
@@ -244,6 +245,8 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 
     loadScript(posthog, legacyScriptUrl(posthog, kind), callback)
 }
+setBundledExtensionLoader(loadExternalDependency)
+assignableWindow.__PosthogExtensions__.loadExternalDependency = loadExternalDependency
 
 assignableWindow.__PosthogExtensions__.loadSiteApp = (posthog: PostHog, url: string, callback: LoadCallback): void => {
     if (posthog.config.require_subresource_integrity) {

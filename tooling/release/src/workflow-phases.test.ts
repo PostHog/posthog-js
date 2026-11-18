@@ -482,8 +482,12 @@ test('posthog-js npm publishing verifies extension hashes against the uploaded S
         /name: \$\{\{ needs.recover-posthog-js-s3.result == 'success' && 's3-recovery-posthog-js-dist' \|\| 'posthog-js-dist' \}\}/
     )
     assert.match(publish, /embed-extension-integrity\.mjs verify "\$RUNNER_TEMP\/posthog-js-s3-dist"/)
-    assert.match(recovery, /name: s3-recovery-posthog-js-dist/)
-    assert.match(job(release, 'build-s3-artifacts'), /name: posthog-js-dist\n/)
+    // npm publishing can be retried after S3 succeeded, so the artifacts must outlive one day.
+    assert.match(
+        job(recovery, 'build-s3-artifacts'),
+        /name: s3-recovery-posthog-js-dist\n(?: {18}.*\n)*? {18}retention-days: 30\n/
+    )
+    assert.match(job(release, 'build-s3-artifacts'), /name: posthog-js-dist\n(?: {18}.*\n)*? {18}retention-days: 30\n/)
     for (const id of ['publish-posthog-js', 'publish-recovered-posthog-js']) {
         assert.match(job(release, id), /steps: \*publish-package-steps/)
     }

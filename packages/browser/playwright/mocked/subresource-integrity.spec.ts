@@ -1,6 +1,6 @@
 import { expect, test, Page } from '@playwright/test'
 import path from 'node:path'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createServer, Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -124,6 +124,9 @@ async function setup(
         if (url.pathname.includes('/static/')) {
             staticRequests.push(url.pathname + url.search)
             const file = url.pathname.split('/').pop()!
+            if (!existsSync(path.join(dist, file))) {
+                return route.fulfill({ status: 404, headers })
+            }
             const body = readFileSync(path.join(dist, file), 'utf8')
             return route.fulfill({
                 contentType: 'application/javascript',
@@ -307,6 +310,42 @@ test.describe('require_subresource_integrity', () => {
         )
         await page.evaluate(() => (window as any).posthog.hardened.capture('hardened event'))
         await expect.poll(() => state.events.map(({ event }) => event)).toContain('hardened event')
+        expect(state.errors).toEqual([])
+    })
+
+    test('a hardened instance keeps its own loader when another core replaces the shared one', async ({ page }) => {
+        const state = await setup(page, {
+            instances: [
+                {
+                    name: '',
+                    config: {
+                        require_subresource_integrity: true,
+                        disable_session_recording: true,
+                        disable_surveys: true,
+                    },
+                },
+            ],
+            tamper: ['surveys.js'],
+        })
+        // Stands in for an older core that loads unpinned scripts and has its own extension hashes.
+        await page.evaluate(() => {
+            ;(window as any).__PosthogExtensions__.loadExternalDependency = (_: unknown, kind: string, cb: any) => {
+                const script = document.createElement('script')
+                script.src = `https://us-assets.i.posthog.com/static/${kind}.js?v=old`
+                script.onload = () => cb()
+                document.head.appendChild(script)
+            }
+        })
+        await page.evaluate((config) => (window as any).posthog.init('phc_sri_hardened', config, 'hardened'), {
+            ...baseConfig,
+            api_host: 'https://us.i.posthog.com',
+            require_subresource_integrity: true,
+            disable_session_recording: true,
+        })
+
+        await expect.poll(() => state.staticRequests).toEqual([`/static/${version}/surveys.js`])
+        await page.waitForTimeout(500)
+        expect(await page.evaluate(() => window.sriTampered)).toEqual([])
         expect(state.errors).toEqual([])
     })
 

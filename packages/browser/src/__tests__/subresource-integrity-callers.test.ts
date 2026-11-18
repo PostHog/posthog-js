@@ -6,13 +6,15 @@ import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED } from '../constants'
 import { createRemoteConfig } from './helpers/posthog-instance'
+import { getBundledExtensionLoader, setBundledExtensionLoader } from '../utils/extension-loader'
 
 // The unbuilt source has placeholders only, so every unpinned extension fails closed: this
 // exercises each caller's handling of a refused load without any hashes available.
 describe('require_subresource_integrity callers', () => {
     let consoleError: ReturnType<typeof vi.spyOn>
     let consoleWarn: ReturnType<typeof vi.spyOn>
-    const loader = assignableWindow.__PosthogExtensions__.loadExternalDependency!
+    const loader = getBundledExtensionLoader()!
+    let bundledLoader: ReturnType<typeof vi.fn>
     const siteAppLoader = assignableWindow.__PosthogExtensions__.loadSiteApp!
 
     beforeEach(() => {
@@ -21,13 +23,16 @@ describe('require_subresource_integrity callers', () => {
         document.body.innerHTML = ''
         consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
         consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-        assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(loader)
+        bundledLoader = vi.fn(loader)
+        setBundledExtensionLoader(bundledLoader)
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = loader
         assignableWindow.__PosthogExtensions__.loadSiteApp = vi.fn(siteAppLoader)
         assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
     })
 
     afterEach(() => {
         vi.useRealTimers()
+        setBundledExtensionLoader(loader)
         assignableWindow.__PosthogExtensions__.loadExternalDependency = loader
         assignableWindow.__PosthogExtensions__.loadSiteApp = siteAppLoader
         consoleError.mockRestore()
@@ -60,8 +65,7 @@ describe('require_subresource_integrity callers', () => {
         return { posthog, onCapture }
     }
 
-    const loadedKinds = () =>
-        vi.mocked(assignableWindow.__PosthogExtensions__.loadExternalDependency!).mock.calls.map(([, kind]) => kind)
+    const loadedKinds = () => bundledLoader.mock.calls.map(([, kind]) => kind)
 
     it('initializes with defaults and keeps capturing when remote config is refused', () => {
         const sendRequest = vi.spyOn(PostHog.prototype, '_send_request').mockImplementation(({ callback }) => {
@@ -132,6 +136,27 @@ describe('require_subresource_integrity callers', () => {
         )
         vi.advanceTimersByTime(60_000)
         expect(loadedKinds()).toHaveLength(kinds.length)
+    })
+
+    it('keeps its own loader when another core replaces the shared global', () => {
+        const replacement = vi.fn()
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = replacement
+        init(
+            { advanced_disable_flags: true, disable_session_recording: false, disable_surveys: false },
+            { sessionRecording: { endpoint: '/s/' }, surveys: true }
+        )
+
+        expect(replacement).not.toHaveBeenCalled()
+        expect(loadedKinds()).toEqual(expect.arrayContaining(['lazy-recorder', 'surveys']))
+        expect(document.getElementsByTagName('script')).toHaveLength(0)
+    })
+
+    it('uses the shared global loader when the option is off', () => {
+        const replacement = vi.fn()
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = replacement
+        init({ require_subresource_integrity: false, advanced_disable_flags: true }, { surveys: true })
+
+        expect(replacement).toHaveBeenCalledWith(expect.anything(), 'surveys', expect.any(Function))
     })
 
     it('refuses site apps without breaking init', () => {
