@@ -528,6 +528,17 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  /**
+   * Listens for an SDK event and returns a function that removes the listener.
+   * The SDK does not throw for failures in background work, so listen for them on the `'error'` event.
+   *
+   * @example
+   * ```js
+   * posthog.on('error', (err) => {
+   *   console.error('PostHog had an error', err)
+   * })
+   * ```
+   */
   on(event: string, cb: (...args: any[]) => void): () => void {
     return this._events.on(event, cb)
   }
@@ -561,7 +572,9 @@ export abstract class PostHogCoreStateless {
     this.removeDebugCallback?.()
 
     if (enabled) {
-      const removeDebugCallback = this.on('*', (event, payload) => this._logger.info(event, payload))
+      const removeDebugCallback = this.on('*', (event, payload) =>
+        this._logger.info(event, this.describeDebugPayload(payload))
+      )
       this.removeDebugCallback = () => {
         removeDebugCallback()
         this.removeDebugCallback = undefined
@@ -571,6 +584,11 @@ export abstract class PostHogCoreStateless {
 
   get isDebug(): boolean {
     return !!this.removeDebugCallback
+  }
+
+  /** What debug mode logs for an emitted event's payload. SDKs whose events can carry sensitive data log a summary instead. */
+  protected describeDebugPayload(payload: any): any {
+    return payload
   }
 
   get isDisabled(): boolean {
@@ -1370,7 +1388,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
     // Top-level `type` is deprecated and a no-op for batch ingestion.
     // Top-level `library` and `library_version` are deprecated; `$lib` and
     // `$lib_version` in properties are the canonical SDK metadata fields.
@@ -1686,6 +1704,10 @@ export abstract class PostHogCoreStateless {
     this._events.emit('flush', sentMessages)
   }
 
+  protected shouldRetainBatchOnError(error: unknown): boolean {
+    return error instanceof PostHogFetchNetworkError
+  }
+
   private async _flushRoute(route: string, sentMessages: any[]): Promise<void> {
     const queueKey = this.persistedQueueKeyForRoute(route)
     let queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
@@ -1757,7 +1779,7 @@ export abstract class PostHogCoreStateless {
 
         // depending on the error type, eg a malformed JSON or broken queue, it'll always return an error
         // and this will be an endless loop, in this case, if the error isn't a network issue, we always remove the items from the queue
-        if (!(err instanceof PostHogFetchNetworkError)) {
+        if (!this.shouldRetainBatchOnError(err)) {
           await persistQueueChange()
         }
         this._events.emit('error', err)

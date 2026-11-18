@@ -2,6 +2,8 @@
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 
+Upgrading from posthog-node 5.x.x? See [MIGRATION.md](./MIGRATION.md).
+
 SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
 ## Documentation
@@ -29,7 +31,7 @@ API-only spans without public readable attributes are skipped.
 For a manual request integration, call `enrichCurrentSpan(posthog)` from `posthog-node/otel` after entering the header context.
 This fills missing attributes on an incoming span that already has application context.
 The helper does nothing when no context processor is installed.
-For other Node.js frameworks, pass `{ signal: controller.signal }` to `withContext` or `enterContext` and abort the controller when the request ends.
+For other Node.js frameworks, pass `{ signal: controller.signal }` to `withContext` and abort the controller when the request ends.
 This ends the context for detached work, including inherited nested scopes, without cancelling the handler.
 The signal also works without OpenTelemetry. Calls without a signal keep their existing scope behavior.
 `fresh: true` starts an independent context with only the supplied values and its own optional signal.

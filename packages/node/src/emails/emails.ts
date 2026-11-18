@@ -34,10 +34,10 @@ import type {
   TemplateEmailForm,
 } from './types'
 
-const SEND_PATH = '/api/projects/@current/messaging/send/email/'
-const UPLOADS_PATH = '/api/projects/@current/messaging/attachments/uploads/'
-const STATUS_PATH = '/api/projects/@current/messaging/emails/{messageId}/'
-const PREFERENCES_PATH = '/api/projects/@current/messaging/preferences/'
+const SEND_PATH = '/api/messaging/send/email/'
+const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
+const STATUS_PATH = '/api/messaging/emails/{messageId}/'
+const PREFERENCES_PATH = '/api/messaging/preferences/'
 const US_APP_HOST = 'https://us.posthog.com'
 const EU_APP_HOST = 'https://eu.posthog.com'
 const CLOUD_APP_HOSTS: Record<string, string> = {

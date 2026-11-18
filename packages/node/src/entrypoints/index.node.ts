@@ -10,6 +10,8 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import type { SpanContextManager } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
 import { AsyncLocalStorageSpanContextManager } from '../extensions/context/span-context.node'
+import type { CaptureCompressor } from '../capture-v1/compression'
+import { zlibCompressor } from '../compression.node'
 import { gzipCompress } from '../gzip.node'
 import { hostOsResourceAttributes } from '../host-os.node'
 
@@ -20,6 +22,10 @@ export class PostHog extends PostHogBackendClient {
 
   protected override compressPayload(payload: string): Promise<PostHogFetchBodyBytes | null> {
     return gzipCompress(payload, this.isDebug)
+  }
+
+  protected override captureCompressor(): CaptureCompressor {
+    return zlibCompressor
   }
 
   protected initializeContext(): PostHogContext {

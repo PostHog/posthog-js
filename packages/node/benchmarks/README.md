@@ -51,7 +51,7 @@ The mixed flag fixture includes boolean, rollout, variant, person-property, rege
 
 ### Transport and lifecycle
 
-A deterministic adapter supplied through the public `fetch` option serves `/flags/definitions` and accepts uncompressed v0 `/batch/` requests. Other requests fail validation. Definition bodies are parsed anew on loading and refresh. The adapter keeps delivery counters and a preallocated bounded sequence bitmap, not captured event history.
+A deterministic adapter supplied through the public `fetch` option serves `/flags/definitions` and accepts uncompressed capture v1 `/i/v1/analytics/events` requests, answering with a result per event uuid. Other requests fail validation. Definition bodies are parsed anew on loading and refresh. The adapter keeps delivery counters and a preallocated bounded sequence bitmap, not captured event history.
 
 This isolates SDK costs from sockets, server scheduling, and production. It is not an HTTP integration benchmark. Refresh-memory measurements include fixture generation and the current serialized definition body in the process; prior fixture generations are not retained by the adapter. Completed-delivery measurements include capture preparation, serialization, public flush completion and the adapter's parsing and validation overhead. Their `completion_boundary=completed_delivery` verification never flushes again. Enqueue-only timing/allocation passes flush and verify delivery after measurement.
 
