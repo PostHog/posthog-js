@@ -1225,6 +1225,29 @@ describe('PostHog RN session replay debug properties', () => {
       expectOffShape(captureOne(client, '$screen').properties)
     })
 
+    it('remote replay turned back on restores the replay keys on the next event', async () => {
+      const client = await readyWithRemoteConfig({ sessionRecording: false })
+      expectOffShape(captureOne(client, '$screen').properties)
+
+      currentRemoteConfig = { sessionRecording: { endpoint: '/s/' } }
+      await client.reloadRemoteConfigAsync?.()
+      await waitForNativeChain(client)
+      expectOnShape(captureOne(client, '$screen').properties)
+    })
+
+    it('a lifted mobile_recordings quota limit restores the replay keys on the next event', async () => {
+      const client = await readyWithRemoteConfig({
+        sessionRecording: { endpoint: '/s/' },
+        quotaLimited: ['mobile_recordings'],
+      })
+      expectOffShape(captureOne(client, '$screen').properties)
+
+      currentRemoteConfig = { sessionRecording: { endpoint: '/s/' } }
+      await client.reloadRemoteConfigAsync?.()
+      await waitForNativeChain(client)
+      expectOnShape(captureOne(client, '$screen').properties)
+    })
+
     it('a quota limit on another product does not turn replay off', async () => {
       const client = await readyWithRemoteConfig({
         sessionRecording: { endpoint: '/s/' },

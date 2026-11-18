@@ -9944,6 +9944,23 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
         })
 
+        it('restores the replay keys on the next event when the persisted remote config turns replay back on', () => {
+            const persistRemoteConfig = (enabled: boolean) =>
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: { enabled, endpoint: '/s/', cache_timestamp: Date.now() },
+                })
+            persistRemoteConfig(true)
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+
+            persistRemoteConfig(false)
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+
+            persistRemoteConfig(true)
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+            expect(sessionRecording.sdkDebugProperties).toHaveProperty('$sdk_debug_replay_rrweb_error')
+        })
+
         it('reports only the disabled status when opted out', () => {
             startRecording()
             posthog.consent.isOptedOut = () => true
