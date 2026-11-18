@@ -9,6 +9,7 @@ import { version } from '../../package.json'
 declare global {
     interface Window {
         sriTampered?: string[]
+        siteAppRan?: boolean
     }
 }
 
@@ -24,6 +25,7 @@ type Options = {
     config?: Record<string, unknown>
     host?: string
     loader?: boolean
+    preloadSiteApp?: boolean
     instances?: { name: string; config: Record<string, unknown> }[]
 }
 
@@ -59,6 +61,7 @@ async function setup(
         host = 'https://customer.example',
         instances,
         loader = false,
+        preloadSiteApp = false,
     }: Options = {}
 ) {
     const staticRequests: string[] = []
@@ -73,6 +76,12 @@ async function setup(
         ? `<!doctype html><html><head><script>window.sriTampered = [];</script>${loaderTag}</head><body></body></html>`
         : `<!doctype html><html><head><script>
         window.sriTampered = [];
+        ${
+            // Mimics the token-specific array.js, which preloads config and site-app code.
+            preloadSiteApp
+                ? `window._POSTHOG_REMOTE_CONFIG = { phc_sri: { config: ${JSON.stringify(remoteConfig)}, siteApps: [{ id: 'preloaded', init: function () { window.siteAppRan = true; return {} } }] } };`
+                : ''
+        }
     </script><script src="https://us-assets.i.posthog.com/static/${version}/array.js" crossorigin="anonymous" integrity="${integrityOf('array.js')}"></script></head><body>
         <script>
             ${configs
@@ -208,6 +217,22 @@ test.describe('require_subresource_integrity', () => {
         await expect.poll(() => state.events.map(({ event }) => event)).toContain('loader event')
         expect(state.errors).toEqual([])
     })
+
+    for (const requireIntegrity of [true, false]) {
+        test(`preloaded site app code ${requireIntegrity ? 'does not run' : 'runs'} with opt_in_site_apps${requireIntegrity ? ' and require_subresource_integrity' : ''}`, async ({
+            page,
+        }) => {
+            const state = await setup(page, {
+                preloadSiteApp: true,
+                config: { opt_in_site_apps: true, require_subresource_integrity: requireIntegrity },
+            })
+
+            await expect.poll(() => extensions(page)).toEqual({ recorder: true, surveys: true })
+            await page.waitForTimeout(500)
+            expect(await page.evaluate(() => window.siteAppRan)).toBe(requireIntegrity ? undefined : true)
+            expect(state.errors).toEqual([])
+        })
+    }
 
     test('a reverse-proxy api_host path loads verified extensions', async ({ page }) => {
         const state = await setup(page, { apiHost: 'https://customer.example/ingest' })

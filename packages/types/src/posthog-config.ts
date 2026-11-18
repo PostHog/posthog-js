@@ -1850,15 +1850,18 @@ export interface PostHogConfig {
      * whatever {@link strict_script_versioning} says. The asset host, or a reverse proxy in
      * front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`).
      *
-     * This mode also refuses to load the toolbar, site apps and the executable
-     * `/array/<token>/config.js` remote config. Remote config is then fetched as JSON.
+     * This mode also disables site apps, overriding {@link opt_in_site_apps}, including site app
+     * code preloaded by the token-specific `/array/<token>/array.js`. It refuses the toolbar and the
+     * executable `/array/<token>/config.js` remote config, which is then fetched as JSON.
      *
      * The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK
      * code you already trust: an npm build, or an `array.js` you pin yourself. Because the
      * extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an
      * exact-version `loader.js` that itself has an `integrity` attribute pins every extension too.
-     * It does not cover an unpinned initial loader, site apps, the toolbar, third-party widgets
-     * such as Intercom or Crisp, or a malicious release with valid hashes.
+     * The token-specific `/array/<token>/array.js` changes with project configuration, so it cannot be
+     * pinned: use `/static/<sdk version>/array.js`, the loader or npm instead. The guarantee does not
+     * cover an unpinned initial loader, third-party widgets such as Intercom or Crisp, or a malicious
+     * release with valid hashes.
      * Extensions share page globals, so if another PostHog instance or any other code on the page
      * already ran unverified extension code, this instance reuses it and the guarantee does not hold.
      *
