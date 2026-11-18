@@ -9,7 +9,7 @@ The client queues events and sends them in batches, so call `shutdown` before yo
 ## Install
 
 ```bash
-npm install posthog-node@~{{major}}.{{minor}}
+npm install posthog-node@~6.0
 ```
 
 ## Initialize
