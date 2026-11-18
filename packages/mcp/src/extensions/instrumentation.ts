@@ -37,7 +37,7 @@ import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException, httpStatus } from './exceptions'
+import { captureException, clientErrorType, httpStatus } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
@@ -479,6 +479,7 @@ function publishSuccessfulToolEvent(
       const resultError = resultBeforeInstructions ?? result
       event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
+      event.errorType = clientErrorType(capturedError ?? resultError)
     } else {
       event.isError = false
     }
@@ -505,6 +506,7 @@ function publishFailedToolEvent(
     event.isError = true
     event.error = captureException(error)
     event.errorStatus = httpStatus(error)
+    event.errorType = clientErrorType(error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
@@ -592,6 +594,7 @@ function publishResourceEvent(
     if ('error' in outcome) {
       event.isError = true
       event.error = captureException(outcome.error)
+      event.errorType = clientErrorType(outcome.error)
     } else {
       event.isError = false
       if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {

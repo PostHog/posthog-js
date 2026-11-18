@@ -54,7 +54,13 @@ export function buildPostHogCaptureEvents(
 ): PostHogCaptureEvent[] {
   const batch = [buildCaptureEvent(event)]
 
-  if (event.isError && event.error && options.enableExceptionAutocapture !== false) {
+  // A validation failure is the client's, not a server exception for error tracking.
+  if (
+    event.isError &&
+    event.error &&
+    event.errorType !== 'validation' &&
+    options.enableExceptionAutocapture !== false
+  ) {
     batch.push(buildExceptionEvent(event))
   }
 

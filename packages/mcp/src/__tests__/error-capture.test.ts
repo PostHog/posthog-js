@@ -9,7 +9,7 @@
  */
 import { runInNewContext } from 'node:vm'
 
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -227,42 +227,55 @@ describe('error capture on the tool-call path', () => {
     expect(events[0].duration).toEqual(expect.any(Number))
   })
 
-  it.each([
-    [
-      'invalid enum value',
-      () => {
-        server.tool!(
-          'calculate',
-          'calc',
-          { op: z.enum(['add', 'sub']), a: z.number(), b: z.number() },
-          async (args: any) => ({ content: [{ type: 'text', text: String(args.a) }] })
-        )
-      },
+  const registerCalculate = () =>
+    server.tool!(
       'calculate',
-      { op: 'modulo', a: 10, b: 3, context: 'test', private_identifier: true },
+      'calc',
+      { op: z.enum(['add', 'sub']), a: z.number(), b: z.number() },
+      async (args: any) => ({ content: [{ type: 'text', text: String(args.a) }] })
+    )
+
+  it.each([
+    ['invalid enum value', registerCalculate, 'calculate', { op: 'modulo', a: 10, b: 3 }, 'validation', false],
+    ['missing required parameter', () => {}, 'add_todo', {}, 'validation', false],
+    [
+      'tool rejecting its own arguments',
+      () =>
+        server.tool!('lookup', 'lookup', {}, async () => {
+          throw new McpError(ErrorCode.InvalidParams, 'id must be a uuid')
+        }),
+      'lookup',
+      {},
+      'validation',
+      false,
     ],
     [
-      'missing required parameter',
-      () => {
-        // add_todo already requires `text`
-      },
-      'add_todo',
-      { context: 'test' },
+      'output failing its own schema',
+      () =>
+        server.registerTool!('report', { description: 'report', outputSchema: { total: z.number() } }, async () => ({
+          content: [{ type: 'text', text: 'no structured content' }],
+        })),
+      'report',
+      {},
+      'Error',
+      true,
     ],
-  ])('captures Zod validation failures (%s) as $exception events', async (_, register, toolName, args) => {
-    register()
-    instrument(server, fakePostHog())
+    ['tool throwing', () => {}, 'complete_todo', { id: 'nonexistent-id' }, 'Error', true],
+  ])(
+    'classifies %s, sending $exception only for server failures',
+    async (_case, register, toolName, args, errorType, sendsException) => {
+      register()
+      instrument(server, fakePostHog())
 
-    // MCP SDK <1.21 throws; ≥1.21 returns CallToolResult with isError: true.
-    await client
-      .request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
-      .catch(() => undefined)
+      await client.request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
+      await new Promise((r) => setTimeout(r, 50))
 
-    await new Promise((r) => setTimeout(r, 50))
-    const event = capture.findEventsByResourceName(toolName).find((e) => e.isError)
-    const exception = event?.error?.$exception_list?.[0]
-    expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['a', 'b', 'op', '[redacted]'] : [])
-    expect(exception?.value).toMatch(/Invalid|required/i)
-    expect(['McpError', 'Error', undefined]).toContain(exception?.type)
-  })
+      const ofTool = (event: string) =>
+        capture.findCapturesByEvent(event).filter((e) => e.properties.$mcp_tool_name === toolName)
+      const [toolCall] = ofTool('$mcp_tool_call')
+      expect(toolCall?.properties.$mcp_is_error).toBe(true)
+      expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
+      expect(ofTool('$exception')).toHaveLength(sendsException ? 1 : 0)
+    }
+  )
 })

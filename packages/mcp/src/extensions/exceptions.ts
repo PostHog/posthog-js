@@ -59,6 +59,30 @@ export function captureException(error: unknown, fallback?: unknown): CoreErrorT
   }
 }
 
+/** JSON-RPC codes a server uses to reject what the client sent: bad params, an unknown resource. */
+const CLIENT_ERROR_CODES = new Set([-32602, -32002])
+// Same code as the input rejections above, but the server's own result broke its schema.
+const OUTPUT_VALIDATION = /Output validation error/
+// The high-level SDK flattens an input rejection into an `isError` result before the tool runs.
+const FLATTENED_INPUT_VALIDATION = /^(MCP error -32602: )?(Input validation error|Invalid arguments for tool)/
+
+/**
+ * `validation` when the request was rejected for what the client sent, which is
+ * the agent's failure rather than the server's. Those keep `$mcp_is_error` but
+ * get no `$exception`.
+ */
+export function clientErrorType(error: unknown): 'validation' | undefined {
+  const code = readField(error, 'code')
+  const message = readField(error, 'message')
+  if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
+    return typeof message === 'string' && OUTPUT_VALIDATION.test(message) ? undefined : 'validation'
+  }
+  if (isCallToolResult(error) && FLATTENED_INPUT_VALIDATION.test(extractCallToolResultMessage(error))) {
+    return 'validation'
+  }
+  return undefined
+}
+
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
 const MAX_CHAIN_LINKS = 50
 
