@@ -1,8 +1,14 @@
 import { app, BrowserWindow } from 'electron'
 import { createRequire } from 'node:module'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { init } from '@posthog/electron/main'
 import { mockToken, startMockServer } from './mock-server.mjs'
+import {
+    assertRuntimeFixture,
+    fixtureAllowedUrl,
+    fixtureWindowOptions,
+    loadFixtureWindow,
+} from './fixtures/runtime.mjs'
 
 const require = createRequire(import.meta.url)
 const indexHtml = fileURLToPath(new URL('./index.html', import.meta.url))
@@ -19,7 +25,7 @@ if (smokeTest) {
     app.setPath('userData', process.env.ELECTRON_EXAMPLE_USER_DATA)
 }
 
-function createWindow() {
+function createWindow(index = 0) {
     const window = new BrowserWindow({
         width: 1000,
         height: 900,
@@ -29,9 +35,10 @@ function createWindow() {
             sandbox: true,
             contextIsolation: true,
             nodeIntegration: false,
+            ...(smokeTest ? fixtureWindowOptions(index) : {}),
         },
     })
-    const deregister = posthog.registerWindow(window, { allowedUrls: [pathToFileURL(indexHtml).href] })
+    const deregister = posthog.registerWindow(window, { allowedUrls: [fixtureAllowedUrl()] })
     window.once('closed', deregister)
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-navigate', (event) => event.preventDefault())
@@ -88,9 +95,11 @@ async function main() {
 
     if (smokeTest) {
         const { runSmokeDriver } = await import('./smoke-driver.mjs')
-        const windows = [createWindow(), createWindow()]
-        await Promise.all(windows.map((window) => window.loadFile(indexHtml)))
+        const windows = [createWindow(0), createWindow(1)]
+        // Session protocol registration is serialized when windows share a session.
+        for (const window of windows) await loadFixtureWindow(window)
         await runSmokeDriver(windows, posthog)
+        await assertRuntimeFixture(windows)
         await posthog.flush()
         await posthog.shutdown(5000)
         quitting = true

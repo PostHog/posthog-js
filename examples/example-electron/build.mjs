@@ -6,6 +6,16 @@ await build({
     bundle: true,
     platform: 'browser',
     format: 'iife',
-    target: 'chrome148',
+    target: 'chrome146',
     sourcemap: true,
+})
+
+await build({
+    entryPoints: ['fixtures/composed-preload.js'],
+    outfile: 'dist/composed-preload.cjs',
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    target: 'node24',
+    external: ['electron'],
 })

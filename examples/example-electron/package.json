@@ -11,7 +11,8 @@
         "test": "pnpm build && node smoke-test.mjs",
         "test:smoke": "pnpm test",
         "test:asar": "pnpm build && node smoke-test.mjs --asar",
-        "test:mock": "node --test mock-server.test.mjs"
+        "test:mock": "node --test mock-server.test.mjs",
+        "test:platform": "pnpm build && node fixtures/run.mjs"
     },
     "dependencies": {
         "@posthog/electron": "0.1.0-alpha.0"
