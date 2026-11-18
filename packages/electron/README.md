@@ -101,6 +101,8 @@ Alias and person-profile updates respect `personProfiles: 'never'`. Opt-out bloc
 
 Malformed JSON payloads from detailed flag responses return `null` and report through `onError`. Valid JSON retains its decoded value, including strings, `false`, `0` and `null`. Legacy flag responses and bootstrap payloads can preserve malformed input as a string; already-decoded strings are returned unchanged rather than parsed again.
 
+Electron sends anonymous and distinct IDs for flag evaluation, but the alpha does not send a separate `$device_id`. Device-ID bucketing is not supported.
+
 ## Opt-in DOM autocapture
 
 Autocapture is **off by default**, configured per trusted renderer:
@@ -244,6 +246,7 @@ This is **not** a sandbox or an untrusted-plugin interface: a registered utility
 - Defaults: at most 1,000 events through core's queue, a 5 MiB state file, and seven-day event retention. Configure `maxQueueSize`, `maxStorageBytes` and `maxQueueAgeMs`. Expired events and oldest events exceeding the storage cap are discarded; oversized non-queue state is rejected through the operation/error callback. Budget property/flag payload sizes accordingly.
 - Storage writes are serialized and atomically renamed. Acknowledgment means the write/rename completed, not an fsync/power-loss guarantee. Each project/host store allows **one local process writer**. A second process remains inactive (including networking), reports through `onError`, and resolves `ready()` without reading the owner's analytics. Opting in cannot activate an unowned store. Use a separate `storageDirectory` for deliberately independent instances/identities.
 - Ownership is released on normal awaited shutdown. Stale ownership is reclaimed only for a same-host PID proven absent; live, permission-denied, foreign-host or unreadable ownership is never stolen. UUID-specific `.reclaim-*` tombstones prevent competing reclaimers from removing a successor's lock; they intentionally remain on disk. A crashed reclaimer or incomplete `.owner` file can require manual recovery: stop **all** application processes before removing the stale `.owner` and associated tombstone. Do not remove these files from a running app. This policy assumes a local filesystem, not a network filesystem or distributed lock service.
+- A failed startup write is reported through `onError` without permanently disabling the client. Mutations still reject if their write fails.
 - Corrupt/unreadable existing storage falls back to opted out and empty analytics, reporting via `onError`. Call `optIn()` explicitly after addressing the cause if appropriate.
 - Network errors, 407, 408, 429 and 5xx preserve batches after bounded immediate retries; background retries use backoff, jitter and Retry-After. Permanent failures may drop the batch. Retries retain event UUIDs, but duplicate delivery remains possible. `flushInterval: 0` disables scheduled background flushes; explicit flush and queue-size-triggered flush still work.
 - Back up and investigate the store before manual ownership recovery; never erase `state.json` or delete coordination files while a writer may still be active.

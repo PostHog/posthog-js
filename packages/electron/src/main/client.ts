@@ -151,13 +151,10 @@ export class ElectronCore extends PostHogCore {
 
     protected async getFlagsForContext(
         ...args: Parameters<PostHogCore['getFlagsForContext']>
-    ): Promise<GetFlagsResult> {
+    ): Promise<GetFlagsResult | undefined> {
         const epoch = this._identityEpoch
         const result = await super.getFlagsForContext(...args)
-        if (this._stopped || epoch !== this._identityEpoch) {
-            return { success: false, error: { type: 'connection_error' } }
-        }
-        return result
+        return this._stopped || epoch !== this._identityEpoch ? undefined : result
     }
 
     getLibraryId(): string {
@@ -180,7 +177,7 @@ export class ElectronCore extends PostHogCore {
             $app_name: app.getName(),
             $app_version: app.getVersion(),
             $os_name: process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux',
-            $os_version: release(),
+            $os_version: process.getSystemVersion?.() ?? release(),
             $device_type: 'Desktop',
             ...(this._appBuild ? { $app_build: this._appBuild } : {}),
             ...this._eventContext,
@@ -233,7 +230,6 @@ export class ElectronCore extends PostHogCore {
             throw new Error('PostHog request outside configured host')
         }
         const flagsRequest = target.pathname.endsWith('/flags/') || target.pathname.endsWith('/flags')
-        const epoch = this._identityEpoch
         const started = Date.now()
         const controller = new AbortController()
         let responseTimer: ReturnType<typeof setTimeout> | undefined
@@ -296,11 +292,7 @@ export class ElectronCore extends PostHogCore {
                 },
                 json: async () => {
                     try {
-                        const value: unknown = await response.json()
-                        if (this._stopped || (flagsRequest && epoch !== this._identityEpoch)) {
-                            throw new Error('Discarded stale PostHog response')
-                        }
-                        return value
+                        return await response.json()
                     } finally {
                         cleanup()
                     }
