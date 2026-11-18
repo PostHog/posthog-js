@@ -3,6 +3,7 @@ import type { IPostHog } from '../types'
 import type { FeatureFlags } from '../../products/flags/flags-token'
 import type { LogsExtension } from '../../products/logs/logs-internal'
 import type { SurveysExtension } from '../../products/surveys/surveys-internal'
+import type { ErrorTrackingExtension } from '../../products/error-tracking/error-tracking-internal'
 import type { ConsentState } from '../state/state'
 
 export interface IdentifyInfo {
@@ -41,4 +42,5 @@ export interface BrowserProducts {
     surveys: SurveysExtension
     autocapture: BrowserExtension & { setElementSelectors(selectors: Set<string>): void }
     webVitals: BrowserExtension
+    errorTracking: ErrorTrackingExtension
 }

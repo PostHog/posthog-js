@@ -101,6 +101,12 @@
             ],
             "web-vitals": [
                 "dist/web-vitals.d.ts"
+            ],
+            "error-tracking": [
+                "dist/error-tracking.d.ts"
+            ],
+            "exception-autocapture": [
+                "dist/exception-autocapture.d.ts"
             ]
         }
     },
@@ -244,6 +250,16 @@
             "types": "./dist/web-vitals.d.ts",
             "require": "./dist/web-vitals.js",
             "import": "./dist/web-vitals.mjs"
+        },
+        "./error-tracking": {
+            "types": "./dist/error-tracking.d.ts",
+            "require": "./dist/error-tracking.js",
+            "import": "./dist/error-tracking.mjs"
+        },
+        "./exception-autocapture": {
+            "types": "./dist/exception-autocapture.d.ts",
+            "require": "./dist/exception-autocapture.js",
+            "import": "./dist/exception-autocapture.mjs"
         }
     },
     "scripts": {

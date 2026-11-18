@@ -21,7 +21,7 @@ describe('snippet query configuration', () => {
         expect(
             parseSnippetOptions(
                 url +
-                    '&apiHost=https%3A%2F%2Fproxy.example%2Fph&capturePageview=false&optOutByDefault=true&debug=true&disableBotDetection=false&storage=false&flags=false&logs=false&surveys=false&autocapture=false&webVitals=false'
+                    '&apiHost=https%3A%2F%2Fproxy.example%2Fph&capturePageview=false&optOutByDefault=true&debug=true&disableBotDetection=false&storage=false&flags=false&logs=false&surveys=false&autocapture=false&webVitals=false&errorTracking=false'
             )
         ).toEqual({
             projectToken: 'phc_fixture',
@@ -36,6 +36,7 @@ describe('snippet query configuration', () => {
             surveys: false,
             autocapture: false,
             webVitals: false,
+            errorTracking: false,
         })
     })
 

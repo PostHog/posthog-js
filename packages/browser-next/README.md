@@ -110,12 +110,12 @@ The first response embeds core and full analytics, including Capture V1 delivery
 
 Only these query options are supported; omitted options use the existing factory defaults:
 
-| Option                                                               | Values                                                                                      |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `projectToken`                                                       | Required, nonempty project token                                                            |
-| `apiHost`                                                            | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
-| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection` | Literal `true` or `false`                                                                   |
-| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`    | Literal `false` to disable the corresponding default                                        |
+| Option                                                                             | Values                                                                                      |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `projectToken`                                                                     | Required, nonempty project token                                                            |
+| `apiHost`                                                                          | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
+| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection`               | Literal `true` or `false`                                                                   |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`, `errorTracking` | Literal `false` to disable the corresponding default                                        |
 
 Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
 
@@ -334,6 +334,29 @@ An explicit logs extension takes precedence over the top-level option, including
 Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { path: true, search: false, hash: false } }` or pass the same `urlCapture` option to `logs()` to select which URL components are retained. These are the defaults, including for omitted fields: the origin and pathname are retained, while query parameters and fragments are removed. With `path: false`, the pathname becomes `/`. Invalid URLs are omitted. Component selection does not redact sensitive values within retained components.
 
 The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits the client's capture queue and all installed extensions' flush methods, including logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
+
+## Error tracking
+
+Supplying an `errorTracking` options object loads error tracking during initialization. With no explicit configuration, it loads when the project's remote configuration enables exception autocapture, from the saved remote setting, or through `resolveExtension('errorTracking')`. Use `errorTracking: false` to disable automatic inclusion.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<ph_project_token>',
+    errorTracking: { captureExceptions: true },
+})
+
+posthog.errorTracking?.addExceptionStep('Checkout button clicked', { cartSize: 3 })
+
+try {
+    await checkout()
+} catch (error) {
+    posthog.errorTracking?.captureException(error, { area: 'checkout' })
+}
+```
+
+For static inclusion, pass `errorTracking()` from `@posthog/browser/error-tracking` as an extension. `captureException()` sends a handled `$exception` event with the same `$exception_list` shape as `posthog-js` and returns whether the event was admitted. Exception properties the SDK generates take precedence over caller properties with the same names. `addExceptionStep()` records a step that is attached as `$exception_steps` to every later exception; steps are kept across captures and `reset()`, bounded by `exceptionSteps.maxBytes` (32,768 bytes by default), and cleared on shutdown.
+
+`captureExceptions: true` captures unhandled errors and promise rejections; an object selects `captureUnhandledErrors`, `captureUnhandledRejections` and `captureConsoleErrors`; `false` disables automatic capture. When it is omitted, the remote `autocaptureExceptions` setting decides. `startExceptionAutocapture()` and `stopExceptionAutocapture()` override both at runtime. The global handlers load as a separate chunk only when a source is enabled. Automatically captured exceptions are rate limited per exception type (`exceptionRateLimiterBucketSize` and `exceptionRateLimiterRefillRate`) and carry `$exception_source`. Remote suppression rules, and exceptions thrown by browser extensions or injected browser scripts (unless `captureExtensionExceptions` is set), drop exceptions before capture.
 
 ## Surveys
 

@@ -62,6 +62,11 @@
             "types": "./dist/products/web-vitals/web-vitals.d.ts",
             "require": "./dist/products/web-vitals/web-vitals.js",
             "import": "./dist/products/web-vitals/web-vitals.mjs"
+        },
+        "./error-tracking": {
+            "types": "./dist/products/error-tracking/error-tracking.d.ts",
+            "require": "./dist/products/error-tracking/error-tracking.js",
+            "import": "./dist/products/error-tracking/error-tracking.mjs"
         }
     },
     "scripts": {
