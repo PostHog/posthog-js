@@ -109,8 +109,9 @@ const reply = {
     is_private: false,
 }
 
-// Fixed backend responses for the widget's ticket lifecycle.
-export function conversationsResponse({ method, path }) {
+// Fixed backend responses for the widget's ticket lifecycle. Like the API, message polls
+// return only messages created strictly after the `after` timestamp.
+export function conversationsResponse({ method, path, url }) {
     if (method === 'GET' && path === `${conversationsApi}/tickets`) return { json: { count: 0, results: [] } }
     if (method === 'POST' && path === `${conversationsApi}/message`)
         return {
@@ -122,16 +123,19 @@ export function conversationsResponse({ method, path }) {
                 unread_count: 0,
             },
         }
-    if (method === 'GET' && path === `${conversationsApi}/messages/${ticketId}`)
+    if (method === 'GET' && path === `${conversationsApi}/messages/${ticketId}`) {
+        const after = url.searchParams.get('after')
+        const messages = [question, reply].filter((message) => !after || message.created_at > after)
         return {
             json: {
                 ticket_id: ticketId,
                 ticket_status: 'open',
-                messages: [question, reply],
+                messages,
                 has_more: false,
-                unread_count: 1,
+                unread_count: messages.some((message) => message.author_type !== 'customer') ? 1 : 0,
             },
         }
+    }
     if (method === 'POST' && path === `${conversationsApi}/messages/${ticketId}/read`)
         return { json: { success: true, unread_count: 0 } }
     return undefined
@@ -209,4 +213,5 @@ export function assertConversationDelivery(ui, network) {
     assert.equal(sent[0].body?.message, question.content, 'Incorrect conversation message')
     assert.equal(sent[0].body?.ticket_id, null, 'First message did not request a new ticket')
     assert(ui.conversation.includes(reply.content), 'Conversation reply was not rendered')
+    assert.equal(ui.conversation.split(question.content).length - 1, 1, 'Conversation message rendered more than once')
 }

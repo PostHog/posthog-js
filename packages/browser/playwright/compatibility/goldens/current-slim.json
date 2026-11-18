@@ -5667,28 +5667,6 @@
                                 "status": 200
                             },
                             {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
                                 "method": "GET",
                                 "path": "/api/conversations/v1/widget/messages/compat-ticket",
                                 "query": {
@@ -5767,7 +5745,7 @@
                     "pageErrors": [],
                     "replay": {},
                     "ui": {
-                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\nDon't see your previous tickets? Recover them here",
+                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\nDon't see your previous tickets? Recover them here",
                         "opened": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nDon't see your previous tickets? Recover them here"
                     },
                     "unexpectedNetwork": []
@@ -87361,28 +87339,6 @@
                                 "status": 200
                             },
                             {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
                                 "method": "GET",
                                 "path": "/api/conversations/v1/widget/messages/compat-ticket",
                                 "query": {
@@ -87461,7 +87417,7 @@
                     "pageErrors": [],
                     "replay": {},
                     "ui": {
-                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\nDon't see your previous tickets? Recover them here",
+                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\nDon't see your previous tickets? Recover them here",
                         "opened": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nDon't see your previous tickets? Recover them here"
                     },
                     "unexpectedNetwork": []
@@ -169103,28 +169059,6 @@
                                 "status": 200
                             },
                             {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
-                                "body": {
-                                    "widget_session_id": "generated-id-13"
-                                },
-                                "contentEncoding": null,
-                                "contentType": "application/json",
-                                "method": "POST",
-                                "path": "/api/conversations/v1/widget/messages/compat-ticket/read",
-                                "query": {},
-                                "status": 200
-                            },
-                            {
                                 "method": "GET",
                                 "path": "/api/conversations/v1/widget/messages/compat-ticket",
                                 "query": {
@@ -169203,7 +169137,7 @@
                     "pageErrors": [],
                     "replay": {},
                     "ui": {
-                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\n\nDon't see your previous tickets? Recover them here",
+                        "conversation": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\nCompat question\nJust now\nCompat agent\nCompat reply\nJust now\n\nDon't see your previous tickets? Recover them here",
                         "opened": "Support chat\nâœ•\nSupport\nCompat greeting\nJust now\n\nDon't see your previous tickets? Recover them here"
                     },
                     "unexpectedNetwork": []
