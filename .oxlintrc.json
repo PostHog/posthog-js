@@ -125,7 +125,7 @@
     },
     "overrides": [
         {
-            "files": ["packages/next/tests/**", "packages/next/vitest.config.ts"],
+            "files": ["packages/next/tests/**", "packages/next/vitest.config.ts", "packages/react/vitest.config.ts"],
             "rules": {
                 "compat/compat": "off"
             }
