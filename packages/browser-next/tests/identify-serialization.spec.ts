@@ -1,8 +1,8 @@
-import { analytics } from '../src/products/analytics/analytics'
 import { createPostHog } from '../src/composition/npm/core'
 import { flags } from '../src/products/flags/flags'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
+import { setPersonProperties } from '../src/products/analytics/person'
+import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
 
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []
 const create = async (debug = false) => {
@@ -15,10 +15,11 @@ const create = async (debug = false) => {
         capturePageview: false,
         remoteConfig: localRemoteConfig,
         fetch: createFetch(requests),
-        extensions: [analytics({ flushInterval: 0 }), flags({ featureFlagEvaluation: false })],
+        analytics: { flushInterval: 0 },
+        extensions: [flags({ featureFlagEvaluation: false })],
     })
     clients.push(client)
-    return { client, product: requireInstalledExtension(client.analytics), requests }
+    return { client, requests }
 }
 const events = (requests: SentRequest[]) => requests.flatMap((request) => request.body?.batch ?? [])
 
@@ -32,14 +33,14 @@ describe('identify person-property serialization', () => {
         'reports rejected %s properties without logging their values or exceptions',
         async (method) => {
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-            const { client, product, requests } = await create(true)
+            const { client, requests } = await create(true)
             const properties = {
                 get privateValue(): unknown {
                     throw new Error('private-value')
                 },
             }
-            if (method === 'identify') await product.identify('new-id', properties)
-            else product.setPersonProperties(properties)
+            if (method === 'identify') client.identify('new-id', properties)
+            else setPersonProperties(client, properties)
             expect(warn).toHaveBeenCalledOnce()
             expect(warn).toHaveBeenCalledWith(expect.any(String), 'Person properties must be JSON-serializable objects')
             expect(JSON.stringify(warn.mock.calls)).not.toContain('private-value')
@@ -50,7 +51,7 @@ describe('identify person-property serialization', () => {
     )
 
     it('retains a valid identity transition when person properties cannot be serialized', async () => {
-        const { client, product, requests } = await create()
+        const { client, requests } = await create()
         const anonymousId = client.anonymousId
         const deviceId = client.deviceId
         const anonymousContext = vi.spyOn(PostHogFeatureFlags.prototype, 'setAnonymousDistinctId')
@@ -58,7 +59,7 @@ describe('identify person-property serialization', () => {
         const notified = vi.fn(() => expect(client.distinctId).toBe('new-id'))
         client.onIdentify(notified)
         const set = { amount: BigInt(1) }
-        await product.identify('new-id', set)
+        client.identify('new-id', set)
         expect(notified).toHaveBeenCalledTimes(1)
         expect(notified).toHaveBeenCalledWith({
             distinctId: 'new-id',
@@ -75,8 +76,8 @@ describe('identify person-property serialization', () => {
         expect(client.session).toBeUndefined()
         await client.flush()
         expect(events(requests)).toEqual([])
-        await product.identify('new-id')
-        product.capture('after_identify')
+        client.identify('new-id')
+        client.capture('after_identify')
         await client.flush()
         expect(events(requests)).toEqual([expect.objectContaining({ event: 'after_identify', distinct_id: 'new-id' })])
     })
@@ -84,7 +85,7 @@ describe('identify person-property serialization', () => {
     it.each(['toJSON', 'getter'] as const)(
         'serializes %s person properties after the identity transition',
         async (kind) => {
-            const { client, product, requests } = await create()
+            const { client, requests } = await create()
             const anonymousId = client.distinctId
             const readIdentity = () => ({ distinctId: client.distinctId, anonymousId: client.anonymousId })
             const set =
@@ -95,7 +96,7 @@ describe('identify person-property serialization', () => {
                               return readIdentity()
                           },
                       }
-            await product.identify('new-id', set)
+            client.identify('new-id', set)
             await client.flush()
             const identity = { distinctId: 'new-id', anonymousId }
             expect(events(requests)).toEqual([

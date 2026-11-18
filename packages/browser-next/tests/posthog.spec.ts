@@ -1,10 +1,10 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
-import { requireInstalledExtension } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src/composition/npm'
-import { analytics as createAnalytics } from '../src/products/analytics/analytics'
+import { createPostHog as createDeliveredPostHog } from '../src/composition/npm/core'
 import type { BrowserFetch, CaptureOptions, CorePostHogOptions, RemoteConfig } from '../src/composition/npm/core'
+import { group } from '../src/products/analytics/groups'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
@@ -20,10 +20,8 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
 const captureEvent = (request: SentRequest | undefined): Record<string, unknown> | undefined =>
     (request?.body?.batch as Record<string, unknown>[] | undefined)?.[0]
 
-const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
-const immediateAnalytics = analytics
 const createPostHogWithAnalytics = (options: CorePostHogOptions) =>
-    createPostHog({ ...options, extensions: [immediateAnalytics(), ...(options.extensions ?? [])] })
+    createDeliveredPostHog({ analytics: { flushAt: 1, flushInterval: 0 }, ...options })
 
 describe('@posthog/browser core', () => {
     it.each([createPostHog, createAutomaticPostHog])('disables clients without a project token', async (create) => {
@@ -36,7 +34,7 @@ describe('@posthog/browser core', () => {
         ]
         for (const client of clients) {
             expect(client.canCapture).toBe(false)
-            expect(() => client.analytics?.capture('disabled')).not.toThrow()
+            expect(() => client.capture('disabled')).not.toThrow()
             expect(await client.sendRequest('/test')).toMatchObject({ statusCode: 0 })
             client.optIn()
             expect(client.canCapture).toBe(false)
@@ -53,33 +51,12 @@ describe('@posthog/browser core', () => {
             fetch: false,
         })
         const events: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => events.push(event))
+        posthog.onEvent(({ event }) => events.push(event))
 
-        const result: boolean = requireInstalledExtension(posthog.analytics).capture('synchronous')
+        const result: boolean = posthog.capture('synchronous')
 
         expect(result).toBe(true)
         expect(events).toEqual(['synchronous'])
-        await posthog.dispose()
-    })
-
-    it('buffers capture without configured analytics delivery', async () => {
-        const requests: SentRequest[] = []
-        const posthog = await createPostHog({
-            remoteConfig: localRemoteConfig,
-            projectToken: 'ph_test',
-            storage: false,
-            navigator: false,
-            fetch: createFetch(requests),
-        })
-
-        await requireInstalledExtension(posthog.analytics).capture('queued', undefined, {
-            uuid: 'queued-uuid',
-            timestamp: new Date('2026-01-02T03:04:05.000Z'),
-        })
-        await posthog.flush()
-
-        expect(requests).toHaveLength(0)
-        expect(posthog.analytics).toBeDefined()
         await posthog.dispose()
     })
 
@@ -87,22 +64,22 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const requests: SentRequest[] = []
-            const posthog = await createPostHog({
+            const posthog = await createDeliveredPostHog({
                 remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
                 navigator: false,
                 fetch: createFetch(requests),
-                extensions: [createAnalytics({ flushAt: 3, flushInterval: 100 })],
+                analytics: { flushAt: 3, flushInterval: 100 },
             })
 
-            await requireInstalledExtension(posthog.analytics).capture('first')
-            await requireInstalledExtension(posthog.analytics).capture('second')
+            posthog.capture('first')
+            posthog.capture('second')
             await vi.advanceTimersByTimeAsync(99)
             expect(requests).toHaveLength(0)
 
-            await requireInstalledExtension(posthog.analytics).capture('third')
+            posthog.capture('third')
             await vi.advanceTimersByTimeAsync(0)
             expect(requests).toHaveLength(1)
             expect((requests[0]?.body?.batch as Array<{ event: string }>).map(({ event }) => event)).toEqual([
@@ -111,7 +88,7 @@ describe('@posthog/browser core', () => {
                 'third',
             ])
 
-            await requireInstalledExtension(posthog.analytics).capture('interval')
+            posthog.capture('interval')
             await vi.advanceTimersByTimeAsync(99)
             expect(requests).toHaveLength(1)
             await vi.advanceTimersByTimeAsync(1)
@@ -134,7 +111,16 @@ describe('@posthog/browser core', () => {
                 flushInterval: { value: Number.NaN },
             }
         )
-        expect(() => createAnalytics(options)).not.toThrow()
+        const posthog = await createDeliveredPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: false,
+            analytics: options,
+        })
+        expect(posthog.capture('normalized')).toBe(true)
+        await posthog.shutdown()
     })
 
     it('does not wait for compression remote config and enables gzip after it arrives', async () => {
@@ -157,7 +143,7 @@ describe('@posthog/browser core', () => {
             ),
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('before_config', { value: 'x'.repeat(2_000) })
+        posthog.capture('before_config', { value: 'x'.repeat(2_000) })
         await posthog.flush()
         expect(requests).toHaveLength(1)
         expect(requests[0]?.body).toEqual(expect.any(String))
@@ -165,7 +151,7 @@ describe('@posthog/browser core', () => {
 
         resolveRemoteConfig?.(createRemoteConfig({ supportedCompression: ['gzip-js'] }))
         await posthog.getRemoteConfig()
-        await requireInstalledExtension(posthog.analytics).capture('after_config', { value: 'x'.repeat(2_000) })
+        posthog.capture('after_config', { value: 'x'.repeat(2_000) })
         await posthog.flush()
 
         expect(requests).toHaveLength(2)
@@ -179,7 +165,8 @@ describe('@posthog/browser core', () => {
 
     it('purges buffered capture when consent is revoked', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createDeliveredPostHog({
+            analytics: { flushAt: 100, flushInterval: 0 },
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
@@ -187,7 +174,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('private')
+        posthog.capture('private')
         posthog.optOut()
         posthog.optIn()
         await posthog.flush()
@@ -205,7 +192,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        requireInstalledExtension(posthog.analytics).capture('private')
+        posthog.capture('private')
         posthog.optOut()
         posthog.optIn()
         await posthog.flush()
@@ -223,13 +210,13 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
         const observed: Array<{ event: string; properties: Record<string, unknown> }> = []
-        requireInstalledExtension(posthog.analytics).onEvent((event) => observed.push(event))
-        requireInstalledExtension(posthog.analytics).registerDynamicEventProperties(() => ({
+        posthog.onEvent((event) => observed.push(event))
+        posthog.registerDynamicEventProperties(() => ({
             dynamic: 'yes',
             token: 'bad-token',
         }))
 
-        requireInstalledExtension(posthog.analytics).capture(
+        posthog.capture(
             'signed_up',
             { plan: 'pro', distinct_id: 'bad-id' },
             {
@@ -293,7 +280,7 @@ describe('@posthog/browser core', () => {
             fetch,
         })
 
-        requireInstalledExtension(posthog.analytics).capture('pending')
+        posthog.capture('pending')
         let flushed = false
         const flush = posthog.flush().then(() => {
             flushed = true
@@ -350,8 +337,8 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(first.analytics).identify('user-123')
-        await requireInstalledExtension(first.analytics).group('organization', 'org-123')
+        first.identify('user-123')
+        group(first, 'organization', 'org-123')
         first.kv.set('key', { value: 1 })
         const anonymousId = first.anonymousId
         await first.dispose()
@@ -450,9 +437,9 @@ describe('@posthog/browser core', () => {
         const anonymousId = posthog.anonymousId
         expect(anonymousId).not.toBe('')
 
-        await requireInstalledExtension(posthog.analytics).identify('user-before-consent')
-        await requireInstalledExtension(posthog.analytics).group('organization', 'group-before-consent')
-        await requireInstalledExtension(posthog.analytics).capture('before_consent')
+        posthog.identify('user-before-consent')
+        group(posthog, 'organization', 'group-before-consent')
+        posthog.capture('before_consent')
         expect(requests).toHaveLength(0)
         expect(posthog.distinctId).toBe('user-before-consent')
         expect(posthog.anonymousId).toBe(anonymousId)
@@ -460,7 +447,7 @@ describe('@posthog/browser core', () => {
         expect(storage.values.has('ph_ph_test_posthog_browser_v2')).toBe(true)
 
         posthog.optIn()
-        await requireInstalledExtension(posthog.analytics).capture('after_consent')
+        posthog.capture('after_consent')
         await posthog.flush()
 
         expect(captureEvent(requests[0])).toMatchObject({
@@ -484,7 +471,8 @@ describe('@posthog/browser core', () => {
         })
         client.current = posthog
 
-        await requireInstalledExtension(posthog.analytics).capture('consent_revoked_during_delivery')
+        posthog.capture('consent_revoked_during_delivery')
+        await posthog.flush()
 
         expect(fetch).toHaveBeenCalledTimes(1)
     })
@@ -503,7 +491,7 @@ describe('@posthog/browser core', () => {
                 fetch,
             })
 
-            requireInstalledExtension(posthog.analytics).capture('consent_revoked_during_backoff')
+            posthog.capture('consent_revoked_during_backoff')
             let flushSettled = false
             const flush = posthog.flush().then(() => {
                 flushSettled = true
@@ -538,7 +526,7 @@ describe('@posthog/browser core', () => {
                 fetch,
             })
 
-            await requireInstalledExtension(posthog.analytics).capture('revoked_and_restored')
+            posthog.capture('revoked_and_restored')
             await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(vi.getTimerCount()).toBe(1)
@@ -561,17 +549,17 @@ describe('@posthog/browser core', () => {
             const fetch = vi
                 .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHog({
+            const posthog = await createDeliveredPostHog({
                 remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
                 navigator: false,
                 fetch,
-                extensions: [createAnalytics({ flushAt: 1, flushInterval: 0 })],
+                analytics: { flushAt: 1, flushInterval: 0 },
             })
 
-            await requireInstalledExtension(posthog.analytics).capture('retained', undefined, { uuid: 'retained-uuid' })
+            posthog.capture('retained', undefined, { uuid: 'retained-uuid' })
             const firstFlush = posthog.flush()
             await vi.runAllTimersAsync()
             await firstFlush
@@ -618,7 +606,7 @@ describe('@posthog/browser core', () => {
                     fetch,
                 })
 
-                requireInstalledExtension(posthog.analytics).capture('disposed_during_backoff')
+                posthog.capture('disposed_during_backoff')
                 await vi.advanceTimersByTimeAsync(0)
                 expect(fetch).toHaveBeenCalledTimes(1)
                 expect(vi.getTimerCount()).toBe(1)
@@ -643,17 +631,16 @@ describe('@posthog/browser core', () => {
 
     it('flushes below-threshold work before shutdown and disables future capture', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createDeliveredPostHog({
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
-            extensions: [createAnalytics({ flushAt: 20, flushInterval: 0 })],
+            analytics: { flushAt: 20, flushInterval: 0 },
         })
-        const installedAnalytics = requireInstalledExtension(posthog.analytics)
-        await installedAnalytics.capture('before_shutdown')
+        posthog.capture('before_shutdown')
         expect(requests).toHaveLength(0)
 
         const first = posthog.shutdown()
@@ -663,7 +650,8 @@ describe('@posthog/browser core', () => {
 
         expect(requests).toHaveLength(1)
         expect(captureEvent(requests[0])).toMatchObject({ event: 'before_shutdown' })
-        await installedAnalytics.capture('after_shutdown')
+        posthog.capture('after_shutdown')
+        await posthog.flush()
         expect(requests).toHaveLength(1)
     })
 
@@ -671,20 +659,18 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(() => new Promise(() => {}))
-            const posthog = await createPostHog({
+            const posthog = await createPostHogWithAnalytics({
                 remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
                 navigator: false,
                 fetch,
-                extensions: [immediateAnalytics()],
             })
-            await requireInstalledExtension(posthog.analytics).capture('stalled')
+            posthog.capture('stalled')
             await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
 
-            requireInstalledExtension(posthog.analytics)
             let settled = false
             const shutdown = posthog.shutdown(5).then(() => {
                 settled = true
@@ -735,7 +721,6 @@ describe('@posthog/browser core', () => {
                 extensions: [{ name: 'stalled-cleanup', setup() {}, dispose: () => new Promise(() => {}) }],
             })
 
-            const installedAnalytics = requireInstalledExtension(posthog.analytics)
             let settled = false
             const shutdown = posthog.shutdown(5).then(() => {
                 settled = true
@@ -744,7 +729,7 @@ describe('@posthog/browser core', () => {
             await shutdown
 
             expect(settled).toBe(true)
-            await installedAnalytics.capture('after_shutdown')
+            posthog.capture('after_shutdown')
             expect(posthog.session).toBeUndefined()
         } finally {
             vi.useRealTimers()
@@ -763,11 +748,11 @@ describe('@posthog/browser core', () => {
             debug: true,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        posthog.onEvent(({ event }) => observed.push(event))
 
         const admitted: boolean[] = []
         for (let index = 0; index < 102; index++) {
-            admitted.push(requireInstalledExtension(posthog.analytics).capture(`event-${index}`))
+            admitted.push(posthog.capture(`event-${index}`))
         }
         expect(observed.slice(0, 100)).toEqual(Array.from({ length: 100 }, (_, index) => `event-${index}`))
         expect(observed.slice(100)).toEqual(['$$client_ingestion_warning'])
@@ -775,7 +760,7 @@ describe('@posthog/browser core', () => {
         expect(warn).toHaveBeenCalledTimes(1)
 
         now.mockReturnValue(1_100)
-        expect(requireInstalledExtension(posthog.analytics).capture('after_refill')).toBe(true)
+        expect(posthog.capture('after_refill')).toBe(true)
         expect(observed.at(-1)).toBe('after_refill')
         await posthog.dispose()
     })
@@ -793,7 +778,7 @@ describe('@posthog/browser core', () => {
         const firstAnonymousId = first.anonymousId
 
         first.optOut()
-        await requireInstalledExtension(first.analytics).capture('blocked')
+        first.capture('blocked')
         expect(requests).toHaveLength(0)
         expect(new Set(storage.values.keys())).toEqual(
             new Set(['ph_ph_test_posthog_browser_v2', '__ph_opt_in_out_ph_test'])
@@ -823,10 +808,10 @@ describe('@posthog/browser core', () => {
 
         const distinctId = posthog.distinctId
         const session = posthog.session
-        await requireInstalledExtension(posthog.analytics).capture('blocked')
-        await requireInstalledExtension(posthog.analytics).identify('blocked-user')
-        await requireInstalledExtension(posthog.analytics).group('organization', 'blocked-org')
-        requireInstalledExtension(posthog.analytics).reset()
+        posthog.capture('blocked')
+        posthog.identify('blocked-user')
+        group(posthog, 'organization', 'blocked-org')
+        posthog.reset()
         posthog.kv.set('blocked', true)
 
         expect(requests).toHaveLength(0)
@@ -888,7 +873,7 @@ describe('@posthog/browser core', () => {
 
         await posthog.sendRequest('/decide/', { target: 'flags' })
         await posthog.sendRequest('/static/extension.js', { target: 'assets' })
-        await requireInstalledExtension(posthog.analytics).capture('host-normalization')
+        posthog.capture('host-normalization')
         await posthog.flush()
 
         expect(requests.map(({ url }) => url.toString())).toEqual([
@@ -911,7 +896,7 @@ describe('@posthog/browser core', () => {
                 fetch: createFetch(requests),
             })
             const events: string[] = []
-            requireInstalledExtension(posthog.analytics).onEvent(({ event }) => events.push(event))
+            posthog.onEvent(({ event }) => events.push(event))
             const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = Object.defineProperty({}, 'hostile', {
@@ -922,9 +907,7 @@ describe('@posthog/browser core', () => {
             })
             vi.advanceTimersByTime(1_000)
 
-            expect(() =>
-                requireInstalledExtension(posthog.analytics).capture('hostile_properties', properties)
-            ).not.toThrow()
+            expect(() => posthog.capture('hostile_properties', properties)).not.toThrow()
 
             expect(posthog.session).toEqual(session)
             expect(storage.values).toEqual(persisted)
@@ -953,7 +936,7 @@ describe('@posthog/browser core', () => {
             if (result instanceof Error) throw result
             return result
         })
-        requireInstalledExtension(posthog.analytics).capture('ordinary_props', { caller: true, toJSON: serialize })
+        posthog.capture('ordinary_props', { caller: true, toJSON: serialize })
         await posthog.flush()
         expect(serialize).not.toHaveBeenCalled()
         expect(captureEvent(requests[0])?.properties).toMatchObject({ caller: true })
@@ -970,7 +953,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
         const serialize = vi.fn(() => ({ source: 'toJSON', token: 'caller-token', distinct_id: 'caller-id' }))
-        requireInstalledExtension(posthog.analytics).capture('ordinary_props', { source: 'caller', toJSON: serialize })
+        posthog.capture('ordinary_props', { source: 'caller', toJSON: serialize })
         await posthog.flush()
         expect(serialize).not.toHaveBeenCalled()
         expect(captureEvent(requests[0])).toMatchObject({
@@ -997,7 +980,7 @@ describe('@posthog/browser core', () => {
                 fetch: createFetch(requests),
             })
             const events: string[] = []
-            requireInstalledExtension(posthog.analytics).onEvent(({ event }) => events.push(event))
+            posthog.onEvent(({ event }) => events.push(event))
             const session = posthog.session
             const persisted = new Map(storage.values)
             vi.advanceTimersByTime(1_000)
@@ -1008,9 +991,7 @@ describe('@posthog/browser core', () => {
                         throw new Error(`${option} getter failed`)
                     },
                 }) as CaptureOptions
-                expect(() =>
-                    requireInstalledExtension(posthog.analytics).capture(`hostile_${option}`, undefined, options)
-                ).not.toThrow()
+                expect(() => posthog.capture(`hostile_${option}`, undefined, options)).not.toThrow()
             }
 
             expect(posthog.session).toEqual(session)
@@ -1030,12 +1011,12 @@ describe('@posthog/browser core', () => {
             fetch: false,
         })
         const properties = { nested: { value: 1 } }
-        requireInstalledExtension(posthog.analytics).onEvent((event) => {
+        posthog.onEvent((event) => {
             const nested = event.properties.nested as { value: number }
             nested.value = 2
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('event', properties)
+        posthog.capture('event', properties)
         expect(properties).toEqual({ nested: { value: 1 } })
     })
 
@@ -1047,18 +1028,18 @@ describe('@posthog/browser core', () => {
             fetch: false,
         })
         const observed: unknown[] = []
-        requireInstalledExtension(posthog.analytics).onEvent((event) => {
+        posthog.onEvent((event) => {
             ;(event as { event: string }).event = 'replaced'
         })
-        requireInstalledExtension(posthog.analytics).onEvent((event) => {
+        posthog.onEvent((event) => {
             ;(event as { properties: Record<string, unknown> }).properties = { nested: { value: 2 } }
         })
-        requireInstalledExtension(posthog.analytics).onEvent((event) => {
+        posthog.onEvent((event) => {
             ;(event.properties.nested as { value: number }).value = 3
         })
-        requireInstalledExtension(posthog.analytics).onEvent((event) => observed.push(event))
+        posthog.onEvent((event) => observed.push(event))
 
-        await requireInstalledExtension(posthog.analytics).capture('event', { nested: { value: 1 } })
+        posthog.capture('event', { nested: { value: 1 } })
 
         expect(observed).toEqual([{ event: 'event', properties: expect.objectContaining({ nested: { value: 1 } }) }])
     })
@@ -1072,13 +1053,14 @@ describe('@posthog/browser core', () => {
             navigator: false,
             fetch: createFetch(requests),
         })
-        requireInstalledExtension(posthog.analytics).onEvent(({ properties }) => {
+        posthog.onEvent(({ properties }) => {
             const mutableProperties = properties as Record<string, unknown>
             mutableProperties.token = 'replaced'
             mutableProperties.distinct_id = 'replaced'
         })
 
-        await requireInstalledExtension(posthog.analytics).capture('event')
+        posthog.capture('event')
+        await posthog.flush()
 
         expect(captureEvent(requests[0])).toMatchObject({ distinct_id: posthog.distinctId })
         expect(captureEvent(requests[0])?.properties).not.toMatchObject({
@@ -1095,12 +1077,12 @@ describe('@posthog/browser core', () => {
             fetch: false,
         })
         const events: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(() => {
+        posthog.onEvent(() => {
             throw new Error('listener failed')
         })
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => events.push(event))
+        posthog.onEvent(({ event }) => events.push(event))
 
-        await requireInstalledExtension(posthog.analytics).capture('event')
+        posthog.capture('event')
         expect(events).toEqual(['event'])
     })
 
@@ -1120,7 +1102,7 @@ describe('@posthog/browser core', () => {
                 distinctId: posthog.distinctId,
             }
 
-            await requireInstalledExtension(posthog.analytics).identify(distinctId)
+            posthog.identify(distinctId)
 
             expect(requests).toHaveLength(0)
             expect(posthog.anonymousId).toBe(identity.anonymousId)
@@ -1138,7 +1120,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).group(type, 'group-key')
+        group(posthog, type, 'group-key')
 
         expect(requests).toHaveLength(0)
         expect(posthog.groups).toEqual({})
@@ -1154,7 +1136,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).group('organization', key)
+        group(posthog, 'organization', key)
 
         expect(requests).toHaveLength(0)
         expect(posthog.groups).toEqual({})
@@ -1171,7 +1153,7 @@ describe('@posthog/browser core', () => {
         })
         const session = posthog.session
 
-        await requireInstalledExtension(posthog.analytics).capture(event)
+        posthog.capture(event)
 
         expect(requests).toHaveLength(0)
         expect(posthog.session).toEqual(session)
@@ -1188,8 +1170,9 @@ describe('@posthog/browser core', () => {
         })
         const anonymousId = posthog.distinctId
 
-        await requireInstalledExtension(posthog.analytics).identify(anonymousId)
-        await requireInstalledExtension(posthog.analytics).identify('later-user')
+        posthog.identify(anonymousId)
+        posthog.identify('later-user')
+        await posthog.flush()
 
         expect(requests).toHaveLength(1)
         expect(captureEvent(requests[0])).toMatchObject({
@@ -1210,9 +1193,9 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).group('organization', 'org-123')
-        await requireInstalledExtension(posthog.analytics).group('organization', 'org-123')
-        await requireInstalledExtension(posthog.analytics).group('organization', 'org-123', { name: 'Acme' })
+        group(posthog, 'organization', 'org-123')
+        group(posthog, 'organization', 'org-123')
+        group(posthog, 'organization', 'org-123', { name: 'Acme' })
 
         await posthog.flush()
         const events = requests.flatMap((request) => request.body?.batch as Record<string, unknown>[])
@@ -1231,8 +1214,9 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        await requireInstalledExtension(posthog.analytics).identify('user-one')
-        await requireInstalledExtension(posthog.analytics).identify('user-two')
+        posthog.identify('user-one')
+        posthog.identify('user-two')
+        await posthog.flush()
 
         expect(requests).toHaveLength(1)
         expect(captureEvent(requests[0])).toMatchObject({
@@ -1312,7 +1296,6 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
             remoteConfig,
         })
-        const installedAnalytics = requireInstalledExtension(posthog.analytics)
         const events: string[] = []
         const closingRemoteConfigListener = vi.fn()
         const lateRemoteConfigListener = vi.fn()
@@ -1325,11 +1308,11 @@ describe('@posthog/browser core', () => {
         expect(posthog.kv.get('while_closing')).toBeUndefined()
         await disposal
 
-        installedAnalytics.onEvent(({ event }) => events.push(event))
+        posthog.onEvent(({ event }) => events.push(event))
         posthog.onRemoteConfig(lateRemoteConfigListener)
-        installedAnalytics.registerDynamicEventProperties(() => ({ after_dispose: true }))
+        posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
-        await installedAnalytics.capture('after_dispose')
+        posthog.capture('after_dispose')
         posthog.kv.set('after_dispose', true)
         posthog.kv.remove('before_dispose')
 
@@ -1388,8 +1371,8 @@ describe('@posthog/browser core', () => {
             navigator: false,
             fetch: false,
         })
-        await requireInstalledExtension(first.analytics).capture('first')
-        await requireInstalledExtension(second.analytics).capture('second')
+        first.capture('first')
+        second.capture('second')
 
         expect(second.session!.sessionId).toBe(first.session!.sessionId)
         expect(second.session!.windowId).not.toBe(first.session!.windowId)
@@ -1406,10 +1389,10 @@ describe('@posthog/browser core', () => {
         })
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(session.reason))
-        await requireInstalledExtension(posthog.analytics).capture('before_idle')
+        posthog.capture('before_idle')
 
         clock.mockReturnValue(now + 31 * 60 * 1000)
-        await requireInstalledExtension(posthog.analytics).capture('after_idle')
+        posthog.capture('after_idle')
 
         expect(sessions).toEqual(['idleTimeout'])
         clock.mockRestore()
@@ -1424,7 +1407,7 @@ describe('@posthog/browser core', () => {
         })
         const deviceId = posthog.deviceId
 
-        requireInstalledExtension(posthog.analytics).reset()
+        posthog.reset()
 
         expect(posthog.deviceId).toBe(deviceId)
         expect(posthog.anonymousId).not.toBe(deviceId)
@@ -1437,19 +1420,19 @@ describe('@posthog/browser core', () => {
             navigator: false,
             fetch: false,
         })
-        await requireInstalledExtension(posthog.analytics).capture('before_reset')
+        posthog.capture('before_reset')
         const originalId = posthog.anonymousId
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(`${session.reason}:${session.sessionId}`))
 
-        requireInstalledExtension(posthog.analytics).reset()
+        posthog.reset()
 
         expect(posthog.anonymousId).not.toBe(originalId)
         expect(posthog.distinctId).toBe(posthog.anonymousId)
         expect(posthog.session).toBeUndefined()
         expect(sessions).toEqual([])
 
-        await requireInstalledExtension(posthog.analytics).capture('after_reset')
+        posthog.capture('after_reset')
         expect(sessions).toEqual([`reset:${posthog.session!.sessionId}`])
     })
 })

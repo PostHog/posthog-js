@@ -1,38 +1,29 @@
 import { loadRemoteConfig } from './remote-config'
+import type { BrowserExtension as Extension, BrowserProducts, ConsentChangeInfo } from './context/browser-client'
 import type {
-    IPostHogInternal,
-    BrowserExtension as Extension,
-    BrowserProducts,
-    ConsentChangeInfo,
-    ChangePropertiesInfo,
-    IdentifyInfo,
-    GroupInfo,
-} from './context/browser-client'
-import {
-    type ApiResponse,
-    type CapturedEventInfo,
-    type Client,
-    type Disposable,
-    type ExtensionToken,
-    type RemoteConfig,
-    type RemoteConfigResult,
-    type SendRequestInit,
-    type SessionContext,
+    ApiResponse,
+    CaptureOptions,
+    Client,
+    Disposable,
+    ExtensionToken,
+    KeyValueStore,
+    RemoteConfig,
+    RemoteConfigResult,
+    SendRequestInit,
+    SessionContext,
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
-import {
-    isAnalyticsExtension,
-    type AnalyticsCaptureHost,
-    type IAnalyticsExtension,
-} from '../products/analytics/analytics-internal'
+import { Analytics } from '../products/analytics/analytics-core'
+import type { AnalyticsDeliveryFactory } from '../products/analytics/analytics-internal'
+import type { AnalyticsOptions } from '../products/analytics/analytics-options'
 import { isLikelyBot } from './state/bot-filter'
 import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from './extensions/registry'
 import { deepFreeze } from '../primitives/immutable'
 import { createLogger } from '../platform/logger'
 import { sendRequest, type RequestRuntime } from '../platform/request'
-import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state/state'
-import type { BrowserFetch, BrowserNavigator, CorePostHogOptions, NewSessionInfo, IPostHog, StorageLike } from './types'
+import { BrowserState, CLIENT_KV_NAMESPACE, getDefaultSessionStorage, getDefaultStorage } from './state/state'
+import type { BrowserFetch, BrowserNavigator, CaptureSummary, CorePostHogOptions, IPostHog, StorageLike } from './types'
 import { version } from '../primitives/version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
@@ -75,9 +66,8 @@ const getDefaultNavigator = (): BrowserNavigator | undefined => {
     }
 }
 
-/** Module-private client; the top-level factory owns its initialization. */
+/** The one browser client. Extensions receive this instance; the top-level factory owns its initialization. */
 class PostHog implements IPostHog {
-    declare readonly analytics?: BrowserProducts['analytics']
     declare readonly featureFlags?: BrowserProducts['featureFlags']
     declare readonly logs?: BrowserProducts['logs']
     declare readonly surveys?: BrowserProducts['surveys']
@@ -88,26 +78,22 @@ class PostHog implements IPostHog {
     readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onNewSession: IPostHog['onNewSession']
-    readonly onIdentify: IPostHogInternal['onIdentify']
-    readonly onGroup: IPostHogInternal['onGroup']
-    readonly onGroupsReset: IPostHogInternal['onGroupsReset']
-    readonly onReset: IPostHogInternal['onReset']
-    readonly onConsentChange: IPostHogInternal['onConsentChange']
+    readonly onEvent: IPostHog['onEvent']
+    readonly onIdentify: IPostHog['onIdentify']
+    readonly onChangeProperties: IPostHog['onChangeProperties']
+    readonly onGroup: IPostHog['onGroup']
+    readonly onGroupsReset: IPostHog['onGroupsReset']
+    readonly onReset: IPostHog['onReset']
+    readonly onConsentChange: IPostHog['onConsentChange']
     readonly onSession: Client['onSession']
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
-    private readonly _eventPublisher: Publisher<CapturedEventInfo>
-    private readonly _newSessionPublisher: Publisher<NewSessionInfo>
-    private readonly _identifyPublisher: Publisher<IdentifyInfo>
-    private readonly _changePropertiesPublisher: Publisher<ChangePropertiesInfo>
-    private readonly _groupPublisher: Publisher<GroupInfo>
-    private readonly _groupsResetPublisher: Publisher<void>
-    private readonly _resetPublisher: Publisher<void>
-    readonly _registry: ExtensionRegistry<IPostHogInternal>
+    readonly _registry: ExtensionRegistry<IPostHog>
     readonly _requestRuntime: RequestRuntime
-    private _analytics: IAnalyticsExtension | undefined
-    private readonly _state: BrowserState
+    readonly _analytics: Analytics
+    readonly _state: BrowserState
+    readonly _sessionKv: KeyValueStore
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
     private readonly _capturePageview: boolean
@@ -116,26 +102,27 @@ class PostHog implements IPostHog {
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
-    private _immediateAuthority = {}
+    _immediateAuthority = {}
     private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
-    private _disposed = false
+    _disposed = false
     private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
     private _ready = false
-    private _pageviewLoading: Promise<void> | undefined
     private _pageviewListener: [Document, EventListener] | undefined
 
     static create(
         options: CorePostHogOptions,
-        loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
+        createDelivery: AnalyticsDeliveryFactory,
+        loaders: Readonly<Record<string, ExtensionLoader<IPostHog>>>
     ): PostHog {
-        return new PostHog(options, loaders)
+        return new PostHog(options, createDelivery, loaders)
     }
 
     private constructor(
         options: CorePostHogOptions,
-        loaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>>
+        createDelivery: AnalyticsDeliveryFactory,
+        loaders: Readonly<Record<string, ExtensionLoader<IPostHog>>>
     ) {
         let projectToken = ''
         try {
@@ -160,15 +147,6 @@ class PostHog implements IPostHog {
         this._remoteConfigPublisher = new Publisher((error) =>
             this.logger.error('A remote configuration listener failed', error)
         )
-        this._eventPublisher = new Publisher((error) => this.logger.error('An event listener failed', error))
-        this._identifyPublisher = new Publisher((error) => this.logger.error('An identify listener failed', error))
-        this._changePropertiesPublisher = new Publisher((error) =>
-            this.logger.error('A person-property listener failed', error)
-        )
-        this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
-        this._groupsResetPublisher = new Publisher((error) => this.logger.error('A group reset listener failed', error))
-        this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
-        this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
         this._consentChangePublisher = new Publisher((error) =>
             this.logger.error('A consent change listener failed', error)
         )
@@ -222,7 +200,8 @@ class PostHog implements IPostHog {
                 ? 10_000
                 : Math.max(0, options.remoteConfigTimeoutMs)
 
-        this.kv = this._state.keyValueStore('core', () => !this._closing && !this._disposed && this._state.prepare())
+        this.kv = this._state.keyValueStore(CLIENT_KV_NAMESPACE, () => this._canMutate() && this._state.prepare())
+        this._sessionKv = this._state.tabKeyValueStore('analytics', () => this._canMutate() && this._state.prepare())
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
             if (this._closing || this._disposed) {
@@ -240,21 +219,23 @@ class PostHog implements IPostHog {
             }
             return subscription
         }
-        this.onIdentify = this._identifyPublisher.listener
-        this.onGroup = this._groupPublisher.listener
-        this.onGroupsReset = this._groupsResetPublisher.listener
-        this.onReset = this._resetPublisher.listener
+        let analyticsOptions: AnalyticsOptions = {}
+        try {
+            analyticsOptions = options.analytics ?? {}
+        } catch {
+            // Unreadable analytics options retain the defaults.
+        }
+        this._analytics = new Analytics(this, analyticsOptions, createDelivery)
+        this.onEvent = this._analytics._eventPublisher.listener
+        this.onIdentify = this._analytics._identifyPublisher.listener
+        this.onChangeProperties = this._analytics._changePropertiesPublisher.listener
+        this.onGroup = this._analytics._groupPublisher.listener
+        this.onGroupsReset = this._analytics._groupsResetPublisher.listener
+        this.onReset = this._analytics._resetPublisher.listener
+        this.onNewSession = this._analytics._newSessionPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
-        this.onNewSession = this._newSessionPublisher.listener
         this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
-        this._registry = new ExtensionRegistry(
-            (extensionName, resolve) => this._createExtensionClient(extensionName, resolve),
-            this.logger,
-            loaders,
-            (extension, host) => this._setupExtension(extension, host),
-            () => !this._closing && !this._disposed
-        )
-        this._registry.expose(this)
+        this._registry = new ExtensionRegistry<IPostHog>(this, this.logger, loaders, () => this._canMutate())
     }
 
     get distinctId(): string {
@@ -290,8 +271,66 @@ class PostHog implements IPostHog {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
+    get isRateLimited(): boolean {
+        return this._analytics.isRateLimited
+    }
+
+    capture(event: string, properties?: Record<string, unknown> | null, options?: CaptureOptions): boolean {
+        return this._analytics.capture(event, properties, options)
+    }
+
+    captureImmediate(
+        event: string,
+        properties?: Record<string, unknown> | null,
+        options?: CaptureOptions
+    ): Promise<CaptureSummary> {
+        return this._analytics.captureImmediate(event, properties, options)
+    }
+
+    identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void {
+        this._analytics.identify(distinctId, set, setOnce)
+    }
+
+    reset(): void {
+        this._analytics.reset()
+    }
+
+    register(properties: Record<string, unknown>): void {
+        this._analytics.register(properties)
+    }
+
+    registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void {
+        this._analytics.registerOnce(properties, defaultValue)
+    }
+
+    unregister(property: string): void {
+        this._analytics.unregister(property)
+    }
+
+    getProperty(property: string): unknown {
+        return this._analytics.getProperty(property)
+    }
+
+    registerForSession(properties: Record<string, unknown>): void {
+        this._analytics.registerForSession(properties)
+    }
+
+    unregisterForSession(property: string): void {
+        this._analytics.unregisterForSession(property)
+    }
+
+    registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
+        return this._analytics.registerDynamicEventProperties(producer)
+    }
+
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
+    getExtension(name: string): Extension | undefined {
+        return this._registry.get(name)
+    }
+
     async flush(): Promise<void> {
-        await this._registry.flush()
+        await Promise.all([this._registry.flush(), this._analytics.flush()])
     }
 
     optIn(): void {
@@ -423,7 +462,9 @@ class PostHog implements IPostHog {
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
             this._closing = true
-            const extensionFlush = this._registry.flush('shutdown')
+            const extensionFlush = Promise.all([this._registry.flush('shutdown'), this._analytics.flush()]).then(
+                () => undefined
+            )
             this._removePageviewListener()
             try {
                 this._consentObservation.dispose()
@@ -473,19 +514,11 @@ class PostHog implements IPostHog {
                 this.logger.error('Failed to dispose browser state', error)
             }
 
-            this._analytics = undefined
-            const cleanup = this._registry
-                .dispose()
-                .catch((error) => this.logger.error('Failed to dispose extensions', error))
+            const cleanup = Promise.all([this._registry.dispose(), this._analytics.dispose()]).catch((error) =>
+                this.logger.error('Failed to dispose extensions', error)
+            )
             this._remoteConfigPublisher.dispose()
-            this._eventPublisher.dispose()
-            this._identifyPublisher.dispose()
-            this._changePropertiesPublisher.dispose()
-            this._groupPublisher.dispose()
-            this._groupsResetPublisher.dispose()
-            this._resetPublisher.dispose()
             this._consentChangePublisher.dispose()
-            this._newSessionPublisher.dispose()
             await Promise.race([cleanup, timeout])
             if (timedOut) {
                 this.logger.warn(`PostHog shutdown stopped waiting for cleanup after ${timeoutMs}ms`)
@@ -503,11 +536,9 @@ class PostHog implements IPostHog {
         }
     }
 
-    async _completeInitialization(): Promise<void> {
-        await this._analytics?.start()
+    _completeInitialization(): void {
         this._ready = true
         this._startInitialPageview()
-        await this._pageviewLoading
     }
 
     _startInitialPageview(): void {
@@ -522,10 +553,6 @@ class PostHog implements IPostHog {
             return
         }
         this._removePageviewListener()
-        if (!this._analytics) {
-            this._loadInitialPageviewAnalytics()
-            return
-        }
         this._initialPageviewPending = false
         if (!this._analytics.captureInitialPageview()) {
             this._initialPageviewPending = !this._disposed && !this._blocked
@@ -569,14 +596,6 @@ class PostHog implements IPostHog {
     private _cancelInitialPageview(): void {
         this._removePageviewListener()
         this._initialPageviewPending = false
-    }
-
-    private _loadInitialPageviewAnalytics(): void {
-        if (this._pageviewLoading || this._blocked || this.hasOptedOut()) return
-        this._pageviewLoading = this.resolveExtension('analytics').then(() => {
-            this._pageviewLoading = undefined
-            if (this._analytics) this._startInitialPageview()
-        })
     }
 
     private _removePageviewListener(): void {
@@ -683,141 +702,8 @@ class PostHog implements IPostHog {
         }
     }
 
-    private _createSharedExtensionClient(extensionName: string): Client {
-        const host = this
-        const logger = this.logger.createLogger(extensionName)
-        const kv = this._state.keyValueStore(
-            extensionName,
-            () => !this._closing && !this._disposed && this._state.prepare()
-        )
-
-        return {
-            get distinctId() {
-                return host.distinctId
-            },
-            get anonymousId() {
-                return host.anonymousId
-            },
-            get deviceId() {
-                return host.deviceId
-            },
-            get library() {
-                return host.library
-            },
-            get initialPersonProperties() {
-                return host.initialPersonProperties
-            },
-            get groups() {
-                return host.groups
-            },
-            get session() {
-                return host.session
-            },
-            get isOptedOut() {
-                return host.isOptedOut
-            },
-            get canCapture() {
-                return host.canCapture
-            },
-            get isRateLimited() {
-                return host._analytics?.isRateLimited ?? false
-            },
-            capture: (event, properties, options) => host._analytics?.capture(event, properties, options) ?? true,
-            registerDynamicEventProperties: (producer) =>
-                host._analytics?.registerDynamicEventProperties(producer) ?? { dispose() {} },
-            getExtension: (name) => host._registry.getShared(name),
-            get projectToken() {
-                return host.projectToken
-            },
-            sendRequest: (path, init) => host.sendRequest(path, init),
-            onRemoteConfig: host.onRemoteConfig,
-            onEvent: host._eventPublisher.listener,
-            onSession: host.onSession,
-            kv,
-            logger,
-        }
-    }
-
-    private _createExtensionClient(
-        extensionName: string,
-        resolve: (name: string) => Promise<Extension | undefined>
-    ): IPostHogInternal {
-        const host = this
-        const sharedClient = this._createSharedExtensionClient(extensionName)
-        const {
-            getExtension: _lookup,
-            capture: _capture,
-            registerDynamicEventProperties: _registration,
-            isRateLimited: _rateLimit,
-            ...capabilities
-        } = Object.getOwnPropertyDescriptors(sharedClient)
-        const browserClient = Object.defineProperties(
-            {
-                sharedClient,
-                resolveExtension: (name: string) =>
-                    !this._closing && !this._disposed ? resolve(name) : Promise.resolve(undefined),
-                onConsentChange: host.onConsentChange,
-                onIdentify: host.onIdentify,
-                onChangeProperties: host._changePropertiesPublisher.listener,
-                onGroup: host.onGroup,
-                onGroupsReset: host.onGroupsReset,
-                onReset: host.onReset,
-            },
-            capabilities
-        ) as IPostHogInternal
-        this._registry.expose(browserClient)
-        return browserClient
-    }
-
-    private async _setupExtension(extension: Extension, host: IPostHogInternal): Promise<void> {
-        if (this._closing || this._disposed) throw new Error('The browser client is closing')
-        if (!isAnalyticsExtension(extension)) {
-            await extension.setup(host)
-            if (this._closing || this._disposed) throw new Error('The browser client is closing')
-            return
-        }
-        this._analytics = extension
-        try {
-            extension.bindCaptureHost(this._analyticsCaptureHost(extension))
-            await extension.setup(host)
-            if (this._closing || this._disposed) throw new Error('The browser client is closing')
-            extension.initialize({
-                runtime: this._requestRuntime,
-                canRetry: () => this._canDeliver(),
-                reportFailure: (error) => this.logger.error('Event delivery failed', error),
-                reportWarning: (message) => this.logger.warn(message),
-                onAvailable: () => this._startInitialPageview(),
-            })
-        } catch (error) {
-            if (this._analytics === extension) this._analytics = undefined
-            throw error
-        }
-    }
-
-    private _canUseAnalytics(owner: IAnalyticsExtension): boolean {
-        return this._analytics === owner && !this._closing && !this._disposed
-    }
-
-    _analyticsCaptureHost(owner: IAnalyticsExtension): AnalyticsCaptureHost {
-        const canMutate = () => this._canUseAnalytics(owner)
-        return {
-            projectToken: this.projectToken,
-            logger: this.logger,
-            sessionKv: this._state.tabKeyValueStore('analytics', () => canMutate() && this._state.prepare()),
-            state: this._state,
-            canCapture: () => canMutate() && !this._blocked && !this.hasOptedOut(),
-            canMutate,
-            isDisposed: () => this._disposed,
-            authority: () => this._immediateAuthority,
-            onEvent: this._eventPublisher.listener,
-            publishEvent: (event) => this._eventPublisher.publish(event),
-            publishNewSession: (session) => this._newSessionPublisher.publish(session),
-            publishIdentify: (info) => this._identifyPublisher.publish(info),
-            publishChangeProperties: (info) => this._changePropertiesPublisher.publish(info),
-            publishGroup: (info) => this._groupPublisher.publish(info),
-            publishGroupsReset: () => this._groupsResetPublisher.publish(undefined),
-            publishReset: () => this._resetPublisher.publish(undefined),
-        }
+    _canMutate(): boolean {
+        return !this._closing && !this._disposed
     }
 
     _canDeliver(): boolean {
@@ -833,20 +719,20 @@ const selectConfiguredExtensions = (configured: readonly Extension[]): Map<strin
 
 export const createPostHogCore = async (
     options: CorePostHogOptions,
+    createDelivery: AnalyticsDeliveryFactory,
     configured: readonly Extension[] = options?.extensions ?? [],
-    automaticLoaders: Readonly<Record<string, ExtensionLoader<IPostHogInternal>>> = {},
-    automatic: readonly AutomaticExtension<IPostHogInternal>[] = []
+    automaticLoaders: Readonly<Record<string, ExtensionLoader<IPostHog>>> = {},
+    automatic: readonly AutomaticExtension<IPostHog>[] = []
 ): Promise<IPostHog> => {
     const selected = selectConfiguredExtensions(configured)
     const loaders = Object.fromEntries([
         ...Object.entries(automaticLoaders),
         ...Array.from(selected, ([name, extension]) => [name, () => extension] as const),
     ])
-    const client = PostHog.create(options ?? { projectToken: '' }, loaders)
+    const client = PostHog.create(options ?? { projectToken: '' }, createDelivery, loaders)
     void client.getRemoteConfig()
-    if (selected.has('analytics')) await client.resolveExtension('analytics')
-    for (const name of selected.keys()) if (name !== 'analytics') await client.resolveExtension(name)
+    for (const name of selected.keys()) await client.resolveExtension(name)
     for (const extension of automatic) await client._registry.activate(extension)
-    await client._completeInitialization()
+    client._completeInitialization()
     return client
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-for (const mode of ['static', 'dynamic', 'acquired'] as const) {
+for (const mode of ['static', 'dynamic'] as const) {
     test(`${mode} surveys render manually with remote config off, submit, and clean up`, async ({ page }) => {
         await page.goto('/')
         await page.evaluate((mode) => window.surveysHarness.initialize(mode, false, false, false), mode)
@@ -73,14 +73,11 @@ test('event-targeted survey activates from admitted capture and remembered submi
     await expect(page.getByText('What can we improve?')).toHaveCount(0)
 })
 
-for (const mode of ['ready', 'denied', 'disposed', 'loading'] as const) {
+for (const mode of ['ready', 'denied', 'disposed'] as const) {
     test(`survey abandonment at pagehide with analytics ${mode}`, async ({ page, request }, testInfo) => {
         const projectToken = `ph_survey_teardown_${mode}_${testInfo.project.name}_${testInfo.retry}`
         await page.goto('/')
-        await page.evaluate(
-            ({ projectToken, loading }) => window.surveysHarness.initializeTeardown(projectToken, loading),
-            { projectToken, loading: mode === 'loading' }
-        )
+        await page.evaluate((projectToken) => window.surveysHarness.initializeTeardown(projectToken), projectToken)
         await expect(page.getByText('What can we improve?')).toBeVisible()
         await page.getByRole('textbox').fill('First answer')
         await page.getByRole('button', { name: /submit survey/i }).click()
@@ -93,7 +90,7 @@ for (const mode of ['ready', 'denied', 'disposed', 'loading'] as const) {
                 await page.evaluate(
                     () => window.surveysHarness.events().filter(({ event }) => event === 'survey abandoned').length
                 )
-            ).toBe(mode === 'loading' ? 1 : 0)
+            ).toBe(0)
         }
         await page.goto('/after')
         const requests = async () =>
@@ -122,7 +119,7 @@ for (const mode of ['ready', 'denied', 'disposed', 'loading'] as const) {
             })
         } else {
             expect(await abandoned()).toEqual([])
-            if (mode === 'loading' || mode === 'denied') expect(await requests()).toEqual([])
+            if (mode === 'denied') expect(await requests()).toEqual([])
         }
     })
 }

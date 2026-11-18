@@ -57,7 +57,11 @@ for (const name of guardedGlobals) {
 let createPostHog
 let createEsmPostHog
 let createCorePostHog
-let analytics
+let createLitePostHog
+let commonJsGroups
+let esmGroups
+let commonJsPerson
+let esmPerson
 let flags
 let logs
 let commonJsLogs
@@ -74,7 +78,12 @@ try {
         throw new Error('Common feature flags token differs between module formats')
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
-    ;({ analytics } = await import('@posthog/browser/analytics'))
+    ;({ createPostHog: createLitePostHog } = await import('@posthog/browser/lite'))
+    require('@posthog/browser/lite')
+    commonJsGroups = require('@posthog/browser/groups')
+    esmGroups = await import('@posthog/browser/groups')
+    commonJsPerson = require('@posthog/browser/person')
+    esmPerson = await import('@posthog/browser/person')
     ;({ createPostHog: createEsmPostHog } = await import('@posthog/browser'))
     await import('@posthog/browser/core')
     ;({ flags } = await import('@posthog/browser/flags'))
@@ -100,7 +109,6 @@ const posthog = await createCorePostHog({
     projectToken: 'ph_test',
     storage: false,
     navigator: false,
-    extensions: [analytics()],
     fetch: async (input, init) => {
         if (init.method === 'GET') return new Response('{}')
         const body = JSON.parse(init.body)
@@ -110,10 +118,10 @@ const posthog = await createCorePostHog({
     },
 })
 
-posthog.analytics.registerForSession({ mixed_session: true })
-posthog.analytics.capture('mixed_module_event')
+posthog.registerForSession({ mixed_session: true })
+posthog.capture('mixed_module_event')
 await posthog.flush()
-const immediateSummary = await posthog.analytics.captureImmediate('mixed_module_immediate', undefined, {
+const immediateSummary = await posthog.captureImmediate('mixed_module_immediate', undefined, {
     uuid: 'mixed-immediate-uuid',
 })
 await posthog.dispose()
@@ -145,14 +153,37 @@ const automatic = await createPostHog({
         return new Response('{}', { status: 200 })
     },
 })
-const automaticAnalytics = await automatic.resolveExtension('analytics')
-if (!automaticAnalytics || automaticAnalytics !== automatic.analytics) throw new Error('Analytics acquisition failed')
-automaticAnalytics.capture('automatic_cjs_event')
+automatic.capture('automatic_cjs_event')
 await automatic.flush()
 await automatic.dispose()
 
 if (automaticRequests.length !== 1 || automaticRequests[0].body?.batch?.[0]?.event !== 'automatic_cjs_event') {
-    throw new Error('The CommonJS root did not dynamically load automatic analytics')
+    throw new Error('The CommonJS root did not deliver captured events')
+}
+
+const liteRequests = []
+const lite = await createLitePostHog({
+    projectToken: 'ph_test',
+    capturePageview: false,
+    storage: false,
+    navigator: false,
+    fetch: async (input, init) => {
+        if (init.method === 'GET') return new Response('{}')
+        liteRequests.push({ url: String(input), body: JSON.parse(init.body) })
+        return new Response('{}', { status: 200 })
+    },
+})
+lite.capture('lite_event')
+await lite.flush()
+const liteImmediate = await lite.captureImmediate('lite_immediate')
+await lite.dispose()
+if (
+    liteRequests.length !== 1 ||
+    !liteRequests[0].url.endsWith('/i/v1/analytics/events') ||
+    liteRequests[0].body?.batch?.[0]?.event !== 'lite_event' ||
+    liteImmediate.allPersisted
+) {
+    throw new Error('The ESM lite entrypoint did not deliver best-effort batches without immediate capture')
 }
 
 const coreRequests = []
@@ -166,8 +197,8 @@ const core = await createCorePostHog({
         return new Response('{}', { status: 200 })
     },
 })
-if (core.analytics || (await core.resolveExtension('analytics'))) {
-    throw new Error('The manual CommonJS host must not construct or acquire implicit analytics')
+if (core.featureFlags || core.logs || core.surveys || core.autocapture) {
+    throw new Error('The manual CommonJS host must not install implicit products')
 }
 await core.flush()
 await core.dispose()
@@ -176,7 +207,7 @@ if (
     String(coreRequests[0][0]) !== 'https://us-assets.i.posthog.com/array/ph_test/config?token=ph_test' ||
     coreRequests[0][1].method !== 'GET'
 ) {
-    throw new Error('The CommonJS core entrypoint must load only remote configuration, not analytics delivery')
+    throw new Error('The CommonJS core entrypoint must send only the remote configuration request without captures')
 }
 
 for (const createFlags of [flags, commonJsFlags]) {
@@ -245,16 +276,14 @@ for (const create of [createPostHog, createEsmPostHog]) {
         storage: false,
         navigator: false,
         fetch: false,
-        analytics: false,
         logs: false,
         capturePageview: false,
         flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { lookup: 'shared' } } },
         extensions: [
-            analytics(),
             {
                 name: 'consumer',
                 setup(value) {
-                    lookupShared = () => value.sharedClient.getExtension(FeatureFlagsCommonExtension)
+                    lookupShared = () => value.getExtension(FeatureFlagsCommonExtension)
                     lookupFacade = () => value.featureFlags
                 },
             },
@@ -266,7 +295,7 @@ for (const create of [createPostHog, createEsmPostHog]) {
         !shared ||
         shared === facade ||
         lookupFacade() !== facade ||
-        'getExtension' in client ||
+        client.getExtension(FeatureFlagsCommonExtension) !== shared ||
         facade.getFeatureFlag('lookup')?.variant !== 'shared' ||
         shared.getFeatureFlag('lookup') !== 'shared'
     )
@@ -274,20 +303,26 @@ for (const create of [createPostHog, createEsmPostHog]) {
     facade.updateFlags({ lookup: 'updated' })
     if (shared.getFeatureFlag('lookup') !== 'updated' || (await shared.reloadFeatureFlagsAsync()).status !== 'skipped')
         throw new Error('Dynamic flags shared lookup did not use the live implementation')
-    client.analytics.reset()
+    client.reset()
     if (shared.getFeatureFlag('lookup') !== undefined) throw new Error('Dynamic flags shared state survived reset')
     await client.dispose()
     if (
         lookupShared() !== undefined ||
         lookupFacade() !== undefined ||
-        'getExtension' in client ||
+        client.getExtension(FeatureFlagsCommonExtension) !== undefined ||
         client.featureFlags !== undefined
     )
         throw new Error('Dynamic flags lookup survived disposal')
 }
-process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')
+process.stdout.write(
+    'Built CommonJS/ESM dynamic flags product/shared lookup, async reload, reset and disposal passed\n'
+)
 
-for (const create of [createPostHog, createEsmPostHog]) {
+// Each client format is paired with the other format's groups and person modules.
+for (const [create, { group, groupIdentify, resetGroups }, { alias }] of [
+    [createPostHog, esmGroups, esmPerson],
+    [createEsmPostHog, commonJsGroups, commonJsPerson],
+]) {
     const requests = []
     let scoped
     const client = await create({
@@ -320,20 +355,13 @@ for (const create of [createPostHog, createEsmPostHog]) {
             return new Response('{}')
         },
     })
-    const product = await client.resolveExtension('analytics')
-    assert.ok(product)
-    assert.equal(product, client.analytics)
-    assert.equal(product, scoped.analytics)
+    assert.equal(scoped, client)
     const identity = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
     let groupResets = 0
-    let scopedGroupResets = 0
     let fullResets = 0
     let identifies = 0
     client.onGroupsReset(() => {
         groupResets++
-    })
-    scoped.onGroupsReset(() => {
-        scopedGroupResets++
     })
     client.onReset(() => {
         fullResets++
@@ -342,26 +370,24 @@ for (const create of [createPostHog, createEsmPostHog]) {
         identifies++
     })
     client.kv.set('retained', true)
-    await product.group('organization', 'current')
-    const { alias, groupIdentify, resetGroups } = product
-    alias('account-123')
-    groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
+    group(client, 'organization', 'current')
+    alias(client, 'account-123')
+    groupIdentify(client, 'organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
     assert.deepEqual(client.groups, { organization: 'current' })
     assert.deepEqual(
         { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId },
         identity
     )
-    product.capture('before_group_reset')
+    client.capture('before_group_reset')
     const session = client.session
-    resetGroups()
+    resetGroups(client)
     assert.deepEqual(client.groups, {})
     assert.deepEqual(client.session, session)
     assert.equal(client.kv.get('retained'), true)
     assert.equal(groupResets, 1)
-    assert.equal(scopedGroupResets, 1)
     assert.equal(fullResets, 0)
     assert.equal(identifies, 0)
-    product.capture('after_group_reset')
+    client.capture('after_group_reset')
     await client.flush()
     const events = requests.flatMap(({ body }) => body.batch)
     assert.deepEqual(
@@ -377,13 +403,13 @@ for (const create of [createPostHog, createEsmPostHog]) {
     assert.deepEqual(events[3].properties.$groups, { organization: 'current' })
     assert.deepEqual(events[4].properties.$groups, {})
     await client.dispose()
-    resetGroups()
-    alias('disposed')
-    groupIdentify('organization', 'disposed')
+    resetGroups(client)
+    alias(client, 'disposed')
+    groupIdentify(client, 'organization', 'disposed')
     assert.equal(groupResets, 1)
-    assert.equal(scopedGroupResets, 1)
+    assert.equal(requests.length, 1)
 }
-process.stdout.write('Built CommonJS/ESM acquired analytics alias, group profile and group-only reset passed\n')
+process.stdout.write('Built CommonJS/ESM client with cross-format alias, group profile and group-only reset passed\n')
 
 for (const create of [createPostHog, createEsmPostHog]) {
     const requests = []
@@ -421,30 +447,26 @@ for (const create of [createPostHog, createEsmPostHog]) {
         },
     }
     const client = await create(options)
-    const product = await client.resolveExtension('analytics')
-    assert.ok(product)
-    const { register, registerOnce, unregister, getProperty } = product
-    const copied = { register, registerOnce, unregister, getProperty }
     const nested = { count: 1 }
-    register({ nested, plan: 'persistent', tier: 'persistent', initial: 'None', retained: false })
-    registerOnce({ initial: 'first', retained: true })
-    registerOnce({ initial: 'second' })
-    copied.register(JSON.parse('{"__proto__":{"own":true},"constructor":"application","prototype":"own"}'))
+    client.register({ nested, plan: 'persistent', tier: 'persistent', initial: 'None', retained: false })
+    client.registerOnce({ initial: 'first', retained: true })
+    client.registerOnce({ initial: 'second' })
+    client.register(JSON.parse('{"__proto__":{"own":true},"constructor":"application","prototype":"own"}'))
     nested.count = 2
-    const read = getProperty('nested')
+    const read = client.getProperty('nested')
     assert.deepEqual(read, { count: 1 })
     read.count = 3
-    assert.deepEqual(copied.getProperty('nested'), { count: 1 })
-    assert.equal(getProperty('initial'), 'first')
-    assert.equal(getProperty('retained'), false)
-    assert.deepEqual(getProperty('__proto__'), { own: true })
-    assert.equal(getProperty('constructor'), 'application')
-    assert.equal(getProperty('prototype'), 'own')
+    assert.deepEqual(client.getProperty('nested'), { count: 1 })
+    assert.equal(client.getProperty('initial'), 'first')
+    assert.equal(client.getProperty('retained'), false)
+    assert.deepEqual(client.getProperty('__proto__'), { own: true })
+    assert.equal(client.getProperty('constructor'), 'application')
+    assert.equal(client.getProperty('prototype'), 'own')
     assert.equal(client.session, undefined)
     assert.equal(requests.length, 0)
-    const dynamic = product.registerDynamicEventProperties(() => ({ plan: 'dynamic', tier: 'dynamic' }))
+    const dynamic = client.registerDynamicEventProperties(() => ({ plan: 'dynamic', tier: 'dynamic' }))
     let serialized = 0
-    product.capture(
+    client.capture(
         'registered_queued',
         {
             plan: 'caller',
@@ -460,9 +482,9 @@ for (const create of [createPostHog, createEsmPostHog]) {
         },
         { uuid: 'registered-queued', set: { plan: 'person' } }
     )
-    register({ nested: { count: 9 }, plan: 'later' })
-    copied.unregister('initial')
-    const immediate = await product.captureImmediate(
+    client.register({ nested: { count: 9 }, plan: 'later' })
+    client.unregister('initial')
+    const immediate = await client.captureImmediate(
         'registered_immediate',
         { plan: 'immediate' },
         { uuid: 'registered-immediate' }
@@ -486,26 +508,22 @@ for (const create of [createPostHog, createEsmPostHog]) {
     assert.equal(inline.properties.plan, 'immediate')
     assert.deepEqual(inline.properties.nested, { count: 9 })
     assert.equal(Object.hasOwn(inline.properties, 'initial'), false)
-    product.resetGroups()
-    assert.deepEqual(getProperty('nested'), { count: 9 })
+    commonJsGroups.resetGroups(client)
+    assert.deepEqual(client.getProperty('nested'), { count: 9 })
     dynamic.dispose()
     await client.dispose()
-    copied.register({ late: true })
-    copied.registerOnce({ late: true })
-    copied.unregister('nested')
-    assert.equal(getProperty('late'), undefined)
+    client.register({ late: true })
+    client.registerOnce({ late: true })
+    client.unregister('nested')
+    assert.equal(client.getProperty('late'), undefined)
     const fresh = await create(options)
-    const restored = await fresh.resolveExtension('analytics')
-    assert.ok(restored)
-    assert.deepEqual(restored.getProperty('nested'), { count: 9 })
-    assert.equal(restored.getProperty('late'), undefined)
-    restored.reset()
-    assert.equal(restored.getProperty('nested'), undefined)
+    assert.deepEqual(fresh.getProperty('nested'), { count: 9 })
+    assert.equal(fresh.getProperty('late'), undefined)
+    fresh.reset()
+    assert.equal(fresh.getProperty('nested'), undefined)
     await fresh.dispose()
 }
-process.stdout.write(
-    'Built CommonJS/ESM acquired persistent analytics properties, snapshots, precedence and reset passed\n'
-)
+process.stdout.write('Built CommonJS/ESM persistent registered properties, snapshots, precedence and reset passed\n')
 
 for (const create of [createPostHog, createEsmPostHog]) {
     const requests = []
@@ -555,18 +573,14 @@ for (const create of [createPostHog, createEsmPostHog]) {
     }
     try {
         const client = await create(options)
-        const product = await client.resolveExtension('analytics')
-        assert.ok(product)
-        const { registerForSession, unregisterForSession } = product
-        const copied = { registerForSession, unregisterForSession }
         const input = { count: 1 }
-        product.register({ precedence: 'persistent', fallback: true })
-        registerForSession({ input, precedence: 'session', removed: true, nullable: null })
+        client.register({ precedence: 'persistent', fallback: true })
+        client.registerForSession({ input, precedence: 'session', removed: true, nullable: null })
         input.count = 2
         assert.equal(client.session, undefined)
-        copied.unregisterForSession('removed')
-        product.capture('session_queued')
-        const summary = await product.captureImmediate('session_immediate', { precedence: 'caller' })
+        client.unregisterForSession('removed')
+        client.capture('session_queued')
+        const summary = await client.captureImmediate('session_immediate', { precedence: 'caller' })
         assert.equal(summary.allPersisted, true)
         await client.flush()
         const events = requests.flatMap(({ batch }) => batch)
@@ -580,25 +594,23 @@ for (const create of [createPostHog, createEsmPostHog]) {
         assert.equal(Object.hasOwn(queued.properties, 'removed'), false)
         assert.equal(Object.hasOwn(queued.properties, 'nullable'), false)
         assert.equal(inline.properties.precedence, 'caller')
-        product.resetGroups()
-        product.capture('after_group_reset')
+        esmGroups.resetGroups(client)
+        client.capture('after_group_reset')
         await client.flush()
         const groupReset = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'after_group_reset')
         assert.ok(groupReset)
         assert.deepEqual(groupReset.properties.input, { count: 1 })
-        product.reset()
-        product.capture('after_full_reset')
+        client.reset()
+        client.capture('after_full_reset')
         await client.flush()
         const fullReset = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'after_full_reset')
         assert.ok(fullReset)
         assert.equal(Object.hasOwn(fullReset.properties, 'input'), false)
-        copied.registerForSession({ reload: true })
+        client.registerForSession({ reload: true })
         await client.dispose()
-        copied.registerForSession({ late: true })
+        client.registerForSession({ late: true })
         const fresh = await create(options)
-        const restored = await fresh.resolveExtension('analytics')
-        assert.ok(restored)
-        restored.capture('session_reloaded')
+        fresh.capture('session_reloaded')
         await fresh.flush()
         const reloaded = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'session_reloaded')
         assert.ok(reloaded)
@@ -612,7 +624,7 @@ for (const create of [createPostHog, createEsmPostHog]) {
         else delete globalThis.localStorage
     }
 }
-process.stdout.write('Built CommonJS/ESM acquired session properties, snapshots, precedence and reset passed\n')
+process.stdout.write('Built CommonJS/ESM session properties, snapshots, precedence and reset passed\n')
 
 for (const factory of [surveys, commonJsSurveys]) {
     const client = await createCorePostHog({

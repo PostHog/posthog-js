@@ -1,9 +1,8 @@
-import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import type { IPostHogInternal } from '../../core/context/browser-client'
+import type { IPostHog } from '../../core/types'
 import type { FlagsExtension } from './flags-internal'
 import type { FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
@@ -27,23 +26,18 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         evaluationContexts: snapshot.evaluationContexts ?? [],
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
-    let client: IPostHogInternal | undefined
+    let client: IPostHog | undefined
     let disposed = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
     const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
-        bindings: { featureFlags: shared, [FeatureFlagsCommonExtension]: shared },
-        getSurveyContext: () => ({
-            remoteEvaluation: !config.featureFlagsDisabled,
-            personProperties: client?.kv.get(STORED_PERSON_PROPERTIES_KEY),
-        }),
-        setup: async (value: IPostHogInternal) => {
+        bindings: { [FeatureFlagsCommonExtension]: shared },
+        getSurveyContext: () => ({ remoteEvaluation: !config.featureFlagsDisabled }),
+        setup: async (value: IPostHog) => {
             client = value
-            await value.resolveExtension('analytics')
-            if (disposed) return
-            await shared.setup(value.sharedClient)
+            await shared.setup(value)
             if (disposed) return
             subscriptions.push(
                 value.onIdentify(({ distinctId, previousDistinctId, wasIdentified }) => {

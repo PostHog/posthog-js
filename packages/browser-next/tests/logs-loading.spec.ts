@@ -1,4 +1,3 @@
-import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
 import type { Extension } from '../src/core/types'
 
 const options = {
@@ -7,7 +6,6 @@ const options = {
     storage: false,
     fetch: false,
     capturePageview: false,
-    analytics: false,
     flags: false,
 } as const
 
@@ -84,11 +82,11 @@ describe('automatic logs module loading', () => {
             throw new Error('chunk unavailable')
         })
         const { createPostHog } = await import('../src/composition/npm')
-        const client = await createPostHog(withBufferedAnalytics({ ...options, logs: {} }))
+        const client = await createPostHog({ ...options, logs: {} })
         expect(client.logs).toBeUndefined()
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
-        requireInstalledExtension(client.analytics).capture('still usable')
+        client.onEvent(captured)
+        client.capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })
