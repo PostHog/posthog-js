@@ -1,4 +1,4 @@
-import type { FeatureFlagValue, JsonType, PostHogEventProperties } from '@posthog/core'
+import type { FeatureFlagValue, FeatureFlagResult, JsonType, PostHogEventProperties } from '@posthog/core'
 
 export const COMMAND_CHANNEL = 'posthog:command:v1'
 export const STATE_CHANNEL = 'posthog:state:v1'
@@ -7,7 +7,24 @@ export const PROTOCOL_VERSION = 1
 export const MAX_MESSAGE_BYTES = 256 * 1024
 
 export type Properties = PostHogEventProperties
-export type { FeatureFlagValue, JsonType }
+export type { FeatureFlagValue, FeatureFlagResult, JsonType }
+
+export interface FeatureFlagReadOptions {
+    /** Report a deduplicated exposure by default; false suppresses it. Takes precedence over sendEvent. */
+    sendFeatureFlagEvent?: boolean
+    /** Compatibility option; prefer sendFeatureFlagEvent. */
+    sendEvent?: boolean
+}
+
+export interface IsFeatureEnabledOptions extends FeatureFlagReadOptions {
+    /** Fallback for unknown or unavailable flags; never overrides a known false or empty variant. */
+    defaultValue?: boolean
+}
+
+// Core currently marks empty variants enabled; normalize reads without changing exposure values.
+export function normalizeFlagResult(result: FeatureFlagResult): FeatureFlagResult {
+    return structuredClone({ ...result, enabled: result.variant === '' ? false : result.enabled })
+}
 
 export interface State {
     revision: number
@@ -25,6 +42,12 @@ export interface State {
 export type Command =
     | { type: 'hello' }
     | { type: 'capture'; event: string; properties?: Properties }
+    | { type: 'alias'; alias: string }
+    | { type: 'screen'; name: string; properties?: Properties }
+    | { type: 'setPersonProperties'; properties?: Properties; propertiesOnce?: Properties }
+    | { type: 'setPersonPropertiesForFlags'; properties: Properties; reloadFeatureFlags: boolean }
+    | { type: 'setGroupPropertiesForFlags'; properties: Record<string, Properties>; reloadFeatureFlags: boolean }
+    | { type: 'resetPersonPropertiesForFlags' | 'resetGroupPropertiesForFlags'; reloadFeatureFlags: boolean }
     | { type: 'identify'; distinctId: string; properties?: Properties }
     | { type: 'reset' }
     | { type: 'group'; groupType: string; groupKey: string | number; properties?: Properties }
@@ -36,6 +59,15 @@ export type Command =
     | { type: 'reloadFeatureFlags' }
     | { type: 'flush' }
     | { type: 'exception'; properties: Properties }
+
+export function isFlagContextCommand(command: Command): command is Extract<Command, { reloadFeatureFlags: boolean }> {
+    return (
+        command.type === 'setPersonPropertiesForFlags' ||
+        command.type === 'setGroupPropertiesForFlags' ||
+        command.type === 'resetPersonPropertiesForFlags' ||
+        command.type === 'resetGroupPropertiesForFlags'
+    )
+}
 
 export interface Request {
     version: number
@@ -119,6 +151,30 @@ export function validateRequest(value: unknown): asserts value is Request {
         case 'capture':
             if (string('event') && !['$snapshot', '$exception'].includes(command.event as string) && properties())
                 return
+            break
+        case 'alias':
+            if (string('alias')) return
+            break
+        case 'screen':
+            if (string('name') && properties()) return
+            break
+        case 'setPersonProperties':
+            if (properties() && (command.propertiesOnce === undefined || isRecord(command.propertiesOnce))) return
+            break
+        case 'setPersonPropertiesForFlags':
+            if (isRecord(command.properties) && typeof command.reloadFeatureFlags === 'boolean') return
+            break
+        case 'setGroupPropertiesForFlags':
+            if (
+                isRecord(command.properties) &&
+                Object.values(command.properties).every(isRecord) &&
+                typeof command.reloadFeatureFlags === 'boolean'
+            )
+                return
+            break
+        case 'resetPersonPropertiesForFlags':
+        case 'resetGroupPropertiesForFlags':
+            if (typeof command.reloadFeatureFlags === 'boolean') return
             break
         case 'identify':
             if (string('distinctId') && properties()) return

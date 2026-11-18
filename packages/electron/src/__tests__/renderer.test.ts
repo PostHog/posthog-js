@@ -98,41 +98,45 @@ describe('renderer facade', () => {
         client.dispose()
     })
 
-    it.each(['flush', 'reloadFeatureFlags'] as const)(
-        'dispatches consent and capture while %s waits for a response',
-        async (method) => {
-            const { client, bridge } = harness()
-            await client.ready()
-            const normal = vi.mocked(bridge.request).getMockImplementation()!
-            let release!: (response: Awaited<ReturnType<Bridge['request']>>) => void
-            const blocked = new Promise<Awaited<ReturnType<Bridge['request']>>>((resolve) => {
-                release = resolve
-            })
-            let request: Parameters<Bridge['request']>[0] | undefined
-            vi.mocked(bridge.request).mockImplementationOnce((value) => {
-                request = value
-                return blocked
-            })
-            const pending = client[method]()
-            for (let i = 0; i < 5; i++) await Promise.resolve()
-            const capture = client.capture('not-blocked')
-            const consent = client.optOut()
-            try {
-                for (let i = 0; i < 15; i++) await Promise.resolve()
-                expect(vi.mocked(bridge.request).mock.calls.map(([value]) => value.command.type)).toEqual([
-                    'hello',
-                    method,
-                    'capture',
-                    'optOut',
-                ])
-                await Promise.all([capture, consent])
-            } finally {
-                if (request) release(await normal(request))
-                await Promise.allSettled([pending, capture, consent])
-                client.dispose()
-            }
+    it.each([
+        ['flush', (client: PostHog) => client.flush()],
+        ['reloadFeatureFlags', (client: PostHog) => client.reloadFeatureFlags()],
+        ['setPersonPropertiesForFlags', (client: PostHog) => client.setPersonPropertiesForFlags({ plan: 'pro' })],
+        ['setGroupPropertiesForFlags', (client: PostHog) => client.setGroupPropertiesForFlags({ org: { tier: 'a' } })],
+        ['resetPersonPropertiesForFlags', (client: PostHog) => client.resetPersonPropertiesForFlags(true)],
+        ['resetGroupPropertiesForFlags', (client: PostHog) => client.resetGroupPropertiesForFlags(true)],
+    ] as const)('dispatches consent and capture while %s waits for a response', async (method, call) => {
+        const { client, bridge } = harness()
+        await client.ready()
+        const normal = vi.mocked(bridge.request).getMockImplementation()!
+        let release!: (response: Awaited<ReturnType<Bridge['request']>>) => void
+        const blocked = new Promise<Awaited<ReturnType<Bridge['request']>>>((resolve) => {
+            release = resolve
+        })
+        let request: Parameters<Bridge['request']>[0] | undefined
+        vi.mocked(bridge.request).mockImplementationOnce((value) => {
+            request = value
+            return blocked
+        })
+        const pending = call(client)
+        for (let i = 0; i < 5; i++) await Promise.resolve()
+        const capture = client.capture('not-blocked')
+        const consent = client.optOut()
+        try {
+            for (let i = 0; i < 15; i++) await Promise.resolve()
+            expect(vi.mocked(bridge.request).mock.calls.map(([value]) => value.command.type)).toEqual([
+                'hello',
+                method,
+                'capture',
+                'optOut',
+            ])
+            await Promise.all([capture, consent])
+        } finally {
+            if (request) release(await normal(request))
+            await Promise.allSettled([pending, capture, consent])
+            client.dispose()
         }
-    )
+    })
 
     it('coalesces repeated cached flag reads before IPC, including in-flight reads and ordinary state revisions', async () => {
         const { client, bridge, broadcast } = harness()
@@ -337,6 +341,58 @@ describe('renderer facade', () => {
         const commands = vi.mocked(bridge.request).mock.calls.map(([request]) => request.command)
         expect(commands).toContainEqual({ type: 'flag', key: 'experiment', value: 'control', flagRevision: 1 })
         client.dispose()
+    })
+
+    it('keeps result reads and bulk reads out of state-listener feedback loops', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        let changes = 0
+        client.onStateChange(() => {
+            if (++changes < 3) {
+                client.getFeatureFlagResult('experiment')
+                client.isFeatureEnabled('off')
+                client.getAllFeatureFlags()
+            }
+        })
+        await client.flush()
+        expect(changes).toBe(1)
+        expect(
+            vi.mocked(bridge.request).mock.calls.filter(([request]) => request.command.type === 'flag')
+        ).toHaveLength(2)
+        client.dispose()
+    })
+
+    it('snapshots properties with their JSON serialization so toJSON redaction is preserved', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        class Profile {
+            constructor(
+                public email: string,
+                public secret: string
+            ) {}
+            toJSON() {
+                return { email: this.email }
+            }
+        }
+        await client.capture('profile', { profile: new Profile('a@example.com', 'do-not-send') } as any)
+        await client.setPersonProperties({ profile: new Profile('b@example.com', 'do-not-send') } as any)
+        const sent = JSON.stringify(vi.mocked(bridge.request).mock.calls.map(([request]) => request.command))
+        expect(sent).toContain('a@example.com')
+        expect(sent).toContain('b@example.com')
+        expect(sent).not.toContain('do-not-send')
+        client.dispose()
+    })
+
+    it('returns public errors as rejected promises and preserves command order after rejection', async () => {
+        const { client, bridge } = harness()
+        await client.ready()
+        await expect(client.setPersonProperties({ invalid: () => {} } as any)).rejects.toThrow()
+        vi.mocked(bridge.request).mockResolvedValueOnce({ ok: false, error: 'Invalid PostHog command' })
+        await expect(client.alias('valid')).rejects.toThrow('Invalid PostHog command')
+        await client.screen('Home')
+        expect(vi.mocked(bridge.request).mock.calls.at(-1)?.[0].command).toEqual({ type: 'screen', name: 'Home' })
+        client.dispose()
+        await expect(client.setPersonPropertiesForFlags({ plan: 'pro' })).rejects.toThrow('disposed')
     })
 
     it('uses synchronized cached state and awaits ordered identity mutation', async () => {
