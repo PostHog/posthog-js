@@ -20,7 +20,7 @@ import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
 import type { TracingHeaders } from './extensions/tracing-headers'
-import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { WebVitalsAutocapture } from '@posthog/browser-common/web-vitals'
 import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'

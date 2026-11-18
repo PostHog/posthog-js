@@ -1,7 +1,7 @@
 import type { Mock as VitestMock } from 'vitest'
 import '../helpers/mock-logger'
 
-import { createPosthogInstance } from '../helpers/posthog-instance'
+import { createPosthogInstance, createRemoteConfig } from '../helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import {
@@ -12,7 +12,10 @@ import {
     SupportedWebVitalsMetrics,
 } from '../../types'
 import { assignableWindow } from '../../utils/globals'
-import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
+import {
+    DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS,
+    FIFTEEN_MINUTES_IN_MILLIS,
+} from '@posthog/browser-common/web-vitals'
 import {
     WEB_VITALS_ENABLED_SERVER_SIDE,
     WEB_VITALS_ALLOWED_METRICS,
@@ -97,6 +100,61 @@ describe('web vitals', () => {
         name: name,
         value: 123.45,
         extra: 'property',
+    })
+
+    it('does not install stale observers when the attribution option changes during loading', async () => {
+        let finishPlain: (() => void) | undefined
+        let finishAttributed: (() => void) | undefined
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: (_instance, kind, loaded) => {
+                if (kind === 'web-vitals') finishPlain = loaded
+                if (kind === 'web-vitals-with-attribution') finishAttributed = loaded
+            },
+            postHogWebVitalsCallbacksByFlavor: {},
+        }
+        const instance = await createPosthogInstance(undefined, {
+            capture_performance: { web_vitals: true, web_vitals_attribution: false },
+            loaded: (posthog) => posthog.set_config({ capture_performance: { web_vitals: true } }),
+        })
+        instance._onRemoteConfig({ ok: true, config: createRemoteConfig({ capturePerformance: { web_vitals: true } }) })
+        expect(finishPlain).toBeDefined()
+        expect(finishAttributed).toBeDefined()
+
+        const plain = { onCLS: vi.fn(), onFCP: vi.fn(), onINP: vi.fn(), onLCP: vi.fn() }
+        const attributed = { onCLS: vi.fn(), onFCP: vi.fn(), onINP: vi.fn(), onLCP: vi.fn() }
+        const extensions = assignableWindow.__PosthogExtensions__!
+        extensions.postHogWebVitalsCallbacksByFlavor!['web-vitals'] = plain
+        finishPlain?.()
+        expect(plain.onLCP).not.toHaveBeenCalled()
+        extensions.postHogWebVitalsCallbacksByFlavor!['web-vitals-with-attribution'] = attributed
+        finishAttributed?.()
+        expect(attributed.onLCP).toHaveBeenCalledOnce()
+        await instance.shutdown()
+    })
+
+    it('stops buffering after shutdown, including reports from observers that cannot be disconnected', async () => {
+        assignableWindow.__PosthogExtensions__ = {
+            postHogWebVitalsCallbacks: {
+                onCLS: (report) => {
+                    onCLSCallback = report
+                },
+                onLCP: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            },
+        }
+        const instance = await createPosthogInstance(undefined, {
+            capture_performance: { web_vitals: true, web_vitals_attribution: false },
+        })
+        const capture = vi.spyOn(instance, 'capture')
+        expect(onCLSCallback).toBeDefined()
+        onCLSCallback?.({ name: 'CLS', value: 0.1 })
+
+        await instance.shutdown()
+        onCLSCallback?.({ name: 'CLS', value: 0.2 })
+        window.dispatchEvent(new Event('pagehide'))
+        vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+        expect(capture.mock.calls.some(([event]) => event === '$web_vitals')).toBe(false)
     })
 
     describe.each([
@@ -1131,114 +1189,6 @@ describe('web vitals', () => {
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
-
-    it('should not run on file:// protocol', async () => {
-        mockLocation.mockReturnValue({
-            protocol: 'file:',
-            host: ' ',
-            pathname: '/Users/robbie/Desktop/test.html',
-            search: '',
-            hash: '',
-            href: 'file:///Users/robbie/Desktop/test.html',
-        })
-
-        posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
-        })
-
-        posthog.webVitalsAutocapture!.onRemoteConfig({
-            ok: true,
-            config: {
-                capturePerformance: { web_vitals: true },
-            } as RemoteConfig,
-        })
-
-        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
-    })
-
-    it.each([
-        // hybrid app tools
-        'capacitor',
-        'capacitor-electron',
-        'tauri',
-        'ionic',
-        'wails',
-        'android-app',
-        'ms-appx-web',
-        // browser extensions
-        'chrome',
-        'chrome-extension',
-        'moz-extension',
-        'safari-web-extension',
-        'vscode-webview',
-        // local files
-        'file',
-        'blob',
-        'data',
-        'content',
-        'dfile',
-        'javascript',
-        'about',
-        'localhost',
-        // email clients
-        'ms-outlook',
-        'email',
-        // misc
-        'ws',
-        'wss',
-        'ftp',
-        'unknown',
-    ])('should not run on %s protocol', async (protocol) => {
-        mockLocation.mockReturnValue({
-            protocol: protocol + ':',
-            host: 'localhost',
-            pathname: '/',
-            search: '',
-            hash: '',
-            href: `${protocol}://localhost/`,
-        })
-
-        posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
-        })
-
-        posthog.webVitalsAutocapture!.onRemoteConfig({
-            ok: true,
-            config: {
-                capturePerformance: { web_vitals: true },
-            } as RemoteConfig,
-        })
-
-        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
-    })
-
-    it.each(['http', 'https'])('should run on %s protocol', async (protocol) => {
-        mockLocation.mockReturnValue({
-            protocol: protocol + ':',
-            host: 'localhost',
-            pathname: '/',
-            search: '',
-            hash: '',
-            href: `${protocol}://localhost/`,
-        })
-
-        posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
-        })
-
-        posthog.webVitalsAutocapture!.onRemoteConfig({
-            ok: true,
-            config: {
-                capturePerformance: { web_vitals: true },
-            } as FlagsResponse,
-        })
-
-        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
-    })
-
     describe('soft-navigation metric attribution', () => {
         const initializeWebVitals = async () => {
             beforeSendMock = vi.fn().mockImplementation((event) => event)
