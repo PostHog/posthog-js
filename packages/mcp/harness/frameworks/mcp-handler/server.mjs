@@ -31,8 +31,11 @@ const mcpHandler = createMcpHandler((server) => {
   if (ORDER === 'last') instrumentServer(server)
 })
 
-const authed = withMcpAuth(mcpHandler, async (_request, token) => token && { token, clientId: 'harness', scopes: [] })
-const handler = WRAP ? withMcpSessionHeader(authed) : authed
+// The order the README shows: auth outermost.
+const handler = withMcpAuth(
+  WRAP ? withMcpSessionHeader(mcpHandler) : mcpHandler,
+  async (_request, token) => token && { token, clientId: 'harness', scopes: [] }
+)
 
 // What Next.js does for a route handler: a web Request in, a web Response out.
 createServer(async (req, res) => {

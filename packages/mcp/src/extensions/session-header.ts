@@ -38,20 +38,41 @@ export function withMcpSessionHeader<A extends unknown[]>(handler: FetchHandler<
   }
 }
 
-// A 2025-era client sends neither header until `initialize` has answered, and
-// a 2026-era client never sends `initialize`. Anything else skips the body read.
+// An `initialize` is a few hundred bytes; reading more would let any caller make
+// the wrapper buffer a large body before the handler can reject it.
+const MAX_INITIALIZE_BYTES = 64 * 1024
+
+// A 2025-era client sends no session until `initialize` has answered, and a
+// 2026-era client never sends `initialize`. Anything else skips the body read.
 function mayBeInitialize(request: Request): boolean {
   return (
     request.method === 'POST' &&
     !request.headers.has(MCP_SESSION_HEADER) &&
-    !request.headers.has('mcp-protocol-version') &&
-    !request.headers.has('mcp-method')
+    !request.headers.has('mcp-method') &&
+    Number(request.headers.get('content-length') ?? 0) <= MAX_INITIALIZE_BYTES
   )
 }
 
 async function readJson(request: Request): Promise<InitializeRequest | undefined> {
+  const reader = request.clone().body?.getReader()
+  if (!reader) {
+    return undefined
+  }
+  const chunks: Uint8Array[] = []
+  let size = 0
   try {
-    return (await request.clone().json()) as InitializeRequest
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      size += chunk.value.byteLength
+      if (size > MAX_INITIALIZE_BYTES) {
+        // A tee branch's cancel settles only once the handler's branch ends too.
+        void reader.cancel().catch(() => undefined)
+        return undefined
+      }
+      chunks.push(chunk.value)
+    }
+    const bytes = new Uint8Array(size)
+    chunks.reduce((offset, part) => (bytes.set(part, offset), offset + part.byteLength), 0)
+    return JSON.parse(new TextDecoder().decode(bytes)) as InitializeRequest
   } catch {
     return undefined
   }

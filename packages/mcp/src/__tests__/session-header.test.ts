@@ -43,7 +43,8 @@ describe('withMcpSessionHeader', () => {
 
   it.each([
     ['a request that replays a session', () => post(INITIALIZE, { [MCP_SESSION_HEADER]: 'existing' })],
-    ['a request after the handshake', () => post(INITIALIZE, { 'mcp-protocol-version': '2025-11-25' })],
+    ['a body over the size cap', () => post({ ...INITIALIZE, padding: 'x'.repeat(70_000) })],
+    ['a request declaring a body over the size cap', () => post(INITIALIZE, { 'content-length': '70000' })],
     ['a 2026-era request', () => post({ ...INITIALIZE, method: 'tools/list' }, { 'mcp-method': 'tools/list' })],
     ['a request that is not initialize', () => post({ ...INITIALIZE, method: 'tools/list' })],
     ['a body that is not JSON', () => post('not json')],
@@ -58,6 +59,14 @@ describe('withMcpSessionHeader', () => {
 
     expect(await response.json()).toEqual({ body: sentBody, sessionHeader: sentHeader })
     expect(response.headers.get(MCP_SESSION_HEADER)).toBeNull()
+  })
+
+  it('mints a token for an initialize that already declares its protocol version', async () => {
+    const response = await withMcpSessionHeader(echoHandler())(
+      post(INITIALIZE, { 'mcp-protocol-version': '2025-11-25' })
+    )
+
+    expect(decodeSessionId(response.headers.get(MCP_SESSION_HEADER))?.clientName).toBe('Claude')
   })
 
   it('leaves a failed initialize without a token', async () => {

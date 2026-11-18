@@ -114,16 +114,19 @@ const posthog = new PostHog(process.env.POSTHOG_API_KEY!, { host: 'https://us.i.
 
 const handler = createMcpHandler((server) => {
   instrument(server, posthog, {
-    // with withMcpAuth, the verified token is on extra.http.authInfo
-    identify: (_request, extra) => (extra?.http?.authInfo ? { distinctId: extra.http.authInfo.clientId } : null),
+    // withMcpAuth puts the verified token on extra.http.authInfo
+    identify: async (_request, extra) => {
+      const auth = (extra?.http as { authInfo?: { clientId: string } } | undefined)?.authInfo
+      return auth ? { distinctId: auth.clientId } : null
+    },
   })
-  server.registerTool('echo', { inputSchema: { text: z.string() } }, async ({ text }) => ({
+  server.registerTool('echo', { inputSchema: z.object({ text: z.string() }) }, async ({ text }) => ({
     content: [{ type: 'text', text }],
   }))
 })
 
-const authed = withMcpAuth(handler, verifyToken)
-const route = withMcpSessionHeader(authed)
+// Auth outermost, so a request that fails it is rejected before anything reads its body.
+const route = withMcpAuth(withMcpSessionHeader(handler), verifyToken)
 export { route as GET, route as POST }
 ```
 
