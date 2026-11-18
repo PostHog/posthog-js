@@ -56,6 +56,9 @@ function mayBeInitialize(request: Request): boolean {
 }
 
 async function readJson(request: Request): Promise<InitializeRequest | undefined> {
+  if (request.signal.aborted) {
+    return undefined
+  }
   const reader = request.clone().body?.getReader()
   if (!reader) {
     return undefined

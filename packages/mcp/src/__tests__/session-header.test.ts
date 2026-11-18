@@ -84,7 +84,23 @@ describe('withMcpSessionHeader', () => {
     expect(response.headers.get(MCP_SESSION_HEADER)).toBe('stateful-1')
   })
 
-  it('stops reading a stalled body when the client aborts', async () => {
+  it.each([
+    [
+      'while the body is read',
+      (controller: AbortController, run: () => Promise<Response>) => {
+        const pending = run()
+        controller.abort()
+        return pending
+      },
+    ],
+    [
+      'before the wrapper runs',
+      (controller: AbortController, run: () => Promise<Response>) => {
+        controller.abort()
+        return run()
+      },
+    ],
+  ])('stops reading a stalled body when the client aborts %s', async (_case, abortAnd) => {
     const aborted = new AbortController()
     const stalled = new ReadableStream<Uint8Array>({
       start: (controller) => controller.enqueue(new TextEncoder().encode('{"method":"initia')),
@@ -97,10 +113,9 @@ describe('withMcpSessionHeader', () => {
     } as RequestInit)
     const handler = vi.fn(async () => new Response('aborted'))
 
-    const pending = withMcpSessionHeader(handler)(request)
-    aborted.abort()
+    const response = await abortAnd(aborted, () => withMcpSessionHeader(handler)(request))
 
-    expect(await (await pending).text()).toBe('aborted')
+    expect(await response.text()).toBe('aborted')
   })
 
   it('leaves a failed initialize without a token', async () => {
