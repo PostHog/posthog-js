@@ -146,6 +146,7 @@
             "files": [
                 "packages/core/**",
                 "packages/docusaurus/**",
+                "packages/electron/**",
                 "packages/mcp/**",
                 "packages/nextjs-config/**",
                 "packages/nuxt/**",

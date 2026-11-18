@@ -1,0 +1,24 @@
+{
+    "name": "example-electron",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "main.mjs",
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "build": "node build.mjs",
+        "start": "pnpm build && electron .",
+        "test": "pnpm build && node smoke-test.mjs",
+        "test:smoke": "pnpm test",
+        "test:asar": "pnpm build && node smoke-test.mjs --asar",
+        "test:mock": "node --test mock-server.test.mjs"
+    },
+    "dependencies": {
+        "@posthog/electron": "0.1.0-alpha.0"
+    },
+    "devDependencies": {
+        "@electron/asar": "3.4.1",
+        "electron": "42.4.0",
+        "esbuild": "^0.25.0"
+    }
+}
