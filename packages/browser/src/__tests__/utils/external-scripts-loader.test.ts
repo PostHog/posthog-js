@@ -605,6 +605,23 @@ describe('external-scripts-loader', () => {
 
         let consoleError: ReturnType<typeof vi.spyOn>
 
+        // jsdom has no native SRI support, so stand in for a browser that reflects the attribute.
+        beforeAll(() => {
+            Object.defineProperty(HTMLScriptElement.prototype, 'integrity', {
+                configurable: true,
+                get(this: HTMLScriptElement) {
+                    return this.getAttribute('integrity') ?? ''
+                },
+                set(this: HTMLScriptElement, value: string) {
+                    this.setAttribute('integrity', value)
+                },
+            })
+        })
+
+        afterAll(() => {
+            delete (HTMLScriptElement.prototype as Partial<HTMLScriptElement>).integrity
+        })
+
         beforeEach(() => {
             callback.mockClear()
             consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -719,7 +736,7 @@ describe('external-scripts-loader', () => {
 
             expect(scripts()).toHaveLength(0)
             expect(callback).toHaveBeenCalledTimes(1)
-            expect(callback.mock.calls[0][0]).toContain('must keep integrity')
+            expect(callback.mock.calls[0][0]).toContain('must keep src, integrity')
         })
 
         it('rejects a preparation hook that returns a different element without the hash', () => {
@@ -732,7 +749,47 @@ describe('external-scripts-loader', () => {
             load('recorder')
 
             expect(scripts()).toHaveLength(0)
-            expect(callback.mock.calls[0][0]).toContain('must keep integrity')
+            expect(callback.mock.calls[0][0]).toContain('must keep src, integrity')
+        })
+
+        it.each([
+            [
+                'removing src',
+                (script: HTMLScriptElement) => {
+                    script.removeAttribute('src')
+                    return script
+                },
+            ],
+            [
+                'returning an inline script',
+                () => {
+                    const inline = document!.createElement('script')
+                    inline.text = 'window.unverified = true'
+                    inline.integrity = BUILT_RECORDER
+                    inline.crossOrigin = 'anonymous'
+                    return inline
+                },
+            ],
+        ])('rejects a preparation hook %s', (_, prepare) => {
+            posthog.config.prepare_external_dependency_script = prepare
+
+            load('recorder')
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledWith(expect.stringContaining('must keep src, integrity'))
+        })
+
+        it('fails closed in a browser without native SRI support', () => {
+            const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'integrity')!
+            delete (HTMLScriptElement.prototype as Partial<HTMLScriptElement>).integrity
+            try {
+                load('recorder')
+            } finally {
+                Object.defineProperty(HTMLScriptElement.prototype, 'integrity', descriptor)
+            }
+
+            expect(scripts()).toHaveLength(0)
+            expect(callback).toHaveBeenCalledWith('This browser does not support Subresource Integrity')
         })
 
         it('reports a preparation hook returning null', () => {

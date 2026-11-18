@@ -73,10 +73,14 @@ const loadScript = (posthog: PostHog, url: string, callback: LoadCallback, integ
             return callback('prepare_external_dependency_script returned null')
         }
         // The hook may rewrite src for proxies or self-hosting: the hash still pins the bytes.
-        if (integrity && (scriptTag.integrity !== integrity || scriptTag.crossOrigin !== 'anonymous')) {
+        // Browsers never apply integrity to inline code, so a src is required.
+        if (
+            integrity &&
+            (!scriptTag.src || scriptTag.integrity !== integrity || scriptTag.crossOrigin !== 'anonymous')
+        ) {
             return refuse(
                 callback,
-                `prepare_external_dependency_script must keep integrity and crossOrigin 'anonymous' for ${url}`,
+                `prepare_external_dependency_script must keep src, integrity and crossOrigin 'anonymous' for ${url}`,
                 true
             )
         }
@@ -175,6 +179,10 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
                 callback,
                 `${kind} can't be integrity-verified, so it is not loaded with require_subresource_integrity`
             )
+        }
+        // Without native support, assigning integrity only sets an ignored property.
+        if (!document || !('integrity' in document.createElement('script'))) {
+            return refuse(callback, 'This browser does not support Subresource Integrity', true)
         }
         const file = `${kind}.js`
         const integrity = EXTENSION_INTEGRITY[file]
