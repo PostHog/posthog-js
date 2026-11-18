@@ -4367,10 +4367,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return Promise.reject(null)
     }
 
+    // Clean the exception properties only after beforeSend has finished redacting them.
+    const hookProperties = eventMessage.properties
+    const preparedProperties =
+      props._originatedFromCaptureException && hookProperties
+        ? readCallerValues(() => ErrorTracking.prepareEventProperties(hookProperties))
+        : hookProperties
+
     return {
       distinctId: eventMessage.distinctId!,
       event: eventMessage.event,
-      properties: eventMessage.properties || {},
+      properties: preparedProperties || {},
       options: eventMessage.options,
       uuid: eventMessage.uuid,
       timestamp: eventMessage.timestamp,
