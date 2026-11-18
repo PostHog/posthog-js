@@ -1,6 +1,6 @@
 # browser-next real-data sandbox
 
-A small Vite app for exercising the experimental `@posthog/browser` client against the shared PostHog US Cloud test project. It imports `packages/browser-next/src` directly, so local SDK edits appear immediately without packaging a tarball.
+A small Vite app for exercising the experimental `@posthog/browser` client against the shared PostHog US Cloud test project. It imports `packages/browser-next/src/composition/npm` directly, so local SDK edits appear immediately without packaging a tarball.
 
 ## Start
 
@@ -25,8 +25,8 @@ pnpm dev
 
 ## What to try
 
-- Leave explicit installation unchecked, capture an event, and watch default analytics load automatically.
-- Disable automatic loading to observe buffer-only capture, then restart with explicit installation enabled.
+- Leave explicit installation unchecked to acquire analytics through the root resolver during initialization, then capture an event.
+- Disable automatic loading to initialize without analytics, then restart with explicit installation enabled.
 - Install analytics explicitly during initialization to verify that it satisfies delivery without a duplicate dynamic load.
 - Use **Capture immediate** to bypass the queue and inspect the terminal Capture V1 persistence summary.
 - Enable gzip and send the 16 KiB event to inspect compressed delivery.

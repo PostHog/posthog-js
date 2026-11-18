@@ -92,10 +92,8 @@ try {
       readdirSync(stage).find((filename) => filename.endsWith('.tgz'))
     )
   }
-  const nodeTarball = packBuiltPackage(join(packageRoot, '..', 'node'), 'node-package')
-  const packageTarball = packBuiltPackage(packageRoot, 'nuxt-package', {
-    'posthog-node': `file:${nodeTarball}`,
-  })
+  // On capture-v1, @posthog/nuxt stays on posthog-node 5 from npm, so only nuxt itself is packed.
+  const packageTarball = packBuiltPackage(packageRoot, 'nuxt-package')
   let resolveCapture
   const capture = new Promise((resolve) => {
     resolveCapture = resolve

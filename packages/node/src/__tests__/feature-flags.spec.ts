@@ -72,7 +72,7 @@ describe('local evaluation', () => {
       expect(await posthog.getFeatureFlag('person-flag', 'some-distinct-id', { personProperties })).toEqual(
         'server-fallback'
       )
-      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=2')
+      const flagsCalls = mockedFetch.mock.calls.filter(([url]) => url === 'http://example.com/flags/?v=4')
       expect(flagsCalls).toHaveLength(1)
       const requestBody = JSON.parse(flagsCalls[0][1]?.body as string)
       expect(requestBody.person_properties).toEqual({ retained: 'value', explicitNull: null })
@@ -1039,7 +1039,7 @@ describe('local evaluation', () => {
       })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -1063,7 +1063,7 @@ describe('local evaluation', () => {
       await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', { personProperties: { doesnt_matter: '1' } })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2',
+      'http://example.com/flags/?v=4',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
@@ -3588,8 +3588,6 @@ describe('getFeatureFlag', () => {
           '$feature/complex-flag': true,
           $feature_flag: 'complex-flag',
           $feature_flag_response: true,
-          $lib: posthog.getLibraryId(),
-          $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: true,
         },
       })
@@ -4736,7 +4734,8 @@ describe('relative date parsing', () => {
   })
 })
 
-describe('consistency tests', () => {
+// Each test evaluates 1,000 distinct ids, so a busy CI runner can exceed the 5 s default.
+describe('consistency tests', { timeout: 30_000 }, () => {
   // # These tests are the same across all libraries
   // # See https://github.com/PostHog/posthog/blob/master/posthog/test/test_feature_flag.py#L627
   // # where this test has directly been copied from.
