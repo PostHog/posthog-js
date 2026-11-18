@@ -231,6 +231,7 @@ export {
   encodeSessionId,
   type SessionTokenPayload,
 } from './extensions/session-token'
+export { withMcpSessionHeader } from './extensions/session-header'
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
   PostHogMCPAnalyticsEvent,

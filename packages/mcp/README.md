@@ -93,7 +93,42 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
   does not, and there is no setting we can reach from inside the server. On that leg, expect
   `$mcp_client_name` and `$mcp_client_version` to be absent for `2025-11-25` traffic — the protocol
   version still arrives, because clients send it on the `MCP-Protocol-Version` header of every
-  request.
+  request. A fetch-style handler can mint the token outside the server instead: wrap it in
+  `withMcpSessionHeader`, as in the [Vercel `mcp-handler`](#vercel-mcp-handler) setup below.
+
+### Vercel `mcp-handler`
+
+[`mcp-handler`](https://github.com/vercel/mcp-handler) builds a fresh `McpServer` for every request
+and passes it to your callback, so call `instrument()` there. Wrap the handler in
+`withMcpSessionHeader` to keep one session per client on the `2025-11-25` protocol: mcp-handler
+streams the `initialize` response, so the session token has to be added outside the server.
+
+```ts
+// app/api/[transport]/route.ts
+import { createMcpHandler, withMcpAuth } from 'mcp-handler'
+import { PostHog, instrument, withMcpSessionHeader } from '@posthog/mcp'
+import { z } from 'zod'
+import { verifyToken } from './auth' // your token check, returning mcp-handler's AuthInfo
+
+const posthog = new PostHog(process.env.POSTHOG_API_KEY!, { host: 'https://us.i.posthog.com' })
+
+const handler = createMcpHandler((server) => {
+  instrument(server, posthog, {
+    // with withMcpAuth, the verified token is on extra.http.authInfo
+    identify: (_request, extra) => (extra?.http?.authInfo ? { distinctId: extra.http.authInfo.clientId } : null),
+  })
+  server.registerTool('echo', { inputSchema: { text: z.string() } }, async ({ text }) => ({
+    content: [{ type: 'text', text }],
+  }))
+})
+
+const authed = withMcpAuth(handler, verifyToken)
+const route = withMcpSessionHeader(authed)
+export { route as GET, route as POST }
+```
+
+`instrument()` may come before or after the tools are registered. Every request instruments a new
+server, which is the same per-request cost the SDK v2 `createMcpHandler` already has.
 
 ### Reading request headers in a callback
 
