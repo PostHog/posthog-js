@@ -8,7 +8,14 @@ import type {
   LanguageModelV3CallOptions,
   LanguageModelV3StreamPart,
 } from '@ai-sdk/provider'
-import { flushPromises } from './test-utils'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+  flushPromises,
+} from './test-utils'
 import { version } from '../package.json'
 
 // Mock PostHog
@@ -214,6 +221,37 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       'withTracing supports Vercel AI SDK v5 and v6 models only. Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.'
     )
   })
+
+  it.each(EVENT_OPTION_CASES)(
+    'sends posthogOptions for generate and stream calls on posthog-node $major (personless: $personless)',
+    async ({ major, personless }) => {
+      const client = asPostHogNodeMajor(mockPostHogClient, major)
+      const prompt = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What is 9 + 10?' }] }]
+      const options = { posthogDistinctId: personless ? undefined : 'test-user', posthogOptions: USER_EVENT_OPTIONS }
+      const generateModel = createMockV3Model('gpt-4')
+      const streamModel = createMockStreamingModel('v3', [
+        { type: 'text-delta', id: 'text-1', delta: '19' },
+        { type: 'finish', usage: v3TokenUsage(10, 2), finishReason: { unified: 'stop' as const, raw: undefined } },
+      ])
+
+      await withTracing(generateModel, client, options).doGenerate({ prompt })
+      const { stream } = await withTracing(streamModel, client, options).doStream({ prompt })
+      const reader = stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+      await flushPromises()
+
+      expect(generateModel.doGenerate).toHaveBeenCalledWith({ prompt })
+      expect(streamModel.doStream).toHaveBeenCalledWith({ prompt })
+      const events = capturedEvents(client)
+      expect(events).toHaveLength(2)
+      for (const event of events) {
+        expect(event.properties.$ai_model_parameters).not.toHaveProperty('posthogOptions')
+        expectUserEventOptions(event, major, personless)
+      }
+    }
+  )
 
   describe('V3 Model (AI SDK 6)', () => {
     it('should wrap a V3 model and track generation', async () => {

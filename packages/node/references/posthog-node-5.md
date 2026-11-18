@@ -1445,10 +1445,12 @@ omits globally inactive flags and therefore leaves those keys absent.
 
 **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
 first time each flag value is read for a user. Experiments use these events as exposures.
+When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
 The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
 `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
 it, so one snapshot can serve both experiment flags and flags that should send no events.
-`getFlagPayload()` never sends events.
+The option governs both events. `getFlagPayload()` never sends events.
 
 **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
 `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
@@ -2384,6 +2386,7 @@ and queries that filter on these values.
 Error values:
   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
   FLAG_MISSING: Requested flag not in API response
+  EVALUATION_FAILED: Requested flag's remote record has no evaluated value
   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
   QUOTA_LIMITED: Rate/quota limit exceeded
   TIMEOUT: Request timed out
@@ -2397,6 +2400,7 @@ Error values:
 | <a id="property-apierror"></a> `apiError()` | (`status`) => `string` |
 | <a id="property-connection_error"></a> `CONNECTION_ERROR` | `"connection_error"` |
 | <a id="property-errors_while_computing"></a> `ERRORS_WHILE_COMPUTING` | `"errors_while_computing_flags"` |
+| <a id="property-evaluation_failed"></a> `EVALUATION_FAILED` | `"evaluation_failed"` |
 | <a id="property-flag_missing"></a> `FLAG_MISSING` | `"flag_missing"` |
 | <a id="property-local_evaluation_inconclusive"></a> `LOCAL_EVALUATION_INCONCLUSIVE` | `"local_evaluation_inconclusive"` |
 | <a id="property-quota_limited"></a> `QUOTA_LIMITED` | `"quota_limited"` |
