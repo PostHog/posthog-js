@@ -27,14 +27,6 @@ export class SiteApps implements Extension {
         return !!this._instance.config.opt_in_site_apps && !this._instance.config.require_subresource_integrity
     }
 
-    private _logDisabled(): void {
-        logger.error(
-            this._instance.config.require_subresource_integrity
-                ? 'PostHog site apps are disabled because require_subresource_integrity is on: their code cannot be integrity-verified.'
-                : 'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
-        )
-    }
-
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
         if (!eventPayload) {
             return
@@ -52,9 +44,7 @@ export class SiteApps implements Extension {
 
     initialize() {
         if (this._instance.config.opt_in_site_apps && !this.isEnabled) {
-            logger.critical(
-                'opt_in_site_apps is ignored because require_subresource_integrity is on: site app code cannot be integrity-verified.'
-            )
+            logger.critical('opt_in_site_apps is ignored: require_subresource_integrity disables site apps')
         }
         if (this.isEnabled) {
             const stop = this._instance._addCaptureHook(this._eventCollector.bind(this))
@@ -392,7 +382,7 @@ export class SiteApps implements Extension {
     onRemoteConfig(result: RemoteConfigResult): void {
         if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
-                this._logDisabled()
+                logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
                 return
             }
 
@@ -420,7 +410,7 @@ export class SiteApps implements Extension {
         }
 
         if (!this.isEnabled) {
-            this._logDisabled()
+            logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
             return
         }
 

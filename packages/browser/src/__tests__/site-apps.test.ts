@@ -365,7 +365,6 @@ describe('SiteApps', () => {
             beforeEach(() => {
                 posthog.config.require_subresource_integrity = true
                 mockLogger.critical.mockClear()
-                mockLogger.error.mockClear()
             })
 
             it('does not run preloaded site apps even with opt_in_site_apps', () => {
@@ -379,10 +378,7 @@ describe('SiteApps', () => {
                 expect(posthog.on).not.toHaveBeenCalled()
                 expect(mockLogger.critical).toHaveBeenCalledTimes(1)
                 expect(mockLogger.critical).toHaveBeenCalledWith(
-                    expect.stringContaining('opt_in_site_apps is ignored because require_subresource_integrity is on')
-                )
-                expect(mockLogger.error).toHaveBeenCalledWith(
-                    expect.stringContaining('site apps are disabled because require_subresource_integrity is on')
+                    'opt_in_site_apps is ignored: require_subresource_integrity disables site apps'
                 )
             })
 
