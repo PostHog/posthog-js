@@ -530,6 +530,7 @@
         "_loadMessages",
         "_loadRemoteConfigJSON",
         "_loadRemoteConfigJs",
+        "_loadRequests",
         "_loadScript",
         "_loadTickets",
         "_loadTicketsAndReconcileView",
