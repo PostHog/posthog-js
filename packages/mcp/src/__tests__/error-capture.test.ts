@@ -260,6 +260,22 @@ describe('error capture on the tool-call path', () => {
       'Error',
       true,
     ],
+    [
+      'a call to a disabled tool',
+      () => server.registerTool!('retired', { description: 'retired' }, async () => ({ content: [] })).disable(),
+      'retired',
+      {},
+      'validation',
+      false,
+    ],
+    [
+      'a result the server built in the wrong shape',
+      () => server.tool!('malformed', 'malformed', {}, async () => ({ content: [{ type: 'bogus' }] }) as any),
+      'malformed',
+      {},
+      'McpError',
+      true,
+    ],
     ['tool throwing', () => {}, 'complete_todo', { id: 'nonexistent-id' }, 'Error', true],
   ])(
     'classifies %s, sending $exception only for server failures',
@@ -267,7 +283,10 @@ describe('error capture on the tool-call path', () => {
       register()
       instrument(server, fakePostHog())
 
-      await client.request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
+      // A malformed result is rejected on the client side too.
+      await client
+        .request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
+        .catch(() => undefined)
       await new Promise((r) => setTimeout(r, 50))
 
       const ofTool = (event: string) =>

@@ -447,6 +447,11 @@ function applyConversationInstructions(
   return updated
 }
 
+function stampClientError(event: McpEvent, error: unknown): void {
+  event.errorType = clientErrorType(error)
+  event.isClientError = event.errorType !== undefined
+}
+
 /**
  * @param result - what the caller receives, conversation handle included.
  * @param resultBeforeInstructions - the same result as the tool produced it.
@@ -479,7 +484,7 @@ function publishSuccessfulToolEvent(
       const resultError = resultBeforeInstructions ?? result
       event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
-      event.errorType = clientErrorType(capturedError ?? resultError)
+      stampClientError(event, capturedError ?? resultError)
     } else {
       event.isError = false
     }
@@ -506,7 +511,7 @@ function publishFailedToolEvent(
     event.isError = true
     event.error = captureException(error)
     event.errorStatus = httpStatus(error)
-    event.errorType = clientErrorType(error)
+    stampClientError(event, error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
@@ -594,7 +599,7 @@ function publishResourceEvent(
     if ('error' in outcome) {
       event.isError = true
       event.error = captureException(outcome.error)
-      event.errorType = clientErrorType(outcome.error)
+      stampClientError(event, outcome.error)
     } else {
       event.isError = false
       if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {

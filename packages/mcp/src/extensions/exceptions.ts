@@ -61,10 +61,11 @@ export function captureException(error: unknown, fallback?: unknown): CoreErrorT
 
 /** JSON-RPC codes a server uses to reject what the client sent: bad params, an unknown resource. */
 const CLIENT_ERROR_CODES = new Set([-32602, -32002])
-// Same code as the input rejections above, but the server's own result broke its schema.
-const OUTPUT_VALIDATION = /Output validation error/
-// The high-level SDK flattens an input rejection into an `isError` result before the tool runs.
-const FLATTENED_INPUT_VALIDATION = /^(MCP error -32602: )?(Input validation error|Invalid arguments for tool)/
+// Same code as the input rejections above, but the server's own result broke a schema.
+const SERVER_RESULT_REJECTED = /Output validation error|Invalid (tools\/call|task creation) result/
+// The high-level SDK flattens a rejected request into an `isError` result: SDK v1
+// prefixes the JSON-RPC code, SDK v2 keeps only the input-validation message.
+const FLATTENED_CLIENT_ERROR = /^(MCP error -32602: |Input validation error|Invalid arguments for tool)/
 
 /**
  * `validation` when the request was rejected for what the client sent, which is
@@ -72,15 +73,16 @@ const FLATTENED_INPUT_VALIDATION = /^(MCP error -32602: )?(Input validation erro
  * get no `$exception`.
  */
 export function clientErrorType(error: unknown): 'validation' | undefined {
-  const code = readField(error, 'code')
-  const message = readField(error, 'message')
-  if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
-    return typeof message === 'string' && OUTPUT_VALIDATION.test(message) ? undefined : 'validation'
+  const flattened = isCallToolResult(error)
+  const message = flattened ? extractCallToolResultMessage(error) : readField(error, 'message')
+  if (typeof message === 'string' && SERVER_RESULT_REJECTED.test(message)) {
+    return undefined
   }
-  if (isCallToolResult(error) && FLATTENED_INPUT_VALIDATION.test(extractCallToolResultMessage(error))) {
+  const code = readField(error, 'code')
+  if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
     return 'validation'
   }
-  return undefined
+  return flattened && FLATTENED_CLIENT_ERROR.test(message as string) ? 'validation' : undefined
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
