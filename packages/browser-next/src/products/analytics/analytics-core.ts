@@ -107,7 +107,7 @@ export class Analytics {
     private _driver: AnalyticsDriver | undefined
     private _isTearingDown = false
     private readonly _registeredProperties: RegisteredProperties
-    private readonly _sessionProperties: SessionRegisteredProperties
+    readonly _sessionProperties: SessionRegisteredProperties
     private readonly _rateLimiter: ClientRateLimiter
     private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
     private readonly _teardownCallbacks = new Set<() => void>()

@@ -13,8 +13,9 @@
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
 
-import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
-import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
+import type { IWindow, listenerHandler, RecordPlugin } from './rrweb-types'
+import type { CapturedNetworkRequest, Headers, InitiatorType } from '@posthog/types'
+import type { NetworkRecordOptions } from '../types/network-recording'
 import {
     isArray,
     isBoolean,
@@ -26,12 +27,12 @@ import {
     isUndefined,
     isObject,
 } from '@posthog/core'
-import { isDocument } from '@posthog/browser-common/utils/type-utils'
-import { createLogger } from '@posthog/browser-common/utils/logger'
-import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
-import { patch } from '../rrweb-plugins/patch'
-import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './config'
+import { isDocument } from '../utils/type-utils'
+import { createLogger } from '../utils/logger'
+import { formDataToQuery } from '../utils/request-utils'
+import { patch } from '../utils/patch'
+import { isHostOnDenyList } from './denylist'
+import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './network-config'
 
 const logger = createLogger('[Recorder]')
 
@@ -56,7 +57,7 @@ type ObservedPerformanceEntry = (PerformanceNavigationTiming | PerformanceResour
 export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): T | undefined {
     const length = array.length
     for (let i = length - 1; i >= 0; i -= 1) {
-        if (predicate(array[i])) {
+        if (predicate(array[i]!)) {
             return array[i]
         }
     }
@@ -506,8 +507,8 @@ function prepareRequest(
         status: number | undefined
         networkRequest: Partial<CapturedNetworkRequest>
         isInitial?: boolean
-        start?: number
-        end?: number
+        start?: number | undefined
+        end?: number | undefined
         // if there is no performance observer entry, we still need to know the url
         url?: string
         // if there is no performance observer entry, we can provide the initiatorType

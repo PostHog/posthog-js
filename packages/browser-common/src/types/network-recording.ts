@@ -3,13 +3,13 @@ import type { CapturedNetworkRequest, InitiatorType } from '@posthog/types'
 export type NetworkRecordOptions = {
     initiatorTypes?: InitiatorType[]
     maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
-    recordHeaders?: boolean | { request: boolean; response: boolean }
-    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
-    recordInitialRequests?: boolean
+    recordHeaders?: boolean | { request: boolean; response: boolean } | undefined
+    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] } | undefined
+    recordInitialRequests?: boolean | undefined
     /**
      * whether to record PerformanceEntry events for network requests
      */
-    recordPerformance?: boolean
+    recordPerformance?: boolean | undefined
     /**
      * the PerformanceObserver will only observe these entry types
      */

@@ -36,6 +36,7 @@ export function parseSnippetOptions(scriptUrl: string): PostHogOptions {
         'errorTracking',
         'toolbar',
         'conversations',
+        'sessionRecording',
     ] as const) {
         if (!query.has(key)) continue
         if (query.get(key) !== 'false') throw new Error('Invalid disable option')

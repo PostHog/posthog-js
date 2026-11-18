@@ -1,4 +1,4 @@
-import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import type { recordOptions, rrwebRecord as rrwebRecordType } from '@posthog/browser-common/replay/rrweb'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
 export { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
 import type { SnapshotCost } from '@posthog/rrweb-record'
@@ -6,12 +6,11 @@ import {
     type customEvent,
     EventType,
     eventWithTime,
-    type fullSnapshotEvent,
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
-} from '../types/rrweb-types'
-import { buildNetworkRequestOptions } from './config'
+} from '@posthog/browser-common/replay/rrweb-types'
+import { buildNetworkRequestOptions } from '@posthog/browser-common/replay/network-config'
 import {
     ACTIVE,
     BUFFERING,
@@ -23,23 +22,39 @@ import {
     SessionRecordingStatus,
     TriggerType,
     URLTriggerMatching,
-} from './triggerMatching'
+} from '@posthog/browser-common/replay/trigger-matching'
 import {
-    circularReferenceReplacer,
-    estimateCompressedEventSize,
     estimateSize,
     getReplayPendingBufferKey,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    type SnapshotBuffer,
     splitBuffer,
     truncateLargeConsoleLogs,
     UNSTRINGIFIABLE_EVENT_SIZE,
-} from './sessionrecording-utils'
-export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
-import { gzipSync, strFromU8, strToU8 } from 'fflate'
+} from '@posthog/browser-common/replay/sessionrecording-utils'
+export { SEVEN_MEGABYTES, splitBuffer } from '@posthog/browser-common/replay/sessionrecording-utils'
+import { strFromU8 } from 'fflate'
+import {
+    buildCompressedFullSnapshotEvent,
+    buildCompressedIncrementalEvent,
+    compressedResult,
+    compressEventSync,
+    serializeForCompression,
+    shouldCompressEvent,
+    type CompressedEventResult,
+    type compressedEventWithTime,
+} from '@posthog/browser-common/replay/event-compression'
+export type {
+    compressedEvent,
+    compressedEventWithTime,
+    compressedFullSnapshotEvent,
+    compressedIncrementalSnapshotEvent,
+    compressedIncrementalStyleSnapshotEvent,
+} from '@posthog/browser-common/replay/event-compression'
 import { window, document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { MutationThrottler } from './mutation-throttler'
+import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
@@ -94,7 +109,7 @@ import {
     V2TriggerGroupStrategy,
     RecordingStrategyContext,
     decodeSamplingDecision,
-} from './recording-strategies'
+} from '@posthog/browser-common/replay/recording-strategies'
 import { MASKED, PERSONAL_DATA_URL_PARAMS } from '@posthog/browser-common/utils/event-utils'
 import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
@@ -174,13 +189,7 @@ interface SessionIdlePayload {
     windowId?: string
 }
 
-export interface SnapshotBuffer {
-    size: number
-    data: any[]
-    sizes: number[]
-    sessionId: string
-    windowId: string
-}
+export type { SnapshotBuffer }
 
 const ACTIVE_SOURCES: IncrementalSource[] = [
     IncrementalSource.MouseMove,
@@ -207,72 +216,6 @@ function getRRWebRecord(): rrwebRecordType | undefined {
     return getRRWeb()?.record
 }
 
-export type compressedFullSnapshotEvent = {
-    type: typeof EventType.FullSnapshot
-    data: string
-}
-
-export type compressedIncrementalSnapshotEvent = {
-    type: typeof EventType.IncrementalSnapshot
-    data: {
-        source: IncrementalSource
-        texts: string
-        attributes: string
-        removes: string
-        adds: string
-    }
-}
-
-export type compressedIncrementalStyleSnapshotEvent = {
-    type: typeof EventType.IncrementalSnapshot
-    data: {
-        source: typeof IncrementalSource.StyleSheetRule
-        id?: number
-        styleId?: number
-        replace?: string
-        replaceSync?: string
-        adds?: string
-        removes?: string
-    }
-}
-
-export type compressedEvent =
-    | compressedIncrementalStyleSnapshotEvent
-    | compressedFullSnapshotEvent
-    | compressedIncrementalSnapshotEvent
-export type compressedEventWithTime = compressedEvent & {
-    timestamp: number
-    delay?: number
-    // marker for compression version
-    cv: '2024-10'
-}
-
-function gzipStringToString(serializedData: string): string {
-    return strFromU8(gzipSync(strToU8(serializedData)), true)
-}
-
-function serializeForCompression(data: unknown): string {
-    try {
-        // fast path: plain native stringify, since a replacer callback is expensive on
-        // large snapshots and circular event data is rare
-        return JSON.stringify(data)
-    } catch (e) {
-        // data past the engine's maximum string length is not something the replacer can
-        // shorten, and the retry would build the string up to that limit all over again
-        // before failing the same way - on unload that stall is paid before the final flush
-        if (e instanceof RangeError) {
-            throw e
-        }
-        // circular event data (e.g. a leaked instance graph) degrades gracefully to
-        // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
-        return JSON.stringify(data, circularReferenceReplacer())
-    }
-}
-
-function gzipToString(data: unknown): string {
-    return gzipStringToString(serializeForCompression(data))
-}
-
 async function gzipToStringAsync(data: unknown): Promise<string> {
     const serializedData = serializeForCompression(data)
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
@@ -283,14 +226,6 @@ let _gzippedEmptyArray: string | undefined
 let _gzippedEmptyArrayPromise: Promise<string> | undefined
 const _isNativeAsyncSessionRecordingGzipSupported = typeof globalThis !== 'undefined' && isGzipSupported()
 let _nativeAsyncSessionRecordingGzipDisabled = false
-
-function gzipField(data: unknown): string {
-    if (isArray(data) && data.length === 0) {
-        _gzippedEmptyArray = _gzippedEmptyArray ?? gzipToString([])
-        return _gzippedEmptyArray
-    }
-    return gzipToString(data)
-}
 
 async function gzipFieldAsync(data: unknown): Promise<string> {
     if (isArray(data) && data.length === 0) {
@@ -314,99 +249,12 @@ async function gzipFieldAsync(data: unknown): Promise<string> {
     return gzipToStringAsync(data)
 }
 
-function shouldCompressEvent(event: eventWithTime): boolean {
-    return (
-        event.type === EventType.FullSnapshot ||
-        (event.type === EventType.IncrementalSnapshot &&
-            (event.data.source === IncrementalSource.Mutation ||
-                event.data.source === IncrementalSource.StyleSheetRule))
-    )
-}
-
 function shouldUseNativeAsyncSessionRecordingGzip(event: eventWithTime): boolean {
     return (
         _isNativeAsyncSessionRecordingGzipSupported &&
         !_nativeAsyncSessionRecordingGzipDisabled &&
         shouldCompressEvent(event)
     )
-}
-
-type CompressedEventResult = { event: eventWithTime | compressedEventWithTime; size: number }
-
-type CompressedMutationFields = Pick<
-    compressedIncrementalSnapshotEvent['data'],
-    'texts' | 'attributes' | 'removes' | 'adds'
->
-type CompressedStyleFields = Pick<compressedIncrementalStyleSnapshotEvent['data'], 'adds' | 'removes'>
-
-function compressedResult(event: compressedEventWithTime): CompressedEventResult {
-    return { event, size: estimateCompressedEventSize(event) }
-}
-
-function buildCompressedFullSnapshotEvent(
-    event: fullSnapshotEvent & { timestamp: number; delay?: number },
-    data: string
-): compressedEventWithTime {
-    return {
-        ...event,
-        data,
-        cv: '2024-10',
-    }
-}
-
-function buildCompressedIncrementalEvent(
-    event: eventWithTime,
-    fields: CompressedMutationFields | CompressedStyleFields
-): compressedEventWithTime {
-    // reshapes rrweb incremental `data` into its compressed string-field variant — the
-    // compiler cannot relate the incoming union member to the matching compressed member
-    // oxlint-disable-next-line typescript/consistent-type-assertions
-    return {
-        ...event,
-        cv: '2024-10' as const,
-        data: {
-            ...(event.data as Record<string, unknown>),
-            ...fields,
-        },
-    } as compressedEventWithTime
-}
-
-/**
- * rrweb's packer takes an event and returns a string or the reverse on `unpack`.
- * but we want to be able to inspect metadata during ingestion.
- * and don't want to compress the entire event,
- * so we have a custom packer that only compresses part of some events
- *
- * returns the compressed event and its estimated JSON size,
- * avoiding a redundant JSON.stringify for size estimation
- */
-function compressEventSync(event: eventWithTime): CompressedEventResult {
-    try {
-        if (event.type === EventType.FullSnapshot) {
-            return compressedResult(buildCompressedFullSnapshotEvent(event, gzipToString(event.data)))
-        }
-        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
-            return compressedResult(
-                buildCompressedIncrementalEvent(event, {
-                    texts: gzipField(event.data.texts),
-                    attributes: gzipField(event.data.attributes),
-                    removes: gzipField(event.data.removes),
-                    adds: gzipField(event.data.adds),
-                })
-            )
-        }
-        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
-            return compressedResult(
-                buildCompressedIncrementalEvent(event, {
-                    adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
-                    removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
-                })
-            )
-        }
-    } catch (e) {
-        logger.warn('could not compress event - will use uncompressed event', e)
-    }
-    return { event, size: estimateSize(event) }
 }
 
 async function compressEventAsync(event: eventWithTime): Promise<CompressedEventResult> {

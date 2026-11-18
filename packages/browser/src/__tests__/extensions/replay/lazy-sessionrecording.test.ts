@@ -26,7 +26,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
+} from '@posthog/browser-common/replay/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
     CapturedNetworkRequest,
@@ -54,7 +54,7 @@ import {
     IncrementalSource,
     type metaEvent,
     type pluginEvent,
-} from '../../../extensions/replay/types/rrweb-types'
+} from '@posthog/browser-common/replay/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import type { Mock } from 'vitest'

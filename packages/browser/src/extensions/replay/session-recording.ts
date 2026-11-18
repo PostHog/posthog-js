@@ -28,7 +28,7 @@ import {
     SessionRecordingOptions,
     SessionStartReason,
 } from '../../types'
-import { type eventWithTime } from './types/rrweb-types'
+import type { eventWithTime } from '@posthog/browser-common/replay/rrweb-types'
 
 import { isNullish, isNumber, isString, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -40,9 +40,8 @@ import {
     DISABLED,
     LAZY_LOADING,
     MISSING_CONFIG,
-    SessionRecordingStatus,
-    TriggerType,
-} from './external/triggerMatching'
+} from '@posthog/browser-common/replay/replay-constants'
+import type { SessionRecordingStatus, TriggerType } from '@posthog/browser-common/replay/trigger-matching'
 import type { Extension } from '../types'
 import { sessionStore } from '../../storage'
 import { getReplayPendingBufferKey } from './external/sessionrecording-utils'

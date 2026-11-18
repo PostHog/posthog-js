@@ -29,8 +29,6 @@ export { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '@pos
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
 export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
-export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
-export const RECORDING_REMOTE_CONFIG_TTL_MS = 1000 * 60 * 60
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 // @deprecated can be removed along with eager loaded replay
@@ -42,24 +40,10 @@ export const SESSION_RECORDING_MASKING = '$session_recording_masking'
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_CANVAS_RECORDING = '$session_recording_canvas_recording'
 // @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
-// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_SCRIPT_CONFIG = '$replay_script_config'
-export const SESSION_RECORDING_OVERRIDE_SAMPLING = '$replay_override_sampling'
-export const SESSION_RECORDING_OVERRIDE_LINKED_FLAG = '$replay_override_linked_flag'
-export const SESSION_RECORDING_OVERRIDE_URL_TRIGGER = '$replay_override_url_trigger'
-export const SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER = '$replay_override_event_trigger'
 export const SESSION_ID = '$sesid'
-export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
-export const SESSION_RECORDING_PAST_MINIMUM_DURATION = '$session_past_minimum_duration'
-export const SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION = '$session_recording_url_trigger_activated_session'
-export const SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION = '$session_recording_event_trigger_activated_session'
-// V2 Trigger Groups: Per-group persistence key prefixes (suffix with group ID)
-export const SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX = '$posthog_sr_group_event_trigger_'
-export const SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX = '$posthog_sr_group_url_trigger_'
-export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_group_sampling_'
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
 export const GROUPS = '$groups'
@@ -95,18 +79,34 @@ export const SDK_DEBUG_EXTENSIONS_INIT_METHOD = '$sdk_debug_extensions_init_meth
 export const SDK_DEBUG_EXTENSIONS_INIT_TIME_MS = '$sdk_debug_extensions_init_time_ms'
 export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
 export const SDK_DEBUG_REPLAY_STALE_CONFIG = '$sdk_debug_replay_stale_config'
-export const SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS = '$sdk_debug_replay_event_trigger_status'
-export const SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS = '$sdk_debug_replay_linked_flag_trigger_status'
-export const SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS = '$sdk_debug_replay_matched_recording_trigger_groups'
-export const SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS = '$sdk_debug_replay_pending_trigger_conditions'
-export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_replay_remote_trigger_matching_config'
-export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
-export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'
 export const SDK_DEBUG_REPLAY_RRWEB_ATTACHED = '$sdk_debug_rrweb_attached'
 export const SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED = '$sdk_debug_rrweb_start_attempted'
-export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+export {
+    SESSION_RECORDING_REMOTE_CONFIG,
+    RECORDING_REMOTE_CONFIG_TTL_MS,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+    SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
+    SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+    SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_PAST_MINIMUM_DURATION,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
+    SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
+    SESSION_RECORDING_START_REASON,
+} from '@posthog/browser-common/replay/replay-constants'
 export {
     SURVEYS,
     SURVEYS_ACTIVATED,

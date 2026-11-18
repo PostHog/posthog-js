@@ -36,6 +36,9 @@
             "pubsub": [
                 "dist/pubsub.d.ts"
             ],
+            "replay/*": [
+                "dist/replay/*.d.ts"
+            ],
             "utils/*": [
                 "dist/utils/*.d.ts"
             ],
@@ -146,6 +149,11 @@
             "types": "./dist/pubsub.d.ts",
             "require": "./dist/pubsub.js",
             "import": "./dist/pubsub.mjs"
+        },
+        "./replay/*": {
+            "types": "./dist/replay/*.d.ts",
+            "require": "./dist/replay/*.js",
+            "import": "./dist/replay/*.mjs"
         },
         "./utils/*": {
             "types": "./dist/utils/*.d.ts",
@@ -292,6 +300,7 @@
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
         "dompurify": "^3.4.18",
+        "fflate": "^0.4.8",
         "preact": "^10.29.3"
     },
     "devDependencies": {

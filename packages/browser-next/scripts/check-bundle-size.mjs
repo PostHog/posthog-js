@@ -12,12 +12,10 @@ const COMPLIANT_BASELINE_PENDING = 'Set binding budgets after P0 compliance and 
 const forbiddenInputs = [
     /(^|\/)packages\/browser\/(src|dist)\//,
     /(^|\/)\.\.\/browser\/(src|dist)\//,
-    /(^|\/)packages\/rrweb\//,
-    /(^|\/)\.\.\/rrweb\//,
-    /(^|\/)node_modules\/(posthog-js|core-js|fflate|rrweb)\//,
+    /(^|\/)node_modules\/(posthog-js|core-js)\//,
 ]
 // Third-party libraries that only lazily loaded chunks may contain, never an initial graph.
-const lazyLibraryInputs = [/(^|\/)node_modules\/web-vitals\//]
+const lazyLibraryInputs = [/(^|\/)node_modules\/(web-vitals|fflate|rrweb)\//, /(^|\/)(packages\/rrweb|\.\.\/rrweb)\//]
 // Heavy dependencies that only optional product chunks may load.
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
@@ -35,6 +33,8 @@ const errorTrackingInput = /(^|\/)(products\/error-tracking\/[^/]+|error-trackin
 const toolbarInput = /(^|\/)(products\/toolbar\/(toolbar|toolbar-extension)|dist\/toolbar)\.(m?js|ts)$/
 const conversationsInput =
     /(^|\/)(products\/conversations\/(conversations|conversations-extension)\.(m?js|ts)|dist\/conversations(-renderer)?[/.])/
+const sessionRecordingInput =
+    /(^|\/)(products\/session-recording\/(session-recording|recorder|snapshot-delivery|replay-trigger-host)|dist\/replay\/[^/]+)\.(m?js|ts)$/
 const productInputs = [
     flagsInput,
     autocaptureInput,
@@ -45,6 +45,7 @@ const productInputs = [
     errorTrackingInput,
     toolbarInput,
     conversationsInput,
+    sessionRecordingInput,
 ]
 
 // Client modules selected by entrypoint or explicit import.
@@ -245,6 +246,7 @@ const measureRoot = async () => {
         /\/products\/error-tracking\/error-tracking\.mjs$/,
         /\/products\/toolbar\/toolbar-extension\.mjs$/,
         /\/products\/conversations\/conversations-extension\.mjs$/,
+        /\/products\/session-recording\/session-recording\.mjs$/,
     ]) {
         assert(
             loaded.some((entryPoint) => product.test(entryPoint)),
@@ -299,6 +301,7 @@ await measureSplit('root tracing headers', 'fixtures/root-tracing-headers.ts', {
 await measureSplit('static error tracking', 'fixtures/static-error-tracking.ts', { initialProducts: true })
 await measureSplit('root error tracking', 'fixtures/dynamic-error-tracking.ts', { surveys: true })
 await measureSplit('static toolbar', 'fixtures/static-toolbar.ts', { initialProducts: true })
+await measureSplit('static session recording', 'fixtures/static-session-recording.ts', { initialProducts: true })
 await measureSplit('static conversations', 'fixtures/static-conversations.ts', { initialProducts: true, surveys: true })
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.

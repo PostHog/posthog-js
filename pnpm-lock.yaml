@@ -529,6 +529,9 @@ importers:
       dompurify:
         specifier: ^3.4.18
         version: 3.4.18
+      fflate:
+        specifier: ^0.4.8
+        version: 0.4.8
       preact:
         specifier: ^10.29.3
         version: 10.29.3
@@ -569,6 +572,12 @@ importers:
       '@posthog/browser-common':
         specifier: workspace:^
         version: link:../browser-common
+      '@posthog/rrweb-plugin-console-record':
+        specifier: workspace:*
+        version: link:../rrweb/plugins/rrweb-plugin-console-record
+      '@posthog/rrweb-record':
+        specifier: workspace:*
+        version: link:../rrweb/record
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
