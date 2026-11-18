@@ -1082,12 +1082,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const featureFlag = details?.flags[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
     const sendEventRequested = options.sendEvent ?? this.sendFeatureFlagEvent
-    // Callers such as the React Native hooks do not read the flag again after opt in, so optIn() reports this read.
-    if (sendEventRequested && this.optedOut) {
+    if (sendEventRequested && !this._isInitialized) {
+      // Before storage loads neither the stored flags nor the opt-out state are known, so report
+      // this read once they are rather than reporting the empty value read now.
+      this.wrap(() => this._getFeatureFlagResult(key, { sendEvent: true }))
+    } else if (sendEventRequested && this.optedOut) {
+      // Callers such as the React Native hooks do not read the flag again after opt in, so optIn() reports this read.
       this.flagCallsPendingOptIn.add(key)
     }
     // An opted-out client drops the event, so marking the flag as reported would suppress the exposure after opt in.
-    const sendEvent = sendEventRequested && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
+    const sendEvent =
+      sendEventRequested && this._isInitialized && !this.optedOut && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []
