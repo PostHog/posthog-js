@@ -19,6 +19,18 @@ import {
     assertCssReconstruction,
     assertPersistedConfigProof,
 } from './product-cases.mjs'
+import {
+    exerciseExceptions,
+    assertExceptionDelivery,
+    toolbarPath,
+    exerciseToolbar,
+    assertToolbarHandoff,
+    conversationsLauncher,
+    exerciseConversations,
+    assertConversationDelivery,
+    expectedPageErrors,
+    expectedRejections,
+} from './extension-cases.mjs'
 import { createCompatibilityContext } from './network.mjs'
 import { directory as lab, repository, verifyInputs, digest, coreSource } from './prepare.mjs'
 import { MATRIX, buildGoldens, compareGoldens, updateGoldens } from './golden.mjs'
@@ -125,7 +137,8 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     })
     const interactionCase = interactionScenarios.includes(scenario)
     const replayLifecycleCase = replayLifecycleScenarios.includes(scenario)
-    const controlledClock = interactionCase || replayLifecycleCase
+    // Conversations polls on timers, so its request count follows the controlled clock.
+    const controlledClock = interactionCase || replayLifecycleCase || scenario === 'conversations'
     if (replayLifecycleCase) await page.addInitScript(trackReplayCompression)
     if (controlledClock) {
         await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
@@ -171,7 +184,9 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 },
                 { origin: server.origin, config: legacyRecordingConfig }
             )
-        await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
+        await page.goto(server.origin + (scenario === 'toolbar' ? toolbarPath() : ''), {
+            waitUntil: 'domcontentloaded',
+        })
         if (['npm', 'slim'].includes(mode)) await waitFor(() => window.__compat?.installed)
         await page.evaluate(
             ({ scenario, mode, comparison }) => {
@@ -300,6 +315,8 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                 .toBe(true)
             await page.waitForFunction(() => window.__compat.surveyNotifications >= 3)
         }
+        // The widget captures its own load events; let them finish before the ready probe.
+        if (scenario === 'conversations') await expect(page.locator(conversationsLauncher)).toBeVisible()
         await page.evaluate(() => window.__compat.readyProbe())
         if (scenario.startsWith('xhr-timeout')) {
             await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
@@ -478,6 +495,9 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             }
             await player.close()
         }
+        if (scenario === 'exceptions') await exerciseExceptions({ page, received, expect })
+        if (scenario === 'toolbar') ui.toolbar = await exerciseToolbar({ page })
+        if (scenario === 'conversations') ui = await exerciseConversations({ page, received, expect })
         if (interactionCase)
             ui = await exerciseInteractions({ scenario, page, received, expect, origin: server.origin, comparison })
         await waitFor(() => window.__compat.promises.every((promise) => promise.state !== 'pending'))
@@ -533,6 +553,9 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         }
         if (scenario === 'replay') assertReplayNetworkCapture(network, server.inspect(), server.origin)
         if (scenario === 'web-vitals') assertWebVitalsDelivery(network)
+        if (scenario === 'exceptions') assertExceptionDelivery(network)
+        if (scenario === 'toolbar') assertToolbarHandoff(ui.toolbar, network)
+        if (scenario === 'conversations') assertConversationDelivery(ui, network)
         if (['surveys', 'surveys-auto'].includes(scenario)) {
             const sent = network.events.filter((event) => event.event === 'survey sent')
             assert(sent.length === 1, 'Missing or duplicate survey submission')
@@ -544,8 +567,12 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         }
         assert(!network.events.some((e) => e.event === 'compat-must-not-deliver'), 'Opted-out event reached the server')
         assert(unexpectedNetwork.length === 0, `Unexpected network: ${unexpectedNetwork}`)
-        assert(pageErrors.length === 0, `Page errors: ${JSON.stringify(pageErrors)}`)
-        assert(api.unhandled.length === 0, `Unhandled rejections: ${JSON.stringify(api.unhandled)}`)
+        const unexpectedPageErrors = pageErrors.filter((error) => !expectedPageErrors(scenario).includes(error.message))
+        assert(unexpectedPageErrors.length === 0, `Page errors: ${JSON.stringify(unexpectedPageErrors)}`)
+        const unexpectedRejections = api.unhandled.filter(
+            (rejection) => !expectedRejections(scenario).includes(rejection.message)
+        )
+        assert(unexpectedRejections.length === 0, `Unhandled rejections: ${JSON.stringify(unexpectedRejections)}`)
         assert(network.errors.length === 0, `Mock errors: ${JSON.stringify(network.errors)}`)
         for (const phase of ['before-init', 'loaded', 'init-return', 'pending', 'ready'])
             assert(
@@ -584,14 +611,15 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         write(join(folder, 'raw.json'), raw)
         const normalized = normalize(
             {
-                api,
+                // Raw evidence keeps the fixture's deliberate failures; snapshots retain only SDK behavior.
+                api: { ...api, unhandled: unexpectedRejections },
                 network,
                 ui,
                 replay,
                 loading,
                 ...(loaderCoverage ? { loaderCoverage } : {}),
                 ...(transport ? { transport } : {}),
-                pageErrors,
+                pageErrors: unexpectedPageErrors,
                 unexpectedNetwork,
             },
             { origin: server.origin, version: core.version, extensionVersion: extensions.version }

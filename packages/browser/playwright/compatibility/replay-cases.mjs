@@ -2,7 +2,24 @@ import assert from 'node:assert/strict'
 import { decodeReplay } from './normalize.mjs'
 import { settleReplayCompression } from './replay-compression.mjs'
 
-export const replayLifecycleScenarios = ['replay-idle', 'replay-rotation', 'replay-bounce', 'replay-minimum-duration']
+export const replayLifecycleScenarios = [
+    'replay-idle',
+    'replay-rotation',
+    'replay-bounce',
+    'replay-minimum-duration',
+    'replay-event-trigger',
+    'replay-url-trigger',
+    'replay-linked-flag',
+]
+// Start conditions the lazy recorder evaluates from the core's persisted remote config.
+export const replayTriggerConfig = {
+    'replay-event-trigger': { sampleRate: '0', eventTriggers: ['compat-replay-trigger'], triggerMatchType: 'any' },
+    'replay-url-trigger': {
+        urlTriggers: [{ url: 'compat-url-trigger', matching: 'regex' }],
+        urlBlocklist: [{ url: 'compat-url-blocked', matching: 'regex' }],
+    },
+    'replay-linked-flag': { linkedFlag: { flag: 'compat-variant', variant: 'blue' } },
+}
 export const replayMinimumDurationMs = 5000
 const idleThresholdMs = 5 * 60 * 1000
 const sessionTimeoutMs = 30 * 60 * 1000
@@ -44,6 +61,16 @@ export function assertReplayLifecycleProof(scenario, network, replay) {
         assert.equal(replay.beforeUnloadSnapshots, 0, 'Passive visit uploaded replay before clean unload')
         assert.equal(replay.navigated, true, 'Bounce did not use real navigation')
     }
+    if (['replay-event-trigger', 'replay-url-trigger'].includes(scenario)) {
+        assert.equal(replay.beforeTriggerSnapshots, 0, 'Replay uploaded before its trigger matched')
+        assert(serialized.includes('After trigger'), 'Replay lost activity after its trigger matched')
+    }
+    if (scenario === 'replay-url-trigger') {
+        assert.equal(replay.blockedMutationSuppressed, true, 'Replay uploaded activity on a blocked URL')
+        assert(serialized.includes('After blocked URL'), 'Replay did not resume after leaving a blocked URL')
+    }
+    if (scenario === 'replay-linked-flag')
+        assert(serialized.includes('Flag enabled'), 'Linked-flag replay lost activity')
     if (scenario === 'replay-minimum-duration') {
         assert.equal(replay.belowMinimumSnapshots, 0, 'Replay uploaded below the configured minimum duration')
         assert.equal(replay.rebuiltText, 'Qualified visit', 'Minimum-duration replay lost its content')
@@ -134,6 +161,41 @@ export async function exerciseReplayLifecycle({ scenario, page, received, expect
         await page.goto(origin + '/after')
         replay.navigated = new URL(page.url()).pathname === '/after'
         await waitForSnapshots()
+    } else if (replayTriggerConfig[scenario]) {
+        const status = () => page.evaluate(() => window.__compat.ph.sessionRecording?.status)
+        const navigate = (query) => page.evaluate((query) => history.pushState(history.state, '', `/?${query}`), query)
+        const snapshotText = async () => JSON.stringify(eventsFor(await received()))
+        // The recorder treats sessions without user input as idle, so pair each change with a click.
+        const activity = async (text) => {
+            await mutate(text)
+            await interact()
+        }
+        if (scenario !== 'replay-linked-flag') {
+            await activity('Before trigger')
+            await advance(3000)
+            replay.statusBeforeTrigger = await status()
+            replay.beforeTriggerSnapshots = (await received()).snapshots.length
+            assert.equal(replay.beforeTriggerSnapshots, 0, 'Replay uploaded before its trigger matched')
+            if (scenario === 'replay-event-trigger') await marker('trigger')
+            else await navigate('compat-url-trigger')
+            await activity('After trigger')
+        } else await activity('Flag enabled')
+        await advance(3000)
+        replay.statusAfterStart = await status()
+        await waitForSnapshots()
+        if (scenario === 'replay-url-trigger') {
+            await navigate('compat-url-blocked')
+            await activity('On blocked URL')
+            await advance(3000)
+            replay.statusWhileBlocked = await status()
+            replay.blockedMutationSuppressed = !(await snapshotText()).includes('On blocked URL')
+            await navigate('compat-url-trigger')
+            await activity('After blocked URL')
+            await advance(3000)
+            replay.statusAfterBlocked = await status()
+            await expect.poll(async () => (await snapshotText()).includes('After blocked URL')).toBe(true)
+        }
+        await page.evaluate(() => window.__compat.call('stopSessionRecording'))
     } else if (scenario === 'replay-minimum-duration') {
         await interact()
         await advance(2000)

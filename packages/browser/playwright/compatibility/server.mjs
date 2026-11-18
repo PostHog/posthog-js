@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock-server'
 import { interactionScenarios } from './interaction-cases.mjs'
-import { replayMinimumDurationMs } from './replay-cases.mjs'
+import { replayMinimumDurationMs, replayTriggerConfig } from './replay-cases.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
+import { toolbarScript, conversationsConfig, conversationsResponse } from './extension-cases.mjs'
 
 export const survey = {
     id: 'compat-survey',
@@ -18,7 +20,7 @@ export const survey = {
 export function observations(server) {
     const { events, snapshots, logs, requests, blockedRequests, errors } = server.inspect()
     const ignored =
-        /^\/(?:$|after$|player$|favicon\.ico$|harness\.js$|snippet\.js$|consumer\.js$|player\.js$|__compat\/)/
+        /^\/(?:$|after$|player$|favicon\.ico$|harness\.js$|snippet\.js$|consumer\.js$|player\.js$|errors\.js$|__compat\/)/
     return {
         events,
         snapshots,
@@ -77,12 +79,18 @@ export function compatibilityServer(settings) {
                         : false,
                 captureDeadClicks: settings.scenario === 'dead-clicks',
                 heatmaps: settings.scenario === 'heatmaps',
-                errorTracking: { autocaptureExceptions: false },
+                errorTracking: { autocaptureExceptions: settings.scenario === 'exceptions' },
                 analytics: { endpoint: '/e/' },
                 surveys: surveysEnabled ? [survey] : false,
+                ...(settings.scenario === 'conversations' ? { conversations: conversationsConfig } : {}),
                 logs: { captureConsoleLogs: settings.scenario === 'logs' },
                 sessionRecording: settings.scenario.startsWith('replay')
-                    ? { endpoint: '/s/', consoleLogRecordingEnabled: false, recordCanvas: false }
+                    ? {
+                          endpoint: '/s/',
+                          consoleLogRecordingEnabled: false,
+                          recordCanvas: false,
+                          ...replayTriggerConfig[settings.scenario],
+                      }
                     : false,
             },
         },
@@ -113,6 +121,8 @@ export function compatibilityServer(settings) {
                 xhrFault.attempts++
                 if (xhrFault.mode === 'exhaust' || xhrFault.attempts === 1) await context.waitForBarrier('xhr-timeout')
             }
+            const conversation = settings.scenario === 'conversations' && conversationsResponse(request)
+            if (conversation) return conversation
             const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
             if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)
                 return { body: networkSample.responseBody, headers: replayNetworkHeaders.response }
@@ -132,7 +142,14 @@ export function compatibilityServer(settings) {
                 )
                 if (
                     path === '/' &&
-                    ['replay-idle', 'replay-rotation', 'replay-minimum-duration'].includes(settings.scenario)
+                    [
+                        'replay-idle',
+                        'replay-rotation',
+                        'replay-minimum-duration',
+                        'replay-event-trigger',
+                        'replay-url-trigger',
+                        'replay-linked-flag',
+                    ].includes(settings.scenario)
                 ) {
                     body = body.replace(
                         '</head>',
@@ -142,6 +159,7 @@ export function compatibilityServer(settings) {
                         '<script>document.getElementById("action").addEventListener("mousedown", (event) => event.preventDefault())</script>'
                 }
                 if (path === '/') {
+                    if (settings.scenario === 'exceptions') body += '<script src="/errors.js"></script>'
                     body += '<script src="/harness.js"></script>'
                     if (settings.mode !== 'loader')
                         body += `<script src="/${settings.mode === 'snippet' ? 'snippet' : 'consumer'}.js"></script>`
@@ -154,9 +172,14 @@ export function compatibilityServer(settings) {
                 '/snippet.js': settings.snippet,
                 '/consumer.js': settings.fixture,
                 '/player.js': settings.player,
+                '/errors.js': fileURLToPath(new URL('./fixtures/errors.js', import.meta.url)),
             }
             if (fixed[path]) return { body: readFileSync(fixed[path]), headers: { 'Content-Type': 'text/javascript' } }
             if (path === '/favicon.ico') return { status: 204, body: '', headers: { 'Content-Type': 'image/x-icon' } }
+            if (settings.scenario === 'toolbar' && path === '/static/toolbar.js') {
+                await context.waitForBarrier('extensions')
+                return { body: toolbarScript, headers: { 'Content-Type': 'text/javascript' } }
+            }
             if (path.startsWith('/static/')) {
                 const parts = path.split('/'),
                     filename = parts.at(-1)
