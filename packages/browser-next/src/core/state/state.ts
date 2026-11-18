@@ -474,7 +474,26 @@ export class BrowserState {
     }
 
     get session(): SessionContext | undefined {
-        const session = this._state.session
+        return this._sessionContext(this._state.session)
+    }
+
+    /**
+     * The persisted session for read-only consumers, including one adopted from another tab, without extending
+     * or rotating it. `undefined` when none exists or a reset is pending. Assigns this tab's window ID, as capture
+     * would, when the tab has none.
+     */
+    peekSession(): SessionContext | undefined {
+        const { session } = this._readSessionAuthority()
+        if (this._pendingSessionReason || !session) return undefined
+        if (!this._windowId) {
+            const window = this._prepareWindow(false)
+            this._initializeWindowStorage(window.storage, window.storageResolved)
+            this._setWindowId(window.windowId)
+        }
+        return this._sessionContext(session)
+    }
+
+    private _sessionContext(session: PersistedSession | undefined): SessionContext | undefined {
         if (!session || !this._windowId) return undefined
         return {
             sessionId: session.sessionId,

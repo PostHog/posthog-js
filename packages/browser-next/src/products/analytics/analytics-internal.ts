@@ -72,6 +72,7 @@ export interface AnalyticsCore extends Pick<Client, 'projectToken' | 'logger' | 
         | 'activeSessionId'
         | 'isIdentified'
         | 'prepareSessionForEvent'
+        | 'peekSession'
         | 'sessionAdmitted'
         | 'identify'
         | 'group'
