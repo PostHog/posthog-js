@@ -8411,6 +8411,7 @@ Options for sending a request through Client.sendRequest.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
+| <a id="property-allowwhileoptedout"></a> `allowWhileOptedOut?` | `boolean` | Dispatch this request while capture is opted out. Use only for requests that carry no person data. Hosts may honor it only for body-less GET requests. Defaults to false; other restrictions still apply. |
 | <a id="property-body"></a> `body?` | `unknown` | JSON-serialized by the client. |
 | <a id="property-compression-1"></a> `compression?` | `Compression` \| `"best-available"` | Compression used by the browser transport. |
 | <a id="property-headers"></a> `headers?` | `Record`\<`string`, `string`\> | Additional headers merged with the host SDK's configured request headers. |
