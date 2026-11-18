@@ -38,6 +38,8 @@ export class RemoteConfigLoader {
             this._instance._send_request({
                 method: 'GET',
                 url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
+                // Without a batchKey the rate limiter treats this as `events` and drops it while events are quota limited.
+                batchKey: 'remote_config',
                 fireCallbackOnDrop: true,
                 callback: (response) => {
                     this._instance.__pending_remote_config_callbacks = undefined
@@ -65,16 +67,11 @@ export class RemoteConfigLoader {
                 return
             }
 
-            // config.js is executable and only adds site-app code over the JSON endpoint, so prefer JSON unless site apps are enabled.
-            // Status 0 (network error or CSP connect-src block) falls back to config.js, which may still be allowed by script-src.
+            // config.js is executable and only adds site-app code over the JSON endpoint, so never load it unless site apps
+            // are enabled, not even as a fallback when the JSON request fails.
             if (!this._instance.config.opt_in_site_apps) {
                 this._loadRemoteConfigJSON((response) => {
-                    if (response.statusCode !== 0) {
-                        this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
-                        return
-                    }
-                    logger.info('Failed to fetch remote config JSON. Falling back to JS.')
-                    this._loadRemoteConfigJs((config) => this._onRemoteConfig(config, config ? undefined : response))
+                    this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
                 })
                 return
             }
