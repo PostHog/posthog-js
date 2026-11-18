@@ -62,7 +62,8 @@ export function captureException(error: unknown, fallback?: unknown): CoreErrorT
 /** JSON-RPC codes a server uses to reject what the client sent: bad params, an unknown resource. */
 const CLIENT_ERROR_CODES = new Set([-32602, -32002])
 // Same code as the input rejections above, but the server's own result broke a schema.
-const SERVER_RESULT_REJECTED = /Output validation error|Invalid (tools\/call|task creation) result/
+const SERVER_RESULT_REJECTED =
+  /^(MCP error -32602: )?(Output validation error|Invalid (tools\/call|task creation) result)/
 // The high-level SDK flattens a rejected request into an `isError` result: SDK v1
 // prefixes the JSON-RPC code, SDK v2 keeps only the input-validation message.
 const FLATTENED_CLIENT_ERROR = /^(MCP error -32602: |Input validation error|Invalid arguments for tool)/

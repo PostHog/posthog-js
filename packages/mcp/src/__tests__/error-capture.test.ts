@@ -239,6 +239,14 @@ describe('error capture on the tool-call path', () => {
     ['invalid enum value', registerCalculate, 'calculate', { op: 'modulo', a: 10, b: 3 }, 'validation', false],
     ['missing required parameter', () => {}, 'add_todo', {}, 'validation', false],
     [
+      'an invalid value that quotes a server-side message',
+      registerCalculate,
+      'calculate',
+      { op: 'Output validation error', a: 1, b: 2 },
+      'validation',
+      false,
+    ],
+    [
       'tool rejecting its own arguments',
       () =>
         server.tool!('lookup', 'lookup', {}, async () => {
