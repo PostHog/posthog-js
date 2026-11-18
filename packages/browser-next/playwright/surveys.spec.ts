@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-for (const mode of ['static', 'dynamic'] as const) {
+for (const mode of ['static', 'dynamic', 'acquired'] as const) {
     test(`${mode} surveys render manually with remote config off, submit, and clean up`, async ({ page }) => {
         await page.goto('/')
         await page.evaluate((mode) => window.surveysHarness.initialize(mode, false, false, false), mode)
