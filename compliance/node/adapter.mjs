@@ -470,7 +470,8 @@ app.post('/reload_feature_flag_definitions', async (req, res) => {
     })()
     let timer
     const timeout = new Promise((resolve) => {
-        timer = setTimeout(() => resolve(null), timeoutMs)
+        // The check above already rejects other values; the clamp states the bound where the timer is set.
+        timer = setTimeout(() => resolve(null), Math.min(Math.max(timeoutMs, 1), 30000))
     })
     try {
         const loads = await Promise.race([reload, timeout])
