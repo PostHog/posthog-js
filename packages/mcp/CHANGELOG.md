@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.6.0
+
+### Minor Changes
+
+- [#5779](https://github.com/PostHog/posthog-js/pull/5779) [`3069723`](https://github.com/PostHog/posthog-js/commit/306972322dd4cd416b16a8b734bee16e3af51a01) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support FastMCP with `instrumentFastMCP(fastmcp, posthog, options)`. FastMCP builds a server per session (per request when stateless) behind a private factory, so this hooks the module's session class and instruments each one before it connects. FastMCP's HTTP layer drops request headers, so the adapter puts them back on `extra.requestInfo.headers` for `identify` and other callbacks.
+  (2026-11-18)
+
 ## 1.5.0
 
 ### Minor Changes
