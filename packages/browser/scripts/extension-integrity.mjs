@@ -81,7 +81,7 @@ export function readEmbeddedIntegrity(code) {
     const result = {}
     for (const file of EXTENSION_FILES) {
         const match = code.match(
-            new RegExp(`["']${file.replace(/[.]/g, '\\.')}["']:["'](sha384-[A-Za-z0-9+/~.-]{64})["']`)
+            new RegExp(`["']${file.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}["']:["'](sha384-[A-Za-z0-9+/~.-]{64})["']`)
         )
         if (match) {
             result[file] = match[1]
