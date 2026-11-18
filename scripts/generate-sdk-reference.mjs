@@ -268,9 +268,17 @@ if (!project) process.exit(1)
 // TypeDoc calls a destructured parameter `__namedParameters` when no `@param` tag names it.
 for (const p of project.getReflectionsByKind(Kind.Parameter)) if (p.name === '__namedParameters') p.name = 'options'
 
+// getting-started.md writes `{{major}}.{{minor}}` for the documented version, such as an install line pinned to
+// patch releases. A next major's page has no release yet, so it gets that major's first minor.
+const minor = declared === major ? pkg.version.split('.')[1] : '0'
 let body
 app.renderer.on(MarkdownRendererEvent.BEGIN, () => {
-    const started = nest(fs.readFileSync(path.join(docsDir, 'getting-started.md'), 'utf8'))
+    const started = nest(
+        fs
+            .readFileSync(path.join(docsDir, 'getting-started.md'), 'utf8')
+            .replaceAll('{{major}}', String(major))
+            .replaceAll('{{minor}}', minor)
+    )
     body = ['## Getting started', started, ...reference(app, project, capabilities(specs), declared >= major)]
 })
 await app.generateOutputs(project)
