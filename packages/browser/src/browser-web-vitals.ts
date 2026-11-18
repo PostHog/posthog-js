@@ -6,9 +6,13 @@ import type { PostHog } from './posthog-core'
 import { assignableWindow } from './utils/globals'
 import { getExtensionLoader } from './utils/extension-loader'
 
+type LoadObserversArgs = Parameters<WebVitalsAutocaptureOptions['loadObservers']>
+
+// Explicit parameters, not a destructured rest parameter, keep the ES6 bundle within ES2015 syntax.
 const loadWebVitalsObservers = (
     instance: PostHog,
-    ...[getFlavor, onLoad]: Parameters<WebVitalsAutocaptureOptions['loadObservers']>
+    getFlavor: LoadObserversArgs[0],
+    onLoad: LoadObserversArgs[1]
 ): void => {
     const getCallbacks = () => {
         const flavor = getFlavor()
