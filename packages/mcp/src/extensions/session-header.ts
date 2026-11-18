@@ -1,4 +1,4 @@
-import { newSessionId } from './session'
+import { isModernEraRequest, newSessionId } from './session'
 import { MCP_SESSION_HEADER, encodeSessionId } from './session-token'
 
 type FetchHandler<A extends unknown[]> = (request: Request, ...args: A) => Response | Promise<Response>
@@ -19,7 +19,8 @@ interface InitializeRequest {
 export function withMcpSessionHeader<A extends unknown[]>(handler: FetchHandler<A>): FetchHandler<A> {
   return async (request, ...args) => {
     const body = mayBeInitialize(request) ? await readJson(request) : undefined
-    if (body?.method !== 'initialize') {
+    // A 2026-era request must never be answered with a session id.
+    if (body?.method !== 'initialize' || isModernEraRequest(body as Parameters<typeof isModernEraRequest>[0])) {
       return handler(request, ...args)
     }
     const token = encodeSessionId({
@@ -29,7 +30,8 @@ export function withMcpSessionHeader<A extends unknown[]>(handler: FetchHandler<
       protocolVersion: asString(body.params?.protocolVersion),
     })
     const response = await handler(withHeader(request, token), ...args)
-    if (!response.ok) {
+    // A stateful handler issues its own session id, which the client must replay.
+    if (!response.ok || response.headers.has(MCP_SESSION_HEADER)) {
       return response
     }
     const headers = new Headers(response.headers)
@@ -58,14 +60,16 @@ async function readJson(request: Request): Promise<InitializeRequest | undefined
   if (!reader) {
     return undefined
   }
+  // A tee branch's cancel settles only once the handler's branch ends too.
+  const stop = () => void reader.cancel().catch(() => undefined)
+  request.signal.addEventListener('abort', stop, { once: true })
   const chunks: Uint8Array[] = []
   let size = 0
   try {
     for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
       size += chunk.value.byteLength
       if (size > MAX_INITIALIZE_BYTES) {
-        // A tee branch's cancel settles only once the handler's branch ends too.
-        void reader.cancel().catch(() => undefined)
+        stop()
         return undefined
       }
       chunks.push(chunk.value)
@@ -75,6 +79,8 @@ async function readJson(request: Request): Promise<InitializeRequest | undefined
     return JSON.parse(new TextDecoder().decode(bytes)) as InitializeRequest
   } catch {
     return undefined
+  } finally {
+    request.signal.removeEventListener('abort', stop)
   }
 }
 
@@ -87,7 +93,12 @@ function withHeader(request: Request, token: string): Request {
   } catch {
     const headers = new Headers(request.headers)
     headers.set(MCP_SESSION_HEADER, token)
-    return Object.assign(new Request(request, { headers }), request)
+    // Own string keys only: a runtime's request internals can be enumerable symbols.
+    const copy = new Request(request, { headers })
+    for (const key of Object.keys(request)) {
+      Reflect.set(copy, key, Reflect.get(request, key))
+    }
+    return copy
   }
 }
 

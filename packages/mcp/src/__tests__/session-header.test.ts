@@ -48,6 +48,13 @@ describe('withMcpSessionHeader', () => {
     ['a 2026-era request', () => post({ ...INITIALIZE, method: 'tools/list' }, { 'mcp-method': 'tools/list' })],
     ['a request that is not initialize', () => post({ ...INITIALIZE, method: 'tools/list' })],
     ['a body that is not JSON', () => post('not json')],
+    ...['2026-07-28', 'draft'].map(
+      (protocolVersion) =>
+        [
+          `an initialize asking for ${protocolVersion}`,
+          () => post({ ...INITIALIZE, params: { ...INITIALIZE.params, protocolVersion } }),
+        ] as [string, () => Request]
+    ),
     ['a GET', () => new Request(URL)],
   ])('passes %s through untouched', async (_case, request) => {
     const original = request()
@@ -69,6 +76,33 @@ describe('withMcpSessionHeader', () => {
     expect(decodeSessionId(response.headers.get(MCP_SESSION_HEADER))?.clientName).toBe('Claude')
   })
 
+  it('keeps a session id the handler issued itself', async () => {
+    const handler = vi.fn(async () => new Response('{}', { headers: { [MCP_SESSION_HEADER]: 'stateful-1' } }))
+
+    const response = await withMcpSessionHeader(handler)(post(INITIALIZE))
+
+    expect(response.headers.get(MCP_SESSION_HEADER)).toBe('stateful-1')
+  })
+
+  it('stops reading a stalled body when the client aborts', async () => {
+    const aborted = new AbortController()
+    const stalled = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.enqueue(new TextEncoder().encode('{"method":"initia')),
+    })
+    const request = new Request(URL, {
+      method: 'POST',
+      body: stalled,
+      signal: aborted.signal,
+      duplex: 'half',
+    } as RequestInit)
+    const handler = vi.fn(async () => new Response('aborted'))
+
+    const pending = withMcpSessionHeader(handler)(request)
+    aborted.abort()
+
+    expect(await (await pending).text()).toBe('aborted')
+  })
+
   it('leaves a failed initialize without a token', async () => {
     const response = await withMcpSessionHeader(echoHandler(400))(post(INITIALIZE))
 
@@ -77,7 +111,7 @@ describe('withMcpSessionHeader', () => {
   })
 
   it.each([
-    ['mutable', (request: Request) => request],
+    ['mutable', (request: Request) => request, 'stale'],
     [
       'immutable',
       (request: Request) => {
@@ -89,16 +123,19 @@ describe('withMcpSessionHeader', () => {
         })
         return Object.defineProperty(request, 'headers', { value: headers, enumerable: false })
       },
+      undefined,
     ],
-  ])('keeps what an auth wrapper set on a request with %s headers', async (_case, seal) => {
+  ])('keeps what an auth wrapper set on a request with %s headers', async (_case, seal, keptInternal) => {
+    const internal = Symbol('request internals')
     const handler = vi.fn(async (request: Request & { auth?: unknown }) =>
       Response.json({
         auth: request.auth,
         sessionHeader: request.headers.get(MCP_SESSION_HEADER),
         body: JSON.parse(await request.text()),
+        internal: (request as unknown as Record<symbol, unknown>)[internal],
       })
     )
-    const request = seal(Object.assign(post(INITIALIZE), { auth: { token: 'abc' } }))
+    const request = seal(Object.assign(post(INITIALIZE), { auth: { token: 'abc' }, [internal]: 'stale' }))
 
     const response = await withMcpSessionHeader(handler)(request)
 
@@ -106,6 +143,7 @@ describe('withMcpSessionHeader', () => {
       auth: { token: 'abc' },
       sessionHeader: response.headers.get(MCP_SESSION_HEADER),
       body: INITIALIZE,
+      internal: keptInternal,
     })
   })
 

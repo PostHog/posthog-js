@@ -125,8 +125,8 @@ const handler = createMcpHandler((server) => {
   }))
 })
 
-// Auth outermost, so a request that fails it is rejected before anything reads its body.
-const route = withMcpAuth(withMcpSessionHeader(handler), verifyToken)
+// Auth outermost and required, so a request without a valid token is rejected before anything reads its body.
+const route = withMcpAuth(withMcpSessionHeader(handler), verifyToken, { required: true })
 export { route as GET, route as POST }
 ```
 
