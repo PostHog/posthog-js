@@ -2,6 +2,8 @@ import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { flags } from '../src/products/flags/flags'
+import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
+import { alias } from '../src/products/analytics/person'
 import type { FlagsOptions } from '../src/products/flags/flags'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, MemoryStorage } from './helpers'
@@ -12,7 +14,6 @@ const base = {
     capturePageview: false,
     storage: false,
     navigator: false,
-    analytics: false,
 } as const
 const clients: IPostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
@@ -81,7 +82,7 @@ describe('flags', () => {
             mode === 'static' ? { fetch, extensions: [flags(options)] } : { fetch, flags: options }
         )
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         const callback = vi.fn()
         const subscription = requireInstalledExtension(client.featureFlags).onFeatureFlags(callback)
         expect(callback).toHaveBeenCalledWith(
@@ -205,7 +206,7 @@ describe('flags', () => {
         const extension = requireInstalledExtension(client.featureFlags)
         const reset = extension.reloadFeatureFlags()
         await vi.advanceTimersByTimeAsync(5)
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
         expect(await reset).toEqual({ status: 'cancelled' })
         const disposed = extension.reloadFeatureFlags()
         await client.dispose()
@@ -224,8 +225,8 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, optOutByDefault: true })
-        await requireInstalledExtension(client.analytics).identify('person', { plan: 'pro' })
-        await requireInstalledExtension(client.analytics).group('organization', 'team', { size: 5 })
+        client.identify('person', { plan: 'pro' })
+        group(client, 'organization', 'team', { size: 5 })
         client.optIn()
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
@@ -236,7 +237,7 @@ describe('flags', () => {
             group_properties: { organization: { size: 5 } },
         })
         requireInstalledExtension(client.featureFlags).updateFlags({ old: true })
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('old')).toBeUndefined()
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledTimes(2)
@@ -245,10 +246,10 @@ describe('flags', () => {
     it('reports flag exposure again after changing identity', async () => {
         const client = await create({ flags: { featureFlagEvaluation: false } })
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         requireInstalledExtension(client.featureFlags).updateFlags({ test: true })
         requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
-        await requireInstalledExtension(client.analytics).identify('next-person')
+        client.identify('next-person')
         requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
         expect(captured.mock.calls.filter(([event]) => event.event === '$feature_flag_called')).toHaveLength(2)
     })
@@ -261,13 +262,13 @@ describe('flags', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {})
         const client = await create({ flags: { featureFlagEvaluation: false } })
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
-        for (let index = 0; index < 100; index++) requireInstalledExtension(client.analytics).capture('flood')
+        client.onEvent(captured)
+        for (let index = 0; index < 100; index++) client.capture('flood')
         requireInstalledExtension(client.featureFlags).updateFlags({ test: true })
         requireInstalledExtension(client.featureFlags).getFeatureFlag('test')
 
         now.mockReturnValue(1_000 + elapsedMs)
-        requireInstalledExtension(client.analytics).capture('next')
+        client.capture('next')
 
         const events = captured.mock.calls.map(([event]) => event.event)
         expect({
@@ -280,12 +281,12 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
         const client = await create({ fetch })
-        await requireInstalledExtension(client.analytics).identify('member', { plan: 'paid' })
-        await requireInstalledExtension(client.analytics).group('organization', 'acme', { region: 'west' })
-        await requireInstalledExtension(client.analytics).group('project', 'web', { stage: 'production' })
+        client.identify('member', { plan: 'paid' })
+        group(client, 'organization', 'acme', { region: 'west' })
+        group(client, 'project', 'web', { stage: 'production' })
         await vi.advanceTimersByTimeAsync(5)
         fetch.mockClear()
-        requireInstalledExtension(client.analytics).resetGroups()
+        resetGroups(client)
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('retained')?.enabled).toBe(true)
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledOnce()
@@ -300,13 +301,12 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
         const client = await create({ fetch })
-        const product = requireInstalledExtension(client.analytics)
-        await product.identify('member', { plan: 'paid' })
-        await product.group('organization', 'acme', { region: 'west' })
+        client.identify('member', { plan: 'paid' })
+        group(client, 'organization', 'acme', { region: 'west' })
         await vi.advanceTimersByTimeAsync(5)
         fetch.mockClear()
-        product.alias('another-account')
-        product.groupIdentify('organization', 'external', { region: 'east' }, { set: { plan: 'other' } })
+        alias(client, 'another-account')
+        groupIdentify(client, 'organization', 'external', { region: 'east' }, { set: { plan: 'other' } })
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).not.toHaveBeenCalled()
         const reload = requireInstalledExtension(client.featureFlags).reloadFeatureFlags()
@@ -326,8 +326,8 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })
-        await requireInstalledExtension(client.analytics).group('org', 'A', { plan: 'paid' })
-        await requireInstalledExtension(client.analytics).group('org', 'B')
+        group(client, 'org', 'A', { plan: 'paid' })
+        group(client, 'org', 'B')
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(init?.body)).groups).toEqual({ org: 'B' })
@@ -339,11 +339,11 @@ describe('flags', () => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })
         const anonymousId = client.distinctId
-        await requireInstalledExtension(client.analytics).identify('A')
+        client.identify('A')
         await vi.advanceTimersByTimeAsync(5)
         const first = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(first?.body)).$anon_distinct_id).toBe(anonymousId)
-        await requireInstalledExtension(client.analytics).identify('B')
+        client.identify('B')
         await vi.advanceTimersByTimeAsync(5)
         const last = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>).at(-1)?.[1]
         expect(JSON.parse(String(last?.body))).toMatchObject({ distinct_id: 'B' })
@@ -373,7 +373,7 @@ describe('flags', () => {
             ],
         })
         expect(client.featureFlags).toBeUndefined()
-        requireInstalledExtension(client.analytics).capture('still works')
+        client.capture('still works')
     })
 
     it('disposal prevents pending requests and extension callbacks', async () => {
@@ -396,7 +396,7 @@ describe('flags', () => {
         const first = await create({ storage, flags: { featureFlagEvaluation: false } })
         requireInstalledExtension(first.featureFlags).updateFlags({ saved: 'blue' }, { saved: { enabled: true } })
         first.kv.set('unrelated', 1)
-        await requireInstalledExtension(first.analytics).group('organization', 'team')
+        group(first, 'organization', 'team')
         await first.dispose()
 
         const reloaded = await create({ storage, flags: { featureFlagEvaluation: false } })
@@ -405,7 +405,7 @@ describe('flags', () => {
             payload: { enabled: true },
         })
         expect(reloaded.kv.get('unrelated')).toBe(1)
-        requireInstalledExtension(reloaded.analytics).reset()
+        reloaded.reset()
         expect(requireInstalledExtension(reloaded.featureFlags).getFeatureFlag('saved')).toBeUndefined()
         await reloaded.dispose()
 

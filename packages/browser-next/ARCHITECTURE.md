@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. The root acquires the complete analytics product when an application resolves it, an enabled initial pageview needs it, or a capture-producing product resolves its dependency. Once acquired, analytics owns a bounded buffer and lazily loads queue scheduling and Capture V1 delivery after admission; an explicitly supplied analytics extension includes delivery statically. Feature flags initialize by default. Logs, surveys orchestration and autocapture load from explicit configuration, saved-state or remote-configuration signals, or explicit resolution. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. The client owns capture admission and a bounded buffer; each entrypoint statically selects its delivery implementation (Capture V1 with retries for the root and `/core`, best effort for `/lite`). Less common analytics operations are separate function imports. Feature flags initialize by default. Logs, surveys orchestration and autocapture load from explicit configuration, saved-state or remote-configuration signals, or explicit resolution. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -102,8 +102,8 @@ The core contains these responsibilities:
 - Device, anonymous, and identified state.
 - Session, window, and cross-context correctness.
 - Conflict-safe persistence and session-admission authority.
-- A scoped shared-client adapter that routes shared capture into analytics.
-- Coordination of one initial `$pageview` through the analytics owner without waiting for remote configuration or analytics delivery.
+- The shared `Client` contract, implemented by the client itself and handed to every extension.
+- Capture admission, identity operations, registered properties and one initial `$pageview`, without waiting for remote configuration.
 - A small control-plane Fetch path for immediate remote configuration and extension requests.
 - Consent and lifecycle authority for analytics dispatch, independent of delivery loading.
 - Extension lifecycle and isolation.
@@ -111,17 +111,11 @@ The core contains these responsibilities:
 
 Keep the capture pipeline fixed and direct. Use compact explicit state machines. Do not add a generic middleware framework or a general dependency-injection framework.
 
-The root `createPostHog` composition wrapper snapshots product options, keeps supplied instances, and injects literal dynamic product loaders into `createPostHogCore`. Core does not statically construct analytics, its buffer, rate limiter or property normalizers. The manual core entrypoint installs only supplied extensions and has no implicit analytics instance or automatic product imports. Owner properties are synchronous ready-only lookups; `resolveExtension()` starts an eligible loader, shares concurrent acquisition and waits for setup. `analytics: false` disables implicit acquisition, while an explicit analytics instance takes precedence.
+The root `createPostHog` composition wrapper snapshots product options, keeps supplied instances, and injects literal dynamic product loaders and the Capture V1 delivery factory into `createPostHogCore`. The manual core and lite entrypoints install only supplied extensions and have no automatic product imports. Product properties are synchronous ready-only lookups; `resolveExtension()` starts an eligible loader, shares concurrent acquisition and waits for setup.
 
-Supplied analytics initializes before other supplied extensions. Flags, surveys and autocapture await analytics resolution before exposing shared implementations that capture synchronously; their controls still work when analytics is explicitly disabled. An enabled initial pageview requests analytics separately. The factory awaits visible pageview admission before readiness; a hidden document waits on its visibility listener. Eager analytics configuration acquires the product and delivery during initialization. Once acquired, analytics interprets its own loading and scheduling options, with `automatic-analytics.ts` providing the separate deferred-delivery loader.
+The client implements the shared `Client` contract and passes itself to every extension's `setup()`. It owns capture finalization, admission, rate limiting, immediate delivery, identity operations, registered properties and dynamic event-property producers through an internal capture pipeline; consent transitions purge its queued work. There is no per-extension adapter or scoped view. Extensions share the client's key-value store, as posthog-js extensions share its persistence, and the client's logger. Extension names and their `bindings` share one lookup namespace for `getExtension()`; the registered extension remains the sole lifecycle owner.
 
-Analytics owns capture finalization, admission, rate limiting, immediate delivery, identity/group operations, and dynamic event-property producers. Core supplies retained state, session admission, consent/lifecycle authority, requests and diagnostics through `AnalyticsCaptureHost`; consent transitions purge the installed analytics owner. The registry flushes installed owners once and isolates failed acquisition/setup without publishing an unusable owner.
-
-First-party analytics receives package-private `AnalyticsCaptureHost` initialization with the bound request runtime, dispatch-time consent/lifecycle authority, diagnostic reporting, and a capacity-availability notification for pending initial pageviews. This preserves raw gzip bodies, abort signals, keepalive, and shutdown delivery without changing the shared `Client.sendRequest()` contract. Core neither constructs a delivery object nor supplies queue-control callbacks. Browser-next extensions receive a scoped `IPostHogInternal` during setup; shared implementations receive its separate narrow `sharedClient` adapter.
-
-Analytics owns one `EventBuffer` throughout its lifetime; `analytics-buffer.ts` contains admission and loading coordination, while `analytics-delivery.ts` creates the deferred `Lane` driver for that existing buffer. The driver owns scheduling, finite flush barriers, transport, and retry coordination. It is ordinary implementation code within analytics, not a registered extension.
-
-Review each core mechanism with compliance tests, bundle measurements, and module attribution. Move optional implementations out of core. Do not move a required invariant out only because it has a measurable cost.
+The capture pipeline owns one `EventBuffer` for its lifetime. The delivery factory selected by the entrypoint attaches to that buffer during construction: `analytics-delivery.ts` creates the `Lane` driver with scheduling, finite flush barriers, transport and retries; `lite-delivery.ts` sends each batch once and hands queued work to a keepalive request on page hide. Group and person operations live in `products/analytics/groups.ts` and `person.ts` and use the pipeline's package-internal methods, so applications that don't import them don't ship them.
 
 Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim `consentPersistenceName` override. Store interoperable `0`/`1` values and accept trimmed, case-insensitive `1`/`true`/`yes` and `0`/`false`/`no` forms, including raw boolean and numeric values from compatibility adapters. Keep this logical key independent of identity persistence and consistent across consent storage adapters. Default local storage uses native `storage` events plus a same-document SDK event; adapters can provide an optional keyed subscription for prompt external revocation. All listeners start during client initialization and stop during disposal. Deprecated prefix-derived keys and migration between storage backends belong in a compatibility entry point.
 
@@ -192,18 +186,15 @@ Cross-context conflict safety is also a core invariant. Same-origin local-storag
 
 ## 5. Root entry point
 
-The initial root graph contains Core and product-composition glue, not analytics admission, buffering or delivery implementations. Resolving analytics acquires its API and buffer first; an admitted capture then starts its separate delivery import. `analytics.load: 'eager'` acquires both during initialization. `analytics: false` blocks implicit acquisition, but not an explicitly supplied instance. The manual core entrypoint has no implicit analytics product. Once acquired, the analytics owner remains the same instance before and after delivery loads.
+The initial root graph contains the client, its capture pipeline, Capture V1 delivery and product-composition glue. Optional products and less common analytics operations stay outside it.
 
 The root entry point must use named exports. It must not create a default client singleton.
 
 Use a narrow root wrapper with a literal dynamic loader and a separate core entry:
 
 ```ts
-// Root composition: acquire the whole product.
-const loadAnalytics = () => import('./automatic-analytics').then(({ analytics }) => analytics({}))
-
-// Inside the acquired product: load delivery separately.
-const loadDelivery = () => import('./analytics-delivery').then(({ createAnalyticsDelivery }) => createAnalyticsDelivery)
+// Root composition: acquire a whole product on demand.
+const loadFlags = () => import('../../products/flags/flags').then(({ flags }) => flags(snapshot))
 
 // @posthog/browser/core
 export { createPostHog } from './core'
@@ -216,7 +207,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its loaders acquire whole products; analytics delivery and survey rendering remain further deferred imports. Flags initializes by default. Logs, surveys and autocapture activate from explicit options, saved-state or remote-configuration signals, or explicit resolution. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its loaders acquire whole products; survey rendering remains a further deferred import. Flags initializes by default. Logs, surveys and autocapture activate from explicit options, saved-state or remote-configuration signals, or explicit resolution. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -237,7 +228,7 @@ Survey action selectors are owned by the optional surveys module. It returns cop
 
 Applications access flag controls through `await posthog.resolveExtension(FeatureFlagsExtension)`. The typed token is lightweight and does not import the implementation. Result conversion, subscriptions, bootstrap, and evaluation stay in the optional module. Missing or failed extensions return undefined from lookup. Callbacks enumerate results without emitting flag-called events.
 
-Browser-next supplies an `IPostHogInternal` scoped host with a separate shared `Client` adapter. Identification publishes `onIdentify`; local person-property updates publish the product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Property setters do not publish identification, while identification with properties publishes both notifications. Core also supplies `onGroup`, `onGroupsReset` and `onReset`. Notifications run synchronously, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses identification to update identity-dependent tracking and property changes to update evaluation context; core does not look up product-specific hooks.
+The client supplies browser notifications alongside the shared `Client` contract. Identification publishes `onIdentify`; local person-property updates publish the product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Property setters do not publish identification, while identification with properties publishes both notifications. Core also supplies `onGroup`, `onGroupsReset` and `onReset`. Notifications run synchronously, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses identification to update identity-dependent tracking and property changes to update evaluation context; core does not look up product-specific hooks.
 
 Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
 
@@ -432,12 +423,9 @@ The client owns every configured or internally created extension for its lifetim
 An extension must release owned resources in its final `dispose()`.
 Cleanup must be safe after partial setup.
 
-The host must give each browser-next extension a scoped `IPostHogInternal` view, with its own narrow `sharedClient` adapter for shared implementations.
-These views must expose capabilities, not the concrete host implementation.
+The client passes itself to every extension. The host must dispose extensions in reverse installation order.
 
-The host must keep extension state separate. The host must dispose extensions in reverse installation order.
-
-Owner names and shared binding names are separate namespaces. Browser product properties and awaited `resolveExtension()` return successfully initialized lifecycle owners. An extension's `bindings` map supplies targets only for the shared adapter's synchronous `getExtension()` lookup; owner names are not implicit shared bindings. For example, `client.featureFlags` returns the browser facade, while `client.sharedClient.getExtension('featureFlags')` returns its shared implementation. The registered extension is the sole lifecycle owner: binding targets are not independently set up, flushed or disposed. Shared bindings are reserved before setup and removed when the owner fails setup, is rolled back, or is disposed.
+Extension names and binding names share one lookup namespace. Browser product properties and awaited `resolveExtension()` return successfully initialized lifecycle owners; `getExtension()` also returns binding targets, such as the shared flags implementation under `FeatureFlagsCommonExtension`. The registered extension is the sole lifecycle owner: binding targets are not independently set up, flushed or disposed. Names and bindings are reserved before setup and released when setup fails or the extension is disposed.
 
 An extension failure must not stop core capture. A failed setup must remove all reserved registry state.
 

@@ -7,37 +7,40 @@ import { analyzeMetafile, build } from 'esbuild'
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url))
 const COMPLIANT_BASELINE_PENDING = 'Set binding budgets after P0 compliance and the optimization pass.'
+
+// Never allowed in any @posthog/browser graph.
 const forbiddenInputs = [
     /(^|\/)packages\/browser\/(src|dist)\//,
     /(^|\/)\.\.\/browser\/(src|dist)\//,
-    /(^|\/)packages\/core\/(src|dist)\//,
-    /(^|\/)\.\.\/core\/(src|dist)\//,
     /(^|\/)packages\/rrweb\//,
     /(^|\/)\.\.\/rrweb\//,
-    /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
+    /(^|\/)node_modules\/(posthog-js|core-js|fflate|rrweb|web-vitals)\//,
 ]
+// Heavy dependencies that only optional product chunks may load.
+const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
+const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
+const surveyRenderingInput = /(^|\/)(surveys-renderer|survey-styles)\.(m?js|ts)$/
+
+// Optional products.
 const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
 const autocaptureInput = /(^|\/)(autocapture|rageclick|autocapture-utils)\.(m?js|ts)$/
 const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
-    /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
-const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
-const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
-const analyticsInput =
-    /(^|\/)(capture-(?:v1|properties)|analytics(?:-buffer|-extension|-delivery|-session-properties)?|event-buffer|rate-limiter|lane)\.(m?js|ts)$/
-const deliveryInputs = [
+    /(^|\/)(surveys(?:-extension|-renderer|-storage)?|automatic-surveys|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
+const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput]
+
+// Client modules selected by entrypoint or explicit import.
+const analyticsCoreInput = /(^|\/)products\/analytics\/analytics-core\.(m?js|ts)$/
+const groupsInput = /(^|\/)products\/analytics\/groups\.(m?js|ts)$/
+const personInput = /(^|\/)products\/analytics\/person\.(m?js|ts)$/
+const durableDeliveryInputs = [
     /(^|\/)analytics-delivery\.(m?js|ts)$/,
-    /(^|\/)lane\.(m?js|ts)$/,
+    /(^|\/)delivery\/lane\.(m?js|ts)$/,
     /(^|\/)capture-v1\.(m?js|ts)$/,
 ]
-const assertAutomaticAnalyticsClosure = (inputs) => {
-    const forbidden = inputs.filter((input) => deliveryInputs.some((pattern) => pattern.test(input)))
-    assert.equal(
-        forbidden.length,
-        0,
-        `Automatic analytics product statically includes delivery: ${forbidden.join(', ')}`
-    )
-}
+const liteDeliveryInput = /(^|\/)lite-delivery\.(m?js|ts)$/
+const rootCompositionInput = /(^|\/)root-composition\.(m?js|ts)$/
+
 const buildOptions = {
     absWorkingDir: packageRoot,
     bundle: true,
@@ -66,7 +69,7 @@ const sizes = (outputs) => ({
     ),
 })
 
-const attribution = (result, outputKeys = Object.keys(result.metafile.outputs)) => {
+const attribution = (result, outputKeys) => {
     const bytes = new Map()
     for (const key of outputKeys) {
         for (const [input, details] of Object.entries(result.metafile.outputs[key].inputs)) {
@@ -76,20 +79,46 @@ const attribution = (result, outputKeys = Object.keys(result.metafile.outputs)) 
     return [...bytes].map(([input, value]) => ({ input, bytes: value })).sort((a, b) => b.bytes - a.bytes)
 }
 
-const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
+const inputsOf = (result, outputKeys) => [
+    ...new Set(outputKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))),
+]
+
+/** Asserts a graph's boundary: every `required` pattern matches an input and no `forbidden` pattern does. */
+const assertBoundary = (name, inputs, { required = [], forbidden = [] }) => {
+    for (const pattern of required) {
+        assert(
+            inputs.some((input) => pattern.test(input)),
+            `The ${name} bundle must include ${pattern}`
+        )
+    }
+    const found = inputs.filter((input) => forbidden.some((pattern) => pattern.test(input)))
+    if (found.length > 0) throw new Error(`The ${name} bundle includes forbidden modules:\n${found.join('\n')}`)
+}
+
+// Initial graphs of /core, /lite and the root entry hold the client only: no optional product or heavy dependency.
+const clientOnly = [...productInputs, groupsInput, personInput, coreInput, surveyUiInput, surveyRenderingInput]
+const coreBoundary = {
+    required: [analyticsCoreInput, ...durableDeliveryInputs],
+    forbidden: [...clientOnly, liteDeliveryInput, rootCompositionInput],
+}
+const liteBoundary = {
+    // Lite delivery reuses the Capture V1 event shape but not the durable lane or its delivery.
+    required: [analyticsCoreInput, liteDeliveryInput],
+    forbidden: [...clientOnly, ...durableDeliveryInputs.slice(0, 2), rootCompositionInput],
+}
+const rootInitialBoundary = {
+    required: [analyticsCoreInput, ...durableDeliveryInputs, rootCompositionInput],
+    forbidden: [...clientOnly, liteDeliveryInput],
+}
+
+const report = async (name, result, outputs, outputKeys, { allowProducts = false, allowSurveyUi = false } = {}) => {
     const measured = sizes(outputs)
-    const inputs = [...new Set(outputKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs)))]
+    const inputs = inputsOf(result, outputKeys)
     const forbidden = inputs.filter(
         (input) =>
-            (forbiddenInputs.some((pattern) => pattern.test(input)) &&
-                !(allowFlags && coreInput.test(input)) &&
-                !(allowSurveys && surveyUiInput.test(input))) ||
-            (forbidAnalytics && analyticsInput.test(input)) ||
-            (!allowFlags &&
-                (flagsInput.test(input) ||
-                    logsInput.test(input) ||
-                    surveysInput.test(input) ||
-                    autocaptureInput.test(input)))
+            forbiddenInputs.some((pattern) => pattern.test(input)) ||
+            (!allowProducts && (coreInput.test(input) || productInputs.some((pattern) => pattern.test(input)))) ||
+            (!allowSurveyUi && (surveyUiInput.test(input) || surveyRenderingInput.test(input)))
     )
 
     stdout.write(
@@ -107,169 +136,108 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
     }
 }
 
-const assertManualCoreInputs = (inputs) => {
-    const forbidden = inputs.filter(
-        (input) =>
-            analyticsInput.test(input) ||
-            flagsInput.test(input) ||
-            logsInput.test(input) ||
-            surveysInput.test(input) ||
-            autocaptureInput.test(input) ||
-            /(^|\/)root-composition\.(m?js|ts)$/.test(input)
-    )
-    if (forbidden.length) throw new Error(`The manual core bundle references product code: ${forbidden.join(', ')}`)
-}
-
-const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
+const measureStatic = async (name, fixture, boundary, options) => {
     const result = await build({ ...buildOptions, entryPoints: [fixture] })
     const output = result.outputFiles[0]?.contents
-    if (!output) {
-        throw new Error(`The ${name} bundle-size fixture did not produce JavaScript`)
-    }
-    if (name === 'core') assertManualCoreInputs(Object.keys(result.metafile.inputs))
-    if (name === 'eager analytics') {
-        assert.throws(
-            () => assertManualCoreInputs(Object.keys(result.metafile.inputs)),
-            /manual core bundle references/,
-            'The manual-core guard must reject the real static analytics consumer graph'
-        )
-        const inputs = Object.keys(result.metafile.inputs)
-        for (const pattern of deliveryInputs)
-            assert(
-                inputs.some((input) => pattern.test(input)),
-                `Full analytics must include ${pattern}`
-            )
-        assert.throws(
-            () => assertAutomaticAnalyticsClosure(inputs),
-            /Automatic analytics product statically includes delivery/,
-            'The automatic-product guard must reject the real static-full analytics closure'
-        )
-        stdout.write('Negative control: static-full analytics rejected by automatic-product inner-boundary assertion\n')
-    }
-    await report(
-        name,
-        result,
-        [output],
-        Object.keys(result.metafile.outputs),
-        forbidAnalytics,
-        allowFlags,
-        allowSurveys
-    )
+    if (!output) throw new Error(`The ${name} bundle-size fixture did not produce JavaScript`)
+    const inputs = Object.keys(result.metafile.inputs)
+    if (boundary) assertBoundary(name, inputs, boundary)
+    await report(name, result, [output], Object.keys(result.metafile.outputs), options)
+    return inputs
 }
 
-const measureLazy = async (
-    name = 'lazy',
-    fixture = 'fixtures/lazy.ts',
-    automatic = true,
-    allowSurveys = automatic,
-    initialSurveys = false
-) => {
-    const outputDirectory = 'bundle-output'
-    const result = await build({
-        ...buildOptions,
-        entryPoints: [fixture],
-        splitting: true,
-        outdir: outputDirectory,
-    })
+const buildSplit = async (fixture) => {
+    const result = await build({ ...buildOptions, entryPoints: [fixture], splitting: true, outdir: 'bundle-output' })
     const outputFiles = new Map(
         result.outputFiles.map((file) => [relative(packageRoot, file.path).replaceAll('\\', '/'), file.contents])
     )
-    const entry = Object.entries(result.metafile.outputs).find(([, details]) =>
-        details.entryPoint?.endsWith(fixture)
-    )?.[0]
-    if (!entry) {
-        throw new Error('The lazy bundle-size fixture did not produce an entry chunk')
-    }
-
-    const staticClosure = (entry) => {
-        const initial = new Set([entry])
-        const pending = [entry]
+    const outputs = result.metafile.outputs
+    const entry = Object.entries(outputs).find(([, details]) => details.entryPoint?.endsWith(fixture))?.[0]
+    if (!entry) throw new Error(`The ${fixture} bundle-size fixture did not produce an entry chunk`)
+    const resolveImport = (from, imported) =>
+        outputs[imported.path] ? imported.path : posix.normalize(posix.join(dirname(from), imported.path))
+    const staticClosure = (start) => {
+        const closure = new Set([start])
+        const pending = [start]
         while (pending.length > 0) {
             const output = pending.pop()
-            for (const imported of result.metafile.outputs[output].imports) {
+            for (const imported of outputs[output].imports) {
                 if (imported.external || imported.kind === 'dynamic-import') continue
-                const key = result.metafile.outputs[imported.path]
-                    ? imported.path
-                    : posix.normalize(posix.join(dirname(output), imported.path))
-                if (!initial.has(key)) {
-                    initial.add(key)
+                const key = resolveImport(output, imported)
+                if (!closure.has(key)) {
+                    closure.add(key)
                     pending.push(key)
                 }
             }
         }
-        return initial
+        return closure
     }
-    const initial = staticClosure(entry)
-    const surveyOrchestrations = Object.entries(result.metafile.outputs).filter(([, details]) =>
-        /\/(?:automatic-)?surveys\.mjs$/.test(details.entryPoint ?? '')
-    )
-    if (
-        automatic &&
-        !surveyOrchestrations.some(([, details]) => details.entryPoint.endsWith('/automatic-surveys.mjs'))
-    ) {
-        throw new Error('The root must reference the automatic surveys orchestration chunk')
-    }
-    for (const [orchestration] of surveyOrchestrations) {
-        const inputs = [...staticClosure(orchestration)].flatMap((key) =>
-            Object.keys(result.metafile.outputs[key].inputs)
+    const dynamicEntryPoints = (keys) =>
+        keys.flatMap((key) =>
+            outputs[key].imports
+                .filter((imported) => !imported.external && imported.kind === 'dynamic-import')
+                .map((imported) => outputs[resolveImport(key, imported)]?.entryPoint ?? '')
         )
-        if (inputs.some((input) => surveyUiInput.test(input) || /surveys-renderer|survey-styles/.test(input))) {
-            throw new Error(
-                'Surveys orchestration must keep renderer, Preact, DOMPurify, and CSS behind its dynamic boundary'
-            )
-        }
-    }
-
     const contents = (keys) =>
         keys.map((key) => {
             const output = outputFiles.get(key)
-            if (!output) {
-                throw new Error(`Missing generated bundle output ${key}`)
-            }
+            if (!output) throw new Error(`Missing generated bundle output ${key}`)
             return output
         })
-    const initialKeys = [...initial]
-    const totalKeys = Object.keys(result.metafile.outputs)
-    if (automatic) {
-        const products = totalKeys.filter((key) =>
-            /\/automatic-analytics\.mjs$/.test(result.metafile.outputs[key].entryPoint ?? '')
-        )
-        assert(products.length > 0, 'The root must reference the deferred automatic analytics product chunk')
-        for (const product of products) {
-            const closure = [...staticClosure(product)]
-            const inputs = closure.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
-            assertAutomaticAnalyticsClosure(inputs)
-            const nestedDelivery = closure
-                .flatMap((key) =>
-                    result.metafile.outputs[key].imports
-                        .filter((imported) => !imported.external && imported.kind === 'dynamic-import')
-                        .map((imported) =>
-                            result.metafile.outputs[imported.path]
-                                ? imported.path
-                                : posix.normalize(posix.join(dirname(key), imported.path))
-                        )
-                )
-                .find((key) => /\/analytics-delivery\.mjs$/.test(result.metafile.outputs[key]?.entryPoint ?? ''))
-            assert(nestedDelivery, 'The automatic product must retain its nested dynamic analytics-delivery edge')
-            const deliveredInputs = [...staticClosure(nestedDelivery)].flatMap((key) =>
-                Object.keys(result.metafile.outputs[key].inputs)
-            )
-            for (const pattern of deliveryInputs)
-                assert(
-                    deliveredInputs.some((input) => pattern.test(input)),
-                    `Nested delivery must include ${pattern}`
-                )
-        }
-        stdout.write('Automatic product static closure excludes delivery; nested dynamic delivery edge retained\n')
+    return { result, outputs, initialKeys: [...staticClosure(entry)], staticClosure, dynamicEntryPoints, contents }
+}
+
+/** Survey orchestration must keep its renderer, Preact, DOMPurify and CSS behind a further dynamic import. */
+const assertSurveyOrchestration = (split) => {
+    const orchestrations = Object.entries(split.outputs).filter(([, details]) =>
+        /\/(?:automatic-)?surveys\.mjs$/.test(details.entryPoint ?? '')
+    )
+    assert(orchestrations.length > 0, 'The bundle must contain a surveys orchestration chunk')
+    for (const [orchestration] of orchestrations) {
+        assertBoundary('surveys orchestration', inputsOf(split.result, [...split.staticClosure(orchestration)]), {
+            forbidden: [surveyUiInput, surveyRenderingInput],
+        })
     }
-    const initialInputs = initialKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
-    if (initialInputs.some((input) => /surveys-renderer|survey-styles/.test(input))) {
-        throw new Error('The initial bundle must not include survey rendering or styles')
-    }
-    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true, initialSurveys)
+}
+
+const reportSplit = async (name, split, { initialProducts = false, allowSurveyUi = false } = {}) => {
+    const { initialKeys } = split
+    const initial = new Set(initialKeys)
+    const totalKeys = Object.keys(split.outputs)
     const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
-    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true, allowSurveys)
-    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
+    const deferred = { allowProducts: true, allowSurveyUi }
+    await report(`${name} initial`, split.result, split.contents(initialKeys), initialKeys, {
+        allowProducts: initialProducts,
+    })
+    await report(`${name} dynamic`, split.result, split.contents(dynamicKeys), dynamicKeys, deferred)
+    await report(`${name} total`, split.result, split.contents(totalKeys), totalKeys, deferred)
+}
+
+const measureRoot = async () => {
+    const split = await buildSplit('fixtures/root.ts')
+    assertBoundary('root initial', inputsOf(split.result, split.initialKeys), rootInitialBoundary)
+    const loaded = split.dynamicEntryPoints(split.initialKeys)
+    for (const product of [
+        /\/products\/flags\/flags\.mjs$/,
+        /\/products\/logs\/logs\.mjs$/,
+        /\/products\/surveys\/automatic-surveys\.mjs$/,
+        /\/products\/autocapture\/autocapture\.mjs$/,
+    ]) {
+        assert(
+            loaded.some((entryPoint) => product.test(entryPoint)),
+            `The root must load ${product} through a dynamic import`
+        )
+    }
+    assertSurveyOrchestration(split)
+    await reportSplit('root', split, { allowSurveyUi: true })
+}
+
+const measureSplit = async (name, fixture, { initialProducts = false, surveys = false } = {}) => {
+    const split = await buildSplit(fixture)
+    // A dynamically imported surveys product is its own orchestration chunk; a static one is in the initial graph,
+    // whose report rejects survey rendering.
+    if (surveys && !initialProducts) assertSurveyOrchestration(split)
+    await reportSplit(name, split, { initialProducts, allowSurveyUi: surveys })
 }
 
 const surveyTypes = await build({
@@ -283,15 +251,37 @@ if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
     throw new Error('Type-only survey contracts must not retain runtime code')
 }
 
-await measureStatic('core', 'fixtures/minimal.ts', true)
-await measureStatic('eager analytics', 'fixtures/eager.ts', false)
-await measureLazy()
-await measureStatic('static flags', 'fixtures/static-flags.ts', true, true)
-await measureLazy('dynamic flags', 'fixtures/dynamic-flags.ts', false)
-await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
-await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
-await measureLazy('explicit surveys', 'fixtures/static-surveys.ts', false, true, true)
-await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
-await measureStatic('static autocapture with analytics', 'fixtures/static-autocapture.ts', false, true)
-await measureLazy('dynamic autocapture', 'fixtures/dynamic-autocapture.ts', false)
+await measureStatic('core minimal', 'fixtures/minimal.ts', coreBoundary)
+const coreInputs = await measureStatic('core', 'fixtures/core.ts', coreBoundary)
+const liteInputs = await measureStatic('lite', 'fixtures/lite.ts', liteBoundary)
+const groupsPersonInputs = await measureStatic('core with groups and person', 'fixtures/groups-person.ts', {
+    required: [groupsInput, personInput, ...durableDeliveryInputs],
+    forbidden: [...productInputs, coreInput, surveyUiInput, rootCompositionInput],
+})
+await measureRoot()
+const staticFlagsInputs = await measureStatic('static flags', 'fixtures/static-flags.ts', undefined, {
+    allowProducts: true,
+})
+await measureSplit('dynamic flags', 'fixtures/dynamic-flags.ts')
+await measureStatic('static logs', 'fixtures/static-logs.ts', undefined, { allowProducts: true })
+await measureSplit('dynamic logs', 'fixtures/dynamic-logs.ts')
+await measureSplit('explicit surveys', 'fixtures/static-surveys.ts', { initialProducts: true, surveys: true })
+await measureSplit('dynamic surveys', 'fixtures/dynamic-surveys.ts', { surveys: true })
+await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', undefined, { allowProducts: true })
+await measureSplit('dynamic autocapture', 'fixtures/dynamic-autocapture.ts')
+
+// Negative controls: each guard must reject a real graph that crosses its boundary.
+for (const [guard, boundary, inputs, graph] of [
+    ['core', coreBoundary, staticFlagsInputs, 'static flags'],
+    ['core', coreBoundary, groupsPersonInputs, 'groups and person'],
+    ['core', coreBoundary, liteInputs, 'lite delivery'],
+    ['lite', liteBoundary, coreInputs, 'durable delivery'],
+]) {
+    assert.throws(
+        () => assertBoundary(guard, inputs, boundary),
+        /forbidden modules|must include/,
+        `The ${guard} guard must reject the real ${graph} graph`
+    )
+}
+stdout.write('Negative controls: core and lite guards reject real flags, groups/person and delivery graphs\n')
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

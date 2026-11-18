@@ -3,7 +3,7 @@ import { createPostHog as createCore } from '../src/composition/npm/core'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 
 const options = {
-    projectToken: 'ph_native_acquisition',
+    projectToken: 'ph_native_root',
     storage: false,
     navigator: false,
     capturePageview: false,
@@ -20,7 +20,7 @@ const options = {
     },
 } satisfies PostHogOptions
 
-export const acquisitionHarness = {
+export const rootHarness = {
     async snapshot() {
         const batches: Array<Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }>> = []
         const client = await createPostHog({
@@ -32,28 +32,15 @@ export const acquisitionHarness = {
             },
         })
         try {
-            const before = client.analytics !== undefined
-            const [product, concurrent] = await Promise.all([
-                client.resolveExtension('analytics'),
-                client.resolveExtension('analytics'),
-            ])
-            if (!product) throw new Error('Expected acquired analytics')
             const originalId = client.distinctId
             const properties = { phase: 'admitted' }
             const observed: string[] = []
-            product.onEvent(({ event }) => observed.push(event))
-            const admitted = product.capture('before_identity_change', properties)
+            client.onEvent(({ event }) => observed.push(event))
+            const admitted = client.capture('before_identity_change', properties)
             properties.phase = 'mutated'
-            await product.identify('later_identity')
+            client.identify('later_identity')
             await client.flush()
-            return {
-                before,
-                same: product === concurrent && product === client.analytics,
-                admitted,
-                observed,
-                originalId,
-                batches,
-            }
+            return { admitted, observed, originalId, batches }
         } finally {
             await client.dispose()
         }
@@ -67,23 +54,22 @@ export const acquisitionHarness = {
             extensions: [{ name: 'observer', setup: (host) => void host.onEvent(({ event }) => observed.push(event)) }],
         })
         try {
-            return { observed, installed: client.analytics !== undefined, session: client.session?.sessionId }
+            return { observed, session: client.session?.sessionId }
         } finally {
             await client.dispose()
         }
     },
-    async disabled() {
+    async idle() {
         const clients: IPostHog[] = []
         try {
             clients.push(await createCore({ ...options, fetch: false }))
-            clients.push(await createPostHog({ ...options, fetch: false, analytics: false }))
-            return await Promise.all(
-                clients.map(async (client) => ({
-                    installed: client.analytics !== undefined,
-                    resolved: (await client.resolveExtension('analytics')) !== undefined,
-                    session: client.session?.sessionId,
-                }))
-            )
+            clients.push(await createPostHog({ ...options, fetch: false }))
+            return clients.map((client) => ({
+                products: ['featureFlags', 'logs', 'surveys', 'autocapture'].filter(
+                    (name) => client.getExtension(name) !== undefined
+                ),
+                session: client.session?.sessionId,
+            }))
         } finally {
             await Promise.all(clients.map((client) => client.dispose()))
         }
@@ -92,6 +78,6 @@ export const acquisitionHarness = {
 
 declare global {
     interface Window {
-        acquisitionHarness: typeof acquisitionHarness
+        rootHarness: typeof rootHarness
     }
 }

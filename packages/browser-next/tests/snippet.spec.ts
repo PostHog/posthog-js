@@ -1,5 +1,6 @@
 import { createPostHog } from '../src/composition/npm/index'
-import { parseSnippetOptions, startSnippet } from '../src/composition/script/runtime'
+import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
+import { parseSnippetOptions, startSnippet, type ScriptPostHog } from '../src/composition/script/runtime'
 import type { IPostHog } from '../src/core/types'
 
 vi.mock('../src/composition/npm/index', () => ({ createPostHog: vi.fn() }))
@@ -53,21 +54,46 @@ describe('snippet query configuration', () => {
 })
 
 describe('snippet installation', () => {
-    it('explicitly composes full analytics into the installer client', async () => {
-        create.mockResolvedValueOnce(client())
-        await startSnippet(url, target())
-        expect(create).toHaveBeenCalledWith(
-            expect.objectContaining({
-                extensions: [
-                    expect.objectContaining({
-                        name: 'analytics',
-                        capture: expect.any(Function),
-                        captureImmediate: expect.any(Function),
-                        identify: expect.any(Function),
-                    }),
-                ],
-            })
+    it('exposes the group and person functions as methods on the global client', async () => {
+        const bodies: string[] = []
+        const real = await createCorePostHog({
+            projectToken: 'phc_fixture',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            analytics: { flushAt: 100, flushInterval: 0 },
+            fetch: async (input, init) => {
+                if (String(input).includes('/i/v1/analytics/events')) bodies.push(String(init?.body))
+                return new Response('{}', { status: 200 })
+            },
+        })
+        create.mockResolvedValueOnce(real)
+        const installed = target()
+        await startSnippet(url, installed)
+        const posthog = installed.posthog as ScriptPostHog
+        posthog.identify('user-1')
+        posthog.group('company', 'acme')
+        posthog.alias('alias-1')
+        posthog.setPersonProperties({ plan: 'pro' })
+        posthog.capture('after_group')
+        await posthog.flush()
+        const events = bodies.flatMap(
+            (body) =>
+                (JSON.parse(body) as { batch?: Array<{ event: string; properties: Record<string, unknown> }> }).batch ??
+                []
         )
+        expect(events.find((event) => event.event === 'after_group')?.properties.$groups).toEqual({ company: 'acme' })
+        expect(events.map((event) => event.event)).toEqual(
+            expect.arrayContaining(['$groupidentify', '$create_alias', '$set'])
+        )
+        expect(Object.keys(posthog)).not.toContain('group')
+        await posthog.shutdown()
+    })
+
+    it('creates the client from the parsed script options', async () => {
+        create.mockResolvedValueOnce(client())
+        await startSnippet(url + '&flags=false', target())
+        expect(create).toHaveBeenCalledWith({ projectToken: 'phc_fixture', flags: false })
     })
 
     it('publishes only after factory readiness, with one winner across concurrent tags', async () => {
