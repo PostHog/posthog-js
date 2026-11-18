@@ -506,6 +506,7 @@ function record<T = eventWithTime>(
         origin: window.location.origin,
         isCheckout,
       };
+      if (nonInteractive) message.nonInteractive = true;
       window.parent.postMessage(message, '*');
     }
 
