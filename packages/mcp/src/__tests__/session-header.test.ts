@@ -87,17 +87,17 @@ describe('withMcpSessionHeader', () => {
   it.each([
     [
       'while the body is read',
-      (controller: AbortController, run: () => Promise<Response>) => {
-        const pending = run()
+      (controller: AbortController, run: () => Response | Promise<Response>) => {
+        const pending = Promise.resolve(run())
         controller.abort()
         return pending
       },
     ],
     [
       'before the wrapper runs',
-      (controller: AbortController, run: () => Promise<Response>) => {
+      (controller: AbortController, run: () => Response | Promise<Response>) => {
         controller.abort()
-        return run()
+        return Promise.resolve(run())
       },
     ],
   ])('stops reading a stalled body when the client aborts %s', async (_case, abortAnd) => {
