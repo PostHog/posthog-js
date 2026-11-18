@@ -1,0 +1,13 @@
+pnpmfile: ../.pnpmfile.cjs
+nodeLinker: hoisted
+lockfile: false
+verifyDepsBeforeRun: true
+minimumReleaseAge: 10080
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  # The 7.x security backport lacks the provenance used by 8.x; do not downgrade to vulnerable 7.4.5.
+  - webpack-dev-middleware@7.4.6
+allowBuilds:
+  core-js: false

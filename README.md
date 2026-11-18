@@ -19,6 +19,7 @@ Please see the main [PostHog docs](https://posthog.com/docs).
 - [posthog-js](./packages/browser/README.md)
 - [posthog-js-lite](./packages/web/README.md)
 - [posthog-node](./packages/node/README.md)
+- [posthog-docusaurus](./packages/docusaurus/README.md)
 - [posthog-react-native](./packages/react-native/README.md)
 - [@posthog/react](./packages/react/README.md)
 - [@posthog/ai](./packages/ai/README.md)

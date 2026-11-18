@@ -1,5 +1,130 @@
 # posthog-node
 
+## 6.0.2
+
+### Patch Changes
+
+- [#5776](https://github.com/PostHog/posthog-js/pull/5776) [`4495a66`](https://github.com/PostHog/posthog-js/commit/4495a6658501de3aa6b7e7a2d37500bb965c40e4) Thanks [@gewenyu99](https://github.com/gewenyu99)! - Accept the 5.x option names `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, and `__preview_capture_bot_pageviews` again as deprecated aliases. Each one maps to its camelCase name and logs one deprecation error per process. When both names are set, the camelCase one wins. In 6.0.0 the old names were ignored without a warning, so a `before_send` hook stopped running.
+  (2026-11-17)
+
+## 6.0.1
+
+### Patch Changes
+
+- [#5775](https://github.com/PostHog/posthog-js/pull/5775) [`a410583`](https://github.com/PostHog/posthog-js/commit/a41058375e0bf01a9c2b131ffd43492c5aef8b3e) Thanks [@gewenyu99](https://github.com/gewenyu99)! - Add the missing commas to the `captureImmediate` and `identify` doc comment examples, so the examples parse when you copy them.
+  (2026-11-17)
+
+## 6.0.0
+
+### Major Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Remove `enterContext()`; use `withContext()` to scope async context to a callback.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Use camelCase SDK configuration names and typed boolean event options with support for additional JSON-valued options.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `captureException()` and `captureExceptionImmediate()` take an options object (`distinctId`, `properties`, `options`, `uuid`, `flags`, `level`). The old positional form still works in posthog-node 6.x.x and logs a deprecation error once per method. `level` is read case-insensitively, with the same aliases as posthog-python (`critical` → `fatal`, `warn` → `warning`). An unknown level keeps `error`.
+  `registerOptions()` and `unregisterOptions()` return a promise, and `prepareEventMessage()` returns a flat message with top-level `options`, `uuid`, `timestamp` and `disableGeoip`. (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Generated event uuids and personless distinct ids take their random bits from `crypto.getRandomValues` instead of `Math.random`.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - A personal API key (`phx_...`) passed as the project API key now disables the client, like a missing key, and either case logs one error that never includes the key.
+  Debug mode logs event names, uuids and counts instead of whole events, and a `before_send` function that throws is logged with the error's type instead of its message. In debug mode, a capture error can still include the server or proxy response text.
+  A new client option, `captureTracingHeaders` (default `true`), controls whether the Express and NestJS integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context. (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Analytics and AI events are batched and sent on separate lanes, in batches of about 5 MiB at most, and events that fail with a network error are kept and retried on the next flush. `flush()` no longer rejects on delivery failures (they arrive through the `'error'` event), and `maxQueueSize` now applies to analytics events only.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Values set on the event, in context or with `register()` / the new `registerOptions()` now win over the values the SDK adds (`$is_server`, `$geoip_disable`, feature flag properties, trace ids), and `before_send` sees and can change all of them. Context and registered properties and options, including the new context `options`, also reach identify, alias and group identify events, but they do not set `process_person_profile` on `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events whose distinct id the SDK did not generate, which default to `true` unless the call sets it.
+  An empty or whitespace distinct id counts as missing, and `$groupidentify` without a distinct id uses the context id, then `$<type>_<key>`.
+  `$geoip_disable` and `$groups` are filled before `before_send`, so a hook that changes the message's `disableGeoip` or `groups` field has no effect: edit the properties instead.
+  Reserved exception properties such as `$exception_level` passed in `captureException()` properties are now ignored, so the SDK's value is sent. (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Every capture call takes a per-event `options` map that is sent to capture unchanged (the SDK no longer converts option values). Legacy option properties still work, but an option overrides its legacy property. Use options.
+  A `$session_id` or `$window_id` that is not a string is dropped with a warning.
+  Capture drops an event whose option value it cannot read, such as `cookieless_mode: [1, 2, 3]`, and the SDK reports it through `'error'` with `details: 'invalid_options'`. (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Events send `$lib` and `$lib_version` in their properties: a `$lib` set on the event, in context or with `register()` wins over the SDK's own pair, and `before_send` can change or remove them.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Capture follows only same-origin 307 and 308 redirects. Invalid event uuids are replaced with a warning, and dropped duplicate copies are reported.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Capture retries only 404, 408, 429, 500, 502, 503, 504 and network errors, waiting 100 ms doubled per retry with jitter (at most 30 s, at least `Retry-After`).
+  Adds `captureMaxRetries`, `captureCompression`, `captureAiCompression`, `captureAiMaxQueueSize` and `captureAiRequestTimeoutMs`. (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Capture always uses capture v1: `POSTHOG_CAPTURE_MODE` is no longer read, `captureAi` sends to `/i/v1/ai/events`, and `CaptureV1Error` is now `CaptureError`.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Send events only through capture v1, with AI events on their own lane. See the posthog-node 6.0.0 migration guide.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - An event whose name is missing, empty or not a string, or whose name, distinct id, session id or window id is not well-formed Unicode (a lone surrogate), is dropped before sending and reported through the `'error'` event, instead of being sent and failing at capture (an object name was sent as `"[object Object]"`). Lone surrogates in property strings are replaced with U+FFFD, so one bad character no longer fails the whole request.
+  An unparseable event timestamp is still replaced with the current time, and now logs a warning that never includes the value. (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - A 2xx capture response whose JSON body has no `results` field now fails the whole batch and reports it through the `'error'` event, like a body that is not JSON or has a `results` value that is not an object. The batch is not resent. A response with an empty `results` object still means every event was delivered.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - An event whose `before_send` hook leaves `distinctId` missing, `null` or not a string is now dropped before sending and reported through the `'error'` event as a local drop (`details: 'invalid event'`). Before, the SDK sent the value as text, or sent `""` when the hook removed it. A caller's non-string `distinctId` is now turned into a string before `before_send` runs, so a hook that leaves it alone still sends it. A hook that sets `distinctId` to `""` still sends it, and capture drops that event and reports it.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - A `before_send` hook that throws is now logged with `console.error` even when `debug` is off, so the dropped event is never silent. The line still names only the event and the error's type.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - An event with a property value that throws when the SDK reads or serializes it, such as a getter or a `toJSON` method that throws, is now dropped alone and reported through the `'error'` event as a local drop (`details: 'unserializable event'`). This covers the call's properties, the copy made for `before_send`, and serialization, on the analytics and AI lanes. In posthog-node 5.x.x, a value that threw while the client read the call's properties printed the raw error with `console.error`, and one that threw during serialization failed the whole batch and emitted the raw error on `'error'`. With no `'error'` listener, the SDK logs one line with the count and reason only.
+  (2026-11-17)
+- Updated dependencies [[`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff)]:
+  - @posthog/core@1.69.0
+
+## 5.74.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/core@1.68.0
+
+## 5.73.1
+
+### Patch Changes
+
+- [#5676](https://github.com/PostHog/posthog-js/pull/5676) [`e8e850a`](https://github.com/PostHog/posthog-js/commit/e8e850af9ffbb8eb57cd3f86eed8fc379c90180a) Thanks [@DanielVisca](https://github.com/DanielVisca)! - fix(node): `shutdown()` now also sends logs captured while its logs flush was in flight, instead of dropping them
+  (2026-11-14)
+
+## 5.73.0
+
+### Minor Changes
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-13)
+
+- [#5538](https://github.com/PostHog/posthog-js/pull/5538) [`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters and `$feature_flag_called` events return the same values as before. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A flag record with a field of the wrong JSON type, such as a string `metadata.version`, now reads as disabled: flag getters return `false` and it has no payload. Other flags in the same response are not affected. This applies to both response versions, so tests that mock `/flags` may need to match the new URL and send correctly typed fields. (2026-11-13)
+
+### Patch Changes
+
+- Updated dependencies [[`db28c59`](https://github.com/PostHog/posthog-js/commit/db28c5989d37aa27cb384e2e8a01a8c10fb74e87)]:
+  - @posthog/core@1.67.3
+
+## 5.72.0
+
+### Minor Changes
+
+- [#5514](https://github.com/PostHog/posthog-js/pull/5514) [`4a2cbe7`](https://github.com/PostHog/posthog-js/commit/4a2cbe7d8344a3acbe613cce68be217e84df1a55) Thanks [@Silthus](https://github.com/Silthus)! - Send cc, bcc and attachments with email from code. The SDK uploads each file PostHog doesn't have yet, then sends the email with the files' hashes. An email carries at most 10 files and 40 MB after Base64 encoding, about 29 MB of files.
+  (2026-11-13)
+
 ## 5.71.0
 
 ### Minor Changes

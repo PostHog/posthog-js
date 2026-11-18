@@ -1,5 +1,6 @@
 import { FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
+import { isServerFailedFlagRecord, type ParsedFlagRecord } from './flags-response'
 import { FeatureFlagError } from './types'
 
 /**
@@ -19,6 +20,12 @@ export type EvaluatedFlagRecord = {
   locallyEvaluated: boolean
   /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
   hasExperiment: boolean | undefined
+  /**
+   * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
+   * state, reason and rule metadata, for the typed flag API and flag events. Absent for locally
+   * evaluated flags and flags with a value override.
+   */
+  parsed?: ParsedFlagRecord
 }
 
 /**
@@ -33,6 +40,12 @@ export type FlagCalledEventParams = {
   groups: Record<string, string | number> | undefined
   disableGeoip: boolean | undefined
   properties: Record<string, any>
+  /**
+   * The parsed `/flags` record supplying the read's value or failure diagnostics. Absent for
+   * local evaluation, overrides and missing flags. A failed record keeps config/reason
+   * attribution, but only a successful experiment split sends `$experiment_exposure`.
+   */
+  record?: ParsedFlagRecord
 }
 
 /**
@@ -78,6 +91,7 @@ export class FeatureFlagEvaluations {
   private readonly _groups: Record<string, string | number> | undefined
   private readonly _disableGeoip: boolean | undefined
   private readonly _flags: Record<string, EvaluatedFlagRecord>
+  private readonly _failedFlags: Record<string, EvaluatedFlagRecord>
   private readonly _unresolvedFlags: Readonly<Record<string, UnresolvedFlagReason>>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
@@ -111,7 +125,15 @@ export class FeatureFlagEvaluations {
     this._distinctId = init.distinctId
     this._groups = init.groups
     this._disableGeoip = init.disableGeoip
-    this._flags = init.flags
+    this._flags = Object.create(null)
+    this._failedFlags = Object.create(null)
+    for (const [key, flag] of Object.entries(init.flags)) {
+      if (flag.parsed && isServerFailedFlagRecord(flag.parsed)) {
+        this._failedFlags[key] = flag
+      } else {
+        this._flags[key] = flag
+      }
+    }
     this._unresolvedFlags = Object.freeze({ ...init.unresolvedFlags })
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
@@ -198,9 +220,9 @@ export class FeatureFlagEvaluations {
    * excluded from the slice.
    */
   onlyAccessed(): FeatureFlagEvaluations {
-    const filtered: Record<string, EvaluatedFlagRecord> = {}
+    const filtered: Record<string, EvaluatedFlagRecord> = Object.create(null)
     for (const key of this._accessed) {
-      const flag = this._flags[key]
+      const flag = this._flags[key] ?? this._failedFlags[key]
       if (flag) {
         filtered[key] = flag
       }
@@ -216,10 +238,10 @@ export class FeatureFlagEvaluations {
    * Branching on a filtered key that was excluded from the slice is a no-op.
    */
   only(keys: string[]): FeatureFlagEvaluations {
-    const filtered: Record<string, EvaluatedFlagRecord> = {}
+    const filtered: Record<string, EvaluatedFlagRecord> = Object.create(null)
     const missing: string[] = []
     for (const key of keys) {
-      const flag = this._flags[key]
+      const flag = this._flags[key] ?? this._failedFlags[key]
       if (flag) {
         filtered[key] = flag
       } else {
@@ -318,13 +340,14 @@ export class FeatureFlagEvaluations {
     // the slice doesn't mean the flag is missing from PostHog — it was filtered out.
     // Don't fire a misleading `flag_missing` event; slices are intended for `capture()`,
     // not for further branching.
-    if (this._isSlice && !(key in this._flags)) {
+    if (this._isSlice && !(key in this._flags) && !(key in this._failedFlags)) {
       return
     }
 
-    const flag = this._flags[key]
+    const failed = key in this._failedFlags
+    const flag = this._flags[key] ?? this._failedFlags[key]
     const response: FeatureFlagValue | undefined =
-      flag === undefined ? undefined : flag.enabled === false ? false : (flag.variant ?? true)
+      flag === undefined || failed ? undefined : flag.enabled === false ? false : (flag.variant ?? true)
 
     const properties: Record<string, any> = {
       $feature_flag: key,
@@ -348,8 +371,7 @@ export class FeatureFlagEvaluations {
 
     // Build the comma-joined `$feature_flag_error` matching the single-flag path's
     // granularity: response-level errors (errors-while-computing, quota-limited) are
-    // combined with per-flag errors (flag-missing or local-evaluation-inconclusive) so consumers
-    // can filter by type.
+    // combined with per-flag errors. A failed fallback does not resolve a local inconclusive result.
     const errors: string[] = []
     if (this._errorsWhileComputing) {
       errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
@@ -357,12 +379,13 @@ export class FeatureFlagEvaluations {
     if (this._quotaLimited) {
       errors.push(FeatureFlagError.QUOTA_LIMITED)
     }
-    if (flag === undefined) {
-      errors.push(
-        Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)
-          ? FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE
-          : FeatureFlagError.FLAG_MISSING
-      )
+    if (failed) {
+      errors.push(FeatureFlagError.EVALUATION_FAILED)
+    }
+    if (Object.prototype.hasOwnProperty.call(this._unresolvedFlags, key)) {
+      errors.push(FeatureFlagError.LOCAL_EVALUATION_INCONCLUSIVE)
+    } else if (flag === undefined) {
+      errors.push(FeatureFlagError.FLAG_MISSING)
     }
     if (errors.length > 0) {
       properties.$feature_flag_error = errors.join(',')
@@ -375,6 +398,8 @@ export class FeatureFlagEvaluations {
       groups: this._groups,
       disableGeoip: this._disableGeoip,
       properties,
+      // Failed records retain config/reason diagnostics, but never send an experiment exposure.
+      record: flag?.parsed,
     })
   }
 }
