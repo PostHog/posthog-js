@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.5.0
+
+### Minor Changes
+
+- [#5778](https://github.com/PostHog/posthog-js/pull/5778) [`7d1b1a7`](https://github.com/PostHog/posthog-js/commit/7d1b1a719fc6606fc65105a600907ef28199a320) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support Vercel's `mcp-handler`. Call `instrument(server, posthog)` inside the `createMcpHandler` callback, and wrap the exported route in the new `withMcpSessionHeader` to keep one `$session_id` and the client's name per conversation on the `2025-11-25` protocol. mcp-handler streams the `initialize` response, so the session token is minted at the fetch layer instead of inside the server.
+  (2026-11-18)
+
 ## 1.4.0
 
 ### Minor Changes

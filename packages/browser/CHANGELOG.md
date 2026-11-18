@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.451.2
+
+### Patch Changes
+
+- [#5774](https://github.com/PostHog/posthog-js/pull/5774) [`58bf16f`](https://github.com/PostHog/posthog-js/commit/58bf16f64d1ed8151c26ca254fb50c353dfa4f3d) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Stop including the first dropped event's name in the console warning shown when the bot user agent filter drops events
+  (2026-11-18)
+
 ## 1.451.1
 
 ### Patch Changes
