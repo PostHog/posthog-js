@@ -433,12 +433,6 @@ export interface Event {
    * (the `$exception_list` entry's `type`).
    */
   errorType?: string
-  /**
-   * The SDK classified this failure as the client's (`errorType: 'validation'`
-   * from a rejected request), so it sends no `$exception`. Never set from the
-   * host's own `errorType`.
-   */
-  isClientError?: boolean
   eventId?: string
   /** posthog-node per-event options → the payload's `options`. */
   eventOptions?: Record<string, JsonType>

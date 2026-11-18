@@ -144,6 +144,28 @@ describe('error capture on the tool-call path', () => {
     expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
   })
 
+  it('still publishes the call when the thrown value has a throwing getter', async () => {
+    instrument(server, fakePostHog())
+    server.tool!('odd_failure', 'throws an odd value', {}, async () => {
+      throw Object.defineProperty({ isError: true }, 'content', {
+        enumerable: true,
+        get() {
+          throw new Error('not loaded')
+        },
+      })
+    })
+
+    await client
+      .request({ method: 'tools/call', params: { name: 'odd_failure', arguments: {} } }, CallToolResultSchema)
+      .catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const [toolCall] = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .filter((event) => event.properties.$mcp_tool_name === 'odd_failure')
+    expect(toolCall?.properties.$mcp_is_error).toBe(true)
+  })
+
   it('keeps the message the tool result carries when reading the error name throws', async () => {
     instrument(server, fakePostHog())
 
@@ -236,15 +258,14 @@ describe('error capture on the tool-call path', () => {
     )
 
   it.each([
-    ['invalid enum value', registerCalculate, 'calculate', { op: 'modulo', a: 10, b: 3 }, 'validation', false],
-    ['missing required parameter', () => {}, 'add_todo', {}, 'validation', false],
+    ['invalid enum value', registerCalculate, 'calculate', { op: 'modulo', a: 10, b: 3 }, 'validation'],
+    ['missing required parameter', () => {}, 'add_todo', {}, 'validation'],
     [
       'an invalid value that quotes a server-side message',
       registerCalculate,
       'calculate',
       { op: 'Output validation error', a: 1, b: 2 },
       'validation',
-      false,
     ],
     [
       'tool rejecting its own arguments',
@@ -255,7 +276,6 @@ describe('error capture on the tool-call path', () => {
       'lookup',
       {},
       'validation',
-      false,
     ],
     [
       'output failing its own schema',
@@ -266,7 +286,6 @@ describe('error capture on the tool-call path', () => {
       'report',
       {},
       'Error',
-      true,
     ],
     [
       'a call to a disabled tool',
@@ -274,7 +293,6 @@ describe('error capture on the tool-call path', () => {
       'retired',
       {},
       'validation',
-      false,
     ],
     [
       'a result the server built in the wrong shape',
@@ -282,27 +300,23 @@ describe('error capture on the tool-call path', () => {
       'malformed',
       {},
       'McpError',
-      true,
     ],
-    ['tool throwing', () => {}, 'complete_todo', { id: 'nonexistent-id' }, 'Error', true],
-  ])(
-    'classifies %s, sending $exception only for server failures',
-    async (_case, register, toolName, args, errorType, sendsException) => {
-      register()
-      instrument(server, fakePostHog())
+    ['tool throwing', () => {}, 'complete_todo', { id: 'nonexistent-id' }, 'Error'],
+  ])('classifies %s, keeping its $exception', async (_case, register, toolName, args, errorType) => {
+    register()
+    instrument(server, fakePostHog())
 
-      // A malformed result is rejected on the client side too.
-      await client
-        .request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
-        .catch(() => undefined)
-      await new Promise((r) => setTimeout(r, 50))
+    // A malformed result is rejected on the client side too.
+    await client
+      .request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
+      .catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
 
-      const ofTool = (event: string) =>
-        capture.findCapturesByEvent(event).filter((e) => e.properties.$mcp_tool_name === toolName)
-      const [toolCall] = ofTool('$mcp_tool_call')
-      expect(toolCall?.properties.$mcp_is_error).toBe(true)
-      expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
-      expect(ofTool('$exception')).toHaveLength(sendsException ? 1 : 0)
-    }
-  )
+    const ofTool = (event: string) =>
+      capture.findCapturesByEvent(event).filter((e) => e.properties.$mcp_tool_name === toolName)
+    const [toolCall] = ofTool('$mcp_tool_call')
+    expect(toolCall?.properties.$mcp_is_error).toBe(true)
+    expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
+    expect(ofTool('$exception')).toHaveLength(1)
+  })
 })

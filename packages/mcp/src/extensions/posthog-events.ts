@@ -54,8 +54,7 @@ export function buildPostHogCaptureEvents(
 ): PostHogCaptureEvent[] {
   const batch = [buildCaptureEvent(event)]
 
-  // A failure the client caused is not a server exception for error tracking.
-  if (event.isError && event.error && !event.isClientError && options.enableExceptionAutocapture !== false) {
+  if (event.isError && event.error && options.enableExceptionAutocapture !== false) {
     batch.push(buildExceptionEvent(event))
   }
 

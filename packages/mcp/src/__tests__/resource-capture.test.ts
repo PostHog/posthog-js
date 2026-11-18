@@ -126,7 +126,7 @@ describe.each([
   })
 })
 
-it('classifies a read of an unknown resource as a validation failure, not a server exception', async () => {
+it('classifies a read of an unknown resource as a validation failure', async () => {
   const eventCapture = new EventCapture()
   await eventCapture.start()
   const { client, cleanup } = await connect(setupHighLevelServer())
@@ -139,7 +139,7 @@ it('classifies a read of an unknown resource as a validation failure, not a serv
     const props = eventCapture.findCapturesByEvent('$mcp_resource_read')[0].properties
     expect(props.$mcp_is_error).toBe(true)
     expect(props.$mcp_error_type).toBe('validation')
-    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(0)
+    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
   } finally {
     await cleanup()
     await eventCapture.stop()

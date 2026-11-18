@@ -70,20 +70,24 @@ const FLATTENED_CLIENT_ERROR = /^(MCP error -32602: |Input validation error|Inva
 
 /**
  * `validation` when the request was rejected for what the client sent, which is
- * the agent's failure rather than the server's. Those keep `$mcp_is_error` but
- * get no `$exception`.
+ * the agent's failure rather than the server's. Never throws: a value whose
+ * getters throw is left unclassified.
  */
 export function clientErrorType(error: unknown): 'validation' | undefined {
-  const flattened = isCallToolResult(error)
-  const message = flattened ? extractCallToolResultMessage(error) : readField(error, 'message')
-  if (typeof message === 'string' && SERVER_RESULT_REJECTED.test(message)) {
+  try {
+    const flattened = isCallToolResult(error)
+    const message = flattened ? extractCallToolResultMessage(error) : readField(error, 'message')
+    if (typeof message === 'string' && SERVER_RESULT_REJECTED.test(message)) {
+      return undefined
+    }
+    const code = readField(error, 'code')
+    if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
+      return 'validation'
+    }
+    return flattened && FLATTENED_CLIENT_ERROR.test(message as string) ? 'validation' : undefined
+  } catch {
     return undefined
   }
-  const code = readField(error, 'code')
-  if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
-    return 'validation'
-  }
-  return flattened && FLATTENED_CLIENT_ERROR.test(message as string) ? 'validation' : undefined
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']
