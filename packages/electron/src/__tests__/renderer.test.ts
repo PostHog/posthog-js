@@ -370,6 +370,7 @@ describe('renderer facade', () => {
         broadcast({ optedOut: true, revision: 2 })
         await client.capture('secret', { secret: 'private' })
         await client.captureException(new Error('secret'))
+        await client.group('organization', 'secret', { secret: 'private' })
         expect(bridge.request).toHaveBeenCalledTimes(1)
         client.dispose()
     })

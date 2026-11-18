@@ -1,6 +1,17 @@
-import { promises as fs } from 'node:fs'
+import {
+    closeSync,
+    ftruncateSync,
+    openSync,
+    promises as fs,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+    writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
 
 const DEFAULT_MAX_STORAGE_BYTES = 5 * 1024 * 1024
 const DEFAULT_MAX_QUEUE_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -40,9 +51,12 @@ function isQueueItem(value: unknown): value is QueueItem {
     )
 }
 
-/** Single-process storage. Call load before using the store; mutations must go through set. */
+/** Exclusively owned local storage. Call load before use; mutations must go through set. */
 export class ElectronStorage {
     private stopped = false
+    private owned = false
+    private readonly owner = JSON.stringify({ host: hostname(), pid: process.pid, token: randomUUID() })
+    private stopping?: Promise<void>
     private values: Values = Object.create(null)
     private serialized = JSON.stringify({ version: 1, values: {} })
     private revision = 0
@@ -51,6 +65,10 @@ export class ElectronStorage {
     private pending?: Promise<void>
     private failure?: { error: unknown }
     private loading?: Promise<void>
+    private loaded = false
+    // Temp file whose rename has been submitted and may still land after the final exit write.
+    private renaming?: string
+    private finalized = false
     private readonly maxStorageBytes: number
     private readonly maxQueueAgeMs: number
     private readonly file: string
@@ -71,11 +89,65 @@ export class ElectronStorage {
     }
 
     async load(): Promise<void> {
-        this.loading ??= this.loadState()
+        this.loading ??= this.loadState().finally(() => {
+            this.loaded = true
+        })
         await this.loading
     }
 
+    get isLoaded(): boolean {
+        return this.loaded
+    }
+
+    get isOwned(): boolean {
+        return this.owned && !this.stopped
+    }
+
+    private async acquire(): Promise<void> {
+        await fs.mkdir(this.directory, { recursive: true, mode: 0o700 })
+        await fs.chmod(this.directory, 0o700)
+        const lock = join(this.directory, '.owner')
+        try {
+            await fs.writeFile(lock, this.owner, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+            const previous = await fs.readFile(lock, 'utf8')
+            const owner: unknown = JSON.parse(previous)
+            if (
+                !isObject(owner) ||
+                owner.host !== hostname() ||
+                !Number.isSafeInteger(owner.pid) ||
+                (owner.pid as number) <= 0 ||
+                typeof owner.token !== 'string' ||
+                !/^[a-f0-9-]{36}$/.test(owner.token)
+            )
+                throw new Error('Unverifiable Electron storage ownership')
+            try {
+                process.kill(owner.pid as number, 0)
+                throw new Error('Electron storage is already owned by another process')
+            } catch (probeError) {
+                if ((probeError as NodeJS.ErrnoException).code !== 'ESRCH') throw probeError
+            }
+            // Never delete this tombstone: only one reclaimer may remove this owner generation.
+            // A crashed reclaimer requires manual recovery with all application processes stopped.
+            await fs.writeFile(join(this.directory, `.reclaim-${owner.token}`), '', { mode: 0o600, flag: 'wx' })
+            if ((await fs.readFile(lock, 'utf8')) !== previous) throw new Error('Electron storage owner changed')
+            await fs.unlink(lock)
+            await fs.writeFile(lock, this.owner, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        }
+        this.owned = true
+    }
+
     private async loadState(): Promise<void> {
+        try {
+            if (this.stopped) return
+            await this.acquire()
+            if (this.stopped) return
+        } catch (error) {
+            this.values = Object.assign(Object.create(null), { opted_out: true })
+            this.report(error)
+            return
+        }
         let text: string
         try {
             text = await fs.readFile(this.file, 'utf8')
@@ -124,7 +196,7 @@ export class ElectronStorage {
     }
 
     get<T>(key: string): T | undefined {
-        if (key === 'queue' && !this.stopped && Date.now() > this.queueExpiresAt) {
+        if (key === 'queue' && this.isOwned && Date.now() > this.queueExpiresAt) {
             const bounded = this.bound(this.values)
             if (bounded.serialized !== this.serialized) {
                 this.values = bounded.values
@@ -140,7 +212,7 @@ export class ElectronStorage {
     }
 
     set<T>(key: string, value: T | null): void {
-        if (this.stopped) return
+        if (!this.isOwned) return
         const next: Values = Object.assign(Object.create(null), this.values)
         try {
             if (value === null) {
@@ -163,7 +235,7 @@ export class ElectronStorage {
 
     /** Waits for atomic write completion, not an fsync/power-loss durability barrier. */
     async flush(): Promise<void> {
-        if (this.stopped) return
+        if (!this.isOwned) return
         // Retention also applies when the queue has been idle since the last write.
         if (Date.now() > this.queueExpiresAt) {
             const bounded = this.bound(this.values)
@@ -221,12 +293,43 @@ export class ElectronStorage {
         return { values, serialized, expiresAt }
     }
 
-    stop(): void {
+    /** Final process-exit only: never race asynchronous loading, writing or ownership release. */
+    releaseOnExit(): void {
+        if (!this.owned || !this.loaded || this.stopping || this.stopped) return
+        // The SDK never blocks quit, so persist unsaved state (notably consent) with a blocking write.
+        if (this.persistedRevision < this.revision) this.writeOnExit()
+        // An older async rename may still land after this; keep ownership as before.
+        if (this.pending) return
         this.stopped = true
+        const lock = join(this.directory, '.owner')
+        try {
+            if (readFileSync(lock, 'utf8') === this.owner) unlinkSync(lock)
+        } catch (error) {
+            this.report(error)
+        } finally {
+            this.owned = false
+        }
+    }
+
+    stop(): Promise<void> {
+        this.stopped = true
+        return (this.stopping ??= (async () => {
+            await this.loading
+            await this.pending?.catch(() => {})
+            if (!this.owned) return
+            const lock = join(this.directory, '.owner')
+            try {
+                if ((await fs.readFile(lock, 'utf8')) === this.owner) await fs.unlink(lock)
+            } catch (error) {
+                this.report(error)
+            } finally {
+                this.owned = false
+            }
+        })())
     }
 
     private scheduleWrite(): void {
-        if (this.stopped || this.pending) {
+        if (!this.isOwned || this.pending) {
             return
         }
         this.failure = undefined
@@ -236,7 +339,7 @@ export class ElectronStorage {
                 attemptedRevision = this.revision
                 const serialized = this.serialized
                 await this.write(serialized)
-                this.persistedRevision = attemptedRevision
+                this.persistedRevision = Math.max(this.persistedRevision, attemptedRevision)
             }
         })
         this.pending = pending
@@ -260,6 +363,39 @@ export class ElectronStorage {
         )
     }
 
+    private writeOnExit(): void {
+        if (Buffer.byteLength(this.serialized, 'utf8') > this.maxStorageBytes) {
+            this.report(new RangeError('Electron storage exceeds maxStorageBytes'))
+            return
+        }
+        // A submitted rename cannot be cancelled. Overwrite its source in place first (never create it):
+        // if it already landed, the rename below replaces it; otherwise it now carries the final state.
+        if (this.renaming) {
+            let fd: number | undefined
+            try {
+                fd = openSync(this.renaming, 'r+')
+                ftruncateSync(fd, 0)
+                writeSync(fd, this.serialized, 0, 'utf8')
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') this.report(error)
+            } finally {
+                if (fd !== undefined) closeSync(fd)
+            }
+        }
+        const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
+        try {
+            writeFileSync(temporary, this.serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+            renameSync(temporary, this.file)
+            this.persistedRevision = this.revision
+            this.finalized = true
+        } catch (error) {
+            this.report(error)
+            try {
+                unlinkSync(temporary)
+            } catch {}
+        }
+    }
+
     private async write(serialized: string): Promise<void> {
         if (Buffer.byteLength(serialized, 'utf8') > this.maxStorageBytes) {
             throw new RangeError('Electron storage exceeds maxStorageBytes')
@@ -269,8 +405,12 @@ export class ElectronStorage {
         const temporary = join(this.directory, `.state-${randomUUID()}.tmp`)
         try {
             await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+            if (this.finalized) return
+            // stop() retains ownership until this already-started write settles.
+            this.renaming = temporary
             await fs.rename(temporary, this.file)
         } finally {
+            if (this.renaming === temporary) this.renaming = undefined
             await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => {
                 if (error.code !== 'ENOENT') {
                     this.report(error)
