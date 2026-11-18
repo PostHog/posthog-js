@@ -98,6 +98,8 @@ const allProductsDisabled = {
     autocapture: 'false',
     webVitals: 'false',
     errorTracking: 'false',
+    toolbar: 'false',
+    conversations: 'false',
 }
 
 test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {

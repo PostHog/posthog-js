@@ -1,12 +1,12 @@
 import { h, Fragment } from 'preact'
 import { useMemo } from 'preact/hooks'
 import { isUndefined, isNumber, isArray } from '@posthog/core'
-import { TipTapDoc, TipTapNode, TipTapMark } from '../../../../posthog-conversations-types'
+import type { TipTapDoc, TipTapNode, TipTapMark } from '../../types/conversations'
 import { cssVar, DEFAULT_ON_PRIMARY_COLOR, DEFAULT_PRIMARY_COLOR } from '../theme'
 
 interface RichContentProps {
     /** Rich content in TipTap JSON format (preferred) */
-    richContent?: TipTapDoc
+    richContent?: TipTapDoc | undefined
     /** Plain text fallback if rich_content is missing or invalid */
     content: string
     /** Whether message is from customer (affects styling) */
@@ -354,7 +354,7 @@ function renderGreetingLine(text: string, styles: ReturnType<typeof getStyles>) 
     let match: RegExpExecArray | null
     while ((match = links.exec(text))) {
         parts.push(text.slice(lastIndex, match.index))
-        const [, prefix, label, url] = match
+        const [, prefix, label = '', url = ''] = match
         const safeUrl = !prefix && label.indexOf('[') === -1 && sanitizeUrl(url)
         const literal = prefix === '\\' ? match[0].slice(1) : match[0]
         parts.push(

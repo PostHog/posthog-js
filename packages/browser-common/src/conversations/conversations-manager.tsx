@@ -1,0 +1,1846 @@
+import { render, h } from 'preact'
+import { isNumber, isNull } from '@posthog/core'
+import type {
+    ConversationsWidgetState,
+    UserProvidedTraits,
+    SendMessageResponse,
+    SendMessagePayload,
+    GetMessagesResponse,
+    MarkAsReadResponse,
+    GetTicketsOptions,
+    GetTicketsResponse,
+    Ticket,
+    RestoreFromTokenPayload,
+    RestoreFromTokenResponse,
+    RequestRestoreLinkPayload,
+    RequestRestoreLinkResponse,
+    TicketStatus,
+    ConversationsTheme,
+} from '../types/conversations'
+import type { ConversationsRemoteConfig } from '../types/remote-config'
+import type { ConversationsHost, ConversationsResponse } from './conversations-host'
+import type { ConversationsPersistence } from './persistence'
+import { ConversationsWidget, type WidgetView } from './components/ConversationsWidget'
+import { createLogger } from '../utils/logger'
+import { document, window } from '../utils/globals'
+import {
+    formDataToQuery,
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '../utils/request-utils'
+import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
+import { addEventListener } from '../utils/general-utils'
+import { createConversationsError, isConversationsError } from './errors'
+import { buildThemeCss, mergeThemes, WIDGET_CONTAINER_ID } from './theme'
+import { prepareStylesheet } from '../utils/stylesheet-loader'
+
+const logger = createLogger('[ConversationsManager]')
+
+const createConversationsRequestError = (
+    response: ConversationsResponse,
+    operation: string,
+    fallbackMessage: string,
+    rateLimitIsWarning: boolean = false,
+    logFailure: boolean = true
+): Error => {
+    if (response.statusCode === 0) {
+        // Fetch failures are already logged by `_send_request`. XHR reports status 0
+        // without an error, so keep one warning for that otherwise-unlogged path.
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        if (response.error) {
+            const errorWithCause = error as Error & { cause?: unknown }
+            errorWithCause.cause = response.error
+        } else if (logFailure) {
+            logger.warn(`Network error ${operation}`)
+        }
+        return error
+    }
+
+    if (response.statusCode === 429) {
+        if (logFailure) {
+            if (rateLimitIsWarning) {
+                logger.warn(`Rate limited ${operation}`)
+            } else {
+                logger.error(fallbackMessage, { status: response.statusCode })
+            }
+        }
+        return createConversationsError('rate_limit', 'Too many requests. Please wait before trying again.')
+    }
+
+    const message = response.json?.error || response.json?.detail || response.json?.message || fallbackMessage
+    if (logFailure) {
+        logger.error(fallbackMessage, { status: response.statusCode })
+    }
+    return createConversationsError('http', message)
+}
+
+const createInvalidConversationsResponseError = (operation: string, logFailure: boolean = true): Error => {
+    const message = 'Invalid response from server'
+    if (logFailure) {
+        logger.error(message, { operation })
+    }
+    return createConversationsError('invalid_response', message)
+}
+
+// Polling cadence. The widget polls faster while open (so replies feel live) and
+// much slower while closed (the badge can lag a few seconds). Idle widgets with no
+// conversation don't poll at all — see _hasSomethingToPoll.
+const POLL_INTERVAL_OPEN_MS = 5000 // 5 seconds
+const POLL_INTERVAL_CLOSED_MS = 15000 // 15 seconds
+// On HTTP 429 we back off exponentially instead of hammering the shared team budget,
+// which is what starves visitor sends (the send and poll budgets are separate server-side,
+// but polling still competes with everyone else's polls).
+const POLL_RATE_LIMIT_BASE_MS = 5000 // 5 seconds
+const POLL_RATE_LIMIT_MAX_MS = 60000 // 1 minute
+// How often to check that the widget container is still attached to the DOM.
+// SPA frameworks that replace document.body on navigation (e.g. Turbo Drive)
+// detach our container; this watcher re-attaches it so the widget survives.
+const REATTACH_CHECK_INTERVAL_MS = 1000 // 1 second
+const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
+const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
+// Polling runs every 5s while the widget is visible, so repeated status-0
+// failures can become an endless blocked-request loop. Match the browser event
+// retry budget and pause polling after this many consecutive online failures.
+const MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES = 3
+
+// Singleton guard: only one ConversationsManager per page (see initConversations).
+let _activeManager: ConversationsManager | null = null
+
+export class ConversationsManager {
+    private _config: ConversationsRemoteConfig
+    private _persistence: ConversationsPersistence
+    private _widgetRef: ConversationsWidget | null = null
+    private _containerElement: HTMLDivElement | null = null
+    private _themeStyleElement: HTMLStyleElement | null = null
+    // Patches from setTheme(), applied over config.conversations.theme
+    private _themeOverrides: ConversationsTheme = {}
+    private _currentTicketId: string | null = null
+    private _pollTimeoutId: number | null = null
+    // Guards against a second _startPolling() while the first poll is still in flight
+    // (the timeout id isn't set until the poll resolves and schedules the next tick).
+    private _pollLoopRunning: boolean = false
+    // Bumped by every start/stop. An in-flight poll chain captures the generation it
+    // started with and abandons itself if a stop/restart happened while it awaited,
+    // so open/close (which stops then starts) can never leave two loops running.
+    private _pollGeneration: number = 0
+    private _consecutivePollingRateLimitFailures: number = 0
+    private _reattachIntervalId: number | null = null
+    private _lastMessageTimestamp: string | null = null
+    private _isPollingMessages: boolean = false
+    private _isPollingTickets: boolean = false
+    private _unsubscribeIdentifyListener: (() => void) | null = null
+    private _unreadCount: number = 0
+    // SECURITY: widget_session_id is the key for access control
+    // This is a random UUID that only this browser knows
+    private _widgetSessionId: string
+    // True when this page load generated the widget_session_id, so the first ticket list
+    // fetch at boot can only return nothing. Cleared once it has been used or by restore.
+    private _skipInitialTicketsFetch: boolean
+    private _isWidgetEnabled: boolean
+    private _isDomainAllowed: boolean
+    private _widgetState: ConversationsWidgetState = 'closed'
+    // open()/close() before the widget paints. Read once when choosing the initial panel state.
+    private _forcedInitialState: ConversationsWidgetState | null = null
+    private _isWidgetRendered: boolean = false
+    private _hasProcessedRestoreToken: boolean = false
+    private _initializeWidgetPromise: Promise<void> | null = null
+    // Bumped by hide() so an initialization already waiting on the network does not
+    // render after the widget was removed.
+    private _widgetInitGeneration: number = 0
+    // Bumped by destroy() (and so by reset()). Async initialization captures it before
+    // awaiting a request and stops if it changed, so a manager torn down mid-request
+    // doesn't persist state, render, or start polling afterwards.
+    private _lifecycleGeneration: number = 0
+    // View state management for ticket list vs message view
+    private _currentView: WidgetView = 'messages'
+    private _tickets: Ticket[] = []
+    private _showTicketList: boolean = false
+    private _consecutivePollingStatusZeroFailures: number = 0
+
+    constructor(
+        config: ConversationsRemoteConfig,
+        private readonly _host: ConversationsHost,
+        persistence: ConversationsPersistence
+    ) {
+        this._config = config
+        this._persistence = persistence
+
+        this._widgetSessionId = this._persistence.getOrCreateWidgetSessionId()
+        this._skipInitialTicketsFetch = this._persistence.isNewWidgetSession()
+
+        // Determine if widget should be shown based on config and domain
+        this._isWidgetEnabled = config.widgetEnabled === true
+        this._isDomainAllowed = isCurrentDomainAllowed(config.domains)
+
+        if (window) {
+            addEventListener(window, 'online', this._onOnline)
+        }
+
+        this._initialize()
+    }
+
+    private _onOnline = (): void => {
+        this._consecutivePollingStatusZeroFailures = 0
+        this._consecutivePollingRateLimitFailures = 0
+        // Clearing the streak alone leaves any pending long backoff timeout in place,
+        // so messages/unread would stay stale until it fires (up to a minute).
+        // Restarting polls immediately and reschedules at the normal cadence.
+        if (this._pollLoopRunning) {
+            this._stopPolling()
+            this._startPolling()
+        }
+    }
+
+    private _currentUrl(): string | undefined {
+        return this._host._getCurrentUrl()
+    }
+
+    /**
+     * Send a message programmatically via the API
+     * Creates a new ticket if none exists or if newTicket is true
+     *
+     * @param message - The message text to send
+     * @param userTraits - Optional user identification data (name, email)
+     * @param newTicket - If true, forces creation of a new ticket (ignores current ticket)
+     * @returns Promise with the response including ticket_id and message_id
+     */
+    async sendMessage(
+        message: string,
+        userTraits?: UserProvidedTraits,
+        newTicket?: boolean
+    ): Promise<SendMessageResponse> {
+        // Determine which ticket to use
+        // If newTicket is true, force creation of new ticket by sending null
+        // Otherwise use current ticket ID (which may be null if no ticket exists yet)
+        const ticketId = newTicket ? null : this._currentTicketId
+
+        // Track if this is creating a new ticket
+        const isNewTicket = !ticketId
+
+        const token = this._config.token
+
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            const personTraits = this._getPersonTraits()
+
+            const name = userTraits?.name || personTraits.name || null
+            const email = userTraits?.email || personTraits.email || null
+
+            const identity = this._identityFields()
+            const payload: Partial<SendMessagePayload> = {
+                message: message.trim(),
+                traits: {
+                    name,
+                    email,
+                },
+                ticket_id: ticketId,
+            }
+
+            if (identity) {
+                Object.assign(payload, identity)
+                payload.distinct_id = identity['identity_distinct_id']!
+            } else {
+                payload.widget_session_id = this._widgetSessionId
+                payload.distinct_id = this._host._getDistinctId()
+            }
+
+            try {
+                // Capture session ID - sent with every message
+                const capturedSessionId = this._host._getSessionId()
+                if (capturedSessionId) {
+                    payload.session_id = capturedSessionId
+                }
+
+                // Capture session replay URL with timestamp - sent with every message
+                const replayUrl = this._host._getSessionReplayUrl()
+
+                // Capture current URL - only for new tickets to record where user started
+                const currentUrl = isNewTicket ? this._currentUrl() : undefined
+
+                if (replayUrl || currentUrl) {
+                    payload.session_context = {
+                        session_replay_url: replayUrl || undefined,
+                        current_url: currentUrl || undefined,
+                    }
+                }
+            } catch (error) {
+                // Log error but don't fail message sending
+                logger.warn('Failed to capture session context', error)
+            }
+
+            this._host._sendRequest({
+                path: '/api/conversations/v1/widget/message',
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode !== 200 && response.statusCode !== 201) {
+                        reject(
+                            createConversationsRequestError(response, 'sending message', 'Failed to send message', true)
+                        )
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(createInvalidConversationsResponseError('sending message'))
+                        return
+                    }
+
+                    const data = response.json as SendMessageResponse
+
+                    // Update current ticket ID if this was a new ticket
+                    // This happens when: 1) No ticket existed, or 2) User forced new ticket creation
+                    if (isNewTicket && data.ticket_id) {
+                        this._currentTicketId = data.ticket_id
+                        this._persistence.saveTicketId(data.ticket_id)
+                        logger.info('New ticket created', {
+                            ticketId: data.ticket_id,
+                            forced: newTicket === true,
+                        })
+                    }
+
+                    // Track message sent
+                    this._host._capture('$conversations_message_sent', {
+                        ticketId: data.ticket_id,
+                        isNewTicket: isNewTicket,
+                        messageLength: message.length,
+                    })
+
+                    // Update last message timestamp
+                    this._lastMessageTimestamp = data.created_at
+
+                    // A ticket now exists, so resume polling if the loop had stopped
+                    // because there was nothing to poll. Only when a widget is rendered —
+                    // programmatic API-only usage never polls.
+                    if (this._isWidgetRendered) {
+                        this._startPolling()
+                    }
+
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    /**
+     * Switch to a different ticket if an explicit ticketId is provided
+     * This ensures subsequent operations (sendMessage, etc.) use the correct ticket
+     */
+    private _switchToTicketIfNeeded(ticketId: string | undefined): void {
+        if (ticketId && ticketId !== this._currentTicketId) {
+            this._currentTicketId = ticketId
+            this._persistence.saveTicketId(ticketId)
+            // Reset last message timestamp when switching tickets
+            this._lastMessageTimestamp = null
+        }
+    }
+
+    /** Fetch messages via the API */
+    async getMessages(ticketId?: string, after?: string): Promise<GetMessagesResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
+
+        // Switch to this ticket if explicitly provided
+        this._switchToTicketIfNeeded(ticketId)
+
+        const token = this._config.token
+
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            const identity = this._identityFields()
+            const queryParams: Record<string, string> = {
+                limit: '50',
+            }
+
+            if (identity) {
+                Object.assign(queryParams, identity)
+            } else {
+                queryParams.widget_session_id = this._widgetSessionId
+            }
+
+            if (after) {
+                queryParams.after = after
+            }
+
+            this._host._sendRequest({
+                path: `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`,
+                method: 'GET',
+                timestampMode: 'query',
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
+
+                    if (response.statusCode !== 200) {
+                        reject(
+                            createConversationsRequestError(response, 'fetching messages', 'Failed to fetch messages')
+                        )
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(createInvalidConversationsResponseError('fetching messages'))
+                        return
+                    }
+
+                    const data = response.json as GetMessagesResponse
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    /** Mark messages as read via the API */
+    async markAsRead(ticketId?: string): Promise<MarkAsReadResponse> {
+        // Use provided ticketId or fall back to current ticket
+        const targetTicketId = ticketId || this._currentTicketId
+
+        if (!targetTicketId) {
+            throw new Error('No ticket ID provided and no active conversation')
+        }
+
+        // Switch to this ticket if explicitly provided
+        this._switchToTicketIfNeeded(ticketId)
+
+        const token = this._config.token
+
+        logger.info('Marking messages as read', { ticketId: targetTicketId })
+
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            const identity = this._identityFields()
+            const data = identity || { widget_session_id: this._widgetSessionId }
+
+            this._host._sendRequest({
+                path: `/api/conversations/v1/widget/messages/${targetTicketId}/read`,
+                method: 'POST',
+                data,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode !== 200) {
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'marking messages as read',
+                                'Failed to mark messages as read'
+                            )
+                        )
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(createInvalidConversationsResponseError('marking messages as read'))
+                        return
+                    }
+
+                    const responseData = response.json as MarkAsReadResponse
+                    resolve(responseData)
+                },
+            })
+        })
+    }
+
+    /**
+     * Initialize the conversations manager.
+     * Always initializes persistence and event listeners for API usage.
+     * Only renders the widget if widgetEnabled is true AND domain is allowed.
+     */
+    private _initialize(): void {
+        if (!document || !window) {
+            logger.info('Conversations not available: Document or window not available')
+            return
+        }
+
+        // In identity mode, restore is unnecessary and the persisted anonymous
+        // ticket belongs to a different principal -- clear it before completing.
+        if (this._identityFields()) {
+            this._persistence.clearTicketId()
+            this._completeInitialization()
+            return
+        }
+
+        const restoreToken = getRestoreTokenFromUrl()
+        if (restoreToken && !this._hasProcessedRestoreToken) {
+            this._hasProcessedRestoreToken = true
+
+            // Clear the token from the URL immediately, then again after a tick and
+            // after the restore completes.  SPA routers (Next.js, React Router, etc.)
+            // maintain their own URL state and can overwrite a single replaceState call.
+            clearRestoreTokenFromUrl()
+            setTimeout(clearRestoreTokenFromUrl, 0)
+
+            const generation = this._lifecycleGeneration
+            this._restoreFromTokenWithRetry(restoreToken)
+                .catch((error) => {
+                    if (!isConversationsError(error)) {
+                        logger.warn('Failed to restore conversations from URL token', error)
+                    }
+                })
+                .finally(() => {
+                    clearRestoreTokenFromUrl()
+                    if (generation !== this._lifecycleGeneration) {
+                        return
+                    }
+                    this._completeInitialization()
+                })
+            return
+        }
+
+        this._completeInitialization()
+    }
+
+    private _completeInitialization(): void {
+        this._hasProcessedRestoreToken = true
+
+        // Load any existing ticket ID from localStorage
+        this._currentTicketId = this._persistence.loadTicketId()
+        logger.info('Loaded ticket ID from storage', { ticketId: this._currentTicketId })
+
+        // Track conversations API loaded (separate from widget loaded)
+        this._host._capture('$conversations_loaded', {
+            hasExistingTicket: !!this._currentTicketId,
+            widgetEnabled: this._isWidgetEnabled,
+            domainAllowed: this._isDomainAllowed,
+        })
+
+        // Only render widget if both widgetEnabled and domain is allowed
+        if (this._isWidgetEnabled && this._isDomainAllowed) {
+            this._initializeWidget()
+        } else {
+            // A later show() can come after another tab created a ticket on this session, so it must load the list.
+            this._skipInitialTicketsFetch = false
+            logger.info('Widget not rendered', {
+                widgetEnabled: this._isWidgetEnabled,
+                domainAllowed: this._isDomainAllowed,
+            })
+        }
+
+        // Listen for identify events to hide identification form when user identifies
+        this._setupIdentifyListener()
+    }
+
+    private async _restoreFromTokenWithRetry(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        try {
+            return await this._restoreFromToken(restoreToken)
+        } catch (error) {
+            const requestLayerHandledNetworkError =
+                isConversationsError(error) && error.kind === 'network' && 'cause' in error
+            if (!requestLayerHandledNetworkError) {
+                logger.warn('Restore token exchange failed, retrying once', error)
+            }
+            return await this._restoreFromToken(restoreToken)
+        }
+    }
+
+    private async _restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        const token = this._config.token
+        const generation = this._lifecycleGeneration
+
+        const payload: RestoreFromTokenPayload = {
+            restore_token: restoreToken,
+            widget_session_id: this._widgetSessionId,
+            distinct_id: this._host._getDistinctId(),
+            current_url: this._currentUrl(),
+        }
+
+        // oxlint-disable-next-line compat/compat
+        const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
+            this._host._sendRequest({
+                path: RESTORE_EXCHANGE_ENDPOINT,
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode !== 200) {
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'restoring conversations',
+                                'Failed to restore conversations',
+                                true,
+                                false
+                            )
+                        )
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(createInvalidConversationsResponseError('restoring conversations', false))
+                        return
+                    }
+
+                    resolve(response.json as RestoreFromTokenResponse)
+                },
+            })
+        })
+
+        if (data.status !== 'success') {
+            logger.info('Restore token was not accepted', { status: data.status, code: data.code })
+            return data
+        }
+
+        if (generation !== this._lifecycleGeneration) {
+            logger.info('Conversations destroyed during restore, discarding the result')
+            return data
+        }
+
+        this._lastMessageTimestamp = null
+        this._unreadCount = 0
+
+        // Apply the canonical widget_session_id from the server if provided
+        if (data.widget_session_id) {
+            this._widgetSessionId = data.widget_session_id
+            this._persistence.setWidgetSessionId(data.widget_session_id)
+            this._skipInitialTicketsFetch = false
+        }
+
+        if (data.migrated_ticket_ids?.length) {
+            const ticketId = data.migrated_ticket_ids[0]!
+            this._currentTicketId = ticketId
+            this._persistence.saveTicketId(ticketId)
+            // Poll straight away so messages and ticket list are fresh, and resume
+            // the loop in case it had stopped while there was no conversation. At
+            // initial boot the widget isn't rendered yet — _doInitializeWidget starts
+            // the loop after restore completes, so only restart an already-live widget.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
+            void this._pollMessages()
+            void this._pollTickets()
+        } else {
+            this._currentTicketId = null
+            this._persistence.clearTicketId()
+        }
+
+        return data
+    }
+
+    /**
+     * Initialize and render the widget UI
+     * Uses a promise guard to prevent race conditions from concurrent calls
+     */
+    private _initializeWidget(): Promise<void> {
+        if (this._isWidgetRendered) {
+            return Promise.resolve()
+        }
+        if (this._initializeWidgetPromise) {
+            return this._initializeWidgetPromise
+        }
+        const initGeneration = this._widgetInitGeneration
+        this._initializeWidgetPromise = this._doInitializeWidget(initGeneration)
+        return this._initializeWidgetPromise
+    }
+
+    private async _doInitializeWidget(initGeneration: number): Promise<void> {
+        // Get initial user traits (from PostHog person properties or saved)
+        const initialUserTraits = this._getInitialUserTraits()
+
+        const lifecycleGeneration = this._lifecycleGeneration
+        // Snapshot before the await so open()/close() during the tickets request
+        // still count as a change once initialization finishes.
+        const persistedBefore: ConversationsWidgetState =
+            this._persistence.loadWidgetState() === 'open' ? 'open' : 'closed'
+
+        // Determine initial view based on ticket count
+        const { view: initialView, tickets } = await this._determineInitialView()
+
+        // destroy()/reset() ran while the tickets request was in flight
+        if (lifecycleGeneration !== this._lifecycleGeneration) {
+            logger.info('Conversations destroyed during widget initialization, not rendering')
+            return
+        }
+        // hide() ran while the tickets request was in flight
+        if (initGeneration !== this._widgetInitGeneration) {
+            logger.info('Widget initialization cancelled before render')
+            return
+        }
+        this._currentView = initialView
+
+        // Read after the await so open()/close() during startup override the saved state.
+        const forcedState = this._forcedInitialState
+        this._forcedInitialState = null
+        const persistedState: ConversationsWidgetState =
+            this._persistence.loadWidgetState() === 'open' ? 'open' : 'closed'
+        const initialState: ConversationsWidgetState = forcedState ?? persistedState
+        this._widgetState = initialState
+
+        // close() writes storage immediately, so compare against the current value when saving
+        // and against the pre-startup value when deciding whether the visible state changed.
+        if (initialState !== persistedState) {
+            this._persistence.saveWidgetState(initialState)
+        }
+        if (initialState !== persistedBefore) {
+            this._host._capture('$conversations_widget_state_changed', {
+                state: initialState,
+                view: this._currentView,
+                ticketId: this._currentTicketId,
+            })
+        }
+
+        // Render the widget with initial view
+        this._renderWidget(initialState, initialUserTraits, initialView, tickets)
+        this._isWidgetRendered = true
+
+        this._host._capture('$conversations_widget_loaded', {
+            hasExistingTicket: !!this._currentTicketId,
+            initialState: initialState,
+            initialView: initialView,
+            ticketCount: tickets.length,
+            hasUserTraits: !!initialUserTraits,
+        })
+
+        // Start polling — the first poll fires immediately and loads messages or tickets
+        this._startPolling()
+
+        // Keep the widget attached across SPA navigations that replace document.body
+        this._startReattachWatcher()
+    }
+
+    /**
+     * Extract name and email from PostHog's stored person properties.
+     *
+     * Person properties set via posthog.identify() are stored under the
+     * $stored_person_properties persistence key, not as top-level props.
+     * We check both locations plus the super-properties for completeness.
+     */
+    private _getPersonTraits(): { name: string | undefined; email: string | undefined } {
+        const storedPersonProps = this._host._getPersonProperties() || {}
+        const superProp = (key: string): any => this._host._getRegisteredProperty(key)
+
+        const name =
+            storedPersonProps.$name || storedPersonProps.name || superProp('$name') || superProp('name') || undefined
+        const email =
+            storedPersonProps.$email ||
+            storedPersonProps.email ||
+            superProp('$email') ||
+            superProp('email') ||
+            undefined
+
+        return { name, email }
+    }
+
+    /**
+     * Get initial user traits from PostHog or localStorage
+     */
+    private _getInitialUserTraits(): UserProvidedTraits | null {
+        const { name, email } = this._getPersonTraits()
+
+        if (name || email) {
+            return {
+                name: name || undefined,
+                email: email || undefined,
+            }
+        }
+
+        // Otherwise, check localStorage for previously saved traits
+        const savedTraits = this._persistence.loadUserTraits()
+        if (savedTraits && (savedTraits.name || savedTraits.email)) {
+            return savedTraits
+        }
+
+        return null
+    }
+
+    /**
+     * Handle user identification from the widget form
+     */
+    private _handleIdentify = (traits: UserProvidedTraits): void => {
+        // Save traits to localStorage
+        this._persistence.saveUserTraits(traits)
+
+        // Track identification
+        this._host._capture('$conversations_user_identified', {
+            hasName: !!traits.name,
+            hasEmail: !!traits.email,
+        })
+    }
+
+    private _handleRequestRestoreLink = async (email: string): Promise<RequestRestoreLinkResponse> => {
+        const response = await this.requestRestoreLink(email)
+        this._host._capture('$conversations_restore_link_requested', {
+            hasEmail: !!email,
+        })
+        return response
+    }
+
+    /**
+     * Handle sending a message from the widget
+     */
+    private _handleSendMessage = async (message: string): Promise<void> => {
+        // Get user traits from the widget
+        const userTraits = this._widgetRef?.getUserTraits() || undefined
+
+        // Call the public API method (which handles tracking and state updates).
+        // Any rejection is propagated to the widget, which renders the error state and logs it -
+        // logging it here as well would surface a benign network failure as a captured exception.
+        await this.sendMessage(message, userTraits)
+
+        // Poll for response immediately (sendMessage already resumed the loop)
+        setTimeout(() => this._pollMessages(), 1000)
+    }
+
+    /**
+     * Handle widget state changes
+     */
+    private _handleStateChange = (state: ConversationsWidgetState): void => {
+        this._widgetState = state
+        logger.info('Widget state changed', { state, view: this._currentView })
+
+        this._host._capture('$conversations_widget_state_changed', {
+            state: state,
+            view: this._currentView,
+            ticketId: this._currentTicketId,
+        })
+
+        this._persistence.saveWidgetState(state)
+
+        // Restart the loop so the new open/closed cadence takes effect immediately
+        // (and opening triggers a fresh poll rather than waiting out a closed interval).
+        if (this._isWidgetRendered) {
+            this._stopPolling()
+            this._startPolling()
+        }
+
+        // Mark messages as read when widget opens (only if in message view with a ticket)
+        if (state === 'open') {
+            if (this._currentView === 'messages' && this._unreadCount > 0 && this._currentTicketId) {
+                this._markMessagesAsRead()
+            }
+        }
+    }
+
+    /**
+     * Mark messages as read
+     */
+    private async _markMessagesAsRead(): Promise<void> {
+        if (!this._currentTicketId) {
+            return
+        }
+
+        try {
+            const response = await this.markAsRead(this._currentTicketId)
+            this._unreadCount = response.unread_count
+            // Update the widget to reflect the new unread count
+            this._widgetRef?.setUnreadCount(0)
+            logger.info('Messages marked as read', { unreadCount: response.unread_count })
+        } catch (error) {
+            if (!isConversationsError(error)) {
+                logger.error('Failed to mark messages as read', error)
+            }
+        }
+    }
+
+    /**
+     * Load messages for the current ticket
+     */
+    private async _loadMessages(): Promise<void> {
+        if (!this._currentTicketId) {
+            return
+        }
+
+        try {
+            const identityBefore = this._host._getIdentity()?.distinctId
+            const ticketBefore = this._currentTicketId
+            const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+
+            // Discard stale response if identity or ticket changed while in-flight
+            if (this._host._getIdentity()?.distinctId !== identityBefore || this._currentTicketId !== ticketBefore) {
+                return
+            }
+
+            // Update unread count from response
+            if (isNumber(response.unread_count)) {
+                this._unreadCount = response.unread_count
+                this._widgetRef?.setUnreadCount(response.unread_count)
+
+                // If widget is open and there are unread messages, mark them as read
+                if (response.unread_count > 0 && this._isWidgetOpen()) {
+                    this._markMessagesAsRead()
+                }
+            }
+
+            // Sync ticket_status so an agent-side resolve flips the UI to locked state even
+            // while we're polling messages (ticket polling doesn't run in messages view).
+            // Using ticketBefore (non-null, validated by the stale check above) avoids relying
+            // on TS narrowing of the mutable this._currentTicketId field.
+            if (response.ticket_status) {
+                this._applyTicketStatusUpdate(ticketBefore, response.ticket_status)
+            }
+
+            if (response.messages.length > 0) {
+                this._widgetRef?.addMessages(response.messages)
+                // Update last message timestamp
+                const lastMessage = response.messages[response.messages.length - 1]!
+                this._lastMessageTimestamp = lastMessage.created_at
+            }
+        } catch (error) {
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load messages', error)
+            }
+        }
+    }
+
+    private _isWidgetOpen(): boolean {
+        return this._widgetState === 'open'
+    }
+
+    /**
+     * Poll for new messages
+     */
+    private _pollMessages = async (): Promise<void> => {
+        if (
+            this._isPollingMessages ||
+            !this._currentTicketId ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
+            return
+        }
+
+        this._isPollingMessages = true
+        try {
+            await this._loadMessages()
+        } finally {
+            this._isPollingMessages = false
+        }
+    }
+
+    /**
+     * Poll for tickets list
+     */
+    private _pollTickets = async (): Promise<void> => {
+        if (
+            this._isPollingTickets ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
+            return
+        }
+
+        this._isPollingTickets = true
+        try {
+            await this._loadTickets()
+        } finally {
+            this._isPollingTickets = false
+        }
+    }
+
+    /**
+     * Load tickets list from API
+     */
+    private async _loadTickets(): Promise<void> {
+        try {
+            const response = await this.getTickets()
+            this._tickets = response.results
+            this._showTicketList = this._computeShowTicketList(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
+
+            // Calculate total unread across all tickets
+            const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+            this._unreadCount = totalUnread
+            this._widgetRef?.setUnreadCount(totalUnread)
+
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
+            logger.info('Tickets loaded', { count: response.results.length, totalUnread })
+        } catch (error) {
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets', error)
+            }
+        }
+    }
+
+    private _computeShowTicketList(tickets: Ticket[]): boolean {
+        // Surface the ticket-list hub (which holds the "New conversation" button and
+        // the back-to-tickets navigation) whenever the user has any ticket -- including
+        // a single open one. Otherwise a user with one unresolved ticket is locked into
+        // that conversation with no way to start a second one.
+        return tickets.length >= 1
+    }
+
+    private _isCurrentTicketResolved(): boolean {
+        if (!this._currentTicketId) {
+            return false
+        }
+        const ticket = this._tickets.find((t) => t.id === this._currentTicketId)
+        return ticket?.status === 'resolved'
+    }
+
+    /**
+     * Patch the local _tickets cache with a new status for a given ticket and push
+     * any UI-relevant changes (resolved lock + list visibility) to the widget.
+     */
+    private _applyTicketStatusUpdate(ticketId: string, status: TicketStatus): void {
+        const idx = this._tickets.findIndex((t) => t.id === ticketId)
+        if (idx === -1) {
+            return
+        }
+        const ticket = this._tickets[idx]!
+        if (ticket.status === status) {
+            return
+        }
+        this._tickets = [...this._tickets.slice(0, idx), { ...ticket, status }, ...this._tickets.slice(idx + 1)]
+        this._showTicketList = this._computeShowTicketList(this._tickets)
+        this._widgetRef?.updateTickets(this._tickets, this._showTicketList)
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+    }
+
+    /**
+     * Main poll function that polls based on current view
+     */
+    private _poll = async (): Promise<void> => {
+        if (this._currentView === 'restore_request') {
+            return
+        }
+
+        if (this._currentView === 'messages') {
+            await this._pollMessages()
+        } else {
+            await this._pollTickets()
+        }
+    }
+
+    private _trackPollingEndpointReachability(statusCode: number): void {
+        this._consecutivePollingStatusZeroFailures = updateStatusZeroFailureCount(
+            statusCode,
+            this._consecutivePollingStatusZeroFailures,
+            MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES,
+            () =>
+                logger.warn(
+                    'Conversations polling requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped polling conversations; will try again when connectivity changes.'
+                )
+        )
+    }
+
+    /**
+     * Track HTTP 429s on polling requests so the loop can back off. Any 2xx
+     * clears the streak; a 429 lengthens the next poll delay exponentially.
+     */
+    private _trackPollingRateLimit(statusCode: number): void {
+        if (statusCode === 429) {
+            this._consecutivePollingRateLimitFailures += 1
+        } else if (statusCode >= 200 && statusCode < 300) {
+            this._consecutivePollingRateLimitFailures = 0
+        }
+    }
+
+    /**
+     * Handle view changes from the widget
+     */
+    private _handleViewChange = (view: WidgetView): void => {
+        logger.info('View changed', { from: this._currentView, to: view })
+        this._currentView = view
+    }
+
+    /**
+     * Handle ticket selection from the list
+     */
+    private _handleSelectTicket = async (ticketId: string): Promise<void> => {
+        // Switch to this ticket
+        this._switchToTicketIfNeeded(ticketId)
+
+        // Clear messages and reset timestamp
+        this._lastMessageTimestamp = null
+        this._widgetRef?.clearMessages()
+
+        // Switch view to messages
+        this._currentView = 'messages'
+        this._widgetRef?.setView('messages')
+
+        // Push resolved state for this ticket so MessagesView locks the input if needed
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
+        // Selecting a ticket gives the loop something to poll again
+        this._startPolling()
+
+        // Load messages for the selected ticket
+        await this._loadMessages()
+
+        // Mark as read if widget is open
+        if (this._isWidgetOpen() && this._unreadCount > 0) {
+            this._markMessagesAsRead()
+        }
+    }
+
+    /**
+     * Handle new conversation request
+     */
+    private _handleNewConversation = (): void => {
+        logger.info('New conversation requested')
+
+        // Clear current ticket
+        this._currentTicketId = null
+        this._persistence.clearTicketId()
+
+        // Reset timestamp
+        this._lastMessageTimestamp = null
+
+        // Switch view to messages
+        this._currentView = 'messages'
+        this._widgetRef?.setView('messages')
+
+        // Fresh ticket is never resolved — unlock the input
+        this._widgetRef?.setCurrentTicketResolved(false)
+
+        // Clear messages and add greeting
+        this._widgetRef?.clearMessages(true)
+    }
+
+    /**
+     * Handle back to tickets request
+     */
+    private _handleBackToTickets = async (): Promise<void> => {
+        logger.info('Back to tickets requested')
+
+        // Switch view to tickets
+        this._currentView = 'tickets'
+        this._widgetRef?.setView('tickets')
+
+        // Load tickets
+        this._widgetRef?.setTicketsLoading(true)
+        await this._loadTickets()
+
+        // Resume the loop if it had stopped (tickets view polls the list)
+        this._startPolling()
+
+        // Track back to tickets
+        this._host._capture('$conversations_back_to_tickets')
+    }
+
+    /**
+     * Determine initial view based on ticket count
+     */
+    private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
+        // A brand-new anonymous session has no tickets on the server. Skipping the request
+        // keeps every first page view (including crawlers) out of the team's poll budget.
+        const skipFetch = this._skipInitialTicketsFetch && !this._currentTicketId && !this._identityFields()
+        this._skipInitialTicketsFetch = false
+        if (skipFetch) {
+            return { view: 'messages', tickets: [] }
+        }
+
+        try {
+            const identityBefore = this._host._getIdentity()?.distinctId
+            const lifecycleGeneration = this._lifecycleGeneration
+            const initGeneration = this._widgetInitGeneration
+            const response = await this.getTickets()
+
+            // If identity changed while the request was in-flight, discard this
+            // stale response -- setIdentity/clearIdentity already triggered a
+            // fresh _loadTicketsAndReconcileView() with the correct credentials.
+            // Also discard it if the manager was destroyed/reset, or this initialization
+            // was cancelled by hide(), so a stale response doesn't overwrite newer state.
+            if (
+                this._host._getIdentity()?.distinctId !== identityBefore ||
+                lifecycleGeneration !== this._lifecycleGeneration ||
+                initGeneration !== this._widgetInitGeneration
+            ) {
+                return { view: 'messages', tickets: [] }
+            }
+
+            const view = this._applyTicketsToState(response.results)
+            return { view, tickets: response.results }
+        } catch (error) {
+            if (!isConversationsError(error)) {
+                logger.error('Failed to determine initial view', error)
+            }
+            return { view: 'messages', tickets: [] }
+        }
+    }
+
+    /**
+     * Apply a fetched ticket list to internal state and return the appropriate view.
+     * Shared by _determineInitialView (widget boot) and _loadTicketsAndReconcileView
+     * (identity change at runtime).
+     */
+    private _applyTicketsToState(tickets: Ticket[]): WidgetView {
+        this._tickets = tickets
+        this._showTicketList = this._computeShowTicketList(tickets)
+
+        const totalUnread = tickets.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+        this._unreadCount = totalUnread
+
+        if (tickets.length >= 2) {
+            this._currentTicketId = null
+            return 'tickets'
+        }
+
+        // Single resolved ticket: show list so user can start a new conversation instead of writing to it
+        if (tickets.length === 1 && tickets[0]!.status === 'resolved') {
+            this._currentTicketId = null
+            this._persistence.clearTicketId()
+            return 'tickets'
+        }
+
+        if (tickets.length === 1) {
+            this._currentTicketId = tickets[0]!.id
+            this._persistence.saveTicketId(tickets[0]!.id)
+        }
+
+        return 'messages'
+    }
+
+    /**
+     * Start the self-scheduling poll loop.
+     *
+     * Idempotent: safe to call from any state-changing handler (send, restore,
+     * identity change, ticket selection). The loop polls immediately, then
+     * reschedules itself with a delay derived from widget state and rate-limit
+     * backoff (see _nextPollDelayMs), and stops itself when there is nothing to
+     * poll (see _hasSomethingToPoll).
+     */
+    private _startPolling(): void {
+        if (this._pollLoopRunning) {
+            return // Already polling
+        }
+        this._pollLoopRunning = true
+        const generation = ++this._pollGeneration
+        logger.info('Started polling', { view: this._currentView })
+        void this._pollThenSchedule(generation)
+    }
+
+    private _pollThenSchedule = async (generation: number): Promise<void> => {
+        try {
+            await this._poll()
+        } catch (error) {
+            // _poll is defensively coded not to throw, but never let an unexpected
+            // error kill the loop (which would leave _pollLoopRunning stuck true).
+            logger.error('Polling iteration failed', error)
+        }
+        // A stop/restart bumped the generation while the request was in flight;
+        // abandon this chain so we don't end up running two loops.
+        if (generation !== this._pollGeneration) {
+            return
+        }
+        this._scheduleNextPoll(generation)
+    }
+
+    /**
+     * Schedule the next poll, or stop the loop when there is nothing to poll.
+     * An idle widget with no conversation generates zero polling traffic.
+     */
+    private _scheduleNextPoll(generation: number): void {
+        if (!this._pollLoopRunning || generation !== this._pollGeneration) {
+            return
+        }
+        if (!this._hasSomethingToPoll()) {
+            this._pollTimeoutId = null
+            this._pollLoopRunning = false
+            logger.info('Nothing to poll, pausing until next user action')
+            return
+        }
+        this._pollTimeoutId = window?.setTimeout(
+            () => void this._pollThenSchedule(generation),
+            this._nextPollDelayMs()
+        ) as unknown as number
+    }
+
+    /**
+     * Delay before the next poll: exponential backoff while rate limited,
+     * otherwise the open/closed cadence.
+     */
+    private _nextPollDelayMs(): number {
+        if (this._consecutivePollingRateLimitFailures > 0) {
+            return Math.min(
+                POLL_RATE_LIMIT_BASE_MS * 2 ** (this._consecutivePollingRateLimitFailures - 1),
+                POLL_RATE_LIMIT_MAX_MS
+            )
+        }
+        return this._isWidgetOpen() ? POLL_INTERVAL_OPEN_MS : POLL_INTERVAL_CLOSED_MS
+    }
+
+    /**
+     * Whether the current view has anything worth polling for. Messages view
+     * needs an active ticket; tickets view needs at least one ticket. The
+     * restore-request view never polls.
+     */
+    private _hasSomethingToPoll(): boolean {
+        if (this._currentView === 'restore_request') {
+            return false
+        }
+        if (this._currentView === 'messages') {
+            return !!this._currentTicketId
+        }
+        return this._tickets.length > 0
+    }
+
+    /**
+     * Stop the poll loop.
+     */
+    private _stopPolling(): void {
+        if (this._pollTimeoutId != null) {
+            window?.clearTimeout(this._pollTimeoutId)
+            this._pollTimeoutId = null
+            logger.info('Stopped polling for messages')
+        }
+        this._pollLoopRunning = false
+        // Invalidate any in-flight poll chain so it won't reschedule itself.
+        this._pollGeneration++
+    }
+
+    /**
+     * Re-attach the widget container if it has been detached from the DOM.
+     *
+     * SPA frameworks such as Turbo Drive (Hotwire) and Rails Turbo replace the
+     * entire document.body on navigation. That removes our container — which was
+     * appended to body in _renderWidget — without any teardown call, so the
+     * widget silently disappears until a full page reload. Re-attaching the same
+     * element (rather than re-rendering) preserves widget state and avoids
+     * refetching messages.
+     */
+    private _reattachWidgetIfDetached(): void {
+        // hide()/destroy() clear the container intentionally — don't fight them
+        if (!this._isWidgetRendered || !this._containerElement) {
+            return
+        }
+        this._attachThemeStyle()
+        // Still in the DOM — nothing to do
+        if (this._containerElement.isConnected) {
+            return
+        }
+        if (!document?.body) {
+            return
+        }
+        document.body.appendChild(this._containerElement)
+        logger.info('Re-attached widget after it was detached from the DOM')
+    }
+
+    /**
+     * Start watching for the widget being detached from the DOM (e.g. by an SPA
+     * navigation that replaces document.body) and re-attach it when it happens.
+     */
+    private _startReattachWatcher(): void {
+        if (this._reattachIntervalId) {
+            return // Already watching
+        }
+        this._reattachIntervalId = window?.setInterval(() => {
+            this._reattachWidgetIfDetached()
+        }, REATTACH_CHECK_INTERVAL_MS) as unknown as number
+    }
+
+    /**
+     * Stop the DOM re-attach watcher.
+     */
+    private _stopReattachWatcher(): void {
+        if (this._reattachIntervalId) {
+            window?.clearInterval(this._reattachIntervalId)
+            this._reattachIntervalId = null
+        }
+    }
+
+    /**
+     * Setup listener for identify events.
+     * When user calls posthog.identify(), hide the identification form
+     * since we now know who they are.
+     */
+    private _setupIdentifyListener(): void {
+        this._unsubscribeIdentifyListener = this._host._onIdentify(() => {
+            // User just identified - hide the identification form if it's showing
+            this._widgetRef?.setUserIdentified()
+        })
+    }
+
+    /**
+     * Show the widget (render it to DOM).
+     * The widget respects its saved state (open/closed).
+     * Note: Domain restrictions still apply - widget won't render on disallowed domains.
+     */
+    show(): void {
+        // Check domain restrictions - don't render on disallowed domains
+        if (!this._isDomainAllowed) {
+            logger.warn('Cannot show widget: current domain is not allowed')
+            return
+        }
+
+        // If widget isn't rendered yet, render it now
+        if (!this._isWidgetRendered) {
+            this._initializeWidget()
+        }
+    }
+
+    /**
+     * Hide and remove the widget from the DOM.
+     * Conversation data is preserved - call show() to re-render.
+     */
+    hide(): void {
+        // Stop polling when widget is hidden (save resources)
+        this._stopPolling()
+        // Stop re-attaching — the widget is being removed intentionally
+        this._stopReattachWatcher()
+
+        if (this._containerElement) {
+            render(null, this._containerElement)
+            this._containerElement.remove()
+            this._containerElement = null
+        }
+        this._removeThemeStyle()
+        this._widgetRef = null
+        this._isWidgetRendered = false
+        this._widgetInitGeneration++
+        this._initializeWidgetPromise = null
+        this._forcedInitialState = null
+
+        // Reset timestamp so show() will re-fetch all messages
+        this._lastMessageTimestamp = null
+    }
+
+    /**
+     * Open the chat panel.
+     * Renders the widget first when it is not on the page.
+     * Domain restrictions still apply.
+     */
+    open(): void {
+        if (!this._isDomainAllowed) {
+            logger.warn('Cannot open widget: current domain is not allowed')
+            return
+        }
+
+        if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('open')
+            this._widgetRef?.open()
+            return
+        }
+
+        this._forcedInitialState = 'open'
+        void this._initializeWidget()
+    }
+
+    /**
+     * Close the chat panel. The launcher button stays on the page.
+     * When the widget is not rendered, a closed panel is what show() restores.
+     */
+    close(): void {
+        if (this._isWidgetRendered) {
+            // The widget reports the change after its next render, which a hide() in the same tick skips.
+            this._persistence.saveWidgetState('closed')
+            this._widgetRef?.close()
+            return
+        }
+
+        this._forcedInitialState = 'closed'
+        this._widgetState = 'closed'
+        // Persist immediately. hide() cancels an in-flight initialization, and that
+        // initialization is what would otherwise write the closed state.
+        if (this._persistence.loadWidgetState() === 'open') {
+            this._persistence.saveWidgetState('closed')
+        }
+    }
+
+    /**
+     * Check if the widget is currently visible (rendered in DOM)
+     */
+    isVisible(): boolean {
+        return this._isWidgetRendered
+    }
+
+    /**
+     * Merge a theme patch over the current theme and restyle the widget.
+     * Unset values keep their current value; values set to undefined fall back to the init or default theme.
+     */
+    setTheme(theme: ConversationsTheme): void {
+        this._themeOverrides = mergeThemes(this._themeOverrides, theme)
+        if (this._themeStyleElement) {
+            this._applyTheme()
+        }
+    }
+
+    /** Write the theme stylesheet, creating it on first use. */
+    private _applyTheme(): void {
+        if (!document) {
+            return
+        }
+        const css = buildThemeCss(this._config.color, mergeThemes(this._host._getTheme(), this._themeOverrides))
+        if (this._themeStyleElement) {
+            this._themeStyleElement.textContent = css
+        } else {
+            this._themeStyleElement = prepareStylesheet(document, css, this._host._stylesheetContext)
+            if (!this._themeStyleElement) {
+                return
+            }
+            this._themeStyleElement.setAttribute('data-ph-conversations-theme', '')
+        }
+        this._attachThemeStyle()
+    }
+
+    private _attachThemeStyle(): void {
+        if (this._themeStyleElement && !this._themeStyleElement.isConnected) {
+            ;(document?.head || document?.body)?.appendChild(this._themeStyleElement)
+        }
+    }
+
+    private _removeThemeStyle(): void {
+        this._themeStyleElement?.remove()
+        this._themeStyleElement = null
+    }
+
+    /** Get tickets list for the current widget session or verified identity */
+    async getTickets(options?: GetTicketsOptions): Promise<GetTicketsResponse> {
+        const token = this._config.token
+
+        const identity = this._identityFields()
+        const queryParams: Record<string, string> = {
+            limit: String(options?.limit ?? 20),
+            offset: String(options?.offset ?? 0),
+        }
+
+        if (identity) {
+            Object.assign(queryParams, identity)
+        } else {
+            queryParams.widget_session_id = this._widgetSessionId
+        }
+
+        if (options?.status) {
+            queryParams.status = options.status
+        }
+
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            this._host._sendRequest({
+                path: `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`,
+                method: 'GET',
+                timestampMode: 'query',
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
+
+                    if (response.statusCode !== 200) {
+                        reject(createConversationsRequestError(response, 'fetching tickets', 'Failed to fetch tickets'))
+                        return
+                    }
+
+                    if (!response.json) {
+                        reject(createInvalidConversationsResponseError('fetching tickets'))
+                        return
+                    }
+
+                    const data = response.json as GetTicketsResponse
+                    resolve(data)
+                },
+            })
+        })
+    }
+
+    async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse> {
+        if (this._identityFields()) {
+            return { ok: true }
+        }
+
+        const normalizedEmail = email.trim().toLowerCase()
+        if (!normalizedEmail) {
+            throw new Error('Email is required')
+        }
+
+        const token = this._config.token
+        const payload: RequestRestoreLinkPayload = {
+            email: normalizedEmail,
+            request_url: this._currentUrl() || '',
+        }
+
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve, reject) => {
+            this._host._sendRequest({
+                path: RESTORE_REQUEST_ENDPOINT,
+                method: 'POST',
+                data: payload,
+                headers: {
+                    'X-Conversations-Token': token,
+                },
+                callback: (response) => {
+                    if (response.statusCode !== 200) {
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'requesting restore link',
+                                'Failed to request restore link'
+                            )
+                        )
+                        return
+                    }
+
+                    resolve({ ok: true })
+                },
+            })
+        })
+    }
+
+    async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        if (this._identityFields()) {
+            return { status: 'success' }
+        }
+
+        const normalizedToken = restoreToken.trim()
+        if (!normalizedToken) {
+            throw new Error('Restore token is required')
+        }
+        try {
+            return await this._restoreFromTokenWithRetry(normalizedToken)
+        } finally {
+            clearRestoreTokenFromUrl()
+        }
+    }
+
+    async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
+        if (this._identityFields()) {
+            return null
+        }
+
+        const restoreToken = getRestoreTokenFromUrl()
+        if (!restoreToken) {
+            return null
+        }
+
+        try {
+            return await this.restoreFromToken(restoreToken)
+        } finally {
+            clearRestoreTokenFromUrl()
+        }
+    }
+
+    /**
+     * Get the current active ticket ID
+     * Returns null if no conversation has been started yet
+     */
+    getCurrentTicketId(): string | null {
+        return this._currentTicketId
+    }
+
+    /**
+     * Get the widget session ID (persistent browser identifier)
+     * This ID is used for access control and stays the same across page loads
+     */
+    getWidgetSessionId(): string {
+        return this._widgetSessionId
+    }
+
+    private _identityFields(): Record<string, string> | null {
+        const identity = this._host._getIdentity()
+        const id = identity?.distinctId
+        const hash = identity?.hash
+        if (!id || !hash) {
+            return null
+        }
+
+        const fields: Record<string, string> = {
+            identity_distinct_id: id,
+            identity_hash: hash,
+        }
+
+        const claims = identity.claims
+        if (claims) {
+            Object.entries(claims).forEach(([field, claim]) => {
+                const isReservedField = field === 'distinct_id' || field === 'hash' || field.startsWith('hash_')
+                if (
+                    field &&
+                    !isReservedField &&
+                    claim &&
+                    typeof claim.value === 'string' &&
+                    claim.value.length > 0 &&
+                    typeof claim.hash === 'string' &&
+                    claim.hash.length > 0
+                ) {
+                    fields[`identity_${field}`] = claim.value
+                    fields[`identity_hash_${field}`] = claim.hash
+                }
+            })
+        }
+
+        return fields
+    }
+
+    setIdentity(): void {
+        this._resetConversationState()
+        this._widgetRef?.setIdentityMode(true)
+        void this._loadTicketsAndReconcileView()
+    }
+
+    clearIdentity(): void {
+        this._resetConversationState()
+        this._widgetRef?.setIdentityMode(false)
+        void this._loadTicketsAndReconcileView()
+    }
+
+    private _resetConversationState(): void {
+        this._currentTicketId = null
+        this._persistence.clearTicketId()
+        this._lastMessageTimestamp = null
+        this._widgetRef?.clearMessages(true)
+    }
+
+    private async _loadTicketsAndReconcileView(): Promise<void> {
+        try {
+            const identityBefore = this._host._getIdentity()?.distinctId
+            const response = await this.getTickets()
+
+            if (this._host._getIdentity()?.distinctId !== identityBefore) {
+                return
+            }
+
+            const view = this._applyTicketsToState(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
+            this._widgetRef?.setUnreadCount(this._unreadCount)
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+            this._currentView = view
+            this._widgetRef?.setView(view)
+
+            // Identity change may have surfaced (or cleared) conversations; resume
+            // the loop if it had stopped. It stops itself again if there's nothing to poll.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
+
+            if (view === 'messages' && this._currentTicketId) {
+                void this._loadMessages()
+            }
+        } catch (error) {
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets after identity change', error)
+            }
+        }
+    }
+
+    /**
+     * Clean up the widget
+     */
+    destroy(): void {
+        this._lifecycleGeneration++
+        this._stopPolling()
+        this._stopReattachWatcher()
+        if (window) {
+            window.removeEventListener('online', this._onOnline)
+        }
+
+        // Unsubscribe from identify events
+        if (this._unsubscribeIdentifyListener) {
+            this._unsubscribeIdentifyListener()
+            this._unsubscribeIdentifyListener = null
+        }
+
+        if (this._containerElement) {
+            render(null, this._containerElement)
+            this._containerElement.remove()
+            this._containerElement = null
+        }
+        this._removeThemeStyle()
+
+        this._widgetRef = null
+
+        if (_activeManager === this) {
+            _activeManager = null
+        }
+        logger.info('Widget destroyed')
+    }
+
+    /**
+     * Reset all conversation data and destroy the widget.
+     * Called on posthog.reset() to start fresh.
+     */
+    reset(): void {
+        // Clear all persisted conversation data
+        this._persistence.clearAll()
+
+        // Reset local state
+        this._currentTicketId = null
+        this._lastMessageTimestamp = null
+        this._unreadCount = 0
+        this._consecutivePollingStatusZeroFailures = 0
+
+        // Destroy the widget
+        this.destroy()
+
+        logger.info('Conversations reset')
+    }
+
+    /**
+     * Render the widget to the DOM
+     */
+    private _renderWidget(
+        initialState: ConversationsWidgetState,
+        initialUserTraits: UserProvidedTraits | null,
+        initialView: WidgetView = 'messages',
+        initialTickets: Ticket[] = []
+    ): void {
+        if (!document) {
+            logger.info('Conversations widget not rendered: Document not available')
+            return
+        }
+
+        // Create container if it doesn't exist
+        let container = document.getElementById(WIDGET_CONTAINER_ID) as HTMLDivElement
+        if (!container) {
+            if (!document.body) {
+                logger.info('Conversations widget not rendered: Document body not available yet')
+                return
+            }
+            container = document.createElement('div')
+            container.id = WIDGET_CONTAINER_ID
+            document.body.appendChild(container)
+        }
+        this._containerElement = container
+        this._applyTheme()
+
+        // Render widget with ref
+        render(
+            <ConversationsWidget
+                ref={(ref: ConversationsWidget | null) => {
+                    this._widgetRef = ref
+                }}
+                config={this._config}
+                initialState={initialState}
+                initialUserTraits={initialUserTraits}
+                isUserIdentified={this._host._isIdentified()}
+                isIdentityMode={!isNull(this._identityFields())}
+                initialView={initialView}
+                initialTickets={initialTickets}
+                showTicketList={this._showTicketList}
+                onSendMessage={this._handleSendMessage}
+                onStateChange={this._handleStateChange}
+                onIdentify={this._handleIdentify}
+                onRequestRestoreLink={this._handleRequestRestoreLink}
+                onSelectTicket={this._handleSelectTicket}
+                onNewConversation={this._handleNewConversation}
+                onBackToTickets={this._handleBackToTickets}
+                onViewChange={this._handleViewChange}
+            />,
+            container
+        )
+    }
+}
+
+/**
+ * Returns the page's conversations manager, creating it on first use.
+ *
+ * Singleton guard: only one ConversationsManager per page. SDKs exclude
+ * internal instances, such as the toolbar's, before calling this, so the
+ * manager always belongs to the customer's main instance.
+ */
+export function initConversations(create: () => ConversationsManager): ConversationsManager {
+    if (_activeManager) {
+        return _activeManager
+    }
+
+    _activeManager = create()
+    return _activeManager
+}

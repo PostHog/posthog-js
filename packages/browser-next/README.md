@@ -110,12 +110,12 @@ The first response embeds core and full analytics, including Capture V1 delivery
 
 Only these query options are supported; omitted options use the existing factory defaults:
 
-| Option                                                                             | Values                                                                                      |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `projectToken`                                                                     | Required, nonempty project token                                                            |
-| `apiHost`                                                                          | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
-| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection`               | Literal `true` or `false`                                                                   |
-| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`, `errorTracking` | Literal `false` to disable the corresponding default                                        |
+| Option                                                                                                         | Values                                                                                      |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `projectToken`                                                                                                 | Required, nonempty project token                                                            |
+| `apiHost`                                                                                                      | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
+| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection`                                           | Literal `true` or `false`                                                                   |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`, `errorTracking`, `toolbar`, `conversations` | Literal `false` to disable the corresponding default                                        |
 
 Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
 

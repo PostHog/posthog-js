@@ -23,3 +23,6 @@ export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 
 export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
 export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
+
+/** Below tours and surveys in the z-index hierarchy: tours > surveys > support. */
+export const Z_INDEX_CONVERSATIONS = 2147483644

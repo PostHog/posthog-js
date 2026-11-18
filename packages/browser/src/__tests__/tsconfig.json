@@ -13,7 +13,8 @@
                 "../../../browser-common/tests/helpers/client-conformance.ts"
             ],
             "web-vitals/attribution/*": ["../../../browser-next/node_modules/web-vitals/dist/modules/attribution/*"],
-            "web-vitals/*": ["../../../browser-next/node_modules/web-vitals/dist/modules/*"]
+            "web-vitals/*": ["../../../browser-next/node_modules/web-vitals/dist/modules/*"],
+            "@posthog/browser-common/conversations/*": ["../../../browser-common/src/conversations/*"]
         }
     },
     "include": ["./**/*.ts*", "setup.js", "../*.d.ts"],
