@@ -413,7 +413,7 @@ describe('PostHog RN session replay debug properties', () => {
   })
 
   it('Capture mode is never a required key (mobile)', async () => {
-    const client = await readyClient()
+    const client = await readyClient({ enableSessionReplay: true })
     expect(captureOne(client).properties.$sdk_debug_replay_capture_mode).toBeUndefined()
   })
 
@@ -457,10 +457,10 @@ describe('PostHog RN session replay debug properties', () => {
   })
 
   it('A successful build never attaches the error key', async () => {
-    const client = await readyClient()
+    const client = await readyClient({ enableSessionReplay: true })
     const { properties } = captureOne(client)
     expect(properties.$sdk_debug_error_capturing_properties).toBeUndefined()
-    expect(properties.$recording_status).toBe('disabled')
+    expect(properties.$recording_status).toBe('active')
     expect(properties.$sdk_debug_pending_queue_size).toBe(0)
   })
 
