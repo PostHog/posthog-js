@@ -80,7 +80,7 @@ type ErrorHandler = (error: unknown, context?: 'rrweb' | 'host') => void | boole
 
 // Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
-    emit?: (e: eventWithTime, isCheckout?: boolean) => void
+    emit?: (e: eventWithTime, isCheckout?: boolean, nonInteractive?: boolean) => void
     checkoutEveryNth?: number
     checkoutEveryNms?: number
     blockClass?: blockClass

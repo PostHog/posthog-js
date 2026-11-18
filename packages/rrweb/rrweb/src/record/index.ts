@@ -71,7 +71,11 @@ import {
 } from './error-handler';
 import dom from '@posthog/rrweb-utils';
 
-let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
+let wrappedEmit!: (
+  e: eventWithoutTime,
+  isCheckout?: boolean,
+  nonInteractive?: boolean,
+) => void;
 
 let takeFullSnapshot!: (isCheckout?: boolean) => void;
 let canvasManager!: CanvasManager;
@@ -472,7 +476,11 @@ function record<T = eventWithTime>(
     }
     return e as unknown as T;
   };
-  wrappedEmit = (r: eventWithoutTime, isCheckout?: boolean) => {
+  wrappedEmit = (
+    r: eventWithoutTime,
+    isCheckout?: boolean,
+    nonInteractive?: boolean,
+  ) => {
     const e = r as eventWithTime;
     e.timestamp = nowTimestamp();
     if (
@@ -489,7 +497,8 @@ function record<T = eventWithTime>(
     }
 
     if (inEmittingFrame) {
-      emit?.(eventProcessor(e), isCheckout);
+      if (nonInteractive) emit?.(eventProcessor(e), isCheckout, true);
+      else emit?.(eventProcessor(e), isCheckout);
     } else if (passEmitsToParent) {
       const message: CrossOriginIframeMessageEventContent<T> = {
         type: 'rrweb',
@@ -936,14 +945,18 @@ function record<T = eventWithTime>(
                 ...d,
               },
             }),
-          inputCb: (v) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.Input,
-                ...v,
+          inputCb: (v, fromMutation) =>
+            wrappedEmit(
+              {
+                type: EventType.IncrementalSnapshot,
+                data: {
+                  source: IncrementalSource.Input,
+                  ...v,
+                },
               },
-            }),
+              undefined,
+              fromMutation,
+            ),
           mediaInteractionCb: (p) =>
             wrappedEmit({
               type: EventType.IncrementalSnapshot,

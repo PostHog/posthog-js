@@ -1976,7 +1976,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             : processEvent()
     }
 
-    onRRwebEmit(rawEvent: eventWithTime) {
+    onRRwebEmit(rawEvent: eventWithTime, nonInteractive?: boolean) {
         // late event after sessionManager teardown (e.g. cookieless opt-out) — _sessionManager would throw
         if (!this._instance.sessionManager) {
             return
@@ -2083,7 +2083,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // right after, and running it here first can adopt a pending rotation before the
             // marker is captured — attributing a marker backdated by the idle gap to the new
             // session, which drags the new recording's start back and makes its prefix unplayable
-            this._updateWindowAndSessionIds(event)
+            this._updateWindowAndSessionIds(event, nonInteractive)
         }
 
         // Route lifecycle events using their payload IDs:
@@ -2717,19 +2717,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _isInteractiveEvent(event: eventWithTime) {
+    private _isInteractiveEvent(event: eventWithTime, nonInteractive?: boolean) {
         return (
+            !nonInteractive &&
             event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
             ACTIVE_SOURCES.indexOf(event.data?.source as IncrementalSource) !== -1
         )
     }
 
-    private _updateWindowAndSessionIds(event: eventWithTime) {
+    private _updateWindowAndSessionIds(event: eventWithTime, nonInteractive?: boolean) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
 
-        const isUserInteraction = this._isInteractiveEvent(event)
+        const isUserInteraction = this._isInteractiveEvent(event, nonInteractive)
 
         if (!isUserInteraction && this._isIdle !== true) {
             // We check if the lastActivityTimestamp is old enough to go idle
@@ -3046,7 +3047,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const activePlugins = this._gatherRRWebPlugins()
         const sourceHandoff = this._styleRuleSourceHandoff
         this._stopRrweb = rrwebRecord({
-            emit: (event) => {
+            emit: (event, _isCheckout, nonInteractive) => {
                 if (sourceHandoff?.cancelled) {
                     return
                 }
@@ -3058,7 +3059,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     sourceHandoff.cancel()
                     return
                 }
-                this.onRRwebEmit(event)
+                this.onRRwebEmit(event, nonInteractive)
             },
             plugins: activePlugins,
             errorHandler: (error, context) => {

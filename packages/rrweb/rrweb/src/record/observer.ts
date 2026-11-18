@@ -458,7 +458,10 @@ function initInputObserver({
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
   let active = true;
-  const pendingSelects = new Map<HTMLElement, boolean>();
+  const pendingSelects = new Map<
+    HTMLElement,
+    { userTriggered: boolean; fromMutation: boolean }
+  >();
   let selectFlushScheduled = false;
 
   function isSelectTarget(target: HTMLElement): boolean {
@@ -519,6 +522,7 @@ function initInputObserver({
     target: HTMLElement | null,
     userTriggered: boolean,
     deferred = false,
+    fromMutation = false,
   ) {
     const tagName =
       target && (isSelectTarget(target) ? 'SELECT' : target.tagName);
@@ -575,7 +579,7 @@ function initInputObserver({
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);
       }
       if (!deferred) {
-        queueSelect(target, userTriggered);
+        queueSelect(target, userTriggered, fromMutation);
         return;
       }
       // Scalar masked events need the select ID, but do not transmit option IDs.
@@ -611,7 +615,7 @@ function initInputObserver({
     if (selectMaskingFn && selectedOptions)
       updateSelectMaskingState(target, mirror, !!shouldMaskInput);
     if (userTriggeredOnInput) value.userTriggered = userTriggered;
-    cbWithDedup(target, value);
+    cbWithDedup(target, value, fromMutation);
     // if a radio was checked
     // the other radios with the same name attribute will be unchecked.
     const name: string | undefined = (target as HTMLInputElement).name;
@@ -631,11 +635,17 @@ function initInputObserver({
         });
     }
   }
-  function queueSelect(select: HTMLElement, userTriggered: boolean) {
-    pendingSelects.set(
-      select,
-      userTriggered || pendingSelects.get(select) || false,
-    );
+  function queueSelect(
+    select: HTMLElement,
+    userTriggered: boolean,
+    fromMutation = false,
+  ) {
+    const pending = pendingSelects.get(select);
+    pendingSelects.set(select, {
+      userTriggered: userTriggered || pending?.userTriggered || false,
+      // Any non-mutation request for this select makes the merged input interactive.
+      fromMutation: fromMutation && (pending?.fromMutation ?? true),
+    });
     if (!selectFlushScheduled) {
       selectFlushScheduled = true;
       // Mutation delivery and already-deferred setter callbacks finish first.
@@ -648,13 +658,23 @@ function initInputObserver({
     const selects = Array.from(pendingSelects);
     pendingSelects.clear();
     callAllSafely(
-      selects.map(([select, userTriggered]) => () => {
-        if (active) callbackWrapper(processInput)(select, userTriggered, true);
+      selects.map(([select, { userTriggered, fromMutation }]) => () => {
+        if (active)
+          callbackWrapper(processInput)(
+            select,
+            userTriggered,
+            true,
+            fromMutation,
+          );
       }),
     );
   }
 
-  function cbWithDedup(target: EventTarget, v: inputValue) {
+  function cbWithDedup(
+    target: EventTarget,
+    v: inputValue,
+    fromMutation = false,
+  ) {
     const values = isSelectTarget(target as HTMLElement)
       ? lastSelectInputValueMap
       : lastInputValueMap;
@@ -671,10 +691,13 @@ function initInputObserver({
     ) {
       values.set(target, v);
       const id = mirror.getId(target as Node);
-      callbackWrapper(inputCb)({
-        ...v,
-        id,
-      });
+      callbackWrapper(inputCb)(
+        {
+          ...v,
+          id,
+        },
+        fromMutation,
+      );
     }
   }
   const events = sampling.input === 'last' ? ['change'] : ['input', 'change'];
@@ -735,7 +758,7 @@ function initInputObserver({
           isBlockedIncludingShadowHosts(select, blockClass, blockSelector)
         )
           return;
-        processInput(select, false);
+        processInput(select, false, false, !!selectMaskingFn);
       }),
     ),
   );

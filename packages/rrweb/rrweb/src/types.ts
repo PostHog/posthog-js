@@ -45,7 +45,8 @@ import type {
 import type ProcessedNodeManager from './record/processed-node-manager';
 
 export type recordOptions<T> = {
-  emit?: (e: T, isCheckout?: boolean) => void;
+  // nonInteractive marks events that look like user activity but were not caused by it.
+  emit?: (e: T, isCheckout?: boolean, nonInteractive?: boolean) => void;
   checkoutEveryNth?: number;
   checkoutEveryNms?: number;
   blockClass?: blockClass;

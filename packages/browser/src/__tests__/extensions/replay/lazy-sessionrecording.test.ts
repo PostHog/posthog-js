@@ -2385,6 +2385,54 @@ describe('Lazy SessionRecording', () => {
                     })
                 })
 
+                describe('select-policy inputs emitted without user interaction', () => {
+                    const selectInput = (timestamp: number) => ({
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: { source: 5, id: 1, text: 'redacted', isChecked: false },
+                        timestamp,
+                    })
+
+                    it.each([
+                        ['fresh start', () => startingTimestamp + 100],
+                        ['rotation-born', () => rotateExternallyWhileUnknown()],
+                    ])('retains the %s hold and stays idle-eligible', (_name, setup) => {
+                        const timestamp = setup()
+                        vi.useFakeTimers().setSystemTime(new Date(timestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        const lastActivity = lazyRecorder['_lastActivityTimestamp']
+
+                        const input = selectInput(timestamp + 100)
+                        _emit(input, false, true)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                        expect(lazyRecorder['_lastActivityTimestamp']).toEqual(lastActivity)
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                    })
+
+                    it('still releases the hold for an ordinary input', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const input = selectInput(startingTimestamp + 100)
+                        _emit(input, false)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({ $snapshot_data: expect.arrayContaining([input]) }),
+                            expect.any(Object)
+                        )
+                    })
+                })
+
                 it('does not hold a windowId-only restart (no session rotation)', () => {
                     const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                     expect(lazyRecorder['_isIdle']).toEqual('unknown')
