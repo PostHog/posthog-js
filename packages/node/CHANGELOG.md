@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.0.4
+
+### Patch Changes
+
+- [#5782](https://github.com/PostHog/posthog-js/pull/5782) [`13f08ee`](https://github.com/PostHog/posthog-js/commit/13f08eef5768c944588504fe221ac5d4fd83d0ee) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Send transactional email requests to `/api/messaging/` instead of the `/api/projects/@current/` alias, which PostHog is removing. Needs PostHog Cloud, or a self-hosted PostHog from 2026-11-18 or later. Older self-hosted versions answer these calls with a 404.
+  (2026-11-18)
+
 ## 6.0.3
 
 ### Patch Changes
