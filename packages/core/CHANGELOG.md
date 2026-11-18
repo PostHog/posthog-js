@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.69.1
+
+### Patch Changes
+
+- [#5696](https://github.com/PostHog/posthog-js/pull/5696) [`3000ae0`](https://github.com/PostHog/posthog-js/commit/3000ae0f01bad0e01b34b110f1f66dd43361a32c) Thanks [@marandaneto](https://github.com/marandaneto)! - Add extension hooks for context-safe feature flags and transient batch retention.
+  (2026-11-18)
+
+- [#5747](https://github.com/PostHog/posthog-js/pull/5747) [`59d9656`](https://github.com/PostHog/posthog-js/commit/59d96564102246bcc1b5ebdb36fd54091fb7ffdc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve falsy JSON payloads in feature flag snapshots from legacy flag responses.
+  (2026-11-18)
+
+## 1.69.0
+
+### Minor Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Debug mode logs an emitted event's payload through an overridable `describeDebugPayload`, so an SDK can log a summary instead. The default is unchanged.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogFetchOptions` has an optional `redirect` field, so a custom `fetch` sees how capture asks it to handle redirects.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export `V7Generator`, so an SDK can generate v7 uuids from its own random source.
+  (2026-11-17)
+
 ## 1.68.0
 
 ### Minor Changes

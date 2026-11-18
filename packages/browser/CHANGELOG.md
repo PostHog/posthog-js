@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.450.1
+
+### Patch Changes
+
+- [#5735](https://github.com/PostHog/posthog-js/pull/5735) [`ea89609`](https://github.com/PostHog/posthog-js/commit/ea89609c816e40fc47d6dfbe44dac02dd1b80e2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Send base64 beacon bodies as bare `text/plain` so `/i/v0/e/` accepts page-unload events when gzip compression is disabled or unavailable
+  (2026-11-17)
+
 ## 1.450.0
 
 ### Minor Changes

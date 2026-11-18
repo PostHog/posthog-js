@@ -1,5 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { waitForPromises } from './utils'
+import { captureRequests, sentEventsOf, v1Response, waitForPromises } from './utils'
 
 const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
@@ -18,11 +18,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
   let client: PostHog
 
   beforeEach(() => {
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 1 }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
@@ -53,10 +49,10 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$pageview')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$pageview')
     })
 
     it('should allow events without user agent', async () => {
@@ -77,14 +73,14 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$pageview')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$pageview')
     })
   })
 
-  describe('with __preview_capture_bot_pageviews enabled', () => {
+  describe('with __previewCaptureBotPageviews enabled', () => {
     it('should rename bot pageviews to $bot_pageview', async () => {
       client = new PostHog('test-api-key', {
         host: 'http://example.com',
@@ -92,7 +88,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
+        __previewCaptureBotPageviews: true,
       })
 
       client.capture({
@@ -106,12 +102,12 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$bot_pageview')
-      expect(body.batch[0].properties.$browser_type).toBe('bot')
-      expect(body.batch[0].properties.$raw_user_agent).toBe(
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$bot_pageview')
+      expect(event.properties.$browser_type).toBe('bot')
+      expect(event.properties.$raw_user_agent).toBe(
         'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
       )
     })
@@ -123,7 +119,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
+        __previewCaptureBotPageviews: true,
       })
 
       client.capture({
@@ -137,11 +133,11 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$pageview')
-      expect(body.batch[0].properties.$raw_user_agent).toBe(
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$pageview')
+      expect(event.properties.$raw_user_agent).toBe(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
       )
     })
@@ -153,7 +149,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
+        __previewCaptureBotPageviews: true,
       })
 
       client.capture({
@@ -167,10 +163,10 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('custom_event')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('custom_event')
     })
 
     it('should work with various bot user agents', async () => {
@@ -191,7 +187,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
           flushInterval: 0,
           fetchRetryCount: 0,
           disableCompression: true,
-          __preview_capture_bot_pageviews: true,
+          __previewCaptureBotPageviews: true,
         })
 
         client.capture({
@@ -205,11 +201,11 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         await waitForFlushTimer()
 
         expect(mockedFetch).toHaveBeenCalled()
-        const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+        const [call] = captureRequests(mockedFetch)
         expect(call).toBeDefined()
-        const body = JSON.parse((call![1] as any).body)
-        expect(body.batch[0].event).toBe('$bot_pageview')
-        expect(body.batch[0].properties.$raw_user_agent).toBe(ua)
+        const [event] = sentEventsOf(call)
+        expect(event.event).toBe('$bot_pageview')
+        expect(event.properties.$raw_user_agent).toBe(ua)
 
         await client.shutdown()
       }
@@ -222,7 +218,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
+        __previewCaptureBotPageviews: true,
       })
 
       client.capture({
@@ -234,21 +230,21 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$pageview')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$pageview')
     })
 
-    it('should support custom_blocked_useragents', async () => {
+    it('should support customBlockedUserAgents', async () => {
       client = new PostHog('test-api-key', {
         host: 'http://example.com',
         flushAt: 1,
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
-        custom_blocked_useragents: ['MyCustomBot'],
+        __previewCaptureBotPageviews: true,
+        customBlockedUserAgents: ['MyCustomBot'],
       })
 
       client.capture({
@@ -262,11 +258,11 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$bot_pageview')
-      expect(body.batch[0].properties.$raw_user_agent).toBe('MyCustomBot/1.0')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$bot_pageview')
+      expect(event.properties.$raw_user_agent).toBe('MyCustomBot/1.0')
     })
 
     it('should preserve other event properties when renaming', async () => {
@@ -276,7 +272,7 @@ describe('bot detection and pageview collection (Node SDK)', () => {
         flushInterval: 0,
         fetchRetryCount: 0,
         disableCompression: true,
-        __preview_capture_bot_pageviews: true,
+        __previewCaptureBotPageviews: true,
       })
 
       client.capture({
@@ -292,12 +288,12 @@ describe('bot detection and pageview collection (Node SDK)', () => {
       await waitForFlushTimer()
 
       expect(mockedFetch).toHaveBeenCalled()
-      const call = mockedFetch.mock.calls.find((x) => (x[0] as string).includes('/batch/'))
+      const [call] = captureRequests(mockedFetch)
       expect(call).toBeDefined()
-      const body = JSON.parse((call![1] as any).body)
-      expect(body.batch[0].event).toBe('$bot_pageview')
-      expect(body.batch[0].properties.custom_prop).toBe('test_value')
-      expect(body.batch[0].properties.$current_url).toBe('https://example.com')
+      const [event] = sentEventsOf(call)
+      expect(event.event).toBe('$bot_pageview')
+      expect(event.properties.custom_prop).toBe('test_value')
+      expect(event.properties.$current_url).toBe('https://example.com')
     })
   })
 })

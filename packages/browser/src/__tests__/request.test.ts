@@ -662,9 +662,9 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                    expect(blob.type).toBe('text/plain')
                     const result = await readBlobAsText(blob)
-                    expect(result).toBe('data=eyJmb28iOiJiYXIifQ%3D%3D')
+                    expect(result).toBe('eyJmb28iOiJiYXIifQ==')
                 },
             ],
         ])(
@@ -1309,12 +1309,13 @@ describe('request', () => {
                 transport = 'sendBeacon'
             })
 
-            it('base64-encodes uncompressed POST data so the content type stays CORS-simple', async () => {
+            it('posts uncompressed data as bare base64 text/plain so the content type stays CORS-simple', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
                         method: 'POST',
-                        data: { foo: 'bar' },
+                        data: [{ event: 'first' }, { event: 'second' }],
+                        timestampMode: 'capture-body',
                     })
                 )
 
@@ -1323,11 +1324,15 @@ describe('request', () => {
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                expect(blob.type).toBe('application/x-www-form-urlencoded')
+                expect(blob.type).toBe('text/plain')
 
                 const result = await readBlobAsText(blob)
 
-                expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
+                expect(JSON.parse(Buffer.from(result, 'base64').toString())).toEqual({
+                    api_key: undefined,
+                    batch: [{ event: 'first' }, { event: 'second' }],
+                    sent_at: '2023-11-14T22:13:20.000Z',
+                })
             })
 
             it('should respect base64 compression', async () => {
@@ -1345,11 +1350,32 @@ describe('request', () => {
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                expect(blob.type).toBe('application/x-www-form-urlencoded')
+                expect(blob.type).toBe('text/plain')
 
                 const result = await readBlobAsText(blob)
 
-                expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
+                expect(result).toMatchInlineSnapshot(`"eyJmb28iOiJiYXIifQ=="`)
+            })
+
+            it('keeps the form-urlencoded shape for base64 requests on other transports', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        transport: 'fetch',
+                        compression: Compression.Base64,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedNavigator?.sendBeacon).not.toHaveBeenCalled()
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?compression=base64',
+                    expect.objectContaining({ body: 'data=eyJmb28iOiJiYXIifQ%3D%3D' })
+                )
+                expect((mockedFetch.mock.calls[0][1].headers as Headers).get('Content-Type')).toBe(
+                    'application/x-www-form-urlencoded'
+                )
             })
 
             it('should respect gzip compression', async () => {
@@ -1378,7 +1404,7 @@ describe('request', () => {
                 expect(JSON.parse(gunzipSync(new Uint8Array(bytes)).toString('utf8'))).toEqual({ foo: 'bar' })
             })
 
-            it('falls back to base64 if gzip encoding throws before the beacon send', () => {
+            it('falls back to bare base64 text/plain if gzip encoding throws before the beacon send', async () => {
                 const gzipSpy = vi.spyOn(fflate, 'gzipSync').mockImplementation(() => {
                     throw new Error('gzip failed')
                 })
@@ -1396,7 +1422,8 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                    expect(blob.type).toBe('text/plain')
+                    expect(await readBlobAsText(blob)).toBe('eyJmb28iOiJiYXIifQ==')
                 } finally {
                     gzipSpy.mockRestore()
                 }
@@ -1441,9 +1468,7 @@ describe('request', () => {
                     const splitBodies = await Promise.all(
                         mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
                             const text = await readBlobAsText(call[1] as Blob)
-                            return JSON.parse(
-                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
-                            )
+                            return JSON.parse(Buffer.from(text, 'base64').toString())
                         })
                     )
                     expect(splitBodies).toEqual([
@@ -1475,9 +1500,7 @@ describe('request', () => {
                     const splitBodies = await Promise.all(
                         mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
                             const text = await readBlobAsText(call[1] as Blob)
-                            return JSON.parse(
-                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
-                            )
+                            return JSON.parse(Buffer.from(text, 'base64').toString())
                         })
                     )
                     expect(splitBodies).toEqual([
@@ -1510,6 +1533,9 @@ describe('request', () => {
                     for (const call of mockedFetch.mock.calls) {
                         expect(call[1].keepalive).toBe(false)
                         expect(call[1].referrerPolicy).toBe('strict-origin')
+                        expect(call[0]).toContain('compression=base64')
+                        expect((call[1].headers as Headers).get('Content-Type')).toBe('text/plain')
+                        expect(JSON.parse(Buffer.from(call[1].body as string, 'base64').toString())).toHaveLength(1)
                     }
                 })
 
@@ -1563,8 +1589,8 @@ describe('request', () => {
                 // Every content type here must be CORS-simple: a preflight cannot complete while
                 // the page unloads, so a preflighted beacon (e.g. application/json) is silently
                 // dropped by the browser on cross-origin hosts and its events are lost.
-                ['no compression', undefined, 'application/x-www-form-urlencoded'],
-                ['base64 compression', Compression.Base64, 'application/x-www-form-urlencoded'],
+                ['no compression', undefined, 'text/plain'],
+                ['base64 compression', Compression.Base64, 'text/plain'],
                 ['gzip compression', Compression.GZipJS, 'text/plain'],
             ])(
                 'always sends a Blob with correct Content-Type for %s',
