@@ -14,6 +14,7 @@ import type {
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
+  GetFlagsResult,
   PostHogFlagsStorageFormat,
   FeatureFlagDetail,
   Survey,
@@ -834,6 +835,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
+  // An SDK can discard an obsolete result without recording it as a request failure.
+  protected getFlagsForContext(
+    ...args: Parameters<PostHogCoreStateless['getFlags']>
+  ): Promise<GetFlagsResult | undefined> {
+    return super.getFlags(...args)
+  }
+
   private async _flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
     const fetchConfig = options?.fetchConfig ?? false
@@ -857,7 +865,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
-        const result = await super.getFlags(
+        const result = await this.getFlagsForContext(
           distinctId,
           groups as PostHogGroupProperties,
           personProperties,
@@ -866,6 +874,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           fetchConfig
         )
 
+        if (result === undefined) return undefined
         if (!result.success) {
           if (!this.disableRemoteFeatureFlags) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a

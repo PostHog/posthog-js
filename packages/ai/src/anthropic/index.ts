@@ -232,11 +232,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   // Parse accumulated tool input
                   const tool = toolsInProgress.get(chunk.index)
                   if (tool) {
-                    try {
-                      tool.block.function.arguments = JSON.parse(tool.inputString)
-                    } catch (e) {
-                      // Keep empty object if parsing fails
-                      console.error('Error parsing tool input:', e)
+                    // A tool called with no arguments streams no input_json_delta, so there is nothing to parse
+                    if (tool.inputString) {
+                      try {
+                        tool.block.function.arguments = JSON.parse(tool.inputString)
+                      } catch (e) {
+                        // Keep empty object if parsing fails
+                        console.error('Error parsing tool input:', e)
+                      }
                     }
                     toolsInProgress.delete(chunk.index)
                   }

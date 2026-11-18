@@ -10,10 +10,10 @@ vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const SECRET_KEY = 'phs_test_secret'
 const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
-const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/email/'
+const SEND_URL = 'https://us.posthog.com/api/messaging/send/email/'
 const MESSAGE_ID = '01a18356-c56c-0001-e494-7666bc915188'
-const STATUS_URL = `https://us.posthog.com/api/projects/@current/messaging/emails/${MESSAGE_ID}/`
-const PREFERENCES_URL = 'https://us.posthog.com/api/projects/@current/messaging/preferences/'
+const STATUS_URL = `https://us.posthog.com/api/messaging/emails/${MESSAGE_ID}/`
+const PREFERENCES_URL = 'https://us.posthog.com/api/messaging/preferences/'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -655,19 +655,25 @@ describe('emails', () => {
       }
     )
 
-    it('hashes bytes and decodes Base64 without Buffer, as on the edge runtime', async () => {
+    it('decodes Base64 without Buffer, as on the edge runtime', async () => {
       const fake = againstPostHog()
+      const atob = vi.spyOn(globalThis, 'atob')
+      // send() decodes the files before its first await. Restore Buffer before awaiting: vitest's forks worker
+      // decodes its IPC messages with the global Buffer and fails the run if one arrives while it is unset.
       vi.stubGlobal('Buffer', undefined)
-      let result: Awaited<ReturnType<PostHog['emails']['send']>>
+      let sending: ReturnType<typeof sendFiles>
       try {
-        result = await sendFiles([
+        sending = sendFiles([
           { filename: 'logo.png', content: new Uint8Array(LOGO) },
           { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS' },
         ])
       } finally {
         vi.unstubAllGlobals()
       }
+      const result = await sending
 
+      expect(atob).toHaveBeenCalledWith('QkVHSU46VkNBTEVOREFS')
+      atob.mockRestore()
       expect(result.error).toBeNull()
       expect(fake.emails.map(({ attachments }) => attachments)).toEqual([
         [
@@ -1143,7 +1149,7 @@ describe('emails', () => {
 
     await send()
 
-    expect(fetch.mock.calls[0][0]).toBe(`${expected}/api/projects/@current/messaging/send/email/`)
+    expect(fetch.mock.calls[0][0]).toBe(`${expected}/api/messaging/send/email/`)
   })
 
   it.each([
@@ -1371,11 +1377,11 @@ describe('emails', () => {
     replies = [rejected(503, 'delivery_unavailable'), accepted()]
     const emailFetch = fetch.getMockImplementation()!
     fetch.mockImplementation((url: string, options: unknown) =>
-      url.includes('/batch/')
+      url.includes('/i/v1/analytics/events')
         ? Promise.resolve({ status: 200, text: async () => '{}', json: async () => ({}), headers: new Headers() })
         : emailFetch(url, options)
     )
-    const batchCalls = (): number => fetch.mock.calls.filter(([url]) => url.includes('/batch/')).length
+    const batchCalls = (): number => fetch.mock.calls.filter(([url]) => url.includes('/i/v1/analytics/events')).length
 
     const pending = send()
     await vi.advanceTimersByTimeAsync(0)

@@ -282,12 +282,12 @@ function withoutTransport(properties: Record<string, any>): Record<string, any> 
   return rest
 }
 
-/** A `before_send` hook that records each event it sees and keeps it. */
-function recordingBeforeSend(): { seen: any[]; before_send: (event: any) => any } {
+/** A `beforeSend` hook that records each event it sees and keeps it. */
+function recordingBeforeSend(): { seen: any[]; beforeSend: (event: any) => any } {
   const seen: any[] = []
   return {
     seen,
-    before_send: (event) => {
+    beforeSend: (event) => {
       seen.push(structuredClone(event))
       return event
     },
@@ -766,6 +766,34 @@ describe('$experiment_exposure', () => {
       expect(attribution(exposure.properties)).toEqual(attribution(EXPECTED_EXPOSURE))
     })
 
+    it('a minimized config version 2 call keeps the properties that set options', async () => {
+      const { client, events } = createClient([
+        response([split({ hasExperiment: false })], { minimalFlagCalledEvents: true }),
+      ])
+      await client.register({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+        plan: 'team',
+      })
+
+      ;(await client.evaluateFlags(DISTINCT_ID)).getFlag(FLAG)
+      await client.shutdown()
+
+      const [called] = events
+      expect(called.event).toBe(FLAG_CALLED)
+      expect(called.properties).not.toHaveProperty('plan')
+      expect(attribution(called.properties)).toEqual(EXPECTED_ATTRIBUTION)
+      // The send step moves these into options, so the minimized event must keep them.
+      expect(called.properties).toMatchObject({
+        $cookieless_mode: true,
+        $ignore_sent_at: true,
+        $product_tour_id: 'tour',
+        $process_person_profile: false,
+      })
+    })
+
     it('a minimized config version 1 call drops super properties named like the attribution', async () => {
       const record = v4Record('condition_match', true, { configVersion: 1 })
       const { client, events } = createClient([response([record], { minimalFlagCalledEvents: true })])
@@ -1200,9 +1228,9 @@ describe('$experiment_exposure', () => {
     }
 
     it.each([FLAG_CALLED, EXPOSURE].flatMap((event) => VALUE_PATHS.map((path) => [event, path])))(
-      'a %s that before_send drops keeps its dedupe key (%s)',
+      'a %s that beforeSend drops keeps its dedupe key (%s)',
       async (event, path) => {
-        const { client, events } = createClient([response([split()])], { before_send: dropping(event) })
+        const { client, events } = createClient([response([split()])], { beforeSend: dropping(event) })
 
         // The application dropped the event, so the second read does not send it again. The other
         // event of the first read is still sent, once.
@@ -1211,9 +1239,9 @@ describe('$experiment_exposure', () => {
     )
 
     it.each([FLAG_CALLED, EXPOSURE].flatMap((event) => VALUE_PATHS.map((path) => [event, path])))(
-      'a %s whose before_send throws keeps no dedupe key (%s)',
+      'a %s whose beforeSend throws keeps no dedupe key (%s)',
       async (event, path) => {
-        const { client, events } = createClient([response([split()])], { before_send: throwingOnce(event) })
+        const { client, events } = createClient([response([split()])], { beforeSend: throwingOnce(event) })
 
         // The other event of the first read is still sent, and the failed one is sent by the second
         // read, once.
@@ -1293,7 +1321,7 @@ describe('$experiment_exposure', () => {
 
     it('a failed exposure capture does not change the read', async () => {
       const { client } = createClient([response([split()])], {
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event?.event === EXPOSURE) {
             throw new Error('rejected')
           }
@@ -1428,11 +1456,11 @@ describe('$experiment_exposure', () => {
     })
   })
 
-  it('before_send sees both events and may still change them', async () => {
-    const { seen, before_send } = recordingBeforeSend()
+  it('beforeSend sees both events and may still change them', async () => {
+    const { seen, beforeSend } = recordingBeforeSend()
     const { client, events } = createClient([response([split()])], {
-      before_send: (event) => {
-        before_send(event)
+      beforeSend: (event) => {
+        beforeSend(event)
         return event && { ...event, properties: { ...event.properties, edited: true } }
       },
     })
