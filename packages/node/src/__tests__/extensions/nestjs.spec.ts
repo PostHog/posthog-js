@@ -2,6 +2,7 @@ import type { IncomingHttpHeaders } from 'node:http'
 import { defer, of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
+import { anyCaptureUrl, captureRequests, lastSentBatch, v1Response } from '../utils'
 import { PostHogInterceptor } from '@/extensions/nestjs'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -17,16 +18,8 @@ const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
-  expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
-
-  const call = mockedFetch.mock.calls
-    .slice()
-    .reverse()
-    .find((x) => (x[0] as string).includes('/batch/'))
-  if (!call) {
-    return undefined
-  }
-  return JSON.parse((call[1] as any).body as any).batch
+  expect(mockedFetch).toHaveBeenCalledWith(anyCaptureUrl, expect.objectContaining({ method: 'POST' }))
+  return lastSentBatch(mockedFetch)
 }
 
 const createMockContext = (overrides?: {
@@ -59,6 +52,10 @@ const createMockCallHandler = (error?: Error) => ({
   handle: () => (error ? throwError(() => error) : of(undefined)),
 })
 
+const COOKIE_IDS = { sessionId: 'cookie-session', distinctId: 'user-from-cookie' }
+const NO_IDS = { sessionId: undefined, distinctId: undefined }
+const BOTH_TRACING_HEADERS = { 'x-posthog-session-id': 'header-session', 'x-posthog-distinct-id': 'header-user' }
+
 const createPostHog = (options: Record<string, any> = {}): PostHog =>
   new PostHog('TEST_API_KEY', {
     host: 'http://example.com',
@@ -75,11 +72,7 @@ describe('PostHogInterceptor', () => {
   beforeEach(() => {
     posthog = createPostHog()
 
-    mockedFetch.mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve('ok'),
-      json: () => Promise.resolve({ status: 'ok' }),
-    } as any)
+    mockedFetch.mockResolvedValue(v1Response())
   })
 
   afterEach(async () => {
@@ -122,11 +115,35 @@ describe('PostHogInterceptor', () => {
     })
 
     it.each([
-      { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
-      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
-    ])('should $name', async ({ readPostHogCookie, linked }) => {
+      {
+        name: 'reads the posthog-js cookie when readPostHogCookie is on',
+        readPostHogCookie: true,
+        expected: COOKIE_IDS,
+      },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, expected: NO_IDS },
+      {
+        name: 'reads the cookie, not the tracing headers, when captureTracingHeaders is false',
+        readPostHogCookie: true,
+        captureTracingHeaders: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: COOKIE_IDS,
+      },
+      {
+        name: 'reads neither the tracing headers nor the cookie when both are off',
+        readPostHogCookie: undefined,
+        captureTracingHeaders: false,
+        tracingHeaders: BOTH_TRACING_HEADERS,
+        expected: NO_IDS,
+      },
+      {
+        name: 'uses only the tracing headers when a request has one, never the cookie',
+        readPostHogCookie: true,
+        tracingHeaders: { 'x-posthog-session-id': 'header-session' },
+        expected: { sessionId: 'header-session', distinctId: undefined },
+      },
+    ])('should $name', async ({ readPostHogCookie, captureTracingHeaders, tracingHeaders, expected }) => {
       await posthog.shutdown()
-      posthog = createPostHog({ readPostHogCookie })
+      posthog = createPostHog({ readPostHogCookie, captureTracingHeaders })
       const interceptor = new PostHogInterceptor(posthog)
       const now = Date.now()
       const cookieValue = encodeURIComponent(
@@ -136,7 +153,9 @@ describe('PostHogInterceptor', () => {
           $sesid: [now, 'cookie-session', now],
         })
       )
-      const context = createMockContext({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+      const context = createMockContext({
+        headers: { ...tracingHeaders, cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` },
+      })
 
       let capturedContext: any
       const handler = {
@@ -148,8 +167,8 @@ describe('PostHogInterceptor', () => {
 
       await lastValueFrom(interceptor.intercept(context, handler))
 
-      expect(capturedContext.sessionId).toBe(linked ? 'cookie-session' : undefined)
-      expect(capturedContext.distinctId).toBe(linked ? 'user-from-cookie' : undefined)
+      expect(capturedContext.sessionId).toBe(expected.sessionId)
+      expect(capturedContext.distinctId).toBe(expected.distinctId)
     })
 
     it.each([
@@ -160,8 +179,8 @@ describe('PostHogInterceptor', () => {
         expectedRequestPath: '/api/test#details',
       },
       {
-        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
-        options: { disable_capture_url_hashes: true },
+        name: 'strips request URL hashes when disableCaptureUrlHashes is enabled',
+        options: { disableCaptureUrlHashes: true },
         expectedCurrentUrl: '/api/test?token=secret',
         expectedRequestPath: '/api/test',
       },
@@ -323,41 +342,44 @@ describe('PostHogInterceptor', () => {
           }),
       })
 
-      posthog.enterContext({
-        sessionId: 'ambient-session',
-        distinctId: 'ambient-user',
-        properties: { ambient: true },
-      })
+      await posthog.withContext(
+        {
+          sessionId: 'ambient-session',
+          distinctId: 'ambient-user',
+          properties: { ambient: true },
+        },
+        async () => {
+          const headerRequest = interceptor.intercept(
+            createMockContext({
+              headers: {
+                'x-posthog-session-id': 'request-session',
+                'x-posthog-distinct-id': 'request-user',
+              },
+            }),
+            createHandler('with-headers')
+          )
+          const headerlessRequest = interceptor.intercept(
+            createMockContext({ headers: {}, path: '/headerless' }),
+            createHandler('headerless')
+          )
 
-      const headerRequest = interceptor.intercept(
-        createMockContext({
-          headers: {
-            'x-posthog-session-id': 'request-session',
-            'x-posthog-distinct-id': 'request-user',
-          },
-        }),
-        createHandler('with-headers')
+          await lastValueFrom(headerRequest)
+          await lastValueFrom(headerlessRequest)
+
+          expect(capturedContexts['with-headers']).toMatchObject({
+            sessionId: 'request-session',
+            distinctId: 'request-user',
+          })
+          expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
+          // Without headers, identity already in the context fills in, but its properties don't leak.
+          expect(capturedContexts.headerless).toMatchObject({
+            sessionId: 'ambient-session',
+            distinctId: 'ambient-user',
+            properties: { $request_path: '/headerless' },
+          })
+          expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
+        }
       )
-      const headerlessRequest = interceptor.intercept(
-        createMockContext({ headers: {}, path: '/headerless' }),
-        createHandler('headerless')
-      )
-
-      await lastValueFrom(headerRequest)
-      await lastValueFrom(headerlessRequest)
-
-      expect(capturedContexts['with-headers']).toMatchObject({
-        sessionId: 'request-session',
-        distinctId: 'request-user',
-      })
-      expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
-      // Without headers, identity already in the context fills in, but its properties don't leak.
-      expect(capturedContexts.headerless).toMatchObject({
-        sessionId: 'ambient-session',
-        distinctId: 'ambient-user',
-        properties: { $request_path: '/headerless' },
-      })
-      expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
     })
 
     it('should pass through successful responses', async () => {
@@ -377,7 +399,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 
@@ -588,7 +610,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 
@@ -652,7 +674,7 @@ describe('PostHogInterceptor', () => {
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
 
-      const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
+      const batchCalls = captureRequests(mockedFetch)
       expect(batchCalls.length).toBe(0)
     })
 
