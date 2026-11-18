@@ -259,6 +259,22 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
+    it.each([false, 0, null, '', '"quoted"'])('preserves legacy snapshot payload %j silently', async (payload) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ decideFlags: { checkout: 'control' }, flagsPayloads: { checkout: payload } })
+      )
+
+      const flags = await posthog.evaluateFlags('user-1')
+      expect(flags.getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.only(['checkout']).getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.getFlagPayload('missing')).toBeUndefined()
+      expect(flags.onlyAccessed().keys).toEqual([])
+      expect(flags.keys).toEqual(['checkout'])
+      await waitForPromises()
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('getFlagPayload returns parsed payload without firing an event', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
