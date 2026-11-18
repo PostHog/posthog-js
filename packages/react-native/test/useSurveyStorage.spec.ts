@@ -77,4 +77,44 @@ describe('useSurveyStorage', () => {
       vi.useFakeTimers()
     }
   })
+
+  it('clears the last seen survey date when surveys are reset', async () => {
+    vi.useRealTimers()
+    try {
+      const ready = Promise.resolve()
+      const storage = new Map<string, unknown>()
+      const listeners: Array<() => void> = []
+      const mockPostHog = {
+        ready: vi.fn(() => ready),
+        getPersistedProperty: vi.fn((property) => storage.get(property)),
+        setPersistedProperty: vi.fn((property, value) => storage.set(property, value)),
+        on: vi.fn((event: string, listener: () => void) => {
+          if (event === 'surveysReset') {
+            listeners.push(listener)
+          }
+          return () => {}
+        }),
+      } as unknown as PostHog
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(PostHogContext.Provider, { value: { client: mockPostHog } }, children)
+
+      const { result } = renderHook(() => useSurveyStorage(), { wrapper })
+      await act(async () => {
+        await ready
+      })
+      act(() => result.current.setLastSeenSurveyDate(new Date('2026-01-01T00:00:00.000Z')))
+      expect(result.current.lastSeenSurveyDate).toEqual(new Date('2026-01-01T00:00:00.000Z'))
+
+      // reset() clears the stored date, then notifies listeners
+      storage.delete(PostHogPersistedProperty.SurveyLastSeenDate)
+      await act(async () => {
+        listeners.forEach((listener) => listener())
+        await ready
+      })
+
+      expect(result.current.lastSeenSurveyDate).toBeUndefined()
+    } finally {
+      vi.useFakeTimers()
+    }
+  })
 })
