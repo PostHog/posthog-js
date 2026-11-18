@@ -84,7 +84,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type RequestResponse, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -532,6 +532,7 @@ export class PostHog implements PostHogInterface {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
+    __pending_remote_config_callbacks?: ((response: RequestResponse) => void)[]
     _pendingRemoteConfig?: RemoteConfigResult
     _lastRemoteConfig?: RemoteConfigResult
     _remoteConfigLoader?: RemoteConfigLoader

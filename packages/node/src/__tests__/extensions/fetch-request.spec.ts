@@ -63,6 +63,52 @@ describe('fetch request instrumentation', () => {
     expect(spans[0].status?.code).not.toBe('error')
   })
 
+  it.each([
+    { name: 'no ids when the cookie fallback is off too', readPostHogCookie: undefined, expected: {} },
+    {
+      name: 'the cookie ids when the cookie fallback is on',
+      readPostHogCookie: true,
+      expected: { sessionId: 'cookie-session', distinctId: 'user-from-cookie' },
+    },
+  ])(
+    'ignores the tracing headers when captureTracingHeaders is false, giving $name',
+    async ({ readPostHogCookie, expected }) => {
+      await posthog.shutdown()
+      posthog = new PostHog('phc_test_key', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        captureTracingHeaders: false,
+        readPostHogCookie,
+      })
+      const now = Date.now()
+      const cookie = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      let seen: any
+      await instrumentRequest(
+        posthog,
+        new Request('http://localhost/x', {
+          headers: {
+            'x-posthog-session-id': 'header-session',
+            'x-posthog-distinct-id': 'header-user',
+            cookie: `ph_phc_test_key_posthog=${cookie}`,
+          },
+        }),
+        () => {
+          seen = posthog.getContext()
+          return new Response('ok')
+        }
+      )
+
+      expect(seen.sessionId).toBe(expected.sessionId)
+      expect(seen.distinctId).toBe(expected.distinctId)
+    }
+  )
+
   it('names the span after the method only when no route is known', async () => {
     await instrumentRequest(posthog, new Request('http://localhost/anything/123'), () => new Response('ok'))
     expect(spans[0].name).toBe('GET')

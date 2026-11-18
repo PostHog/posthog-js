@@ -43,6 +43,7 @@ The repository contains the following top-level packages in `./packages/`:
 | Package                      | Name                                 | Description                                              |
 | ---------------------------- | ------------------------------------ | -------------------------------------------------------- |
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
+| `electron/`                  | `@posthog/electron`                  | Electron analytics, shared app state and client flags    |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
 | `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
