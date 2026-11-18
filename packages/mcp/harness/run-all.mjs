@@ -8,7 +8,6 @@
 //   pnpm --filter @posthog/mcp run test:integration:sdk-v2
 //   pnpm --filter @posthog/mcp run test:integration:nest-v1
 //   pnpm --filter @posthog/mcp run test:integration:nest-v2
-//   pnpm --filter @posthog/mcp run test:integration:mcp-handler
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -34,7 +33,6 @@ const LANES = [
   ['official SDK v2', 'test:integration:sdk-v2'],
   ['mcp-nest (SDK v1)', 'test:integration:nest-v1'],
   ['mcp-nest (SDK v2)', 'test:integration:nest-v2'],
-  ['mcp-handler', 'test:integration:mcp-handler'],
 ]
 
 const outcomes = []
