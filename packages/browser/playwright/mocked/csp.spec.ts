@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, Page, test } from '@playwright/test'
 import { version } from '../../package.json'
 import {
     ASSETS_HOST,
@@ -234,8 +234,8 @@ test.describe('strict CSP: core', () => {
         await expectNoUnexpectedActivity(state)
     })
 
-    // Documented exception: the loaders copy their nonce onto array.js, but extension scripts and
-    // config.js are inserted without one. A nonce-only script-src (no host, no strict-dynamic) blocks
+    // Documented exception: the loaders copy their nonce onto array.js, but extension scripts are
+    // inserted without one. A nonce-only script-src (no host, no strict-dynamic) blocks
     // them unless prepare_external_dependency_script copies the nonce.
     for (const copyNonce of [false, true]) {
         test(`nonce-only script-src ${copyNonce ? 'loads extensions when prepare_external_dependency_script sets the nonce' : 'blocks extension scripts inserted without a nonce'}`, async ({
@@ -263,7 +263,6 @@ test.describe('strict CSP: core', () => {
             await expect
                 .poll(async () => (await violationsFor(state, 'script-src', ASSETS_HOST)).map((v) => v.blockedURI))
                 .toEqual([
-                    `${ASSETS_HOST}/array/phc_csp_test/config.js`,
                     `${ASSETS_HOST}/static/${version}/lazy-recorder.js`,
                     `${ASSETS_HOST}/static/lazy-recorder.js?v=${version}`,
                 ])
@@ -355,9 +354,23 @@ test.describe('strict CSP: toolbar', () => {
 })
 
 test.describe('strict CSP: blocked remote config', () => {
-    test('a blocked config.js falls back to the JSON config', async ({ page }) => {
+    test('without site apps, config loads as JSON and config.js is never requested', async ({ page }) => {
         const state = await openCspPage(page, {
             scenario: scenarios.configScriptBlocked(),
+            remoteConfig: { surveys: true },
+            apiResponses: { '/api/surveys/': { surveys: [survey] } },
+        })
+        await state.waitForLoaded()
+        await expect.poll(() => state.remoteConfigApplied()).toBe(true)
+        await expect(page.locator('.PostHogSurvey-csp-survey').locator('.survey-form')).toBeVisible()
+        expect(state.requests.filter((url) => url.endsWith('/array/phc_csp_test/config'))).toHaveLength(1)
+        await expectNoUnexpectedActivity(state)
+    })
+
+    test('with site apps, a blocked config.js falls back to the JSON config', async ({ page }) => {
+        const state = await openCspPage(page, {
+            scenario: scenarios.configScriptBlocked(),
+            config: { opt_in_site_apps: true },
             remoteConfig: { surveys: true },
             apiResponses: { '/api/surveys/': { surveys: [survey] } },
         })
@@ -373,9 +386,18 @@ test.describe('strict CSP: blocked remote config', () => {
         })
     })
 
-    test('blocked config.js and JSON config fall back to defaults and keep capturing', async ({ page }) => {
+    for (const siteApps of [false, true]) {
+        test(`blocked remote config falls back to defaults and keeps capturing ${siteApps ? 'with' : 'without'} site apps`, async ({
+            page,
+        }) => {
+            await expectBlockedRemoteConfigFallsBack(page, siteApps)
+        })
+    }
+
+    async function expectBlockedRemoteConfigFallsBack(page: Page, siteApps: boolean) {
         const state = await openCspPage(page, {
             scenario: scenarios.remoteConfigBlocked(),
+            config: { opt_in_site_apps: siteApps },
             remoteConfig: { surveys: true, sessionRecording: { endpoint: '/s/' } },
             flags: { 'csp-flag': true },
         })
@@ -386,7 +408,8 @@ test.describe('strict CSP: blocked remote config', () => {
         await expectEventCaptured(state, 'csp event')
         await expect.poll(() => page.evaluate(() => (window as any).posthog.isFeatureEnabled('csp-flag'))).toBe(true)
         await expect.poll(() => violationsFor(state, 'connect-src', `${ASSETS_HOST}/array/`)).toHaveLength(1)
-        expect(await violationsFor(state, 'script-src', `${ASSETS_HOST}/array/`)).toHaveLength(1)
+        // Without site apps the SDK never inserts config.js, so script-src is never involved.
+        expect(await violationsFor(state, 'script-src', `${ASSETS_HOST}/array/`)).toHaveLength(siteApps ? 1 : 0)
         expect(await state.remoteConfigApplied()).toBe(false)
         expect(await page.evaluate(() => (window as any).posthog.sessionRecording?.started)).toBeFalsy()
         await expectNoUnexpectedActivity(state, {
@@ -395,7 +418,7 @@ test.describe('strict CSP: blocked remote config', () => {
                 { directive: 'connect-src', blockedURI: `${ASSETS_HOST}/array/` },
             ],
         })
-    })
+    }
 })
 
 const uiExtensionScripts = ['surveys.js', 'product-tours.js', 'conversations.js']
