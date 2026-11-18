@@ -655,19 +655,25 @@ describe('emails', () => {
       }
     )
 
-    it('hashes bytes and decodes Base64 without Buffer, as on the edge runtime', async () => {
+    it('decodes Base64 without Buffer, as on the edge runtime', async () => {
       const fake = againstPostHog()
+      const atob = vi.spyOn(globalThis, 'atob')
+      // send() decodes the files before its first await. Restore Buffer before awaiting: vitest's forks worker
+      // decodes its IPC messages with the global Buffer and fails the run if one arrives while it is unset.
       vi.stubGlobal('Buffer', undefined)
-      let result: Awaited<ReturnType<PostHog['emails']['send']>>
+      let sending: ReturnType<typeof sendFiles>
       try {
-        result = await sendFiles([
+        sending = sendFiles([
           { filename: 'logo.png', content: new Uint8Array(LOGO) },
           { filename: 'invite.ics', content: 'QkVHSU46VkNBTEVOREFS' },
         ])
       } finally {
         vi.unstubAllGlobals()
       }
+      const result = await sending
 
+      expect(atob).toHaveBeenCalledWith('QkVHSU46VkNBTEVOREFS')
+      atob.mockRestore()
       expect(result.error).toBeNull()
       expect(fake.emails.map(({ attachments }) => attachments)).toEqual([
         [
