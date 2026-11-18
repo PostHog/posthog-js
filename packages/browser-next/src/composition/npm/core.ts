@@ -25,6 +25,7 @@ export type {
     NewSessionReason,
     IPostHog,
     RemoteConfig,
+    RuntimeOptions,
     SendRequestInit,
     SessionContext,
     StorageLike,
