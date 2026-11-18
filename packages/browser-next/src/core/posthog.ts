@@ -31,7 +31,9 @@ import type {
     BrowserNavigator,
     CaptureSummary,
     CorePostHogOptions,
+    ExplicitConsentStatus,
     IPostHog,
+    ResetOptions,
     RuntimeOptions,
     StorageLike,
 } from './types'
@@ -89,6 +91,7 @@ class PostHog implements IPostHog {
     readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onNewSession: IPostHog['onNewSession']
+    readonly onSessionId: IPostHog['onSessionId']
     readonly onEvent: IPostHog['onEvent']
     readonly onIdentify: IPostHog['onIdentify']
     readonly onChangeProperties: IPostHog['onChangeProperties']
@@ -190,7 +193,8 @@ class PostHog implements IPostHog {
                     this._analytics?.purge()
                 }
                 this._consentChangePublisher.publish({ current: consent, previous })
-            }
+            },
+            options.cookie
         )
         this._consentObservation = this._observeConsent(
             storage,
@@ -253,7 +257,20 @@ class PostHog implements IPostHog {
         this.onNewSession = this._analytics._newSessionPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
+        this.onSessionId = (handler) => {
+            const subscription = this._analytics._sessionIdPublisher.listener(handler)
+            const session = this._canMutate() ? this.session : undefined
+            if (session) {
+                try {
+                    handler(session)
+                } catch (error) {
+                    this.logger.error('A session ID listener failed', error)
+                }
+            }
+            return subscription
+        }
         this._registry = new ExtensionRegistry<IPostHog>(this, this.logger, loaders, () => this._canMutate())
+        if (options.bootstrap) this._analytics.bootstrap(options.bootstrap)
     }
 
     get distinctId(): string {
@@ -309,8 +326,8 @@ class PostHog implements IPostHog {
         this._analytics.identify(distinctId, set, setOnce)
     }
 
-    reset(): void {
-        this._analytics.reset()
+    reset(options?: boolean | ResetOptions): void {
+        this._analytics.reset(options)
     }
 
     register(properties: Record<string, unknown>): void {
@@ -410,6 +427,20 @@ class PostHog implements IPostHog {
 
     hasOptedOut(): boolean {
         return this._state.consent === 'denied'
+    }
+
+    getExplicitConsentStatus(): ExplicitConsentStatus {
+        return this._state.consentChoice ?? 'pending'
+    }
+
+    clearOptInOut(): void {
+        if (this._disposed) {
+            return
+        }
+        if (this._state.clearConsent()) {
+            this._dispatchConsentChange()
+        }
+        this._startInitialPageview()
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {

@@ -1,4 +1,4 @@
-import type { CaptureOptions, CapturedEventInfo, Disposable } from '@posthog/browser-common'
+import type { CaptureOptions, CapturedEventInfo, Disposable, SessionContext } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 import {
     MAX_ANALYTICS_BATCH_EVENTS,
@@ -11,7 +11,8 @@ import {
     type CaptureHost,
 } from './analytics-internal'
 import type { ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { NewSessionInfo, CaptureSummary } from '../../core/types'
+import type { BootstrapOptions, NewSessionInfo, CaptureSummary, ResetOptions } from '../../core/types'
+import { readBootstrapSession } from '../../core/state/state'
 import type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './admission/event-buffer'
 import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './admission/capture-summary'
@@ -63,6 +64,16 @@ const eventTimestamp = (timestamp: Date | undefined): string => {
     }
 }
 
+/** Snapshots JSON options so later caller mutations and hostile getters cannot affect identity operations. */
+export const snapshotOptions = <T extends object>(options: T | undefined): Partial<T> => {
+    try {
+        const snapshot: unknown = JSON.parse(JSON.stringify(options ?? {}))
+        return typeof snapshot === 'object' && snapshot !== null ? (snapshot as Partial<T>) : {}
+    } catch {
+        return {}
+    }
+}
+
 interface PersonPropertiesAdmission {
     readonly signature: string | undefined
 }
@@ -81,6 +92,7 @@ interface PreparedCapture {
 export class Analytics {
     readonly _eventPublisher: Publisher<CapturedEventInfo>
     readonly _newSessionPublisher: Publisher<NewSessionInfo>
+    readonly _sessionIdPublisher: Publisher<SessionContext>
     readonly _identifyPublisher: Publisher<IdentifyInfo>
     readonly _changePropertiesPublisher: Publisher<ChangePropertiesInfo>
     readonly _groupPublisher: Publisher<GroupInfo>
@@ -110,6 +122,7 @@ export class Analytics {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
         this._newSessionPublisher = new Publisher(report('A session'))
+        this._sessionIdPublisher = new Publisher(report('A session ID'))
         this._identifyPublisher = new Publisher(report('An identify'))
         this._changePropertiesPublisher = new Publisher(report('A person-property'))
         this._groupPublisher = new Publisher(report('A group'))
@@ -183,6 +196,7 @@ export class Analytics {
         for (const publisher of [
             this._eventPublisher,
             this._newSessionPublisher,
+            this._sessionIdPublisher,
             this._identifyPublisher,
             this._changePropertiesPublisher,
             this._groupPublisher,
@@ -415,6 +429,7 @@ export class Analytics {
             if (bytes > MAX_ANALYTICS_BYTES) this._warnOversized(message.event, bytes)
             return undefined
         }
+        const previous = this._core._state.session
         if (!this._core._state.sessionAdmitted(preparedSession)) {
             if (!immediate) this._buffer.discardQueued(message)
             return undefined
@@ -431,6 +446,8 @@ export class Analytics {
         if (message.event === '$pageview') this._pageview = [message.uuid, session.sessionId]
         else if (this._pageview?.[1] !== session.sessionId) this._pageview = undefined
         this._sessionProperties.admitted(session.sessionId)
+        if (previous?.sessionId !== session.sessionId || previous.windowId !== session.windowId)
+            this._sessionIdPublisher.publish({ ...session })
         if (preparedSession.reason) this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         this._eventPublisher.publish(deepFreeze({ event: message.event, properties: observedProperties }))
         return message
@@ -524,13 +541,45 @@ export class Analytics {
         }
     }
 
-    reset(): void {
+    reset(options?: boolean | ResetOptions): void {
         if (!this._canMutate()) return
-        this._core._state.reset()
+        const { resetDeviceId, bootstrap } =
+            options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
+        const { distinctId, isIdentifiedId } = bootstrap ?? {}
+        this._core._state.reset(
+            resetDeviceId === true,
+            isValidDistinctId(distinctId) ? [distinctId, isIdentifiedId === true] : undefined,
+            this._bootstrapSession(bootstrap)
+        )
         this._lastPersonProperties = undefined
         this._pageview = undefined
         this._sessionProperties.clear()
         this._resetPublisher.publish(undefined)
+    }
+
+    /** Applies setup bootstrap without replacing a persisted identity, as in posthog-js. */
+    bootstrap(options: BootstrapOptions | undefined): void {
+        const bootstrap = snapshotOptions(options)
+        const { distinctId, isIdentifiedId } = bootstrap
+        const session = this._bootstrapSession(bootstrap)
+        if (session) this._core._state.bootstrapSession(session)
+        if (!isValidDistinctId(distinctId) || !this._canMutate()) return
+        const state = this._core._state
+        if (state.generated) return state.bootstrapIdentity(distinctId, isIdentifiedId === true)
+        // An anonymous ID never replaces a stored identity.
+        if (isIdentifiedId !== true) return
+        // A matching ID only marks the user identified, without an event.
+        if (distinctId === state.distinctId) state.identify(distinctId)
+        else if (!state.isIdentified) this.identify(distinctId)
+        else this._core.logger.warn('Ignored the bootstrap distinct ID of a different identified user')
+    }
+
+    private _bootstrapSession(bootstrap: BootstrapOptions | undefined): ReturnType<typeof readBootstrapSession> {
+        const sessionId = bootstrap?.sessionId
+        if (sessionId === undefined) return undefined
+        const session = readBootstrapSession(sessionId)
+        if (!session) this._core.logger.error('Ignored the bootstrap session ID: not a past UUIDv7')
+        return session
     }
 
     private _registration(properties: Record<string, unknown>): Record<string, unknown> | undefined {
