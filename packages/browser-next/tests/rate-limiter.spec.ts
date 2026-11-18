@@ -1,4 +1,4 @@
-import { ClientRateLimiter } from '../src/rate-limiter'
+import { ClientRateLimiter } from '../src/products/analytics/admission/rate-limiter'
 
 describe('ClientRateLimiter', () => {
     it('admits the burst, reports one transition, and refills fractionally', () => {

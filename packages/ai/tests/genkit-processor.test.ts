@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks'
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
 import { PostHog } from 'posthog-node'
+import type { MockInstance } from 'vitest'
 import { PostHogGenkitSpanProcessor, type PostHogGenkitSpanProcessorOptions } from '../src/genkit'
 
 const spanKinds = [
@@ -12,7 +13,7 @@ const spanKinds = [
 
 describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () => {
   let client: PostHog
-  let capture: ReturnType<typeof vi.spyOn<PostHog, 'capture'>>
+  let capture: MockInstance<Parameters<PostHog['captureAi']>, ReturnType<PostHog['captureAi']>>
   let providers: BasicTracerProvider[]
 
   function tracer(options: Omit<PostHogGenkitSpanProcessorOptions, 'client'> = {}) {
@@ -25,7 +26,8 @@ describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () =
 
   beforeEach(() => {
     client = new PostHog('phc_test', { host: 'http://127.0.0.1:9', flushAt: 1000, flushInterval: 0 })
-    capture = vi.spyOn(client, 'capture').mockImplementation(() => {})
+    // posthog-node 6 sends AI events through captureAi.
+    capture = vi.spyOn(client, 'captureAi').mockImplementation(() => undefined)
     providers = []
   })
 
@@ -65,12 +67,54 @@ describe('PostHogGenkitSpanProcessor with a custom OpenTelemetry provider', () =
     client.withContext({ distinctId: 'ending-user' }, () => span.end())
 
     expect(capture).toHaveBeenCalledWith(
-      expect.objectContaining({
-        distinctId: span.spanContext().traceId,
-        properties: expect.objectContaining({ $process_person_profile: false }),
-      })
+      expect.objectContaining({ distinctId: span.spanContext().traceId, options: { process_person_profile: false } })
     )
+    expect(capture.mock.calls[0][0].properties).not.toHaveProperty('$process_person_profile')
   })
+
+  it.each(spanKinds)('sends processor options over registered options for $event', async ({ name, attributes }) => {
+    await client.registerOptions({ process_person_profile: false, cookieless_mode: false })
+    const span = tracer({
+      distinctId: 'user-1',
+      options: { process_person_profile: true, cookieless_mode: true },
+    }).startSpan(name, { attributes: { 'genkit:type': 'action', ...attributes } })
+
+    span.end()
+
+    const [event] = capture.mock.calls[0]
+    expect(event.properties).not.toHaveProperty('$process_person_profile')
+    expect((await client.prepareEventMessage(event)).options).toEqual({
+      process_person_profile: true,
+      cookieless_mode: true,
+    })
+  })
+
+  it.each(
+    spanKinds.flatMap((kind) =>
+      [
+        { source: 'no distinct ID', distinctId: undefined, contextDistinctId: undefined },
+        { source: 'an empty distinct ID', distinctId: '', contextDistinctId: undefined },
+        { source: 'a whitespace distinct ID', distinctId: '  ', contextDistinctId: undefined },
+        { source: 'a whitespace context distinct ID', distinctId: undefined, contextDistinctId: '  ' },
+      ].map((identity) => ({ ...kind, ...identity }))
+    )
+  )(
+    'keeps $event personless over a registered option with $source',
+    async ({ name, attributes, distinctId, contextDistinctId }) => {
+      await client.registerOptions({ process_person_profile: true })
+      const otel = tracer({ distinctId })
+      const start = () => otel.startSpan(name, { attributes: { 'genkit:type': 'action', ...attributes } })
+      const span =
+        contextDistinctId === undefined ? start() : client.withContext({ distinctId: contextDistinctId }, start)
+
+      span.end()
+
+      const [event] = capture.mock.calls[0]
+      expect(event.distinctId).toBe(span.spanContext().traceId)
+      expect(event.options).toEqual({ process_person_profile: false })
+      expect((await client.prepareEventMessage(event)).options).toEqual({ process_person_profile: false })
+    }
+  )
 
   it('prefers an explicit distinct ID over the starting context', () => {
     const otel = tracer({ distinctId: 'explicit-user' })
