@@ -99,7 +99,7 @@ export class SessionRecording implements Extension {
     }
 
     get status(): SessionRecordingStatus {
-        if (this._isReplayOff) {
+        if (this.isReplayOff) {
             return DISABLED
         }
         if (this._recordingStatus === AWAITING_CONFIG || this._recordingStatus === MISSING_CONFIG) {
@@ -146,7 +146,8 @@ export class SessionRecording implements Extension {
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
-    private get _isReplayOff(): boolean {
+    /** @internal */
+    get isReplayOff(): boolean {
         return (
             !!this._config.disable_session_recording ||
             this._instance.consent.isOptedOut() ||
@@ -496,7 +497,7 @@ export class SessionRecording implements Extension {
      * when looking at the event feed for a session
      */
     get sdkDebugProperties(): Properties {
-        if (this._isReplayOff) {
+        if (this.isReplayOff) {
             return { $recording_status: DISABLED }
         }
         const properties: Properties = {}

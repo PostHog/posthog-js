@@ -222,6 +222,25 @@ describe('posthog core', () => {
             }
         })
 
+        it('does not consume the replay diagnostic interval while replay is off', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            const recorderKeys = {
+                $recording_status: 'active',
+                $sdk_debug_session_start: baseUTCDateTime.getTime(),
+            }
+            posthog.sessionRecording!['_lazyLoadedSessionRecording'] = {
+                sdkDebugProperties: recorderKeys,
+                stop: vi.fn(),
+            } as any
+
+            posthog.set_config({ disable_session_recording: true })
+            expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+
+            posthog.set_config({ disable_session_recording: false })
+            expect(posthog.capture('$pageview')!.properties).toMatchObject(recorderKeys)
+            expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+        })
+
         it('keeps caller-supplied replay-named properties while replay is off', () => {
             const posthog = posthogWith({
                 capture_pageview: false,
