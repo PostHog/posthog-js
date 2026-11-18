@@ -165,14 +165,12 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                     (identityKeys.has(key) || ['$sesid', 'widgetSessionId'].includes(key))) ||
                 (storageRoot.test(path) && key.endsWith('_window_id'))
             if (sdkId && (uuid.test(value) || key === '$insert_id')) return mapId(value)
-            // A sampled-out session is persisted as its session ID with a negation marker.
-            if (
-                key === '$session_is_sampled' &&
-                (eventProperty.test(path) || storageProperty.test(path)) &&
-                /^!/.test(value) &&
-                uuid.test(value.slice(1))
-            )
-                return '!' + mapId(value.slice(1))
+            // A sampled-out decision stores the session ID behind a marker. Keep the marker verbatim so a
+            // change to it remains a reviewable difference; only the generated session ID is tokenized.
+            if (key === '$session_is_sampled' && (eventProperty.test(path) || storageProperty.test(path))) {
+                const sessionId = value.slice(-36)
+                if (value.length > 36 && uuid.test(sessionId)) return value.slice(0, -36) + mapId(sessionId)
+            }
             if (
                 key === '$lib_version' &&
                 (eventProperty.test(path) ||

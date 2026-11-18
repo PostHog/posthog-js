@@ -39575,7 +39575,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -39707,7 +39707,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -39870,7 +39870,7 @@
                                         "sessionId": "generated-id-2",
                                         "size": "<encoded-size>"
                                     },
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_event_trigger_activated_session": "generated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
@@ -40167,7 +40167,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -40277,7 +40277,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -41323,7 +41323,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -41451,7 +41451,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -124283,7 +124283,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -124415,7 +124415,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -124578,7 +124578,7 @@
                                         "sessionId": "generated-id-2",
                                         "size": "<encoded-size>"
                                     },
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_event_trigger_activated_session": "generated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
@@ -124875,7 +124875,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -124985,7 +124985,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -126031,7 +126031,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -126159,7 +126159,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -209003,7 +209003,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -209135,7 +209135,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -209298,7 +209298,7 @@
                                         "sessionId": "generated-id-2",
                                         "size": "<encoded-size>"
                                     },
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_event_trigger_activated_session": "generated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
@@ -209595,7 +209595,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -209705,7 +209705,7 @@
                                     "$session_entry_referring_domain": "$direct",
                                     "$session_entry_url": "<fixture-origin>/",
                                     "$session_id": "generated-id-2",
-                                    "$session_is_sampled": "!generated-id-2",
+                                    "$session_is_sampled": "xgenerated-id-2",
                                     "$session_recording_remote_config": {
                                         "cache_timestamp": 1704067201000,
                                         "canvasRecording": {
@@ -210751,7 +210751,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
@@ -210879,7 +210879,7 @@
                                         "$session_entry_referring_domain": "$direct",
                                         "$session_entry_url": "<fixture-origin>/",
                                         "$session_id": "generated-id-2",
-                                        "$session_is_sampled": "!generated-id-2",
+                                        "$session_is_sampled": "xgenerated-id-2",
                                         "$session_recording_remote_config": {
                                             "cache_timestamp": 1704067201000,
                                             "canvasRecording": {
