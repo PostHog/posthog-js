@@ -13,7 +13,6 @@ import type {
     IPostHog as CorePostHog,
     PersonProfileMode as CorePersonProfileMode,
 } from '@posthog/browser/core'
-import type { IPostHog as LitePostHog, PersonProfileMode as LitePersonProfileMode } from '@posthog/browser/lite'
 import { group, groupIdentify, resetGroups } from '@posthog/browser/groups'
 import {
     alias,
@@ -26,8 +25,7 @@ import type { Client, Extension as SharedExtension, ExtensionToken } from '@post
 
 const personProfiles: PersonProfileMode = 'identified_only'
 const corePersonProfiles: CorePersonProfileMode = personProfiles
-const litePersonProfiles: LitePersonProfileMode = corePersonProfiles
-export const analyticsOptions: AnalyticsOptions = { personProfiles: litePersonProfiles, flushAt: 10, flushInterval: 0 }
+export const analyticsOptions: AnalyticsOptions = { personProfiles: corePersonProfiles, flushAt: 10, flushInterval: 0 }
 export const rootOptions: PostHogOptions = { projectToken: 'ph_test', analytics: analyticsOptions, flags: false }
 export const coreOptions: CorePostHogOptions = { projectToken: 'ph_test', analytics: analyticsOptions }
 // @ts-expect-error Analytics is part of the client and cannot be disabled.
@@ -76,7 +74,7 @@ interface CustomExtension extends Extension {
 }
 const CustomExtension = 'custom' as ExtensionToken<CustomExtension>
 
-export const entrypointClients = (core: CorePostHog, lite: LitePostHog): IPostHog[] => [core, lite]
+export const entrypointClients = (core: CorePostHog): IPostHog[] => [core]
 
 export const publicClient = async (posthog: IPostHog): Promise<void> => {
     const admitted: boolean = posthog.capture('event', { plan: 'paid' }, { uuid: 'event-uuid', timestamp: new Date() })

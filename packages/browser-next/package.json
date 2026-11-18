@@ -33,11 +33,6 @@
             "require": "./dist/products/flags/flags.js",
             "import": "./dist/products/flags/flags.mjs"
         },
-        "./lite": {
-            "types": "./dist/composition/npm/lite.d.ts",
-            "require": "./dist/composition/npm/lite.js",
-            "import": "./dist/composition/npm/lite.mjs"
-        },
         "./groups": {
             "types": "./dist/products/analytics/groups.d.ts",
             "require": "./dist/products/analytics/groups.js",

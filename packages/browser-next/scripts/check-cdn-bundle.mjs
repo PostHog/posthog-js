@@ -39,7 +39,6 @@ const assertInitialModules = (entries) => {
 }
 const forbiddenInitial = [
     /\/(?:flags|feature-flags|logs|console-logs|surveys|surveys-extension|surveys-renderer|autocapture|rageclick)\.(?:ts|mjs|js)$/,
-    /\/products\/analytics\/delivery\/lite-delivery\.ts$/,
     /\/(?:core|browser)\/dist\//,
     /node_modules\/(?:posthog-js|@posthog\/core|core-js|fflate|preact|dompurify|rrweb|web-vitals)\//,
 ]

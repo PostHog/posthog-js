@@ -57,7 +57,6 @@ for (const name of guardedGlobals) {
 let createPostHog
 let createEsmPostHog
 let createCorePostHog
-let createLitePostHog
 let commonJsGroups
 let esmGroups
 let commonJsPerson
@@ -78,8 +77,6 @@ try {
         throw new Error('Common feature flags token differs between module formats')
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
-    ;({ createPostHog: createLitePostHog } = await import('@posthog/browser/lite'))
-    require('@posthog/browser/lite')
     commonJsGroups = require('@posthog/browser/groups')
     esmGroups = await import('@posthog/browser/groups')
     commonJsPerson = require('@posthog/browser/person')
@@ -159,31 +156,6 @@ await automatic.dispose()
 
 if (automaticRequests.length !== 1 || automaticRequests[0].body?.batch?.[0]?.event !== 'automatic_cjs_event') {
     throw new Error('The CommonJS root did not deliver captured events')
-}
-
-const liteRequests = []
-const lite = await createLitePostHog({
-    projectToken: 'ph_test',
-    capturePageview: false,
-    storage: false,
-    navigator: false,
-    fetch: async (input, init) => {
-        if (init.method === 'GET') return new Response('{}')
-        liteRequests.push({ url: String(input), body: JSON.parse(init.body) })
-        return new Response('{}', { status: 200 })
-    },
-})
-lite.capture('lite_event')
-await lite.flush()
-const liteImmediate = await lite.captureImmediate('lite_immediate')
-await lite.dispose()
-if (
-    liteRequests.length !== 1 ||
-    !liteRequests[0].url.endsWith('/i/v1/analytics/events') ||
-    liteRequests[0].body?.batch?.[0]?.event !== 'lite_event' ||
-    liteImmediate.allPersisted
-) {
-    throw new Error('The ESM lite entrypoint did not deliver best-effort batches without immediate capture')
 }
 
 const coreRequests = []

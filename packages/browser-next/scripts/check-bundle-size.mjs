@@ -38,7 +38,6 @@ const durableDeliveryInputs = [
     /(^|\/)delivery\/lane\.(m?js|ts)$/,
     /(^|\/)capture-v1\.(m?js|ts)$/,
 ]
-const liteDeliveryInput = /(^|\/)lite-delivery\.(m?js|ts)$/
 const rootCompositionInput = /(^|\/)root-composition\.(m?js|ts)$/
 
 const buildOptions = {
@@ -95,20 +94,15 @@ const assertBoundary = (name, inputs, { required = [], forbidden = [] }) => {
     if (found.length > 0) throw new Error(`The ${name} bundle includes forbidden modules:\n${found.join('\n')}`)
 }
 
-// Initial graphs of /core, /lite and the root entry hold the client only: no optional product or heavy dependency.
+// Initial graphs of /core and the root entry hold the client only: no optional product or heavy dependency.
 const clientOnly = [...productInputs, groupsInput, personInput, coreInput, surveyUiInput, surveyRenderingInput]
 const coreBoundary = {
     required: [analyticsCoreInput, ...durableDeliveryInputs],
-    forbidden: [...clientOnly, liteDeliveryInput, rootCompositionInput],
-}
-const liteBoundary = {
-    // Lite delivery reuses the Capture V1 event shape but not the durable lane or its delivery.
-    required: [analyticsCoreInput, liteDeliveryInput],
-    forbidden: [...clientOnly, ...durableDeliveryInputs.slice(0, 2), rootCompositionInput],
+    forbidden: [...clientOnly, rootCompositionInput],
 }
 const rootInitialBoundary = {
     required: [analyticsCoreInput, ...durableDeliveryInputs, rootCompositionInput],
-    forbidden: [...clientOnly, liteDeliveryInput],
+    forbidden: clientOnly,
 }
 
 const report = async (name, result, outputs, outputKeys, { allowProducts = false, allowSurveyUi = false } = {}) => {
@@ -252,8 +246,7 @@ if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
 }
 
 await measureStatic('core minimal', 'fixtures/minimal.ts', coreBoundary)
-const coreInputs = await measureStatic('core', 'fixtures/core.ts', coreBoundary)
-const liteInputs = await measureStatic('lite', 'fixtures/lite.ts', liteBoundary)
+await measureStatic('core', 'fixtures/core.ts', coreBoundary)
 const groupsPersonInputs = await measureStatic('core with groups and person', 'fixtures/groups-person.ts', {
     required: [groupsInput, personInput, ...durableDeliveryInputs],
     forbidden: [...productInputs, coreInput, surveyUiInput, rootCompositionInput],
@@ -274,8 +267,6 @@ await measureSplit('dynamic autocapture', 'fixtures/dynamic-autocapture.ts')
 for (const [guard, boundary, inputs, graph] of [
     ['core', coreBoundary, staticFlagsInputs, 'static flags'],
     ['core', coreBoundary, groupsPersonInputs, 'groups and person'],
-    ['core', coreBoundary, liteInputs, 'lite delivery'],
-    ['lite', liteBoundary, coreInputs, 'durable delivery'],
 ]) {
     assert.throws(
         () => assertBoundary(guard, inputs, boundary),
@@ -283,5 +274,5 @@ for (const [guard, boundary, inputs, graph] of [
         `The ${guard} guard must reject the real ${graph} graph`
     )
 }
-stdout.write('Negative controls: core and lite guards reject real flags, groups/person and delivery graphs\n')
+stdout.write('Negative controls: core guards reject real flags and groups/person graphs\n')
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

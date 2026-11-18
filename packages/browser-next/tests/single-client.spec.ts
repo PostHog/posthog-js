@@ -1,6 +1,5 @@
 import type { Extension } from '@posthog/browser-common'
 import { createPostHog as createDefault } from '../src/composition/npm/core'
-import { createPostHog as createLite } from '../src/composition/npm/lite'
 import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
 import { alias, setPersonProperties, unsetPersonProperties } from '../src/products/analytics/person'
 import type { BrowserFetch, CorePostHogOptions, IPostHog, StorageLike } from '../src/core/types'
@@ -66,16 +65,13 @@ const options = (fetch: BrowserFetch): CorePostHogOptions => ({
     analytics: { flushAt: 100, flushInterval: 0 },
 })
 
-describe.each([
-    ['default', createDefault],
-    ['lite', createLite],
-] as const)('single client (%s delivery)', (_name, create) => {
+describe('single client', () => {
     let sent: Sent[]
     let posthog: IPostHog
 
     beforeEach(async () => {
         sent = []
-        posthog = await create(options(capture(sent)))
+        posthog = await createDefault(options(capture(sent)))
     })
 
     afterEach(async () => {
@@ -101,7 +97,7 @@ describe.each([
             },
         }
         await posthog.shutdown()
-        posthog = await create({ ...options(capture(sent)), extensions: [shared] })
+        posthog = await createDefault({ ...options(capture(sent)), extensions: [shared] })
         expect(host).toBe(posthog)
         expect(posthog.getExtension('shared-test')).toBe(shared)
         await posthog.flush()
@@ -152,48 +148,6 @@ describe.each([
         posthog.capture('blocked')
         await posthog.flush()
         expect(sent).toHaveLength(0)
-    })
-})
-
-describe('lite delivery', () => {
-    it('hands queued events to a keepalive request on page hide', async () => {
-        const target = new EventTarget()
-        vi.stubGlobal('addEventListener', target.addEventListener.bind(target))
-        vi.stubGlobal('removeEventListener', target.removeEventListener.bind(target))
-        try {
-            const sent: Sent[] = []
-            const posthog = await createLite(options(capture(sent)))
-            posthog.capture('before_hide')
-            target.dispatchEvent(new Event('pagehide'))
-            await Promise.resolve()
-            expect(sent).toHaveLength(1)
-            expect(sent[0]?.keepalive).toBe(true)
-            expect(sent[0]?.batch[0]?.event).toBe('before_hide')
-            await posthog.shutdown()
-        } finally {
-            vi.unstubAllGlobals()
-        }
-    })
-
-    it('reports immediate capture as unavailable without admitting the event', async () => {
-        const posthog = await createLite(options(capture([])))
-        const observed: string[] = []
-        posthog.onEvent(({ event }) => observed.push(event))
-        const summary = await posthog.captureImmediate('now')
-        expect(summary.allPersisted).toBe(false)
-        expect(summary.error?.message).toBe('Immediate analytics delivery is unavailable')
-        expect(observed).toEqual([])
-        await posthog.shutdown()
-    })
-
-    it('sends a count-triggered batch after the capture commits', async () => {
-        const sent: Sent[] = []
-        const posthog = await createLite({ ...options(capture(sent)), analytics: { flushAt: 1, flushInterval: 0 } })
-        posthog.capture('first')
-        expect(sent).toHaveLength(0)
-        await Promise.resolve()
-        expect(events(sent).map((event) => event.event)).toEqual(['first'])
-        await posthog.shutdown()
     })
 })
 
