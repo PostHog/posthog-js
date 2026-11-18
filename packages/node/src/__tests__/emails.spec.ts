@@ -1371,11 +1371,11 @@ describe('emails', () => {
     replies = [rejected(503, 'delivery_unavailable'), accepted()]
     const emailFetch = fetch.getMockImplementation()!
     fetch.mockImplementation((url: string, options: unknown) =>
-      url.includes('/batch/')
+      url.includes('/i/v1/analytics/events')
         ? Promise.resolve({ status: 200, text: async () => '{}', json: async () => ({}), headers: new Headers() })
         : emailFetch(url, options)
     )
-    const batchCalls = (): number => fetch.mock.calls.filter(([url]) => url.includes('/batch/')).length
+    const batchCalls = (): number => fetch.mock.calls.filter(([url]) => url.includes('/i/v1/analytics/events')).length
 
     const pending = send()
     await vi.advanceTimersByTimeAsync(0)

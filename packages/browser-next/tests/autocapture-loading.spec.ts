@@ -1,4 +1,5 @@
-import type { Extension } from '@posthog/browser-common'
+import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
+import type { Extension } from '../src/core/types'
 
 const options = {
     projectToken: 'test',
@@ -13,7 +14,7 @@ const options = {
 } as const
 
 afterEach(() => {
-    vi.doUnmock('../src/autocapture')
+    vi.doUnmock('../src/products/autocapture/autocapture')
     vi.resetModules()
     vi.restoreAllMocks()
 })
@@ -27,13 +28,13 @@ describe('automatic autocapture module loading', () => {
         })
         const setup = vi.fn(() => setupGate)
         vi.doMock(
-            '../src/autocapture',
+            '../src/products/autocapture/autocapture',
             () =>
                 new Promise((resolve) => {
                     loaded = resolve
                 })
         )
-        const { createPostHog } = await import('../src')
+        const { createPostHog } = await import('../src/composition/npm')
         const finished = vi.fn()
         const configuration = { cssSelectorAllowlist: ['.original'] }
         const pending = createPostHog({ ...options, autocapture: configuration }).then((client) => {
@@ -50,21 +51,21 @@ describe('automatic autocapture module loading', () => {
         expect(factory).toHaveBeenCalledWith({ cssSelectorAllowlist: ['.original'] })
         setupFinished()
         const client = await pending
-        expect(client.getExtension('autocapture')).toBeDefined()
+        expect(client.autocapture).toBeDefined()
         await client.dispose()
     })
 
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
-        vi.doMock('../src/autocapture', () => {
+        vi.doMock('../src/products/autocapture/autocapture', () => {
             throw new Error('chunk unavailable')
         })
-        const { createPostHog } = await import('../src')
-        const client = await createPostHog(options)
-        expect(client.getExtension('autocapture')).toBeUndefined()
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog(withBufferedAnalytics({ ...options, autocapture: {} }))
+        expect(client.autocapture).toBeUndefined()
         const captured = vi.fn()
-        client.onEvent(captured)
-        client.capture('still usable')
+        requireInstalledExtension(client.analytics).onEvent(captured)
+        requireInstalledExtension(client.analytics).capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })
@@ -73,15 +74,15 @@ describe('automatic autocapture module loading', () => {
         const imported = vi.fn(() => {
             throw new Error('must not load')
         })
-        vi.doMock('../src/autocapture', imported)
-        const { createPostHog } = await import('../src')
+        vi.doMock('../src/products/autocapture/autocapture', imported)
+        const { createPostHog } = await import('../src/composition/npm')
         const explicit: Extension = { name: 'autocapture', setup() {} }
         const client = await createPostHog({
             ...options,
             ...(mode === 'disabled' ? { autocapture: false as const } : { extensions: [explicit] }),
         })
         expect(imported).not.toHaveBeenCalled()
-        expect(client.getExtension('autocapture')).toBe(mode === 'disabled' ? undefined : explicit)
+        expect(client.autocapture).toBe(mode === 'disabled' ? undefined : explicit)
         await client.dispose()
     })
 })

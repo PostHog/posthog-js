@@ -26,6 +26,8 @@ export type PostHogCoreOptions = {
   /**
    * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
    *
+   * When the queue is full, the SDK drops the oldest event first.
+   *
    * @default 1000
    */
   maxQueueSize?: number
@@ -250,6 +252,7 @@ export type PostHogCoreOptions = {
    * Use this to link requests made from your app to session replays and LLM traces
    * in PostHog. When set, the global `fetch` is patched on initialization and the
    * headers are added to requests whose hostname matches one of the entries.
+   * Hostnames match exactly, so pass hostnames only, without a protocol or path.
    *
    * Requires the SDK to wire up `patchFetchForTracingHeaders` against this option
    * (currently supported in posthog-react-native).
@@ -313,6 +316,7 @@ export type PostHogFetchOptions = {
   headers: { [key: string]: string }
   body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
+  redirect?: 'follow' | 'manual' | 'error'
 }
 
 // Check out posthog-js for these additional options and try to keep them in sync
@@ -560,6 +564,7 @@ export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<P
  * Error values:
  *   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
  *   FLAG_MISSING: Requested flag not in API response
+ *   EVALUATION_FAILED: Requested flag's remote record has no evaluated value
  *   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
  *   QUOTA_LIMITED: Rate/quota limit exceeded
  *   TIMEOUT: Request timed out
@@ -569,6 +574,7 @@ export type FetchLike = (url: string, options: PostHogFetchOptions) => Promise<P
 export const FeatureFlagError = {
   ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
   FLAG_MISSING: 'flag_missing',
+  EVALUATION_FAILED: 'evaluation_failed',
   LOCAL_EVALUATION_INCONCLUSIVE: 'local_evaluation_inconclusive',
   QUOTA_LIMITED: 'quota_limited',
   TIMEOUT: 'timeout',
