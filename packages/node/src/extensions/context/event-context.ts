@@ -5,7 +5,9 @@ const capturedContext = Symbol('capturedContext')
 type ContextEvent = EventMessage & { [capturedContext]?: ContextData | null }
 
 export function snapshotEventContext(context: ContextData | undefined): (event: EventMessage) => EventMessage {
-  const snapshot = context ? { ...context, properties: { ...context.properties } } : null
+  const snapshot = context
+    ? { ...context, properties: { ...context.properties }, options: { ...context.options } }
+    : null
   return (event) => Object.assign(event, { [capturedContext]: snapshot })
 }
 

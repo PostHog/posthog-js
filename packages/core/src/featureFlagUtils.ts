@@ -62,7 +62,7 @@ function getFlagDetailFromFlagAndPayload(
     metadata: {
       id: undefined,
       version: undefined,
-      payload: payload ? JSON.stringify(payload) : undefined,
+      payload: payload !== undefined ? JSON.stringify(payload) : undefined,
       description: undefined,
     },
   }

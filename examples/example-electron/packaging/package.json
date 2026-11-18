@@ -1,0 +1,39 @@
+{
+    "name": "posthog-electron-packaging-fixture",
+    "productName": "PostHogFixture",
+    "version": "1.0.0",
+    "description": "Credential-free installed-consumer packaging smoke fixture",
+    "author": "PostHog",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "dist/app/fixtures/packaged-main.mjs",
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "test:forge": "node package-test.mjs forge",
+        "test:builder": "node package-test.mjs builder"
+    },
+    "dependencies": {
+        "@posthog/electron": "0.1.0-alpha.0"
+    },
+    "devDependencies": {
+        "@electron-forge/core": "8.0.1",
+        "electron": "42.4.0",
+        "electron-builder": "26.11.0"
+    },
+    "config": {
+        "forge": {
+            "packagerConfig": {
+                "asar": true,
+                "name": "PostHogFixture",
+                "executableName": "PostHogFixture",
+                "ignore": [
+                    "^/dist/(?!app(?:/|$))",
+                    "^/package-(?:test|isolation\\.test)\\.mjs$",
+                    "^/pnpm",
+                    "^/\\.pnpmfile\\.cjs$"
+                ]
+            }
+        }
+    }
+}

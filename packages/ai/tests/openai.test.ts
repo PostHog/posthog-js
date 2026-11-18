@@ -4,7 +4,15 @@ import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import { Stream as OpenAIStream } from 'openai/streaming'
-import { collectUnhandledRejections, flushPromises } from './test-utils'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  collectUnhandledRejections,
+  expectUserEventOptions,
+  flushPromises,
+} from './test-utils'
 import { version } from '../package.json'
 
 // Test-specific helper interface for async iteration
@@ -31,11 +39,16 @@ vi.mock('posthog-node', () => {
   }
 })
 
-vi.mock('@posthog/core', () => ({
-  uuidv7: vi.fn(() => 'uuid-v7'),
-  ErrorTracking: {},
-  toJsonSafeValue: vi.fn((value) => value),
-}))
+vi.mock('@posthog/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@posthog/core')>()
+  return {
+    uuidv7: vi.fn(() => 'uuid-v7'),
+    ErrorTracking: {},
+    toJsonSafeValue: vi.fn((value) => value),
+    acceptsEventOptions: actual.acceptsEventOptions,
+    eventOptionsAsLegacyProperties: actual.eventOptionsAsLegacyProperties,
+  }
+})
 
 vi.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that
@@ -1558,6 +1571,29 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(distinctId).toBe('user-456')
     expect(properties['$process_person_profile']).toBeUndefined()
   })
+
+  test.each(EVENT_OPTION_CASES)(
+    'sends posthogOptions on posthog-node $major without handing them to OpenAI (personless: $personless)',
+    async ({ major, personless }) => {
+      asPostHogNodeMajor(mockPostHogClient, major)
+
+      await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogDistinctId: personless ? undefined : 'user-456',
+        posthogOptions: USER_EVENT_OPTIONS,
+      })
+      await flushPromises()
+
+      expect((openaiModule.Chat.Completions as any).prototype.create).toHaveBeenCalledWith(
+        { model: 'gpt-4', messages: [{ role: 'user', content: 'Hello' }] },
+        undefined
+      )
+      const events = capturedEvents(mockPostHogClient)
+      expect(events).toHaveLength(1)
+      expectUserEventOptions(events[0], major, personless)
+    }
+  )
 
   describe('Streaming Responses', () => {
     test('break after first chunk cancels the real OpenAI stream and captures only the partial response', async () => {

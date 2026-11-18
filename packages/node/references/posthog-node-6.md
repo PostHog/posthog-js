@@ -254,7 +254,7 @@ await client.captureImmediate({
   sendFeatureFlags: {
     onlyEvaluateLocally: true,
     personProperties: { plan: 'premium' },
-    groupProperties: { org: { tier: 'enterprise' } }
+    groupProperties: { org: { tier: 'enterprise' } },
     flagKeys: ['flag1', 'flag2']
   }
 })
@@ -338,7 +338,7 @@ client.identify({
   distinctId: 'user_123',
   properties: {
     $set: { name: 'John Doe', email: 'john@example.com' },
-    $set_once: { first_login: new Date().toISOString() }
+    $set_once: { first_login: new Date().toISOString() },
     $anon_distinct_id: 'anonymous_user_456'
   }
 })
@@ -681,11 +681,11 @@ Create an alias to link two distinct IDs together.
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
-| `data.options?` | `Record`\<`string`, `JsonType`\> | - |
+| `data.options?` | `V1EventOptions` | - |
 
 #### Returns
 
@@ -711,11 +711,11 @@ Create an alias to link two distinct IDs together immediately (synchronously).
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
-| `data.options?` | `Record`\<`string`, `JsonType`\> | - |
+| `data.options?` | `V1EventOptions` | - |
 
 #### Returns
 
@@ -1001,14 +1001,15 @@ client.debug(false)
 
 > **get** **emails**(): `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates, and reads
-the status of each email it sent.
+The `posthog.emails` API: sends transactional email from PostHog email templates, reads
+the status of each email it sent, and sets a recipient's topic preferences.
 
-Needs `secretKey`, a project secret API key with the `transactional_email:write` scope (the
-"Send transactional email" preset). A key with only `transactional_email:read` can read
-statuses but not send. Keys made with `hog_flow:write` still work. Requests go to `appHost`,
-or to the PostHog Cloud app host of `host`. `send` and `get` resolve to `{ data, error }` and
-do not reject.
+Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
+(the "Send transactional email" preset), and `get` needs `transactional_email:read` or
+`transactional_email:write`. `setPreferences` needs the
+`messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
+work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
+`get` and `setPreferences` resolve to `{ data, error }` and do not reject.
 `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
 and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
 returns the error `client_closed`.
@@ -1029,6 +1030,9 @@ if (error) {
 }
 
 const status = await client.emails.get(data.id) // later, for example from a job
+
+// From a preference center: opt out of one topic, keep the rest
+await client.emails.setPreferences({ to: 'user@example.com', topics: { newsletter: false } })
 ```
 
 ##### Returns
@@ -1042,7 +1046,7 @@ Needs `secretKey`, a project secret API key with the `transactional_email:write`
 
 ### `EmailError`
 
-PostHog did not queue the email, or the client could not tell whether it did.
+PostHog refused an email call, or the client could not tell whether it succeeded.
 
 Branch on `code`, PostHog's stable error code, or on `name`, a coarse category of the
 failure. The message never contains the secret key or the request body.
@@ -1077,7 +1081,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
-| <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog answered. | - |
+| <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
 
 ## Flush
@@ -1516,10 +1520,12 @@ omits globally inactive flags and therefore leaves those keys absent.
 
 **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
 first time each flag value is read for a user. Experiments use these events as exposures.
+When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
 The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
 `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
 it, so one snapshot can serve both experiment flags and flags that should send no events.
-`getFlagPayload()` never sends events.
+The option governs both events. `getFlagPayload()` never sends events.
 
 **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
 `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
@@ -1994,7 +2000,7 @@ Register properties that every event sent by this client carries.
 
 Each event fills the keys it left unset in this order: the event's own values, then context
 properties, then these, then the values the SDK adds (such as `$is_server` and
-`$geoip_disable`). `before_send` sees the result and can change it.
+`$geoip_disable`). `beforeSend` sees the result and can change it.
 
 A `$process_person_profile` registered here never reaches `$identify`, `$create_alias`,
 `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events (see `registerOptions()`).
@@ -2263,31 +2269,6 @@ The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
 gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
 periodically. Configure via the `metrics` client option.
 
-### `PostHog.enterContext`
-
-> **enterContext**(`data`, `options?`): `void`
-
-Set context without a callback wrapper.
-
-Uses `AsyncLocalStorage.enterWith()` to attach context to the current
-async execution context. The context lives until that async context ends.
-
-Must be called in the same async scope that makes PostHog calls.
-Calling this outside a request-scoped async context will leak context
-across unrelated work. Prefer `withContext()` when you can wrap code
-in a callback — it creates an isolated scope that cleans up automatically.
-
-#### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `data` | `Partial`\<`ContextData`\> | Context data to apply (distinctId, sessionId, properties, options) |
-| `options?` | `ContextOptions` | Context options (fresh: true to start with clean context instead of inheriting) |
-
-#### Returns
-
-`void`
-
 ### `PostHog.getContext`
 
 > **getContext**(): `ContextData` \| `undefined`
@@ -2445,7 +2426,7 @@ Register options that every event sent by this client carries.
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `options` | `Record`\<`string`, `JsonType`\> | The options to add to every event |
+| `options` | `V1EventOptions` | The options to add to every event |
 
 #### Returns
 
@@ -2455,7 +2436,7 @@ Register options that every event sent by this client carries.
 
 Each event fills the options it left unset (missing or `null`) in this order: the event's own
 `options`, then context options, then these, then the options the SDK adds (such as
-`process_person_profile: false` for an event with no distinct id). `before_send` sees the
+`process_person_profile: false` for an event with no distinct id). `beforeSend` sees the
 result and can change it. Values are sent to capture unchanged. Capture drops an event whose
 option value it cannot read, so a bad value registered here drops every event.
 
@@ -2518,7 +2499,7 @@ The return value of the function
 
 Context `properties` and `options` fill only what an event left unset: the event's own values
 win, and context values beat `register()` and `registerOptions()` values and the values the SDK
-adds. `before_send` sees the result and can change it.
+adds. `beforeSend` sees the result and can change it.
 
 On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
 events, a context `process_person_profile` option applies only when the distinct id is
@@ -2545,6 +2526,7 @@ and queries that filter on these values.
 Error values:
   ERRORS_WHILE_COMPUTING: Server returned errorsWhileComputingFlags=true
   FLAG_MISSING: Requested flag not in API response
+  EVALUATION_FAILED: Requested flag's remote record has no evaluated value
   LOCAL_EVALUATION_INCONCLUSIVE: Flag has a loaded local definition but local evaluation could not resolve it
   QUOTA_LIMITED: Rate/quota limit exceeded
   TIMEOUT: Request timed out
@@ -2558,6 +2540,7 @@ Error values:
 | <a id="property-apierror"></a> `apiError()` | (`status`) => `string` |
 | <a id="property-connection_error"></a> `CONNECTION_ERROR` | `"connection_error"` |
 | <a id="property-errors_while_computing"></a> `ERRORS_WHILE_COMPUTING` | `"errors_while_computing_flags"` |
+| <a id="property-evaluation_failed"></a> `EVALUATION_FAILED` | `"evaluation_failed"` |
 | <a id="property-flag_missing"></a> `FLAG_MISSING` | `"flag_missing"` |
 | <a id="property-local_evaluation_inconclusive"></a> `LOCAL_EVALUATION_INCONCLUSIVE` | `"local_evaluation_inconclusive"` |
 | <a id="property-quota_limited"></a> `QUOTA_LIMITED` | `"quota_limited"` |
@@ -2972,7 +2955,7 @@ Options for `captureException()` and `captureExceptionImmediate()`.
 | <a id="distinctid"></a> `distinctId?` | `string` | The event's distinct id. Without one, the context distinct id is used, else a personless id. |
 | <a id="flags"></a> `flags?` | `FeatureFlagEvaluations` | A `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events. |
 | <a id="level"></a> `level?` | `SeverityLevel` | The exception's severity, sent as `$exception_level`. An unknown value is ignored. **Default** `'error'` |
-| <a id="options-1"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, as in `capture()`. |
+| <a id="options-1"></a> `options?` | `EventOptions` | Per-event options, as in `capture()`. |
 | <a id="properties"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Properties to add to the event. Exception properties the SDK or PostHog owns, such as `$exception_list` and `$exception_level`, are ignored: use `level` to set the level. |
 | <a id="uuid"></a> `uuid?` | `string` | Overrides the generated event UUID. Must be a valid UUID. |
 
@@ -3006,11 +2989,16 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-captureengagement"></a> `captureEngagement?` | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. |
+| <a id="property-attachments"></a> `attachments?` | `EmailAttachment`[] | Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing. |
+| <a id="property-bcc"></a> `bcc?` | `string` \| `string`[] | Bare addresses that get a copy the other recipients never see. |
+| <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
+| <a id="property-cc"></a> `cc?` | `string` \| `string`[] | Bare addresses, such as `'finance@example.com'`, that get a copy. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
+| <a id="property-sensitive"></a> `sensitive?` | `boolean` | Marks the email as sensitive, such as one that carries login links, reset tokens or codes. A sensitive email keeps its links as they are unless `tracking` turns clicks on, leaves its subject off engagement events, and keeps its content out of PostHog's logs. Without it, a send whose `templateKey` matches a template saved in PostHog follows that template's setting, and any other send is sensitive. PostHog refuses `sensitive: false` when the matching template is sensitive. |
 | <a id="property-subject"></a> `subject` | `string` | - |
 | <a id="property-templatekey"></a> `templateKey` | `string` | Names the email, such as `'password-reset'`, so its metrics, logs and status group under it in PostHog. Letters, digits, hyphens and underscores, at most 400. |
+| <a id="property-tracking"></a> `tracking?` | `boolean` \| `EmailTracking` | What PostHog tracks for this email. Without it, PostHog counts opens with its open pixel, captures engagement events, and counts clicks only when the email isn't sensitive. - `true` turns on opens, clicks and engagement events. - `false` turns off all tracking, including kinds PostHog adds later. PostHog can't count the email's opens or clicks, and captures no engagement events. - An object turns each kind on or off. A key you leave out keeps its default. Turn clicks on for a sensitive email only when its links are safe to send through PostHog's click tracking. |
 
 ### `CodeEmailForm`
 
@@ -3032,7 +3020,7 @@ the client renders. PostHog sends it as is and never stores it. PostHog derives 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-distinctid"></a> `distinctId?` | `string` | - |
-| <a id="property-options"></a> `options?` | `Record`\<`string`, `JsonType`\> | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
+| <a id="property-options"></a> `options?` | `V1EventOptions` | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
 | <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Properties that fill the keys an event left unset. The event's own values win. |
 | <a id="property-sessionid"></a> `sessionId?` | `string` | - |
 
@@ -3063,6 +3051,20 @@ Minimal cookie-reading interface compatible with Next.js `cookies()`,
 ###### Returns
 
 \{ `value`: `string`; \} \| `undefined`
+
+### `EmailAttachment`
+
+A file sent with the email.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-content"></a> `content` | `string` \| `Uint8Array`\<`ArrayBufferLike`\> | The file's bytes, or its content already Base64 encoded. At least one byte. |
+| <a id="property-contentid"></a> `contentId?` | `string` | Shows the file inline where the HTML has `<img src="cid:...">` with this id. |
+| <a id="property-contenttype"></a> `contentType?` | `string` | A MIME type, such as `'application/pdf'`. |
+| <a id="property-filename"></a> `filename` | `string` | The name the recipient sees, such as `'invoice.pdf'`. |
+| <a id="property-path"></a> `path?` | `undefined` | PostHog can't fetch a file from a path or URL: read the file and pass its `content`. |
 
 ### `EmailDeliveryStatus`
 
@@ -3096,6 +3098,18 @@ A coarse category of the failure, for code that branches on the kind of failure 
 | <a id="property-statuscode"></a> `statusCode?` | `number` |
 | <a id="property-why"></a> `why?` | `string` |
 
+### `EmailPreferences`
+
+A recipient's preferences after the change.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-allmarketing"></a> `allMarketing` | `boolean` \| `null` | `false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose. |
+| <a id="property-to"></a> `to` | `string` | - |
+| <a id="property-topics"></a> `topics` | `Record`\<`string`, `boolean`\> | Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose. |
+
 ### `EmailReactElement`
 
 A React element, such as `<WelcomeEmail firstName="Ada" />`. Typed by its shape, so
@@ -3111,7 +3125,8 @@ posthog-node needs no React types.
 ### `Emails`
 
 The `posthog.emails` API: sends transactional email from PostHog email templates or from
-content your code rendered, and reads the status of each email it sent.
+content your code rendered, reads the status of each email it sent, and sets a recipient's
+topic preferences.
 
 #### Methods
 
@@ -3155,6 +3170,29 @@ an unavailable service are retried with the same idempotency key.
 
 `Promise`\<`SendEmailResponse`\>
 
+##### setPreferences()
+
+> **setPreferences**(`options`): `Promise`\<`SetEmailPreferencesResponse`\>
+
+Opt one recipient out of topics, or back in, in one request. PostHog saves the whole change at once. The same
+change twice ends the same, but a retry that lands after a newer change for the same recipient undoes that
+change. A failed call may still have saved the change. Workflows sends skip a marketing topic the recipient
+opted out of.
+
+Resolves to `{ data, error }` and does not reject. The error code is `unknown_topic` when a topic key names no
+topic of the project, and nothing is saved. A plain `not_found` means the PostHog instance has no preferences
+API yet. Network errors, rate limits and an unavailable service are retried.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | `SetEmailPreferencesOptions` |
+
+###### Returns
+
+`Promise`\<`SetEmailPreferencesResponse`\>
+
 ### `EmailStatus`
 
 The status of an email that `posthog.emails.send()` queued.
@@ -3168,6 +3206,18 @@ The status of an email that `posthog.emails.send()` queued.
 | <a id="property-reason"></a> `reason` | `string` \| `null` | Why a failed email was not sent, such as `provider_error` or `recipient_suppressed`, or the bounce type of a bounced email: `hard`, `soft` or `unknown`. Null otherwise. |
 | <a id="property-status"></a> `status` | `EmailDeliveryStatus` \| `string` & `object` | - |
 | <a id="property-statusat"></a> `statusAt` | `string` | When the email reached its current status, as an ISO 8601 timestamp. |
+
+### `EmailTracking`
+
+Which kinds of tracking a send with `templateKey` turns on.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-clicks"></a> `clicks?` | `boolean` | Counts clicks by sending the email's links through PostHog's click tracking. Defaults to `false` for a sensitive email and `true` for any other. Needs `opens`: PostHog refuses a send with `opens: false` and `clicks: true`. |
+| <a id="property-engagement"></a> `engagement?` | `boolean` | Captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. |
+| <a id="property-opens"></a> `opens?` | `boolean` | Counts opens with PostHog's open pixel. Defaults to `true`. |
 
 ### `EmailWarning`
 
@@ -3219,6 +3269,12 @@ A warning PostHog returned with a queued email.
 | `sendFeatureFlags?` | `boolean` \| `SendFeatureFlagsOptions` | **Deprecated** Use the `flags` option with a `FeatureFlagEvaluations` object obtained from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags` request on capture and may return different values than the ones the code branched on. |
 | `timestamp?` | `Date` | If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. |
 | `uuid?` | `string` | If provided overrides the auto-generated event UUID. Must be a valid UUID. |
+
+### `EventOptions`
+
+> **EventOptions** = `V1EventOptions`
+
+Processing options sent with an event to capture v1.
 
 ### `ExceptionRateLimiterConfig`
 
@@ -3580,7 +3636,7 @@ The promise does not reject.
 | <a id="distinctid-1"></a> `distinctId?` | `string` | The event's distinct id. When it is missing, empty or only whitespace, the context distinct id is used, then `$<groupType>_<groupKey>`. |
 | <a id="groupkey"></a> `groupKey` | `string` | - |
 | <a id="grouptype"></a> `groupType` | `string` | - |
-| <a id="options-2"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-2"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-2"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 
 ### `HistogramOptions`
@@ -3623,7 +3679,7 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 | ------ | ------ | ------ |
 | <a id="disablegeoip-2"></a> `disableGeoip?` | `boolean` | - |
 | <a id="distinctid-2"></a> `distinctId` | `string` | - |
-| <a id="options-3"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-3"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-3"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 
 ### `InstrumentRequestOptions`
@@ -3650,11 +3706,11 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 
 | Parameter | Type |
 | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
 | `data.alias` | `string` |
 | `data.disableGeoip?` | `boolean` |
 | `data.distinctId` | `string` |
-| `data.options?` | `Record`\<`string`, `JsonType`\> |
+| `data.options?` | `V1EventOptions` |
 
 ###### Returns
 
@@ -3678,11 +3734,11 @@ The same concept applies for when a user logs in. If you're using PostHog in the
 
 | Parameter | Type |
 | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `Record`\<`string`, `JsonType`\>; \} |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
 | `data.alias` | `string` |
 | `data.disableGeoip?` | `boolean` |
 | `data.distinctId` | `string` |
-| `data.options?` | `Record`\<`string`, `JsonType`\> |
+| `data.options?` | `V1EventOptions` |
 
 ###### Returns
 
@@ -3810,27 +3866,6 @@ Capture an exception as a $exception event immediately.
 ###### Description
 
 Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-
-##### enterContext()
-
-> **enterContext**(`data`, `options?`): `void`
-
-###### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `data` | `Partial`\<`ContextData`\> | Context data to apply (distinctId, sessionId, properties, options) |
-| `options?` | `ContextOptions` | Context options (fresh) |
-
-###### Returns
-
-`void`
-
-###### Description
-
-Set context without a callback wrapper. Must be called in the same
-async scope that makes PostHog calls. Prefer `withContext()` when you can wrap
-code in a callback.
 
 ##### evaluateFlags()
 
@@ -4759,7 +4794,7 @@ Shared by every SDK; browser-only options live in `BrowserMetricsConfig`.
 | ------ | ------ | ------ |
 | <a id="property-beforesend"></a> `beforeSend?` | `BeforeSendMetricFn` \| `BeforeSendMetricFn`[] | Pre-aggregation filter for metric samples, as a single function or a left-to-right chain. Each function inspects, mutates, or drops a sample (return `null` to drop) before it is aggregated. |
 | <a id="property-environment"></a> `environment?` | `string` | The deployment environment for metric series (e.g. 'production', 'staging'). Maps to the OTel resource attribute 'deployment.environment'. |
-| <a id="property-flushintervalms"></a> `flushIntervalMs?` | `number` | How often the aggregated window is flushed, in milliseconds. Samples are folded into per-series aggregates in memory between flushes — one data point per series per window, no matter how many calls. **Default** `10000` |
+| <a id="property-flushintervalms"></a> `flushIntervalMs?` | `number` | How often the aggregated window is flushed, in milliseconds. Samples are folded into per-series aggregates in memory between flushes — one data point per series per window, no matter how many calls. The browser SDK defaults to 60000: every tab of an app writes to the same series, so a longer window keeps busy series under the backend's per-series point limit. **Default** `10000 (60000 in the browser)` |
 | <a id="property-maxseriesperflush"></a> `maxSeriesPerFlush?` | `number` | Cardinality guardrail: maximum distinct series (name + type + unit + attribute combination) held per flush window. Samples for series beyond the cap are dropped with a single warning per window. **Default** `1000` |
 | <a id="property-resourceattributes"></a> `resourceAttributes?` | `MetricAttributes` | Additional resource attributes applied to every metrics batch. These describe the service/deployment, not individual series. Named fields (serviceName, environment, serviceVersion) are set first; resourceAttributes can override them. **Example** `{ 'host.name': 'web-01', 'cloud.region': 'us-east-1' }` |
 | <a id="property-servicename"></a> `serviceName?` | `string` | The service name for metric series. Maps to the OTel resource attribute 'service.name'. **Default** `'unknown_service'` |
@@ -4924,6 +4959,10 @@ Supports multiple formats:
 
 > **PostHogFetchOptions** = `object`
 
+#### Extended by
+
+- `EmailFetchOptions`
+
 #### Properties
 
 | Property | Type |
@@ -4997,26 +5036,31 @@ differently for cellular cost vs tab-suspension behavior).
 
 ### `PostHogOptions`
 
-> **PostHogOptions** = `Omit`\<`PostHogCoreOptions`, `"before_send"` \| `"disableGeoip"` \| `"flushInterval"` \| `"maxQueueSize"` \| `"fetchRetryCount"` \| `"fetchRetryDelay"` \| `"disableCompression"` \| `"requestTimeout"`\> & `object` & `ExceptionRateLimiterConfig`
+> **PostHogOptions** = `Omit`\<`PostHogCoreOptions`, `"before_send"` \| `"disable_capture_url_hashes"` \| `"disableGeoip"` \| `"flushInterval"` \| `"maxQueueSize"` \| `"fetchRetryCount"` \| `"fetchRetryDelay"` \| `"disableCompression"` \| `"requestTimeout"`\> & `object` & `ExceptionRateLimiterConfig`
 
 #### Type Declaration
 
 | Name | Type | Description |
 | ------ | ------ | ------ |
-| `__preview_capture_bot_pageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
+| `__preview_capture_bot_pageviews?` | `boolean` | **Deprecated** Use `__previewCaptureBotPageviews` instead. This property will be removed in the next major version. |
+| `__previewCaptureBotPageviews?` | `boolean` | PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION Enables collection of bot traffic as $bot_pageview events instead of dropping them. When enabled, events with a $raw_user_agent property that matches the bot detection list will have their $pageview event renamed to $bot_pageview. To use this feature, pass the user agent in event properties: `client.capture({ distinctId: 'user_123', event: '$pageview', properties: { $raw_user_agent: req.headers['user-agent'] } })` |
 | `appHost?` | `string` | Your PostHog app host, such as `https://posthog.example.com`. `emails.send` sends there. Needed only when `host` is not PostHog Cloud, for example a reverse proxy, which must not receive the secret key. On PostHog Cloud, the client derives `https://us.posthog.com` or `https://eu.posthog.com` from `host`. |
-| `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events it sees `options.process_person_profile` and no `$process_person_profile` property. Those events get their default from the event name the call used, so a hook that renames an event to one of them must set `options.process_person_profile` itself. |
+| `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | **Deprecated** Use `beforeSend` instead. This property will be removed in the next major version. |
+| `beforeSend?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. **Remarks** The hook gets a copy of the finished event: the event's own values, then the values filled from context, `register()` and `registerOptions()`, then the values the SDK adds (such as `$is_server`, `$geoip_disable`, feature flag properties and `options.process_person_profile`). It has the final say: it can change or remove any of them, and nothing is added after it. Set `$geoip_disable` in `properties` to change GeoIP; the `disableGeoip` and `groups` fields are already applied to the properties it sees. On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events it sees `options.process_person_profile` and no `$process_person_profile` property. Those events get their default from the event name the call used, so a hook that renames an event to one of them must set `options.process_person_profile` itself. |
 | `captureAiCompression?` | `"none"` \| `"gzip"` \| `"deflate"` \| `"zstd"` | How `captureAi` requests compress their body, with the same values as `captureCompression`. It does not read `captureCompression` or `disableCompression`. **Default** `'gzip'` |
 | `captureAiMaxQueueSize?` | `number` | The maximum number of `captureAi` events held in memory waiting to be sent. When the queue is full, the oldest AI event is dropped and reported through the `'error'` event. **Default** `1000` |
 | `captureAiRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `captureAi` request. Analytics capture requests use `requestTimeout`. **Default** `30000` |
 | `captureCompression?` | `"none"` \| `"gzip"` \| `"deflate"` \| `"zstd"` | How analytics capture requests compress their body. `'deflate'` is zlib-wrapped. `'zstd'` needs Node 22.15 or later and falls back to `'gzip'` elsewhere, including the edge build. When not set, `disableCompression: true` means `'none'`. **Default** `'gzip'` |
 | `captureMaxRetries?` | `number` | How many times a capture request is retried after its first attempt, on both capture lanes. Waits start at 100 ms and double each retry, with jitter, up to 30 seconds; a `Retry-After` header can raise a wait. Only HTTP 404, 408, 429, 500, 502, 503 and 504 and network errors are retried. When not set, `fetchRetryCount` is used. **Default** `3` |
 | `captureTracingHeaders?` | `boolean` | Whether the Express, NestJS, Hono, and `instrumentRequest` integrations read the `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` request headers into the request context. A distinct id or session id you pass explicitly always wins over these headers, and they are never used for authentication. Turning it off does not turn off `readPostHogCookie`. To stop all request linking, set `captureTracingHeaders: false` and leave `readPostHogCookie` off (its default). **Default** `true` |
-| `custom_blocked_useragents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
+| `custom_blocked_useragents?` | `string`[] | **Deprecated** Use `customBlockedUserAgents` instead. This property will be removed in the next major version. |
+| `customBlockedUserAgents?` | `string`[] | Additional user agent strings to block from being tracked. These are combined with the default list of blocked user agents. **Default** `[]` |
+| `disable_capture_url_hashes?` | `boolean` | **Deprecated** Use `disableCaptureUrlHashes` instead. This property will be removed in the next major version. |
+| `disableCaptureUrlHashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured request URLs. **Default** `false` |
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
 | `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. **Default** `15000` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |
@@ -5068,7 +5112,7 @@ differently for cellular cost vs tab-suspension behavior).
 > **PreparedEventMessage** = `object`
 
 An event as `prepareEventMessage()` builds it: the shape of `EventMessage`, with the distinct id
-resolved and the properties and options filled from every layer, after `before_send`.
+resolved and the properties and options filled from every layer, after `beforeSend`.
 
 #### Properties
 
@@ -5077,7 +5121,7 @@ resolved and the properties and options filled from every layer, after `before_s
 | <a id="disablegeoip-3"></a> `disableGeoip?` | `boolean` | - |
 | <a id="distinctid-3"></a> `distinctId` | `string` | - |
 | <a id="event"></a> `event` | `string` | - |
-| <a id="options-4"></a> `options?` | `Record`\<`string`, `JsonType`\> | The event's options, sent to capture unchanged. |
+| <a id="options-4"></a> `options?` | `EventOptions` | The event's options, sent to capture unchanged. |
 | <a id="properties-4"></a> `properties` | `PostHogEventProperties` | - |
 | <a id="timestamp"></a> `timestamp?` | `Date` | - |
 | <a id="uuid-1"></a> `uuid?` | `string` | - |
@@ -5156,7 +5200,7 @@ What every send takes, whatever its form.
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
-| <a id="property-to"></a> `to` | `string` | One recipient email address. |
+| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
 
@@ -5214,6 +5258,25 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | <a id="sendexceptionstoposthog"></a> `sendExceptionsToPostHog?` | `boolean` |
 | <a id="severityallowlist"></a> `severityAllowList?` | `SeverityLevel`[] \| `"*"` |
 
+### `SetEmailPreferencesOptions`
+
+Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or both.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-allmarketing-1"></a> `allMarketing?` | `boolean` | `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. |
+| <a id="property-to-2"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
+| <a id="property-topics-1"></a> `topics?` | `Record`\<`string`, `boolean`\> | Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice. |
+
+### `SetEmailPreferencesResponse`
+
+> **SetEmailPreferencesResponse** = \{ `data`: `EmailPreferences`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.setPreferences()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
 ### `SetPersonPropertiesMessage`
 
 > **SetPersonPropertiesMessage** = `object`
@@ -5223,7 +5286,7 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="distinctid-4"></a> `distinctId` | `string` | - |
-| <a id="options-5"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-5"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-5"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
 | <a id="propertiesonce"></a> `propertiesOnce?` | `Record`\<`string` \| `number`, `any`\> | - |
 
@@ -5789,8 +5852,28 @@ evaluation call, and `unresolved_dependency` from a flag the definition depends 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="distinctid-5"></a> `distinctId` | `string` | - |
-| <a id="options-6"></a> `options?` | `Record`\<`string`, `JsonType`\> | Per-event options, sent to capture unchanged. The known keys are `process_person_profile`, `cookieless_mode`, `disable_skew_correction` and `product_tour_id`; unknown keys pass through. Capture drops an event whose option value it cannot read (`invalid_options`), and the SDK reports the drop through the `'error'` event. |
+| <a id="options-6"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
 | <a id="properties-6"></a> `properties` | `string` \| `string`[] | - |
+
+### `V1EventOptions`
+
+The `options` object on a Capture V1 event: the caller's options plus any legacy
+`$`-prefixed option properties lifted by the transform. Values are sent unchanged.
+Always serialized as an object (`{}` when empty), never `null`.
+
+#### Indexable
+
+> \[`key`: `string`\]: `JsonType` \| `undefined`
+
+Additional capture options, sent to capture v1 unchanged.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-cookieless_mode"></a> `cookieless_mode?` | `boolean` | Whether to process this event in cookieless mode. |
+| <a id="property-disable_skew_correction"></a> `disable_skew_correction?` | `boolean` | Whether to disable server-side timestamp skew correction for this event. |
+| <a id="property-process_person_profile"></a> `process_person_profile?` | `boolean` | Whether to create or update a person profile for this event. |
 
 ### `Without`
 

@@ -42,11 +42,15 @@ import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/prope
 const logger = createLogger('[SessionRecording]')
 
 /**
- * Decisions are stored as `sessionId` (sampled in) or `'!' + sessionId` (sampled out), so another
- * session can never inherit them. Anything else (legacy `true`/`false`, another session's decision)
- * decodes to null and is re-decided — safe, since `sampleOnProperty` is deterministic per session id.
+ * Decisions are stored as `sessionId` (sampled in) or `'x' + sessionId` (sampled out), so another
+ * session can never inherit them. Anything else (legacy `true`/`false`, the older `'!'` prefix, another
+ * session's decision) decodes to null and is re-decided — safe, since `sampleOnProperty` is deterministic
+ * per session id.
+ *
+ * The value lands in the cookie, so the prefix must stay a plain letter: WAF rule sets such as
+ * OWASP CRS block requests whose cookie contains a quote followed by `!` (rule 942190) or `~` (rule 932270).
  */
-const NOT_SAMPLED_PREFIX = '!'
+const NOT_SAMPLED_PREFIX = 'x'
 
 export function encodeSamplingDecision(sessionId: string, isSampled: boolean): string {
     return isSampled ? sessionId : NOT_SAMPLED_PREFIX + sessionId
