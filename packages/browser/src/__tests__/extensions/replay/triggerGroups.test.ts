@@ -13,7 +13,7 @@ import {
     EventTriggerMatching,
     LinkedFlagMatching,
     PAUSED,
-} from '../../../extensions/replay/external/triggerMatching'
+} from '@posthog/browser-common/replay/trigger-matching'
 import { SessionRecordingTriggerGroup } from '../../../types'
 import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 import { createMockPostHog } from '../../helpers/posthog-instance'

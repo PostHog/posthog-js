@@ -1,9 +1,5 @@
 import * as fc from 'fast-check'
-import {
-    URLTriggerMatching,
-    TRIGGER_ACTIVATED,
-    TRIGGER_PENDING,
-} from '../../../extensions/replay/external/triggerMatching'
+import { URLTriggerMatching, TRIGGER_ACTIVATED, TRIGGER_PENDING } from '@posthog/browser-common/replay/trigger-matching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 import { SessionRecordingUrlTrigger } from '../../../types'
 import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../../constants'

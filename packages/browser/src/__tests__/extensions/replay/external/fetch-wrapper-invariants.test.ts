@@ -2,7 +2,7 @@
  * @vitest-environment node
  */
 
-import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
+import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/network-plugin'
 import { NetworkRecordOptions } from '../../../../types'
 import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './test_data/header-cases'
 

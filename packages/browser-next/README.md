@@ -110,12 +110,12 @@ The first response embeds core and full analytics, including Capture V1 delivery
 
 Only these query options are supported; omitted options use the existing factory defaults:
 
-| Option                                                                                                         | Values                                                                                      |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `projectToken`                                                                                                 | Required, nonempty project token                                                            |
-| `apiHost`                                                                                                      | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
-| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection`                                           | Literal `true` or `false`                                                                   |
-| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`, `errorTracking`, `toolbar`, `conversations` | Literal `false` to disable the corresponding default                                        |
+| Option                                                                                                                             | Values                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `projectToken`                                                                                                                     | Required, nonempty project token                                                            |
+| `apiHost`                                                                                                                          | Absolute HTTP(S) API base, optionally with a proxy path; no credentials, query, or fragment |
+| `capturePageview`, `optOutByDefault`, `debug`, `disableBotDetection`                                                               | Literal `true` or `false`                                                                   |
+| `storage`, `flags`, `logs`, `surveys`, `autocapture`, `webVitals`, `errorTracking`, `toolbar`, `conversations`, `sessionRecording` | Literal `false` to disable the corresponding default                                        |
 
 Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
 
@@ -463,6 +463,28 @@ The extension wraps `fetch` and `XMLHttpRequest` during setup and restores them 
 Values are read for each request: `fetch` reads them when called, XHR when `open()` is called. Requests never start, extend, rotate or announce a session. They carry the active session saved by this or another tab, or a pending `bootstrap.sessionId` that the next capture will adopt. Before any capture has started a session, after `reset()`, or once the session is idle or has reached its maximum length, requests carry no session header until a capture starts the next session. `X-POSTHOG-WINDOW-ID` is sent only once a capture in this tab has assigned a window ID. Requests do not capture events. If the identity or session cannot be read, the request receives no PostHog headers. While capture is not permitted, for example after `optOut()`, requests receive no PostHog headers; `traceparent` carries no identity and is still added.
 
 Cross-origin backends must allow these headers in CORS preflight responses. Tracing headers are untrusted analytics context, not authentication.
+
+## Session recording
+
+With no explicit session recording configuration, the product loads when remote configuration enables replay for the project, or from the replay configuration saved by an earlier page. Supplying an options object loads it during initialization. Either way, the recorder and rrweb are a separate dynamic chunk that loads only when recording starts. Recording requires the project to enable replay, and follows its sampling, minimum duration, linked flag, event and URL triggers, and URL blocklist.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    sessionRecording: { disableSessionRecording: true, maskTextSelector: '.pii' },
+})
+const replay = await posthog.resolveExtension('sessionRecording')
+replay?.startSessionRecording({ sampling: true })
+replay?.sessionRecordingStarted()
+replay?.getSessionReplayUrl({ withTimestamp: true })
+replay?.stopSessionRecording()
+```
+
+`startSessionRecording(true)` treats sampling, the linked flag and triggers as satisfied for the current session; pass `{ sampling, linkedFlag, urlTrigger, eventTrigger }` to choose. Capture consent still gates recording. The privacy options match posthog-js `session_recording`: input values are masked by default, `ph-no-capture` blocks an element, `ph-mask` and `maskTextSelector` mask text, and `maskCapturedNetworkRequestFn` can redact recorded network requests and page URLs. Local masking options take precedence over the project's privacy settings. `captureConsoleLogs`, `capturePerformance` and `sampleRate` override the project setting when set.
+
+A recording that starts without user interaction is held until the user interacts; a visible page that unloads still sends it. A new session that starts while the user is idle is held the same way and is dropped if nobody interacts. A recording still below the minimum duration when the page unloads continues from the next page in the same tab. Recorded page URLs never include fragments. Snapshots use their own `/s/` lane in the format posthog-js sends, separate from analytics batches, with posthog-js's per-event compression and gzip request bodies when the project supports them. On pagehide, replay uses at most its own share of the browser's keepalive quota and sends the rest as regular requests.
+
+Use `sessionRecording: false` to omit it. For static inclusion, import `sessionRecording` from `@posthog/browser/session-recording` and pass the instance in `extensions`.
 
 ## Capture and delivery
 
