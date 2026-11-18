@@ -212,3 +212,43 @@ export interface RemoteConfig {
 
 /** The latest outcome of loading remote configuration from PostHog. */
 export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
+
+/** the config stored in persistence when session recording remote config is received */
+export type SessionRecordingPersistedConfig = Omit<
+    SessionRecordingRemoteConfig,
+    | 'recordCanvas'
+    | 'canvasFps'
+    | 'canvasQuality'
+    | 'networkPayloadCapture'
+    | 'sampleRate'
+    | 'minimumDurationMilliseconds'
+> & {
+    /**
+     * Used to determine if the persisted config is still valid or we need to wait for a new one
+     * only accepts undefined since older versions of the library didn't set this.
+     */
+    cache_timestamp?: number
+    enabled: boolean
+    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
+        capturePerformance: RemoteConfig['capturePerformance']
+    }
+    canvasRecording: {
+        enabled: SessionRecordingRemoteConfig['recordCanvas']
+        fps: SessionRecordingRemoteConfig['canvasFps']
+        quality: SessionRecordingRemoteConfig['canvasQuality']
+    }
+    // we don't allow string config here
+    sampleRate: number | null
+    minimumDurationMilliseconds: number | null | undefined
+}
+
+/** Why session recording started for the current session. */
+export type SessionStartReason =
+    | 'sampling_overridden'
+    | 'recording_initialized'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | 'sampled'
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'

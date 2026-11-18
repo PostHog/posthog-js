@@ -3,15 +3,7 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
 import { PostHog } from './posthog-core'
-// only importing types here, so won't affect the bundle
-// oxlint-disable-next-line posthog-js/no-external-replay-imports
-import type { SAMPLED } from './extensions/replay/external/triggerMatching'
-import {
-    Compression,
-    type RemoteConfig,
-    type RemoteConfigResult as BrowserCommonRemoteConfigResult,
-    type SessionRecordingRemoteConfig,
-} from '@posthog/browser-common'
+import { Compression, type RemoteConfigResult as BrowserCommonRemoteConfigResult } from '@posthog/browser-common'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
 import type { ExtensionConstructor } from './extensions/types'
@@ -136,6 +128,8 @@ export type {
     SessionRecordingEventTrigger,
     SessionRecordingTriggerPropertyFilter,
     SessionRecordingTriggerGroup,
+    SessionRecordingPersistedConfig,
+    SessionStartReason,
     NetworkRecordOptions,
     PropertyMatchType,
     ErrorTrackingSuppressionRule,
@@ -306,35 +300,6 @@ export interface RetriableRequestWithOptions extends QueuedRequestWithOptions {
     retriesPerformedSoFar?: number
 }
 
-/** the config stored in persistence when session recording remote config is received */
-export type SessionRecordingPersistedConfig = Omit<
-    SessionRecordingRemoteConfig,
-    | 'recordCanvas'
-    | 'canvasFps'
-    | 'canvasQuality'
-    | 'networkPayloadCapture'
-    | 'sampleRate'
-    | 'minimumDurationMilliseconds'
-> & {
-    /**
-     * Used to determine if the persisted config is still valid or we need to wait for a new one
-     * only accepts undefined since older versions of the library didn't set this.
-     */
-    cache_timestamp?: number
-    enabled: boolean
-    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
-        capturePerformance: RemoteConfig['capturePerformance']
-    }
-    canvasRecording: {
-        enabled: SessionRecordingRemoteConfig['recordCanvas']
-        fps: SessionRecordingRemoteConfig['canvasFps']
-        quality: SessionRecordingRemoteConfig['canvasQuality']
-    }
-    // we don't allow string config here
-    sampleRate: number | null
-    minimumDurationMilliseconds: number | null | undefined
-}
-
 /**
  * Outcome of a remote config fetch: the config, or an explicit failure.
  * @internal
@@ -410,16 +375,6 @@ export type ErrorEventArgs = [
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-
-export type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | typeof SAMPLED
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
 
 export type OverrideConfig = {
     sampling: boolean

@@ -15,7 +15,7 @@ import {
     TRIGGER_DISABLED,
     TRIGGER_PENDING,
     URLTriggerMatching,
-} from '../../../extensions/replay/external/triggerMatching'
+} from '@posthog/browser-common/replay/trigger-matching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 
 type TestConfig = {

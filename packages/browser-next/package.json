@@ -77,6 +77,11 @@
             "types": "./dist/products/toolbar/toolbar.d.ts",
             "require": "./dist/products/toolbar/toolbar.js",
             "import": "./dist/products/toolbar/toolbar.mjs"
+        },
+        "./session-recording": {
+            "types": "./dist/products/session-recording/session-recording.d.ts",
+            "require": "./dist/products/session-recording/session-recording.js",
+            "import": "./dist/products/session-recording/session-recording.mjs"
         }
     },
     "scripts": {
@@ -100,6 +105,8 @@
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
+        "@posthog/rrweb-plugin-console-record": "workspace:*",
+        "@posthog/rrweb-record": "workspace:*",
         "@posthog/types": "workspace:^",
         "web-vitals": "^6.2.1"
     },

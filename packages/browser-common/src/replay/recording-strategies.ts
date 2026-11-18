@@ -1,10 +1,10 @@
-import { PostHog } from '../../../posthog-core'
-import {
-    CaptureResult,
+import type { CaptureResult } from '@posthog/types'
+import type {
     SessionRecordingPersistedConfig,
     SessionRecordingTriggerGroup,
     SessionStartReason,
-} from '../../../types'
+} from '../types/remote-config'
+import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
@@ -17,27 +17,28 @@ import {
     SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
     SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
     SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
-    STORED_PERSON_PROPERTIES_KEY,
-} from '../../../constants'
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from './replay-constants'
 import {
     EventTriggerMatching,
     LinkedFlagMatching,
     URLTriggerMatching,
     TriggerGroupMatching,
-    SessionRecordingStatus,
+    type SessionRecordingStatus,
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
     triggerGroupsMatchSessionRecordingStatus,
-    TriggerType,
+    type TriggerType,
     AndTriggerMatching,
     OrTriggerMatching,
-    TriggerStatusMatching,
+    type TriggerStatusMatching,
     TRIGGER_PENDING,
-} from './triggerMatching'
-import { sampleOnProperty } from '../../sampling'
+    type ReplayTriggerHost,
+} from './trigger-matching'
+import { sampleOnProperty } from '../utils/sampling'
 import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
-import { createLogger } from '@posthog/browser-common/utils/logger'
-import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
+import { createLogger } from '../utils/logger'
+import { matchTriggerPropertyFilters } from '../utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
 
@@ -70,7 +71,7 @@ export function decodeSamplingDecision(storedValue: unknown, sessionId: string):
  * Shared context that strategies need to access from the recorder
  */
 export interface RecordingStrategyContext {
-    instance: PostHog
+    instance: ReplayTriggerHost
     sessionId: string
     isSampled: boolean | null
     rrwebError: boolean
@@ -171,7 +172,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     private _recordingStatusFunction: typeof anyMatchSessionRecordingStatus = allMatchSessionRecordingStatus
 
     constructor(
-        private readonly _instance: PostHog,
+        private readonly _instance: ReplayTriggerHost,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _eventTriggerMatching: EventTriggerMatching,
         private readonly _linkedFlagMatching: LinkedFlagMatching,
@@ -222,7 +223,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     getMinimumDuration(sessionId: string): number | null {
         // V1: Minimum duration is global from config, doesn't need sessionId
         void sessionId
-        const config = this._instance.get_property('$session_recording_remote_config') as
+        const config = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG) as
             | SessionRecordingPersistedConfig
             | undefined
         const duration = config?.minimumDurationMilliseconds
@@ -364,7 +365,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
     private _removeEventTriggerCaptureHook: (() => void) | undefined
 
     constructor(
-        private readonly _instance: PostHog,
+        private readonly _instance: ReplayTriggerHost,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
         private readonly _tryAddCustomEvent: (tag: string, payload: any) => void,

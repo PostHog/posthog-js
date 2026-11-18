@@ -1,6 +1,6 @@
 import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
 import { includes, clampToRange } from '@posthog/core'
-import { appendArray, sampleOnProperty, updateThreshold } from '../extensions/sampling'
+import { appendArray, sampleOnProperty, updateThreshold } from '@posthog/browser-common/utils/sampling'
 import { logger } from '@posthog/browser-common/utils/logger'
 
 /**

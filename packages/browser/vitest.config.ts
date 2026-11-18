@@ -98,6 +98,10 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/tests/helpers/client-conformance.ts'),
             },
             {
+                find: /^@posthog\/browser-common\/replay\/(.*)$/,
+                replacement: `${fromRoot('../browser-common/src/replay')}/$1.ts`,
+            },
+            {
                 find: /^@posthog\/browser-common\/utils\/(.*)$/,
                 replacement: `${fromRoot('../browser-common/src/utils')}/$1.ts`,
             },
