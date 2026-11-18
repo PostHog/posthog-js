@@ -14,8 +14,10 @@ const forbiddenInputs = [
     /(^|\/)\.\.\/browser\/(src|dist)\//,
     /(^|\/)packages\/rrweb\//,
     /(^|\/)\.\.\/rrweb\//,
-    /(^|\/)node_modules\/(posthog-js|core-js|fflate|rrweb|web-vitals)\//,
+    /(^|\/)node_modules\/(posthog-js|core-js|fflate|rrweb)\//,
 ]
+// Third-party libraries that only lazily loaded chunks may contain, never an initial graph.
+const lazyLibraryInputs = [/(^|\/)node_modules\/web-vitals\//]
 // Heavy dependencies that only optional product chunks may load.
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const surveyUiInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:preact|dompurify)\//
@@ -27,7 +29,8 @@ const autocaptureInput = /(^|\/)(autocapture|rageclick|autocapture-utils)\.(m?js
 const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|automatic-surveys|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
-const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput]
+const webVitalsInput = /(^|\/)(products\/web-vitals\/[^/]+|web-vitals)\.(m?js|ts)$/
+const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput, webVitalsInput]
 
 // Client modules selected by entrypoint or explicit import.
 const analyticsCoreInput = /(^|\/)products\/analytics\/analytics-core\.(m?js|ts)$/
@@ -104,12 +107,19 @@ const rootInitialBoundary = {
     forbidden: clientOnly,
 }
 
-const report = async (name, result, outputs, outputKeys, { allowProducts = false, allowSurveyUi = false } = {}) => {
+const report = async (
+    name,
+    result,
+    outputs,
+    outputKeys,
+    { allowProducts = false, allowSurveyUi = false, allowLazyLibraries = false } = {}
+) => {
     const measured = sizes(outputs)
     const inputs = inputsOf(result, outputKeys)
     const forbidden = inputs.filter(
         (input) =>
             forbiddenInputs.some((pattern) => pattern.test(input)) ||
+            (!allowLazyLibraries && lazyLibraryInputs.some((pattern) => pattern.test(input))) ||
             (!allowProducts && (coreInput.test(input) || productInputs.some((pattern) => pattern.test(input)))) ||
             (!allowSurveyUi && (surveyUiInput.test(input) || surveyRenderingInput.test(input)))
     )
@@ -198,7 +208,7 @@ const reportSplit = async (name, split, { initialProducts = false, allowSurveyUi
     const initial = new Set(initialKeys)
     const totalKeys = Object.keys(split.outputs)
     const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
-    const deferred = { allowProducts: true, allowSurveyUi }
+    const deferred = { allowProducts: true, allowSurveyUi, allowLazyLibraries: true }
     await report(`${name} initial`, split.result, split.contents(initialKeys), initialKeys, {
         allowProducts: initialProducts,
     })
@@ -215,6 +225,7 @@ const measureRoot = async () => {
         /\/products\/logs\/logs\.mjs$/,
         /\/products\/surveys\/automatic-surveys\.mjs$/,
         /\/products\/autocapture\/autocapture\.mjs$/,
+        /\/products\/web-vitals\/web-vitals\.mjs$/,
     ]) {
         assert(
             loaded.some((entryPoint) => product.test(entryPoint)),
@@ -261,6 +272,9 @@ await measureSplit('explicit surveys', 'fixtures/static-surveys.ts', { initialPr
 await measureSplit('dynamic surveys', 'fixtures/dynamic-surveys.ts', { surveys: true })
 await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', undefined, { allowProducts: true })
 await measureSplit('dynamic autocapture', 'fixtures/dynamic-autocapture.ts')
+// A static product keeps its third-party library behind the product's own dynamic import.
+await measureSplit('static web vitals', 'fixtures/static-web-vitals.ts', { initialProducts: true })
+await measureSplit('dynamic web vitals', 'fixtures/dynamic-web-vitals.ts')
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.
 for (const [guard, boundary, inputs, graph] of [['core', coreBoundary, staticFlagsInputs, 'static flags']]) {

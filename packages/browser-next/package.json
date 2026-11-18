@@ -52,6 +52,11 @@
             "types": "./dist/persistence/cookie.d.ts",
             "require": "./dist/persistence/cookie.js",
             "import": "./dist/persistence/cookie.mjs"
+        },
+        "./web-vitals": {
+            "types": "./dist/products/web-vitals/web-vitals.d.ts",
+            "require": "./dist/products/web-vitals/web-vitals.js",
+            "import": "./dist/products/web-vitals/web-vitals.mjs"
         }
     },
     "scripts": {
@@ -75,7 +80,8 @@
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
-        "@posthog/types": "workspace:^"
+        "@posthog/types": "workspace:^",
+        "web-vitals": "^6.2.1"
     },
     "devDependencies": {
         "@playwright/test": "1.52.0",

@@ -10,6 +10,7 @@ import type {
 import type { LogsConfiguration } from '../products/logs/logs-options'
 import type { SurveysConfiguration } from '../products/surveys/surveys-options'
 import type { AutocaptureConfiguration } from '../products/autocapture/autocapture-options'
+import type { WebVitalsConfiguration } from '../products/web-vitals/web-vitals-options'
 import type { AnalyticsOptions, PersonProfileMode } from '../products/analytics/analytics-options'
 
 import type {
@@ -133,6 +134,8 @@ export interface PostHogOptions {
     surveys?: SurveysConfiguration
     /** Acquire logs from saved/fresh console signals, or during initialization when configured explicitly. */
     logs?: LogsConfiguration
+    /** Acquire web vitals from saved/fresh project signals, or during initialization when `enabled` is true. */
+    webVitals?: WebVitalsConfiguration
     /** Install extensions before the factory resolves. Explicit instances take precedence over automatic product options. */
     extensions?: readonly Extension[]
 }
@@ -149,7 +152,7 @@ export interface RuntimeOptions {
 }
 
 /** Options for the manually composed `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'flags' | 'logs' | 'surveys' | 'autocapture'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'flags' | 'logs' | 'surveys' | 'autocapture' | 'webVitals'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'

@@ -138,7 +138,7 @@ import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
 import type { TracingHeaders } from './extensions/tracing-headers'
-import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { WebVitalsAutocapture } from '@posthog/browser-common/web-vitals'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import type { PostHogExceptions } from './posthog-exceptions'
@@ -1308,7 +1308,7 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.heatmaps = new ext.heatmaps(this)))
         }
         if (ext.webVitalsAutocapture) {
-            this._extensions.push((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)))
+            this._enrollExtension((this.webVitalsAutocapture = new ext.webVitalsAutocapture(this)), initTasks)
         }
         if (ext.exceptionObserver) {
             this._extensions.push((this.exceptionObserver = new ext.exceptionObserver(this)))
@@ -4131,6 +4131,7 @@ export class PostHog implements PostHogInterface {
             () => this.logs?.dispose(),
             () => this.surveys?.dispose(),
             () => this.autocapture?.dispose(),
+            () => this.webVitalsAutocapture?.dispose(),
             () => unsubscribe?.(),
             () => this._requestQueue?.unload(),
             () => this._retryQueue?.unload(),
