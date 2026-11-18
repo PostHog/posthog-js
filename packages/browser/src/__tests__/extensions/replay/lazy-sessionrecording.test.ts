@@ -6122,7 +6122,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => '!' + sessionId,
+                expectedIsSampled: () => 'x' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -6134,7 +6134,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => '!' + sessionId,
+                expectedIsSampled: () => 'x' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -6231,7 +6231,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -6285,7 +6285,7 @@ describe('Lazy SessionRecording', () => {
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
             )
             // then check that a session is sampled out (stored tagged with its session id)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
             expect(sessionRecording.status).toBe('disabled')
 
             // then turn sample rate to null
@@ -6296,6 +6296,20 @@ describe('Lazy SessionRecording', () => {
             // then check that a session is no longer sampled out (i.e. storage is cleared not false)
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
+        })
+
+        it('rewrites a sampled-out decision stored with the old `!` prefix, which WAF rules flag in the cookie', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_IS_SAMPLED]: '!' + sessionId,
+                [SESSION_RECORDING_SAMPLE_RATE]: 0,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
         })
 
         describe('legacy boolean true in persistence', () => {
@@ -6333,7 +6347,7 @@ describe('Lazy SessionRecording', () => {
 
                 // should be disabled despite legacy true, because 0% sample rate
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
@@ -6412,7 +6426,7 @@ describe('Lazy SessionRecording', () => {
 
                 // the new session must have a (negative) decision, not record unsampled
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + SAMPLED_OUT_SESSION_ID)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + SAMPLED_OUT_SESSION_ID)
 
                 // and nothing is ever sent for the sampled-out session
                 expect(posthog.capture).not.toHaveBeenCalledWith(
