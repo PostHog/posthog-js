@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { EventEmitter } from 'node:events'
+import { promises as fs } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { release, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
@@ -66,6 +67,14 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true })
     vi.useRealTimers()
 })
+
+function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+        resolve = done
+    })
+    return { promise, resolve }
+}
 
 async function start(options = {}) {
     client = init({
@@ -970,6 +979,34 @@ describe('main Electron client', () => {
         await vi.waitFor(async () => expect(await fs.readdir(join(directory, namespace))).toEqual(['state.json']))
     })
 
+    it('recovers after a transient startup write failure', async () => {
+        const error = Object.assign(new Error('Startup rename failed'), { code: 'EPERM' })
+        const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(error)
+        const onError = vi.fn()
+        const owner = await start({ onError })
+        expect(onError.mock.calls.flat().filter((reported) => reported === error)).toHaveLength(1)
+        await owner.capture('after-storage-recovery')
+        await owner.flush()
+        expect(rename.mock.calls.length).toBeGreaterThan(1)
+        expect(batches.map(({ event }) => event)).toEqual(['after-storage-recovery'])
+    })
+
+    it('uses the Electron system version, falling back to the OS release outside Electron', async () => {
+        const getter = Object.getOwnPropertyDescriptor(process, 'getSystemVersion')
+        try {
+            Object.defineProperty(process, 'getSystemVersion', { configurable: true, value: () => '15.7.1' })
+            const owner = await start()
+            await owner.capture('system-version')
+            Reflect.deleteProperty(process, 'getSystemVersion')
+            await owner.capture('os-release')
+            await owner.flush()
+            expect(batches.map(({ properties }) => properties.$os_version)).toEqual(['15.7.1', release()])
+        } finally {
+            if (getter) Object.defineProperty(process, 'getSystemVersion', getter)
+            else Reflect.deleteProperty(process, 'getSystemVersion')
+        }
+    })
+
     it('reinitializes a disposed renderer on the same bridge without resetting its request sequence', async () => {
         const owner = await start()
         const page = renderer(owner, 1)
@@ -1270,6 +1307,43 @@ describe('main Electron client', () => {
         await window.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: observed.flagRevision })
         await owner.flush()
         expect(batches.filter((event) => event.event === '$feature_flag_called')).toEqual([])
+    })
+
+    it('keeps flags unloaded for the new identity until its own response arrives', async () => {
+        const onError = vi.fn()
+        const owner = await start({ onError })
+        const page = renderer(owner, 1)
+        await page.send({ type: 'hello' })
+        const old = deferred<Response>()
+        const current = deferred<Response>()
+        const oldStarted = deferred<void>()
+        const currentStarted = deferred<void>()
+        mock.fetch.mockImplementationOnce(() => {
+            oldStarted.resolve()
+            return old.promise
+        })
+        mock.fetch.mockImplementationOnce(() => {
+            currentStarted.resolve()
+            return current.promise
+        })
+        const loading = owner.reloadFeatureFlagsAsync()
+        try {
+            await oldStarted.promise
+            await owner.identify('new-user')
+            old.resolve(new Response(JSON.stringify({ featureFlags: { old_user: true } })))
+            await loading
+            await currentStarted.promise
+            expect(owner.getState()).toMatchObject({ distinctId: 'new-user', flagsLoaded: false, featureFlags: {} })
+            expect(onError).not.toHaveBeenCalled()
+        } finally {
+            old.resolve(new Response('{}'))
+            current.resolve(new Response(JSON.stringify({ featureFlags: { current_user: true } })))
+        }
+        await vi.waitFor(() => {
+            expect(owner.getState()).toMatchObject({ flagsLoaded: true, featureFlags: { current_user: true } })
+        })
+        const snapshots = page.contents.mainFrame.send.mock.calls.map(([, state]) => state as State)
+        expect(snapshots.some((state) => Object.hasOwn(state.featureFlags, 'old_user'))).toBe(false)
     })
 
     it('rejects stale flags across the whole request including retries', async () => {
