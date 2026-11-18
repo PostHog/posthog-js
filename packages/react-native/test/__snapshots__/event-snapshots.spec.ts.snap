@@ -67,7 +67,6 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$screen_height": 1334,
           "$screen_width": 750,
           "$sdk_debug_pending_queue_size": 1,
-          "$sdk_debug_session_start": 1704164645000,
           "$session_id": "<session-id>",
           "$set": {
             "email": "snapshot@example.com",

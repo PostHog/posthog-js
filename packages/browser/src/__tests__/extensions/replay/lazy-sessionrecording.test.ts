@@ -17,6 +17,7 @@ import {
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { resetSessionStorageSupported } from '../../../storage'
@@ -9881,6 +9882,99 @@ describe('Lazy SessionRecording', () => {
                 'could not capture snapshot chunk - skipping it',
                 expect.any(RangeError)
             )
+        })
+    })
+
+    describe('debug properties while replay is off', () => {
+        const OFF_SHAPE = { $recording_status: 'disabled' }
+        const sessionKeys = {
+            [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+            [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: ['url'],
+        }
+        let store: Record<string, unknown>
+
+        const startRecording = (recordingConfig: Record<string, unknown> = {}) => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', ...recordingConfig } })
+            )
+        }
+
+        beforeEach(() => {
+            store = { ...sessionKeys }
+            ;(posthog as any).sessionPersistence = { get_property: (key: string) => store[key] }
+        })
+
+        it('reports only the disabled status after a mid-session stop and restores keys on re-enable', () => {
+            startRecording()
+            expect(sessionRecording.status).toBe('active')
+            expect(sessionRecording.sdkDebugProperties).toMatchObject({
+                ...sessionKeys,
+                $sdk_debug_session_start: expect.any(Number),
+            })
+
+            posthog.config.disable_session_recording = true
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeDefined()
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+
+            posthog.config.disable_session_recording = false
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+            expect(sessionRecording.sdkDebugProperties).toHaveProperty('$sdk_debug_session_start')
+        })
+
+        it('reports only the disabled status after stopSessionRecording-style config changes', () => {
+            startRecording()
+            posthog.config.disable_session_recording = true
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('reports only the disabled status when the server turns replay off mid-session', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() },
+            })
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.status).toBe('active')
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('reports only the disabled status when opted out', () => {
+            startRecording()
+            posthog.consent.isOptedOut = () => true
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('keeps the recorder keys when sampled out', () => {
+            startRecording({ sampleRate: '0.00' })
+
+            const debug = sessionRecording.sdkDebugProperties
+            expect(sessionRecording.status).toBe('disabled')
+            expect(debug).toMatchObject(sessionKeys)
+            expect(debug).toHaveProperty('$sdk_debug_session_start')
+            expect(debug).toHaveProperty('$sdk_debug_replay_rrweb_error')
+        })
+
+        it('keeps the full map while a trigger is pending', () => {
+            startRecording({ urlTriggers: [{ url: 'start-on-me', matching: 'regex' }] })
+
+            const debug = sessionRecording.sdkDebugProperties
+            expect(sessionRecording.status).toBe('buffering')
+            expect(debug).toMatchObject(sessionKeys)
+            expect(debug).toHaveProperty('$sdk_debug_replay_internal_buffer_length')
+        })
+
+        it('keeps persisted keys while awaiting remote config', () => {
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
         })
     })
 })
