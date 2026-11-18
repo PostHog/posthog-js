@@ -1,6 +1,6 @@
 import { format, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { MAX_MESSAGE_BYTES, trustedUrl, validateRequest } from '../shared/protocol'
+import { assertJson, MAX_MESSAGE_BYTES, trustedUrl, validateRequest } from '../shared/protocol'
 
 const request = (command: unknown) => ({ version: 1, sequence: 1, generation: 0, command })
 
@@ -34,6 +34,19 @@ describe('Electron bridge protocol', () => {
         ).toThrow('Unsafe')
         expect(() => validateRequest({ ...request({ type: 'hello' }), sequence: 0 })).toThrow('Invalid')
         expect(() => validateRequest({ ...request({ type: 'hello' }), version: 2 })).toThrow('Invalid')
+    })
+    it('rejects an oversized property during preflight validation', () => {
+        expect(() => assertJson({ text: 'x'.repeat(MAX_MESSAGE_BYTES) })).toThrow('256 KiB')
+    })
+    it('preserves the exact UTF-8 byte limit for valid JSON', () => {
+        const properties = { text: '' }
+        const message = request({ type: 'capture', event: 'x', properties })
+        const space = MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(message))
+        properties.text = 'é'.repeat(Math.floor(space / 2)) + 'x'.repeat(space % 2)
+        expect(Buffer.byteLength(JSON.stringify(message))).toBe(MAX_MESSAGE_BYTES)
+        expect(() => validateRequest(message)).not.toThrow()
+        properties.text += 'x'
+        expect(() => validateRequest(message)).toThrow('256 KiB')
     })
     it.each(['%7E', '%7e'])('matches Windows file paths with %s tilde encoding in either direction', (encoding) => {
         const path = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\fixture\\app.asar\\index.html'
