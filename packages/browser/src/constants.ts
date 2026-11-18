@@ -16,11 +16,15 @@ export const PERSISTENCE_FACEBOOK_CLICK_ID = '$fbc_persistence'
 export const FACEBOOK_BROWSER_ID = '$fbp'
 export const PERSISTENCE_FACEBOOK_BROWSER_ID = '$fbp_persistence'
 export const EVENT_TIMERS_KEY = '__timers'
-export { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '@posthog/browser-common/constants'
+export {
+    AUTOCAPTURE_DISABLED_SERVER_SIDE,
+    EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE,
+} from '@posthog/browser-common/constants'
+export {
+    ERROR_TRACKING_SUPPRESSION_RULES,
+    ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS,
+} from '@posthog/browser-common/error-tracking'
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
-export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
-export const ERROR_TRACKING_SUPPRESSION_RULES = '$error_tracking_suppression_rules'
-export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capture_extension_exceptions'
 export { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '@posthog/browser-common/constants'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'

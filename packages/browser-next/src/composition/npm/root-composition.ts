@@ -1,4 +1,8 @@
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE, WEB_VITALS_ENABLED_SERVER_SIDE } from '@posthog/browser-common/constants'
+import {
+    AUTOCAPTURE_DISABLED_SERVER_SIDE,
+    EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE,
+    WEB_VITALS_ENABLED_SERVER_SIDE,
+} from '@posthog/browser-common/constants'
 import { SURVEYS } from '@posthog/browser-common/surveys-config'
 import type { DeepReadonly } from '@posthog/browser-common'
 import { snapshotAutocaptureOptions } from '../../products/autocapture/autocapture-options'
@@ -137,6 +141,23 @@ const configureTracingHeaders = (options: PostHogOptions): ProductDefinition | u
     }
 }
 
+const configureErrorTracking = (options: PostHogOptions): ProductDefinition | undefined => {
+    const configuration = options?.errorTracking
+    if (configuration === false) return
+    const snapshot = configuration && JSON.parse(JSON.stringify(configuration))
+    return {
+        load: () =>
+            import('../../products/error-tracking/error-tracking').then(({ errorTracking }) => errorTracking(snapshot)),
+        activate:
+            configuration === undefined
+                ? activateFromSignals(
+                      (host) => host.kv.get(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE) === true,
+                      (config) => !!config.autocaptureExceptions
+                  )
+                : undefined,
+    }
+}
+
 export const createProductComposition = (options: PostHogOptions): ProductComposition => {
     const composition: ProductComposition = {
         extensions: [...(options?.extensions ?? [])],
@@ -150,5 +171,6 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
     registerProduct(composition, 'autocapture', 'autocapture', () => configureAutocapture(options))
     registerProduct(composition, 'webVitals', 'web vitals', () => configureWebVitals(options))
     registerProduct(composition, 'tracingHeaders', 'tracing headers', () => configureTracingHeaders(options))
+    registerProduct(composition, 'errorTracking', 'error tracking', () => configureErrorTracking(options))
     return composition
 }

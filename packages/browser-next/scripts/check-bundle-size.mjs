@@ -31,7 +31,16 @@ const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|automatic-surveys|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
 const webVitalsInput = /(^|\/)(products\/web-vitals\/[^/]+|web-vitals)\.(m?js|ts)$/
 const tracingHeadersInput = /(^|\/)(products\/tracing-headers\/tracing-headers|utils\/tracing-headers)\.(m?js|ts)$/
-const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput, webVitalsInput, tracingHeadersInput]
+const errorTrackingInput = /(^|\/)(products\/error-tracking\/[^/]+|error-tracking|exception-autocapture)\.(m?js|ts)$/
+const productInputs = [
+    flagsInput,
+    autocaptureInput,
+    logsInput,
+    surveysInput,
+    webVitalsInput,
+    tracingHeadersInput,
+    errorTrackingInput,
+]
 
 // Client modules selected by entrypoint or explicit import.
 const analyticsCoreInput = /(^|\/)products\/analytics\/analytics-core\.(m?js|ts)$/
@@ -228,6 +237,7 @@ const measureRoot = async () => {
         /\/products\/autocapture\/autocapture\.mjs$/,
         /\/products\/web-vitals\/web-vitals\.mjs$/,
         /\/products\/tracing-headers\/tracing-headers\.mjs$/,
+        /\/products\/error-tracking\/error-tracking\.mjs$/,
     ]) {
         assert(
             loaded.some((entryPoint) => product.test(entryPoint)),
@@ -279,6 +289,8 @@ await measureSplit('static web vitals', 'fixtures/static-web-vitals.ts', { initi
 await measureSplit('dynamic web vitals', 'fixtures/dynamic-web-vitals.ts')
 await measureStatic('static tracing headers', 'fixtures/static-tracing-headers.ts', undefined, { allowProducts: true })
 await measureSplit('root tracing headers', 'fixtures/root-tracing-headers.ts', { surveys: true })
+await measureSplit('static error tracking', 'fixtures/static-error-tracking.ts', { initialProducts: true })
+await measureSplit('root error tracking', 'fixtures/dynamic-error-tracking.ts', { surveys: true })
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.
 for (const [guard, boundary, inputs, graph] of [['core', coreBoundary, staticFlagsInputs, 'static flags']]) {

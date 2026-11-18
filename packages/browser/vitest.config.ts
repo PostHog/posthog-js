@@ -77,6 +77,14 @@ export default defineConfig({
             },
             { find: '@posthog/browser-common/pubsub', replacement: fromRoot('../browser-common/src/pubsub.ts') },
             {
+                find: '@posthog/browser-common/error-tracking',
+                replacement: fromRoot('../browser-common/src/error-tracking.ts'),
+            },
+            {
+                find: '@posthog/browser-common/exception-autocapture',
+                replacement: fromRoot('../browser-common/src/exception-autocapture.ts'),
+            },
+            {
                 find: '@posthog/browser-common/tests/client-conformance',
                 replacement: fromRoot('../browser-common/tests/helpers/client-conformance.ts'),
             },
@@ -85,6 +93,8 @@ export default defineConfig({
                 replacement: `${fromRoot('../browser-common/src/utils')}/$1.ts`,
             },
             { find: '@posthog/core/surveys', replacement: fromRoot('../core/src/surveys/index.ts') },
+            { find: '@posthog/core/error-tracking', replacement: fromRoot('../core/src/error-tracking/index.ts') },
+            { find: '@posthog/core/utils', replacement: fromRoot('../core/src/utils/index.ts') },
             { find: /^@posthog\/core$/, replacement: fromRoot('../core/src/index.ts') },
         ],
     },

@@ -5,8 +5,12 @@ import { RemoteConfigResult } from '../../types'
 
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
-import { ErrorTracking } from '@posthog/core'
+import { BucketedRateLimiter, ErrorTracking } from '@posthog/core'
+import {
+    createExceptionRateLimiter,
+    exceptionRateLimitKey,
+    resolveExceptionAutocaptureConfig,
+} from '@posthog/browser-common/error-tracking'
 import { ExceptionAutoCaptureConfig } from '../../types'
 import { getExtensionLoader } from '../../utils/extension-loader'
 
@@ -25,36 +29,16 @@ export class ExceptionObserver {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
-        // Burst protection is scoped per exception type: captures ten exceptions before rate
-        // limiting, then refills at a rate of one token / 10 second period (e.g. captures 1
-        // rate-limited exception of that type every 10 seconds until the burst ends). The bucket
-        // size and refill rate can be tuned via the `exceptionRateLimiterBucketSize` and
-        // `exceptionRateLimiterRefillRate` config options.
-        this._rateLimiter = new BucketedRateLimiter({
-            ...resolveExceptionRateLimiterConfig(this._instance.config.error_tracking),
-            refillInterval: 10000, // ten seconds in milliseconds,
-            _logger: logger,
-        })
+        // Burst protection is scoped per exception type. The bucket size and refill rate can be tuned
+        // via the `exceptionRateLimiterBucketSize` and `exceptionRateLimiterRefillRate` config options.
+        this._rateLimiter = createExceptionRateLimiter(this._instance.config.error_tracking, logger)
 
         this._config = this._requiredConfig()
         this.startIfEnabledOrStop()
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
-        const providedConfig = this._instance.config.capture_exceptions
-        let config: Required<ExceptionAutoCaptureConfig> = {
-            capture_unhandled_errors: false,
-            capture_unhandled_rejections: false,
-            capture_console_errors: false,
-        }
-
-        if (isObject(providedConfig)) {
-            config = { ...config, ...providedConfig }
-        } else if (isUndefined(providedConfig) ? this._remoteEnabled : providedConfig) {
-            config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
-        }
-
-        return config
+        return resolveExceptionAutocaptureConfig(this._instance.config.capture_exceptions, this._remoteEnabled)
     }
 
     public get isEnabled(): boolean {
@@ -159,7 +143,7 @@ export class ExceptionObserver {
 
     captureException(errorProperties: ErrorTracking.ErrorProperties) {
         try {
-            const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
+            const exceptionType = exceptionRateLimitKey(errorProperties)
             const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
             if (isRateLimited) {
