@@ -142,7 +142,7 @@ describe('batched event timestamps across retries', () => {
             reader.onload = () => resolve(reader.result as string)
             reader.readAsText(blob)
         })
-        const body = JSON.parse(atob(new URLSearchParams(text).get('data')!)) as CaptureBody
+        const body = JSON.parse(atob(text)) as CaptureBody
         expect(body.batch).toEqual(firstBody.batch)
         expect(body.batch[0]).toMatchObject({ uuid: event.uuid, timestamp: timestamp.toISOString() })
         expect(body.batch[0]).not.toHaveProperty('offset')

@@ -273,7 +273,10 @@ test('the browser type check hashes the sibling sources that its test typecheck 
     const task = dryRun(['run', 'check-types']).find((task) => task.taskId === 'posthog-js#check-types')
     assert.equal(task.command, 'pnpm typecheck && pnpm test:typecheck')
     const inputs = Object.keys(task.inputs)
-    for (const file of ['browser-next/src/lane.ts', 'browser-common/tests/helpers/client-conformance.ts']) {
+    for (const file of [
+        'browser-next/src/products/analytics/delivery/lane.ts',
+        'browser-common/tests/helpers/client-conformance.ts',
+    ]) {
         assert.ok(
             inputs.some((input) => input.endsWith(file)),
             `${file} must invalidate the check-types cache`
@@ -295,7 +298,13 @@ test('root tests schedule leaf suites once, including every existing rrweb suite
         )
         assert.ok(prerequisites(tasks, id).has(`${pkg.name}#build`), id)
     }
-    for (const id of ['posthog-js#test:unit', 'posthog-js#test:functional', '@posthog/browser#test:built']) {
+    for (const id of [
+        'posthog-js#test:unit',
+        'posthog-js#test:functional',
+        '@posthog/browser#test:built',
+        'posthog-docusaurus#test:unit',
+        'posthog-docusaurus#test:built',
+    ]) {
         assert.ok(
             executable(tasks).some((task) => task.taskId === id),
             id

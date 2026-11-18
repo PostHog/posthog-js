@@ -1,5 +1,15 @@
 # @posthog/nuxt
 
+## 1.9.2
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Require posthog-node 5.58.0 or later, the first version with the span-context helpers they use.
+  (2026-11-17)
+- Updated dependencies [[`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff)]:
+  - @posthog/core@1.69.0
+  - posthog-node@6.0.0
+
 ## 1.9.1
 
 ### Patch Changes
