@@ -200,7 +200,8 @@ export class PostHog {
         if (this._core.preloadFeatureFlags && !this._core.isDisabled) {
             void this._core.reloadFeatureFlagsAsync().catch((error) => this._report(error))
         }
-        await this._core.persist()
+        // Storage already reports failed writes and retries on later mutations. Readiness is not a write receipt.
+        await this._core.persist().catch(() => {})
         this._scheduleState()
     }
 

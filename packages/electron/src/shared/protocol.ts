@@ -56,24 +56,37 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function assertJson(value: unknown, depth = 0): void {
-    if (depth > 20) throw new Error('PostHog payload is too deeply nested')
-    if (value === null || typeof value === 'string' || typeof value === 'boolean') return
-    if (typeof value === 'number' && Number.isFinite(value)) return
-    if (Array.isArray(value)) {
-        for (const item of value) assertJson(item, depth + 1)
-        return
+    let remaining = MAX_MESSAGE_BYTES
+    const spend = (size: number): void => {
+        remaining -= size
+        if (remaining < 0) throw new Error('PostHog message exceeds 256 KiB')
     }
-    if (
-        isRecord(value) &&
-        (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-    ) {
-        for (const [key, item] of Object.entries(value)) {
-            if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Unsafe PostHog property key')
-            assertJson(item, depth + 1)
+    const visit = (item: unknown, level: number): void => {
+        if (level > 20) throw new Error('PostHog payload is too deeply nested')
+        // Count each occurrence, including shared references, against a lower bound on JSON size.
+        spend(typeof item === 'string' ? item.length + 2 : 1)
+        if (item === null || typeof item === 'string' || typeof item === 'boolean') return
+        if (typeof item === 'number' && Number.isFinite(item)) return
+        if (Array.isArray(item)) {
+            for (const element of item) visit(element, level + 1)
+            return
         }
-        return
+        if (
+            isRecord(item) &&
+            (Object.getPrototypeOf(item) === Object.prototype || Object.getPrototypeOf(item) === null)
+        ) {
+            for (const key in item) {
+                if (!Object.hasOwn(item, key)) continue
+                spend(key.length + 3)
+                if (['__proto__', 'constructor', 'prototype'].includes(key))
+                    throw new Error('Unsafe PostHog property key')
+                visit(item[key], level + 1)
+            }
+            return
+        }
+        throw new Error('PostHog properties must be JSON serializable')
     }
-    throw new Error('PostHog properties must be JSON serializable')
+    visit(value, depth)
 }
 
 export function validateRequest(value: unknown): asserts value is Request {
