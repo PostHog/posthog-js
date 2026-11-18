@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.451.1
+
+### Patch Changes
+
+- [#5798](https://github.com/PostHog/posthog-js/pull/5798) [`4c9fcaf`](https://github.com/PostHog/posthog-js/commit/4c9fcaf10c848223ec8d079d8441c5f8994bc38d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fixed requests being blocked by web application firewalls running the OWASP Core Rule Set (ModSecurity and others) for visitors whose session was sampled out of session replay. The `ph_<token>_posthog` cookie stored that decision with a `!` prefix that rule 942190 flags as SQL injection. The decision now uses a plain letter, and this version removes old `!` values from the cookie on the next page load, whether or not replay starts on that page. Versions before 1.417.0 that load the unversioned recorder from the PostHog CDN stop writing new `!` values without upgrading, but only replace old ones on pages where the recorder loads.
+  (2026-11-18)
+
 ## 1.451.0
 
 ### Minor Changes
