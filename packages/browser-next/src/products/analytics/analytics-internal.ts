@@ -77,6 +77,10 @@ export interface AnalyticsCore extends Pick<Client, 'projectToken' | 'logger' | 
         | 'group'
         | 'reset'
         | 'resetGroups'
+        | 'session'
+        | 'generated'
+        | 'bootstrapIdentity'
+        | 'bootstrapSession'
     >
     readonly _sessionKv: KeyValueStore
     readonly _requestRuntime: RequestRuntime
