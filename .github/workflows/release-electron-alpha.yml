@@ -10,7 +10,7 @@ on:
                 required: true
                 type: string
             version:
-                description: 'Exact reviewed version, e.g. 0.1.0-alpha.0'
+                description: 'Exact reviewed x.y.z version, e.g. 0.1.0'
                 required: true
                 type: string
             publish:

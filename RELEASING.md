@@ -28,15 +28,15 @@ Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://gith
 
 ### Electron alpha releases
 
-`@posthog/electron` has an **independent, manual alpha path**, not a coordinated stable release. Its manifest currently contains `0.1.0-alpha.0`; the release job does not rewrite it. Electron is intentionally absent from `release.yml`'s npm matrix and is in `.changeset/config.json`'s `ignore` list. Do not add it to the stable matrix, run monorepo-wide `changeset pre enter`, or promote `latest` to release an alpha.
+`@posthog/electron` has an **independent, manual alpha path**, not a coordinated stable release. Its manifest currently contains `0.1.0`; the release job does not rewrite it. Alpha status is expressed by the npm `alpha` dist-tag, not a version suffix. Electron is intentionally absent from `release.yml`'s npm matrix and is in `.changeset/config.json`'s `ignore` list. Do not add it to the stable matrix, run monorepo-wide `changeset pre enter`, or promote `latest` to release an alpha.
 
 Implementation PRs keep the package `private: true` and cannot publish Electron. Only the final, separately reviewed alpha-release PR removes that flag and enables the protected manual path below; merging it still does not publish automatically.
 
 During alpha:
 
-- Do **not** add Electron entries to `.changeset/*.md`, including mixed Electron/core changesets. Changesets rejects mixing ignored and released packages; a normal minor bump on an alpha manifest can also produce a stable version.
+- Do **not** add Electron entries to `.changeset/*.md`, including mixed Electron/core changesets. Changesets rejects mixing ignored and released packages. Do not use Changesets to version or release Electron during alpha.
 - Keep changesets for shared dependency changes (core/browser-common) as ordinary, separate stable changesets. The former mixed `electron-sdk-alpha.md` now releases **core only**, for the new context-safe flags and batch-retention hooks.
-- Set each next Electron `x.y.z-alpha.N` version deliberately in a reviewed PR, with a short user-facing release note in that PR. The manifest's `publishConfig` fixes public access, the npm registry and the `alpha` dist-tag as defense in depth. Pack with pnpm so `workspace:^` becomes the real registry `^<workspace version>` dependency; do not bundle unreleased core as a workaround.
+- Set each next Electron `x.y.z` version deliberately in a reviewed PR, with a short user-facing release note in that PR. The manifest's `publishConfig` fixes public access, the npm registry and the `alpha` dist-tag as defense in depth. Pack with pnpm so `workspace:^` becomes the real registry `^<workspace version>` dependency; do not bundle unreleased core as a workaround.
 - Stable/GA onboarding (removing the ignore, adding the stable matrix entry, changeset/version policy and `latest` promotion) requires a separate review. This workflow never performs it. Electron needs no CDN publication.
 
 #### External release gates (not established by this PR)

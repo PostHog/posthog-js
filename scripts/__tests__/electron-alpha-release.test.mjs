@@ -14,7 +14,7 @@ const getReleasePlan = createRequire(require.resolve('@changesets/cli/package.js
 
 const manifest = {
     name: packageName,
-    version: '0.1.0-alpha.0',
+    version: '0.1.0',
     dependencies: { '@posthog/core': '^1.67.3', '@posthog/browser-common': '^0.10.9' },
 }
 const now = Date.parse('2026-11-20T00:00:00Z')
@@ -35,11 +35,12 @@ function mockRegistry({ target = null, age = 8, missing = false, status = 200 } 
     }
 }
 
-test('only the reviewed Electron alpha version with external stable lower bounds is accepted', () => {
+test('only an exact reviewed x.y.z version with external stable lower bounds is accepted', () => {
     validateManifest(manifest, manifest.version)
-    for (const version of ['0.1.0', '0.1.0-beta.0', '0.1.0-alpha', '0.1.0-alpha.01', 'latest', '0.1.0-alpha.1']) {
-        assert.throws(() => validateManifest(manifest, version))
+    for (const version of ['0.1.0-alpha.0', '0.1.0-beta.0', '0.1.0+build', 'v0.1.0', '00.1.0', 'latest']) {
+        assert.throws(() => validateManifest({ ...manifest, version }, version), /Only exact x\.y\.z versions/)
     }
+    assert.throws(() => validateManifest(manifest, '0.1.1'), /Commit and requested version must match/)
     for (const patch of [
         { name: '@posthog/core' },
         { private: true },
@@ -98,15 +99,11 @@ test('stable release discovery deliberately excludes Electron while retaining co
     const plan = await getReleasePlan(process.cwd())
     for (const release of plan.releases.filter((release) => release.name === packageName)) {
         assert.equal(release.type, 'none')
-        assert.equal(
-            release.newVersion,
-            release.oldVersion,
-            'Dependency updates must not stabilize the Electron version'
-        )
+        assert.equal(release.newVersion, release.oldVersion, 'Dependency updates must not version Electron')
     }
 })
 
-test('release planning works without Git refs and does not stabilize ignored Electron dependencies', async () => {
+test('release planning works without Git refs and keeps the ignored Electron version unchanged', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'electron-alpha-plan-'))
     const json = (path, value) => writeFileSync(join(directory, path), JSON.stringify(value))
     try {
@@ -118,7 +115,7 @@ test('release planning works without Git refs and does not stabilize ignored Ele
         json('packages/core/package.json', { name: '@posthog/core', version: '1.0.0' })
         json('packages/electron/package.json', {
             name: packageName,
-            version: '0.1.0-alpha.0',
+            version: '0.1.0',
             dependencies: { '@posthog/core': 'workspace:^' },
         })
         json('.changeset/config.json', {
@@ -130,7 +127,7 @@ test('release planning works without Git refs and does not stabilize ignored Ele
         assert.equal(plan.releases.find(({ name }) => name === '@posthog/core')?.newVersion, '1.0.1')
         for (const release of plan.releases.filter(({ name }) => name === packageName)) {
             assert.equal(release.type, 'none')
-            assert.equal(release.newVersion, '0.1.0-alpha.0')
+            assert.equal(release.newVersion, '0.1.0')
         }
     } finally {
         rmSync(directory, { recursive: true, force: true })
@@ -166,6 +163,11 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
     for (const action of workflow.matchAll(/uses: ([^\n]+)/g)) assert.match(action[1], /@[a-f0-9]{40} #/)
     const pkg = JSON.parse(readFileSync('packages/electron/package.json', 'utf8'))
     assert.notEqual(pkg.private, true)
+    assert.match(pkg.version, /^\d+\.\d+\.\d+$/)
+    for (const example of ['examples/example-electron', 'examples/example-electron/packaging']) {
+        const manifest = JSON.parse(readFileSync(join(example, 'package.json'), 'utf8'))
+        assert.equal(manifest.dependencies[packageName], pkg.version)
+    }
     assert.equal(pkg.publishConfig.tag, 'alpha')
     assert.equal(pkg.publishConfig.registry, 'https://registry.npmjs.org')
     assert.ok(pkg.files.includes('MIGRATION.md'))

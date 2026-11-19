@@ -14,7 +14,7 @@
         "test:builder": "node package-test.mjs builder"
     },
     "dependencies": {
-        "@posthog/electron": "0.1.0-alpha.0"
+        "@posthog/electron": "0.1.0"
     },
     "devDependencies": {
         "@electron-forge/core": "8.0.1",

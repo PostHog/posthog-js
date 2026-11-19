@@ -8,11 +8,10 @@ import { pathToFileURL } from 'node:url'
 
 export const registry = 'https://registry.npmjs.org'
 export const packageName = '@posthog/electron'
-const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
-const alphaVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-alpha\.(0|[1-9]\d*)$/
+const plainVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 
 export function validateManifest(manifest, version) {
-    assert.match(version, alphaVersion, 'Only exact alpha.N versions are permitted')
+    assert.match(version, plainVersion, 'Only exact x.y.z versions are permitted')
     assert.equal(manifest.name, packageName)
     assert.equal(manifest.version, version, 'Commit and requested version must match; no CI version rewriting')
     assert.ok(!manifest.private, 'Alpha must be publishable')
@@ -20,7 +19,7 @@ export function validateManifest(manifest, version) {
     assert.ok(!manifest.bundledDependencies && !manifest.bundleDependencies, 'No bundled dependencies')
     for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
         assert.ok(
-            range.startsWith('^') && stableVersion.test(range.slice(1)),
+            range.startsWith('^') && plainVersion.test(range.slice(1)),
             `${name}: require a packed ^stable lower bound`
         )
     }
@@ -61,7 +60,7 @@ function git(...args) {
 
 export function validateSource(sha, version) {
     assert.match(sha, /^[a-f0-9]{40}$/, 'A full immutable source SHA is required')
-    assert.match(version, alphaVersion)
+    assert.match(version, plainVersion, 'Only exact x.y.z versions are permitted')
     assert.equal(git('rev-parse', `${sha}^{commit}`), sha)
     git('merge-base', '--is-ancestor', sha, 'origin/main')
     const manifest = JSON.parse(git('show', `${sha}:packages/electron/package.json`))

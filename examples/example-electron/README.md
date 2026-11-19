@@ -1,6 +1,6 @@
 # Electron example
 
-A real Electron app using `@posthog/electron` (`0.1.0-alpha.0`), with one main-process SDK owner and a sandboxed renderer facade. No project token is required: by default a local HTTP receiver prints captured events in the terminal and returns an `electron-example` flag (`local-variant`) with a JSON payload.
+A real Electron app using `@posthog/electron` (`0.1.0`), with one main-process SDK owner and a sandboxed renderer facade. No project token is required: by default a local HTTP receiver prints captured events in the terminal and returns an `electron-example` flag (`local-variant`) with a JSON payload.
 
 This demonstrates explicit main/renderer capture, shared identify/reset, groups, registered properties, consent, feature flags, handled JavaScript exceptions, and flushing. It does **not** demonstrate or claim support for session replay, native crashes, surveys, product tours, or browser autocapture.
 
