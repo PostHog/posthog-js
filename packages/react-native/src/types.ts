@@ -294,8 +294,9 @@ export type PostHogSessionReplayConfig = {
    * Schedule screenshot image capture on a background queue.
    * iOS only
    *
-   * @deprecated Only `@posthog/react-native-plugin` 2.x uses it. posthog-ios 4.0, which plugin 3.0.0 and later
-   * use, removed background capture, so those plugins record with `'standard'` and log a message. Use
+   * @deprecated Only `@posthog/react-native-plugin` 2.x and the legacy `posthog-react-native-session-replay`
+   * package use it. posthog-ios 4.0, which plugin 3.0.0 and later use, removed background capture, so those
+   * plugins record with `'standard'` and log a message. Use
    * `iOSCaptureMethod: 'gpu'` for less main-thread time. Ignored when `iOSCaptureMethod` is set.
    * @default false
    */
