@@ -14,7 +14,9 @@ const message = (sessionId: string, windowId = 'window'): SnapshotMessage => ({
     properties: { $session_id: sessionId, $window_id: windowId, $snapshot_data: [{ type: 2 }], $snapshot_bytes: 10 },
 })
 
-const decode = async (request: Request): Promise<Array<{ properties: Record<string, unknown>; sent_at: string }>> => {
+const decode = async (
+    request: Request
+): Promise<Array<{ uuid: string; properties: Record<string, unknown>; sent_at: string }>> => {
     const body = request.init.body
     if (typeof body === 'string') {
         return JSON.parse(
@@ -110,6 +112,28 @@ describe('snapshot delivery', () => {
         }
 
         expect(requests.length).toBe(2)
+    })
+
+    it('keeps a failed batch until its retry interval when another snapshot arrives', async () => {
+        let attempts = 0
+        const { delivery, requests } = setup(() => (++attempts === 1 ? 503 : 200))
+        const failed = message('s1')
+        const attemptsOf = async (uuid: string): Promise<number> =>
+            (await Promise.all(requests.map(decode))).filter((events) => events.some((event) => event.uuid === uuid))
+                .length
+        vi.useFakeTimers()
+        try {
+            delivery.enqueue(failed, 10)
+            await vi.advanceTimersByTimeAsync(2_000)
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(0)
+            expect(await attemptsOf(failed.uuid)).toBe(1)
+
+            await vi.advanceTimersByTimeAsync(1_000)
+            expect(await attemptsOf(failed.uuid)).toBe(2)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('drops client errors without retrying', async () => {
