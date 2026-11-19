@@ -4,7 +4,7 @@ export default async function handler(_req, res) {
   let captured
   const client = new PostHog('phc_integration', {
     flushInterval: 0,
-    before_send(event) {
+    beforeSend(event) {
       captured = event
       return null
     },

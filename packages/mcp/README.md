@@ -93,7 +93,80 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
   does not, and there is no setting we can reach from inside the server. On that leg, expect
   `$mcp_client_name` and `$mcp_client_version` to be absent for `2025-11-25` traffic — the protocol
   version still arrives, because clients send it on the `MCP-Protocol-Version` header of every
-  request.
+  request. A fetch-style handler can mint the token outside the server instead: wrap it in
+  `withMcpSessionHeader`, as in the [Vercel `mcp-handler`](#vercel-mcp-handler) setup below.
+
+### Vercel `mcp-handler`
+
+[`mcp-handler`](https://github.com/vercel/mcp-handler) builds a fresh `McpServer` for every request
+and passes it to your callback, so call `instrument()` there. Wrap the handler in
+`withMcpSessionHeader` to keep one session per client on the `2025-11-25` protocol: mcp-handler
+streams the `initialize` response, so the session token has to be added outside the server.
+
+```ts
+// app/api/[transport]/route.ts
+import { createMcpHandler, withMcpAuth } from 'mcp-handler'
+import { PostHog, instrument, withMcpSessionHeader } from '@posthog/mcp'
+import { z } from 'zod'
+import { verifyToken } from './auth' // your token check, returning mcp-handler's AuthInfo
+
+const posthog = new PostHog(process.env.POSTHOG_API_KEY!, { host: 'https://us.i.posthog.com' })
+
+const handler = createMcpHandler((server) => {
+  instrument(server, posthog, {
+    // withMcpAuth puts the verified token on extra.http.authInfo
+    identify: async (_request, extra) => {
+      const auth = (extra?.http as { authInfo?: { clientId: string } } | undefined)?.authInfo
+      return auth ? { distinctId: auth.clientId } : null
+    },
+  })
+  server.registerTool('echo', { inputSchema: z.object({ text: z.string() }) }, async ({ text }) => ({
+    content: [{ type: 'text', text }],
+  }))
+})
+
+// Auth outermost and required, so a request without a valid token is rejected before anything reads its body.
+const route = withMcpAuth(withMcpSessionHeader(handler), verifyToken, { required: true })
+export { route as GET, route as POST }
+```
+
+`instrument()` may come before or after the tools are registered. Every request instruments a new
+server, which is the same per-request cost the SDK v2 `createMcpHandler` already has.
+
+### FastMCP
+
+[FastMCP](https://github.com/punkpeye/fastmcp) builds a new server for every session, or for every
+request when stateless, inside the framework. Hand `instrumentFastMCP` the `fastmcp` module before
+you start the server, and every one of those servers is instrumented:
+
+```ts
+import * as fastmcp from 'fastmcp'
+import { PostHog, getRequestHeaders, instrumentFastMCP } from '@posthog/mcp'
+
+const posthog = new PostHog(process.env.POSTHOG_API_KEY!, { host: 'https://us.i.posthog.com' })
+
+instrumentFastMCP(fastmcp, posthog, {
+  identify: async (_request, extra) => {
+    const token = String(getRequestHeaders(extra)?.authorization ?? '').replace(/^Bearer\s+/i, '')
+    return token ? { distinctId: userIdForToken(token) } : null
+  },
+})
+
+const server = new fastmcp.FastMCP({ name: 'my-server', version: '1.0.0' })
+// server.addTool(...)
+await server.start({
+  transportType: 'httpStream',
+  httpStream: { port: 8080, stateless: true, enableJsonResponse: true },
+})
+```
+
+- Stateless servers need `enableJsonResponse: true` to keep one session per client, for the reason
+  given in [Streamable HTTP](#streamable-http-set-enablejsonresponse-true).
+- FastMCP's HTTP layer does not pass request headers to the server, so `instrumentFastMCP` puts the
+  headers of the HTTP request back on `extra.requestInfo.headers` for your callbacks.
+- FastMCP rewrites a thrown error to `Tool '<name>' execution failed: <message>`, and that is the
+  `$mcp_error_message` you see.
+- It hooks the module, so it covers every FastMCP server in the process with the same options.
 
 ### Reading request headers in a callback
 
@@ -225,6 +298,39 @@ const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN,
 
 Omit `serverBuild` when the deployment does not provide a reliable value.
 `PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
+
+### Per-event options (`eventOptions`)
+
+`eventOptions` sets posthog-node per-event options, such as `process_person_profile`, on MCP events.
+Give `instrument()` a callback for every auto-captured event, or pass `eventOptions` per call to
+`analytics.capture()` and to the `PostHogMCP` capture methods. The callback runs only for
+auto-captured events, since `analytics.capture()` has no request to pass it. A failed call's
+`$exception` event gets the same options.
+
+```ts
+const analytics = instrument(server, posthog, {
+  // Process persons for anonymous sessions too
+  eventOptions: (request, extra) => ({ process_person_profile: true }),
+})
+
+await analytics.capture({ event: 'report_exported', eventOptions: { process_person_profile: false } })
+
+posthogMCP.captureToolCall({
+  toolName: 'search_docs',
+  sessionId,
+  eventOptions: { process_person_profile: true },
+})
+```
+
+Events from a session with no resolved identity are personless by default: they carry the
+`process_person_profile: false` option. An explicit `process_person_profile` in `eventOptions` wins
+over that default.
+
+`beforeSend` receives the options as `event.options` and can change them. The SDK sends what it
+returns. On posthog-node 6.x.x, the client's own `beforeSend` sees them too. posthog-node 5.x.x has no
+per-event options, so the SDK sends the known options the way that version reads them and drops
+other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
+`options` field instead of `eventOptions`.
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
@@ -401,6 +507,15 @@ Whether the workaround costs you anything depends on your stack: instrumenting t
 skips the high-level tool registry, so tool descriptions and callback-level wrapping come only from
 what is advertised over `tools/list`. If your framework never calls `registerTool()` — `@rekog/mcp-nest`
 does not — the registry is empty and the two calls behave the same.
+
+## Library identity (`$lib`)
+
+`instrument()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
+
+- Give MCP analytics its own `PostHog` client if your app also captures other events.
+- With posthog-node 6.x.x, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5.x.x, an event captured just before `instrument()` can get the MCP label too.
+- With posthog-node 6.x.x, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
+- To find MCP traffic, filter on `$mcp_*` events or `$mcp_source = 'posthog_mcp_analytics'` rather than `$lib`.
 
 ## Developing locally
 

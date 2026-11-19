@@ -469,3 +469,26 @@ test('main keeps the release concurrency group and other branches and dry runs g
         /\nconcurrency:\n {4}group: >-\n {8}\$\{\{ inputs.maintenance_dry_run == true && format\('release-dry-run-\{0\}', github.ref_name\) \|\|\n {8}github.ref_name != 'main' && format\('release-\{0\}', github.ref_name\) \|\| 'release' \}\}\n {4}cancel-in-progress: false\n/
     )
 })
+
+test('posthog-js npm publishing verifies extension hashes against the uploaded S3 artifact', () => {
+    const publish = job(release, 'publish')
+    const install = publish.indexOf('name: Install and build dependencies')
+    const download = publish.indexOf('name: Download posthog-js S3 artifact')
+    const verify = publish.indexOf('name: Require npm extension hashes to match the S3 artifact')
+    const npmPublish = publish.indexOf('name: Publish ${{ matrix.package.name }} to NPM')
+    assert.ok(install < download && download < verify && verify < npmPublish)
+    assert.match(
+        publish,
+        /name: \$\{\{ needs.recover-posthog-js-s3.result == 'success' && 's3-recovery-posthog-js-dist' \|\| 'posthog-js-dist' \}\}/
+    )
+    assert.match(publish, /embed-extension-integrity\.mjs verify "\$RUNNER_TEMP\/posthog-js-s3-dist"/)
+    // npm publishing can be retried after S3 succeeded, so the artifacts must outlive one day.
+    assert.match(
+        job(recovery, 'build-s3-artifacts'),
+        /name: s3-recovery-posthog-js-dist\n(?: {18}.*\n)*? {18}retention-days: 30\n/
+    )
+    assert.match(job(release, 'build-s3-artifacts'), /name: posthog-js-dist\n(?: {18}.*\n)*? {18}retention-days: 30\n/)
+    for (const id of ['publish-posthog-js', 'publish-recovered-posthog-js']) {
+        assert.match(job(release, id), /steps: \*publish-package-steps/)
+    }
+})

@@ -15,6 +15,7 @@ import {
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
+  PostHogFeatureFlagsResponse,
   FeatureFlagDetail,
   SurveyResponse,
   PostHogFetchResponse,
@@ -413,6 +414,22 @@ export abstract class PostHogCoreStateless {
     return undefined
   }
 
+  /**
+   * The `/flags` response this client requests and how it reads it. `version` is sent as the `v`
+   * query parameter, and `read` reads the response body that version selects. The two are one
+   * seam, so a client cannot request one version and read another. The default requests `v=2`
+   * and reads the v1 and v2 responses. This is an SDK seam, not a user option.
+   */
+  protected getFlagsResponseFormat(): {
+    version: 2 | 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    return {
+      version: 2,
+      read: (body) => normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse),
+    }
+  }
+
   // This is our abstracted storage. Each implementation should handle its own
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
@@ -511,6 +528,17 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  /**
+   * Listens for an SDK event and returns a function that removes the listener.
+   * The SDK does not throw for failures in background work, so listen for them on the `'error'` event.
+   *
+   * @example
+   * ```js
+   * posthog.on('error', (err) => {
+   *   console.error('PostHog had an error', err)
+   * })
+   * ```
+   */
   on(event: string, cb: (...args: any[]) => void): () => void {
     return this._events.on(event, cb)
   }
@@ -544,7 +572,9 @@ export abstract class PostHogCoreStateless {
     this.removeDebugCallback?.()
 
     if (enabled) {
-      const removeDebugCallback = this.on('*', (event, payload) => this._logger.info(event, payload))
+      const removeDebugCallback = this.on('*', (event, payload) =>
+        this._logger.info(event, this.describeDebugPayload(payload))
+      )
       this.removeDebugCallback = () => {
         removeDebugCallback()
         this.removeDebugCallback = undefined
@@ -554,6 +584,11 @@ export abstract class PostHogCoreStateless {
 
   get isDebug(): boolean {
     return !!this.removeDebugCallback
+  }
+
+  /** What debug mode logs for an emitted event's payload. SDKs whose events can carry sensitive data log a summary instead. */
+  protected describeDebugPayload(payload: any): any {
+    return payload
   }
 
   get isDisabled(): boolean {
@@ -806,8 +841,9 @@ export abstract class PostHogCoreStateless {
   ): Promise<GetFlagsResult> {
     await this._initPromise
 
+    const responseFormat = this.getFlagsResponseFormat()
     const configParam = fetchConfig ? '&config=true' : ''
-    const url = `${this.host}/flags/?v=2${configParam}`
+    const url = `${this.host}/flags/?v=${responseFormat.version}${configParam}`
     const requestData: Record<string, any> = {
       token: this.projectToken,
       distinct_id: distinctId,
@@ -857,7 +893,7 @@ export abstract class PostHogCoreStateless {
       { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
       this.featureFlagsRequestTimeoutMs
     )
-      .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
+      .then((response) => ({ success: true as const, response: responseFormat.read(response) }))
       .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
         return { success: false, error: this.categorizeRequestError(error) }
@@ -1352,7 +1388,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
     // Top-level `type` is deprecated and a no-op for batch ingestion.
     // Top-level `library` and `library_version` are deprecated; `$lib` and
     // `$lib_version` in properties are the canonical SDK metadata fields.
@@ -1668,6 +1704,10 @@ export abstract class PostHogCoreStateless {
     this._events.emit('flush', sentMessages)
   }
 
+  protected shouldRetainBatchOnError(error: unknown): boolean {
+    return error instanceof PostHogFetchNetworkError
+  }
+
   private async _flushRoute(route: string, sentMessages: any[]): Promise<void> {
     const queueKey = this.persistedQueueKeyForRoute(route)
     let queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
@@ -1739,7 +1779,7 @@ export abstract class PostHogCoreStateless {
 
         // depending on the error type, eg a malformed JSON or broken queue, it'll always return an error
         // and this will be an endless loop, in this case, if the error isn't a network issue, we always remove the items from the queue
-        if (!(err instanceof PostHogFetchNetworkError)) {
+        if (!this.shouldRetainBatchOnError(err)) {
           await persistQueueChange()
         }
         this._events.emit('error', err)

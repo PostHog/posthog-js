@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.20.0",
+  "version": "8.21.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.18",
-    "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
+    "@anthropic-ai/sdk": ">=0.112.3 <2.0.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "2.18.0",
@@ -82,10 +82,10 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.112.3 <0.135.0",
+    "@anthropic-ai/sdk": ">=0.112.3 <2.0.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
-    "@google/genai": "^1.52.0 || ^2.18.0",
+    "@google/genai": "^1.52.0 || ^2.18.0 || ^3.0.0",
     "genkit": "^1.0.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0 || ^7.0.0",
@@ -94,7 +94,7 @@
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@openai/agents": "^0.8.0",
     "langchain": ">=1.5.5 <2.0.0",
-    "posthog-node": "^5.0.0"
+    "posthog-node": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {

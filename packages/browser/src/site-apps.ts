@@ -24,7 +24,7 @@ export class SiteApps implements Extension {
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.opt_in_site_apps
+        return !!this._instance.config.opt_in_site_apps && !this._instance.config.require_subresource_integrity
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
@@ -43,6 +43,9 @@ export class SiteApps implements Extension {
     }
 
     initialize() {
+        if (this._instance.config.opt_in_site_apps && !this.isEnabled) {
+            logger.critical('opt_in_site_apps is ignored: require_subresource_integrity disables site apps')
+        }
         if (this.isEnabled) {
             const stop = this._instance._addCaptureHook(this._eventCollector.bind(this))
             this._stopBuffering = () => {
