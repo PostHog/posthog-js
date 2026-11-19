@@ -318,6 +318,25 @@ describe('conversations', () => {
     })
 })
 
+describe('conversations with several clients', () => {
+    it('keeps the widget of the client that created it', async () => {
+        const config = widgetConfig({ widgetEnabled: true })
+        const owner = await loaded((await createClient({ conversations: config })).client)
+        await vi.waitFor(() => expect(owner.isVisible()).toBe(true))
+        const widget = document.getElementById('ph-conversations-widget-container')
+
+        const { client } = await createClient({ conversations: config })
+        await client.resolveExtension('conversations')
+        // Let the renderer finish loading for the second client.
+        await vi.waitFor(() => expect(client.conversations?.getUnavailableReason()).not.toBe('initializing'))
+        client.conversations?.hide()
+        await client.dispose()
+
+        expect(document.getElementById('ph-conversations-widget-container')).toBe(widget)
+        expect(owner.isVisible()).toBe(true)
+    })
+})
+
 describe('conversations identity', () => {
     it('uses a verified identity for requests and returns to the widget session when cleared', async () => {
         const { client, requests, events } = await createClient({ conversations: widgetConfig() })
