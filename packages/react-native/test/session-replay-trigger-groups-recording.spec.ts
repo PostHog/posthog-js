@@ -955,6 +955,181 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(replay.startRecording).not.toHaveBeenCalled()
     })
 
+    it('retries a refused start on a timer and on flags reloads, and stops once started', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(2)
+
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(3)
+
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(4)
+      expect(nativeRecording).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(60000)
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(4)
+    })
+
+    it('gives up retrying on the timer after the bounded delays', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(6)
+    })
+
+    it('does not spend the timer retry budget on event-driven retries', async () => {
+      currentSessionRecording = v2Config([
+        { id: 'g1', name: 'Taps', sampleRate: 1, conditions: { matchType: 'any', events: [{ name: 'tap' }] } },
+      ])
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      for (let i = 0; i < 6; i++) {
+        posthog.capture('tap')
+        await vi.advanceTimersByTimeAsync(0)
+        await waitForNativePluginEvaluation(posthog)
+        await vi.advanceTimersByTimeAsync(0)
+      }
+      expect(replay.startRecording).toHaveBeenCalledTimes(6)
+
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(nativeRecording).toBe(true)
+    })
+
+    it('gives a later wanted start a fresh timer retry budget after an off decision', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(6)
+
+      currentFlags = { 'replay-flag': false }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      await waitForNativePluginEvaluation(posthog)
+
+      rotateSession()
+      await vi.advanceTimersByTimeAsync(0)
+      await waitForNativePluginEvaluation(posthog)
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.startRecording).toHaveBeenCalledTimes(7)
+      expect(nativeRecording).toBe(false)
+
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(nativeRecording).toBe(true)
+    })
+
+    it('does not re-arm the timer retry from an evaluation in flight at shutdown', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      let release!: () => void
+      replay.startRecording.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = () => {
+              nativeRecording = nativeAccepts
+              resolve()
+            }
+          })
+      )
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+
+      void posthog.shutdown()
+      release()
+      await vi.advanceTimersByTimeAsync(1500)
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+    })
+
+    it('cancels the timer retry on stop', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog(replayOnlyOptions)
+      await posthog.ready()
+      await settle()
+
+      vi.useFakeTimers()
+      nativeAccepts = false
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+
+      await posthog.stopSessionRecording()
+      await vi.advanceTimersByTimeAsync(0)
+      const attempts = replay.startRecording.mock.calls.length
+      expect((posthog as any)._triggerGroupsStartRetry?.timer).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
+    })
+
     describe('the sampleRate sent to native', () => {
       const sampleRateAtSetup = (): number | undefined =>
         setup.mock.calls[0][2].sessionReplay.sdkReplayConfig.sampleRate
@@ -1076,6 +1251,45 @@ describe('PostHog RN session replay v2 trigger groups', () => {
 
         releaseConfig()
         await waitForExpect(2000, () => expect(replayEnabledAtSetup()).toEqual([true]))
+        expect(replay.startRecording).not.toHaveBeenCalled()
+      })
+
+      it('retries a start native refused on the instance push already brought up', async () => {
+        currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
+        nativeAccepts = false
+        holdConfig()
+
+        posthog = newPostHog()
+        await posthog.ready()
+        await waitForExpect(2000, () => expect(setup).toHaveBeenCalled())
+
+        releaseConfig()
+        await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+        await settle()
+        expect(nativeRecording).toBe(false)
+        expect(setup).toHaveBeenCalledTimes(1)
+
+        const refusedStarts = replay.startRecording.mock.calls.length
+        nativeAccepts = true
+        await waitForExpect(3000, () => expect(replay.startRecording.mock.calls.length).toBeGreaterThan(refusedStarts))
+        expect(nativeRecording).toBe(true)
+        expect(setup).toHaveBeenCalledTimes(1)
+      })
+
+      it('does not set native up or start it when the config arrives after shutdown', async () => {
+        currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
+        holdConfig()
+
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+
+        const shutdown = posthog.shutdown()
+        releaseConfig()
+        await shutdown
+        await settle()
+
+        expect(setup).not.toHaveBeenCalled()
         expect(replay.startRecording).not.toHaveBeenCalled()
       })
 
