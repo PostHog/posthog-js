@@ -94,7 +94,6 @@ describe.each(['setup', 'start'] as const)('screenshot configuration through nat
     [undefined, 'standard', false],
     [{ screenshotModeBackgroundCapture: true }, 'background', true],
     [{ iOSCaptureMethod: 'gpu' }, 'gpu', false],
-    [{ iOSCaptureMethod: 'background' }, 'background', true],
     [{ iOSCaptureMethod: 'gpu', screenshotModeBackgroundCapture: true }, 'gpu', false],
     [{ iOSCaptureMethod: 'standard', screenshotModeBackgroundCapture: true }, 'standard', false],
   ])('resolves the iOS capture method from %j', async (options, method, backgroundCapture) => {

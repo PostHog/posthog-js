@@ -3252,7 +3252,7 @@ export class PostHog extends PostHogCore {
           `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) captures with 'standard'.`
       )
     }
-    // Plugins before 3.0 only read the boolean.
+    // Plugins before 3.0 only read the boolean. Plugin 3.0 and later record 'background' with 'standard'.
     const screenshotModeBackgroundCapture = iOSCaptureMethod === 'background'
 
     let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs

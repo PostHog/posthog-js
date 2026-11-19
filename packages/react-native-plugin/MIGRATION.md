@@ -10,7 +10,7 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | --------------------------------------------------- | --------------------------------------------------------------- | --------------------- |
 | React Native (`react-native`, `react-native-macos`) | Any on Android, 0.71 on iOS                                     | 0.75 or later         |
 | iOS deployment target                               | 13.0                                                            | 15.0                  |
-| macOS deployment target                             | 10.15                                                           | 11.0                  |
+| macOS deployment target                             | 10.15                                                           | 12.0                  |
 | How `posthog-ios` is installed                      | CocoaPods trunk, or Swift Package Manager with `posthog.useSpm` | Swift Package Manager |
 | `posthog-ios` version                               | 3.x                                                             | 4.0                   |
 | `posthog-android` version                           | 3.x                                                             | 4.0                   |
@@ -48,7 +48,7 @@ Both edits are in generated files, so `npx expo prebuild --clean`, or an EAS bui
 
 **If ignored:** the Android build fails with `Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.1.0, but the compiler version 1.9.0 can read versions up to 2.0.0.`
 
-#### iOS 15 and macOS 11
+#### iOS 15 and macOS 12
 
 ```ruby
 # ios/Podfile: before
@@ -218,7 +218,7 @@ If you ship 3.0 and then go back to 2.x, 2.x sends the native crash reports and 
 - [ ] Your build machines use Xcode 26 or later.
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
 - [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later, and Expo apps keep that setting through `prebuild --clean`.
-- [ ] The iOS deployment target is 15.0 or later, and macOS is 11.0 or later if you ship it.
+- [ ] The iOS deployment target is 15.0 or later, and macOS is 12.0 or later if you ship it.
 - [ ] Full Swift Package Manager apps resolve `posthog-ios` 4.0.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
