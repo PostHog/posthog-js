@@ -646,6 +646,13 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       conditions: { matchType: 'any', flag: { flag: 'replay-flag' } },
     }
 
+    // Nothing else brings native up early, so the group's activation is what sets native up.
+    const replayOnlyOptions = {
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: false },
+    }
+
     it('sets native up with replay off and starts the recorder explicitly', async () => {
       currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
       await warmup()
@@ -692,6 +699,85 @@ describe('PostHog RN session replay v2 trigger groups', () => {
 
       expect(replayEnabledAtSetup()).toEqual([true])
       expect(replay.startRecording).not.toHaveBeenCalled()
+    })
+
+    describe('on a first launch with nothing cached', () => {
+      let releaseConfig: () => void
+
+      // Holds every response so the pre-config state can be observed, then delivers the config.
+      const holdConfig = (): void => {
+        const gate = new Promise<void>((resolve) => {
+          releaseConfig = resolve
+        })
+        const respond = (window.fetch as any).getMockImplementation() as (url: string) => Promise<unknown>
+        ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+          await gate
+          return respond(url)
+        })
+      }
+
+      it('never sets native up to record when the only v2 group is ineligible', async () => {
+        currentSessionRecording = v2Config([flagGroup])
+        currentFlags = { 'replay-flag': false }
+        holdConfig()
+
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+        expect(setup).not.toHaveBeenCalled()
+
+        releaseConfig()
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(replayEnabledAtSetup()).not.toContain(true)
+        expect(replay.startRecording).not.toHaveBeenCalled()
+      })
+
+      it('sets native up with replay off and starts the recorder once for an eligible v2 group', async () => {
+        currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
+        holdConfig()
+
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+        expect(setup).not.toHaveBeenCalled()
+        expect(replay.startRecording).not.toHaveBeenCalled()
+
+        releaseConfig()
+        await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+        await settle()
+
+        expect(replayEnabledAtSetup()).toEqual([false])
+        expect(replay.startRecording.mock.calls).toEqual([[true]])
+      })
+
+      it('sets native up with automatic replay only once a v1 config arrives', async () => {
+        currentSessionRecording = { endpoint: '/s/' }
+        holdConfig()
+
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+        expect(setup).not.toHaveBeenCalled()
+
+        releaseConfig()
+        await waitForExpect(2000, () => expect(replayEnabledAtSetup()).toEqual([true]))
+        expect(replay.startRecording).not.toHaveBeenCalled()
+      })
+
+      it('still brings native up for push with replay off before the config arrives', async () => {
+        currentSessionRecording = { endpoint: '/s/' }
+        holdConfig()
+
+        posthog = newPostHog()
+        await posthog.ready()
+        await waitForExpect(2000, () => expect(setup).toHaveBeenCalled())
+
+        expect(replayEnabledAtSetup()).toEqual([false])
+        expect(nativeRecording).toBe(false)
+        releaseConfig()
+      })
     })
   })
 })

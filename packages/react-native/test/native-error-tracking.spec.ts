@@ -1,7 +1,7 @@
 import { Platform } from 'react-native'
 import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
+import { setupFetch, setupReplayV1ConfigFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 const pluginVersion = vi.hoisted(() => ({ current: '2.12.0' as string | undefined }))
 
@@ -279,6 +279,7 @@ describe('native error tracking', () => {
   })
 
   it('passes both session replay and native error tracking config when both are enabled', async () => {
+    setupReplayV1ConfigFetch()
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
       flushInterval: 0,
@@ -292,9 +293,12 @@ describe('native error tracking', () => {
       expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
     })
 
+    // Native comes up for error tracking with replay off; replay resumes on it once the config arrives.
     const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
-    expect(pluginConfig.sessionReplay.enabled).toBe(true)
+    expect(pluginConfig.sessionReplay.enabled).toBe(false)
     expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
+    await waitForExpect(2000, () => expect(mockPlugin.startRecording).toHaveBeenCalledWith(true))
+    expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
 
     await posthog.shutdown()
   })
@@ -321,9 +325,10 @@ describe('native error tracking', () => {
 
     await posthog.ready()
 
-    // Linked flag is on: replay + error tracking arm in a single setup().
+    // Native comes up once for error tracking, and replay resumes on it when the linked flag is on.
     await waitForExpect(2000, () => {
       expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+      expect(mockPlugin.startRecording).toHaveBeenCalledTimes(1)
     })
     expect(mockPlugin.setup.mock.calls[0][2].errorTracking.nativeAutocapture).toBe(true)
 
@@ -337,7 +342,7 @@ describe('native error tracking', () => {
     // Linked flag flips back on -> recording resumes on the existing instance.
     recFlagValue = true
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(mockPlugin.startRecording).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(mockPlugin.startRecording).toHaveBeenCalledTimes(2))
     expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
 
     await posthog.shutdown()

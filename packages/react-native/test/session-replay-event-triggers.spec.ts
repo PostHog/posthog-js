@@ -89,7 +89,7 @@ describe('PostHog RN session replay event triggers', () => {
 
   // First launch caches the recording config (incl. eventTriggers) so the *next* launch evaluates
   // the trigger gate at bootstrap. Mirrors the warm-start pattern used by the linked-flag tests —
-  // a cold first launch starts replay optimistically before /flags returns, which the cache avoids.
+  // a cold first launch waits for the remote config before it evaluates any replay gate.
   const warmup = async (): Promise<void> => {
     const w = newPostHog()
     await w.ready()

@@ -358,6 +358,7 @@ describe('PostHog RN session replay follows consent', () => {
   })
 
   it('restarts replay on opt-in when an evaluation queued before optOut() stopped it', async () => {
+    await warmCache()
     let releaseStart: () => void = () => {}
     replay.start.mockImplementation(
       () =>

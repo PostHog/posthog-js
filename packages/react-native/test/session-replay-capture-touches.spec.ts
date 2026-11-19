@@ -1,7 +1,7 @@
 import { AppState, Linking } from 'react-native'
 import { PostHog, PostHogSessionReplayConfig } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { waitForExpect } from './test-utils'
+import { setupReplayV1ConfigFetch, waitForExpect } from './test-utils'
 
 const pluginVersion = vi.hoisted(() => ({ value: undefined as string | undefined }))
 
@@ -22,6 +22,13 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 
 const replay = OptionalReactNativePlugin as unknown as { start: vi.Mock; setup?: vi.Mock }
 
+// Push or native error tracking would bring native up with replay off before the config arrives.
+const replayOnlyOptions = {
+  capturePushNotificationSubscriptions: false,
+  capturePushNotificationOpened: false,
+  errorTracking: { autocapture: false },
+}
+
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
 
@@ -31,6 +38,7 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
 
   beforeEach(() => {
     vi.clearAllMocks()
+    setupReplayV1ConfigFetch()
     pluginVersion.value = undefined
     if (method === 'setup') {
       replay.setup = vi.fn(async () => {})
@@ -50,6 +58,7 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
         disableRemoteConfig: true,
         enableSessionReplay: true,
         flushInterval: 0,
+        ...replayOnlyOptions,
         sessionReplayConfig: captureTouches === undefined ? undefined : { captureTouches },
       })
       await posthog.ready()
@@ -77,6 +86,7 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
       disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
+      ...replayOnlyOptions,
       sessionReplayConfig,
     })
     await posthog.ready()
@@ -101,6 +111,7 @@ describe.each(['setup', 'start'] as const)('replay touch compatibility warnings 
 
   beforeEach(() => {
     vi.clearAllMocks()
+    setupReplayV1ConfigFetch()
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       status: 200,
       json: async () => ({}),
@@ -128,6 +139,7 @@ describe.each(['setup', 'start'] as const)('replay touch compatibility warnings 
       disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
+      ...replayOnlyOptions,
       sessionReplayConfig: { captureTouches },
     })
     posthog.debug(true)
