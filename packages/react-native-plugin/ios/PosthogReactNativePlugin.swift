@@ -6,6 +6,10 @@ private func hedgeLog(_ message: String) {
     print("[PostHog] \(message)")
 }
 
+private func logBackgroundCaptureRemoved() {
+    hedgeLog("Session replay background capture was removed in posthog-ios 4.0, recording with the standard capture method instead.")
+}
+
 #if !os(iOS)
     // Session replay is part of posthog-ios's iOS-only surface, so recording is a no-op on macOS.
     // Log once so a caller isn't left wondering why recording "started" but nothing arrives.
@@ -409,16 +413,20 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
             // posthog-react-native before iOSCaptureMethod only sends the boolean.
+            // posthog-ios 4.0 removed background capture, so 'background' and the older boolean record with `.standard`.
             switch sdkReplayConfig["iOSCaptureMethod"] as? String {
             case "gpu":
                 config.sessionReplayConfig.captureMethod = .gpu
             case "background":
-                config.sessionReplayConfig.captureMethod = .background
+                logBackgroundCaptureRemoved()
+                config.sessionReplayConfig.captureMethod = .standard
             case "standard":
                 config.sessionReplayConfig.captureMethod = .standard
             default:
-                let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-                config.sessionReplayConfig.captureMethod = screenshotModeBackgroundCapture ? .background : .standard
+                if sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false {
+                    logBackgroundCaptureRemoved()
+                }
+                config.sessionReplayConfig.captureMethod = .standard
             }
 
             let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
