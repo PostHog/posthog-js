@@ -123,7 +123,8 @@ export const loadToolbar = (
         })
         watchPageReplacement(() => {
             win.ph_toolbar_state = UNINITIALIZED
-            loadToolbar(params, instance, logger, loadScript, watchPageReplacement)
+            // This watcher keeps running, so a reload does not register another one.
+            loadToolbar(params, instance, logger, loadScript, () => {})
         })
     }
     return true
