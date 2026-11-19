@@ -2006,23 +2006,31 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    /**
+     * Calls back with cached early access features, or fetches, caches and delivers them.
+     *
+     * @param options.ignoreFailedResponses Keep the cache and skip the callback unless the request succeeds with a
+     *        feature list.
+     */
     getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
         force_reload = false,
-        stages?: EarlyAccessFeatureStage[]
+        stages?: EarlyAccessFeatureStage[],
+        options?: { ignoreFailedResponses?: boolean }
     ): void {
         const existing_early_access_features = this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES)
         if (existing_early_access_features && !force_reload) {
             callback(existing_early_access_features)
             return
         }
-        void this._getEarlyAccessFeatures(callback, stages)
+        void this._getEarlyAccessFeatures(callback, stages, !!options?.ignoreFailedResponses)
     }
 
     // TODO: Consider moving early access features to their own extension.
     private async _getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
-        stages?: EarlyAccessFeatureStage[]
+        stages: EarlyAccessFeatureStage[] | undefined,
+        ignoreFailedResponses: boolean
     ): Promise<void> {
         const client = this._client
         if (!client) {
@@ -2044,6 +2052,9 @@ export class PostHogFeatureFlags implements Extension {
                 return
             }
             earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
+            if (ignoreFailedResponses && (response.statusCode !== 200 || !isArray(earlyAccessFeatures))) {
+                return
+            }
             this._set({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
         } catch (error) {
             this._logger.error('Early access feature request failed', error)
