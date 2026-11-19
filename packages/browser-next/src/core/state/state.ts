@@ -99,7 +99,7 @@ const compareRevisions = (left: string | undefined, right: string | undefined): 
     return left.length === right.length ? (left > right ? 1 : -1) : left.length > right.length ? 1 : -1
 }
 
-const incrementRevision = (revision: string): string => {
+export const incrementRevision = (revision: string): string => {
     const digits = revision.split('')
     for (let index = digits.length - 1; index >= 0; index--) {
         if (digits[index] !== '9') {

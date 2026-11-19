@@ -11,7 +11,7 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
 } from '@posthog/browser-common/constants'
 import { createId } from '../primitives/id'
-import { CLIENT_KV_NAMESPACE } from '../core/state/state'
+import { CLIENT_KV_NAMESPACE, incrementRevision } from '../core/state/state'
 import { isValidDistinctId } from '../products/analytics/analytics-core'
 import { REGISTERED_PROPERTIES } from '../products/analytics/properties/analytics-properties'
 import type { CookiePersistence, StorageLike } from '../core/types'
@@ -192,6 +192,14 @@ const mergeCookie = (local: string | null, cookie: Values | undefined): string |
         }
     } else if (validRevision) {
         merged.sessionReset = validRevision
+    } else if (
+        sessionId === null &&
+        typeof knownSession?.revision === 'string' &&
+        REVISION.test(knownSession.revision)
+    ) {
+        // posthog-js ends a session with an empty one and no revision, on reset() or after an idle timeout. It
+        // supersedes the session this context knows, so the next event starts a new one.
+        merged.sessionReset = incrementRevision(knownSession.revision)
     }
     return JSON.stringify(merged)
 }
