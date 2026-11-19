@@ -1,5 +1,6 @@
 import { createPostHog } from '@posthog/browser'
-import type { BrowserFetch, Extension, IPostHog, RemoteConfig } from '@posthog/browser'
+import type { BrowserFetch, IPostHog, RemoteConfig } from '@posthog/browser'
+import { group } from '@posthog/browser/groups'
 
 import './style.css'
 import { EventQueueVisualizer } from './queue-visualizer'
@@ -34,7 +35,6 @@ app.innerHTML = `
     <main>
         <section class="status-strip" aria-label="SDK status">
             <div><span>Client</span><strong id="client-status">not initialized</strong></div>
-            <div><span>Analytics</span><strong id="analytics-status">not installed</strong></div>
             <div><span>Network</span><strong id="network-status">${navigator.onLine ? 'online' : 'offline'}</strong></div>
             <div><span>Consent</span><strong id="consent-status">—</strong></div>
         </section>
@@ -51,8 +51,6 @@ app.innerHTML = `
                 <label>Flush interval (ms)<input id="flush-interval" type="number" min="0" value="3000" /></label>
             </div>
             <div class="checks">
-                <label><input id="install-on-init" type="checkbox" /> Install analytics explicitly on initialize</label>
-                <label><input id="disable-auto" type="checkbox" /> Disable automatic lazy analytics</label>
                 <label><input id="gzip" type="checkbox" checked /> Advertise native gzip</label>
                 <label><input id="debug" type="checkbox" checked /> SDK debug logs</label>
             </div>
@@ -286,12 +284,6 @@ function enqueue(label: string, action: () => Promise<void> | void): void {
         })
 }
 
-const requireAnalytics = () => {
-    const analytics = requireClient().analytics
-    if (!analytics) throw new Error('Analytics is unavailable')
-    return analytics
-}
-
 async function initialize(): Promise<void> {
     if (!PROJECT_TOKEN) {
         throw new Error('Missing VITE_POSTHOG_PROJECT_TOKEN. Start the playground with pnpm dev:real.')
@@ -304,38 +296,22 @@ async function initialize(): Promise<void> {
     deliveryOnline = navigator.onLine
 
     const host = element<HTMLInputElement>('host').value.trim() || DEFAULT_HOST
-    const installExplicitly = element<HTMLInputElement>('install-on-init').checked
-    const extensions: Extension[] = []
-    if (installExplicitly) {
-        const { analytics } = await import('@posthog/browser/analytics')
-        extensions.push(
-            analytics({
-                flushAt: numberValue('flush-at', 3),
-                flushInterval: numberValue('flush-interval', 3_000),
-            })
-        )
-    }
     const posthog = await createPostHog({
         projectToken: PROJECT_TOKEN,
         apiHost: host,
         capturePageview: false,
         disableBotDetection: true,
         debug: element<HTMLInputElement>('debug').checked,
-        analytics:
-            installExplicitly || element<HTMLInputElement>('disable-auto').checked
-                ? false
-                : {
-                      flushAt: numberValue('flush-at', 3),
-                      flushInterval: numberValue('flush-interval', 3_000),
-                  },
-        extensions,
+        analytics: {
+            flushAt: numberValue('flush-at', 3),
+            flushInterval: numberValue('flush-interval', 3_000),
+        },
         fetch: sandboxFetch,
         consentPersistenceName: '__ph_browser_next_real_sandbox_consent',
         remoteConfig: remoteConfig(element<HTMLInputElement>('gzip').checked),
     })
-    const installedAnalytics = await posthog.resolveExtension('analytics')
-    installedAnalytics?.registerDynamicEventProperties(() => syntheticProperties())
-    installedAnalytics?.onEvent(({ event, properties }) => {
+    posthog.registerDynamicEventProperties(() => syntheticProperties())
+    posthog.onEvent(({ event, properties }) => {
         queue.admit(event, properties)
         log('event', `admitted ${event}`)
     })
@@ -355,7 +331,6 @@ function requireClient(): IPostHog {
 
 function refreshStatus(): void {
     element<HTMLElement>('client-status').textContent = client ? 'ready' : 'not initialized'
-    element<HTMLElement>('analytics-status').textContent = client?.analytics ? 'installed' : 'not installed'
     element<HTMLElement>('network-status').textContent = deliveryOnline ? 'online' : 'paused by offline hint'
     element<HTMLElement>('consent-status').textContent = client ? (client.hasOptedOut() ? 'opted out' : 'allowed') : '—'
     element<HTMLElement>('distinct-id').textContent = client?.distinctId || '—'
@@ -366,16 +341,13 @@ function refreshStatus(): void {
 
 element<HTMLButtonElement>('initialize').addEventListener('click', () => enqueue('Initialize', initialize))
 element<HTMLButtonElement>('capture').addEventListener('click', () =>
-    enqueue('Capture', async () => {
-        await requireAnalytics().capture(eventName(), syntheticProperties(configuredProperties()))
+    enqueue('Capture', () => {
+        requireClient().capture(eventName(), syntheticProperties(configuredProperties()))
     })
 )
 element<HTMLButtonElement>('capture-immediate').addEventListener('click', () =>
     enqueue('Capture immediate', async () => {
-        const summary = await requireAnalytics().captureImmediate(
-            eventName(),
-            syntheticProperties(configuredProperties())
-        )
+        const summary = await requireClient().captureImmediate(eventName(), syntheticProperties(configuredProperties()))
         log(
             summary.allPersisted ? 'sandbox' : 'error',
             `Immediate capture submitted ${summary.submitted}; ${summary.notPersisted} not persisted`
@@ -383,17 +355,17 @@ element<HTMLButtonElement>('capture-immediate').addEventListener('click', () =>
     })
 )
 element<HTMLButtonElement>('capture-five').addEventListener('click', () =>
-    enqueue('Queue five', async () => {
-        const analytics = requireAnalytics()
+    enqueue('Queue five', () => {
+        const posthog = requireClient()
         const properties = configuredProperties()
         for (let index = 1; index <= 5; index++) {
-            await analytics.capture(eventName(), syntheticProperties({ ...properties, batch_index: index }))
+            posthog.capture(eventName(), syntheticProperties({ ...properties, batch_index: index }))
         }
     })
 )
 element<HTMLButtonElement>('capture-large').addEventListener('click', () =>
-    enqueue('Capture large event', async () => {
-        await requireAnalytics().capture(
+    enqueue('Capture large event', () => {
+        requireClient().capture(
             `${TEST_EVENT_PREFIX}browser_next_large_payload`,
             syntheticProperties({ payload: 'browser-next-compression-'.repeat(700) })
         )
@@ -406,22 +378,19 @@ element<HTMLButtonElement>('flush').addEventListener('click', () =>
     })
 )
 element<HTMLButtonElement>('identify').addEventListener('click', () =>
-    enqueue('Identify', async () => {
+    enqueue('Identify', () => {
         const suffix = safeSuffix(element<HTMLInputElement>('distinct-id-suffix').value, `browser-next-${randomPart}`)
-        await requireAnalytics().identify(
-            `${TEST_DISTINCT_ID_PREFIX}${suffix}`,
-            syntheticProperties({ sandbox_user: true })
-        )
+        requireClient().identify(`${TEST_DISTINCT_ID_PREFIX}${suffix}`, syntheticProperties({ sandbox_user: true }))
     })
 )
 element<HTMLButtonElement>('group').addEventListener('click', () =>
-    enqueue('Group', async () => {
-        await requireAnalytics().group('sandbox_run', runId, syntheticProperties({ sandbox_group: true }))
+    enqueue('Group', () => {
+        group(requireClient(), 'sandbox_run', runId, syntheticProperties({ sandbox_group: true }))
     })
 )
 element<HTMLButtonElement>('reset').addEventListener('click', () =>
     enqueue('Reset', () => {
-        requireAnalytics().reset()
+        requireClient().reset()
         log('sandbox', 'Reset identity and session state')
     })
 )
