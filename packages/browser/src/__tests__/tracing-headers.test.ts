@@ -8,7 +8,8 @@ class TestRequest {
     bodyUsed = false
     headers: Headers
     method: string
-    url: string
+    // Like a native Request, construction reads the internal destination, not an overridden `url` property.
+    private readonly _destination: string
 
     constructor(input: string | URL | TestRequest, init?: RequestInit) {
         const inputRequest = input instanceof TestRequest ? input : undefined
@@ -16,7 +17,7 @@ class TestRequest {
             throw new TypeError('Cannot construct a Request with a Request object that has already been used.')
         }
 
-        this.url = inputRequest ? inputRequest.url : input.toString()
+        this._destination = inputRequest ? inputRequest._destination : input.toString()
         this.headers = new Headers(init?.headers ?? inputRequest?.headers)
         this.method = init?.method ?? inputRequest?.method ?? 'GET'
         this.body = init?.body ?? inputRequest?.body ?? null
@@ -24,6 +25,10 @@ class TestRequest {
         if (inputRequest && isUndefined(init?.body) && !isNull(inputRequest.body) && !isUndefined(inputRequest.body)) {
             inputRequest.bodyUsed = true
         }
+    }
+
+    get url(): string {
+        return this._destination
     }
 
     clone(): TestRequest {
@@ -337,6 +342,23 @@ describe('tracing headers', () => {
 
             expect(() => window.fetch('https://example.com/path')).toThrow(error)
             expect(originalFetch).toHaveBeenCalledTimes(1)
+        })
+
+        it('matches a Request by its destination, not an overridden url property', async () => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
+            setWindowFetch(originalFetch)
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
+
+            const request = new Request('https://other.example/path')
+            Object.defineProperty(request, 'url', { value: 'https://example.com/path' })
+            await window.fetch(request)
+
+            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
+            expect(downstreamRequest.url).toBe('https://other.example/path')
+            expect(downstreamRequest.headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
+            expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
         })
 
         it('keeps a Request body and the session headers when the distinct ID is not a valid header value', async () => {

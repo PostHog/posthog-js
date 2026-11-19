@@ -360,17 +360,22 @@ export const patchFetch = (
                 const requestUrl = getRequestUrl(win, url)
                 if (requestUrl) {
                     if (isRequest(url)) {
-                        // Prepare the headers first: constructing the Request below takes the caller's body, so a
-                        // failure after it would leave the fallback with a body that has already been used.
-                        const tracingHeaders = new Headers()
-                        addTracingHeaders(hostnames, getDistinctId, getSession, requestUrl, tracingHeaders)
                         // For fetch(Request, init), construct a new Request so init overrides are applied and the
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         const req = new Request(url, init)
-                        tracingHeaders.forEach((value, name) => req.headers.set(name, value))
-                        addTraceparentHeader(win, traceparentTargets, req.url, req.headers)
+                        // The new Request has taken the caller's body, so it is sent even when the tracing headers
+                        // cannot be prepared. They are matched against its destination, which a `url` property
+                        // override cannot change.
                         fetchArgs = [req]
+                        const tracingHeaders = new Headers()
+                        try {
+                            addTracingHeaders(hostnames, getDistinctId, getSession, req.url, tracingHeaders)
+                            tracingHeaders.forEach((value, name) => req.headers.set(name, value))
+                        } catch {
+                            // Send the request without tracing headers.
+                        }
+                        addTraceparentHeader(win, traceparentTargets, req.url, req.headers)
                     } else {
                         const headers = new Headers(isObjectLike(init) ? init.headers : undefined)
                         const addedTracingHeaders = addTracingHeaders(
