@@ -338,6 +338,45 @@ describe('tracing headers', () => {
             expect(() => window.fetch('https://example.com/path')).toThrow(error)
             expect(originalFetch).toHaveBeenCalledTimes(1)
         })
+
+        it('keeps a Request body and the session headers when the distinct ID is not a valid header value', async () => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
+            setWindowFetch(originalFetch)
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any)
+
+            const request = new Request('https://example.com/path', { body: 'request-body', method: 'POST' })
+            await window.fetch(request)
+
+            expect(originalFetch).toHaveBeenCalledTimes(1)
+            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
+            expect(downstreamRequest.headers.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+            expect(downstreamRequest.headers.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+            expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
+            await expect(downstreamRequest.text()).resolves.toBe('request-body')
+        })
+
+        it('sends a Request with its unread body when preparing tracing headers fails', async () => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
+            setWindowFetch(originalFetch)
+            restoreFetchPatch = patchFns._patchFetch(
+                ['example.com'],
+                () => {
+                    throw new Error('distinct ID unavailable')
+                },
+                sessionManager as any
+            )
+
+            const request = new Request('https://example.com/path', { body: 'request-body', method: 'POST' })
+            await window.fetch(request)
+
+            expect(originalFetch).toHaveBeenCalledTimes(1)
+            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
+            await expect(downstreamRequest.text()).resolves.toBe('request-body')
+        })
     })
 
     describe('xhr', () => {
@@ -391,6 +430,37 @@ describe('tracing headers', () => {
                     setRequestHeaderSpy.mock.calls.some(([name]) => name.toLowerCase() === header.toLowerCase())
                 ).toBe(false)
             })
+        })
+
+        it('opens the request with the session headers when the distinct ID is not a valid header value', () => {
+            const openSpy = vi.spyOn(XMLHttpRequest.prototype, 'open')
+            const setRequestHeaderSpy = vi
+                .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                .mockImplementation(() => {})
+            restoreXHRPatch = patchFns._patchXHR(['example.com'], '用户-1', sessionManager as any)
+
+            const xhr = new XMLHttpRequest()
+            expect(() => xhr.open('GET', 'https://example.com/path')).not.toThrow()
+
+            expect(openSpy).toHaveBeenCalledTimes(1)
+            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-SESSION-ID', 'session-id')
+            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-WINDOW-ID', 'window-id')
+            expect(setRequestHeaderSpy.mock.calls.some(([name]) => name === 'X-POSTHOG-DISTINCT-ID')).toBe(false)
+        })
+
+        it('opens the request when preparing tracing headers fails', () => {
+            const openSpy = vi.spyOn(XMLHttpRequest.prototype, 'open')
+            restoreXHRPatch = patchFns._patchXHR(
+                ['example.com'],
+                () => {
+                    throw new Error('distinct ID unavailable')
+                },
+                sessionManager as any
+            )
+
+            const xhr = new XMLHttpRequest()
+            expect(() => xhr.open('GET', 'https://example.com/path')).not.toThrow()
+            expect(openSpy).toHaveBeenCalledTimes(1)
         })
     })
 
