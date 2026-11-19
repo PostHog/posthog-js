@@ -15,7 +15,7 @@ import {
 import type { ErrorWrappingFunctions } from '@posthog/browser-common/exception-autocapture'
 import type { Client, Disposable, ErrorTrackingSuppressionRule } from '@posthog/browser-common'
 import type { IPostHog } from '../../core/types'
-import { analyticsOf } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import type { ErrorTrackingExtension } from './error-tracking-internal'
 import {
     snapshotErrorTrackingOptions,

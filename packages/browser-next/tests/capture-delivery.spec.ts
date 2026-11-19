@@ -1,5 +1,5 @@
 import { createPostHog as createDefault } from '../src/composition/npm/core'
-import { analyticsOf } from '../src/products/analytics/analytics-core'
+import { analyticsOf } from '../src/products/analytics/analytics-of'
 import type { BrowserFetch } from '../src/core/types'
 import { recordCapture, recordingOptions, type RecordedRequest } from './capture-recorder'
 

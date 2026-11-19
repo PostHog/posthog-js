@@ -9,8 +9,7 @@ import {
 import type { PerformanceCaptureConfig } from '@posthog/types'
 import type { BrowserProducts } from '../../core/context/browser-client'
 import type { IPostHog } from '../../core/types'
-import { analyticsOf } from '../analytics/analytics-core'
-import { recordedUrl } from '../analytics/properties/page-properties'
+import { analyticsOf } from '../analytics/analytics-of'
 import type { WebVitalsOptions } from './web-vitals-options'
 
 export type { WebVitalsOptions, WebVitalsMetric } from './web-vitals-options'
@@ -92,7 +91,7 @@ export const webVitals = (options: WebVitalsOptions = {}): BrowserProducts['webV
                     .catch((error: unknown) => client?.logger.error('[Web Vitals] failed to start', error))
             },
         },
-        (href) => client && recordedUrl(href, analyticsOf(client)!._urlSanitization)?.href
+        (href) => client && analyticsOf(client)!.recordUrl(href)
     )
     return {
         name: 'webVitals',

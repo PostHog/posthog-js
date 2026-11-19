@@ -6,7 +6,7 @@ import { DEFAULT_DISPLAY_SURVEY_OPTIONS, setSurveySeenOnLocalStorage } from '@po
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import type { AnalyticsTeardownSubscription } from '../analytics/analytics-internal'
-import { analyticsOf } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import type { FlagsExtension } from '../flags/flags-internal'
 import type { FeatureFlags } from '../flags/flags-token'
 import type { SurveysExtension } from './surveys-internal'

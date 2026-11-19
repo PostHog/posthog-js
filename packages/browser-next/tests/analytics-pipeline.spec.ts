@@ -1,7 +1,7 @@
 import { createPostHog } from '../src/composition/npm'
 import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
 import { createPostHogCore } from '../src/core/posthog'
-import { analyticsOf } from '../src/products/analytics/analytics-core'
+import { analyticsOf } from '../src/products/analytics/analytics-of'
 import type { AnalyticsOptions, CorePostHogOptions, IPostHog } from '../src/core/types'
 import { createFetch, localRemoteConfig, requireInstalledExtension, type SentRequest } from './helpers'
 

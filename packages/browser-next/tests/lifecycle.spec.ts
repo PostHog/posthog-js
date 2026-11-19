@@ -1,7 +1,7 @@
 import { localRemoteConfig, requireInstalledExtension } from './helpers'
 import type { Mock } from 'vitest'
 
-import { analyticsOf } from '../src/products/analytics/analytics-core'
+import { analyticsOf } from '../src/products/analytics/analytics-of'
 import type { AnalyticsMessage } from '../src/products/analytics/analytics-internal'
 import { CAPTURE_V1_TEARDOWN_BUDGET_BYTES } from '../src/products/analytics/delivery/capture-v1'
 import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'

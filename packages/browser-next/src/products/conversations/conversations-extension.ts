@@ -7,7 +7,7 @@ import type {
 } from '@posthog/browser-common/conversations-renderer'
 import type { BrowserState } from '../../core/state/state'
 import type { IPostHog } from '../../core/types'
-import { analyticsOf } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import { alias } from '../analytics/person'
 import type {
     ConversationsExtension,

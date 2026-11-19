@@ -2,7 +2,7 @@ import { patchFetch, patchXHR } from '@posthog/browser-common/utils/tracing-head
 import type { TracingHeadersSession } from '@posthog/browser-common/utils/tracing-headers'
 import type { BrowserExtension } from '../../core/context/browser-client'
 import type { IPostHog } from '../../core/types'
-import { analyticsOf } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import { snapshotTracingHeadersOptions, type TracingHeadersOptions } from './tracing-headers-options'
 
 export type { TracingHeadersOptions } from './tracing-headers-options'
