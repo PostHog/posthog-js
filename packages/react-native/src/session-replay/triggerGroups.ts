@@ -41,12 +41,15 @@ export type SessionReplayTriggerGroup = {
   conditions: SessionReplayTriggerConditions
 }
 
-// The API can send the rate as a string. One that doesn't parse samples out (NaN never passes the
-// threshold on web either); only a missing rate samples in.
+// The API can send the rate as a string. A rate that isn't a finite number samples in (null), while a
+// blank string reads as 0 and samples out. A JSON null rate is 0 (null * 100), unlike a missing one.
 function parseTriggerGroupSampleRate(value: JsonType | undefined): number | null {
+  if (value === null) {
+    return 0
+  }
   if (typeof value === 'string') {
     const parsed = Number(value)
-    return value.trim() !== '' && Number.isFinite(parsed) ? parsed : 0
+    return Number.isFinite(parsed) ? parsed : null
   }
   return getFiniteNumber(value)
 }

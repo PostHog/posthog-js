@@ -48,16 +48,52 @@ describe('parseSessionRecordingTriggerGroups', () => {
     expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: [{ no: 'id' }] })).toBeNull()
   })
 
-  it('parses a string sample rate and samples out one that does not parse', () => {
+  it('parses a string sample rate: unparseable samples in, blank samples out', () => {
+    const rates = ['0.5', ' 0.5 ', 'abc', 'NaN', '1e400', '', '  ']
     const groups = parseSessionRecordingTriggerGroups({
       version: 2,
       triggerGroups: [
-        { id: 'g1', conditions: {} },
-        { id: 'g2', sampleRate: '0.5', conditions: {} },
-        { id: 'g3', sampleRate: 'abc', conditions: {} },
+        { id: 'g0', conditions: {} },
+        ...rates.map((sampleRate, i) => ({ id: `g${i + 1}`, sampleRate, conditions: {} })),
       ],
     })
-    expect(groups?.map((g) => g.sampleRate)).toEqual([null, 0.5, 0])
+    expect(groups?.map((g) => g.sampleRate)).toEqual([null, 0.5, 0.5, null, null, null, 0, 0])
+  })
+
+  it('samples in a group whose string rate does not parse and samples out a blank one', () => {
+    const groups = parseSessionRecordingTriggerGroups({
+      version: 2,
+      triggerGroups: [
+        { id: 'garbage', sampleRate: 'abc', conditions: {} },
+        { id: 'blank', sampleRate: '  ', conditions: {} },
+      ],
+    })
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig(groups!)
+    const sampled = evaluator.evaluate('s1', {}, undefined).matchedGroups.map((g) => [g.id, g.sampled])
+    expect(sampled).toEqual([
+      ['garbage', true],
+      ['blank', false],
+    ])
+  })
+
+  it('samples out a group whose sample rate is null and samples in one with no rate', () => {
+    const groups = parseSessionRecordingTriggerGroups({
+      version: 2,
+      triggerGroups: [
+        { id: 'null-rate', sampleRate: null, conditions: {} },
+        { id: 'no-rate', conditions: {} },
+      ],
+    })
+    expect(groups?.map((g) => g.sampleRate)).toEqual([0, null])
+
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig(groups!)
+    const sampled = evaluator.evaluate('s1', {}, undefined).matchedGroups.map((g) => [g.id, g.sampled])
+    expect(sampled).toEqual([
+      ['null-rate', false],
+      ['no-rate', true],
+    ])
   })
 
   it('keeps a configured leg configured even when none of its entries parse', () => {
@@ -138,8 +174,8 @@ describe('parseSessionRecordingTriggerGroups', () => {
       {
         id: 'g1',
         name: '',
-        // an unparseable rate samples out rather than reading as "no rate"
-        sampleRate: 0,
+        // an unparseable rate samples in rather than out
+        sampleRate: null,
         minDurationMs: null,
         conditions: {
           matchType: 'all',
