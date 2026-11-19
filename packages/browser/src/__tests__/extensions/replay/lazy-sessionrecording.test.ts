@@ -4028,15 +4028,47 @@ describe('Lazy SessionRecording', () => {
                 addRRwebToWindow(true)
                 callback()
             })
-            const selectMaskingFn = (element: HTMLSelectElement): 'masked' | 'unmasked' =>
+            posthog.config.session_recording.selectMaskingFn = (element: HTMLSelectElement) =>
                 element.hasAttribute('data-public') ? 'unmasked' : 'masked'
-            posthog.config.session_recording.selectMaskingFn = selectMaskingFn
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
-            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
-                expect.objectContaining({ selectMaskingFn })
-            )
+            const installed = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                .selectMaskingFn!
+            const publicSelect = document.createElement('select')
+            publicSelect.setAttribute('data-public', '')
+            expect(installed(publicSelect)).toBe('unmasked')
+            expect(installed(document.createElement('select'))).toBe('masked')
+        })
+
+        it('warns once when the select masking policy throws and still fails closed', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            const policyError = new Error('policy failure')
+            posthog.config.session_recording.selectMaskingFn = () => {
+                throw policyError
+            }
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            try {
+                const recorderPolicy = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                    .selectMaskingFn!
+                const select = document.createElement('select')
+
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy.mock.calls[0][1]).toContain('selectMaskingFn threw')
+                expect(warnSpy.mock.calls[0][2]).toBe(policyError)
+            } finally {
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+                warnSpy.mockRestore()
+            }
         })
 
         it('removes scripts when JSON-LD capture is enabled', () => {

@@ -66,6 +66,16 @@ function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfi
 
 const originalLocation = window!.location
 
+// The recorder wraps the policy to report exceptions, so assert delegation rather than identity.
+function expectInstalledPolicy(record: Mock, selectMaskingFn: Mock) {
+    const installed = record.mock.lastCall![0].selectMaskingFn
+    const select = document.createElement('select')
+    selectMaskingFn.mockClear()
+    installed(select)
+    expect(selectMaskingFn).toHaveBeenCalledTimes(1)
+    expect(selectMaskingFn).toHaveBeenCalledWith(select)
+}
+
 describe('SessionRecording', () => {
     const _addCustomEvent = vi.fn()
     const loadScriptMock = vi.fn()
@@ -280,13 +290,13 @@ describe('SessionRecording', () => {
             record.supportsSelectMasking = true
             if (previous) config.session_recording.selectMaskingFn = () => previous
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            const selectMaskingFn = () => policy
+            const selectMaskingFn = vi.fn(() => policy)
 
             config.session_recording.selectMaskingFn = selectMaskingFn
             sessionRecording.startIfEnabledOrStop()
 
             expect(record).toHaveBeenCalledTimes(2)
-            expect(record).toHaveBeenLastCalledWith(expect.objectContaining({ selectMaskingFn }))
+            expectInstalledPolicy(record, selectMaskingFn)
             expect(sessionRecording.started).toBe(true)
         })
 
@@ -430,7 +440,7 @@ describe('SessionRecording', () => {
             addRRwebToWindow()
             const record = assignableWindow.__PosthogExtensions__.rrweb!.record
             record.supportsSelectMasking = true
-            const selectMaskingFn = () => 'masked' as const
+            const selectMaskingFn = vi.fn(() => 'masked' as const)
             config.session_recording.selectMaskingFn = selectMaskingFn
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
@@ -441,7 +451,7 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording.started).toBe(true)
             expect(record).toHaveBeenCalledTimes(2)
-            expect(record).toHaveBeenLastCalledWith(expect.objectContaining({ selectMaskingFn }))
+            expectInstalledPolicy(record, selectMaskingFn)
         })
 
         it('stops an unsupported active recorder when select masking is configured', () => {

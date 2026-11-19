@@ -569,6 +569,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskRegionsFnFailed = false
     // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
     private _hasLoggedRecorderCallbackError = false
+    private _hasLoggedSelectMaskingError = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -3043,7 +3044,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
-        this._selectMaskingFn = sessionRecordingOptions.selectMaskingFn
+        const selectMaskingFn = sessionRecordingOptions.selectMaskingFn
+        this._selectMaskingFn = selectMaskingFn
+        if (selectMaskingFn) {
+            // rrweb masks the select when the policy throws; rethrow so that stays the case.
+            sessionRecordingOptions.selectMaskingFn = (select) => {
+                try {
+                    return selectMaskingFn(select)
+                } catch (error) {
+                    if (!this._hasLoggedSelectMaskingError) {
+                        this._hasLoggedSelectMaskingError = true
+                        logger.warn('selectMaskingFn threw; affected selects are recorded as masked.', error)
+                    }
+                    throw error
+                }
+            }
+        }
         const activePlugins = this._gatherRRWebPlugins()
         const sourceHandoff = this._styleRuleSourceHandoff
         this._stopRrweb = rrwebRecord({

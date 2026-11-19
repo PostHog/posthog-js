@@ -379,6 +379,7 @@
         "_hasLoadedFlags",
         "_hasLocationChanged",
         "_hasLoggedRecorderCallbackError",
+        "_hasLoggedSelectMaskingError",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
