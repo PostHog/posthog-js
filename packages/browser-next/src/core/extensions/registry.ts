@@ -135,6 +135,7 @@ export class ExtensionRegistry<Host extends object> {
         // Dispose concurrently so one stuck extension cannot block the others' cleanup.
         await Promise.all(
             extensions.map(async (extension) => {
+                if (this._retired.has(extension)) return
                 this._retired.add(extension)
                 try {
                     await extension.dispose?.()

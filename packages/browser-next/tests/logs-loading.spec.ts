@@ -109,6 +109,48 @@ describe('automatic logs module loading', () => {
         expect(dispose).toHaveBeenCalledOnce()
     })
 
+    it('disposes an acquired product once when setup fails during shutdown', async () => {
+        let entered!: () => void
+        const setupEntered = new Promise<void>((resolve) => {
+            entered = resolve
+        })
+        let failSetup!: (error: Error) => void
+        const setupGate = new Promise<void>((_, reject) => {
+            failSetup = reject
+        })
+        const dispose = vi.fn()
+        vi.doMock('../src/products/logs/logs', () => ({
+            logs: () => ({
+                name: 'logs',
+                setup() {
+                    entered()
+                    return setupGate
+                },
+                dispose,
+            }),
+        }))
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog({ ...options, surveys: false, autocapture: false })
+        const acquiring = client.resolveExtension('logs')
+        await setupEntered
+
+        vi.useFakeTimers()
+        try {
+            const closing = client.shutdown(5)
+            // Queue setup rejection after the timeout resolves but before shutdown resumes
+            // to dispose extensions. Setup failure claims cleanup first.
+            vi.advanceTimersByTime(5)
+            failSetup(new Error('setup failed'))
+            await closing
+            expect(dispose).toHaveBeenCalledOnce()
+        } finally {
+            vi.useRealTimers()
+        }
+        expect(await acquiring).toBeUndefined()
+        expect(client.logs).toBeUndefined()
+        expect(dispose).toHaveBeenCalledOnce()
+    })
+
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.doMock('../src/products/logs/logs', () => {
