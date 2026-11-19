@@ -449,6 +449,106 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     rotateSession()
     await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
   })
+  describe('an explicit stopSessionRecording()', () => {
+    const flagGroup = {
+      id: 'g1',
+      name: 'Flagged',
+      sampleRate: 1,
+      conditions: { matchType: 'any', flag: { flag: 'replay-flag' } },
+    }
+
+    const reloadFlags = async (flags: Record<string, any>): Promise<void> => {
+      currentFlags = flags
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+    }
+
+    const startsCount = (): number => replay.start.mock.calls.length + replay.startRecording.mock.calls.length
+
+    beforeEach(async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      expect(startsCount()).toBe(0)
+
+      await reloadFlags({ 'replay-flag': true })
+      expect(replay.start).toHaveBeenCalledTimes(1)
+      replay.isEnabled.mockImplementation(async () => true)
+    })
+
+    it('holds across flags reloads that make the group eligible again', async () => {
+      await posthog.stopSessionRecording()
+      await reloadFlags({ 'replay-flag': false })
+      await reloadFlags({ 'replay-flag': true })
+      expect(startsCount()).toBe(1)
+    })
+
+    it('holds when made while an ineligible group had already paused the recorder', async () => {
+      await reloadFlags({ 'replay-flag': false })
+      expect(replay.stopRecording).toHaveBeenCalled()
+      expect((posthog as any)._sessionReplayRecordingActive).toBe(false)
+
+      await posthog.stopSessionRecording()
+      await reloadFlags({ 'replay-flag': true })
+      expect(startsCount()).toBe(1)
+    })
+
+    it('holds across a session rotation and a matching event in the new session', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await reloadFlags({})
+      await posthog.stopSessionRecording()
+
+      rotateSession()
+      posthog.capture('purchase')
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)).toBeFalsy()
+      expect(startsCount()).toBe(1)
+    })
+
+    it('activates no group on a matching event', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await reloadFlags({})
+      await posthog.stopSessionRecording()
+      const evaluate = vi.spyOn(posthog as any, '_evaluateAndStartSessionReplay')
+
+      posthog.capture('purchase')
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)).toBeFalsy()
+      expect((posthog as any)._triggerGroupsEvaluator.getActivation()?.eventGroupIds ?? []).toEqual([])
+      expect(evaluate).not.toHaveBeenCalled()
+      expect(startsCount()).toBe(1)
+    })
+
+    it('is lifted by startSessionRecording()', async () => {
+      await posthog.stopSessionRecording()
+      await reloadFlags({ 'replay-flag': true })
+      expect(startsCount()).toBe(1)
+
+      await posthog.startSessionRecording()
+      expect(startsCount()).toBe(2)
+    })
+
+    it('is lifted by a startSessionRecording() native refuses, so a later eligible reload starts', async () => {
+      await posthog.stopSessionRecording()
+      await reloadFlags({ 'replay-flag': true })
+
+      replay.isEnabled.mockImplementation(async () => false)
+      await posthog.startSessionRecording()
+      expect(startsCount()).toBe(2)
+
+      replay.isEnabled.mockImplementation(async () => true)
+      await reloadFlags({ 'replay-flag': true })
+      expect(startsCount()).toBe(3)
+      expect((posthog as any)._sessionReplayRecordingActive).toBe(true)
+    })
+  })
+
   // A session id the given group samples in (or out), picked through the SDK's own sampling hash.
   const sessionIdSampled = (groupId: string, rate: number, sampledIn: boolean): string => {
     for (let i = 0; i < 1000; i++) {

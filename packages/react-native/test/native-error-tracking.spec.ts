@@ -278,6 +278,28 @@ describe('native error tracking', () => {
     await posthog.shutdown()
   })
 
+  it('still sets native up for push and error tracking when the app stops replay before the first evaluation', async () => {
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      enableSessionReplay: true,
+      errorTracking: { autocapture: { nativeCrashes: true } },
+    })
+    void posthog.stopSessionRecording()
+
+    await posthog.ready()
+
+    await waitForExpect(200, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+    const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
+    expect(pluginConfig.sessionReplay.enabled).toBe(false)
+    expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
+    expect(mockPlugin.startRecording).not.toHaveBeenCalled()
+
+    await posthog.shutdown()
+  })
+
   it('passes both session replay and native error tracking config when both are enabled', async () => {
     setupReplayV1ConfigFetch()
     const posthog = new PostHog('test-token', {
