@@ -110,12 +110,11 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             }
         },
         getFeatureFlag: (key, options) => {
-            if (disposed) return undefined
+            // Fresh reads wait for an error-free evaluation. The shared `fresh` check instead follows the latest HTTP
+            // status, so it accepts quota-limited responses and rejects cached values after a later failed refresh.
+            if (disposed || (options?.fresh && !shared.hasLoadedRemoteFlags)) return undefined
             try {
-                return shared.getFeatureFlagResult(key, {
-                    send_event: options?.sendFeatureFlagEvent ?? true,
-                    fresh: options?.fresh ?? false,
-                })
+                return shared.getFeatureFlagResult(key, { send_event: options?.sendFeatureFlagEvent ?? true })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined

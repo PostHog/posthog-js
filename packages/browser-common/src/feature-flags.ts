@@ -351,6 +351,7 @@ export class PostHogFeatureFlags implements Extension {
     private _flagCallsPendingCapture = new Map<string, PendingFlagCall>()
     private _sendingFlagCallsPendingCapture: boolean = false
     private _flagsLoadedFromRemote: boolean = false
+    private _remoteFlagsLoaded: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
     private _refreshInterval: ReturnType<typeof setInterval> | undefined
@@ -814,6 +815,11 @@ export class PostHogFeatureFlags implements Extension {
         return this._hasLoadedFlags
     }
 
+    /** Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true. */
+    get hasLoadedRemoteFlags(): boolean {
+        return this._remoteFlagsLoaded
+    }
+
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
     }
@@ -1203,6 +1209,14 @@ export class PostHogFeatureFlags implements Extension {
                 flagErrors.push(FeatureFlagError.QUOTA_LIMITED)
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
+            const status: FeatureFlagsReloadResult['status'] = data.disable_flags
+                ? 'skipped'
+                : flagErrors.length || (!json.flags && !json.featureFlags)
+                  ? 'error'
+                  : 'loaded'
+            if (status === 'loaded') {
+                this._remoteFlagsLoaded = true
+            }
 
             if (isQuotaLimited) {
                 this._logger.warn(
@@ -1211,14 +1225,7 @@ export class PostHogFeatureFlags implements Extension {
             } else if (!data.disable_flags) {
                 this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
             }
-            this._settleReloads(
-                completions,
-                data.disable_flags
-                    ? 'skipped'
-                    : flagErrors.length || (!json.flags && !json.featureFlags)
-                      ? 'error'
-                      : 'loaded'
-            )
+            this._settleReloads(completions, status)
             requestAdditionalReload()
         }
         const handleError = (error: unknown): void => {
@@ -2180,6 +2187,7 @@ export class PostHogFeatureFlags implements Extension {
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false
+        this._remoteFlagsLoaded = false
         this.$anon_distinct_id = undefined
         this._clearDebouncer()
         this._override_warning = false
