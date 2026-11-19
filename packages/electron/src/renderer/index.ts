@@ -21,6 +21,8 @@ import {
     type State,
 } from '../shared/protocol'
 
+import { RendererAutocapture, type AutocaptureConfig } from './autocapture'
+
 export type {
     State,
     Properties,
@@ -29,11 +31,19 @@ export type {
     FeatureFlagReadOptions,
     IsFeatureEnabledOptions,
     JsonType,
+    AutocaptureConfig,
+}
+
+export interface RendererOptions {
+    autocapture?: boolean | AutocaptureConfig
+    onError?: (error: unknown) => void
 }
 
 const bridgeSequences = new WeakMap<Bridge, number>()
 
 export class PostHog {
+    private _autocapture?: RendererAutocapture
+    private _autocapturePauses = 0
     private _state?: State
     private _reportedFlags = new Set<string>()
     private _ready?: Promise<void>
@@ -46,7 +56,34 @@ export class PostHog {
         createDefaultStackParser()
     )
 
-    constructor(private _bridge: Bridge) {
+    constructor(
+        private _bridge: Bridge,
+        private _options: RendererOptions = {}
+    ) {
+        if (_options.autocapture) {
+            this._autocapture = new RendererAutocapture(
+                {
+                    getState: () => {
+                        const state = this._state
+                        if (!state) throw new Error('PostHog renderer is not ready')
+                        return {
+                            generation: state.generation,
+                            distinctId: state.distinctId,
+                            optedOut: state.optedOut,
+                            autocapture: state.autocapture,
+                        }
+                    },
+                    capture: (event, properties) => this.capture(event, properties),
+                    loadConfig: () => this._send({ type: 'loadAutocaptureConfig' }),
+                    onError: (error) => {
+                        try {
+                            this._options.onError?.(error)
+                        } catch {}
+                    },
+                },
+                typeof _options.autocapture === 'object' ? _options.autocapture : {}
+            )
+        }
         this._unsubscribe = this._bridge.subscribe((state) => this._update(state))
     }
 
@@ -61,6 +98,7 @@ export class PostHog {
             this._reportedFlags = new Set()
         }
         this._state = structuredClone(state)
+        this._autocapture?.update(this._autocapturePauses > 0)
         for (const listener of this._listeners) {
             try {
                 listener(this.getState())
@@ -96,9 +134,19 @@ export class PostHog {
         const networkBound =
             command.type === 'flush' ||
             command.type === 'reloadFeatureFlags' ||
+            command.type === 'loadAutocaptureConfig' ||
             (isFlagContextCommand(command) && command.reloadFeatureFlags)
         this._tail = (networkBound ? dispatched : operation).catch(() => {})
         return operation
+    }
+
+    private _pauseAutocapture(command: Command): Promise<void> {
+        this._autocapturePauses++
+        if (this._state) this._autocapture?.update(true)
+        return this._send(command).finally(() => {
+            this._autocapturePauses--
+            if (this._state) this._autocapture?.update(this._autocapturePauses > 0)
+        })
     }
 
     async ready(): Promise<void> {
@@ -175,10 +223,10 @@ export class PostHog {
         return this._send({ type: 'resetGroupPropertiesForFlags', reloadFeatureFlags })
     }
     identify(distinctId: string, properties?: Properties): Promise<void> {
-        return this._send({ type: 'identify', distinctId, ...(properties ? { properties } : {}) })
+        return this._pauseAutocapture({ type: 'identify', distinctId, ...(properties ? { properties } : {}) })
     }
     reset(): Promise<void> {
-        return this._send({ type: 'reset' })
+        return this._pauseAutocapture({ type: 'reset' })
     }
     group(groupType: string, groupKey: string | number, properties?: Properties): Promise<void> {
         if (this.hasOptedOutCapturing()) return Promise.resolve()
@@ -194,7 +242,7 @@ export class PostHog {
         return this._send({ type: 'optIn' })
     }
     optOut(): Promise<void> {
-        return this._send({ type: 'optOut' })
+        return this._pauseAutocapture({ type: 'optOut' })
     }
     /**
      * Refresh flags using the shared identity/context after earlier mutations, then persist and synchronize the cache.
@@ -324,6 +372,7 @@ export class PostHog {
     dispose(): void {
         if (this._disposed) return
         this._disposed = true
+        this._autocapture?.dispose()
         this._unsubscribe()
         this._listeners.clear()
         this._reportedFlags.clear()
@@ -334,12 +383,12 @@ export class PostHog {
 let singleton: PostHog | undefined
 let initializing: Promise<PostHog> | undefined
 
-export function init(): Promise<PostHog> {
+export function init(options: RendererOptions = {}): Promise<PostHog> {
     if (initializing) return initializing
     if (singleton) return Promise.resolve(singleton)
     const bridge = (globalThis as typeof globalThis & { [BRIDGE_KEY]?: Bridge })[BRIDGE_KEY]
     if (!bridge) return Promise.reject(new Error('PostHog preload bridge is missing; configure your Electron preload'))
-    const client = new PostHog(bridge)
+    const client = new PostHog(bridge, options)
     initializing = client
         .ready()
         .then(() => {
