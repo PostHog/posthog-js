@@ -154,6 +154,10 @@ describe('PostHog RN session replay debug properties', () => {
   }
 
   const readyClient = async (options: Record<string, unknown> = {}): Promise<PostHog> => {
+    // A first launch waits for the remote config before it starts replay, so cache one first.
+    if (options.enableSessionReplay) {
+      await warmup()
+    }
     const client = newPostHog(options)
     await client.ready()
     await waitForNativePluginEvaluation(client)
@@ -180,7 +184,7 @@ describe('PostHog RN session replay debug properties', () => {
   }
 
   // Caches the remote replay config so the next launch evaluates its gates at startup instead
-  // of starting optimistically before /flags returns.
+  // of waiting for /flags to return.
   const warmup = async (): Promise<void> => {
     const w = newPostHog({ enableSessionReplay: true })
     await w.ready()

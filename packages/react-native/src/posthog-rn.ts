@@ -3752,7 +3752,18 @@ export class PostHog extends PostHogCore {
       this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) == null &&
       remoteConfig?.sessionRecording === false
 
-    if (projectDisabled) {
+    // On a first launch nothing says whether the project is v1 or v2, so starting native here would
+    // record under v1 gates that v2 may then override. Wait for the config.
+    const replayConfigUnknown =
+      remoteConfig == null && this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) == null
+
+    if (replayConfigUnknown) {
+      this._logger.info('Session replay waits for the remote config before it starts.')
+      this._sessionReplayEventTriggers = []
+      this._sessionReplayTriggerGroups = null
+      this._unregisterTriggerGroupsDebugProperties()
+      recordingActive = false
+    } else if (projectDisabled) {
       this._logger.info('Session replay is disabled for the project.')
       this._sessionReplayEventTriggers = []
       this._sessionReplayTriggerGroups = null
@@ -3810,7 +3821,7 @@ export class PostHog extends PostHogCore {
     // flag), so replay can start on optIn() without a restart, but nothing records until then.
     if (this.optedOut) {
       if (!this._sessionReplayNativeInitialized) {
-        await this.initializeNativePlugin(options, remoteConfig, true)
+        await this.initializeNativePlugin(options, remoteConfig, !replayConfigUnknown)
       }
       // Also ends a manual recording, which _sessionReplayRecordingActive doesn't track.
       if (this._sessionReplayNativeInitialized) {
@@ -3881,7 +3892,7 @@ export class PostHog extends PostHogCore {
         this._sessionReplayRecordingActive = false
       }
 
-      if (enableNativeErrorTracking || enablePush) {
+      if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
