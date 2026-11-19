@@ -23,3 +23,4 @@
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
 - Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default), `'background'` or experimental `'gpu'`
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
+- Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request

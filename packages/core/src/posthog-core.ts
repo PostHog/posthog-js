@@ -80,6 +80,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   // Track if an additional reload was requested while a request was in flight
   // This prevents dropping reload requests (e.g., from identify()) when preload is in progress
   private _pendingFlagsRequest?: PendingFlagsRequest
+  // Counts reset() calls, so a /flags response requested for the previous identity isn't stored for the next.
+  private _flagsResetCount = 0
 
   // person profiles
   protected _personProfiles: 'always' | 'identified_only' | 'never'
@@ -201,6 +203,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
     this.wrap(() => {
+      this._flagsResetCount++
       const allPropertiesToKeep = [
         PostHogPersistedProperty.Queue,
         PostHogPersistedProperty.AiQueue,
@@ -848,6 +851,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     const triggerOnRemoteConfig = options?.triggerOnRemoteConfig ?? false
     this._flagsResponsePromise = this._initPromise
       .then(async () => {
+        const resetCount = this._flagsResetCount
         const distinctId = this.getDistinctId()
         const groups = this.props.$groups || {}
         const personProperties =
@@ -875,8 +879,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         )
 
         if (result === undefined) return undefined
+        // reset() ran while this request was in flight. Its flags belong to the previous identity, and
+        // reset() queued a reload for the new one, so only the remote config is still used.
+        const isForPreviousIdentity = resetCount !== this._flagsResetCount
         if (!result.success) {
-          if (!this.disableRemoteFeatureFlags) {
+          if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a
             // signal that the server turned minimal flag-called events off.
             this.setKnownFeatureFlagDetails({
@@ -891,7 +898,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const res = result.response
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
-          if (!this.disableRemoteFeatureFlags) {
+          if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
@@ -905,10 +912,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           return res
         }
         if (res?.featureFlags) {
-          if (this.disableRemoteFeatureFlags) {
+          if (this.disableRemoteFeatureFlags || isForPreviousIdentity) {
             this.cacheSessionReplay('flags', res)
             this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
-            return res
+            return isForPreviousIdentity ? undefined : res
           }
 
           let newFeatureFlagDetails = res
