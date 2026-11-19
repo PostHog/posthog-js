@@ -99,6 +99,20 @@ describe('pageview ID', () => {
         })
     })
 
+    it.each([null, undefined])('omits pageview IDs the caller sets to %s', async (value) => {
+        const observed: Record<string, unknown>[] = []
+        posthog.onEvent(({ properties }) => observed.push(properties))
+        posthog.capture('$pageview')
+        posthog.capture('checkout_completed', { $pageview_id: value })
+        posthog.capture('$pageleave', { $pageview_id: value, $prev_pageview_id: value })
+
+        const events = await sent()
+        expect(events.checkout_completed?.properties).not.toHaveProperty('$pageview_id')
+        expect(events.$pageleave?.properties).not.toHaveProperty('$pageview_id')
+        expect(events.$pageleave?.properties).not.toHaveProperty('$prev_pageview_id')
+        expect(observed[1]?.$pageview_id).toBe(value)
+    })
+
     it('lets registered properties replace the pageview ID', async () => {
         posthog.register({ $pageview_id: 'registered' })
         posthog.registerForSession({ $prev_pageview_id: 'session' })

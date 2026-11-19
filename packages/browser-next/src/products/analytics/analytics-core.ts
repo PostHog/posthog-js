@@ -350,9 +350,11 @@ export class Analytics {
         const isPageview = event === '$pageview'
         const pageviewId = isPageview ? uuid : activePageviewId
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
+        // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
+        const owned = (key: string): boolean => snapshot.overrides.has(key)
         const defaults = {
-            ...(pageviewId ? { $pageview_id: pageviewId } : {}),
-            ...(activePageviewId && (isPageview || event === '$pageleave')
+            ...(pageviewId && !owned('$pageview_id') ? { $pageview_id: pageviewId } : {}),
+            ...(activePageviewId && (isPageview || event === '$pageleave') && !owned('$prev_pageview_id')
                 ? { $prev_pageview_id: activePageviewId }
                 : {}),
         }
