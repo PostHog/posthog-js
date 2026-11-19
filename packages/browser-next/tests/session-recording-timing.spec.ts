@@ -12,6 +12,7 @@ import {
     transport,
     type Transport,
     recordedEvents,
+    recordingStatus,
     resetDocument,
     setup,
     shutdownClients,
@@ -245,6 +246,28 @@ describe('session recording timing', () => {
         posthog.capture('next session')
 
         expect(saved().cache_timestamp).toBeGreaterThan(before)
+    })
+
+    it('reports a stale saved configuration only on SDK events that carry optional replay diagnostics', async () => {
+        const network = transport()
+        const first = await pageLoad(network, {})
+        await started(first.replay)
+        navigateAway(first.replay)
+        advance(2 * 60 * 60_000)
+        const second = await pageLoad(network, undefined)
+        await vi.waitFor(() => expect(recordingStatus(second.posthog)).toBe('missing_config'))
+        const staleConfig = (event: string): unknown => {
+            let value: unknown
+            const subscription = second.posthog.onEvent(({ properties }) => {
+                value = properties.$sdk_debug_replay_stale_config
+            })
+            second.posthog.capture(event)
+            subscription.dispose()
+            return value
+        }
+
+        expect(staleConfig('ordinary_custom')).toBeUndefined()
+        expect(staleConfig('$pageview')).toBe(true)
     })
 
     it('keeps recording after reset when remote configuration failed on this page', async () => {

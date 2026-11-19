@@ -35,6 +35,11 @@ export type { SessionRecordingOptions, SessionRecordingConfiguration } from './s
 const RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
 const STALE_CONFIG = '$sdk_debug_replay_stale_config'
 const MAX_EARLY_EVENTS = 100
+const DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+
+// SDK events that carry the optional replay diagnostics, at most once per interval, as in posthog-js
+const carriesOptionalDebugProperties = (event: string): boolean =>
+    event[0] === '$' && event !== '$feature_flag_called' && event !== '$$heatmap'
 
 const validSampleRate = (rate: unknown): number | null => {
     if (rate === null || rate === undefined) return null
@@ -105,6 +110,8 @@ class SessionRecordingProduct implements SessionRecordingExtension {
     // the configuration recording started with on this page: received fresh, or saved and still fresh at setup
     private _trustedConfig: SessionRecordingPersistedConfig | undefined
     private _receivedConfig = false
+    private _staleConfig = false
+    private _debugPropertiesPaused = false
     // events admitted before the recorder first starts, such as the initial `$pageview`, so they can still match
     // an event trigger once it loads
     private _earlyEvents: CapturedEventInfo[] | undefined = []
@@ -132,9 +139,13 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             // Without visibility history a held recording is not released on unload.
         }
         this._subscriptions.push(
-            client.registerDynamicEventProperties(() =>
-                this._recorder ? this._recorder.debugProperties() : { $recording_status: this.status }
-            ),
+            analyticsOf(client)!.registerDynamicEventProperties((event) => {
+                const optional = !this._debugPropertiesPaused && carriesOptionalDebugProperties(event)
+                return {
+                    ...(optional && this._staleConfig ? { [STALE_CONFIG]: true } : {}),
+                    ...(this._recorder ? this._recorder.debugProperties(optional) : { $recording_status: this.status }),
+                }
+            }),
             client.onConsentChange(({ current }) => {
                 if (current === 'denied') this._recorder?.discard()
                 this._startIfEnabledOrStop()
@@ -152,6 +163,11 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             client.onRemoteConfig((result) => this._onRemoteConfig(result)),
             client.onEvent((event) => {
                 if (this._earlyEvents && this._earlyEvents.length < MAX_EARLY_EVENTS) this._earlyEvents.push(event)
+                // the interval starts once an event that carried the optional diagnostics is accepted
+                if (!this._debugPropertiesPaused && carriesOptionalDebugProperties(event.event)) {
+                    this._debugPropertiesPaused = true
+                    setTimeout(() => (this._debugPropertiesPaused = false), DEBUG_PROPERTIES_INTERVAL_MS)
+                }
             })
         )
         this._startIfEnabledOrStop()
@@ -263,7 +279,7 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             // no fresh replay configuration arrived, so recording relies on what was persisted
             if (this._status === 'awaiting_config') {
                 this._status = 'missing_config'
-                client.registerForSession({ [STALE_CONFIG]: true })
+                this._staleConfig = true
             }
             this._startIfEnabledOrStop()
             return
