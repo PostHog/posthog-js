@@ -619,6 +619,14 @@ describe('main Electron client', () => {
         await ignored.ready()
         expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
         await ignored.shutdown(100)
+        const disabled = await start({
+            enableExceptionAutocapture: true,
+            captureUnhandledRejections: true,
+            disabled: true,
+        })
+        await disabled.ready()
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        await disabled.shutdown(100)
         const owner = await start({ enableExceptionAutocapture: true, captureUnhandledRejections: true })
         await owner.ready()
         expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
@@ -629,11 +637,14 @@ describe('main Electron client', () => {
         // Strict mode escalates to the monitor and then emits unhandledRejection for the same rejection.
         const strict = new RangeError('strict rejection')
         EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', strict, 'unhandledRejection')
+        // A different rejection arriving in between must still be reported.
+        listener(new RangeError('interleaved rejection'))
         listener(strict)
         await owner.flush()
         expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
             'main rejection',
             'strict rejection',
+            'interleaved rejection',
         ])
         expect(batches[0]).toMatchObject({
             properties: {

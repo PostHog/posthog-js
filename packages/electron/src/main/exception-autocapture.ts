@@ -12,20 +12,22 @@ export function startProcessExceptionAutocapture(
     captureUnhandledRejections = false
 ): () => void {
     const observe = createExceptionObserver(canCapture, capture)
-    let escalated = false
+    let escalated: unknown
     const monitor = (error: Error, origin: NodeJS.UncaughtExceptionOrigin): void => {
         const rejection = origin === 'unhandledRejection'
-        escalated = rejection
+        if (rejection) escalated = error
         observe(
             error,
             rejection ? 'onunhandledrejection' : 'onuncaughtexception',
             rejection ? 'node.process_unhandled_rejection' : 'node.process_uncaught_exception'
         )
     }
-    // Strict mode escalates to the monitor, then synchronously emits unhandledRejection for the same rejection.
+    // Strict mode escalates to the monitor, then emits unhandledRejection for the same rejection. Node wraps
+    // a non-Error reason in an ERR_UNHANDLED_REJECTION error, so the reason itself only matches Error reasons.
     const rejection = (reason: unknown): void => {
-        if (escalated) {
-            escalated = false
+        const wrapped = (escalated as { code?: unknown } | undefined)?.code === 'ERR_UNHANDLED_REJECTION'
+        if (escalated !== undefined && (reason === escalated || (wrapped && !(reason instanceof Error)))) {
+            escalated = undefined
             return
         }
         observe(reason, 'onunhandledrejection', 'node.process_unhandled_rejection')
