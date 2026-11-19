@@ -7,7 +7,7 @@ The main changes are:
 - Import a factory instead of a singleton, and await client creation.
 - Access product APIs through extension references instead of methods on the client.
 - Dispose subscriptions with `.dispose()` instead of calling an unsubscribe function.
-- Check return types and behavior, not just method names. In particular, feature flag reads now return result objects, and `capture()` returns nothing.
+- Check return types and behavior, not just method names. In particular, feature flag reads now return result objects, and `capture()` returns a rate-limit signal instead of the captured event.
 
 Examples below use `legacy` for the `posthog-js` instance and `posthog` for the new client. Configuration is shown only where it affects a call-site migration; this is not a complete configuration reference. See the [package README](./README.md) for extension configuration and delivery behavior.
 
@@ -44,9 +44,9 @@ Use the same factory in place of `new PostHog()` followed by `.init()`. Share th
 
 Awaiting creation means configured extensions have finished setup. It does **not** mean remote feature flag evaluation, survey definitions, or analytics delivery have completed. Check the relevant product's readiness separately.
 
-**TODO: Document the default initialization that includes all extensions.** The current root factory supplies analytics and automatically loads flags, logs, and surveys unless disabled or explicitly supplied. This is not yet the complete default-extension setup replacing `posthog-js` initialization.
+**TODO: Document the default initialization that includes all extensions.** The current root factory includes analytics delivery and automatically loads flags, logs, and surveys unless disabled or explicitly supplied. This is not yet the complete default-extension setup replacing `posthog-js` initialization.
 
-Do not substitute `@posthog/browser/core` for the root import without selecting delivery: the core entrypoint retains an analytics buffer but requires an explicit analytics extension to send events.
+`@posthog/browser/core` delivers events the same way as the root import, but installs only the extensions you pass in `extensions`; it never loads flags, logs, surveys, or autocapture automatically.
 
 ### Other initialization call sites
 
@@ -75,7 +75,7 @@ legacy.capture('checkout_completed', { order_id: 'order-123' })
 posthog.capture('checkout_completed', { order_id: 'order-123' })
 ```
 
-`capture()` now returns `void`: it synchronously attempts admission to the analytics buffer, not delivery. Code that reads the legacy `CaptureResult`, checks its truthiness, or modifies a returned event must change. An admitted event can still be dropped by queue limits or fail delivery.
+`capture()` now returns a boolean: it synchronously attempts admission to the analytics buffer, not delivery. `false` means the client rate limit dropped the event; `true` does not confirm admission, because consent, bot filtering, or validation can also skip the event. Code that reads the legacy `CaptureResult` or modifies a returned event must change. An admitted event can still be dropped by queue limits or fail delivery.
 
 | Before                                                                    | After / migration status                                                                                                                                                                                   |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -84,7 +84,7 @@ posthog.capture('checkout_completed', { order_id: 'order-123' })
 | `legacy.capture(event, properties, { send_instantly: true })`             | Ordinary `capture()` remains buffered. Use `await posthog.captureImmediate(event, properties)` when you need a delivery outcome; see below. This is not an equivalent transport-option rename.             |
 | Per-call legacy transport, URL, or batching overrides                     | No general equivalent. For best-effort unload capture use `posthog.capture(event, properties, { delivery: 'unload' })`; it does not confirm server persistence. Other overrides need a separate migration. |
 
-Unload delivery is best effort. If analytics delivery has not loaded, the call can miss page teardown; static inclusion with `analytics()` from `@posthog/browser/analytics` avoids that loading dependency. It still does not guarantee delivery.
+Unload delivery is best effort. Delivery is part of the client, so no further module load is needed at page teardown, but the request can still be lost.
 
 Immediate delivery returns a summary rather than throwing for delivery failures:
 
@@ -155,20 +155,20 @@ The new shutdown is idempotent and bounded. `await posthog.dispose()` uses the s
 
 ## Identity and person properties
 
-| Before                                                                                 | After / migration status                                                                                                                                                                                                               |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy.identify(id, set, setOnce)`                                                    | `await posthog.identify(id, set, setOnce)`. The promise does not acknowledge event delivery.                                                                                                                                           |
-| `legacy.get_distinct_id()`                                                             | `posthog.distinctId`.                                                                                                                                                                                                                  |
-| `legacy.reset()`                                                                       | `posthog.reset()`. It generates a new anonymous distinct ID, retains the device ID, clears group/extension state, and resets the session. Consent is retained.                                                                         |
-| `legacy.reset(true)` or `legacy.reset({ resetDeviceID, bootstrap })`                   | **TODO:** device-ID replacement and reset bootstrap have no equivalent options on `reset()`. Do not silently discard the arguments.                                                                                                    |
-| `legacy.setPersonProperties(set, setOnce)`                                             | **TODO:** no dedicated equivalent. `identify(id, set, setOnce)` accepts person properties when identifying a user, but calling it with the current anonymous ID can mark that ID identified. It is not a drop-in property-only update. |
-| `legacy.unsetPersonProperties(names)`                                                  | **TODO:** no dedicated equivalent preserving both server property deletion and local feature flag evaluation state.                                                                                                                    |
-| `legacy.people.set(properties)` / `legacy.people.set(name, value, callback)`           | **TODO:** migrate the deprecated wrapper together with `setPersonProperties()`, including callers using its callback.                                                                                                                  |
-| `legacy.people.set_once(properties)` / `legacy.people.set_once(name, value, callback)` | **TODO:** migrate together with property-only `$set_once` support.                                                                                                                                                                     |
-| `legacy.alias(alias, original)`                                                        | **TODO:** no alias API. `identify()` is not a general replacement for linking arbitrary identifiers.                                                                                                                                   |
-| `legacy.createPersonProfile()`                                                         | **TODO:** no equivalent person-profile creation control.                                                                                                                                                                               |
-| `legacy.setInternalOrTestUser()`                                                       | **TODO:** no equivalent helper covering its person-processing behavior.                                                                                                                                                                |
-| `legacy.setIdentity(id, hash)` / `legacy.clearIdentity()`                              | **TODO:** no HMAC/conversations identity API. This is separate from analytics `identify()` / `reset()`.                                                                                                                                |
+| Before                                                                                 | After / migration status                                                                                                                                                  |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy.identify(id, set, setOnce)`                                                    | `posthog.identify(id, set, setOnce)`. It updates local identity synchronously and returns nothing; it does not acknowledge event delivery.                                |
+| `legacy.get_distinct_id()`                                                             | `posthog.distinctId`.                                                                                                                                                     |
+| `legacy.reset()`                                                                       | `posthog.reset()`. It generates a new anonymous distinct ID, retains the device ID, clears group/extension state, and resets the session. Consent is retained.            |
+| `legacy.reset(true)` or `legacy.reset({ resetDeviceID, bootstrap })`                   | **TODO:** device-ID replacement and reset bootstrap have no equivalent options on `reset()`. Do not silently discard the arguments.                                       |
+| `legacy.setPersonProperties(set, setOnce)`                                             | `setPersonProperties(posthog, set, setOnce)` from `@posthog/browser/person`. It keeps the current identity and does not identify the user.                                |
+| `legacy.unsetPersonProperties(names)`                                                  | `unsetPersonProperties(posthog, names)` from `@posthog/browser/person`. It sends `$unset` for the properties and removes them from local feature flag evaluation context. |
+| `legacy.people.set(properties)` / `legacy.people.set(name, value, callback)`           | `setPersonProperties(posthog, properties)` or `setPersonProperties(posthog, { [name]: value })`. There is no callback.                                                    |
+| `legacy.people.set_once(properties)` / `legacy.people.set_once(name, value, callback)` | `setPersonProperties(posthog, undefined, properties)` or `setPersonProperties(posthog, undefined, { [name]: value })`. There is no callback.                              |
+| `legacy.alias(alias, original)`                                                        | `alias(posthog, alias)` from `@posthog/browser/person` links `alias` to the current distinct ID without changing the current identity. There is no `original` argument.   |
+| `legacy.createPersonProfile()`                                                         | `createPersonProfile(posthog)` from `@posthog/browser/person`.                                                                                                            |
+| `legacy.setInternalOrTestUser()`                                                       | `setInternalOrTestUser(posthog)` from `@posthog/browser/person`. It sets the `$internal_or_test_user` person property.                                                    |
+| `legacy.setIdentity(id, hash)` / `legacy.clearIdentity()`                              | **TODO:** no HMAC/conversations identity API. This is separate from analytics `identify()` / `reset()`.                                                                   |
 
 **Persistence matters:** the new default state record is separate from legacy identity storage. Changing the import does not migrate an existing distinct ID, cookies, or cross-subdomain identity. **TODO:** document the supported historical-state migration before recommending a production identity cutover.
 
@@ -184,23 +184,23 @@ const groups = legacy.getGroups()
 After:
 
 ```ts
-await posthog.group('organization', 'org-123', { plan: 'paid' })
+import { group } from '@posthog/browser/groups'
+
+group(posthog, 'organization', 'org-123', { plan: 'paid' })
 const groups = posthog.groups
 ```
 
-`group()` returns a promise, but does not wait for backend ingestion or feature flag evaluation. Treat `groups` as readonly application state, not a mutable configuration object.
+`group()` returns nothing and does not wait for backend ingestion or feature flag evaluation. Use `groupIdentify(posthog, type, key, properties)` from the same import to update a group's properties without changing membership. Treat `groups` as readonly application state, not a mutable configuration object.
 
-| Before                                                  | After / migration status                                                                                                                                               |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy.resetGroups()`                                  | **TODO:** no group-only reset API. `posthog.reset()` also resets identity and other state, so it is not equivalent.                                                    |
-| `legacy.setGroupPropertiesForFlags(properties, reload)` | **TODO:** no matching method on the browser flags facade. `group(type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
-| `legacy.resetGroupPropertiesForFlags(type)`             | **TODO:** no matching method on the browser flags facade.                                                                                                              |
+| Before                                                  | After / migration status                                                                                                                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy.resetGroups()`                                  | `resetGroups(posthog)` from `@posthog/browser/groups`. It clears group memberships and keeps identity, sessions and registered properties.                                      |
+| `legacy.setGroupPropertiesForFlags(properties, reload)` | **TODO:** no matching method on the browser flags facade. `group(posthog, type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
+| `legacy.resetGroupPropertiesForFlags(type)`             | **TODO:** no matching method on the browser flags facade.                                                                                                                       |
 
 ## Super properties
 
-The new client has `registerDynamicEventProperties()`, but does not implement the legacy persistent or session-scoped super-property API.
-
-For values that your application already owns in memory:
+Registration is on the client:
 
 ```js
 // Before
@@ -210,23 +210,23 @@ legacy.unregister('app_version')
 ```
 
 ```ts
-// After: application-owned, in-memory properties only
-const properties = posthog.registerDynamicEventProperties(() => ({ app_version: '1.0.0' }))
+// After
+posthog.register({ app_version: '1.0.0' })
 posthog.capture('app_ready')
-properties.dispose()
+posthog.unregister('app_version')
 ```
 
-The producer runs synchronously for each capture. Disposing removes that producer, not all producers or every occurrence of those property names. This does not persist values, implement `register_once`, or clear them automatically on reset or session rotation.
+Registered properties persist with the client's storage until unregistered or cleared by `reset()`. For values your application computes at capture time, `posthog.registerDynamicEventProperties(() => ({ ... }))` returns a subscription; disposing it removes that producer.
 
-| Before                                                 | After / migration status                                                                                                                                                           |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy.register(properties, days)`                    | **Partial:** use a dynamic producer only for application-owned in-memory values. **TODO:** persistence and expiration semantics.                                                   |
-| `legacy.register_once(properties, defaultValue, days)` | **TODO:** no register-once equivalent.                                                                                                                                             |
-| `legacy.register_for_session(properties)`              | **TODO:** no session-scoped registration equivalent.                                                                                                                               |
-| `legacy.unregister(property)`                          | **Partial:** dispose the producer you own; no general key-based unregister.                                                                                                        |
-| `legacy.unregister_for_session(property)`              | **TODO:** no session-scoped unregister equivalent.                                                                                                                                 |
-| `legacy.get_property(name)`                            | Read your application-owned property state. **TODO:** no general legacy super-property store getter. Use `posthog.distinctId` or `posthog.deviceId` for those SDK identity values. |
-| `legacy.getSessionProperty(name)`                      | **TODO:** no equivalent session super-property getter.                                                                                                                             |
+| Before                                                 | After / migration status                                                                                                               |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy.register(properties, days)`                    | `posthog.register(properties)`. **TODO:** no expiration (`days`) equivalent.                                                           |
+| `legacy.register_once(properties, defaultValue, days)` | `posthog.registerOnce(properties, defaultValue)`. **TODO:** no expiration (`days`) equivalent.                                         |
+| `legacy.register_for_session(properties)`              | `posthog.registerForSession(properties)`.                                                                                              |
+| `legacy.unregister(property)`                          | `posthog.unregister(property)`.                                                                                                        |
+| `legacy.unregister_for_session(property)`              | `posthog.unregisterForSession(property)`.                                                                                              |
+| `legacy.get_property(name)`                            | `posthog.getProperty(name)` reads registered properties. Use `posthog.distinctId` or `posthog.deviceId` for those SDK identity values. |
+| `legacy.getSessionProperty(name)`                      | **TODO:** no equivalent session property getter.                                                                                       |
 
 ## Feature flags
 
