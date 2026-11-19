@@ -13,6 +13,7 @@ export interface AutomaticExtension<Host> {
  */
 export class ExtensionRegistry<Host extends object> {
     private readonly _installed = new Map<string, Extension<Host>>()
+    private readonly _settingUp = new Set<Extension<Host>>()
     private readonly _lookup = new Map<string, object>()
     private readonly _reserved = new Set<string>()
     private readonly _pending = new Map<string, Promise<Extension<Host> | undefined>>()
@@ -80,18 +81,23 @@ export class ExtensionRegistry<Host extends object> {
             }
         }
         for (const key of names) this._reserved.add(key)
+        this._settingUp.add(extension)
         try {
             await extension.setup(this._host)
             if (this._disposed || !this._canInstall()) throw new Error('Extension installation stopped during setup')
         } catch (error) {
-            this._retired.add(extension)
-            try {
-                await extension.dispose?.()
-            } catch (disposeError) {
-                this._logger.error('Extension cleanup failed after setup failed', disposeError)
+            // Registry disposal may already have cleaned up an extension that was mid-setup.
+            if (!this._retired.has(extension)) {
+                this._retired.add(extension)
+                try {
+                    await extension.dispose?.()
+                } catch (disposeError) {
+                    this._logger.error('Extension cleanup failed after setup failed', disposeError)
+                }
             }
             throw error
         } finally {
+            this._settingUp.delete(extension)
             for (const key of names) this._reserved.delete(key)
         }
         const { name } = extension
@@ -120,10 +126,12 @@ export class ExtensionRegistry<Host extends object> {
     async dispose(): Promise<void> {
         if (this._disposed) return
         this._disposed = true
-        const extensions = Array.from(this._installed.values()).reverse()
-        for (const { name } of extensions) Reflect.deleteProperty(this._host, name)
+        const installed = Array.from(this._installed.values()).reverse()
+        for (const { name } of installed) Reflect.deleteProperty(this._host, name)
         this._installed.clear()
         this._lookup.clear()
+        // Extensions still in setup may already hold resources, so clean them up now rather than when setup settles.
+        const extensions = [...installed, ...this._settingUp]
         // Dispose concurrently so one stuck extension cannot block the others' cleanup.
         await Promise.all(
             extensions.map(async (extension) => {
