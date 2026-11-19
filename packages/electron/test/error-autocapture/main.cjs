@@ -11,6 +11,8 @@ app.commandLine.appendSwitch('disable-background-networking')
 app.commandLine.appendSwitch('disable-component-update')
 const enabled = process.env.FIXTURE_ENABLED === 'true'
 const disabled = process.env.FIXTURE_DISABLED === 'true'
+const rejections = process.env.FIXTURE_REJECTIONS === 'true'
+const rejectionWarnings = rejections ? 0 : 2
 let exceptionRequests = 0
 const handle = ipcMain.handle
 ipcMain.handle = function (channel, listener) {
@@ -37,6 +39,7 @@ const posthog = init({
     host: process.env.FIXTURE_HOST,
     storageDirectory: join(process.env.FIXTURE_USER_DATA, 'analytics'),
     enableExceptionAutocapture: enabled,
+    captureUnhandledRejections: rejections,
     disabled,
     captureAppLifecycleEvents: false,
     preloadFeatureFlags: false,
@@ -81,7 +84,10 @@ app.whenReady()
         session.fromPartition('posthog-electron').webRequest.onBeforeRequest(filter)
         await posthog.ready()
         assert.deepEqual(process.rawListeners('uncaughtException'), originals.uncaught)
-        assert.deepEqual(process.rawListeners('unhandledRejection'), originals.rejection)
+        assert.equal(
+            process.rawListeners('unhandledRejection').length,
+            originals.rejection.length + Number(rejections && enabled && !disabled)
+        )
         assert.equal(process.exit, originals.exit)
         assert.equal(app.quit, originals.quit)
         assert.equal(
@@ -119,7 +125,10 @@ app.whenReady()
         await posthog.captureException(new SyntaxError('main manual'))
         triggerMain('initial')
         await evaluate(window, (fixture) => fixture.trigger('initial'))
-        await waitFor('actual initial main throws/rejections', () => hostEvents.length === 1 && warnings.length === 2)
+        await waitFor(
+            'actual initial main throws/rejections',
+            () => hostEvents.length === 1 && warnings.length === rejectionWarnings
+        )
         await waitFor('actual initial renderer throws/rejections', () =>
             evaluate(window, (fixture) => fixture.hostEvents.length === 2)
         )
@@ -130,7 +139,7 @@ app.whenReady()
         await evaluate(window, (fixture) => fixture.trigger('optedout'))
         await waitFor(
             'opted-out main still reaches app handlers',
-            () => hostEvents.length === 2 && warnings.length === 4
+            () => hostEvents.length === 2 && warnings.length === rejectionWarnings * 2
         )
         await waitFor('opted-out renderer still reaches app handlers', () =>
             evaluate(window, (fixture) => fixture.hostEvents.length === 4)
@@ -163,7 +172,7 @@ app.whenReady()
             hostEvents.map((event) => event.origin),
             ['uncaughtException', 'uncaughtException']
         )
-        assert.deepEqual(warnings, Array(4).fill('UnhandledPromiseRejectionWarning'))
+        assert.deepEqual(warnings, Array(rejectionWarnings * 2).fill('UnhandledPromiseRejectionWarning'))
         if (disabled) {
             const getterReads = await evaluate(window, async (fixture) => {
                 let reads = 0
@@ -196,7 +205,16 @@ app.whenReady()
         assert.deepEqual(unexpectedNetwork, [])
         await writeFile(
             process.env.FIXTURE_REPORT,
-            JSON.stringify({ enabled, disabled, exceptionRequests, hostEvents, warnings, renderer, unexpectedNetwork })
+            JSON.stringify({
+                enabled,
+                disabled,
+                rejections,
+                exceptionRequests,
+                hostEvents,
+                warnings,
+                renderer,
+                unexpectedNetwork,
+            })
         )
         window.destroy()
         app.quit()

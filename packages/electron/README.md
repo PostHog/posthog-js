@@ -147,11 +147,33 @@ const posthog = init({ projectToken: '<ph_project_token>', enableExceptionAutoca
 const posthog = await init({ enableExceptionAutocapture: true })
 ```
 
-Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled. Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
+Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled (except with the opt-in `captureUnhandledRejections`, below). Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
 
 Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Renderer same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
 
-**Main-process limitations:** monitor-only observation sees rejections only when Node escalates them to an uncaught exception (`throw` mode without a host `unhandledRejection` handler, or `strict` mode). **Electron 42 defaults to warning-only rejections, so main-process rejections are not automatically captured in that default mode.** Host-handled rejections and non-escalating `warn`, `warn-with-error-code` or `none` modes are not automatically captured. No SDK rejection listener is installed, because it would change Node's default behavior. Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
+**Main-process unhandled promise rejections are not captured by default.** By default, main observes only `uncaughtExceptionMonitor`, which sees a rejection only when Node escalates it to an uncaught exception. Electron's main process (all supported versions, 41+) only prints `UnhandledPromiseRejectionWarning` for unhandled rejections, even with `--unhandled-rejections=throw` or `strict` set on the command line or in `NODE_OPTIONS`, so the monitor never sees them. Choose one of:
+
+- Opt in to the SDK listener with `captureUnhandledRejections: true` (requires `enableExceptionAutocapture: true`):
+
+    ```js
+    const posthog = init({
+        projectToken: '<ph_project_token>',
+        enableExceptionAutocapture: true,
+        captureUnhandledRejections: true,
+    })
+    ```
+
+    This installs `process.on('unhandledRejection')`, which changes Node's default handling: Electron no longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the process (`strict` still does). Each rejection is reported once with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. The listener is removed at shutdown.
+
+- Or keep the default and capture from your own handler:
+
+    ```js
+    process.on('unhandledRejection', (reason) => {
+        posthog.captureException(reason)
+    })
+    ```
+
+Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
 
 ### React renderer (optional)
 

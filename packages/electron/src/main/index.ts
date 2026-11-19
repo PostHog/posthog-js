@@ -79,6 +79,13 @@ export interface PostHogOptions extends Pick<
     maxQueueAgeMs?: number
     captureAppLifecycleEvents?: boolean
     enableExceptionAutocapture?: boolean
+    /**
+     * Also installs a `process.on('unhandledRejection')` listener to capture main-process rejections.
+     * Requires `enableExceptionAutocapture`. The listener changes Node's default handling: Electron no
+     * longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the
+     * process. Off by default.
+     */
+    captureUnhandledRejections?: boolean
     appBuild?: string
     onError?: (error: unknown) => void
 }
@@ -197,7 +204,8 @@ export class PostHog {
         if (!this._closing && this._options.enableExceptionAutocapture === true) {
             this._stopExceptionAutocapture = startProcessExceptionAutocapture(
                 () => !this._closing && !this._core.isDisabled && !this._core.optedOut,
-                (error, properties, hint) => this._captureException(error, properties, hint)
+                (error, properties, hint) => this._captureException(error, properties, hint),
+                this._options.captureUnhandledRejections === true
             )
         }
         if (!this._core.isDisabled && this._options.captureAppLifecycleEvents !== false) {

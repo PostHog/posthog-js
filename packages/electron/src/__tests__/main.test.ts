@@ -612,6 +612,40 @@ describe('main Electron client', () => {
         expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
     })
 
+    it('opts in to an unhandledRejection listener that captures each rejection once', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const rejections = process.rawListeners('unhandledRejection')
+        const ignored = await start({ captureUnhandledRejections: true })
+        await ignored.ready()
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        await ignored.shutdown(100)
+        const owner = await start({ enableExceptionAutocapture: true, captureUnhandledRejections: true })
+        await owner.ready()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        expect(process.rawListeners('unhandledRejection')).toHaveLength(rejections.length + 1)
+        // Call the SDK listener directly: emitting would also reach the test runner's rejection listener.
+        const listener = process.rawListeners('unhandledRejection').at(-1) as (reason: unknown) => void
+        listener(new RangeError('main rejection'))
+        // Strict mode escalates to the monitor and then emits unhandledRejection for the same rejection.
+        const strict = new RangeError('strict rejection')
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', strict, 'unhandledRejection')
+        listener(strict)
+        await owner.flush()
+        expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
+            'main rejection',
+            'strict rejection',
+        ])
+        expect(batches[0]).toMatchObject({
+            properties: {
+                $exception_source: 'node.process_unhandled_rejection',
+                $exception_list: [{ type: 'RangeError', mechanism: { type: 'onunhandledrejection', handled: false } }],
+            },
+        })
+        await owner.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+    })
+
     it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
         const monitors = process.rawListeners('uncaughtExceptionMonitor')
         const owner = await start()
