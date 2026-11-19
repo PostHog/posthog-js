@@ -1,5 +1,7 @@
 import type { FeatureFlagValue, FeatureFlagResult, JsonType, PostHogEventProperties } from '@posthog/core'
 
+import type { AutocaptureState } from './autocapture'
+
 export const COMMAND_CHANNEL = 'posthog:command:v1'
 export const STATE_CHANNEL = 'posthog:state:v1'
 export const BRIDGE_KEY = '__POSTHOG_ELECTRON__'
@@ -33,6 +35,7 @@ export interface State {
     anonymousId: string
     sessionId: string
     optedOut: boolean
+    autocapture?: AutocaptureState
     featureFlags: Record<string, FeatureFlagValue>
     flagsLoaded?: boolean
     flagRevision: number
@@ -57,6 +60,7 @@ export type Command =
     | { type: 'optOut' }
     | { type: 'flag'; key: string; flagRevision: number; value: FeatureFlagValue | null }
     | { type: 'reloadFeatureFlags' }
+    | { type: 'loadAutocaptureConfig' }
     | { type: 'flush' }
     | { type: 'exception'; properties: Properties }
 
@@ -146,6 +150,7 @@ export function validateRequest(value: unknown): asserts value is Request {
         case 'optIn':
         case 'optOut':
         case 'reloadFeatureFlags':
+        case 'loadAutocaptureConfig':
         case 'flush':
             return
         case 'capture':

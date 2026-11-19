@@ -49,6 +49,8 @@ export interface PostHogOptions extends Pick<
     | 'fetchRetryDelay'
     | 'preloadFeatureFlags'
     | 'disableRemoteFeatureFlags'
+    | 'disableRemoteConfig'
+    | 'remoteConfigRequestTimeoutMs'
     | 'defaultOptIn'
     | 'disabled'
     | 'bootstrap'
@@ -418,6 +420,7 @@ export class PostHog {
         const optedOut = this._core.optedOut
         this._core.reset([
             PostHogPersistedProperty.OptedOut,
+            PostHogPersistedProperty.RemoteConfig,
             PostHogPersistedProperty.InstalledAppVersion,
             PostHogPersistedProperty.InstalledAppBuild,
         ])
@@ -612,6 +615,7 @@ export class PostHog {
             anonymousId: this._core.getAnonymousId(),
             sessionId: this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? '',
             optedOut: this._core.optedOut,
+            autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
             flagsLoaded: details !== undefined,
             flagRevision: this._flagRevision,
@@ -771,6 +775,12 @@ export class PostHog {
         if (command.type === 'reloadFeatureFlags') return this._reloadFeatureFlags(generation, authorize)
         // Withdrawal from any window must survive an immediate quit, like a main-process optOut().
         if (command.type === 'optOut') return this._changeConsent(true, undefined, authorize)
+        if (command.type === 'loadAutocaptureConfig') {
+            await this._core.loadAutocaptureConfig()
+            if (!this._closing) await this._core.persist()
+            this._scheduleState()
+            return
+        }
         const operation = () =>
             this._core.withContext(context, () => {
                 switch (command.type) {
