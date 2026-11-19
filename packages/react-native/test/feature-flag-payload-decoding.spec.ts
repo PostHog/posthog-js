@@ -86,6 +86,22 @@ describe('PostHog RN feature flag payload decoding', () => {
     expect(posthog.getFeatureFlagDetails()?.featureFlagPayloads).toEqual({ checkout: null })
   })
 
+  it('warns about a malformed payload once, however often it is read', async () => {
+    serializedPayload = '{broken'
+    posthog = new PostHog('test-token', { customStorage: mockStorage, flushInterval: 0, preloadFeatureFlags: false })
+    await posthog.ready()
+    const warn = vi.spyOn((posthog as any)._logger, 'warn')
+    await posthog.reloadFeatureFlagsAsync()
+
+    for (let i = 0; i < 3; i++) {
+      posthog.capture('event')
+      posthog.getFeatureFlagResult('checkout', { sendFeatureFlagEvent: false })
+      posthog.getAllFeatureFlags()
+    }
+
+    expect(warn.mock.calls.filter(([msg]) => String(msg).includes('not valid JSON'))).toHaveLength(1)
+  })
+
   it('keeps a malformed payload null after a merging updateFlags()', async () => {
     await loadFlags('{broken')
 
