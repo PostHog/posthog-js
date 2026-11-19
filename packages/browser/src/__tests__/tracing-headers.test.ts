@@ -361,7 +361,7 @@ describe('tracing headers', () => {
             expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
         })
 
-        it('keeps a Request body and the session headers when the distinct ID is not a valid header value', async () => {
+        it('sends a Request with its body and no PostHog headers when the distinct ID is not a valid header value', async () => {
             const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
                 Promise.resolve(new Response())
             )
@@ -373,10 +373,35 @@ describe('tracing headers', () => {
 
             expect(originalFetch).toHaveBeenCalledTimes(1)
             const downstreamRequest = originalFetch.mock.calls[0][0] as Request
-            expect(downstreamRequest.headers.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
-            expect(downstreamRequest.headers.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+            expect(downstreamRequest.headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
+            expect(downstreamRequest.headers.has('X-POSTHOG-WINDOW-ID')).toBe(false)
             expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
             await expect(downstreamRequest.text()).resolves.toBe('request-body')
+        })
+
+        it('keeps the caller headers and traceparent but adds no PostHog headers when the distinct ID is not a valid header value', async () => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
+            setWindowFetch(originalFetch)
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any, ['example.com'])
+
+            await window.fetch('https://example.com/path', {
+                body: 'request-body',
+                headers: { 'x-original': 'original-header-value' },
+                method: 'POST',
+            })
+
+            expect(originalFetch).toHaveBeenCalledTimes(1)
+            const [input, downstreamInit] = originalFetch.mock.calls[0]
+            expect(input).toBe('https://example.com/path')
+            expect(downstreamInit?.body).toBe('request-body')
+            const headers = new Headers(downstreamInit?.headers)
+            expect(headers.get('x-original')).toBe('original-header-value')
+            expect(headers.has('traceparent')).toBe(true)
+            expect(headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
+            expect(headers.has('X-POSTHOG-WINDOW-ID')).toBe(false)
+            expect(headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
         })
 
         it('sends a Request with its unread body when preparing tracing headers fails', async () => {
@@ -454,7 +479,7 @@ describe('tracing headers', () => {
             })
         })
 
-        it('opens the request with the session headers when the distinct ID is not a valid header value', () => {
+        it('opens the request without PostHog headers when the distinct ID is not a valid header value', () => {
             const openSpy = vi.spyOn(XMLHttpRequest.prototype, 'open')
             const setRequestHeaderSpy = vi
                 .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
@@ -465,9 +490,7 @@ describe('tracing headers', () => {
             expect(() => xhr.open('GET', 'https://example.com/path')).not.toThrow()
 
             expect(openSpy).toHaveBeenCalledTimes(1)
-            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-SESSION-ID', 'session-id')
-            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-WINDOW-ID', 'window-id')
-            expect(setRequestHeaderSpy.mock.calls.some(([name]) => name === 'X-POSTHOG-DISTINCT-ID')).toBe(false)
+            expect(setRequestHeaderSpy).not.toHaveBeenCalled()
         })
 
         it('opens the request when preparing tracing headers fails', () => {
