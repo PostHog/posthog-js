@@ -192,7 +192,10 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
     const lane = new Lane(buffer, (error) => host.reportFailure(error))
     lane.attach({
         batchSize: MAX_BATCH_SNAPSHOTS,
-        flushAt: 1,
+        // each snapshot sends on arrival, except while a failed batch at the front of the queue waits to retry
+        get flushAt() {
+            return (buffer._queue[0]?.[5] ?? 0) > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : 1
+        },
         flushInterval: RETRY_INTERVAL_MS,
         canDeliver: () => !!host.runtime[2] && host.canDeliver(),
         async deliver(messages, context) {
