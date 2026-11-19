@@ -85,7 +85,12 @@ export const clients: IPostHog[] = []
 export const setup = async (
     config: SessionRecordingRemoteConfig | false = {},
     options: SessionRecordingOptions = {},
-    overrides: { replay?: SessionRecordingExtension; extensions?: BrowserExtension[]; optOutByDefault?: boolean } = {}
+    overrides: {
+        replay?: SessionRecordingExtension
+        extensions?: BrowserExtension[]
+        optOutByDefault?: boolean
+        capturePageview?: boolean
+    } = {}
 ): Promise<Setup> => {
     const network = transport()
     const storage = new MemoryStorage()
@@ -93,7 +98,7 @@ export const setup = async (
     const posthog = await createCore({
         projectToken: 'ph_test',
         apiHost: 'https://us.i.posthog.com',
-        capturePageview: false,
+        capturePageview: overrides.capturePageview ?? false,
         storage,
         navigator: false,
         fetch: network.fetch,
