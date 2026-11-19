@@ -1,0 +1,58 @@
+[
+  {
+    "framework": "mcp-handler",
+    "row": "without withMcpSessionHeader",
+    "era": "legacy",
+    "name": "client name recorded",
+    "why": "Control row: mcp-handler streams the initialize response, so instrument() cannot add the session token and later per-request servers never learn the client. withMcpSessionHeader is the fix the other rows prove."
+  },
+  {
+    "framework": "mcp-handler",
+    "row": "without withMcpSessionHeader",
+    "era": "legacy",
+    "name": "one session across the conversation",
+    "why": "Same control row: without the token, $mcp_initialize lands in its own session"
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateful",
+    "era": "legacy",
+    "name": "error message is clean",
+    "why": "FastMCP rewrites a thrown error to \"Tool 'fail_always' execution failed: intentional failure\" before the MCP layer sees it. Framework behaviour, not ours."
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateless",
+    "era": "legacy",
+    "name": "error message is clean",
+    "why": "Same FastMCP error rewrite"
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateless json",
+    "era": "legacy",
+    "name": "error message is clean",
+    "why": "Same FastMCP error rewrite"
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateless",
+    "era": "legacy",
+    "name": "client name recorded",
+    "why": "Stateless SSE streams the initialize response before instrument() can add the session token, as the README's enableJsonResponse section describes. The 'stateless json' row is the documented fix and passes."
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateless",
+    "era": "legacy",
+    "name": "protocol version recorded",
+    "why": "Stateless SSE streams the initialize response before instrument() can add the session token, as the README's enableJsonResponse section describes. The 'stateless json' row is the documented fix and passes."
+  },
+  {
+    "framework": "fastmcp",
+    "row": "stateless",
+    "era": "legacy",
+    "name": "one session across the conversation",
+    "why": "Stateless SSE streams the initialize response before instrument() can add the session token, as the README's enableJsonResponse section describes. The 'stateless json' row is the documented fix and passes."
+  }
+]

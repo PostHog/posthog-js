@@ -1,5 +1,27 @@
 # posthog-js
 
+## 1.451.2
+
+### Patch Changes
+
+- [#5774](https://github.com/PostHog/posthog-js/pull/5774) [`58bf16f`](https://github.com/PostHog/posthog-js/commit/58bf16f64d1ed8151c26ca254fb50c353dfa4f3d) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Stop including the first dropped event's name in the console warning shown when the bot user agent filter drops events
+  (2026-11-18)
+
+## 1.451.1
+
+### Patch Changes
+
+- [#5798](https://github.com/PostHog/posthog-js/pull/5798) [`4c9fcaf`](https://github.com/PostHog/posthog-js/commit/4c9fcaf10c848223ec8d079d8441c5f8994bc38d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fixed requests being blocked by web application firewalls running the OWASP Core Rule Set (ModSecurity and others) for visitors whose session was sampled out of session replay. The `ph_<token>_posthog` cookie stored that decision with a `!` prefix that rule 942190 flags as SQL injection. The decision now uses a plain letter, and this version removes old `!` values from the cookie on the next page load, whether or not replay starts on that page. Versions before 1.417.0 that load the unversioned recorder from the PostHog CDN stop writing new `!` values without upgrading, but only replace old ones on pages where the recorder loads.
+  (2026-11-18)
+
+## 1.451.0
+
+### Minor Changes
+
+- [#5765](https://github.com/PostHog/posthog-js/pull/5765) [`91537b4`](https://github.com/PostHog/posthog-js/commit/91537b41bd6f5399e82c4c193d464c4c73a51bca) Thanks [@marandaneto](https://github.com/marandaneto)! - Load remote config as JSON with `fetch` instead of executable `config.js` when site apps are disabled (the default). The SDK no longer falls back to `config.js` when the JSON request fails.
+
+  **Action may be required if you use a Content Security Policy without a reverse proxy:** remote config is now fetched from the assets host, so `connect-src` must allow it, not only `script-src`. Add `https://us-assets.i.posthog.com` (US), `https://eu-assets.i.posthog.com` (EU), or `https://*.posthog.com` to `connect-src`. Otherwise remote config fails to load, so features such as session recording, surveys, and autocapture use their default or saved settings. Feature flags are unaffected. Sites using a reverse proxy, no CSP, or `opt_in_site_apps: true` need no change. (2026-11-18)
+
 ## 1.450.1
 
 ### Patch Changes
