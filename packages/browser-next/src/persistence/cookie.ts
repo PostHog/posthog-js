@@ -216,13 +216,11 @@ const sameIdentity = (cookie: Values, identity: Identity): boolean =>
  * the session, which the state's own revisions already reconciled. Unknown posthog-js keys survive unless a reset
  * started a new person.
  */
-const toCookie = (record: Values, existing: Values | undefined, stale: boolean): Values => {
+const toCookie = (record: Values, existing: Values | undefined, stale: boolean, replaced: boolean): Values => {
     const identified = record.isIdentified === true
-    // A new person starts only when the identity changes: an empty session posthog-js writes when it idles out keeps it.
-    const reset =
-        !!existing &&
-        !sameIdentity(existing, [record.distinctId, identified]) &&
-        (!identified || record.sessionReset !== undefined)
+    // A new person starts only when a reset replaced the anonymous ID. An identify keeps posthog-js keys, including
+    // after the empty session posthog-js writes when it idles out or resets.
+    const reset = !!existing && !sameIdentity(existing, [record.distinctId, identified]) && (!identified || replaced)
     const value: Values = existing && (stale || !reset) ? existing : {}
     if (!stale) {
         // Another subdomain can enable person processing for this identity before this context reads it.
@@ -297,6 +295,8 @@ export const cookiePersistence = (options: CookiePersistenceOptions = {}): Cooki
             const site = (document: Document): string => (siteDomain ??= findSiteDomain(document, hostname))
             // The identity this context loaded or last wrote. A different cookie identity is newer than ours.
             let known: Identity | undefined
+            // The anonymous ID this context loaded or last wrote. Only a reset replaces it.
+            let anonymousId: unknown
             let scoped = false
             const write = (state: string | undefined): void => {
                 try {
@@ -331,7 +331,8 @@ export const cookiePersistence = (options: CookiePersistenceOptions = {}): Cooki
                             identity[0] === known[0] &&
                             identity[1] === known[1]
                         if (stale) identity = undefined
-                        value = toCookie(record, existing, stale)
+                        value = toCookie(record, existing, stale, record.anonymousId !== anonymousId)
+                        anonymousId = record.anonymousId
                     }
                     writeCookie(document, name, value, settings, settings.crossSubdomain ? site(document) : '')
                     // A rejected write must not make this context's identity look current.
@@ -348,7 +349,10 @@ export const cookiePersistence = (options: CookiePersistenceOptions = {}): Cooki
                     if (!known && merged) {
                         try {
                             const record: unknown = JSON.parse(merged)
-                            if (isRecord(record)) known = [record.distinctId, record.isIdentified === true]
+                            if (isRecord(record)) {
+                                known = [record.distinctId, record.isIdentified === true]
+                                anonymousId = record.anonymousId
+                            }
                         } catch {
                             // An unreadable record leaves the first write to establish the identity.
                         }
