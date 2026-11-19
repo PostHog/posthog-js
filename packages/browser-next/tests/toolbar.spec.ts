@@ -254,6 +254,24 @@ describe('toolbar', () => {
         window.dispatchEvent(new Event('turbolinks:load'))
         expect(toolbarScripts()).toHaveLength(2)
     })
+
+    it('inserts one current script for each Turbolinks body replacement', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(10 * 60 * 1000)
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        client.toolbar?.loadToolbar()
+        finishScriptLoad()
+        for (let navigation = 1; navigation <= 3; navigation++) {
+            vi.setSystemTime((10 + 5 * navigation) * 60 * 1000)
+            document.body.replaceChildren()
+            window.dispatchEvent(new Event('turbolinks:load'))
+            expect(toolbarScripts(), `navigation ${navigation}`).toHaveLength(1)
+            expect(toolbarScripts()[0]?.src).toMatch(new RegExp(`&t=${Date.now()}$`))
+            finishScriptLoad()
+        }
+        expect(toolbarWindow.ph_load_toolbar).toHaveBeenCalledTimes(4)
+        await client.dispose()
+    })
 })
 
 describe('automatic toolbar loading', () => {

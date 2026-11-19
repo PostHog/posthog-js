@@ -91,7 +91,6 @@ export const createToolbar = (options: ToolbarOptions, stateHash: string | null)
             const hosts = (posthog as unknown as { _requestRuntime?: RequestRuntime })._requestRuntime?.[0]
             const apiHost = hosts?.api ?? ''
             const assetHost = trimHost(options.assetHost ?? '') || hosts?.assets || apiHost
-            const scriptUrl = `${assetHost}/static/toolbar.js?v=${posthog.library.version}&t=${getToolbarCacheBucket()}`
             return loadToolbar(
                 {
                     token: posthog.projectToken,
@@ -106,6 +105,8 @@ export const createToolbar = (options: ToolbarOptions, stateHash: string | null)
                 (callback) => {
                     // The script loader can call back before it returns its cancel function.
                     const pending: { cancel?: () => void; done?: boolean } = {}
+                    // Turbolinks reloads reuse this loader, so each one takes the current cache bucket.
+                    const scriptUrl = `${assetHost}/static/toolbar.js?v=${posthog.library.version}&t=${getToolbarCacheBucket()}`
                     pending.cancel = insertScript(scriptUrl, options, (error) => {
                         pending.done = true
                         if (pending.cancel) pendingLoads.delete(pending.cancel)
