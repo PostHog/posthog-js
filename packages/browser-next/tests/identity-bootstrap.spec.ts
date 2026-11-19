@@ -1,4 +1,4 @@
-import type { IPostHog } from '../src/core/types'
+import type { IPostHog, StorageLike } from '../src/core/types'
 import {
     CONSENT_KEY,
     createClient,
@@ -183,6 +183,36 @@ describe('setup bootstrap', () => {
         const distinctId = original.distinctId
         const posthog = await create(storage, [], { bootstrap: { distinctId: 'anon-2' } })
         expect(posthog.distinctId).toBe(distinctId)
+    })
+
+    it('does not replace a stored identity that a retried read recovers', async () => {
+        const storage = new MemoryStorage()
+        const original = await create(storage)
+        original.identify('persisted-user')
+        await original.shutdown()
+
+        let fail = true
+        const flaky: StorageLike = {
+            getItem(key) {
+                if (key === STATE_KEY && fail) {
+                    fail = false
+                    throw new Error('unavailable once')
+                }
+                return storage.getItem(key)
+            },
+            setItem: (key, value) => storage.setItem(key, value),
+            removeItem: (key) => storage.removeItem(key),
+        }
+        const sent: SentEvent[] = []
+        const posthog = await create(flaky, sent, { bootstrap: { distinctId: 'new-anonymous' } })
+        posthog.capture('after_recovery')
+        await posthog.flush()
+
+        expect([
+            posthog.distinctId,
+            storedState(storage).distinctId,
+            eventNamed(sent, 'after_recovery')?.distinct_id,
+        ]).toEqual(Array(3).fill('persisted-user'))
     })
 
     it('identifies a stored anonymous user', async () => {
