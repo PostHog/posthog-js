@@ -4,7 +4,7 @@ Coordinated PostHog analytics and client feature flags for Electron. One main-pr
 
 This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
-**Release status:** not published by this PR. Registry dependency compatibility, cross-OS/runtime CI and published SDK-harness acceptance remain release gates; only macOS runtime execution has been locally demonstrated. See [release gates](../../RELEASING.md#electron-alpha-releases) and [migration](./MIGRATION.md). Do not interpret local tarball tests with a core override as proof that an npm consumer can install this alpha.
+**Release status:** not published by this PR. Platform CI passed local-tarball packaging on macOS, Windows and Linux. That does not establish registry dependency compatibility or published SDK-harness acceptance. See [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-alpha-releases) and [migration](./MIGRATION.md). Do not interpret local tarball tests with a core override as proof that an npm consumer can install this alpha.
 
 ## Setup
 
