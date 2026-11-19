@@ -42,6 +42,9 @@ import type { FlagsExtension } from '../products/flags/flags-internal'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
+// The request the flags extension builds to list early-access features: the project token and stage filters only.
+const EARLY_ACCESS_CATALOGUE_PATH =
+    /^\/api\/early_access_features\/\?token=[^&#]*(&stage=(concept|alpha|beta|general-availability))*&?$/
 
 const normalizeHost = (host: string): string => {
     let end = host.length
@@ -473,16 +476,15 @@ class PostHog implements IPostHog {
         }
     }
 
-    sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        // Only a body-less GET can be permitted while opted out, so the permission cannot carry event data.
-        const allowWhileOptedOut =
-            init?.allowWhileOptedOut === true && init.body === undefined && (init.method ?? 'GET') === 'GET'
-        return sendRequest(
-            this._requestRuntime,
-            path,
-            init,
-            () => !this._blocked && (allowWhileOptedOut || !this.hasOptedOut())
-        )
+    sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
+        // The project's early-access catalogue carries no person data, so it stays available while opted out.
+        const catalogue =
+            EARLY_ACCESS_CATALOGUE_PATH.test(path) &&
+            (init.method ?? 'GET') === 'GET' &&
+            init.body === undefined &&
+            !init.query &&
+            !init.headers
+        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && (catalogue || !this.hasOptedOut()))
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
