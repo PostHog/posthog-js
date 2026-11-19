@@ -109,9 +109,13 @@ const reply = {
     is_private: false,
 }
 
-// Fixed backend responses for the widget's ticket lifecycle. Like the API, message polls
-// return only messages created strictly after the `after` timestamp.
-export function conversationsResponse({ method, path, url }) {
+// Fixed backend responses for the widget's ticket lifecycle. Like the API, every widget route
+// rejects a missing or wrong widget token, and message polls return only messages created
+// strictly after the `after` timestamp.
+export function conversationsResponse({ method, path, url, headers }) {
+    if (!path.startsWith(`${conversationsApi}/`)) return undefined
+    if (headers['x-conversations-token'] !== conversationsConfig.token)
+        return { status: 403, json: { error: 'Authentication required' } }
     if (method === 'GET' && path === `${conversationsApi}/tickets`) return { json: { count: 0, results: [] } }
     if (method === 'POST' && path === `${conversationsApi}/message`)
         return {

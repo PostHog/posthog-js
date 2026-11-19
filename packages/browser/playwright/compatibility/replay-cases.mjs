@@ -11,6 +11,8 @@ export const replayLifecycleScenarios = [
     'replay-url-trigger',
     'replay-linked-flag',
 ]
+// The linked flag is evaluated with a nonmatching variant first, then switched to the linked one.
+export const replayLinkedFlag = { flag: 'compat-replay-variant', before: 'red', variant: 'blue' }
 // Start conditions the lazy recorder evaluates from the core's persisted remote config.
 export const replayTriggerConfig = {
     'replay-event-trigger': { sampleRate: '0', eventTriggers: ['compat-replay-trigger'], triggerMatchType: 'any' },
@@ -18,7 +20,7 @@ export const replayTriggerConfig = {
         urlTriggers: [{ url: 'compat-url-trigger', matching: 'regex' }],
         urlBlocklist: [{ url: 'compat-url-blocked', matching: 'regex' }],
     },
-    'replay-linked-flag': { linkedFlag: { flag: 'compat-variant', variant: 'blue' } },
+    'replay-linked-flag': { linkedFlag: { flag: replayLinkedFlag.flag, variant: replayLinkedFlag.variant } },
 }
 export const replayMinimumDurationMs = 5000
 const idleThresholdMs = 5 * 60 * 1000
@@ -61,16 +63,19 @@ export function assertReplayLifecycleProof(scenario, network, replay) {
         assert.equal(replay.beforeUnloadSnapshots, 0, 'Passive visit uploaded replay before clean unload')
         assert.equal(replay.navigated, true, 'Bounce did not use real navigation')
     }
-    if (['replay-event-trigger', 'replay-url-trigger'].includes(scenario)) {
+    if (replayTriggerConfig[scenario]) {
         assert.equal(replay.beforeTriggerSnapshots, 0, 'Replay uploaded before its trigger matched')
         assert(serialized.includes('After trigger'), 'Replay lost activity after its trigger matched')
     }
     if (scenario === 'replay-url-trigger') {
         assert.equal(replay.blockedMutationSuppressed, true, 'Replay uploaded activity on a blocked URL')
+        assert(!serialized.includes('On blocked URL'), 'Replay delivered activity from a blocked URL after resuming')
         assert(serialized.includes('After blocked URL'), 'Replay did not resume after leaving a blocked URL')
     }
-    if (scenario === 'replay-linked-flag')
-        assert(serialized.includes('Flag enabled'), 'Linked-flag replay lost activity')
+    if (scenario === 'replay-linked-flag') {
+        assert.equal(replay.variantBeforeTrigger, replayLinkedFlag.before, 'Replay flag did not start unmatched')
+        assert.equal(replay.variantAfterTrigger, replayLinkedFlag.variant, 'Replay flag did not switch to its variant')
+    }
     if (scenario === 'replay-minimum-duration') {
         assert.equal(replay.belowMinimumSnapshots, 0, 'Replay uploaded below the configured minimum duration')
         assert.equal(replay.rebuiltText, 'Qualified visit', 'Minimum-duration replay lost its content')
@@ -105,7 +110,7 @@ async function rebuild({ page, network, sessionId, expect, origin, text }) {
     }
 }
 
-export async function exerciseReplayLifecycle({ scenario, page, received, expect, origin }) {
+export async function exerciseReplayLifecycle({ scenario, page, server, received, expect, origin }) {
     const marker = (phase) =>
         page.evaluate((phase) => {
             window.__compat.phase = phase
@@ -170,16 +175,27 @@ export async function exerciseReplayLifecycle({ scenario, page, received, expect
             await mutate(text)
             await interact()
         }
-        if (scenario !== 'replay-linked-flag') {
-            await activity('Before trigger')
-            await advance(3000)
-            replay.statusBeforeTrigger = await status()
-            replay.beforeTriggerSnapshots = (await received()).snapshots.length
-            assert.equal(replay.beforeTriggerSnapshots, 0, 'Replay uploaded before its trigger matched')
-            if (scenario === 'replay-event-trigger') await marker('trigger')
-            else await navigate('compat-url-trigger')
-            await activity('After trigger')
-        } else await activity('Flag enabled')
+        await activity('Before trigger')
+        await advance(3000)
+        replay.statusBeforeTrigger = await status()
+        replay.beforeTriggerSnapshots = (await received()).snapshots.length
+        assert.equal(replay.beforeTriggerSnapshots, 0, 'Replay uploaded before its trigger matched')
+        if (scenario === 'replay-event-trigger') await marker('trigger')
+        else if (scenario === 'replay-url-trigger') await navigate('compat-url-trigger')
+        else {
+            const replayFlag = () =>
+                page.evaluate(
+                    (flag) => window.__compat.ph.getFeatureFlag(flag, { send_event: false }),
+                    replayLinkedFlag.flag
+                )
+            replay.variantBeforeTrigger = await replayFlag()
+            server.updateState({ flags: { [replayLinkedFlag.flag]: replayLinkedFlag.variant } })
+            await page.evaluate(() => window.__compat.call('reloadFeatureFlags'))
+            await advance(100)
+            await expect.poll(replayFlag).toBe(replayLinkedFlag.variant)
+            replay.variantAfterTrigger = await replayFlag()
+        }
+        await activity('After trigger')
         await advance(3000)
         replay.statusAfterStart = await status()
         await waitForSnapshots()
@@ -189,7 +205,10 @@ export async function exerciseReplayLifecycle({ scenario, page, received, expect
             await advance(3000)
             replay.statusWhileBlocked = await status()
             replay.blockedMutationSuppressed = !(await snapshotText()).includes('On blocked URL')
-            await navigate('compat-url-trigger')
+            // Resuming takes a full snapshot of the live DOM, so remove the blocked-only text first.
+            // The destination matches neither the trigger nor the blocklist.
+            await mutate('Leaving blocked URL')
+            await navigate('compat-url-resumed')
             await activity('After blocked URL')
             await advance(3000)
             replay.statusAfterBlocked = await status()

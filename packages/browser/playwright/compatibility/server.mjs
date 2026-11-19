@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock-server'
 import { interactionScenarios } from './interaction-cases.mjs'
-import { replayMinimumDurationMs, replayTriggerConfig } from './replay-cases.mjs'
+import { replayLinkedFlag, replayMinimumDurationMs, replayTriggerConfig } from './replay-cases.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 import { toolbarScript, conversationsConfig, conversationsResponse } from './extension-cases.mjs'
 
@@ -69,6 +69,9 @@ export function compatibilityServer(settings) {
                 'compat-enabled': true,
                 'compat-variant': 'blue',
                 ...(settings.scenario.startsWith('xhr-timeout') ? { 'compat-timeout': 'cached' } : {}),
+                ...(settings.scenario === 'replay-linked-flag'
+                    ? { [replayLinkedFlag.flag]: replayLinkedFlag.before }
+                    : {}),
             },
             projectToken: 'phc_COMPAT',
             configOverrides: {

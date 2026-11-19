@@ -505,6 +505,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             ({ replay, api } = await exerciseReplayLifecycle({
                 scenario,
                 page,
+                server,
                 received,
                 expect,
                 origin: server.origin,

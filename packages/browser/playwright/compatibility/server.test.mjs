@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
+import { replayLinkedFlag } from './replay-cases.mjs'
+import { conversationsConfig } from './extension-cases.mjs'
 
 async function fixture(t, scenario = 'core', mode = 'snippet') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
@@ -177,4 +179,45 @@ test('compatibility behavioral projection retains original ordered ingestion bat
     assert.equal(record.path, '/e')
     assert.deepEqual(record.body, batch)
     assert.equal(server.inspect().requests[0].rawBodyBase64, Buffer.from(bytes).toString('base64'))
+})
+
+test('linked-flag replay starts with a nonmatching replay flag and keeps the readiness flag', async (t) => {
+    const { server, origin } = await fixture(t, 'replay-linked-flag')
+    server.releaseBarrier('flags')
+    const flags = async () =>
+        (await (await fetch(origin + '/flags/', { method: 'POST', body: '{}' })).json()).featureFlags
+    assert.deepEqual(await flags(), {
+        'compat-enabled': true,
+        'compat-variant': 'blue',
+        [replayLinkedFlag.flag]: replayLinkedFlag.before,
+    })
+    server.updateState({ flags: { [replayLinkedFlag.flag]: replayLinkedFlag.variant } })
+    assert.equal((await flags())[replayLinkedFlag.flag], replayLinkedFlag.variant)
+})
+
+test('Conversations widget routes require the widget token', async (t) => {
+    const { origin } = await fixture(t, 'conversations')
+    const widget = origin + '/api/conversations/v1/widget'
+    const requests = [
+        ['POST', '/message', { message: 'Compat question', ticket_id: null }],
+        ['GET', '/messages/compat-ticket'],
+        ['POST', '/messages/compat-ticket/read', {}],
+        ['GET', '/tickets'],
+    ]
+    for (const [method, path, body] of requests) {
+        const statuses = []
+        for (const token of [conversationsConfig.token, undefined, 'not-the-widget-token']) {
+            const response = await fetch(widget + path, {
+                method,
+                headers: {
+                    ...(body ? { 'content-type': 'application/json' } : {}),
+                    ...(token === undefined ? {} : { 'x-conversations-token': token }),
+                },
+                body: body && JSON.stringify(body),
+            })
+            await response.json()
+            statuses.push(response.status)
+        }
+        assert.deepEqual(statuses, [200, 403, 403], `${method} ${path}`)
+    }
 })
