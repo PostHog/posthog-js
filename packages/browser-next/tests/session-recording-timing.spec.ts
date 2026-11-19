@@ -268,6 +268,43 @@ describe('session recording timing', () => {
         expect(sessions.has(second.posthog.session!.sessionId)).toBe(true)
     })
 
+    it.each(['1', '0'])(
+        'applies a fresh sample rate of %s to a recording started from the saved configuration',
+        async (sampleRate) => {
+            const network = transport()
+            const first = await pageLoad(network, { sampleRate: '1' })
+            await started(first.replay)
+            navigateAway(first.replay)
+
+            let respond!: (response: Response) => void
+            const fresh = new Promise<Response>((resolve) => {
+                respond = resolve
+            })
+            const second = await pageLoad(
+                {
+                    ...network,
+                    fetch: (input, init) => (String(input).includes('/array/') ? fresh : network.fetch(input, init)),
+                },
+                undefined
+            )
+            await started(second.replay)
+            respond(new Response(JSON.stringify(remoteConfig({ sampleRate })), { status: 200 }))
+            await vi.waitFor(() =>
+                expect(second.posthog.kv.get('$session_recording_remote_config')).toMatchObject({
+                    sampleRate: Number(sampleRate),
+                })
+            )
+            await started(second.replay)
+            await second.replay.flush?.()
+            network.snapshots.length = 0
+
+            interact()
+            await second.replay.flush?.()
+
+            expect(network.snapshots.length > 0).toBe(sampleRate === '1')
+        }
+    )
+
     it('extends the session with replay interactions', async () => {
         const { replay, posthog } = await setup()
         await started(replay)
