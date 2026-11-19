@@ -237,6 +237,53 @@ describe('React Native captureAi', () => {
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
 
+  it('persists only the newest 5 MiB of kept AI events for the next launch', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    const twoMiB = 'x'.repeat(2 * 1024 * 1024)
+    for (const index of [0, 1, 2]) {
+      earlier.captureAi('$ai_generation', { blob: twoMiB, index })
+    }
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1, 2])
+  })
+
+  it('keeps AI events from an earlier launch when flush() runs before storage has loaded', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog()
+    earlier.captureAi('$ai_generation')
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    posthog = new PostHog('test-token', {
+      customStorage: {
+        ...storage,
+        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
+      },
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      captureAiCompression: 'none',
+      disableCompression: true,
+    })
+    const early = posthog.flush()
+    await posthog.ready()
+    await early
+    await posthog.flush()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
   it('returns undefined and queues nothing when before_send drops the event', async () => {
     const client = await newPostHog({ before_send: () => null })
 

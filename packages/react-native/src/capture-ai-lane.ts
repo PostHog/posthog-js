@@ -14,6 +14,8 @@ export const CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES = 8 * 1024 * 1024 + 64 * 1024
 export const CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE = 100
 export const CAPTURE_AI_DEFAULT_TIMEOUT_MS = 60_000
 const CAPTURE_AI_MAX_QUEUE_BYTES = 50 * 1024 * 1024
+// Each change rewrites the stored queue, so only the newest events up to this size are kept across restarts.
+const CAPTURE_AI_MAX_PERSISTED_BYTES = 5 * 1024 * 1024
 const CAPTURE_AI_BATCH_BYTE_TARGET = 5 * 1024 * 1024
 const MAX_RESEND_WAIT_MS = 30_000
 
@@ -46,6 +48,8 @@ export class CaptureAiLane {
   private _resendCount = 0
   private _batchSize: number
   private _stopped = false
+  private _events?: SerializedV1Event[]
+  private _storageLoaded = false
 
   constructor(
     private readonly _storage: PostHogRNStorage,
@@ -56,6 +60,7 @@ export class CaptureAiLane {
     this._batchSize = _settings.maxBatchSize
     // Events left from an earlier launch are sent on the first timer flush.
     const scheduleLeftovers = (): void => {
+      this._storageLoaded = true
       if (this._queue().length > 0) {
         this._scheduleFlush()
       }
@@ -244,13 +249,28 @@ export class CaptureAiLane {
   }
 
   private _queue(): SerializedV1Event[] {
+    if (this._events) {
+      return this._events
+    }
     const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
-    return Array.isArray(stored) ? stored.filter(isQueuedEvent) : []
+    const events = Array.isArray(stored) ? stored.filter(isQueuedEvent) : []
+    // Until storage has loaded, a read sees nothing yet; caching it would lose an earlier launch's events.
+    if (this._storageLoaded) {
+      this._events = events
+    }
+    return events
   }
 
   private _setQueue(queue: SerializedV1Event[]): void {
-    if (queue.length > 0) {
-      this._storage.setItem(PostHogPersistedProperty.AiQueue, queue)
+    this._events = queue
+    let start = queue.length
+    let bytes = 0
+    while (start > 0 && bytes + queue[start - 1].bytes <= CAPTURE_AI_MAX_PERSISTED_BYTES) {
+      start--
+      bytes += queue[start].bytes
+    }
+    if (start < queue.length) {
+      this._storage.setItem(PostHogPersistedProperty.AiQueue, queue.slice(start))
     } else {
       this._storage.removeItem(PostHogPersistedProperty.AiQueue)
     }
