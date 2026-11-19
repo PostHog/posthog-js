@@ -251,6 +251,49 @@ describe('web vitals', () => {
         expect(events[0]!.properties.$web_vitals_LCP_value).toBe(1200)
     })
 
+    it('drops metrics reported while consent is denied instead of sending them after opt-in', async () => {
+        const client = await createCore(
+            coreOptions({
+                optOutByDefault: true,
+                extensions: [webVitals({ enabled: true, attribution: false, allowedMetrics: ['LCP', 'CLS'] })],
+            })
+        )
+        const events = track(client)
+        await waitForObservers()
+
+        reporter(library.plain.onLCP)({ name: 'LCP', value: 1201 })
+        client.optIn()
+        reporter(library.plain.onCLS)({ name: 'CLS', value: 0.1 })
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(events).toHaveLength(1)
+        expect(events[0]!.properties).not.toHaveProperty('$web_vitals_LCP_value')
+        expect(events[0]!.properties.$web_vitals_CLS_value).toBe(0.1)
+    })
+
+    it('discards metrics pending at reset so they do not reach the next identity', async () => {
+        const client = await createCore(
+            coreOptions({
+                extensions: [webVitals({ enabled: true, attribution: false, allowedMetrics: ['LCP', 'CLS'] })],
+            })
+        )
+        const events = track(client)
+        client.identify('first-user')
+        await waitForObservers()
+        reporter(library.plain.onLCP)({ name: 'LCP', value: 1201 })
+
+        client.reset(true)
+        client.identify('second-user')
+        reporter(library.plain.onCLS)({ name: 'CLS', value: 0.1 })
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(events).toHaveLength(1)
+        expect(events[0]!.properties).not.toHaveProperty('$web_vitals_LCP_value')
+        expect((events[0]!.properties.$web_vitals_CLS_event as Record<string, unknown>).$session_id).toBe(
+            client.session?.sessionId
+        )
+    })
+
     it('logs and continues when the library fails to load', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.resetModules()

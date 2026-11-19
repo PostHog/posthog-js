@@ -1,7 +1,9 @@
+import type { Disposable } from '@posthog/browser-common'
 import {
     WebVitalsAutocapture,
     type WebVitalsCallbackFlavor,
     type WebVitalsCallbacks,
+    type WebVitalsMetricCallbacks,
 } from '@posthog/browser-common/web-vitals'
 import type { PerformanceCaptureConfig } from '@posthog/types'
 import type { BrowserProducts } from '../../core/context/browser-client'
@@ -10,22 +12,35 @@ import type { WebVitalsOptions } from './web-vitals-options'
 
 export type { WebVitalsOptions, WebVitalsMetric } from './web-vitals-options'
 
+// Drop reports when they arrive while capture is not permitted, so a later opt-in cannot send them.
+const admitWhen = (canCapture: () => boolean, callbacks: WebVitalsMetricCallbacks): WebVitalsMetricCallbacks => {
+    const gate =
+        (observer: WebVitalsMetricCallbacks['onLCP']): WebVitalsMetricCallbacks['onLCP'] =>
+        (onReport, opts) =>
+            observer((metric) => {
+                if (canCapture()) onReport(metric)
+            }, opts)
+    return {
+        onLCP: gate(callbacks.onLCP),
+        onCLS: gate(callbacks.onCLS),
+        onFCP: gate(callbacks.onFCP),
+        onINP: gate(callbacks.onINP),
+    }
+}
+
 // The web-vitals library stays in its own lazily loaded chunks, imported only once capture is enabled.
-const loadCallbacks = async (flavor: WebVitalsCallbackFlavor): Promise<WebVitalsCallbacks> => {
+const loadCallbacks = async (
+    flavor: WebVitalsCallbackFlavor,
+    canCapture: () => boolean
+): Promise<WebVitalsCallbacks> => {
     const unattributed = flavor === 'web-vitals' || flavor === 'web-vitals-soft-navs'
-    const [{ onLCP, onCLS, onFCP, onINP }, attributed] = await Promise.all([
+    const [library, attributed] = await Promise.all([
         import('./web-vitals-library'),
         unattributed ? undefined : import('./web-vitals-attribution-library'),
     ])
-    const plain = { onLCP, onCLS, onFCP, onINP }
+    const plain = admitWhen(canCapture, library)
     if (!attributed) return plain
-    return {
-        onLCP: attributed.onLCP,
-        onCLS: attributed.onCLS,
-        onFCP: attributed.onFCP,
-        onINP: attributed.onINP,
-        withoutAttribution: plain,
-    }
+    return { ...admitWhen(canCapture, attributed), withoutAttribution: plain }
 }
 
 // Map onto the posthog-js `capture_performance` settings the shared implementation reads.
@@ -55,10 +70,11 @@ export const webVitals = (options: WebVitalsOptions = {}): BrowserProducts['webV
         custom_personal_data_properties: [...(options.customPersonalDataProperties ?? [])],
     }
     let client: IPostHog | undefined
+    let resetSubscription: Disposable | undefined
     const shared = new WebVitalsAutocapture({
         getConfig: () => config,
         loadObservers: (getFlavor, onLoad) => {
-            loadCallbacks(getFlavor())
+            loadCallbacks(getFlavor(), () => !!client?.canCapture)
                 .then(onLoad)
                 .catch((error: unknown) => client?.logger.error('[Web Vitals] failed to start', error))
         },
@@ -67,9 +83,12 @@ export const webVitals = (options: WebVitalsOptions = {}): BrowserProducts['webV
         name: 'webVitals',
         setup: (value) => {
             client = value
+            // Pending metrics carry the previous session, so they must not cross into the next identity.
+            resetSubscription = value.onReset(() => shared.clearPendingMetrics())
             return shared.setup(value)
         },
         dispose: () => {
+            resetSubscription?.dispose()
             shared.dispose()
             client = undefined
         },
