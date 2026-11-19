@@ -296,6 +296,33 @@ describe('conversations', () => {
         }
     })
 
+    it('does not poll after disposal when a sent message completes', async () => {
+        const requests: ConversationsRequest[] = []
+        const respond = createConversationsFetch(requests)
+        let release!: () => void
+        const sent = new Promise<void>((resolve) => (release = resolve))
+        const { client } = await createClient(
+            { conversations: widgetConfig({ widgetEnabled: true }) },
+            {
+                fetch: async (input, init) => {
+                    const response = respond(input, init)
+                    if (new URL(String(input)).pathname.endsWith('/widget/message')) await sent
+                    return response
+                },
+            }
+        )
+        const extension = await loaded(client)
+        await vi.waitFor(() => expect(extension.isVisible()).toBe(true))
+        const message = extension.sendMessage('Hello')
+        await client.dispose()
+        const count = requests.length
+
+        release()
+        await message
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(requests.slice(count)).toEqual([])
+    })
+
     it('resolves API calls to null before conversations load', async () => {
         const { client } = await createClient(
             {},
