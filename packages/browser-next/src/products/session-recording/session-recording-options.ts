@@ -36,7 +36,10 @@ export interface SessionRecordingOptions extends SessionRecordingRecorderOptions
     captureConsoleLogs?: boolean
     /** Record network timing in replays. `false` overrides the project setting. */
     capturePerformance?: boolean
-    /** Fraction of sessions to record, between 0 and 1. Overrides the project setting when set. */
+    /**
+     * Fraction of sessions to record, between 0 and 1. Overrides the project sample rate when set, but not the sample
+     * rates of a project that uses trigger groups.
+     */
     sampleRate?: number
     /** Interval between full snapshots while recording, in milliseconds. Defaults to five minutes; 0 disables them. */
     fullSnapshotIntervalMs?: number
