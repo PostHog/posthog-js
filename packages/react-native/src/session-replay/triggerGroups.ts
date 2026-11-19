@@ -330,7 +330,8 @@ export class SessionReplayTriggerGroupsEvaluator {
           conditions.urls.length > 0 &&
           typeof screenName === 'string' &&
           conditions.urls.some((regex) => regex.test(screenName)) &&
-          matchTriggerPropertyFilters(conditions.properties, eventProperties, personProperties)
+          // The url leg checks the group-level filters without event properties.
+          matchTriggerPropertyFilters(conditions.properties, undefined, personProperties)
         if (screenMatched) {
           anyMatched = true
           if (!this.screenActivatedGroupIds.has(group.id)) {

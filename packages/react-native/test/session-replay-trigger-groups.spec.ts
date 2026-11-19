@@ -447,21 +447,60 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
         group({
           conditions: conditions({
             urls: [/^checkout/, /.*payment.*$/],
-            properties: [{ key: 'locale', operator: 'exact', value: 'en-US' }],
+            properties: [{ key: 'locale', type: 'person', operator: 'exact', value: 'en-US' }],
           }),
         }),
       ])
 
-      expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'Home' }, undefined).anyMatched).toBe(false)
+      expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'Home' }, { locale: 'en-US' }).anyMatched).toBe(false)
       // Regex matches but the group-level property does not.
       expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined).anyMatched).toBe(false)
       expect(
-        evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1', locale: 'en-US' }, undefined)
-          .newlyActivated
+        evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, { locale: 'en-US' }).newlyActivated
       ).toBe(true)
       // A second group with a different regex in the list also matches the same screen.
       evaluator.onConfig([group({ id: 'g2', conditions: conditions({ urls: [/.*payment.*$/] }) })])
       expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'payment-success' }, undefined).anyMatched).toBe(true)
+    })
+
+    describe('group-level filters on the url leg see no event properties', () => {
+      const screenGroup = (properties: SessionReplayTriggerGroup['conditions']['properties']) =>
+        group({ conditions: conditions({ matchType: 'any', urls: [/^X$/], properties }) })
+
+      it('never matches a positive event filter, even when the screen event carries the property', () => {
+        const evaluator = new SessionReplayTriggerGroupsEvaluator()
+        evaluator.onConfig([screenGroup([{ key: '$screen_name', operator: 'exact', value: 'X' }])])
+        expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'X' }, undefined).anyMatched).toBe(false)
+        expect(evaluator.evaluate('s1', {}, undefined).shouldRecord).toBe(false)
+      })
+
+      it('matches a negative event filter', () => {
+        const evaluator = new SessionReplayTriggerGroupsEvaluator()
+        evaluator.onConfig([screenGroup([{ key: '$screen_name', operator: 'is_not', value: 'X' }])])
+        expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'X' }, undefined).newlyActivated).toBe(true)
+        expect(evaluator.evaluate('s1', {}, undefined).shouldRecord).toBe(true)
+      })
+
+      it('still applies person filters', () => {
+        const evaluator = new SessionReplayTriggerGroupsEvaluator()
+        evaluator.onConfig([screenGroup([{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }])])
+        expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'X' }, { plan: 'free' }).anyMatched).toBe(false)
+        expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'X' }, { plan: 'pro' }).newlyActivated).toBe(true)
+      })
+
+      it('leaves the event leg reading event properties for the same filters', () => {
+        const evaluator = new SessionReplayTriggerGroupsEvaluator()
+        const eventGroup = (properties: SessionReplayTriggerGroup['conditions']['properties']) =>
+          group({
+            conditions: conditions({ matchType: 'any', events: [{ name: '$screen', properties: [] }], properties }),
+          })
+
+        evaluator.onConfig([eventGroup([{ key: '$screen_name', operator: 'exact', value: 'X' }])])
+        expect(evaluator.onEvent('s1', '$screen', { $screen_name: 'X' }, undefined).newlyActivated).toBe(true)
+
+        evaluator.onConfig([eventGroup([{ key: '$screen_name', operator: 'is_not', value: 'X' }])])
+        expect(evaluator.onEvent('s2', '$screen', { $screen_name: 'X' }, undefined).anyMatched).toBe(false)
+      })
     })
 
     it('ignores non-screen events for the url leg', () => {
