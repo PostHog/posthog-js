@@ -1,6 +1,7 @@
 import type {
     AnalyticsOptions,
     CaptureSummary,
+    Disposable,
     Extension,
     IPostHog,
     NewSessionInfo,
@@ -44,6 +45,20 @@ export const clientExtension: Extension = {
     },
 }
 
+// The README lifecycle-notification example.
+let identitySubscription: Disposable | undefined
+export const identityObserver = {
+    name: 'identity-observer',
+    setup(client: IPostHog) {
+        identitySubscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
+            void [previousDistinctId, distinctId]
+        })
+    },
+    dispose() {
+        identitySubscription?.dispose()
+    },
+}
+
 export const sharedClientExtension: SharedExtension = {
     name: 'shared-client-extension',
     setup(client) {
@@ -54,7 +69,7 @@ export const sharedClientExtension: SharedExtension = {
 
 export const sharedExtensionOptions: CorePostHogOptions = {
     projectToken: 'ph_test',
-    extensions: [clientExtension, sharedClientExtension],
+    extensions: [clientExtension, sharedClientExtension, identityObserver],
 }
 
 interface CustomExtensionHost {

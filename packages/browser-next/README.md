@@ -123,7 +123,7 @@ After the existing `createPostHog()` factory resolves, the script assigns `windo
 
 ```js
 function onPostHogReady(client) {
-    client.analytics?.capture('signed_up')
+    client.capture('signed_up')
 }
 if (window.posthog) {
     onPostHogReady(window.posthog)
@@ -232,15 +232,15 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies an `IPostHogInternal` scoped host to extension setup. It exposes browser namespaces, asynchronous dependency resolution, and `onIdentify`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use the separate product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Extensions receive the `IPostHog` client in `setup()`. It exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
-import type { IPostHogInternal, Disposable } from '@posthog/browser'
+import type { Disposable, IPostHog } from '@posthog/browser'
 
 let subscription: Disposable | undefined
 const extension = {
     name: 'identity-observer',
-    setup(client: IPostHogInternal) {
+    setup(client: IPostHog) {
         subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
             console.log(previousDistinctId, distinctId)
         })
