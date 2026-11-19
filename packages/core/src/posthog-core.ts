@@ -59,6 +59,9 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
+// Captured events that update a person; PostHog drops them when person processing is off.
+const PERSON_UPDATE_EVENTS = ['$set', '$set_once', '$merge_dangerously']
+
 /**
  * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
  * `getAllFeatureFlags()` and `updateFlags()` replace.
@@ -279,11 +282,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return false
   }
 
-  // Person processing follows the SDK policy, even over a registered or caller `$process_person_profile`;
-  // `before_send` can still change it. A registered or caller `$is_identified` wins.
+  // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
+  // 4.0. The legacy person state always uses the SDK's `$process_person_profile`.
   private stampPersonState(properties: PostHogEventProperties): void {
     const hasPersonProcessing = this._hasPersonProcessing()
-    properties['$process_person_profile'] = hasPersonProcessing
+    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] === undefined) {
+      properties['$process_person_profile'] = hasPersonProcessing
+    }
     if (this.usesLegacyEventPersonState() || properties['$is_identified'] === undefined) {
       properties['$is_identified'] = this._isIdentified()
     }
@@ -509,6 +514,14 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const allProperties = this.enrichProperties(properties)
+      // As on identity events, a registered `$process_person_profile` doesn't apply to person updates.
+      if (
+        !this.usesLegacyEventPersonState() &&
+        PERSON_UPDATE_EVENTS.includes(event) &&
+        properties?.['$process_person_profile'] === undefined
+      ) {
+        delete allProperties['$process_person_profile']
+      }
       this.stampPersonState(allProperties)
 
       super.captureStateless(distinctId, event, allProperties, options)

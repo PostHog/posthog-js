@@ -27,11 +27,11 @@ afterEach(async () => {
 })
 
 describe('event person state', () => {
-  it('keeps the person processing policy over a caller value and lets a caller $is_identified win for that event', () => {
+  it('lets a caller $process_person_profile and $is_identified win for that event', () => {
     const client = newPostHog({ personProfiles: 'never' })
     client.capture('Signed Up', { $process_person_profile: true, $is_identified: true })
     expect(queued(client, 'Signed Up').properties).toMatchObject({
-      $process_person_profile: false,
+      $process_person_profile: true,
       $is_identified: true,
     })
     client.capture('Viewed Dashboard')
@@ -39,6 +39,21 @@ describe('event person state', () => {
       $process_person_profile: false,
       $is_identified: false,
     })
+  })
+
+  it('lets a registered $process_person_profile win on ordinary events', () => {
+    const client = newPostHog()
+    client.identify('user-123')
+    client.register({ $process_person_profile: false })
+    client.capture('Viewed Dashboard')
+    expect(queued(client, 'Viewed Dashboard').properties.$process_person_profile).toBe(false)
+  })
+
+  it('leaves a registered personless setting off person updates', () => {
+    const client = newPostHog()
+    client.register({ $process_person_profile: false })
+    client.setPersonProperties({ plan: 'pro' })
+    expect(queued(client, '$set').properties.$process_person_profile).toBe(true)
   })
 
   it('lets a registered $is_identified win over the SDK value', () => {
@@ -75,7 +90,6 @@ describe('event person state', () => {
 
   it('stamps person processing and $is_identified on $autocapture', () => {
     const client = newPostHog({ personProfiles: 'identified_only' })
-    client.register({ $process_person_profile: true })
     client.autocapture('click', [])
     expect(queued(client, '$autocapture').properties).toMatchObject({
       $process_person_profile: false,
@@ -134,9 +148,14 @@ describe('null event properties', () => {
     expect(properties.hookItems).toEqual([null, {}])
   })
 
-  it('drops null members of $set', () => {
+  it('keeps null members of $set, $set_once and $group_set, which clear the property', () => {
     const client = newPostHog()
-    client.identify('user-123', { email: null, name: 'Ada' } as any)
-    expect(queued(client, '$identify').properties.$set).toEqual({ name: 'Ada' })
+    client.identify('user-123', { $set: { email: null, name: 'Ada' }, $set_once: { referrer: null } } as any)
+    expect(queued(client, '$identify').properties).toMatchObject({
+      $set: { email: null, name: 'Ada' },
+      $set_once: { referrer: null },
+    })
+    client.group('company', 'acme', { note: null } as any)
+    expect(queued(client, '$groupidentify').properties.$group_set).toEqual({ note: null })
   })
 })

@@ -113,12 +113,26 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
 
+// A null person or group property clears it, so these keep their nulls, as in posthog-ios 4.0.
+const NULL_PRESERVING_PROPERTY_KEYS = ['$set', '$set_once', '$group_set']
+
 // Null and undefined property members are left off the wire and the persisted queue, as native 4.0 does. This runs
 // after `before_send`, so members a hook sets to null are removed too.
-const withoutNullProperties = (message: PostHogEventProperties | null): PostHogEventProperties | null =>
-  message && message.properties !== undefined
-    ? { ...message, properties: withoutNullMembers(message.properties) }
-    : message
+const withoutNullProperties = (message: PostHogEventProperties | null): PostHogEventProperties | null => {
+  if (!message || !isObject(message.properties)) {
+    return message
+  }
+  const properties = message.properties as PostHogEventProperties
+  const kept = withoutNullMembers(
+    omitProperties(properties, (key) => NULL_PRESERVING_PROPERTY_KEYS.includes(key))
+  ) as PostHogEventProperties
+  for (const key of NULL_PRESERVING_PROPERTY_KEYS) {
+    if (key in properties) {
+      kept[key] = properties[key]
+    }
+  }
+  return { ...message, properties: kept }
+}
 
 const isReplayDebugEvent = (eventName: unknown): boolean =>
   typeof eventName === 'string' &&
