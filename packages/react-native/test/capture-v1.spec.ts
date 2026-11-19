@@ -163,6 +163,30 @@ describe('React Native capture v1 delivery', () => {
     expect(requests.length).toBe(requestsAtShutdown)
   })
 
+  it('sends nothing after shutdown when a capture response arrives after the shutdown timeout', async () => {
+    const randomSpy = stubJitter()
+    let releaseResponse: () => void = () => {}
+    const responseHeld = new Promise<void>((resolve) => (releaseResponse = resolve))
+    respond = () => ({ status: 503 })
+    const fetchMock = (globalThis as any).window.fetch as vi.Mock
+    const respondNow = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string, options: any) => {
+      if (String(url).includes(CAPTURE_PATH)) {
+        await responseHeld
+      }
+      return respondNow(url, options)
+    })
+    vi.spyOn((posthog as any)._logger, 'critical').mockImplementation(() => {})
+    posthog.capture('kept')
+    await posthog.shutdown(50)
+    releaseResponse()
+
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    randomSpy.mockRestore()
+
+    expect(sentEvents()).toEqual([['kept']])
+  })
+
   it('keeps a stored event whose uuid is not a valid UUID when capture asks to retry it', async () => {
     ;(posthog as any).setPersistedProperty((posthog as any).persistedQueueKeyForRoute('default'), [
       { message: { event: 'legacy', distinct_id: 'user', uuid: 'legacy-not-a-uuid', properties: {} } },
