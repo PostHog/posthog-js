@@ -5,7 +5,7 @@ import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock
 import { interactionScenarios } from './interaction-cases.mjs'
 import { replayLinkedFlag, replayMinimumDurationMs, replayTriggerConfig } from './replay-cases.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
-import { toolbarScript, conversationsConfig, conversationsResponse } from './extension-cases.mjs'
+import { toolbarScript, conversationsConfig, conversationsBackend } from './extension-cases.mjs'
 
 export const survey = {
     id: 'compat-survey',
@@ -51,6 +51,7 @@ export function compatibilityServer(settings) {
     ].includes(settings.scenario)
     let flagSequence = 0
     let xhrFault
+    const conversations = settings.scenario === 'conversations' && conversationsBackend()
     const server = createMockServer({
         barriers: [
             'config',
@@ -124,7 +125,7 @@ export function compatibilityServer(settings) {
                 xhrFault.attempts++
                 if (xhrFault.mode === 'exhaust' || xhrFault.attempts === 1) await context.waitForBarrier('xhr-timeout')
             }
-            const conversation = settings.scenario === 'conversations' && conversationsResponse(request)
+            const conversation = conversations && conversations(request)
             if (conversation) return conversation
             const networkSample = replayNetworkCases.find((sample) => path === `${replayNetworkPath}/${sample.name}`)
             if (settings.scenario === 'replay' && request.method === 'POST' && networkSample)

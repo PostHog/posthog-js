@@ -109,40 +109,55 @@ const reply = {
     is_private: false,
 }
 
+const visitorId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const invalid = (error) => ({ status: 400, json: { error } })
+
 // Fixed backend responses for the widget's ticket lifecycle. Like the API, every widget route
-// rejects a missing or wrong widget token, and message polls return only messages created
-// strictly after the `after` timestamp.
-export function conversationsResponse({ method, path, url, headers }) {
-    if (!path.startsWith(`${conversationsApi}/`)) return undefined
-    if (headers['x-conversations-token'] !== conversationsConfig.token)
-        return { status: 403, json: { error: 'Authentication required' } }
-    if (method === 'GET' && path === `${conversationsApi}/tickets`) return { json: { count: 0, results: [] } }
-    if (method === 'POST' && path === `${conversationsApi}/message`)
-        return {
-            json: {
-                ticket_id: ticketId,
-                message_id: question.id,
-                ticket_status: 'new',
-                created_at: question.created_at,
-                unread_count: 0,
-            },
+// rejects a missing or wrong widget token and an anonymous request without a widget_session_id
+// UUID. A message also needs the visitor's distinct_id, and only the visitor who started the
+// ticket can poll it or mark it read. Message polls return only messages created strictly after
+// the `after` timestamp.
+export function conversationsBackend() {
+    let ticketVisitor
+    return ({ method, path, url, headers, body }) => {
+        if (!path.startsWith(`${conversationsApi}/`)) return undefined
+        if (headers['x-conversations-token'] !== conversationsConfig.token)
+            return { status: 403, json: { error: 'Authentication required' } }
+        const visitor = method === 'GET' ? url.searchParams.get('widget_session_id') : body?.widget_session_id
+        if (!visitorId.test(visitor ?? '')) return invalid('widget_session_id is required')
+        if (method === 'GET' && path === `${conversationsApi}/tickets`) return { json: { count: 0, results: [] } }
+        if (method === 'POST' && path === `${conversationsApi}/message`) {
+            if (!body.distinct_id) return invalid('distinct_id is required when using widget_session_id')
+            ticketVisitor = visitor
+            return {
+                json: {
+                    ticket_id: ticketId,
+                    message_id: question.id,
+                    ticket_status: 'new',
+                    created_at: question.created_at,
+                    unread_count: 0,
+                },
+            }
         }
-    if (method === 'GET' && path === `${conversationsApi}/messages/${ticketId}`) {
-        const after = url.searchParams.get('after')
-        const messages = [question, reply].filter((message) => !after || message.created_at > after)
-        return {
-            json: {
-                ticket_id: ticketId,
-                ticket_status: 'open',
-                messages,
-                has_more: false,
-                unread_count: messages.some((message) => message.author_type !== 'customer') ? 1 : 0,
-            },
+        const ticketPath = `${conversationsApi}/messages/${ticketId}`
+        if (![ticketPath, `${ticketPath}/read`].includes(path)) return undefined
+        if (visitor !== ticketVisitor) return { status: 403, json: { error: 'Forbidden' } }
+        if (method === 'GET' && path === ticketPath) {
+            const after = url.searchParams.get('after')
+            const messages = [question, reply].filter((message) => !after || message.created_at > after)
+            return {
+                json: {
+                    ticket_id: ticketId,
+                    ticket_status: 'open',
+                    messages,
+                    has_more: false,
+                    unread_count: messages.some((message) => message.author_type !== 'customer') ? 1 : 0,
+                },
+            }
         }
+        if (method === 'POST' && path === `${ticketPath}/read`) return { json: { success: true, unread_count: 0 } }
+        return undefined
     }
-    if (method === 'POST' && path === `${conversationsApi}/messages/${ticketId}/read`)
-        return { json: { success: true, unread_count: 0 } }
-    return undefined
 }
 
 const widget = '#ph-conversations-widget-container'
