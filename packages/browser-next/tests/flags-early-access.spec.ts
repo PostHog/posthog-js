@@ -204,6 +204,36 @@ describe('early-access feature flags', () => {
         expect(flags.getFeatureFlag('onboarding')?.enabled).toBe(false)
     })
 
+    it.each([true, false])(
+        'applies enrollment to %s over an active bootstrap without remote evaluation',
+        async (isEnrolled) => {
+            const client = await create({
+                flags: {
+                    featureFlagEvaluation: false,
+                    bootstrap: {
+                        featureFlags: { onboarding: !isEnrolled, retained: 'blue' },
+                        featureFlagPayloads: { retained: { theme: 'dark' } },
+                    },
+                },
+            })
+            const flags = requireInstalledExtension(client.featureFlags)
+            const changed = vi.fn()
+            flags.onFeatureFlags(changed)
+            changed.mockClear()
+
+            flags.updateEarlyAccessFeatureEnrollment('onboarding', isEnrolled, 'beta')
+
+            const expected = [
+                { key: 'onboarding', enabled: isEnrolled, variant: undefined, payload: undefined },
+                { key: 'retained', enabled: true, variant: 'blue', payload: { theme: 'dark' } },
+            ]
+            expect(flags.getFeatureFlag('onboarding', { sendFeatureFlagEvent: false })).toEqual(expected[0])
+            expect(flags.getAllFeatureFlags()).toEqual(expected)
+            expect(changed).toHaveBeenCalledOnce()
+            expect(changed).toHaveBeenCalledWith(expected, false)
+        }
+    )
+
     it('contains application callback exceptions on both fetched and cached delivery', async () => {
         vi.useFakeTimers()
         const client = await create({

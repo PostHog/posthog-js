@@ -218,7 +218,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         updateEarlyAccessFeatureEnrollment: (key, isEnrolled, stage) => {
             if (disposed) return
             try {
-                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
+                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage, { updateBootstrappedFlags: true })
             } catch (error) {
                 client?.logger.error('Early access feature enrollment failed', error)
             }

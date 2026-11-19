@@ -1931,7 +1931,18 @@ export class PostHogFeatureFlags implements Extension {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
-    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
+    /**
+     * Records an early access enrollment in stored flags and person properties, and captures it.
+     *
+     * @param options.updateBootstrappedFlags Also apply the value to active bootstrapped flags, which otherwise
+     *        take precedence over stored flags until the next evaluation.
+     */
+    updateEarlyAccessFeatureEnrollment(
+        key: string,
+        isEnrolled: boolean,
+        stage?: string,
+        options?: { updateBootstrappedFlags?: boolean }
+    ): void {
         const existing_early_access_features: EarlyAccessFeature[] = this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
         const feature = existing_early_access_features.find((f) => f.flagKey === key)
 
@@ -1969,17 +1980,24 @@ export class PostHogFeatureFlags implements Extension {
                 : {}),
             [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
         })
-        this._set({
+        const flagState: FeatureFlagsState = {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
             ...(replacesFailure
                 ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: flagDetails, [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloads }
                 : {}),
+        }
+        this._set({
+            ...flagState,
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
                 ...enrollmentPersonProp,
             },
         })
+        if (options?.updateBootstrappedFlags && this._bootstrapState) {
+            // The new state was derived from the bootstrapped values, so it keeps their other flags and payloads.
+            this._bootstrapState = { ...this._bootstrapState, ...flagState }
+        }
         this._fireFeatureFlagsCallbacks()
         try {
             this._client?.capture('$feature_enrollment_update', properties)
