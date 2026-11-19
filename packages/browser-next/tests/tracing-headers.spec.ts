@@ -333,6 +333,30 @@ describe('tracing headers', () => {
         }
     })
 
+    it('stops adding headers after disposal when a later wrapper still calls the PostHog wrapper', async () => {
+        const client = await create({ hostnames: ['api.example.com'], tracePropagationTargets: ['api.example.com'] })
+        const installed = browser.fetch
+        const outer = (input: RequestInfo | URL, init?: RequestInit) => installed(input, init)
+        browser.fetch = outer
+        const { open, send } = FakeXHR.prototype
+        FakeXHR.prototype.open = function (this: FakeXHR, method: string, url: string | URL) {
+            open.call(this, method, url)
+        }
+        FakeXHR.prototype.send = function (this: FakeXHR) {
+            send.call(this)
+        }
+
+        await client.dispose()
+        await browser.fetch('https://api.example.com/work')
+        const request = new browser.XMLHttpRequest() as unknown as FakeXHR
+        request.open('GET', 'https://api.example.com/work')
+        request.send()
+
+        expect(browser.fetch).toBe(outer)
+        expect([...sentHeaders().keys()]).toEqual([])
+        expect(request.headers).toEqual([])
+    })
+
     it('does not patch anything without hostnames or propagation targets', async () => {
         await create({ hostnames: [' '], tracePropagationTargets: [] })
         expect(browser.fetch).toBe(downstream)
