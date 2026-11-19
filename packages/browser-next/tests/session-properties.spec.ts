@@ -1,6 +1,6 @@
 import type { AnalyticsOptions } from '../src/core/types'
 import type { IPostHog } from '../src/core/types'
-import { analyticsOf } from '../src/products/analytics/analytics-core'
+import { analyticsOf } from '../src/products/analytics/analytics-of'
 import { BrowserState } from '../src/core/state/state'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
 import { ClientRateLimiter } from '../src/products/analytics/admission/rate-limiter'

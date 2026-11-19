@@ -5,8 +5,7 @@ import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
 import type { ConsoleLogsHost } from '@posthog/browser-common/console-logs'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import { analyticsOf } from '../analytics/analytics-core'
-import { recordedUrl } from '../analytics/properties/page-properties'
+import { analyticsOf } from '../analytics/analytics-of'
 import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
@@ -26,7 +25,7 @@ const readSdkContext = (environment: LogsEnvironment) => {
     let currentUrl: string | undefined
     try {
         // The page URL is shaped like events' `$current_url`.
-        currentUrl = recordedUrl(environment.browserWindow?.location?.href, analyticsOf(client)!._urlSanitization)?.href
+        currentUrl = analyticsOf(client)!.recordUrl(environment.browserWindow?.location?.href)
     } catch {
         /* Unavailable location is omitted. */
     }

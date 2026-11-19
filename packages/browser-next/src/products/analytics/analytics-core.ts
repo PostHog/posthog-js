@@ -39,8 +39,9 @@ import {
     snapshotPersonProperties,
     type PersonProperties,
 } from './properties/person-processing'
-import { pageProperties } from './properties/page-properties'
+import { pageProperties, recordedUrl } from './properties/page-properties'
 import { version } from '../../primitives/version'
+import { isNonEmptyString, isValidDistinctId } from './identifiers'
 import { utf8Bytes } from '../../primitives/utf8'
 
 const numberOption = (read: () => number | undefined, fallback: number, minimum: number, maximum: number): number => {
@@ -57,11 +58,6 @@ const numberOption = (read: () => number | undefined, fallback: number, minimum:
 }
 
 const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
-export const isNonEmptyString = (value: unknown): value is string =>
-    typeof value === 'string' && value.trim().length > 0
-export const isValidDistinctId = (value: unknown): value is string =>
-    isNonEmptyString(value) &&
-    !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
 
 const eventTimestamp = (timestamp: Date | undefined): string => {
     try {
@@ -126,8 +122,7 @@ export class Analytics {
         readonly _core: AnalyticsCore,
         options: AnalyticsOptions,
         createDelivery: AnalyticsDeliveryFactory,
-        /** The client's URL policy, which logs and web vitals apply to the URLs they record. */
-        readonly _urlSanitization: UrlSanitizationOptions
+        private readonly _urlSanitization: UrlSanitizationOptions
     ) {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
@@ -676,6 +671,11 @@ export class Analytics {
     }
 
     /** Registers a producer of properties for each event, given the event name as passed to capture. */
+    /** Shapes a page URL with the client's `urlSanitization`, as events record `$current_url`. */
+    recordUrl(href: string | undefined): string | undefined {
+        return recordedUrl(href, this._urlSanitization)?.href
+    }
+
     registerDynamicEventProperties(producer: (event: string) => Record<string, unknown>): Disposable {
         if (this._disposed || this._core._disposed) return { dispose() {} }
         this._dynamicEventProperties.push(producer)
@@ -690,7 +690,3 @@ export class Analytics {
         }
     }
 }
-
-/** The client's capture pipeline, for optional modules that extend it with less common operations. */
-export const analyticsOf = (posthog: object): Analytics | undefined =>
-    (posthog as { _analytics?: Analytics })._analytics

@@ -23,7 +23,7 @@ import {
 import type { SessionRecordingStatus } from '@posthog/browser-common/replay/trigger-matching'
 
 import type { IPostHog } from '../../core/types'
-import { analyticsOf } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import type { SessionRecorder } from './recorder'
 import type {
     SessionRecordingExtension,
