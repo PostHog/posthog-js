@@ -319,3 +319,50 @@ test('failed optional chunks leave embedded analytics usable and optional acquis
         expect.objectContaining({ event: 'optional_failure' }),
     ])
 })
+
+test('the script served from the PostHog CDN captures exceptions for non-Error values', async ({ page }) => {
+    // The PostHog SDK filter matches the CDN path; a non-Error value's fallback stack starts inside the SDK.
+    const assetPath = '/static/browser/0/'
+    const prefix = `https://us-assets.i.posthog.com${assetPath}`
+    await page.route(`${prefix}**`, (route) =>
+        route.fulfill({
+            path: `dist-cdn/${new URL(route.request().url()).pathname.slice(assetPath.length)}`,
+            contentType: 'text/javascript',
+            headers: { 'Access-Control-Allow-Origin': '*' },
+        })
+    )
+    const fixture = `${pageOrigin}/error-tracking-cdn`
+    const options = new URLSearchParams({
+        projectToken: 'phc_snippet_fixture',
+        apiHost: pageOrigin,
+        capturePageview: 'false',
+        disableBotDetection: 'true',
+    })
+    await page.route(fixture, (route) =>
+        route.fulfill({
+            contentType: 'text/html',
+            body: `<!doctype html><script src="${prefix}script.js?${options}"></script>`,
+        })
+    )
+    await page.goto(fixture)
+    await page.waitForFunction(() => !!window.posthog)
+    const results = await page.evaluate(async () => {
+        const client = window.posthog as IPostHog
+        const tracking = await client.resolveExtension('errorTracking')
+        const results = [
+            tracking?.captureException('business failure'),
+            tracking?.captureException(new Error('native')),
+        ]
+        await client.flush()
+        return results
+    })
+    expect(results).toEqual([true, true])
+    const events = (await backend.inspect()).events as Array<{
+        event: string
+        properties: { $exception_list?: Array<{ value: string }> }
+    }>
+    const values = events
+        .filter((event) => event.event === '$exception')
+        .map((event) => event.properties.$exception_list?.[0]?.value)
+    expect(values).toEqual(['business failure', 'native'])
+})
