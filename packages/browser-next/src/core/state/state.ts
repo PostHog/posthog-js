@@ -320,8 +320,7 @@ export class BrowserState {
     private _pendingSessionReason: 'reset' | undefined
     private _bootstrapSession: BootstrapSession | undefined
     private _stateReadPending = false
-    /** Whether the constructor generated this identity rather than reading a persisted one. */
-    readonly generated: boolean
+    private _generated: boolean
     private _lastConsentValue: unknown = null
     private _ignoredConsentValue: unknown
     private _hasIgnoredConsentValue = false
@@ -369,7 +368,7 @@ export class BrowserState {
         }
         const [stateRead, storedState] = this._read(this._stateKey)
         const persisted = parseState(typeof storedState === 'string' ? storedState : null)
-        this.generated = !persisted
+        this._generated = !persisted
         this._state = persisted ?? createInitialState()
         this._lastActivityWriteTimestamp = this._state.session?.lastActivityTimestamp ?? 0
         this._stateReadPending = !stateRead
@@ -390,11 +389,17 @@ export class BrowserState {
         const persisted = parseState(typeof storedState === 'string' ? storedState : null)
         if (persisted) {
             this._state = persisted
+            this._generated = false
             this._lastActivityWriteTimestamp = persisted.session?.lastActivityTimestamp ?? 0
         } else {
             this._save(false)
         }
         return true
+    }
+
+    /** Whether this identity was generated rather than read from storage, including a later successful read. */
+    get generated(): boolean {
+        return this._generated
     }
 
     get deviceId(): string {
