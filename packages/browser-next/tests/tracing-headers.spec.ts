@@ -141,12 +141,28 @@ describe('tracing headers', () => {
         expect(client.session?.sessionId).toBe(session.sessionId)
     })
 
+    it('notifies session ID listeners once when a request starts the session', async () => {
+        const client = await create()
+        const sessions = vi.fn()
+        client.onSessionId(sessions)
+
+        await browser.fetch('https://api.example.com/work')
+        expect(sessions).toHaveBeenCalledTimes(1)
+        expect(sessions).toHaveBeenCalledWith(client.session)
+
+        client.capture('after')
+        expect(sessions).toHaveBeenCalledTimes(1)
+    })
+
     it('starts a new session after reset and announces it', async () => {
         const client = await create()
         client.capture('before reset')
         const previous = client.session!
         const sessions: NewSessionInfo[] = []
         client.onNewSession((session) => sessions.push(session))
+        const sessionIds = vi.fn()
+        client.onSessionId(sessionIds)
+        sessionIds.mockClear()
 
         client.reset()
         await browser.fetch('https://api.example.com/work')
@@ -156,6 +172,7 @@ describe('tracing headers', () => {
         expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(session.sessionId)
         expect(sentHeaders().get('X-POSTHOG-DISTINCT-ID')).toBe(client.distinctId)
         expect(sessions).toEqual([expect.objectContaining({ sessionId: session.sessionId, reason: 'reset' })])
+        expect(sessionIds.mock.calls).toEqual([[session]])
     })
 
     describe('with a persisted session', () => {
@@ -188,6 +205,21 @@ describe('tracing headers', () => {
             clients.push(next)
             next.capture('next page')
             expect(next.session?.sessionId).not.toBe(previous.sessionId)
+        })
+
+        it('notifies session ID listeners once when a request reads the session on a new page', async () => {
+            const shared = storage()
+            const previous = await persistedSession(shared)
+            const client = await create(undefined, { storage: shared })
+            const sessions = vi.fn()
+            client.onSessionId(sessions)
+
+            await browser.fetch('https://api.example.com/work')
+            expect(sessions).toHaveBeenCalledTimes(1)
+            expect(sessions).toHaveBeenCalledWith(expect.objectContaining({ sessionId: previous.sessionId }))
+
+            client.capture('next event')
+            expect(sessions).toHaveBeenCalledTimes(1)
         })
 
         it('sends an idle session without rotating it', async () => {
