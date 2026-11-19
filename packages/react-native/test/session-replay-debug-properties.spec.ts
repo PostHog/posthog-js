@@ -1217,6 +1217,25 @@ describe('PostHog RN session replay debug properties', () => {
       expectOffShape(captureOne(client, '$screen').properties)
     })
 
+    it('remote off keeps the replay keys until native reports the recorder stopped', async () => {
+      const client = await readyClient({ enableSessionReplay: true })
+      nativeDebugMap = { $recording_status: 'active' }
+      ;(client as any)._invalidateNativeSessionReplayDebugProperties()
+      await waitForNativeChain(client)
+
+      currentRemoteConfig = { sessionRecording: false }
+      await client.reloadRemoteConfigAsync?.()
+      await waitForNativeChain(client)
+      const running = captureOne(client, '$screen').properties
+      expectOnShape(running)
+      expect(running.$recording_status).toBe('active')
+
+      nativeDebugMap = { $recording_status: 'disabled' }
+      ;(client as any)._invalidateNativeSessionReplayDebugProperties()
+      await waitForNativeChain(client)
+      expectOffShape(captureOne(client, '$screen').properties)
+    })
+
     it('a quota-limited mobile_recordings project reads as remote off', async () => {
       const client = await readyWithRemoteConfig({
         sessionRecording: { endpoint: '/s/' },
@@ -1261,10 +1280,18 @@ describe('PostHog RN session replay debug properties', () => {
       expectOnShape(captureOne(client, '$screen').properties)
     })
 
-    it('remote off wins over a manual start', async () => {
+    it('a manual start under remote off reports what native reports', async () => {
       const client = await readyWithRemoteConfig({ sessionRecording: false }, { enableSessionReplay: false })
       pluginMock.isEnabled.mockResolvedValue(true)
       await client.startSessionRecording()
+      await waitForNativeChain(client)
+      advanceClock(WINDOW_MS)
+      const running = captureOne(client, '$screen').properties
+      expectOnShape(running)
+      expect(running.$recording_status).toBe('active')
+
+      nativeDebugMap = { $recording_status: 'disabled' }
+      ;(client as any)._invalidateNativeSessionReplayDebugProperties()
       await waitForNativeChain(client)
       expectOffShape(captureOne(client, '$screen').properties)
     })
