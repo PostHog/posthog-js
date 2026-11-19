@@ -9,7 +9,7 @@ class TestRequest {
     headers: Headers
     method: string
     // Like a native Request, construction reads the internal destination, not an overridden `url` property.
-    readonly #url: string
+    private readonly _destination: string
 
     constructor(input: string | URL | TestRequest, init?: RequestInit) {
         const inputRequest = input instanceof TestRequest ? input : undefined
@@ -17,7 +17,7 @@ class TestRequest {
             throw new TypeError('Cannot construct a Request with a Request object that has already been used.')
         }
 
-        this.#url = inputRequest ? inputRequest.#url : input.toString()
+        this._destination = inputRequest ? inputRequest._destination : input.toString()
         this.headers = new Headers(init?.headers ?? inputRequest?.headers)
         this.method = init?.method ?? inputRequest?.method ?? 'GET'
         this.body = init?.body ?? inputRequest?.body ?? null
@@ -28,7 +28,7 @@ class TestRequest {
     }
 
     get url(): string {
-        return this.#url
+        return this._destination
     }
 
     clone(): TestRequest {
