@@ -1,6 +1,14 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
-import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam } from './request-utils'
+import {
+    MASKED,
+    maskQueryParams,
+    PERSONAL_DATA_CAMPAIGN_PARAMS,
+    PERSONAL_DATA_URL_PARAMS,
+    SNAPCHAT_CLICK_ID_ALIASES,
+} from './url-masking'
+export { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS, PERSONAL_DATA_URL_PARAMS } from './url-masking'
 import { hasOwnProperty, isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
@@ -23,50 +31,11 @@ const URL_REGEX_PREFIX = 'https?://(.*)'
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
 // https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
 
-// The list of campaign parameters that could be considered personal data under e.g. GDPR.
-// These can be masked in URLs and properties before being sent to posthog.
-export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
-    'gclid', // google ads
-    'gclsrc', // google ads 360
-    'dclid', // google display ads
-    'gbraid', // google ads, web to app
-    'wbraid', // google ads, app to web
-    'fbclid', // facebook
-    'msclkid', // microsoft
-    'twclid', // twitter
-    'li_fat_id', // linkedin
-    'igshid', // instagram
-    'ttclid', // tiktok
-    'rdt_cid', // reddit
-    'epik', // pinterest
-    'qclid', // quora
-    'sccid', // snapchat
-    'oppref', // openai ads
-    'bfcid', // freebuff
-    'irclid', // impact
-    '_kx', // klaviyo
-]
-
-// Other spellings of the Snapchat click ID that appear in landing URLs.
-// Query params are case-sensitive, so each spelling is listed exactly.
-// Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is not read
-// as the Snapchat click ID because ShareASale uses it for its own affiliate click ID.
-const SNAPCHAT_CLICK_ID_ALIASES = ['ScCid', 'SsCid']
-
 // Other spellings of a campaign param. A value found under an alias is stored
 // under the canonical name.
 export const CAMPAIGN_PARAM_ALIASES: Record<string, string[]> = {
     sccid: SNAPCHAT_CLICK_ID_ALIASES,
 }
-
-// The URL params to mask when masking personal data: the personal data campaign
-// params and the aliases of those params.
-export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => [
-    ...PERSONAL_DATA_CAMPAIGN_PARAMS,
-    ...SNAPCHAT_CLICK_ID_ALIASES,
-    // Snapchat's lowercase spelling and ShareASale's affiliate click ID: masked, but never read as sccid
-    'sscid',
-])()
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
@@ -102,8 +71,6 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$viewport_width',
     '$raw_user_agent',
 ]
-
-export const MASKED = '<masked>'
 
 // Campaign params that can be read from the cookie store
 export const COOKIE_CAMPAIGN_PARAMS = [

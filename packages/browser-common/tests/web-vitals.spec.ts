@@ -3,8 +3,9 @@ import type { RemoteConfig } from '../src/types/remote-config'
 import { WebVitalsAutocapture } from '../src/web-vitals'
 import { createTestClient } from './helpers/test-client'
 
-const { location } = vi.hoisted(() => ({ location: { protocol: '' } }))
-vi.mock('../src/utils/globals', () => ({ location }))
+const location = { protocol: '' }
+beforeEach(() => vi.stubGlobal('location', location))
+afterEach(() => vi.unstubAllGlobals())
 
 describe('web-vitals protocol gating', () => {
     it.each([
