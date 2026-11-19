@@ -1,6 +1,9 @@
 import type { BrowserExtension } from '../../core/context/browser-client'
 
-/** Ingestion controls that `startSessionRecording()` treats as satisfied for the current session. */
+/**
+ * Ingestion controls that `startSessionRecording()` treats as satisfied for the current session. They apply to the
+ * project's sample rate, linked flag and triggers, not to the per-group decisions of a project that uses trigger groups.
+ */
 export interface SessionRecordingOverride {
     /** Record even when the session was sampled out. */
     sampling?: boolean
@@ -22,7 +25,8 @@ export interface SessionReplayUrlOptions {
 export interface SessionRecordingExtension extends BrowserExtension {
     /**
      * Starts or resumes session recording when the project enables it. Pass `true` to bypass sampling, the linked
-     * flag and triggers for the current session, or an object to bypass some of them.
+     * flag and triggers for the current session, or an object to bypass some of them. Overrides do not apply to a
+     * project that uses trigger groups, whose groups decide sampling, linked flags and triggers themselves.
      */
     startSessionRecording(override?: true | SessionRecordingOverride): void
     /** Stops session recording after sending buffered replay data. Recording resumes on `startSessionRecording()`. */
