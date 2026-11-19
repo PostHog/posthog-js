@@ -92,6 +92,16 @@ const throwNativeGzipValidationError = (reason: NativeGzipValidationReason): nev
   throw createNamedError(NATIVE_GZIP_VALIDATION_ERROR, `Native gzip produced invalid output: ${reason}`)
 }
 
+// The CRC pass is linear JS over the whole input on the main thread, so once native gzip has
+// proven itself in this runtime we keep only the cheap header and size checks.
+const CRC_VALIDATED_COMPRESSIONS_BEFORE_TRUST = 3
+let crcValidatedCompressions = 0
+
+/** @internal */
+export const resetNativeGzipTrustForTests = (): void => {
+  crcValidatedCompressions = 0
+}
+
 const validateNativeGzip = async (compressed: Blob, inputBytes: Uint8Array): Promise<void> => {
   if (compressed.size < 18) {
     throwNativeGzipValidationError('too-short')
@@ -103,13 +113,16 @@ const validateNativeGzip = async (compressed: Blob, inputBytes: Uint8Array): Pro
   }
 
   const trailer = new DataView(await compressed.slice(compressed.size - 8).arrayBuffer())
-  if (trailer.getUint32(0, true) !== crc32(inputBytes)) {
-    throwNativeGzipValidationError('invalid-crc')
-  }
-
   const inputSize = inputBytes.length >>> 0
   if (trailer.getUint32(4, true) !== inputSize) {
     throwNativeGzipValidationError('invalid-size')
+  }
+
+  if (crcValidatedCompressions < CRC_VALIDATED_COMPRESSIONS_BEFORE_TRUST) {
+    if (trailer.getUint32(0, true) !== crc32(inputBytes)) {
+      throwNativeGzipValidationError('invalid-crc')
+    }
+    crcValidatedCompressions++
   }
 }
 

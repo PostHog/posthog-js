@@ -5,6 +5,7 @@ import {
   isGzipRequest,
   isNativeAsyncGzipError,
   isNativeAsyncGzipReadError,
+  resetNativeGzipTrustForTests,
 } from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -187,6 +188,53 @@ describe('gzip', () => {
       } finally {
         ;(globalThis as any).CompressionStream = CompressionStream
       }
+    })
+
+    describe('native output trust', () => {
+      const withNativeOutput = async (output: Uint8Array, run: () => Promise<void>): Promise<void> => {
+        const CompressionStream = globalThis.CompressionStream
+        ;(globalThis as any).CompressionStream = vi.fn(() => ({
+          writable: new WritableStream(),
+          readable: new ReadableStream({
+            start(controller) {
+              controller.enqueue(output)
+              controller.close()
+            },
+          }),
+        }))
+        try {
+          await run()
+        } finally {
+          ;(globalThis as any).CompressionStream = CompressionStream
+        }
+      }
+
+      const nodeGzip = async (input: string, corrupt: 'crc' | 'size'): Promise<Uint8Array> => {
+        const bytes = new Uint8Array(await promisify(gzip)(input))
+        bytes[bytes.length - (corrupt === 'crc' ? 8 : 4)] ^= 0xff
+        return bytes
+      }
+
+      beforeEach(() => resetNativeGzipTrustForTests())
+
+      it.each([
+        ['a corrupt crc before native gzip is trusted', 'crc', 0, true],
+        ['a corrupt crc after native gzip is trusted', 'crc', 3, false],
+        ['a wrong size after native gzip is trusted', 'size', 3, true],
+      ] as const)('%s', async (_name, corrupt, priorCompressions, rejects) => {
+        for (let i = 0; i < priorCompressions; i++) {
+          await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
+        }
+
+        await withNativeOutput(await nodeGzip(API_TEST_INPUT, corrupt), async () => {
+          const result = gzipCompress(API_TEST_INPUT, false, { rethrow: true })
+          if (rejects) {
+            await expect(result).rejects.toHaveProperty('name', 'NativeGzipValidationError')
+          } else {
+            await expect(result).resolves.not.toBeNull()
+          }
+        })
+      })
     })
 
     it('compressed random data should match node', async () => {
