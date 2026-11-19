@@ -102,5 +102,6 @@ export const snapshotConversationsOptions = (options: ConversationsOptions = {})
     ...(options.theme
         ? { theme: { ...options.theme, ...(options.theme.dark ? { dark: { ...options.theme.dark } } : {}) } }
         : {}),
-    ...(options.identity ? { identity: { ...options.identity } } : {}),
+    // The identity holds only strings, including the signed claims.
+    ...(options.identity ? { identity: JSON.parse(JSON.stringify(options.identity)) } : {}),
 })
