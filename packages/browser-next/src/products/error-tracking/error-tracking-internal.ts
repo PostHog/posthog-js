@@ -7,7 +7,7 @@ export interface ErrorTrackingExtension extends BrowserExtension {
      * Returns whether the event was admitted for delivery.
      */
     captureException(error: unknown, properties?: Record<string, unknown>): boolean
-    /** Records a step that is attached as `$exception_steps` to exceptions captured afterwards. */
+    /** Records a step that is attached as `$exception_steps` to exceptions captured afterwards. Ignored while capture is not permitted. */
     addExceptionStep(message: string, properties?: Record<string, unknown>): void
     /** Starts automatic exception capture, overriding configured and remote settings. Defaults to errors and rejections. */
     startExceptionAutocapture(options?: true | ExceptionAutocaptureOptions): void

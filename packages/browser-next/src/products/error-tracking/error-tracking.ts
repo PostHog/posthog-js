@@ -38,8 +38,6 @@ interface ActiveErrorTracking {
 // The browser-next logger writes its prefix as a separate first console argument.
 const DIAGNOSTIC_PREFIX = /^\[PostHog\](?: |$)/
 
-const SILENT = { warn() {}, error() {} }
-
 const toAutocaptureConfig = (
     value: boolean | ExceptionAutocaptureOptions | undefined
 ): Parameters<typeof resolveExceptionAutocaptureConfig>[0] => {
@@ -235,7 +233,9 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
             }
         },
         addExceptionStep: (message, properties) => {
-            if (!disposed && steps) addExceptionStep(steps, message, properties, active?.logger ?? SILENT)
+            // Record only with capture permission, so a step recorded while denied is never sent after opt-in.
+            const current = active
+            if (steps && current?.client.canCapture) addExceptionStep(steps, message, properties, current.logger)
         },
         startExceptionAutocapture: (sources) => {
             if (disposed) return
