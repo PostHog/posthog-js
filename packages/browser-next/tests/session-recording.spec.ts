@@ -2,6 +2,7 @@
 import { createPostHog as createRoot } from '../src/composition/npm/index'
 import { createSessionRecording } from '../src/products/session-recording/session-recording'
 import type { BrowserExtension } from '../src/core/context/browser-client'
+import type { IPostHog } from '../src/core/types'
 import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
 import {
     clients,
@@ -123,6 +124,57 @@ describe('session recording controls', () => {
             ).toBe(true)
         )
         expect(failing.sessionRecordingStarted()).toBe(false)
+    })
+})
+
+describe('session recording debug properties', () => {
+    const OPTIONAL = ['$sdk_debug_replay_internal_buffer_size', '$sdk_debug_replay_remote_trigger_matching_config']
+    const captured = (
+        posthog: IPostHog,
+        event: string,
+        properties?: Record<string, unknown>
+    ): Record<string, unknown> => {
+        let value: Record<string, unknown> = {}
+        const subscription = posthog.onEvent((sent) => {
+            value = sent.properties
+        })
+        posthog.capture(event, properties)
+        subscription.dispose()
+        return value
+    }
+    const optionalKeys = (properties: Record<string, unknown>): string[] =>
+        OPTIONAL.filter((key) => properties[key] !== undefined)
+
+    it('keeps optional replay diagnostics off custom and excluded events', async () => {
+        const { posthog, replay } = await setup({ triggerMatchType: 'any' })
+        await started(replay)
+
+        for (const event of ['ordinary_custom', '$feature_flag_called', '$$heatmap']) {
+            const properties = captured(posthog, event)
+            expect(properties.$recording_status).toBe('active')
+            expect(optionalKeys(properties)).toEqual([])
+        }
+        expect(optionalKeys(captured(posthog, '$pageview'))).toEqual(OPTIONAL)
+    })
+
+    it('keeps an optional diagnostic the caller supplies on a custom event', async () => {
+        const { posthog, replay } = await setup()
+        await started(replay)
+
+        const properties = captured(posthog, 'ordinary_custom', { $sdk_debug_replay_internal_buffer_size: 123 })
+
+        expect(properties.$sdk_debug_replay_internal_buffer_size).toBe(123)
+    })
+
+    it('adds optional replay diagnostics to at most one SDK event every 30 seconds', async () => {
+        const { posthog, replay } = await setup({ triggerMatchType: 'any' })
+        await started(replay)
+        vi.useFakeTimers({ toFake: ['setTimeout'] })
+
+        expect(optionalKeys(captured(posthog, '$pageview'))).toEqual(OPTIONAL)
+        expect(optionalKeys(captured(posthog, '$autocapture'))).toEqual([])
+        vi.advanceTimersByTime(30_000)
+        expect(optionalKeys(captured(posthog, '$autocapture'))).toEqual(OPTIONAL)
     })
 })
 

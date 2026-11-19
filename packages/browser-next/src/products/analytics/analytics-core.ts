@@ -109,7 +109,7 @@ export class Analytics {
     private readonly _registeredProperties: RegisteredProperties
     readonly _sessionProperties: SessionRegisteredProperties
     private readonly _rateLimiter: ClientRateLimiter
-    private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
+    private readonly _dynamicEventProperties: Array<(event: string) => Record<string, unknown>> = []
     private readonly _teardownCallbacks = new Set<() => void>()
     private readonly _buffer: EventBuffer<AnalyticsMessage>
     private readonly _deliveryHost: CaptureHost
@@ -303,7 +303,7 @@ export class Analytics {
         if (!this._acceptRateLimit(skipRateLimit)) return undefined
         // An identity another subdomain stored replaces this context's registered properties before they are read.
         this._adoptStoredIdentity()
-        const snapshot = this._snapshotProperties(properties, options)
+        const snapshot = this._snapshotProperties(event, properties, options)
         if (!snapshot) return undefined
         const candidate = this._prepareCapture(event, snapshot)
         return candidate ? this._commitCapture(candidate, immediate, personProperties) : undefined
@@ -333,13 +333,14 @@ export class Analytics {
     }
 
     private _snapshotProperties(
+        event: string,
         properties: Record<string, unknown> | null,
         options: CaptureOptions
     ): CaptureProperties | undefined {
         const dynamic: Record<string, unknown> = {}
         for (const producer of this._dynamicEventProperties.slice()) {
             try {
-                Object.assign(dynamic, producer())
+                Object.assign(dynamic, producer(event))
             } catch (error) {
                 this._core.logger.error('An event property producer failed', error)
             }
@@ -647,7 +648,8 @@ export class Analytics {
         return this._canUseProperties() ? this._registeredProperties.get(property) : undefined
     }
 
-    registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
+    /** Registers a producer of properties for each event, given the event name as passed to capture. */
+    registerDynamicEventProperties(producer: (event: string) => Record<string, unknown>): Disposable {
         if (this._disposed || this._core._disposed) return { dispose() {} }
         this._dynamicEventProperties.push(producer)
         let active = true

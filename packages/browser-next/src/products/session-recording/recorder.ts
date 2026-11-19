@@ -50,7 +50,6 @@ import {
     PAUSED,
     SAMPLED,
     URLTriggerMatching,
-    type ReplayTriggerHost,
     type SessionRecordingStatus,
     type TriggerType,
 } from '@posthog/browser-common/replay/trigger-matching'
@@ -63,7 +62,7 @@ import { version } from '../../primitives/version'
 import type { IPostHog } from '../../core/types'
 import type { BrowserState } from '../../core/state/state'
 import { analyticsOf, type Analytics } from '../analytics/analytics-core'
-import { createReplayTriggerHost } from './replay-trigger-host'
+import { createReplayTriggerHost, type ReplayDebugHost } from './replay-trigger-host'
 import { createSnapshotDelivery, type SnapshotDelivery } from './snapshot-delivery'
 import type { SessionRecordingOptions } from './session-recording-options'
 
@@ -138,7 +137,7 @@ const touchSession = (analytics: Analytics, now?: number): SessionContext | unde
 export class SessionRecorder {
     private readonly _client: IPostHog
     private readonly _analytics: Analytics | undefined
-    private readonly _triggerHost: ReplayTriggerHost
+    private readonly _triggerHost: ReplayDebugHost
     private readonly _delivery: SnapshotDelivery
     private readonly _urlTriggerMatching: URLTriggerMatching
     private readonly _eventTriggerMatching: EventTriggerMatching
@@ -213,18 +212,24 @@ export class SessionRecorder {
         })
     }
 
-    debugProperties(): Record<string, unknown> {
+    /** The replay debug properties for an event; only some SDK events also carry the optional ones. */
+    debugProperties(optional: boolean): Record<string, unknown> {
         return {
             // a stopped recorder reports itself disabled, though its last strategy still answers status reads
             $recording_status: this.isStarted || this._rrwebError ? this.status : DISABLED,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
-            $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
-            ...(this._holdFlushUntilInteraction
+            ...(optional
                 ? {
-                      $sdk_debug_replay_flush_hold_reason: this._heldEpochShipsOnUnload
-                          ? 'no_interaction_since_recording_started'
-                          : 'no_interaction_since_session_rotated',
+                      ...this._triggerHost.optionalDebugProperties(),
+                      $sdk_debug_replay_internal_buffer_size: this._buffer.size,
+                      ...(this._holdFlushUntilInteraction
+                          ? {
+                                $sdk_debug_replay_flush_hold_reason: this._heldEpochShipsOnUnload
+                                    ? 'no_interaction_since_recording_started'
+                                    : 'no_interaction_since_session_rotated',
+                            }
+                          : {}),
                   }
                 : {}),
         }
