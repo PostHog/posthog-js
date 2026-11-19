@@ -11,6 +11,8 @@ const DEFAULT_CLICK_COUNT = 3
 
 export default class RageClick {
     clicks: { x: number; y: number; timestamp: number }[]
+    lastTarget: Element | null
+    lastTimestamp: number
 
     thresholdPx: number
     timeoutMs: number
@@ -26,10 +28,27 @@ export default class RageClick {
         this.clickCount = conf.click_count || DEFAULT_CLICK_COUNT
 
         this.clicks = []
+        this.lastTarget = null
+        this.lastTimestamp = 0
     }
 
-    isRageClick(x: number, y: number, timestamp: number): boolean {
+    isRageClick(x: number, y: number, timestamp: number, target?: Element | null): boolean {
         if (this.disabled) {
+            return false
+        }
+
+        // Clicking a <label> makes the browser dispatch a second, synthetic click at the labeled
+        // control. Chromium and WebKit give that forwarded click `detail === 0`, but Firefox sends
+        // `detail === 1`, so the detail value can't tell it apart from a genuine click. Recognise it
+        // by its target instead: the control of the <label> the previous click landed in, dispatched
+        // a few milliseconds later. Counting it would double-count a single user click and could
+        // trigger a false rage click, so drop it without recording it.
+        const previousLabel = this.lastTarget?.closest('label') as HTMLLabelElement | null | undefined
+        const isForwardedLabelClick =
+            !!previousLabel && !!target && previousLabel.control === target && timestamp - this.lastTimestamp < 50
+        this.lastTarget = target ?? null
+        this.lastTimestamp = timestamp
+        if (isForwardedLabelClick) {
             return false
         }
 

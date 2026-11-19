@@ -153,6 +153,65 @@ describe('Autocapture system', () => {
         })
     })
 
+    describe('rage clicks', () => {
+        const dispatchClick = (element: Element, detail: number) =>
+            element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail, clientX: 5, clientY: 5 }))
+
+        const addLabelAndControl = (id: string) => {
+            const label = document.createElement('label')
+            label.htmlFor = id
+            const control = document.createElement('input')
+            control.id = id
+            document.body.appendChild(label)
+            document.body.appendChild(control)
+            return { label, control }
+        }
+
+        // Clicking a <label> dispatches the genuine click on the label and then a synthetic click
+        // forwarded to its control. Firefox gives that forwarded click detail 1 (Chromium and WebKit
+        // give it detail 0), so it is told apart by its target, not its detail.
+        const clickLabel = (label: Element, control: Element) => {
+            dispatchClick(label, 1)
+            dispatchClick(control, 1)
+        }
+
+        it('does not count a browser-forwarded label click toward a rage click', async () => {
+            const instance = await createPosthogInstance(uuidv7(), {
+                autocapture: true,
+                rageclick: true,
+                capture_pageview: false,
+            })
+            const capture = vi.spyOn(instance, 'capture')
+            const { label, control } = addLabelAndControl('rc-input')
+
+            const rageCaptured = () => capture.mock.calls.some((call) => call[0] === '$rageclick')
+
+            // Six real label clicks produce twelve click events (half of them forwarded), but only
+            // the six genuine clicks count, so no rage click should fire from the forwarded ones.
+            for (let i = 0; i < 6; i++) clickLabel(label, control)
+            expect(rageCaptured()).toBe(false)
+
+            await instance.shutdown()
+        })
+
+        it('still rage clicks on three genuine label clicks', async () => {
+            const instance = await createPosthogInstance(uuidv7(), {
+                autocapture: true,
+                rageclick: true,
+                capture_pageview: false,
+            })
+            const capture = vi.spyOn(instance, 'capture')
+            const { label, control } = addLabelAndControl('rc-input-2')
+
+            const rageCaptured = () => capture.mock.calls.some((call) => call[0] === '$rageclick')
+
+            for (let i = 0; i < 3; i++) clickLabel(label, control)
+            expect(rageCaptured()).toBe(true)
+
+            await instance.shutdown()
+        })
+    })
+
     describe('afterFlagsResponse()', () => {
         beforeEach(() => {
             document.title = 'test page'
