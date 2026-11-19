@@ -80,7 +80,7 @@ type ErrorHandler = (error: unknown, context?: 'rrweb' | 'host') => void | boole
 
 // Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
-    emit?: (e: eventWithTime, isCheckout?: boolean) => void
+    emit?: (e: eventWithTime, isCheckout?: boolean, nonInteractive?: boolean) => void
     checkoutEveryNth?: number
     checkoutEveryNms?: number
     blockClass?: blockClass
@@ -92,6 +92,13 @@ export type recordOptions = {
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: MaskInputFn
+    /**
+     * Opt in to explicit selection masking. Omitted preserves legacy callback behavior.
+     * Returning original text from maskInputFn still records it, even for masked selects.
+     * Re-evaluated on input, select subtree mutations and snapshots. Use a pure policy.
+     * Invalid results and exceptions mask.
+     */
+    selectMaskingFn?: (element: HTMLSelectElement) => 'masked' | 'unmasked'
     maskTextFn?: MaskTextFn
     maskAllElementAttributes?: boolean
     maskAttributeFn?: MaskAttributeFn
@@ -126,6 +133,7 @@ export type rrwebRecord = {
     takeFullSnapshot: () => void
     // absent on recorder bundles older than this property
     isRecording?: () => boolean
+    supportsSelectMasking?: boolean
     withStyleRuleSourceHandoff?: (stop: () => void, restart: (cancel: () => void) => void) => void
     mirror: {
         getId(n: Node | undefined | null): number

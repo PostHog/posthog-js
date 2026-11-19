@@ -188,6 +188,20 @@ describe('PostHogMCP', () => {
       expect(p.$process_person_profile).toBeUndefined()
     })
 
+    it('keeps the $exception for a failure the host labels validation itself', async () => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: true,
+        errorType: 'validation',
+        error: new Error('query must not be empty'),
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_error_type).toBe('validation')
+      expect(onlyCapture('$exception')).toBeDefined()
+    })
+
     it('maps category to $mcp_tool_category', async () => {
       posthog.captureToolCall({
         toolName: 'query-logs',

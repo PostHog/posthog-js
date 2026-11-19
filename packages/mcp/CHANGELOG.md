@@ -1,5 +1,26 @@
 # @posthog/mcp
 
+## 1.6.0
+
+### Minor Changes
+
+- [#5779](https://github.com/PostHog/posthog-js/pull/5779) [`3069723`](https://github.com/PostHog/posthog-js/commit/306972322dd4cd416b16a8b734bee16e3af51a01) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support FastMCP with `instrumentFastMCP(fastmcp, posthog, options)`. FastMCP builds a server per session (per request when stateless) behind a private factory, so this hooks the module's session class and instruments each one before it connects. FastMCP's HTTP layer drops request headers, so the adapter puts them back on `extra.requestInfo.headers` for `identify` and other callbacks.
+  (2026-11-18)
+
+## 1.5.0
+
+### Minor Changes
+
+- [#5778](https://github.com/PostHog/posthog-js/pull/5778) [`7d1b1a7`](https://github.com/PostHog/posthog-js/commit/7d1b1a719fc6606fc65105a600907ef28199a320) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support Vercel's `mcp-handler`. Call `instrument(server, posthog)` inside the `createMcpHandler` callback, and wrap the exported route in the new `withMcpSessionHeader` to keep one `$session_id` and the client's name per conversation on the `2025-11-25` protocol. mcp-handler streams the `initialize` response, so the session token is minted at the fetch layer instead of inside the server.
+  (2026-11-18)
+
+## 1.4.0
+
+### Minor Changes
+
+- [#5781](https://github.com/PostHog/posthog-js/pull/5781) [`d07d87f`](https://github.com/PostHog/posthog-js/commit/d07d87f8b1376477b7c25187d19bec9841d9a6ad) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Classify client-caused failures as `$mcp_error_type: "validation"`. A tool call whose arguments failed the tool's input schema, a call to a disabled tool, a tool that rejected its arguments with JSON-RPC `-32602`, and a read of an unknown resource now carry `validation` instead of the thrown error's type, so dashboards can tell an agent's mistake from a server bug. Output-schema failures and malformed tool results, which also use `-32602`, keep the thrown type. Every failure still sends its `$exception`, as before.
+  (2026-11-18)
+
 ## 1.3.0
 
 ### Minor Changes

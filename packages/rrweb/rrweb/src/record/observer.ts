@@ -1,6 +1,8 @@
 import {
   type MaskInputOptions,
   maskInputValue,
+  getInputMaskOptions,
+  updateSelectMaskingState,
   Mirror,
   getInputType,
   stringifyStylesheet,
@@ -460,12 +462,25 @@ function initInputObserver({
   ignoreSelector,
   maskInputOptions,
   maskInputFn,
+  selectMaskingFn,
   sampling,
   userTriggeredOnInput,
 }: observerParam): listenerHandler {
   let active = true;
-  const pendingSelects = new Map<HTMLElement, boolean>();
+  const pendingSelects = new Map<
+    HTMLElement,
+    { userTriggered: boolean; fromMutation: boolean }
+  >();
   let selectFlushScheduled = false;
+
+  function isSelectTarget(target: HTMLElement): boolean {
+    return (
+      target.tagName === 'SELECT' ||
+      (!!selectMaskingFn &&
+        target.localName === 'select' &&
+        target.namespaceURI === 'http://www.w3.org/1999/xhtml')
+    );
+  }
 
   function getInputTarget(target: HTMLElement | null): HTMLElement | null {
     // Reading a native accessor (tagName/value/checked/type) on a non-native
@@ -475,6 +490,20 @@ function initInputObserver({
     const view = doc.defaultView;
     if (target && view && !(target instanceof view.HTMLElement)) {
       return null;
+    }
+    if (
+      selectMaskingFn &&
+      target?.localName === 'option' &&
+      target.namespaceURI === 'http://www.w3.org/1999/xhtml'
+    ) {
+      let owner = dom.parentElement(target);
+      while (
+        owner &&
+        (owner.localName !== 'select' ||
+          owner.namespaceURI !== 'http://www.w3.org/1999/xhtml')
+      )
+        owner = dom.parentElement(owner);
+      return owner;
     }
     if (target && target.tagName === 'OPTION') {
       target = dom.parentElement(target);
@@ -502,8 +531,16 @@ function initInputObserver({
     target: HTMLElement | null,
     userTriggered: boolean,
     deferred = false,
+    fromMutation = false,
   ) {
-    const tagName = target && target.tagName;
+    const tagName =
+      target && (isSelectTarget(target) ? 'SELECT' : target.tagName);
+    if (selectMaskingFn && tagName === 'SELECT') {
+      // Flush callbacks before reading policy or selection, even with known IDs.
+      if (mutationBuffers[0]?.isFrozen())
+        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+      if (!active) return;
+    }
     if (
       !target ||
       !tagName ||
@@ -520,9 +557,20 @@ function initInputObserver({
       return;
     }
     const type: Lowercase<string> = getInputType(target) || '';
+    const inputMaskOptions = getInputMaskOptions(
+      target,
+      maskInputOptions,
+      selectMaskingFn,
+    );
+    if (
+      selectMaskingFn &&
+      (!active || isBlocked(target, blockClass, blockSelector, true))
+    ) {
+      return;
+    }
     const shouldMaskInput =
-      maskInputOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
-      maskInputOptions[type as keyof MaskInputOptions];
+      inputMaskOptions[tagName.toLowerCase() as keyof MaskInputOptions] ||
+      inputMaskOptions[type as keyof MaskInputOptions];
     let selectedOptions =
       tagName === 'SELECT'
         ? getSelectedOptions(target as HTMLSelectElement)
@@ -540,7 +588,7 @@ function initInputObserver({
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);
       }
       if (!deferred) {
-        queueSelect(target, userTriggered);
+        queueSelect(target, userTriggered, fromMutation);
         return;
       }
       // Scalar masked events need the select ID, but do not transmit option IDs.
@@ -562,7 +610,7 @@ function initInputObserver({
     } else if (shouldMaskInput) {
       text = maskInputValue({
         element: target,
-        maskInputOptions,
+        maskInputOptions: inputMaskOptions,
         tagName,
         type,
         value: text,
@@ -573,8 +621,10 @@ function initInputObserver({
     }
     const value: inputValue = { text, isChecked };
     if (selectedOptionIds) value.selectedOptionIds = selectedOptionIds;
+    if (selectMaskingFn && selectedOptions)
+      updateSelectMaskingState(target, mirror, !!shouldMaskInput);
     if (userTriggeredOnInput) value.userTriggered = userTriggered;
-    cbWithDedup(target, value);
+    cbWithDedup(target, value, fromMutation);
     // if a radio was checked
     // the other radios with the same name attribute will be unchecked.
     const name: string | undefined = (target as HTMLInputElement).name;
@@ -594,11 +644,17 @@ function initInputObserver({
         });
     }
   }
-  function queueSelect(select: HTMLElement, userTriggered: boolean) {
-    pendingSelects.set(
-      select,
-      userTriggered || pendingSelects.get(select) || false,
-    );
+  function queueSelect(
+    select: HTMLElement,
+    userTriggered: boolean,
+    fromMutation = false,
+  ) {
+    const pending = pendingSelects.get(select);
+    pendingSelects.set(select, {
+      userTriggered: userTriggered || pending?.userTriggered || false,
+      // Any non-mutation request for this select makes the merged input interactive.
+      fromMutation: fromMutation && (pending?.fromMutation ?? true),
+    });
     if (!selectFlushScheduled) {
       selectFlushScheduled = true;
       // Mutation delivery and already-deferred setter callbacks finish first.
@@ -611,33 +667,46 @@ function initInputObserver({
     const selects = Array.from(pendingSelects);
     pendingSelects.clear();
     callAllSafely(
-      selects.map(([select, userTriggered]) => () => {
-        if (active) callbackWrapper(processInput)(select, userTriggered, true);
+      selects.map(([select, { userTriggered, fromMutation }]) => () => {
+        if (active)
+          callbackWrapper(processInput)(
+            select,
+            userTriggered,
+            true,
+            fromMutation,
+          );
       }),
     );
   }
 
-  function cbWithDedup(target: EventTarget, v: inputValue) {
-    const values =
-      (target as HTMLElement).tagName === 'SELECT'
-        ? lastSelectInputValueMap
-        : lastInputValueMap;
+  function cbWithDedup(
+    target: EventTarget,
+    v: inputValue,
+    fromMutation = false,
+  ) {
+    const values = isSelectTarget(target as HTMLElement)
+      ? lastSelectInputValueMap
+      : lastInputValueMap;
     const lastInputValue = values.get(target);
     if (
       !lastInputValue ||
       lastInputValue.text !== v.text ||
       lastInputValue.isChecked !== v.isChecked ||
-      lastInputValue.selectedOptionIds?.length !== v.selectedOptionIds?.length ||
+      lastInputValue.selectedOptionIds?.length !==
+        v.selectedOptionIds?.length ||
       v.selectedOptionIds?.some(
         (id, index) => id !== lastInputValue.selectedOptionIds?.[index],
       )
     ) {
       values.set(target, v);
       const id = mirror.getId(target as Node);
-      callbackWrapper(inputCb)({
-        ...v,
-        id,
-      });
+      callbackWrapper(inputCb)(
+        {
+          ...v,
+          id,
+        },
+        fromMutation,
+      );
     }
   }
   const events = sampling.input === 'last' ? ['change'] : ['input', 'change'];
@@ -675,7 +744,7 @@ function initInputObserver({
               if (!active) return;
               const target = callbackWrapper(getInputTarget)(this);
               if (!target) return;
-              if (target.tagName === 'SELECT') {
+              if (isSelectTarget(target)) {
                 queueSelect(target, false);
               } else {
                 callbackWrapper(processInput)(target, false);
@@ -698,7 +767,7 @@ function initInputObserver({
           isBlockedIncludingShadowHosts(select, blockClass, blockSelector)
         )
           return;
-        processInput(select, false);
+        processInput(select, false, false, !!selectMaskingFn);
       }),
     ),
   );

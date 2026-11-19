@@ -152,6 +152,8 @@ export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1'
             'flags_v2',
             ...(requestsFlagsV4(consumer) ? ['flags_response_v4'] : []),
             'flags_getter_remote_uncached',
+            // Metadata only: setup and getters preserve omitted disableGeoip options.
+            'flags_geoip_default_disabled',
             // The legacy payload getter returns the decoded JSON payload.
             'feature_flag_payloads',
             'flag_snapshot_value_scalar',

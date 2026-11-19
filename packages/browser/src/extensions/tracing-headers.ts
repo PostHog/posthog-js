@@ -4,6 +4,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isString, isUndefined } from '@posthog/core'
 import type { TraceparentTargets, TracingHeadersHostnames } from './tracing-headers-types'
 import type { Extension } from './types'
+import { getExtensionLoader } from '../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[TracingHeaders]')
 
@@ -29,7 +30,7 @@ export class TracingHeaders implements Extension {
             return
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
+        getExtensionLoader(this._instance)?.(this._instance, 'tracing-headers', (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }
