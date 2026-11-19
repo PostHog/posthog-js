@@ -216,6 +216,24 @@ describe('manual exception capture', () => {
         expect(await exceptions(posthog, sent)).toEqual([])
     })
 
+    it('omits SDK-owned exception metadata supplied by the application', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+        posthog.register({ $debug_images: [{ debug_id: 'registered' }] })
+
+        tracking.captureException(new Error('manual'), {
+            $exception_source: 'browser.console',
+            $exception_types: ['Fake'],
+            area: 'checkout',
+        })
+
+        const [properties] = await exceptions(posthog, sent)
+        expect(properties.area).toBe('checkout')
+        expect(properties).not.toHaveProperty('$exception_source')
+        expect(properties).not.toHaveProperty('$exception_types')
+        expect(properties).not.toHaveProperty('$debug_images')
+    })
+
     it('lists the caught exception first and its cause last', async () => {
         const sent: CapturedEvent[] = []
         const { posthog, tracking } = await createWith(sent)
