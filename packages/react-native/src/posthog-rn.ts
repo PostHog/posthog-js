@@ -2298,7 +2298,8 @@ export class PostHog extends PostHogCore {
   ): Promise<SessionReplayTriggerGroupsDecision | null> {
     await this._initPromise
     const triggerGroups = parseSessionRecordingTriggerGroups(
-      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)
+      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay),
+      this._logger
     )
     if (triggerGroups === null || this._manualRecordingStartRequest !== request) {
       return null
@@ -3411,7 +3412,10 @@ export class PostHog extends PostHogCore {
     )
     // Under v2, per-group sampling replaces the remote rate; forwarding it would gate recording twice.
     const isTriggerGroupsConfig =
-      parseSessionRecordingTriggerGroups(this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)) !== null
+      parseSessionRecordingTriggerGroups(
+        this.getPersistedProperty(PostHogPersistedProperty.SessionReplay),
+        this._logger
+      ) !== null
     const remoteSampleRateRaw = isTriggerGroupsConfig
       ? undefined
       : getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
@@ -3747,7 +3751,7 @@ export class PostHog extends PostHogCore {
       // Trigger groups replace event triggers and only gate automatic replay, so both stay disarmed
       // under a v2 config.
       this._sessionReplayEventTriggers =
-        this._sessionReplayWanted && !parseSessionRecordingTriggerGroups(cachedReplayConfig)
+        this._sessionReplayWanted && !parseSessionRecordingTriggerGroups(cachedReplayConfig, this._logger)
           ? this._parseEventTriggers(cachedReplayConfig['eventTriggers'])
           : []
       this._sessionReplayTriggerGroups = null
@@ -3778,7 +3782,7 @@ export class PostHog extends PostHogCore {
     }
 
     let recordingActive: boolean
-    const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig)
+    const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig, this._logger)
     this._replayEvaluatedSessionId = super.getSessionId()
     // Core drops the cached replay config both before the first fetch and for an explicit project
     // disable. Only the cached /config tells them apart: without this, a disabled project reads as

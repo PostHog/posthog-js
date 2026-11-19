@@ -121,6 +121,38 @@ describe('parseSessionRecordingTriggerGroups', () => {
     expect(decision.hasPendingGroups).toBe(true)
   })
 
+  it('logs an invalid url regex once per parse and keeps the group and its valid urls', () => {
+    const logger = { error: vi.fn() }
+    const config = {
+      version: 2,
+      triggerGroups: [
+        {
+          id: 'g1',
+          conditions: {
+            urls: [
+              { url: '([invalid', matching: 'regex' },
+              { url: 'checkout.*', matching: 'regex' },
+            ],
+          },
+        },
+      ],
+    }
+
+    const groups = parseSessionRecordingTriggerGroups(config, logger)
+
+    expect(groups!.map((g) => g.id)).toEqual(['g1'])
+    expect(groups![0].conditions.urls).toEqual([/checkout.*/])
+    expect(logger.error).toHaveBeenCalledTimes(1)
+    expect(logger.error).toHaveBeenCalledWith(
+      'Invalid URL trigger regex pattern:',
+      '([invalid',
+      expect.any(SyntaxError)
+    )
+
+    parseSessionRecordingTriggerGroups(config, logger)
+    expect(logger.error).toHaveBeenCalledTimes(2)
+  })
+
   it('parses groups, conditions and filters from a v2 config', () => {
     const groups = parseSessionRecordingTriggerGroups({
       version: 2,
