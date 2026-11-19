@@ -223,7 +223,11 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
                     (await received()).requests.some((request) => /\/config(?:\.js)?$/.test(request.path))
                 )
                 .toBe(true)
-            await waitFor(() => !!window._POSTHOG_REMOTE_CONFIG?.phc_COMPAT?.config)
+            await waitFor(
+                () =>
+                    !!window._POSTHOG_REMOTE_CONFIG?.phc_COMPAT?.config ||
+                    window.__compat.ph.persistence?.props?.$autocapture_disabled_server_side !== undefined
+            )
             await page.evaluate(() => window.__compat.call('reloadFeatureFlags'))
             await page.clock.runFor(100)
         }

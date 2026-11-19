@@ -3,13 +3,92 @@ import type { AutocaptureClient } from './autocapture'
 import { PostHogBackendClient } from '@/client'
 import type { ContextData } from '../context/types'
 import { snapshotEventContext } from '../context/event-context'
-import { isObject } from '@posthog/core'
+import { isObject, safeJsonStringify } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
 import { BucketedRateLimiter, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
+
+// Copy custom JSON containers only: null array entries and native values keep their meaning.
+function withoutNullObjectProperties(value: any): any {
+  const copies = new WeakMap<object, any>()
+  const pending: { source: Record<string, any>; target: Record<string, any>; array: boolean }[] = []
+  const copyValue = (source: any, inArray = false): any => {
+    if (
+      !Array.isArray(source) &&
+      (source === null ||
+        typeof source !== 'object' ||
+        (Object.getPrototypeOf(source) !== Object.prototype && Object.getPrototypeOf(source) !== null))
+    )
+      return source
+    if (copies.has(source)) return copies.get(source)
+    const toJSON = source.toJSON
+    if (typeof toJSON === 'function') {
+      // Let serialization choose the key and call the original receiver. Its backing
+      // properties may be unreadable; clean only the representation the hook returns.
+      return {
+        toJSON(key: string) {
+          const representation = JSON.parse(safeJsonStringify({ [key]: { toJSON: toJSON.bind(source) } }))[key]
+          if (representation === null && !inArray) return undefined
+          return withoutNullObjectProperties(representation)
+        },
+      }
+    }
+    const array = Array.isArray(source)
+    const target: any = array ? new Array(source.length) : {}
+    copies.set(source, target)
+    pending.push({ source, target, array })
+    return target
+  }
+  const root = copyValue(value)
+  while (pending.length) {
+    const { source, target, array } = pending.pop()!
+    // The allocated array snapshots length before source getters can extend it.
+    const keys = array ? Array.prototype.keys.call(target) : Object.keys(source)
+    for (const key of keys) {
+      if (array && !(key in source)) continue
+      const entry = source[key]
+      if (entry !== null || array) {
+        Object.defineProperty(target, key, {
+          value: copyValue(entry, array),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        })
+      }
+    }
+  }
+  return root
+}
+
+function isReservedExceptionProperty(key: string): boolean {
+  return (
+    (key.startsWith('$exception_') && key !== '$exception_fingerprint') ||
+    key === '$debug_images' ||
+    key === '$cymbal_errors'
+  )
+}
+
+/**
+ * The `$exception_level` values a caller may set (sdk-specs `exception-event-metadata`), read
+ * case-insensitively with the same aliases as posthog-python. Any other value keeps the default.
+ */
+const EXCEPTION_LEVELS: ReadonlyMap<string, CoreErrorTracking.SeverityLevel> = new Map([
+  ['fatal', 'fatal'],
+  ['critical', 'fatal'],
+  ['alert', 'fatal'],
+  ['emergency', 'fatal'],
+  ['error', 'error'],
+  ['warning', 'warning'],
+  ['warn', 'warning'],
+  ['log', 'log'],
+  ['notice', 'info'],
+  ['info', 'info'],
+  ['trace', 'debug'],
+  ['debug', 'debug'],
+])
 
 export default class ErrorTracking {
   private client: PostHogBackendClient
@@ -47,29 +126,42 @@ export default class ErrorTracking {
     return isObject(x) && '__posthog_previously_captured_error' in x && x.__posthog_previously_captured_error === true
   }
 
+  static prepareEventProperties(
+    properties: NonNullable<EventMessage['properties']>
+  ): NonNullable<EventMessage['properties']> {
+    const entries = Object.entries(properties)
+    return {
+      ...Object.fromEntries(entries.filter(([key]) => isReservedExceptionProperty(key))),
+      ...withoutNullObjectProperties(Object.fromEntries(entries.filter(([key]) => !isReservedExceptionProperty(key)))),
+    }
+  }
+
   static async buildEventMessage(
     builder: CoreErrorTracking.ErrorPropertiesBuilder,
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>,
+    level?: CoreErrorTracking.SeverityLevel,
     context?: ContextData
   ): Promise<EventMessage> {
     const applyContextSnapshot = snapshotEventContext(context)
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const properties: NonNullable<EventMessage['properties']> = Object.fromEntries(
+      Object.keys(additionalProperties ?? {})
+        .filter((key) => !isReservedExceptionProperty(key))
+        .map((key) => [key, additionalProperties![key]])
+    )
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
-
-    const injectedReleaseId = CoreErrorTracking.getInjectedReleaseId()
-    if (injectedReleaseId) {
-      properties.$release_id = injectedReleaseId
+    const exceptionLevel = typeof level === 'string' ? EXCEPTION_LEVELS.get(level.toLowerCase()) : undefined
+    if (exceptionLevel !== undefined) {
+      exceptionProperties.$exception_level = exceptionLevel
     }
 
     return applyContextSnapshot({
       event: '$exception',
-      // Leave distinctId resolution to prepareEventMessage which checks request context
-      // and falls back to a random UUID with $process_person_profile = false
+      // The client resolves a missing id: the context id, else a personless id.
       distinctId: distinctId,
       properties: {
         ...exceptionProperties,
@@ -128,6 +220,7 @@ export default class ErrorTracking {
             this.client.getErrorPropertiesBuilder(),
             exception,
             hint,
+            undefined,
             undefined,
             undefined,
             this.client.getContext()

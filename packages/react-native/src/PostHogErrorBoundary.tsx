@@ -29,6 +29,12 @@ const INITIAL_STATE: PostHogErrorBoundaryState = {
 
 const isFunction = (f: any): f is (...args: any[]) => any => typeof f === 'function'
 
+/**
+ * Captures errors thrown while rendering its children and shows `fallback` in their place.
+ *
+ * React also logs render errors to the console, so with console capture enabled each render error is captured twice.
+ * Set `errorTracking: { autocapture: { console: [] } }` to avoid this.
+ */
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
   static contextType = PostHogContext
   context!: React.ContextType<typeof PostHogContext>

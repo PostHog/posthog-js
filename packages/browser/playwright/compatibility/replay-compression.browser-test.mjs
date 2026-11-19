@@ -82,7 +82,15 @@ async function record(browser, engine, comparison, holdCompression) {
         await expect.poll(() => page.evaluate(() => window.__compat.loaded)).toBe(true)
         server.releaseBarrier('config')
         server.releaseBarrier('flags')
-        await expect.poll(() => page.evaluate(() => !!window._POSTHOG_REMOTE_CONFIG?.phc_COMPAT?.config)).toBe(true)
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () =>
+                        !!window._POSTHOG_REMOTE_CONFIG?.phc_COMPAT?.config ||
+                        window.__compat.ph.persistence?.props?.$autocapture_disabled_server_side !== undefined
+                )
+            )
+            .toBe(true)
         await page.evaluate(() => window.__compat.call('reloadFeatureFlags'))
         await page.clock.runFor(100)
         await expect

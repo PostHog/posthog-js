@@ -259,6 +259,22 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
+    it.each([false, 0, null, '', '"quoted"'])('preserves legacy snapshot payload %j silently', async (payload) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ decideFlags: { checkout: 'control' }, flagsPayloads: { checkout: payload } })
+      )
+
+      const flags = await posthog.evaluateFlags('user-1')
+      expect(flags.getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.only(['checkout']).getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.getFlagPayload('missing')).toBeUndefined()
+      expect(flags.onlyAccessed().keys).toEqual([])
+      expect(flags.keys).toEqual(['checkout'])
+      await waitForPromises()
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('getFlagPayload returns parsed payload without firing an event', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
@@ -607,7 +623,7 @@ describe('evaluateFlags', () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
 
-      posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
+      posthog.captureException(new Error('boom'), { distinctId: 'user-1', flags: flags.onlyAccessed() })
 
       await posthog.flush()
 
@@ -627,7 +643,7 @@ describe('evaluateFlags', () => {
       const filtered = flags.only(['boolean-flag'])
       const spy = vi.spyOn(posthog, 'captureImmediate').mockResolvedValue(undefined)
 
-      await posthog.captureExceptionImmediate(new Error('boom'), 'user-1', undefined, filtered)
+      await posthog.captureExceptionImmediate(new Error('boom'), { distinctId: 'user-1', flags: filtered })
       await waitForPromises()
 
       expect(spy).toHaveBeenCalledTimes(1)
@@ -716,10 +732,10 @@ describe('evaluateFlags', () => {
           '$feature_flag_request_id',
           '$feature_flag_evaluated_at',
           'locally_evaluated',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(byKey['boolean-flag'].$is_server).toBe(true)

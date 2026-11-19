@@ -29,7 +29,7 @@ import {
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isNullish, isNumber, isString, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -114,6 +114,14 @@ export class SessionRecording implements Extension {
 
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
+        }
+
+        // WAF rule sets such as OWASP CRS block requests whose cookie holds a sampled-out decision
+        // stored with the `!` prefix. Drop it here, where it runs even when the recorder never loads;
+        // the recorder decides again with the same outcome.
+        const storedIsSampled = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        if (isString(storedIsSampled) && storedIsSampled[0] === '!') {
+            this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
         }
 
         // Start before the recorder chunk loads so a visible -> hidden transition during
