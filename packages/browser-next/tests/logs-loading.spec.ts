@@ -76,6 +76,39 @@ describe('automatic logs module loading', () => {
         await client.dispose()
     })
 
+    it('disposes an acquired product whose setup is still pending when shutdown returns', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        let entered!: () => void
+        const setupEntered = new Promise<void>((resolve) => {
+            entered = resolve
+        })
+        let release!: () => void
+        const setupGate = new Promise<void>((resolve) => {
+            release = resolve
+        })
+        // Only cleanup releases setup, so shutdown cannot wait for setup to settle first.
+        const dispose = vi.fn(() => release())
+        vi.doMock('../src/products/logs/logs', () => ({
+            logs: () => ({
+                name: 'logs',
+                setup() {
+                    entered()
+                    return setupGate
+                },
+                dispose,
+            }),
+        }))
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog(options)
+        const acquiring = client.resolveExtension('logs')
+        await setupEntered
+        await client.shutdown(100)
+        expect(dispose).toHaveBeenCalledOnce()
+        expect(await acquiring).toBeUndefined()
+        expect(client.logs).toBeUndefined()
+        expect(dispose).toHaveBeenCalledOnce()
+    })
+
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.doMock('../src/products/logs/logs', () => {

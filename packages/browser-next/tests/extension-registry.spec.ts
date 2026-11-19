@@ -275,6 +275,23 @@ describe('extension registry activation and installation authority', () => {
         expect(product.dispose).toHaveBeenCalledOnce()
     })
 
+    it('disposes an extension during setup, shares its pending acquisition, and does not dispose it again', async () => {
+        const ready = deferred<void>()
+        const product = { name: 'product', setup: vi.fn(() => ready.promise), dispose: vi.fn(() => ready.resolve()) }
+        const { host, registry } = makeRegistry({ product: () => product })
+        const first = registry.resolve('product')
+        const second = registry.resolve('product')
+        expect(second).toBe(first)
+        await vi.waitFor(() => expect(product.setup).toHaveBeenCalledOnce())
+        await registry.dispose()
+        expect(product.dispose).toHaveBeenCalledOnce()
+        expect(await first).toBeUndefined()
+        expect(await second).toBeUndefined()
+        expect('product' in host).toBe(false)
+        expect(registry.get('product')).toBeUndefined()
+        expect(product.dispose).toHaveBeenCalledOnce()
+    })
+
     it('rejects installation after disposal', async () => {
         const { registry } = makeRegistry()
         await registry.dispose()
