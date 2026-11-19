@@ -425,6 +425,9 @@ export class BrowserState {
         // The stored record already drops groups and caches that belonged to this context's identity.
         copyAuthority(stored, this._state)
         this._state = stored
+        // Writing the adopted identity tells the cookie adapter it is current, so a later write from this context
+        // cannot restore it over a newer identity that another subdomain stores.
+        this._save()
         return true
     }
 

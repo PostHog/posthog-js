@@ -443,4 +443,24 @@ describe('cookie persistence', () => {
             properties: { cohort: 'cohort-1' },
         })
     })
+
+    it('does not let a write from an open tab restore an identity it adopted before a later reset', async () => {
+        const app = await create(new MemoryStorage())
+        app.capture('app_started')
+        visit('www.example.com')
+        const www = await create(new MemoryStorage())
+        www.capture('www_started')
+
+        visit('app.example.com')
+        app.identify('user-1')
+        visit('www.example.com')
+        www.capture('adopt_identify')
+        expect(www.distinctId).toBe('user-1')
+
+        visit('app.example.com')
+        app.reset()
+        visit('www.example.com')
+        www.register({ color: 'blue' })
+        expect(jar.read()?.distinct_id).toBe(app.distinctId)
+    })
 })
