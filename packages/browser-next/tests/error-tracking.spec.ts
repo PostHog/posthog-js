@@ -301,6 +301,21 @@ describe('exception steps', () => {
         expect(stepMessages(properties)).toEqual(['before reset'])
     })
 
+    it('does not attach steps recorded while capture is denied', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+
+        tracking.addExceptionStep('before')
+        posthog.optOut()
+        tracking.addExceptionStep('denied')
+        posthog.optIn()
+        tracking.addExceptionStep('after')
+        tracking.captureException(new Error('boom'))
+
+        const [properties] = await exceptions(posthog, sent)
+        expect(stepMessages(properties)).toEqual(['before', 'after'])
+    })
+
     it('ignores invalid messages and strips reserved fields', async () => {
         const sent: CapturedEvent[] = []
         const { posthog, tracking } = await createWith(sent)
