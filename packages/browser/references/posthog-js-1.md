@@ -6357,6 +6357,18 @@ Legacy constructor and configuration mapping for the shared flags extension.
 
 `boolean`
 
+##### hasLoadedRemoteFlags
+
+###### Get Signature
+
+> **get** **hasLoadedRemoteFlags**(): `boolean`
+
+Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true.
+
+###### Returns
+
+`boolean`
+
 #### Methods
 
 ##### \_callFlagsEndpoint()
@@ -6451,15 +6463,19 @@ Release final resources synchronously. Feature-level start/stop remains extensio
 
 ##### getEarlyAccessFeatures()
 
-> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`): `void`
+> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`, `options?`): `void`
+
+Calls back with cached early access features, or fetches, caches and delivers them.
 
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `callback` | `EarlyAccessFeatureCallback` |
-| `force_reload?` | `boolean` |
-| `stages?` | `EarlyAccessFeatureStage`[] |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `callback` | `EarlyAccessFeatureCallback` | - |
+| `force_reload?` | `boolean` | - |
+| `stages?` | `EarlyAccessFeatureStage`[] | - |
+| `options?` | \{ `ignoreFailedResponses?`: `boolean`; \} | - |
+| `options.ignoreFailedResponses?` | `boolean` | Keep the cache and skip the callback unless the request succeeds with a feature list. |
 
 ###### Returns
 
@@ -7010,15 +7026,19 @@ are unset so flags re-evaluate without the removed values.
 
 ##### updateEarlyAccessFeatureEnrollment()
 
-> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`): `void`
+> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`, `options?`): `void`
+
+Records an early access enrollment in stored flags and person properties, and captures it.
 
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
-| `isEnrolled` | `boolean` |
-| `stage?` | `string` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `key` | `string` | - |
+| `isEnrolled` | `boolean` | - |
+| `stage?` | `string` | - |
+| `options?` | \{ `updateBootstrappedFlags?`: `boolean`; \} | - |
+| `options.updateBootstrappedFlags?` | `boolean` | Also apply the value to active bootstrapped flags, which otherwise take precedence over stored flags until the next evaluation. |
 
 ###### Returns
 
@@ -7103,6 +7123,18 @@ interface SessionReplayExtension extends Extension {
 ###### Get Signature
 
 > **get** **hasLoadedFlags**(): `boolean`
+
+###### Returns
+
+`boolean`
+
+##### hasLoadedRemoteFlags
+
+###### Get Signature
+
+> **get** **hasLoadedRemoteFlags**(): `boolean`
+
+Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true.
 
 ###### Returns
 
@@ -7202,15 +7234,19 @@ Release final resources synchronously. Feature-level start/stop remains extensio
 
 ##### getEarlyAccessFeatures()
 
-> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`): `void`
+> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`, `options?`): `void`
+
+Calls back with cached early access features, or fetches, caches and delivers them.
 
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `callback` | `EarlyAccessFeatureCallback` |
-| `force_reload?` | `boolean` |
-| `stages?` | `EarlyAccessFeatureStage`[] |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `callback` | `EarlyAccessFeatureCallback` | - |
+| `force_reload?` | `boolean` | - |
+| `stages?` | `EarlyAccessFeatureStage`[] | - |
+| `options?` | \{ `ignoreFailedResponses?`: `boolean`; \} | - |
+| `options.ignoreFailedResponses?` | `boolean` | Keep the cache and skip the callback unless the request succeeds with a feature list. |
 
 ###### Returns
 
@@ -7746,15 +7782,19 @@ are unset so flags re-evaluate without the removed values.
 
 ##### updateEarlyAccessFeatureEnrollment()
 
-> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`): `void`
+> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`, `options?`): `void`
+
+Records an early access enrollment in stored flags and person properties, and captures it.
 
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
-| `isEnrolled` | `boolean` |
-| `stage?` | `string` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `key` | `string` | - |
+| `isEnrolled` | `boolean` | - |
+| `stage?` | `string` | - |
+| `options?` | \{ `updateBootstrappedFlags?`: `boolean`; \} | - |
+| `options.updateBootstrappedFlags?` | `boolean` | Also apply the value to active bootstrapped flags, which otherwise take precedence over stored flags until the next evaluation. |
 
 ###### Returns
 
@@ -8411,7 +8451,6 @@ Options for sending a request through Client.sendRequest.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-allowwhileoptedout"></a> `allowWhileOptedOut?` | `boolean` | Dispatch this request while capture is opted out. Use only for requests that carry no person data. Hosts may honor it only for body-less GET requests. Defaults to false; other restrictions still apply. |
 | <a id="property-body"></a> `body?` | `unknown` | JSON-serialized by the client. |
 | <a id="property-compression-1"></a> `compression?` | `Compression` \| `"best-available"` | Compression used by the browser transport. |
 | <a id="property-headers"></a> `headers?` | `Record`\<`string`, `string`\> | Additional headers merged with the host SDK's configured request headers. |
