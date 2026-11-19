@@ -1,5 +1,15 @@
 # @posthog/core
 
+## 1.69.1
+
+### Patch Changes
+
+- [#5696](https://github.com/PostHog/posthog-js/pull/5696) [`3000ae0`](https://github.com/PostHog/posthog-js/commit/3000ae0f01bad0e01b34b110f1f66dd43361a32c) Thanks [@marandaneto](https://github.com/marandaneto)! - Add extension hooks for context-safe feature flags and transient batch retention.
+  (2026-11-18)
+
+- [#5747](https://github.com/PostHog/posthog-js/pull/5747) [`59d9656`](https://github.com/PostHog/posthog-js/commit/59d96564102246bcc1b5ebdb36fd54091fb7ffdc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve falsy JSON payloads in feature flag snapshots from legacy flag responses.
+  (2026-11-18)
+
 ## 1.69.0
 
 ### Minor Changes

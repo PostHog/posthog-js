@@ -273,6 +273,38 @@ test('captureException constructs a native fixture and preserves positional argu
     }
 })
 
+test('captureException preserves native values, stacks, causes and aggregate members', async () => {
+    await spies(async (binding, calls) => {
+        await setup(binding)
+        for (const value of ['thrown string', 0, false, null, { message: 'object message', stack: 'original stack' }]) {
+            await binding.invoke('/capture_exception', { error: { value } })
+            assert.deepEqual(calls.at(-1), ['captureException', [value]])
+        }
+        const stack = 'TypeError: original\n    at boom (/fixture.js:40:2)'
+        const descriptor = {
+            type: 'AggregateError',
+            message: 'group',
+            stack,
+            cause: { type: 'Error', message: 'root cause' },
+            errors: [
+                { type: 'TypeError', message: 'first' },
+                { type: 'RangeError', message: 'second' },
+            ],
+        }
+        const before = structuredClone(descriptor)
+        await binding.invoke('/capture_exception', { error: descriptor })
+        const error = calls.at(-1)[1][0]
+        assert.ok(error instanceof AggregateError)
+        assert.equal(error.message, 'group')
+        assert.equal(error.stack, stack)
+        assert.ok(error.cause instanceof Error)
+        assert.equal(error.cause.message, 'root cause')
+        assert.ok(error.errors[0] instanceof TypeError)
+        assert.ok(error.errors[1] instanceof RangeError)
+        assert.deepEqual(descriptor, before)
+    })
+})
+
 test('captureException reports unsupported or unrepresentable fixture arguments without invoking the SDK', async () => {
     await spies(async (binding, calls) => {
         await setup(binding)
@@ -281,7 +313,10 @@ test('captureException reports unsupported or unrepresentable fixture arguments 
             null,
             false,
             {},
-            { type: 'Error', message: 'boom' },
+            { type: 'UnknownError', message: 'boom' },
+            { value: false, message: 'ambiguous' },
+            { type: 'TypeError', message: 'boom', stack: 0 },
+            { type: 'AggregateError', message: 'boom', errors: false },
             { type: 'TypeError', message: 0 },
         ]) {
             const completion = await binding.invoke('/capture_exception', { error })
@@ -290,7 +325,7 @@ test('captureException reports unsupported or unrepresentable fixture arguments 
             assert.equal(completion.failure.code, 'exception-fixture')
         }
         for (const args of [
-            { error: { type: 'TypeError', message: 'boom', stack: 'invented' } },
+            { error: { type: 'TypeError', message: 'boom', unsupported: true } },
             { error: { type: 'TypeError', message: 'boom' }, uuid: 'unsupported' },
         ]) {
             const completion = await binding.invoke('/capture_exception', args)
@@ -368,7 +403,7 @@ test('groupIdentify preserves public arguments, omission and native outcomes', a
 test('semantic negatives reach public constructor/capture without coercion', async () => {
     await spies(async (binding, calls) => {
         const result = await binding.invoke('/setup', { project_token: 'test-project', config: null })
-        assert.equal(result.outcome.kind, 'thrown')
+        assert.equal(result.outcome.kind, 'void')
         assert.deepEqual(calls, [['constructor', ['test-project', null]]])
     })
     await spies(async (binding, calls) => {

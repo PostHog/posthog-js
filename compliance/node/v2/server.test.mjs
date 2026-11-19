@@ -418,10 +418,12 @@ test('transport errors remain non-200; SDK throws are completions and case IDs c
         fixture_id: 'f',
         call_id: 'explicit',
         route: '/setup',
-        args: { project_token: 'test', config: null },
+        args: { project_token: 'test', config: { secret_key: 'phc_test_project_key' } },
         timeout_ms: 1000,
     }
-    assert.equal((await post('invoke', data)).completion.outcome.kind, 'thrown')
+    const { outcome } = (await post('invoke', data)).completion
+    assert.equal(outcome.kind, 'thrown')
+    assert.equal(outcome.error.kind, 'exception')
     await post('invoke', data, 400)
     assert.equal((await invoke('/setup', { project_token: 'test' })).outcome.kind, 'void')
     assert.equal((await invoke('/unknown')).failure.kind, 'unsupported_binding')
@@ -638,4 +640,10 @@ test('missing public package fails allocation rather than claiming execution', a
         { fixture_id: 'f', case_id: 'test', profile_id: 'node-analytics-v1', timeout_ms: 1000 },
         400
     )
+})
+
+test('declares the v1 profile with the native GeoIP-disabled privacy default', async (t) => {
+    const negotiation = await (await harness(t)).post('negotiate', { protocol })
+    assert.equal(negotiation.profiles[0].id, 'node-analytics-v1')
+    assert.ok(negotiation.profiles[0].sdk_capabilities.includes('flags_geoip_default_disabled'))
 })

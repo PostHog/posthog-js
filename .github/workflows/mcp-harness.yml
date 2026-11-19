@@ -1,7 +1,8 @@
 name: MCP harness
 
 # Integration gate for @posthog/mcp: real MCP servers over real HTTP, on both SDK
-# majors and both protocol eras, plus the NestJS/@rekog/mcp-nest customer stacks.
+# majors and both protocol eras, plus the customer stacks built on frameworks
+# (NestJS/@rekog/mcp-nest, Vercel's mcp-handler, FastMCP).
 # The harness lives at packages/mcp/harness/ and needs no secrets — the PostHog
 # client is an in-process recorder — so it runs on fork PRs too.
 
@@ -49,6 +50,8 @@ jobs:
                     - { name: 'official SDK v2', script: 'test:integration:sdk-v2' }
                     - { name: 'mcp-nest (SDK v1)', script: 'test:integration:nest-v1' }
                     - { name: 'mcp-nest (SDK v2)', script: 'test:integration:nest-v2' }
+                    - { name: 'mcp-handler', script: 'test:integration:mcp-handler' }
+                    - { name: 'FastMCP', script: 'test:integration:fastmcp' }
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
