@@ -23,6 +23,7 @@ ipcMain.handle = function (channel, listener) {
 }
 const hostEvents = []
 const warnings = []
+const exitCodes = []
 process.on('warning', (warning) => warnings.push(warning.name))
 // Application-owned recovery is intentional: the SDK must not add one or change it.
 const host = (error, origin) => hostEvents.push({ message: error.message, origin })
@@ -66,9 +67,17 @@ function triggerMain(label) {
     setTimeout(function mainThrow() {
         throw new TypeError(`main ${label} throw`)
     }, 0)
-    setTimeout(function mainRejection() {
-        void Promise.reject(new RangeError(`main ${label} rejection`))
-    }, 0)
+    // Node handles unhandled rejections before the next setImmediate, so this resolves after dispatch.
+    return new Promise((resolve) => {
+        setTimeout(function mainRejection() {
+            void Promise.reject(new RangeError(`main ${label} rejection`))
+            setImmediate(() => {
+                exitCodes.push(process.exitCode)
+                process.exitCode = undefined
+                resolve()
+            })
+        }, 0)
+    })
 }
 
 app.whenReady()
@@ -123,8 +132,9 @@ app.whenReady()
         assert.equal(preferences.contextIsolation, true)
         assert.equal(preferences.nodeIntegration, false)
         await posthog.captureException(new SyntaxError('main manual'))
-        triggerMain('initial')
+        const initialRejection = triggerMain('initial')
         await evaluate(window, (fixture) => fixture.trigger('initial'))
+        await initialRejection
         await waitFor(
             'actual initial main throws/rejections',
             () => hostEvents.length === 1 && warnings.length === rejectionWarnings
@@ -135,8 +145,10 @@ app.whenReady()
         await evaluate(window, (fixture) => fixture.posthog.flush())
 
         await evaluate(window, (fixture) => fixture.posthog.optOut())
-        triggerMain('optedout')
+        const optedOutRejection = triggerMain('optedout')
         await evaluate(window, (fixture) => fixture.trigger('optedout'))
+        await optedOutRejection
+        assert.equal(warnings.length, rejectionWarnings * 2)
         await waitFor(
             'opted-out main still reaches app handlers',
             () => hostEvents.length === 2 && warnings.length === rejectionWarnings * 2
@@ -173,6 +185,8 @@ app.whenReady()
             ['uncaughtException', 'uncaughtException']
         )
         assert.deepEqual(warnings, Array(rejectionWarnings * 2).fill('UnhandledPromiseRejectionWarning'))
+        // Electron sets exitCode 1 for an unhandled rejection unless an unhandledRejection listener exists.
+        assert.deepEqual(exitCodes, Array(2).fill(rejections && enabled && !disabled ? undefined : 1))
         if (disabled) {
             const getterReads = await evaluate(window, async (fixture) => {
                 let reads = 0

@@ -81,9 +81,9 @@ export interface PostHogOptions extends Pick<
     enableExceptionAutocapture?: boolean
     /**
      * Also installs a `process.on('unhandledRejection')` listener to capture main-process rejections.
-     * Requires `enableExceptionAutocapture`. The listener changes Node's default handling: Electron no
-     * longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the
-     * process. Off by default.
+     * Requires `enableExceptionAutocapture`. While the listener is installed, Node skips its default
+     * handling: an unhandled rejection no longer prints `UnhandledPromiseRejectionWarning` or sets
+     * `process.exitCode = 1`. This lasts until shutdown, even while the user is opted out. Off by default.
      */
     captureUnhandledRejections?: boolean
     appBuild?: string

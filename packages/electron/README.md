@@ -151,7 +151,7 @@ Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; r
 
 Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Renderer same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
 
-**Main-process unhandled promise rejections are not captured by default.** By default, main observes only `uncaughtExceptionMonitor`, which sees a rejection only when Node escalates it to an uncaught exception. Electron's main process (all supported versions, 41+) only prints `UnhandledPromiseRejectionWarning` for unhandled rejections, even with `--unhandled-rejections=throw` or `strict` set on the command line or in `NODE_OPTIONS`, so the monitor never sees them. Choose one of:
+**Main-process unhandled promise rejections are not captured by default.** By default, main observes only `uncaughtExceptionMonitor`, which sees a rejection only when Node escalates it to an uncaught exception. Electron's main process (all supported versions, 41+) forces Node's `warn-with-error-code` mode and ignores `--unhandled-rejections` set on the command line or in `NODE_OPTIONS`. An unhandled rejection prints `UnhandledPromiseRejectionWarning` and sets `process.exitCode = 1`, but the process keeps running and the monitor never sees it. Choose one of:
 
 - Opt in to the SDK listener with `captureUnhandledRejections: true` (requires `enableExceptionAutocapture: true`):
 
@@ -163,15 +163,18 @@ Consent is checked before inspecting error properties or submitting exception da
     })
     ```
 
-    This installs `process.on('unhandledRejection')`, which changes Node's default handling: Electron no longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the process. If Node's `strict` mode is in effect, a rejection that ends the process before the listener runs is not captured. Each rejection is reported once with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. The listener is removed at shutdown.
+    This installs `process.on('unhandledRejection')`. Node only applies its default handling when no `unhandledRejection` listener exists, so while the SDK listener is installed an unhandled rejection no longer prints `UnhandledPromiseRejectionWarning` or sets `process.exitCode = 1`. If your app reads `process.exitCode` to decide whether a run failed, set it yourself. This lasts until shutdown, including while the user is opted out: consent stops reporting, not the listener. If your app already has an `unhandledRejection` listener, Node's default handling is already off and nothing else changes. The SDK makes one capture attempt per rejection, subject to consent and rate limiting, with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. Delivery is not guaranteed.
 
-- Or keep the default and capture from your own handler:
+- Or keep the default and capture from your own handler. `captureException` rejects when the event can't be stored, so catch it to avoid causing another unhandled rejection. Adding the first `unhandledRejection` listener has the same effect on the warning and `process.exitCode` as the SDK listener.
 
     ```js
-    process.on('unhandledRejection', (reason) => {
-        posthog.captureException(reason)
-    })
+    const onUnhandledRejection = (reason) => {
+        void posthog.captureException(reason).catch(() => {})
+    }
+    process.on('unhandledRejection', onUnhandledRejection)
     ```
+
+    During teardown, call `process.removeListener('unhandledRejection', onUnhandledRejection)`.
 
 Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
 
