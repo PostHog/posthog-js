@@ -710,6 +710,29 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Opt in to explicit select selection masking, overriding the select category setting.
+     * Masked selects use `maskInputFn` for replacement text but omit selection identity metadata.
+     * Returning original text from `maskInputFn` still records that text, even when this
+     * policy returns 'masked'. The callback is responsible for sanitizing its output.
+     * Unmasked selects retain their choices, including duplicate-valued options.
+     * Masked native `<selectedcontent>` clones are omitted. Static option labels remain visible.
+     * Pointer events are not covered: clicks on options in listbox-style selects (`multiple`,
+     * `size` > 1 or a customizable picker) still record the clicked option and position.
+     * Block selects whose choices must stay private, for example with `ph-no-capture`.
+     * Omit this option to preserve legacy `maskInputFn` behavior.
+     * Use a pure policy. It is evaluated for input events, select subtree mutations
+     * and snapshots; changes to external state take effect at the next such capture.
+     * Keep the callback reference stable. Replacing it restarts recording and discards
+     * queued old-policy data; changing its return value does not require a restart.
+     * Pending buffers are not carried across page loads with this option, because
+     * callback compatibility cannot be verified across pages.
+     * Invalid return values and exceptions resolve to masked. Recording does not start
+     * if the loaded recorder or driver does not support this option. Policy transitions
+     * also require a matching replay player.
+     */
+    selectMaskingFn?: (element: HTMLSelectElement) => 'masked' | 'unmasked'
+
+    /**
      * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
      * including rendering attributes such as `class`, `id`, `style`, `src`, `href`, and
      * synthesized form values. Only rrweb-generated layout metadata is retained, so this

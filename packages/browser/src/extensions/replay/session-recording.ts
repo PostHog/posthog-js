@@ -25,6 +25,7 @@ import {
     RemoteConfig,
     RemoteConfigResult,
     SessionRecordingPersistedConfig,
+    SessionRecordingOptions,
     SessionStartReason,
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
@@ -43,6 +44,8 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { sessionStore } from '../../storage'
+import { getReplayPendingBufferKey } from './external/sessionrecording-utils'
 import { getExtensionLoader } from '../../utils/extension-loader'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -86,6 +89,7 @@ export class SessionRecording implements Extension {
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
+    private _selectMaskingFn: SessionRecordingOptions['selectMaskingFn'] = undefined
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
@@ -157,8 +161,17 @@ export class SessionRecording implements Extension {
             return
         }
 
-        if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
-            return
+        if (this._lazyLoadedSessionRecording) {
+            if (this._selectMaskingFn !== this._config.session_recording?.selectMaskingFn) {
+                sessionStore._remove(getReplayPendingBufferKey(this._config))
+                this._lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
+                this._selectMaskingFn = undefined
+            } else if (this._lazyLoadedSessionRecording.isStarted && this._isRecordingEnabled) {
+                if (!this._checkSelectMaskingSupport()) {
+                    this._discardRecording(true)
+                }
+                return
+            }
         }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -239,9 +252,13 @@ export class SessionRecording implements Extension {
     }
 
     private _discardRecording(discardProducerEvents = false) {
+        if (discardProducerEvents && (this._selectMaskingFn || this._config.session_recording?.selectMaskingFn)) {
+            sessionStore._remove(getReplayPendingBufferKey(this._config))
+        }
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
+        this._selectMaskingFn = undefined
     }
 
     private _resetSampling() {
@@ -385,6 +402,20 @@ export class SessionRecording implements Extension {
         return Date.now() - config.cache_timestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
+    private _checkSelectMaskingSupport(): boolean {
+        if (
+            !this._config.session_recording?.selectMaskingFn ||
+            (assignableWindow.__PosthogExtensions__?.rrweb?.record?.supportsSelectMasking === true &&
+                assignableWindow.__PosthogExtensions__?.initSessionRecording?.supportsSelectMasking === true &&
+                (!this._lazyLoadedSessionRecording || this._lazyLoadedSessionRecording.supportsSelectMasking === true))
+        ) {
+            return true
+        }
+        this._recordingStatus = DISABLED
+        logger.error('Session recording has not started: the recorder does not support selectMaskingFn.')
+        return false
+    }
+
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
             this._recordingStatus = DISABLED
@@ -401,6 +432,11 @@ export class SessionRecording implements Extension {
             return
         }
 
+        // An older extension may discard the policy before its own start check.
+        if (!this._checkSelectMaskingSupport()) {
+            return
+        }
+
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
                 this._instance,
@@ -408,6 +444,11 @@ export class SessionRecording implements Extension {
             )
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
+        }
+
+        if (!this._checkSelectMaskingSupport()) {
+            this._discardRecording(true)
+            return
         }
 
         if (!this._isRemoteConfigFresh()) {
@@ -422,7 +463,15 @@ export class SessionRecording implements Extension {
 
         this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.setDocumentWasEverVisible?.(this._documentWasEverVisible)
+        const selectMaskingFn = this._config.session_recording?.selectMaskingFn
         this._lazyLoadedSessionRecording.start(startReason)
+        this._selectMaskingFn = selectMaskingFn
+        if (
+            this._lazyLoadedSessionRecording.isStarted &&
+            selectMaskingFn !== this._config.session_recording?.selectMaskingFn
+        ) {
+            this.startIfEnabledOrStop()
+        }
     }
 
     /**

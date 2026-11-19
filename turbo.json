@@ -111,7 +111,8 @@
             "cache": false
         },
         "test:rrweb": {
-            "dependsOn": ["build"]
+            "dependsOn": ["build"],
+            "env": ["RRWEB_SELECTED_CONTENT_BROWSER"]
         },
         "test:functional": {},
         "@posthog/rollup-plugin#test:functional": {
