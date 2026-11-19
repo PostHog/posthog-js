@@ -11,6 +11,7 @@ describe('PostHog RN feature flag payload decoding', () => {
   let cache: any = {}
   let mockStorage: PostHogCustomStorage
   let serializedPayload: string
+  let v1Response: boolean
 
   beforeEach(() => {
     ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
@@ -18,21 +19,26 @@ describe('PostHog RN feature flag payload decoding', () => {
         return {
           status: 200,
           json: () =>
-            Promise.resolve({
-              flags: {
-                checkout: {
-                  key: 'checkout',
-                  enabled: true,
-                  variant: 'blue',
-                  metadata: { id: 1, version: 1, payload: serializedPayload },
-                },
-              },
-            }),
+            Promise.resolve(
+              v1Response
+                ? { featureFlags: { checkout: 'blue' }, featureFlagPayloads: { checkout: serializedPayload } }
+                : {
+                    flags: {
+                      checkout: {
+                        key: 'checkout',
+                        enabled: true,
+                        variant: 'blue',
+                        metadata: { id: 1, version: 1, payload: serializedPayload },
+                      },
+                    },
+                  }
+            ),
         }
       }
       return { status: 200, json: () => Promise.resolve({ status: 'ok' }) }
     })
 
+    v1Response = false
     cache = {}
     mockStorage = {
       getItem: async (key) => cache[key] || null,
@@ -64,6 +70,14 @@ describe('PostHog RN feature flag payload decoding', () => {
     })
     expect(posthog.getAllFeatureFlags()).toEqual([{ key: 'checkout', enabled: true, variant: 'blue', payload: null }])
     expect(posthog.getFeatureFlag('checkout')).toEqual('blue')
+  })
+
+  it.each(['{broken', ''])('reads a malformed payload %j in a v1 /flags response as null', async (payload) => {
+    v1Response = true
+    await loadFlags(payload)
+
+    expect(posthog.getFeatureFlagResult('checkout', { sendFeatureFlagEvent: false })?.payload).toBeNull()
+    expect(posthog.getFeatureFlagDetails()?.featureFlagPayloads).toEqual({ checkout: null })
   })
 
   it('reads a malformed payload as null in getFeatureFlagDetails()', async () => {

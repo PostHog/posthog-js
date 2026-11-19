@@ -65,6 +65,13 @@ describe('feature flag hooks', () => {
     expect(result.current).toBeUndefined()
   })
 
+  it('useFeatureFlagEnabled reads an empty variant as disabled, like isFeatureEnabled()', () => {
+    featureFlags = { empty: '' }
+    const { result } = renderHook(() => useFeatureFlagEnabled('empty', undefined, posthog))
+
+    expect(result.current).toBe(false)
+  })
+
   it('useFeatureFlagVariantKey follows the flag value', () => {
     featureFlags = { checkout: 'control' }
     const { result } = renderHook(() => useFeatureFlagVariantKey('checkout', posthog))

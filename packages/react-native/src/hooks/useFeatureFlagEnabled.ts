@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import type { PostHog } from '../posthog-rn'
 import { useOverridablePostHog } from './utils'
 
+// An empty variant reads as disabled, matching isFeatureEnabled().
+const readEnabled = (posthog: PostHog | undefined, flag: string): boolean | undefined => {
+  const result = posthog?.getFeatureFlagResult(flag)
+  return result === undefined ? undefined : !!(result.variant ?? result.enabled)
+}
+
 /**
  * Whether a feature flag is enabled for the current user, updated when flags load.
  *
@@ -17,12 +23,12 @@ export function useFeatureFlagEnabled(flag: string, defaultValue: boolean, clien
 export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean, client?: PostHog): boolean | undefined
 export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean, client?: PostHog): boolean | undefined {
   const posthog = useOverridablePostHog(client, 'useFeatureFlagEnabled')
-  const [enabled, setEnabled] = useState<boolean | undefined>(() => posthog?.getFeatureFlagResult(flag)?.enabled)
+  const [enabled, setEnabled] = useState<boolean | undefined>(() => readEnabled(posthog, flag))
 
   useEffect(() => {
-    setEnabled(posthog?.getFeatureFlagResult(flag)?.enabled)
+    setEnabled(readEnabled(posthog, flag))
     return posthog?.onFeatureFlags(() => {
-      setEnabled(posthog.getFeatureFlagResult(flag)?.enabled)
+      setEnabled(readEnabled(posthog, flag))
     })
   }, [posthog, flag])
 
