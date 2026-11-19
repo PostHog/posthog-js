@@ -13,7 +13,7 @@ export type { FlagsOptions, FlagsCallback, FeatureFlagResult, FeatureFlagsReload
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
-    const config: FeatureFlagsConfig = {
+    const config: { -readonly [Key in keyof FeatureFlagsConfig]: FeatureFlagsConfig[Key] } = {
         bootstrap: snapshot.bootstrap ?? {},
         remoteRequestsDisabled: false,
         featureFlagsDisabled: snapshot.featureFlagEvaluation === false,
@@ -26,6 +26,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         evaluationContexts: snapshot.evaluationContexts ?? [],
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
+    const setupBootstrap = config.bootstrap
     let client: IPostHog | undefined
     let disposed = false
     const subscriptions: Disposable[] = []
@@ -73,12 +74,23 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             subscriptions.push(value.onEvent(() => shared.sendFlagCallsPendingCapture()))
             subscriptions.push(
                 value.onReset(() => {
+                    // Flag calls report the setup bootstrap again unless the reset supplies its own.
+                    config.bootstrap = setupBootstrap
                     shared.reset()
                     shared.reloadFeatureFlags()
                 })
             )
             shared.setPersonPropertiesForFlags({ ...value.initialPersonProperties }, false)
             shared.ensureFlagsLoaded()
+        },
+        bootstrap: (bootstrap) => {
+            if (disposed) return
+            config.bootstrap = bootstrap
+            try {
+                shared.initialize()
+            } catch (error) {
+                client?.logger.error('Feature flags bootstrap failed', error)
+            }
         },
         getFeatureFlag: (key) => {
             if (disposed) return undefined

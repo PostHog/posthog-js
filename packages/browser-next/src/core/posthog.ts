@@ -38,6 +38,7 @@ import type {
     StorageLike,
 } from './types'
 import { version } from '../primitives/version'
+import type { FlagsExtension } from '../products/flags/flags-internal'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
@@ -327,7 +328,8 @@ class PostHog implements IPostHog {
     }
 
     reset(options?: boolean | ResetOptions): void {
-        this._analytics.reset(options)
+        const bootstrap = this._analytics.reset(options)
+        if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 
     register(properties: Record<string, unknown>): void {

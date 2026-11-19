@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '../products/flags/flags-options'
+import type { FlagsConfiguration, FlagsOptions } from '../products/flags/flags-options'
 import type {
     BrowserExtension as Extension,
     BrowserProducts,
@@ -66,8 +66,11 @@ export interface BootstrapOptions {
 export interface ResetOptions {
     /** Also replace the device ID. */
     resetDeviceId?: boolean
-    /** Seed the new identity and next session instead of generating them. Feature flags are not seeded. */
-    bootstrap?: BootstrapOptions
+    /**
+     * Seed the new identity and next session instead of generating them. With feature flags, `featureFlags` and
+     * `featureFlagPayloads` are served for the new identity until flags load.
+     */
+    bootstrap?: BootstrapOptions & FlagsOptions['bootstrap']
 }
 
 /** Shares identity and session state through a cookie. Create one with `cookiePersistence()` from `@posthog/browser/persistence/cookie`. */

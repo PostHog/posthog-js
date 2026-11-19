@@ -570,9 +570,10 @@ export class Analytics {
         }
     }
 
-    reset(options?: boolean | ResetOptions): void {
+    /** Resets identity state and returns the bootstrap values for the new identity, if any. */
+    reset(options?: boolean | ResetOptions): ResetOptions['bootstrap'] {
         // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
-        if (this._disposed || !this._core._canMutate()) return
+        if (this._disposed || !this._core._canMutate()) return undefined
         this._core._state.prepare()
         const { resetDeviceId, bootstrap } =
             options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
@@ -583,6 +584,7 @@ export class Analytics {
             this._bootstrapSession(bootstrap)
         )
         this._resetIdentityState()
+        return bootstrap
     }
 
     /** Applies setup bootstrap without replacing a persisted identity, as in posthog-js. */
