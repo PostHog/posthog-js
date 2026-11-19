@@ -223,6 +223,54 @@ describe('cookie persistence', () => {
         expect(storedState(wwwStorage).isIdentified).toBe(false)
     })
 
+    it('sends the identity and session another subdomain reset to from an open tab', async () => {
+        const app = await create(new MemoryStorage())
+        app.capture('baseline')
+        visit('www.example.com')
+        const sent: SentEvent[] = []
+        const www = await create(new MemoryStorage(), sent)
+        expect(www.distinctId).toBe(app.distinctId)
+
+        visit('app.example.com')
+        app.reset(true)
+        app.capture('after_reset')
+
+        visit('www.example.com')
+        www.capture('continuation')
+        await www.flush()
+        expect(sent.find((event) => event.event === 'continuation')).toMatchObject({
+            distinct_id: app.distinctId,
+            session_id: app.session!.sessionId,
+            properties: { $device_id: app.deviceId },
+        })
+    })
+
+    it('notifies listeners when an open tab adopts another subdomain identity', async () => {
+        const app = await create(new MemoryStorage())
+        const anonymousId = app.distinctId
+        visit('www.example.com')
+        const www = await create(new MemoryStorage())
+        const changes: unknown[] = []
+        www.onIdentify(({ distinctId, previousDistinctId, wasIdentified }) =>
+            changes.push({ distinctId, previousDistinctId, wasIdentified })
+        )
+        www.onReset(() => changes.push('reset'))
+
+        visit('app.example.com')
+        app.identify('user-1')
+        visit('www.example.com')
+        www.capture('after_identify')
+        visit('app.example.com')
+        app.reset()
+        visit('www.example.com')
+        www.capture('after_reset')
+
+        expect(changes).toEqual([
+            { distinctId: 'user-1', previousDistinctId: anonymousId, wasIdentified: false },
+            'reset',
+        ])
+    })
+
     it('keeps the newest session when a stale subdomain writes', async () => {
         const app = await create(new MemoryStorage())
         app.capture('on_app')

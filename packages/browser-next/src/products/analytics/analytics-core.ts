@@ -351,6 +351,7 @@ export class Analytics {
     }
 
     private _prepareCapture(event: string, snapshot: CaptureProperties): PreparedCapture | undefined {
+        this._adoptStoredIdentity()
         const state = this._core._state
         const processPersonProfile = this._hasPersonProcessing()
         if (processPersonProfile) this._requirePersonProcessing()
@@ -483,7 +484,34 @@ export class Analytics {
     _canMutate(): boolean {
         if (this._disposed || !this._core._canMutate()) return false
         this._core._state.prepare()
+        this._adoptStoredIdentity()
         return true
+    }
+
+    /** Applies an identity another subdomain stored as this context applies its own reset or identify. */
+    private _adoptStoredIdentity(): void {
+        const state = this._core._state
+        const previousDistinctId = state.distinctId
+        const wasIdentified = state.isIdentified
+        if (!state.adoptStoredIdentity()) return
+        if (!state.isIdentified) return this._resetIdentityState()
+        this._lastPersonProperties = undefined
+        const distinctId = state.distinctId
+        this._identifyPublisher.publish({
+            distinctId,
+            previousDistinctId,
+            wasIdentified,
+            set: undefined,
+            setOnce: undefined,
+        })
+    }
+
+    /** Clears state that belonged to the previous identity and notifies reset listeners. */
+    private _resetIdentityState(): void {
+        this._lastPersonProperties = undefined
+        this._pageview = undefined
+        this._sessionProperties.clear()
+        this._resetPublisher.publish(undefined)
     }
 
     /** Whether registered properties are available now. */
@@ -542,7 +570,9 @@ export class Analytics {
     }
 
     reset(options?: boolean | ResetOptions): void {
-        if (!this._canMutate()) return
+        // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
+        if (this._disposed || !this._core._canMutate()) return
+        this._core._state.prepare()
         const { resetDeviceId, bootstrap } =
             options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
         const { distinctId, isIdentifiedId } = bootstrap ?? {}
@@ -551,10 +581,7 @@ export class Analytics {
             isValidDistinctId(distinctId) ? [distinctId, isIdentifiedId === true] : undefined,
             this._bootstrapSession(bootstrap)
         )
-        this._lastPersonProperties = undefined
-        this._pageview = undefined
-        this._sessionProperties.clear()
-        this._resetPublisher.publish(undefined)
+        this._resetIdentityState()
     }
 
     /** Applies setup bootstrap without replacing a persisted identity, as in posthog-js. */

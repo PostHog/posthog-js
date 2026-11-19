@@ -244,7 +244,8 @@ const writeCookie = (
 
 /**
  * Persists identity and session state in a cookie as well as local storage, so subdomains of a site share one
- * identity. The cookie uses the `posthog-js` name and keys, so identities continue across a migration and between
+ * identity. An open page adopts an identify or reset from another subdomain before its next event or identity
+ * operation. The cookie uses the `posthog-js` name and keys, so identities continue across a migration and between
  * sites that use either SDK. Consent stays in local storage, as in `posthog-js`.
  */
 export const cookiePersistence = (options: CookiePersistenceOptions = {}): CookiePersistence => {
