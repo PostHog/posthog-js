@@ -11,7 +11,13 @@ import {
     type CaptureHost,
 } from './analytics-internal'
 import type { ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { BootstrapOptions, NewSessionInfo, CaptureSummary, ResetOptions } from '../../core/types'
+import type {
+    BootstrapOptions,
+    NewSessionInfo,
+    CaptureSummary,
+    ResetOptions,
+    UrlSanitizationOptions,
+} from '../../core/types'
 import { readBootstrapSession } from '../../core/state/state'
 import type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './admission/event-buffer'
@@ -33,6 +39,7 @@ import {
     snapshotPersonProperties,
     type PersonProperties,
 } from './properties/person-processing'
+import { pageProperties } from './properties/page-properties'
 import { version } from '../../primitives/version'
 import { utf8Bytes } from '../../primitives/utf8'
 
@@ -118,7 +125,8 @@ export class Analytics {
     constructor(
         readonly _core: AnalyticsCore,
         options: AnalyticsOptions,
-        createDelivery: AnalyticsDeliveryFactory
+        createDelivery: AnalyticsDeliveryFactory,
+        private readonly _urlSanitization: UrlSanitizationOptions
     ) {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
@@ -375,9 +383,12 @@ export class Analytics {
         const pageviewId = isPageview ? uuid : activePageviewId
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
         // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
-        const defaults: Record<string, string> = {}
-        if (pageviewId && !snapshot.overrides.has('$pageview_id')) defaults.$pageview_id = pageviewId
-        if (activePageviewId && (isPageview || event === '$pageleave') && !snapshot.overrides.has('$prev_pageview_id'))
+        const owned = (key: string): boolean => snapshot.overrides.has(key)
+        const page = pageProperties(event, this._urlSanitization)
+        for (const key in page) if (owned(key)) delete page[key]
+        const defaults: Record<string, unknown> = page
+        if (pageviewId && !owned('$pageview_id')) defaults.$pageview_id = pageviewId
+        if (activePageviewId && (isPageview || event === '$pageleave') && !owned('$prev_pageview_id'))
             defaults.$prev_pageview_id = activePageviewId
         const metadata = {
             token: this._core.projectToken,

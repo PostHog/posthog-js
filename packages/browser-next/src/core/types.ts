@@ -79,6 +79,21 @@ export interface ResetOptions {
     bootstrap?: BootstrapOptions & FlagsOptions['bootstrap']
 }
 
+/** Selects how the page URL is recorded on events. Credentials are always removed. */
+export interface UrlSanitizationOptions {
+    /** Include the pathname. Defaults to true; when false, the path is `/`. */
+    path?: boolean
+    /** Include query parameters. Defaults to true. */
+    query?: boolean
+    /** Include the fragment. Defaults to true. */
+    hash?: boolean
+    /**
+     * Rewrite a copy of the page URL before `path`, `query` and `hash` apply. Return an absolute URL or URL string.
+     * Throwing or returning anything else omits `$current_url`, `$host` and `$pathname` from the event.
+     */
+    sanitize?: (url: URL) => URL | string
+}
+
 /**
  * Shares identity and session state through a cookie. Create one with `cookiePersistence()` from
  * `@posthog/browser/persistence/cookie`; only instances it returns are supported. `wrap` and the state record it
@@ -124,6 +139,11 @@ export interface PostHogOptions {
     navigator?: BrowserNavigator | false
     /** Start with capture disabled until `optIn()` runs. Feature flags still load, as in posthog-js. */
     optOutByDefault?: boolean
+    /**
+     * Shapes the page URL that every event carries as `$current_url`, with the `$host` and `$pathname` derived from it.
+     * Defaults to the full page URL, as posthog-js records it, without credentials.
+     */
+    urlSanitization?: UrlSanitizationOptions
     /** Capture one initial `$pageview` after configured extensions install. Defaults to `true`. */
     capturePageview?: boolean
     /** Initial person properties exposed to feature-evaluation extensions. */

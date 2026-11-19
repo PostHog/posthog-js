@@ -34,6 +34,7 @@ describe('browser-next initial pageview', () => {
 
     afterEach(() => {
         vi.restoreAllMocks()
+        vi.unstubAllGlobals()
         if (originalDocument) {
             Object.defineProperty(globalThis, 'document', originalDocument)
         } else {
@@ -46,8 +47,10 @@ describe('browser-next initial pageview', () => {
     }
 
     it('admits one default pageview after configured extensions install and before the factory resolves', async () => {
-        const document = new TestDocument('visible')
+        const document = Object.assign(new TestDocument('visible'), { title: 'Home' })
         setDocument(document)
+        vi.stubGlobal('location', new URL('https://example.com/home?ref=email'))
+        vi.stubGlobal('window', globalThis)
         const order: string[] = []
         let pageviewProperties: Readonly<Record<string, unknown>> | undefined
         const extension: Extension = {
@@ -72,8 +75,12 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(order).toEqual(['setup', '$pageview'])
-        expect(pageviewProperties).not.toHaveProperty('title')
-        expect(pageviewProperties).not.toHaveProperty('$current_url')
+        expect(pageviewProperties).toMatchObject({
+            title: 'Home',
+            $current_url: 'https://example.com/home?ref=email',
+            $host: 'example.com',
+            $pathname: '/home',
+        })
         expect(posthog.session!.sessionId).not.toBe('')
         posthog.capture('explicit')
         expect(order).toEqual(['setup', '$pageview', 'explicit'])

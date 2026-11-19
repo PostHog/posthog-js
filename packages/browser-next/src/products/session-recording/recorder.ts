@@ -590,7 +590,8 @@ export class SessionRecorder {
                 if (event !== '$pageview') return
                 const href = typeof properties.$current_url === 'string' ? this._maskUrl(properties.$current_url) : ''
                 if (!href) return
-                this._lastHref = href
+                // The event's URL can drop parts the live URL keeps, so compare later changes with the live URL.
+                this._lastHref = this._liveHref() ?? href
                 this._addCustomEvent('$pageview', { href })
             })
         )
@@ -837,17 +838,21 @@ export class SessionRecorder {
         this._addToBuffer(compressed as eventWithTime, size)
     }
 
-    private _trackUrlChange(): void {
+    private _liveHref(): string | undefined {
         try {
             const location = globalThis.window?.location
-            if (!location) return
-            const href = this._maskUrl(location.origin + location.pathname + location.search)
-            if (href && href !== this._lastHref) {
-                this._lastHref = href
-                this._addCustomEvent('$url_changed', { href })
-            }
+            return location ? this._maskUrl(location.origin + location.pathname + location.search) : undefined
         } catch {
             // URL processing failures do not interrupt recording.
+            return undefined
+        }
+    }
+
+    private _trackUrlChange(): void {
+        const href = this._liveHref()
+        if (href && href !== this._lastHref) {
+            this._lastHref = href
+            this._addCustomEvent('$url_changed', { href })
         }
     }
 

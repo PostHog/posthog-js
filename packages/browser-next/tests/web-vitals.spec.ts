@@ -178,7 +178,7 @@ describe('web vitals', () => {
             { customPersonalDataProperties: ['utm_source'] },
             'http://localhost:3000/page?gclid=<masked>&utm_source=<masked>',
         ],
-    ] as const)('applies URL privacy options %j', async (privacy, expectedUrl) => {
+    ] as const)('applies URL privacy options %j over the page URL default', async (privacy, expectedUrl) => {
         window.history.replaceState({}, '', '/page?gclid=abc&utm_source=ads#access_token=secret')
         try {
             const client = await createCore(
@@ -189,7 +189,8 @@ describe('web vitals', () => {
             reporter(library.plain.onLCP)({ name: 'LCP', value: 1200 })
             window.dispatchEvent(new Event('pagehide'))
 
-            expect(events[0]!.properties.$current_url).toBe(expectedUrl)
+            // The measured URL replaces the client's sanitized page URL; the rest of the page context remains.
+            expect(events[0]!.properties).toMatchObject({ $current_url: expectedUrl, $pathname: '/page' })
             expect((events[0]!.properties.$web_vitals_LCP_event as Record<string, unknown>).$current_url).toBe(
                 expectedUrl
             )
