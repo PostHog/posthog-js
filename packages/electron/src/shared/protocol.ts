@@ -35,6 +35,7 @@ export interface State {
     anonymousId: string
     sessionId: string
     optedOut: boolean
+    disabled?: boolean
     autocapture?: AutocaptureState
     featureFlags: Record<string, FeatureFlagValue>
     flagsLoaded?: boolean
