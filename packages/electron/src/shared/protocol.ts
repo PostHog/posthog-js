@@ -92,7 +92,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function assertJson(value: unknown, depth = 0): void {
+export function assertJson(value: unknown, depth = 0, allowReservedKeys = false): void {
     let remaining = MAX_MESSAGE_BYTES
     const spend = (size: number): void => {
         remaining -= size
@@ -115,7 +115,7 @@ export function assertJson(value: unknown, depth = 0): void {
             for (const key in item) {
                 if (!Object.hasOwn(item, key)) continue
                 spend(key.length + 3)
-                if (['__proto__', 'constructor', 'prototype'].includes(key))
+                if (!allowReservedKeys && ['__proto__', 'constructor', 'prototype'].includes(key))
                     throw new Error('Unsafe PostHog property key')
                 visit(item[key], level + 1)
             }
