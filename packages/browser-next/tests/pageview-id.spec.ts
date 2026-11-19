@@ -74,14 +74,43 @@ describe('pageview ID', () => {
         })
     })
 
-    it('overrides a caller value while a pageview is active and keeps it otherwise', async () => {
-        posthog.capture('before', { $pageview_id: 'caller' })
-        posthog.capture('$pageview')
-        posthog.capture('after', { $pageview_id: 'caller' })
+    it('keeps a caller pageview ID for that event only', async () => {
+        const observed: Record<string, unknown>[] = []
+        posthog.onEvent(({ properties }) => observed.push(properties))
+        posthog.capture('$pageview', null, { uuid: '01890000-0000-7000-8000-000000000001' })
+        posthog.capture('checkout_completed', { $pageview_id: 'caller' })
+        posthog.capture('after')
 
         const events = await sent()
-        expect(events.before?.properties.$pageview_id).toBe('caller')
-        expect(events.after?.properties.$pageview_id).toBe(events.$pageview?.uuid)
+        expect(events.checkout_completed?.properties.$pageview_id).toBe('caller')
+        expect(observed[1]?.$pageview_id).toBe('caller')
+        expect(events.after?.properties.$pageview_id).toBe('01890000-0000-7000-8000-000000000001')
+        expect(posthog.getPageViewId()).toBe('01890000-0000-7000-8000-000000000001')
+    })
+
+    it('keeps a caller previous pageview ID on a page leave', async () => {
+        posthog.capture('$pageview', null, { uuid: '01890000-0000-7000-8000-000000000001' })
+        posthog.capture('$pageleave', { $prev_pageview_id: 'caller' })
+
+        const events = await sent()
+        expect(events.$pageleave?.properties).toMatchObject({
+            $pageview_id: '01890000-0000-7000-8000-000000000001',
+            $prev_pageview_id: 'caller',
+        })
+    })
+
+    it('lets registered properties replace the pageview ID', async () => {
+        posthog.register({ $pageview_id: 'registered' })
+        posthog.registerForSession({ $prev_pageview_id: 'session' })
+        posthog.capture('$pageview')
+        posthog.capture('$pageleave')
+
+        const events = await sent()
+        expect(events.$pageleave?.properties).toMatchObject({
+            $pageview_id: 'registered',
+            $prev_pageview_id: 'session',
+        })
+        expect(posthog.getPageViewId()).toBe(events.$pageview?.uuid)
     })
 
     it('does not track a pageview that was not admitted', async () => {
