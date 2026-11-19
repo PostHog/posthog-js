@@ -115,6 +115,8 @@ describe('gzip', () => {
     })
   })
   describe('gzipCompress', () => {
+    beforeEach(() => __resetNativeGzipTrustForTests())
+
     it('rethrows errors when requested', async () => {
       const CompressionStream = globalThis.CompressionStream
       delete (globalThis as any).CompressionStream
@@ -194,23 +196,31 @@ describe('gzip', () => {
       )
     })
 
+    const compressGoodInputs = async (count: number): Promise<void> => {
+      for (let i = 0; i < count; i++) {
+        await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
+      }
+    }
+
     it('stops checking the crc once native gzip has passed it, but keeps checking the size', async () => {
-      __resetNativeGzipTrustForTests()
+      await compressGoodInputs(3)
+
+      await withNativeOutput(await nodeGzipWithFlippedTrailerByte(8), async () => {
+        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).resolves.not.toBeNull()
+      })
+      await withNativeOutput(await nodeGzipWithFlippedTrailerByte(4), () =>
+        expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
+      )
+    })
+
+    it('keeps checking the crc for the page once native gzip has failed it', async () => {
       const badCrc = await nodeGzipWithFlippedTrailerByte(8)
-      const badSize = await nodeGzipWithFlippedTrailerByte(4)
 
       await withNativeOutput(badCrc, () =>
         expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
       )
-
-      for (let i = 0; i < 3; i++) {
-        await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
-      }
-
-      await withNativeOutput(badCrc, async () => {
-        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).resolves.not.toBeNull()
-      })
-      await withNativeOutput(badSize, () =>
+      await compressGoodInputs(3)
+      await withNativeOutput(badCrc, () =>
         expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
       )
     })
