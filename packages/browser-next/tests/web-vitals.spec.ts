@@ -169,34 +169,89 @@ describe('web vitals', () => {
     })
 
     it.each([
-        [{}, 'http://localhost:3000/page?gclid=<masked>&utm_source=ads'],
+        ['the default', undefined, 'http://localhost:3000/page?gclid=abc&utm_source=ads#access_token=secret'],
+        ['query: false', { query: false }, 'http://localhost:3000/page#access_token=secret'],
         [
-            { disableCaptureUrlHashes: false, maskPersonalDataProperties: false },
-            'http://localhost:3000/page?gclid=abc&utm_source=ads#access_token=secret',
+            'sanitize',
+            {
+                sanitize: (url: URL) => {
+                    url.searchParams.delete('gclid')
+                    url.hash = ''
+                    return url
+                },
+            },
+            'http://localhost:3000/page?utm_source=ads',
         ],
-        [
-            { customPersonalDataProperties: ['utm_source'] },
-            'http://localhost:3000/page?gclid=<masked>&utm_source=<masked>',
-        ],
-    ] as const)('applies URL privacy options %j over the page URL default', async (privacy, expectedUrl) => {
-        window.history.replaceState({}, '', '/page?gclid=abc&utm_source=ads#access_token=secret')
-        try {
-            const client = await createCore(
-                coreOptions({ extensions: [webVitals({ enabled: true, attribution: false, ...privacy })] })
-            )
-            const events = track(client)
-            await waitForObservers()
-            reporter(library.plain.onLCP)({ name: 'LCP', value: 1200 })
-            window.dispatchEvent(new Event('pagehide'))
+    ] as const)(
+        'records the measured page URL with %s urlSanitization',
+        async (_label, urlSanitization, expectedUrl) => {
+            window.history.replaceState({}, '', '/page?gclid=abc&utm_source=ads#access_token=secret')
+            try {
+                const client = await createCore(
+                    coreOptions({
+                        ...(urlSanitization ? { urlSanitization } : {}),
+                        extensions: [webVitals({ enabled: true, attribution: false })],
+                    })
+                )
+                const events = track(client)
+                await waitForObservers()
+                reporter(library.plain.onLCP)({ name: 'LCP', value: 1200 })
+                window.dispatchEvent(new Event('pagehide'))
 
-            // The measured URL replaces the client's sanitized page URL; the rest of the page context remains.
-            expect(events[0]!.properties).toMatchObject({ $current_url: expectedUrl, $pathname: '/page' })
-            expect((events[0]!.properties.$web_vitals_LCP_event as Record<string, unknown>).$current_url).toBe(
-                expectedUrl
-            )
-        } finally {
-            window.history.replaceState({}, '', '/')
+                expect(events[0]!.properties).toMatchObject({ $current_url: expectedUrl, $pathname: '/page' })
+                expect((events[0]!.properties.$web_vitals_LCP_event as Record<string, unknown>).$current_url).toBe(
+                    expectedUrl
+                )
+            } finally {
+                window.history.replaceState({}, '', '/')
+            }
         }
+    )
+
+    it('records the navigation and attribution URLs the library measured with urlSanitization', async () => {
+        const client = await createCore(
+            coreOptions({
+                urlSanitization: { query: false },
+                extensions: [webVitals({ enabled: true, attribution: ['LCP'] })],
+            })
+        )
+        const events = track(client)
+        await vi.waitFor(() => expect(library.attributed.onLCP).toHaveBeenCalled())
+        reporter(library.attributed.onLCP)({
+            name: 'LCP',
+            value: 1200,
+            navigationId: 'soft-1',
+            navigationURL: 'http://localhost:3000/route?id=7#tab',
+            attribution: { url: 'https://cdn.example/hero.png?sig=secret', target: 'img' },
+        })
+        window.dispatchEvent(new Event('pagehide'))
+
+        const metric = events[0]!.properties.$web_vitals_LCP_event as Record<string, unknown>
+        expect(events[0]!.properties.$current_url).toBe('http://localhost:3000/route#tab')
+        expect(metric).toMatchObject({
+            navigationURL: 'http://localhost:3000/route#tab',
+            $current_url: 'http://localhost:3000/route#tab',
+            attribution: { url: 'https://cdn.example/hero.png', target: 'img' },
+        })
+    })
+
+    it('drops metrics when sanitize fails, as when the page URL is unavailable', async () => {
+        const client = await createCore(
+            coreOptions({
+                urlSanitization: {
+                    sanitize: () => {
+                        throw new Error('unavailable')
+                    },
+                },
+                extensions: [webVitals({ enabled: true, attribution: false })],
+            })
+        )
+        const events = track(client)
+        await waitForObservers()
+        reporter(library.plain.onLCP)({ name: 'LCP', value: 1200 })
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(events).toHaveLength(0)
     })
 
     it('waits for the project setting when not enabled locally', async () => {
