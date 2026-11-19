@@ -349,6 +349,13 @@ export class Analytics {
         const activePageviewId = this._pageview?.[1] === session.sessionId ? this._pageview[0] : undefined
         const isPageview = event === '$pageview'
         const pageviewId = isPageview ? uuid : activePageviewId
+        // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
+        const defaults = {
+            ...(pageviewId ? { $pageview_id: pageviewId } : {}),
+            ...(activePageviewId && (isPageview || event === '$pageleave')
+                ? { $prev_pageview_id: activePageviewId }
+                : {}),
+        }
         const metadata = {
             token: this._core.projectToken,
             distinct_id: distinctId,
@@ -359,23 +366,22 @@ export class Analytics {
             $lib: 'web',
             $lib_version: version,
             $process_person_profile: processPersonProfile,
-            ...(pageviewId ? { $pageview_id: pageviewId } : {}),
-            ...(activePageviewId && (isPageview || event === '$pageleave')
-                ? { $prev_pageview_id: activePageviewId }
-                : {}),
         }
         const message: AnalyticsMessage = {
             uuid,
             event,
             distinct_id: distinctId,
-            properties: { ...snapshot.message, ...metadata },
+            properties: { ...defaults, ...snapshot.message, ...metadata },
             timestamp: eventTimestamp(snapshot.timestamp),
         }
         try {
             let bytes = utf8Bytes(JSON.stringify(message))
             if (bytes > MAX_ANALYTICS_BYTES) {
                 const minimum = utf8Bytes(
-                    JSON.stringify({ ...message, properties: unavoidableProperties(snapshot, metadata) })
+                    JSON.stringify({
+                        ...message,
+                        properties: { ...defaults, ...unavoidableProperties(snapshot, metadata) },
+                    })
                 )
                 if (minimum > MAX_ANALYTICS_BYTES) {
                     this._warnOversized(event, bytes)
@@ -383,13 +389,13 @@ export class Analytics {
                 }
             }
             const changed = applySessionProperties(snapshot, this._sessionProperties.values(session.sessionId))
-            message.properties = { ...snapshot.message, ...metadata }
+            message.properties = { ...defaults, ...snapshot.message, ...metadata }
             if (changed) bytes = utf8Bytes(JSON.stringify(message))
             return {
                 message,
                 bytes,
                 preparedSession,
-                observedProperties: { ...snapshot.observed, ...metadata, $groups: { ...groups } },
+                observedProperties: { ...defaults, ...snapshot.observed, ...metadata, $groups: { ...groups } },
             }
         } catch (error) {
             this._core.logger.error('The finalized event could not be measured', error)
