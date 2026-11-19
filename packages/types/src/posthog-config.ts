@@ -1858,6 +1858,37 @@ export interface PostHogConfig {
     strict_script_versioning: boolean | 'fallback'
 
     /**
+     * Requires Subresource Integrity (SRI) for every extension script the SDK loads, such as
+     * recorder.js, surveys.js or web-vitals.js.
+     *
+     * When enabled, each extension loads only from the exact-version path
+     * `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set,
+     * using the SHA-384 hashes built into this SDK bundle. A missing hash, an integrity failure
+     * or a `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin`
+     * disables only that feature. The SDK never retries through the mutable legacy path,
+     * whatever {@link strict_script_versioning} says. The asset host, or a reverse proxy in
+     * front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`).
+     *
+     * This mode also disables site apps, overriding {@link opt_in_site_apps}, including site app
+     * code preloaded by the token-specific `/array/<token>/array.js`. It refuses the toolbar and the
+     * executable `/array/<token>/config.js` remote config, which is then fetched as JSON.
+     *
+     * The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK
+     * code you already trust: an npm build, or an `array.js` you pin yourself. Because the
+     * extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an
+     * exact-version `loader.js` that itself has an `integrity` attribute pins every extension too.
+     * The token-specific `/array/<token>/array.js` changes with project configuration, so it cannot be
+     * pinned: use `/static/<sdk version>/array.js`, the loader or npm instead. The guarantee does not
+     * cover an unpinned initial loader, third-party widgets such as Intercom or Crisp, or a malicious
+     * release with valid hashes.
+     * Extensions share page globals, so if another PostHog instance or any other code on the page
+     * already ran unverified extension code, this instance reuses it and the guarantee does not hold.
+     *
+     * @default false
+     */
+    require_subresource_integrity?: boolean
+
+    /**
      * Optional host override for static assets loaded by PostHog, such as
      * recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset
      * paths; dynamic assets like remote config continue to use the regular

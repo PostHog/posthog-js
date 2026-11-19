@@ -29,7 +29,7 @@ import {
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isNullish, isNumber, isString, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -43,6 +43,7 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = /* @__PURE__ */ createLogger(LOGGER_PREFIX)
@@ -113,6 +114,14 @@ export class SessionRecording implements Extension {
 
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
+        }
+
+        // WAF rule sets such as OWASP CRS block requests whose cookie holds a sampled-out decision
+        // stored with the `!` prefix. Drop it here, where it runs even when the recorder never loads;
+        // the recorder decides again with the same outcome.
+        const storedIsSampled = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        if (isString(storedIsSampled) && storedIsSampled[0] === '!') {
+            this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
         }
 
         // Start before the recorder chunk loads so a visible -> hidden transition during
@@ -198,30 +207,26 @@ export class SessionRecording implements Extension {
             // Consent and session state can change while the recorder chunk is loading.
             // Only the recorder that initiated this load may finish starting with its manager.
             const sessionManager = this._instance.sessionManager
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (
-                        this._sessionRecordingDisposed ||
-                        !this._isRecordingEnabled ||
-                        this._instance.sessionManager !== sessionManager
-                    ) {
-                        this._recordingStatus = DISABLED
-                        return
-                    }
-                    if (err) {
-                        // most often this is an ad blocker matching the `/static/<script>.js` path.
-                        // flag it on the session so a blocked recorder is visible in analytics
-                        // instead of only in the browser console
-                        this._instance.register_for_session({
-                            [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
-                        })
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
+            getExtensionLoader(this._instance)?.(this._instance, this._scriptName, (err) => {
+                if (
+                    this._sessionRecordingDisposed ||
+                    !this._isRecordingEnabled ||
+                    this._instance.sessionManager !== sessionManager
+                ) {
+                    this._recordingStatus = DISABLED
+                    return
                 }
-            )
+                if (err) {
+                    // most often this is an ad blocker matching the `/static/<script>.js` path.
+                    // flag it on the session so a blocked recorder is visible in analytics
+                    // instead of only in the browser console
+                    this._instance.register_for_session({
+                        [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+                    })
+                    return logger.error('could not load recorder', err)
+                }
+                this._onScriptLoaded(startReason)
+            })
         } else {
             this._onScriptLoaded(startReason)
         }
