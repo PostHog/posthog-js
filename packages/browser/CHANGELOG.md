@@ -1,5 +1,66 @@
 # posthog-js
 
+## 1.453.0
+
+### Minor Changes
+
+- [#5709](https://github.com/PostHog/posthog-js/pull/5709) [`1016d81`](https://github.com/PostHog/posthog-js/commit/1016d81c33ba0f673d0bcc2c49a851cb0e102f52) Thanks [@marandaneto](https://github.com/marandaneto)! - Add an explicit per-select session replay masking policy.
+  (2026-11-19)
+
+### Patch Changes
+
+- [#5820](https://github.com/PostHog/posthog-js/pull/5820) [`2cdc70c`](https://github.com/PostHog/posthog-js/commit/2cdc70c2a454644cfb24bfaa11916cec42555977) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix: reduce main-thread work when validating native gzip output
+  (2026-11-19)
+- Updated dependencies [[`1016d81`](https://github.com/PostHog/posthog-js/commit/1016d81c33ba0f673d0bcc2c49a851cb0e102f52), [`2cdc70c`](https://github.com/PostHog/posthog-js/commit/2cdc70c2a454644cfb24bfaa11916cec42555977)]:
+  - @posthog/types@1.427.0
+  - @posthog/core@1.69.2
+
+## 1.452.0
+
+### Minor Changes
+
+- [#5766](https://github.com/PostHog/posthog-js/pull/5766) [`6680554`](https://github.com/PostHog/posthog-js/commit/6680554eef7c225f83ab4ec8ca3f4a8691b663db) Thanks [@marandaneto](https://github.com/marandaneto)! - Add opt-in `require_subresource_integrity` to verify lazy-loaded extension scripts against SHA-384 hashes built into the trusted SDK bundle; it disables site apps and the toolbar and doesn't cover the initial loader unless pinned, third-party widgets or a malicious release with valid hashes.
+  (2026-11-19)
+
+### Patch Changes
+
+- Updated dependencies [[`6680554`](https://github.com/PostHog/posthog-js/commit/6680554eef7c225f83ab4ec8ca3f4a8691b663db)]:
+  - @posthog/types@1.426.0
+
+## 1.451.3
+
+### Patch Changes
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip autocapture when ancestor privacy checks cannot complete.
+  (2026-11-19)
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor autocapture privacy markers across shadow hosts and slots before collecting text and attributes.
+  (2026-11-19)
+- Updated dependencies [[`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1), [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1), [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1)]:
+  - @posthog/browser-common@0.12.1
+
+## 1.451.2
+
+### Patch Changes
+
+- [#5774](https://github.com/PostHog/posthog-js/pull/5774) [`58bf16f`](https://github.com/PostHog/posthog-js/commit/58bf16f64d1ed8151c26ca254fb50c353dfa4f3d) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Stop including the first dropped event's name in the console warning shown when the bot user agent filter drops events
+  (2026-11-18)
+
+## 1.451.1
+
+### Patch Changes
+
+- [#5798](https://github.com/PostHog/posthog-js/pull/5798) [`4c9fcaf`](https://github.com/PostHog/posthog-js/commit/4c9fcaf10c848223ec8d079d8441c5f8994bc38d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fixed requests being blocked by web application firewalls running the OWASP Core Rule Set (ModSecurity and others) for visitors whose session was sampled out of session replay. The `ph_<token>_posthog` cookie stored that decision with a `!` prefix that rule 942190 flags as SQL injection. The decision now uses a plain letter, and this version removes old `!` values from the cookie on the next page load, whether or not replay starts on that page. Versions before 1.417.0 that load the unversioned recorder from the PostHog CDN stop writing new `!` values without upgrading, but only replace old ones on pages where the recorder loads.
+  (2026-11-18)
+
+## 1.451.0
+
+### Minor Changes
+
+- [#5765](https://github.com/PostHog/posthog-js/pull/5765) [`91537b4`](https://github.com/PostHog/posthog-js/commit/91537b41bd6f5399e82c4c193d464c4c73a51bca) Thanks [@marandaneto](https://github.com/marandaneto)! - Load remote config as JSON with `fetch` instead of executable `config.js` when site apps are disabled (the default). The SDK no longer falls back to `config.js` when the JSON request fails.
+
+  **Action may be required if you use a Content Security Policy without a reverse proxy:** remote config is now fetched from the assets host, so `connect-src` must allow it, not only `script-src`. Add `https://us-assets.i.posthog.com` (US), `https://eu-assets.i.posthog.com` (EU), or `https://*.posthog.com` to `connect-src`. Otherwise remote config fails to load, so features such as session recording, surveys, and autocapture use their default or saved settings. Feature flags are unaffected. Sites using a reverse proxy, no CSP, or `opt_in_site_apps: true` need no change. (2026-11-18)
+
 ## 1.450.1
 
 ### Patch Changes

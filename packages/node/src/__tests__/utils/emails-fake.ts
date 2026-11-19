@@ -4,8 +4,8 @@ import type { PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import type { EmailFetchOptions } from '../../emails/emails'
 
 const APP_HOST = 'https://us.posthog.com'
-const UPLOADS_PATH = '/api/projects/@current/messaging/attachments/uploads/'
-const SEND_PATH = '/api/projects/@current/messaging/send/email/'
+const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
+const SEND_PATH = '/api/messaging/send/email/'
 const STORAGE_ORIGIN = 'https://email-files.s3.example.com'
 const UPLOAD_ROUTE = 'POST /api/projects/{project_id}/messaging/attachments/uploads/'
 const MESSAGE_LIMIT_BYTES = 40_000_000

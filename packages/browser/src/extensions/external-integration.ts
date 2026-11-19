@@ -2,6 +2,7 @@ import { PostHog } from '../posthog-core'
 import { ExternalIntegrationKind } from '../types'
 import { assignableWindow, ExternalExtensionKind } from '../utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { getExtensionLoader } from '../utils/extension-loader'
 
 const logger = createLogger('[PostHog ExternalIntegrations]')
 
@@ -14,7 +15,7 @@ export class ExternalIntegrations {
     constructor(private readonly _instance: PostHog) {}
 
     private _loadScript(name: ExternalExtensionKind, cb: () => void): void {
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, name, (err) => {
+        getExtensionLoader(this._instance)?.(this._instance, name, (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }

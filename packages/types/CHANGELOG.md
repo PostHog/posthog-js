@@ -1,5 +1,19 @@
 # @posthog/types
 
+## 1.427.0
+
+### Minor Changes
+
+- [#5709](https://github.com/PostHog/posthog-js/pull/5709) [`1016d81`](https://github.com/PostHog/posthog-js/commit/1016d81c33ba0f673d0bcc2c49a851cb0e102f52) Thanks [@marandaneto](https://github.com/marandaneto)! - Add an explicit per-select session replay masking policy.
+  (2026-11-19)
+
+## 1.426.0
+
+### Minor Changes
+
+- [#5766](https://github.com/PostHog/posthog-js/pull/5766) [`6680554`](https://github.com/PostHog/posthog-js/commit/6680554eef7c225f83ab4ec8ca3f4a8691b663db) Thanks [@marandaneto](https://github.com/marandaneto)! - Add opt-in `require_subresource_integrity` to verify lazy-loaded extension scripts against SHA-384 hashes built into the trusted SDK bundle; it disables site apps and the toolbar and doesn't cover the initial loader unless pinned, third-party widgets or a malicious release with valid hashes.
+  (2026-11-19)
+
 ## 1.425.1
 
 ### Patch Changes

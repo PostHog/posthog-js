@@ -358,11 +358,12 @@ describe('posthog core', () => {
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith(defaultConfig, defaultOverrides)
 
-            posthog.capture(eventName, {}, {})
+            posthog.capture('first_bot_event', {}, {})
             posthog.capture(eventName, {}, {})
 
             expect(warnSpy).toHaveBeenCalledTimes(1)
             expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('opt_out_useragent_filter'))
+            expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('first_bot_event'))
             warnSpy.mockRestore()
             navigatorSpy.mockRestore()
         })
