@@ -181,6 +181,31 @@ describe('immediate capture with default delivery', () => {
         await posthog.shutdown()
     })
 
+    it('sends the event on reconnect when older offline events fill the first batch', async () => {
+        vi.useFakeTimers()
+        try {
+            const target = stubWindowEvents()
+            const requests: RecordedRequest[] = []
+            const posthog = await createDefault({
+                ...recordingOptions(recordCapture(requests)),
+                navigator: { onLine: false },
+            })
+
+            for (let i = 0; i < 100; i++) posthog.capture('older')
+            // Replenish a rate-limit token after the 100-event burst.
+            await vi.advanceTimersByTimeAsync(100)
+            posthog.capture('instant', null, { delivery: 'immediate' })
+            target.dispatchEvent(new Event('online'))
+            await vi.advanceTimersByTimeAsync(0)
+
+            expect(requests.map((request) => request.batch.length)).toEqual([100, 1])
+            expect(names(requests)[1]).toEqual(['instant'])
+            await posthog.shutdown()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('includes the event in the shutdown flush', async () => {
         const requests: RecordedRequest[] = []
         const posthog = await createDefault(recordingOptions(recordCapture(requests)))

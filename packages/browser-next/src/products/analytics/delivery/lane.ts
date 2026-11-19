@@ -84,6 +84,9 @@ export class Lane<E> {
     flush(immediate = false): Promise<void> {
         this._buffer._expireQueue(this._buffer._now())
         const attached = this._delivery
+        const target = this._buffer._nextId
+        // An immediate target outlasts unavailability, so the next drive (such as on reconnect) reaches it.
+        if (immediate) this._forceTarget = Math.max(this._forceTarget ?? 0, (this._immediateTarget = target))
         if (
             !attached ||
             (!this._buffer._activeEntries && this._buffer._queue.length === 0) ||
@@ -92,11 +95,9 @@ export class Lane<E> {
             return Promise.resolve()
         }
 
-        const target = this._buffer._nextId
         this._retryBlocked = false
         this._clearTimer()
         this._forceTarget = Math.max(this._forceTarget ?? 0, target)
-        if (immediate) this._immediateTarget = target
         const epoch = this._drain ? this._activeEpoch : this._beginDrive(true)
         if (!epoch) {
             return Promise.resolve()
