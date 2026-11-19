@@ -1726,6 +1726,8 @@ export class ConversationsManager {
      */
     destroy(): void {
         this._lifecycleGeneration++
+        // Late request callbacks restart polling only for a rendered widget.
+        this._isWidgetRendered = false
         this._stopPolling()
         this._stopReattachWatcher()
         if (window) {
