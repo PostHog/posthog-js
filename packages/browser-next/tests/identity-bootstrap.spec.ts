@@ -1,5 +1,7 @@
+import { createPostHog } from '../src/composition/npm/index'
 import type { IPostHog, StorageLike } from '../src/core/types'
 import {
+    clientOptions,
     CONSENT_KEY,
     createClient,
     MemoryStorage,
@@ -144,6 +146,50 @@ describe('reset options', () => {
         posthog.capture('after_reset')
         await posthog.flush()
         expect(eventNamed(sent, 'after_reset')?.session_id).not.toBe(sessionId)
+    })
+
+    it('serves bootstrapped feature flags and payloads for the new identity', async () => {
+        const posthog = await createPostHog({
+            ...clientOptions(new MemoryStorage(), []),
+            flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { previous: true } } },
+        })
+        clients.push(posthog)
+        expect(posthog.featureFlags!.getFeatureFlag('previous')?.enabled).toBe(true)
+        posthog.reset({
+            bootstrap: {
+                distinctId: 'user-2',
+                isIdentifiedId: true,
+                featureFlags: { next: 'blue', disabled: false },
+                featureFlagPayloads: { next: { color: 'blue' }, disabled: { color: 'red' } },
+            },
+        })
+        expect(posthog.featureFlags!.getFeatureFlag('previous')).toBeUndefined()
+        expect(posthog.featureFlags!.getFeatureFlag('next')).toMatchObject({
+            enabled: true,
+            variant: 'blue',
+            payload: { color: 'blue' },
+        })
+        expect(posthog.featureFlags!.getFeatureFlag('disabled')?.payload).toBeUndefined()
+    })
+
+    it('reports bootstrapped flag values only for the reset that supplied them', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await createPostHog({
+            ...clientOptions(new MemoryStorage(), sent),
+            flags: { featureFlagEvaluation: false },
+        })
+        clients.push(posthog)
+        posthog.reset({ bootstrap: { featureFlags: { next: 'blue' } } })
+        posthog.featureFlags!.getFeatureFlag('next')
+        posthog.reset()
+        posthog.featureFlags!.updateFlags({ next: 'red' })
+        posthog.featureFlags!.getFeatureFlag('next')
+        await posthog.flush()
+        expect(
+            sent
+                .filter((event) => event.event === '$feature_flag_called')
+                .map((event) => event.properties.$feature_flag_bootstrapped_response)
+        ).toEqual(['blue', undefined])
     })
 
     it('retains consent', async () => {
