@@ -218,7 +218,11 @@ const sameIdentity = (cookie: Values, identity: Identity): boolean =>
  */
 const toCookie = (record: Values, existing: Values | undefined, stale: boolean): Values => {
     const identified = record.isIdentified === true
-    const reset = record.sessionReset !== undefined || (!identified && existing?.distinct_id !== record.distinctId)
+    // A new person starts only when the identity changes: an empty session posthog-js writes when it idles out keeps it.
+    const reset =
+        !!existing &&
+        !sameIdentity(existing, [record.distinctId, identified]) &&
+        (!identified || record.sessionReset !== undefined)
     const value: Values = existing && (stale || !reset) ? existing : {}
     if (!stale) {
         // Another subdomain can enable person processing for this identity before this context reads it.
