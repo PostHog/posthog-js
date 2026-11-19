@@ -1,5 +1,5 @@
 import { propertyComparisons } from '@posthog/core/surveys'
-import type { FeatureFlagValue, JsonType } from '@posthog/core'
+import type { FeatureFlagValue, JsonType, Logger } from '@posthog/core'
 
 // Session replay v2 trigger groups (posthog-js V2TriggerGroupStrategy).
 export type SessionReplayTriggerPropertyFilter = {
@@ -56,7 +56,8 @@ function parseTriggerGroupSampleRate(value: JsonType | undefined): number | null
 
 // null means v1: the web SDK keeps the v1 strategy unless version is 2 and a group parses.
 export function parseSessionRecordingTriggerGroups(
-  sessionRecording: boolean | { [key: string]: JsonType } | undefined | null
+  sessionRecording: boolean | { [key: string]: JsonType } | undefined | null,
+  logger?: Pick<Logger, 'error'>
 ): SessionReplayTriggerGroup[] | null {
   if (!sessionRecording || typeof sessionRecording !== 'object') {
     return null
@@ -85,20 +86,23 @@ export function parseSessionRecordingTriggerGroups(
       name: typeof map['name'] === 'string' ? map['name'] : '',
       sampleRate: parseTriggerGroupSampleRate(map['sampleRate']),
       minDurationMs: getFiniteNumber(map['minDurationMs']),
-      conditions: parseTriggerConditions(map['conditions']),
+      conditions: parseTriggerConditions(map['conditions'], logger),
     })
   }
 
   return groups.length > 0 ? groups : null
 }
 
-function parseTriggerConditions(conditions: JsonType | undefined): SessionReplayTriggerConditions {
+function parseTriggerConditions(
+  conditions: JsonType | undefined,
+  logger?: Pick<Logger, 'error'>
+): SessionReplayTriggerConditions {
   const map = conditions && typeof conditions === 'object' ? (conditions as { [key: string]: JsonType }) : {}
   const rawFlag = map['flag']
   return {
     matchType: map['matchType'] === 'any' ? 'any' : 'all',
     events: parseTriggerEvents(map['events']),
-    urls: parseTriggerUrls(map['urls']),
+    urls: parseTriggerUrls(map['urls'], logger),
     flag: parseTriggerFlag(rawFlag),
     properties: parseTriggerPropertyFilters(map['properties']),
     hasEventsLeg: Array.isArray(map['events']) && map['events'].length > 0,
@@ -126,7 +130,7 @@ function parseTriggerEvents(events: JsonType | undefined): SessionReplayTriggerE
   return parsed
 }
 
-function parseTriggerUrls(urls: JsonType | undefined): RegExp[] {
+function parseTriggerUrls(urls: JsonType | undefined, logger?: Pick<Logger, 'error'>): RegExp[] {
   if (!Array.isArray(urls)) {
     return []
   }
@@ -142,7 +146,9 @@ function parseTriggerUrls(urls: JsonType | undefined): RegExp[] {
     }
     try {
       parsed.push(new RegExp(pattern))
-    } catch {}
+    } catch (e) {
+      logger?.error('Invalid URL trigger regex pattern:', pattern, e)
+    }
   }
   return parsed
 }
