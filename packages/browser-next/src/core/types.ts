@@ -56,14 +56,17 @@ export interface BootstrapOptions {
     distinctId?: string
     /** Whether `distinctId` identifies a known person rather than an anonymous user. */
     isIdentifiedId?: boolean
-    /** UUIDv7 session ID to continue, such as one passed from another domain. */
+    /**
+     * UUIDv7 session ID to continue, such as one passed from another domain. Like a generated session, it starts with
+     * the first admitted event, so `session` and `onSessionId` report it from then on.
+     */
     sessionId?: string
 }
 
 export interface ResetOptions {
     /** Also replace the device ID. */
     resetDeviceId?: boolean
-    /** Seed the new identity and next session instead of generating them. */
+    /** Seed the new identity and next session instead of generating them. Feature flags are not seeded. */
     bootstrap?: BootstrapOptions
 }
 
