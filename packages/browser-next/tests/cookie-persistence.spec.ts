@@ -100,6 +100,61 @@ afterEach(async () => {
 })
 
 describe('cookie persistence', () => {
+    it('keeps posthog-js cookie keys when identify follows a posthog-js idle session end', async () => {
+        const now = Date.now()
+        jar.write({
+            distinct_id: 'anon-1',
+            $device_id: 'anon-1',
+            $user_state: 'anonymous',
+            $sesid: [now, uuidv7(now - 60_000), now - 60_000],
+            $initial_person_info: { r: '$direct' },
+        })
+        const posthog = await create(new MemoryStorage())
+        posthog.capture('active')
+        jar.write({ ...(jar.read() as Record<string, unknown>), $sesid: [null, null, null] })
+        posthog.identify('user-1')
+
+        expect(jar.read()).toMatchObject({ distinct_id: 'user-1', $initial_person_info: { r: '$direct' } })
+    })
+
+    it('keeps posthog-js cookie keys when identify follows an adopted posthog-js reset', async () => {
+        const now = Date.now()
+        jar.write({
+            distinct_id: 'legacy-user',
+            $device_id: 'legacy-device',
+            $user_state: 'identified',
+            $sesid: [now, uuidv7(now - 60_000), now - 60_000],
+        })
+        const posthog = await create(new MemoryStorage())
+        posthog.capture('before_reset')
+        // posthog-js reset() writes a new anonymous identity and an empty session, then records initial person info.
+        jar.write({
+            distinct_id: 'legacy-anonymous',
+            $device_id: 'legacy-device',
+            $user_state: 'anonymous',
+            $sesid: [null, null, null],
+            $initial_person_info: { r: '$direct' },
+        })
+        posthog.identify('user-2')
+
+        expect(jar.read()).toMatchObject({ distinct_id: 'user-2', $initial_person_info: { r: '$direct' } })
+    })
+
+    it('drops posthog-js cookie keys when reset bootstraps an identified user', async () => {
+        jar.write({
+            distinct_id: 'anon-1',
+            $device_id: 'anon-1',
+            $user_state: 'anonymous',
+            $initial_person_info: { r: 'x' },
+        })
+        const posthog = await create(new MemoryStorage())
+        posthog.identify('user-1')
+        posthog.reset({ bootstrap: { distinctId: 'user-2', isIdentifiedId: true } })
+
+        expect(jar.read()).toMatchObject({ distinct_id: 'user-2', $user_state: 'identified' })
+        expect(jar.read()?.$initial_person_info).toBeUndefined()
+    })
+
     it('keeps posthog-js cookie keys when posthog-js ends an idle session', async () => {
         const now = Date.now()
         jar.write({
