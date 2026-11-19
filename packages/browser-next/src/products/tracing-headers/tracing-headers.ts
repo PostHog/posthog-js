@@ -79,6 +79,12 @@ export const tracingHeaders = (options: TracingHeadersOptions = {}): BrowserExte
         },
         dispose: () => {
             client = undefined
+            // A wrapper installed after ours can keep calling it, so make it inert before trying to unlink it. The
+            // patches read these arrays for each request, and a disposed extension is never set up again.
+            if (snapshot) {
+                snapshot.hostnames.length = 0
+                snapshot.tracePropagationTargets.length = 0
+            }
             for (const restore of restores.splice(0).reverse()) restore()
         },
     }
