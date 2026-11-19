@@ -1,4 +1,5 @@
 import Config from './config'
+import { getBundledExtensionLoader, LoadExternalDependency } from './utils/extension-loader'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
@@ -538,6 +539,7 @@ export class PostHog implements PostHogInterface {
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
+    __loadExternalDependency?: LoadExternalDependency = getBundledExtensionLoader()
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     // Keys registered via register_for_session — cleared when the PostHog session rotates
     _sessionRegisteredPropKeys: Set<string> = new Set()
@@ -1870,9 +1872,7 @@ export class PostHog implements PostHogInterface {
                 // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
                 // oxlint-disable-next-line no-console
                 console.warn(
-                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
-                        event_name +
-                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot. Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
                 )
             }
             logger.info(
