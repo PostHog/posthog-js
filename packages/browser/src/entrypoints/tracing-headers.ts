@@ -155,21 +155,23 @@ const addTracingHeaders = (
     }
 
     let hasAddedHeaders = false
+    // The distinct ID is set first so that, when it cannot be, none of the PostHog headers are added.
+    const currentDistinctId = getDistinctId(distinctId)
+    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
+        try {
+            headers.set(DISTINCT_ID_HEADER, currentDistinctId)
+        } catch {
+            // A distinct ID can contain characters a header value cannot (for example non-Latin-1 text). Sending
+            // only the session headers would stop a server from finding the person another way, such as the cookie.
+            return false
+        }
+        hasAddedHeaders = true
+    }
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         headers.set(SESSION_ID_HEADER, sessionId)
         headers.set(WINDOW_ID_HEADER, windowId)
         hasAddedHeaders = true
-    }
-    const currentDistinctId = getDistinctId(distinctId)
-    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
-        try {
-            headers.set(DISTINCT_ID_HEADER, currentDistinctId)
-            hasAddedHeaders = true
-        } catch {
-            // A distinct ID can contain characters a header value cannot (for example non-Latin-1 text),
-            // so the request goes out without it.
-        }
     }
     return hasAddedHeaders
 }
