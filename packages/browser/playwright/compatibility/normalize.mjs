@@ -29,6 +29,10 @@ const replayNodeAttributes = new RegExp(
     `^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data\\.node(?:\\.childNodes\\[\\d+\\])*\\.attributes$`
 )
 const storageRoot = /^api\.storage\.(?:local|session)\.[^.]+$/
+const extensionInitDebugProperties = new Set([
+    '$sdk_debug_extensions_init_method',
+    '$sdk_debug_extensions_init_time_ms',
+])
 const storageProperty = /^api\.storage\.(?:local|session)\.[^.]+\.[^.]+(?:\[\d+\])?$/
 const storedSessionId =
     /^api\.storage\.(?:local|session)\.[^.]+\.(?:\$client_session_props|\$sess_rec_flush_size)\.sessionId$/
@@ -249,13 +253,16 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)
+            // Registered only when extension init takes at least 1 ms, so presence varies by machine.
+            if (debugProperties && extensionInitDebugProperties.has(child)) continue
             if (
-                child === '$sdk_debug_extensions_init_time_ms' &&
-                debugProperties &&
-                typeof item === 'number' &&
-                Number.isFinite(item)
-            )
-                item = '<cpu-duration-ms>'
+                /^api\.storage\.(?:local|session)$/.test(path) &&
+                child.endsWith('_session_registered_properties') &&
+                Array.isArray(item)
+            ) {
+                item = item.filter((key) => !extensionInitDebugProperties.has(key))
+                if (!item.length) continue
+            }
             if (
                 webVitals &&
                 ((sdkProperties.test(path) && child === '$web_vitals_FCP_value') ||

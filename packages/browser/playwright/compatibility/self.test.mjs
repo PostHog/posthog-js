@@ -71,7 +71,6 @@ test('application UUIDs, cv fields, versions and clock-like fields are retained'
         $lib_version: context.version,
         timeUnixNano: '123',
         $snapshot_bytes: 100,
-        $sdk_debug_extensions_init_time_ms: 1,
     }
     const baseline = snapshot([event({ application: app })])
     assert.deepEqual(JSON.parse(JSON.stringify(n(baseline).network.events[0].properties.application)), app)
@@ -82,10 +81,20 @@ test('application UUIDs, cv fields, versions and clock-like fields are retained'
     }
 })
 
-test('CPU/encoded-size metrics normalize numeric variation, not malformed types', () => {
-    const baseline = snapshot([event({ $sdk_debug_extensions_init_time_ms: 1, $snapshot_bytes: 100 })])
-    assert.deepEqual(n(baseline), n(snapshot([event({ $sdk_debug_extensions_init_time_ms: 7, $snapshot_bytes: 200 })])))
-    assert(changed(baseline, snapshot([event({ $sdk_debug_extensions_init_time_ms: false, $snapshot_bytes: null })])))
+test('encoded-size metrics normalize numeric variation, not malformed types', () => {
+    const baseline = snapshot([event({ $snapshot_bytes: 100 })])
+    assert.deepEqual(n(baseline), n(snapshot([event({ $snapshot_bytes: 200 })])))
+    assert(changed(baseline, snapshot([event({ $snapshot_bytes: null })])))
+})
+
+test('timing-dependent extension init debug properties are omitted', () => {
+    const debug = { $sdk_debug_extensions_init_method: 'synchronous', $sdk_debug_extensions_init_time_ms: 3 }
+    assert.deepEqual(n(snapshot([event({})])), n(snapshot([event(debug)])))
+    const stored = (registered) => ({
+        api: { storage: { session: { ph_x_session_registered_properties: registered } } },
+    })
+    assert.deepEqual(n(stored(Object.keys(debug))), n({ api: { storage: { session: {} } } }))
+    assert.deepEqual(n(stored([...Object.keys(debug), '$other'])), n(stored(['$other'])))
 })
 
 test('OpenTelemetry identity/version/clock normalization preserves record contents', () => {
