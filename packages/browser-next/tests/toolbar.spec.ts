@@ -193,6 +193,27 @@ describe('toolbar', () => {
         await client.dispose()
     })
 
+    it('handles completion of a script element that prepareScript replaces', async () => {
+        const prepareScript = (script: HTMLScriptElement): HTMLScriptElement => {
+            const replacement = script.cloneNode() as HTMLScriptElement
+            replacement.nonce = 'abc'
+            return replacement
+        }
+        const client = await createCorePostHog({ ...options, extensions: [toolbar({ prepareScript })] })
+        client.toolbar?.loadToolbar()
+        const failed = toolbarScripts()[0]
+        failed?.dispatchEvent(new Event('error'))
+        expect(toolbarWindow.ph_toolbar_state).toBe(0)
+        failed?.remove()
+
+        client.toolbar?.loadToolbar()
+        const [script] = toolbarScripts()
+        expect(script?.nonce).toBe('abc')
+        script?.dispatchEvent(new Event('load'))
+        expect(toolbarWindow.ph_load_toolbar).toHaveBeenCalledTimes(1)
+        await client.dispose()
+    })
+
     it('ignores a script that finishes loading after disposal and releases the page-wide load state', async () => {
         const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
         client.toolbar?.loadToolbar()
