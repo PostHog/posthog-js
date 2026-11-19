@@ -422,4 +422,28 @@ describe('React Native captureAi', () => {
     expect(uuid).toEqual(expect.any(String))
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
+
+  it('activates a session replay event trigger only for an AI event the lane queued', async () => {
+    const client = await newPostHog({ flushAt: 10, captureAiMaxEventBytes: 2000 })
+    vi.spyOn((client as any)._logger, 'warn').mockImplementation(() => {})
+    const trigger = vi.spyOn(client as any, '_maybeActivateEventTrigger')
+
+    expect(client.captureAi('$ai_generation', { $ai_input: 'x'.repeat(2500) })).toBeUndefined()
+    expect(trigger).not.toHaveBeenCalledWith('$ai_generation')
+
+    client.captureAi('$ai_generation', { $ai_input: 'short' })
+    expect(trigger).toHaveBeenCalledWith('$ai_generation')
+  })
+
+  it('logs only the name and uuid of an AI event in debug mode', async () => {
+    const client = await newPostHog({ flushAt: 10 })
+    const info = vi.spyOn((client as any)._logger, 'info').mockImplementation(() => {})
+    client.debug()
+
+    const uuid = client.captureAi('$ai_generation', { $ai_input: 'private prompt' })
+
+    const logged = JSON.stringify(info.mock.calls)
+    expect(logged).not.toContain('private prompt')
+    expect(info).toHaveBeenCalledWith('capture', { event: '$ai_generation', uuid })
+  })
 })

@@ -513,6 +513,8 @@ export class PostHog extends PostHogCore {
   private _captureResendTimer?: ReturnType<typeof setTimeout>
   // Set once shutdown() returns, so a capture response that lands later schedules no resend.
   private _captureShutDown = false
+  // AI events emitted to listeners; debug mode logs only their name and uuid, since they carry prompts and outputs.
+  private _emittedAiEvents = new WeakSet<object>()
 
   /**
    * The project token the client was created with.
@@ -972,6 +974,13 @@ export class PostHog extends PostHogCore {
     return `${this.getLibraryId()}/${this.getLibraryVersion()}`
   }
 
+  protected describeDebugPayload(payload: any): any {
+    if (payload && typeof payload === 'object' && this._emittedAiEvents.has(payload)) {
+      return { event: payload.event, uuid: payload.uuid }
+    }
+    return super.describeDebugPayload(payload)
+  }
+
   protected getCustomHeaders(): { [key: string]: string } {
     return { ...super.getCustomHeaders(), ...this._requestHeaders }
   }
@@ -1173,7 +1182,7 @@ export class PostHog extends PostHogCore {
       if (this.optedOut) {
         return
       }
-      const processed = this.processBeforeEnqueue(this.prepareMessage(message, options))
+      const processed = this.processBeforeEnqueue(this.prepareMessage(message, options), true)
       if (processed === null) {
         return
       }
@@ -1183,6 +1192,12 @@ export class PostHog extends PostHogCore {
         if (admission) {
           admission.uuid = normalized.uuid as string
         }
+        try {
+          this._maybeActivateEventTrigger(normalized.event)
+        } catch (e) {
+          this._logger.error(`Session replay event trigger check failed: ${e}.`)
+        }
+        this._emittedAiEvents.add(normalized)
         this._events.emit(type, normalized)
       }
     })
@@ -4057,7 +4072,11 @@ export class PostHog extends PostHogCore {
    * debug keys and gates the optional bundle to one accepted eligible event per
    * REPLAY_DEBUG_PROPERTIES_INTERVAL_MS.
    */
-  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+  // `deferEventTrigger` leaves the replay event trigger to the caller, which checks it once the event is queued.
+  protected processBeforeEnqueue(
+    message: PostHogEventProperties,
+    deferEventTrigger = false
+  ): PostHogEventProperties | null {
     this._stampReplayDebugProperties(message)
     const claimedBundle = this._claimReplayDebugBundle(message)
     let accepted = false
@@ -4097,7 +4116,9 @@ export class PostHog extends PostHogCore {
         observation.queued = !suppress
       }
       try {
-        this._maybeActivateEventTrigger(processed?.['event'])
+        if (!deferEventTrigger) {
+          this._maybeActivateEventTrigger(processed?.['event'])
+        }
         this._refreshStaleNativeStatus()
       } catch (e) {
         this._logger.error(`Session replay event trigger check failed: ${e}.`)
