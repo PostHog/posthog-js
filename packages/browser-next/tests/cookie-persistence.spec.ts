@@ -405,4 +405,42 @@ describe('cookie persistence', () => {
         expect((await create(storage)).distinctId).toBe('user-1')
         expect(storage.getItem(STATE_KEY)).not.toBeNull()
     })
+
+    it('drops the previous identity registered properties when an open tab adopts a reset', async () => {
+        const app = await create(new MemoryStorage())
+        app.identify('user-1')
+        visit('www.example.com')
+        const sent: SentEvent[] = []
+        const www = await create(new MemoryStorage(), sent)
+        www.register({ cohort: 'cohort-1' })
+        const resets: unknown[] = []
+        www.onReset(() => resets.push('reset'))
+
+        visit('app.example.com')
+        app.reset()
+        visit('www.example.com')
+        www.capture('after_reset')
+        await www.flush()
+        expect(sent.find((event) => event.event === 'after_reset')).toMatchObject({ distinct_id: app.distinctId })
+        expect(sent.find((event) => event.event === 'after_reset')?.properties).not.toHaveProperty('cohort')
+        expect(resets).toEqual(['reset'])
+    })
+
+    it('keeps registered properties when an open tab adopts an identify', async () => {
+        const app = await create(new MemoryStorage())
+        visit('www.example.com')
+        const sent: SentEvent[] = []
+        const www = await create(new MemoryStorage(), sent)
+        www.register({ cohort: 'cohort-1' })
+
+        visit('app.example.com')
+        app.identify('user-1')
+        visit('www.example.com')
+        www.capture('after_identify')
+        await www.flush()
+        expect(sent.find((event) => event.event === 'after_identify')).toMatchObject({
+            distinct_id: 'user-1',
+            properties: { cohort: 'cohort-1' },
+        })
+    })
 })

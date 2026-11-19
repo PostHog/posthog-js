@@ -13,6 +13,7 @@ import {
 import { createId } from '../primitives/id'
 import { CLIENT_KV_NAMESPACE } from '../core/state/state'
 import { isValidDistinctId } from '../products/analytics/analytics-core'
+import { REGISTERED_PROPERTIES } from '../products/analytics/properties/analytics-properties'
 import type { CookiePersistence, StorageLike } from '../core/types'
 
 export type { CookiePersistence }
@@ -148,9 +149,11 @@ const mergeCookie = (local: string | null, cookie: Values | undefined): string |
     }
     if (!sameUser) {
         for (const key of IDENTITY_BOUND_KEYS) delete data[key]
+        // A new anonymous user means another subdomain reset, which clears the previous user's event context.
         if (!identified) {
             merged.groups = {}
             delete data[STORED_GROUP_PROPERTIES_KEY]
+            delete data[REGISTERED_PROPERTIES]
         }
     }
     if (cookie.$epp === true) data.personProcessingEnabled = true
