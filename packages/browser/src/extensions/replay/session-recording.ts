@@ -146,6 +146,7 @@ export class SessionRecording implements Extension {
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
+    // Not `!_isRecordingEnabled`: missing remote config means awaiting config, not off.
     /** @internal */
     get isReplayOff(): boolean {
         return (
