@@ -411,6 +411,10 @@ export class PostHog extends PostHogCore {
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
   private _sessionReplayStartedByApp: boolean = false
   private _manualRecordingStartRequest?: ManualRecordingStartRequest
+  // Timer retries of a trigger-group start native refused, bounded like manual-start retries.
+  private _triggerGroupsStartRetry?: { attempts: number; timer?: ReturnType<typeof setTimeout> }
+  // Set by _shutdown() and terminal: an evaluation after it must not set native up, start it or arm a retry.
+  private _isShutDown = false
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   // Serializes every JS->native command (identity, consent, push) so they reach native in
@@ -864,7 +868,9 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._isShutDown = true
     this._cancelManualRecordingStart()
+    this._cancelTriggerGroupsStartRetry()
     if (nativeSessionOwner === this) {
       nativeSessionOwner = undefined
     }
@@ -1297,6 +1303,7 @@ export class PostHog extends PostHogCore {
 
     // Cancel before super.reset() emits flags for the next, anonymous user.
     this._cancelManualRecordingStart()
+    this._cancelTriggerGroupsStartRetry()
     // The persisted activation is wiped below; the in-memory evaluator must drop its copy too,
     // or a session id kept via propertiesToKeep would carry one user's activated groups forward.
     this._triggerGroupsEvaluator.clearActivation()
@@ -1590,6 +1597,7 @@ export class PostHog extends PostHogCore {
    */
   optOut(): Promise<void> {
     this._cancelManualRecordingStart()
+    this._cancelTriggerGroupsStartRetry()
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
     this._sessionReplayStartedByApp = false
@@ -2399,6 +2407,27 @@ export class PostHog extends PostHogCore {
     this._currentSessionId = newSessionId
   }
 
+  // Both native SDKs refuse to start the recorder while their own remote config is not
+  // loaded (PostHog.kt, PostHogSDK.swift) and resolve the call all the same, so ask the
+  // recorder instead of reporting a success the caller cannot check.
+  private async _confirmNativeRecordingStarted(): Promise<boolean> {
+    const started = await OptionalReactNativePlugin!.isEnabled().catch((e) => {
+      // Unknown state, so report the start rather than a failure nothing can act on.
+      this._logger.warn(`Failed to confirm the session recording started: ${e}`)
+      return true
+    })
+
+    this._invalidateNativeSessionReplayDebugProperties({ $recording_status: started ? 'active' : 'disabled' })
+
+    if (!started) {
+      this._logger.warn(
+        'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
+          'PostHog retries on the next feature flags load.'
+      )
+    }
+    return started
+  }
+
   // Shared start path. Also called by the flags-driven evaluation, which runs inside
   // _sessionReplayEvalChain and so must not re-enter it.
   private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
@@ -2442,22 +2471,7 @@ export class PostHog extends PostHogCore {
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
 
-      // Both native SDKs refuse to start the recorder while their own remote config is not
-      // loaded (PostHog.kt, PostHogSDK.swift) and resolve the call all the same, so ask the
-      // recorder instead of reporting a success the caller cannot check.
-      const started = await OptionalReactNativePlugin.isEnabled().catch((e) => {
-        // Unknown state, so report the start rather than a failure nothing can act on.
-        this._logger.warn(`Failed to confirm the session recording started: ${e}`)
-        return true
-      })
-
-      this._invalidateNativeSessionReplayDebugProperties({ $recording_status: started ? 'active' : 'disabled' })
-
-      if (!started) {
-        this._logger.warn(
-          'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
-            'PostHog retries on the next feature flags load.'
-        )
+      if (!(await this._confirmNativeRecordingStarted())) {
         return false
       }
 
@@ -2486,6 +2500,7 @@ export class PostHog extends PostHogCore {
    */
   async stopSessionRecording(): Promise<void> {
     this._cancelManualRecordingStart()
+    this._cancelTriggerGroupsStartRetry()
     this._sessionReplayStartedByApp = false
     // Holds over an opt-in still in flight. A stop made while opted out is ignored on opt-in.
     if (!this.optedOut) {
@@ -3373,8 +3388,7 @@ export class PostHog extends PostHogCore {
     if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
       this._sessionReplayNativeInitialized = true
       await OptionalReactNativePlugin.startRecording?.(true)
-      this._refreshNativeSessionReplayDebugProperties()
-      return true
+      return this._confirmNativeRecordingStarted()
     }
 
     const sessionId = this.getSessionId()
@@ -3760,6 +3774,14 @@ export class PostHog extends PostHogCore {
     // app wanted, or stops a recorder posthog-ios optIn() restarted unless the app started one since.
     freshSession: boolean = false
   ): Promise<void> {
+    if (this._isShutDown) {
+      return
+    }
+    // This evaluation supersedes a pending retry; a failed start below schedules the next one.
+    clearTimeout(this._triggerGroupsStartRetry?.timer)
+    if (this._triggerGroupsStartRetry) {
+      this._triggerGroupsStartRetry.timer = undefined
+    }
     const options = this._sessionReplayOptions
     const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
     const enablePush = this._isPushNativeEnabled(options)
@@ -3943,8 +3965,15 @@ export class PostHog extends PostHogCore {
           initialized && startAfterSetup ? await this._startSessionRecording(true) : initialized
       }
       this._sessionReplayStartFailed = this._sessionReplayRecordingActive !== true
+      if (this._sessionReplayStartFailed && this._sessionReplayTriggerGroups !== null) {
+        this._scheduleTriggerGroupsStartRetry()
+      } else {
+        this._cancelTriggerGroupsStartRetry()
+      }
     } else {
       this._logger.info('Session replay disabled.')
+      // The next wanted start gets a fresh retry budget.
+      this._cancelTriggerGroupsStartRetry()
       // A start native refused still lifts its stop hold, so native may have resumed on its own
       // once its flags arrived: stop it as well.
       const startFailed = this._sessionReplayStartFailed
@@ -3971,6 +4000,32 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  // Native refuses a start until its remote config loads. Flags reloads and matching events retry
+  // too, but neither may come, so retry on a timer through the evaluation chain. Only a timer firing
+  // spends the budget: those other evaluations clear the timer and re-arm it at the same delay.
+  private _scheduleTriggerGroupsStartRetry(): void {
+    if (this._isShutDown) {
+      return
+    }
+    const retry = (this._triggerGroupsStartRetry ??= { attempts: 0 })
+    const delay = MANUAL_RECORDING_START_RETRY_DELAYS_MS[retry.attempts]
+    if (retry.timer !== undefined || delay === undefined) {
+      return
+    }
+    retry.timer = safeSetTimeout(() => {
+      retry.timer = undefined
+      if (this._triggerGroupsStartRetry === retry && !this._isShutDown) {
+        retry.attempts++
+        void this._evaluateAndStartSessionReplay()
+      }
+    }, delay)
+  }
+
+  private _cancelTriggerGroupsStartRetry(): void {
+    clearTimeout(this._triggerGroupsStartRetry?.timer)
+    this._triggerGroupsStartRetry = undefined
   }
 
   // Set by stopSessionRecording(), cleared by startSessionRecording().

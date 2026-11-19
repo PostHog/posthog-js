@@ -345,6 +345,16 @@ describe('native error tracking', () => {
       errorTracking: { autocapture: { nativeCrashes: true } },
     })
 
+    // Native accepts the start, so the recorder reports itself on until stopped.
+    let nativeRecording = false
+    mockPlugin.startRecording.mockImplementation(async () => {
+      nativeRecording = true
+    })
+    mockPlugin.stopRecording.mockImplementation(async () => {
+      nativeRecording = false
+    })
+    mockPlugin.isEnabled.mockImplementation(async () => nativeRecording)
+
     await posthog.ready()
 
     // Native comes up once for error tracking, and replay resumes on it when the linked flag is on.
