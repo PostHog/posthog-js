@@ -15,6 +15,7 @@ import {
 import type { ErrorWrappingFunctions } from '@posthog/browser-common/exception-autocapture'
 import type { Client, Disposable, ErrorTrackingSuppressionRule } from '@posthog/browser-common'
 import type { IPostHog } from '../../core/types'
+import { analyticsOf } from '../analytics/analytics-core'
 import type { ErrorTrackingExtension } from './error-tracking-internal'
 import {
     snapshotErrorTrackingOptions,
@@ -107,7 +108,8 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                 logger.info(drop.log)
                 return false
             }
-            return client.capture('$exception', withExceptionContext(properties, steps, logger))
+            // Reports whether the event was queued; a false result from capture() signals only rate limiting.
+            return analyticsOf(client)?._capture('$exception', withExceptionContext(properties, steps, logger)) === true
         } catch (error) {
             if (!isStackOverflowError(error)) {
                 logger.error('Failed to capture exception event. Dropping this exception.', error)
