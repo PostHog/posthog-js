@@ -100,6 +100,24 @@ afterEach(async () => {
 })
 
 describe('cookie persistence', () => {
+    it('keeps posthog-js cookie keys when posthog-js ends an idle session', async () => {
+        const now = Date.now()
+        jar.write({
+            distinct_id: 'anon-1',
+            $device_id: 'anon-1',
+            $user_state: 'anonymous',
+            $sesid: [now, uuidv7(now - 60_000), now - 60_000],
+            $initial_person_info: { r: '$direct' },
+        })
+        const posthog = await create(new MemoryStorage())
+        posthog.capture('active')
+        // posthog-js's idle timer ends the session without changing the identity.
+        jar.write({ ...(jar.read() as Record<string, unknown>), $sesid: [null, null, null] })
+        posthog.register({ color: 'blue' })
+
+        expect(jar.read()).toMatchObject({ distinct_id: 'anon-1', $initial_person_info: { r: '$direct' } })
+    })
+
     it('writes identity and session state with posthog-js cookie keys', async () => {
         const posthog = await create(new MemoryStorage())
         posthog.identify('user-1')
