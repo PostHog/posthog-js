@@ -418,8 +418,11 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
-/** Marks a `captureAi()` event so `enqueue()` routes it to the AI lane. */
-type CaptureAiOptions = PostHogCaptureOptions & { _captureAi?: true }
+/**
+ * Marks a `captureAi()` event so `enqueue()` routes it to the AI lane. `_admission` gets the uuid of
+ * the event the lane queued, per call, so a nested `captureAi()` can't overwrite it.
+ */
+type CaptureAiOptions = PostHogCaptureOptions & { _captureAi?: true; _admission?: { uuid?: string } }
 
 // sdk-specs event-batcher: capture v1 requests carry at most 5 MiB of event bytes.
 const CAPTURE_V1_BATCH_BYTE_TARGET = 5 * 1024 * 1024
@@ -435,7 +438,6 @@ export class PostHog extends PostHogCore {
   private _captureAiSender?: V1CaptureSender
   private _captureAiCompression: 'gzip' | 'none' = 'gzip'
   private _captureAiTimeoutMs = CAPTURE_AI_DEFAULT_TIMEOUT_MS
-  private _lastAdmittedAiUuid?: string
   private _appProperties: PostHogCustomAppProperties = {}
   private _appLanguage: string | undefined
   private _currentSessionId?: string | undefined
@@ -1177,7 +1179,10 @@ export class PostHog extends PostHogCore {
       }
       const normalized = this.normalizeMessage(processed)
       if (this._aiLane.enqueue(normalized)) {
-        this._lastAdmittedAiUuid = normalized.uuid as string
+        const admission = (options as CaptureAiOptions | undefined)?._admission
+        if (admission) {
+          admission.uuid = normalized.uuid as string
+        }
         this._events.emit(type, normalized)
       }
     })
@@ -1676,7 +1681,9 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     // Signal both lanes before waiting on either.
-    const aiFlush = this.isDisabled || this._shuttingDown ? Promise.resolve() : this._aiLane.flush()
+    // Waits for initialization so AI events captured before it are queued first.
+    const aiFlush =
+      this.isDisabled || this._shuttingDown ? Promise.resolve() : this._initPromise.then(() => this._aiLane.flush())
     return Promise.all([super.flush(), aiFlush]).then(() => undefined)
   }
 
@@ -1717,7 +1724,8 @@ export class PostHog extends PostHogCore {
    * finishes initializing it returns the UUID, and those checks run once initialization completes.
    */
   captureAi(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): string | undefined {
-    if (this.isDisabled || this.optedOut) {
+    // Before initialization, consent isn't loaded yet; the lane checks it once initialization completes.
+    if (this.isDisabled || (this._isInitialized && this.optedOut)) {
       return undefined
     }
     if (typeof event !== 'string' || event === '') {
@@ -1729,10 +1737,10 @@ export class PostHog extends PostHogCore {
     }
     const uuid = (typeof options?.uuid === 'string' ? canonicalizeUuid(options.uuid) : undefined) ?? uuidv7()
     const initialized = this._isInitialized
-    this._lastAdmittedAiUuid = undefined
-    const aiOptions: CaptureAiOptions = { ...options, uuid, _captureAi: true }
+    const admission: { uuid?: string } = {}
+    const aiOptions: CaptureAiOptions = { ...options, uuid, _captureAi: true, _admission: admission }
     this.capture(event, properties, aiOptions)
-    return initialized ? this._lastAdmittedAiUuid : uuid
+    return initialized ? admission.uuid : uuid
   }
 
   /**

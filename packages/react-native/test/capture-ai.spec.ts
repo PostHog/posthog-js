@@ -342,4 +342,84 @@ describe('React Native captureAi', () => {
 
     expect(sent(AI_PATH)).toEqual([])
   })
+
+  const newPostHogWithSlowStorage = (options: PostHogOptions = {}): PostHog => {
+    posthog = new PostHog('test-token', {
+      customStorage: {
+        ...storage,
+        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
+      },
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      captureAiCompression: 'none',
+      disableCompression: true,
+      ...options,
+    })
+    return posthog
+  }
+
+  it('sends an AI event captured before initialization when flush() is called before ready()', async () => {
+    const client = newPostHogWithSlowStorage()
+
+    client.captureAi('$ai_generation')
+    await client.flush()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
+  it('starts no more AI requests once the shutdown deadline passes', async () => {
+    const logs = (['debug', 'info', 'log', 'warn', 'error'] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => {})
+    )
+    respond = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      return { status: 200, body: { results: {} } }
+    }
+    const client = await newPostHog({ flushAt: 10 })
+    // Each event is over half the 5 MiB batch target, so they go in separate requests.
+    const threeMiB = 'x'.repeat(3 * 1024 * 1024)
+
+    try {
+      client.captureAi('$ai_generation', { blob: threeMiB })
+      client.captureAi('$ai_span', { blob: threeMiB })
+      await client.shutdown(50)
+      await new Promise((resolve) => setTimeout(resolve, 600))
+
+      expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+    } finally {
+      posthog = undefined
+      logs.forEach((spy) => spy.mockRestore())
+    }
+  })
+
+  it('returns the uuid of its own event when a capture listener calls captureAi()', async () => {
+    const client = await newPostHog({ flushAt: 10 })
+    client.on('capture', (event) => {
+      if (event.event === '$ai_generation') {
+        client.captureAi('$ai_span')
+      }
+    })
+
+    const uuid = client.captureAi('$ai_generation')
+    await client.flush()
+
+    const generation = requests.flatMap((request) => request.body.batch).find((e) => e.event === '$ai_generation')
+    expect(uuid).toBe(generation?.uuid)
+  })
+
+  it('keeps an AI event captured before a persisted opt-in has loaded', async () => {
+    const earlier = await newPostHog({ defaultOptIn: false })
+    earlier.optIn()
+    await earlier.shutdown()
+    posthog = undefined
+
+    const client = newPostHogWithSlowStorage({ defaultOptIn: false })
+    const uuid = client.captureAi('$ai_generation')
+    await client.ready()
+    await client.flush()
+
+    expect(uuid).toEqual(expect.any(String))
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
 })

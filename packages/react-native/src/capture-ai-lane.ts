@@ -161,11 +161,12 @@ export class CaptureAiLane {
 
   private async _drain(automatic: boolean): Promise<void> {
     this._clearFlushTimer()
-    if (automatic && (this._stopped || Date.now() < this._resendAt)) {
+    if (this._stopped || (automatic && Date.now() < this._resendAt)) {
       return
     }
     let remaining = this._queue().length
-    while (remaining > 0) {
+    // stop() can run while a request is in flight, when the shutdown deadline passes.
+    while (remaining > 0 && !this._stopped) {
       const batch = this._takeBatch(this._queue())
       if (batch.length === 0) {
         return
