@@ -2045,7 +2045,6 @@ export class PostHogFeatureFlags implements Extension {
                     target: 'api',
                     method: 'GET',
                     sentAt: 'query',
-                    allowWhileOptedOut: true,
                 }
             )
             if (!response.json) {

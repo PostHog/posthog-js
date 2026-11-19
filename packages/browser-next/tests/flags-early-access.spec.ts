@@ -1,6 +1,6 @@
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createPostHog } from '../src/composition/npm'
-import type { IPostHog, PostHogOptions, RemoteConfig } from '../src/core/types'
+import type { IPostHog, PostHogOptions, RemoteConfig, SendRequestInit } from '../src/core/types'
 import { flags as featureFlags } from '../src/products/flags/flags'
 import type { EarlyAccessFeature, EarlyAccessFeatureStage } from '../src/products/flags/flags-options'
 
@@ -167,12 +167,16 @@ describe('early-access feature flags', () => {
         })
     })
 
-    it('lists uncached features under consent denial', async () => {
+    it.each([
+        ['no', undefined],
+        ['empty', []],
+        ['all', ['concept', 'alpha', 'beta', 'general-availability']],
+    ] as const)('lists uncached features with %s stage filters under consent denial', async (_label, stages) => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response(JSON.stringify({ earlyAccessFeatures: definitions })))
         const client = await create({ fetch, optOutByDefault: true })
         const callback = vi.fn()
-        requireInstalledExtension(client.featureFlags).getEarlyAccessFeatures(callback)
+        requireInstalledExtension(client.featureFlags).getEarlyAccessFeatures(callback, true, stages && [...stages])
         await vi.advanceTimersByTimeAsync(0)
         expect(fetch).toHaveBeenCalledOnce()
         expect(callback).toHaveBeenCalledWith(definitions)
@@ -334,26 +338,29 @@ describe('early-access feature flags', () => {
     })
 })
 
-describe('opted-out request permission', () => {
-    it('dispatches only explicitly permitted requests while opted out', async () => {
-        const fetch = vi.fn(async () => new Response('{}'))
+describe('opted-out early-access catalogue requests', () => {
+    const catalogue = '/api/early_access_features/?token=ph_early_access_test&stage=beta&stage=general-availability'
+
+    it('sends the fixed catalogue request while opted out', async () => {
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ earlyAccessFeatures: definitions })))
         const client = await create({ fetch, flags: false, optOutByDefault: true })
-        expect((await client.sendRequest('/api/early_access_features/')).statusCode).toBe(0)
-        expect(fetch).not.toHaveBeenCalled()
-        expect((await client.sendRequest('/api/early_access_features/', { allowWhileOptedOut: true })).statusCode).toBe(
-            200
-        )
+        const response = await client.sendRequest(catalogue, { target: 'api', method: 'GET', sentAt: 'query' })
+        expect(response.statusCode).toBe(200)
         expect(fetch).toHaveBeenCalledOnce()
     })
 
     it.each([
-        ['a POST', { method: 'POST' }],
-        ['a request body', { body: { distinct_id: 'person' } }],
-    ] as const)('ignores the permission for %s', async (_label, init) => {
+        ['another path', '/api/surveys/', {}],
+        ['an extra query field', `${catalogue}&distinct_id=person`, {}],
+        ['an unknown stage', '/api/early_access_features/?token=ph_early_access_test&stage=person', {}],
+        ['query options', catalogue, { query: { distinct_id: 'person' } }],
+        ['headers', catalogue, { headers: { 'X-Person': 'person' } }],
+        ['a POST', catalogue, { method: 'POST' }],
+        ['a request body', catalogue, { body: { distinct_id: 'person' } }],
+    ] as const)('applies capture consent to %s', async (_label, path, init) => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, flags: false, optOutByDefault: true })
-        const response = await client.sendRequest('/api/early_access_features/', { ...init, allowWhileOptedOut: true })
-        expect(response.statusCode).toBe(0)
+        expect((await client.sendRequest(path, init as SendRequestInit)).statusCode).toBe(0)
         expect(fetch).not.toHaveBeenCalled()
     })
 })

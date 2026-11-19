@@ -76,11 +76,6 @@ export type RequestTransport = 'XHR' | 'fetch' | 'sendBeacon'
 export interface SendRequestInit {
     /** Configured host to send through; defaults to the regular API host. */
     target?: RequestTarget
-    /**
-     * Dispatch this request while capture is opted out. Use only for requests that carry no person data.
-     * Hosts may honor it only for body-less GET requests. Defaults to false; other restrictions still apply.
-     */
-    allowWhileOptedOut?: boolean
     /** HTTP method to use; the host transport's default applies when omitted. */
     method?: 'GET' | 'POST'
     /** JSON-serialized by the client. */
