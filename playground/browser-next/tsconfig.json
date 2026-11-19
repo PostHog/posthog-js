@@ -19,7 +19,7 @@
         "baseUrl": ".",
         "paths": {
             "@posthog/browser": ["../../packages/browser-next/src/composition/npm/index.ts"],
-            "@posthog/browser/analytics": ["../../packages/browser-next/src/products/analytics/analytics.ts"]
+            "@posthog/browser/groups": ["../../packages/browser-next/src/products/analytics/groups.ts"]
         }
     },
     "include": ["src", "vite.config.ts"]

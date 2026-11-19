@@ -7,9 +7,9 @@ export default defineConfig({
     resolve: {
         alias: [
             {
-                find: '@posthog/browser/analytics',
+                find: '@posthog/browser/groups',
                 replacement: fileURLToPath(
-                    new URL('../../packages/browser-next/src/products/analytics/analytics.ts', import.meta.url)
+                    new URL('../../packages/browser-next/src/products/analytics/groups.ts', import.meta.url)
                 ),
             },
             {
