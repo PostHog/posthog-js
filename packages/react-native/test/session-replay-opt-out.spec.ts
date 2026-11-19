@@ -608,7 +608,7 @@ describe('PostHog RN session replay follows consent', () => {
     expect(nativeRecording).toBe(false)
   })
 
-  it('leaves replay the app stopped off on opt-in even after a linked flag restarted it', async () => {
+  it('leaves replay the app stopped off across linked flag reloads and on opt-in', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
     await warmCache()
@@ -621,7 +621,8 @@ describe('PostHog RN session replay follows consent', () => {
     await posthog.reloadFeatureFlagsAsync()
     currentFlags = { 'replay-flag': true }
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(nativeRecording).toBe(false)
     mockNativeOptInRestartsRecorder()
 
     await posthog.optOut()

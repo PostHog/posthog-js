@@ -3836,15 +3836,18 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    // The app stopped replay, so it stays stopped: undo the restart posthog-ios optIn() makes when it
-    // reinstalls its integrations, unless the app has started a recording since.
-    if (freshSession && !this._sessionReplayWanted && !this._sessionReplayStartedByApp) {
-      if (this._sessionReplayNativeInitialized) {
+    // The app stopped replay, so it stays stopped until it starts it again, whatever the gates say.
+    // Also undoes the restart native optIn() makes when it reinstalls its integrations. Once
+    // marked stopped, later reloads skip the native stop.
+    if (this._isReplayExplicitlyStopped()) {
+      if (this._sessionReplayNativeInitialized && (freshSession || this._sessionReplayRecordingActive !== false)) {
         await this._stopSessionRecording(true)
       }
-      // As after a stop made while opted in, so a later flags reload leaves it stopped. Opt-out cleared
-      // this if the app stopped replay during an unawaited optIn().
-      this._sessionReplayRecordingActive = true
+      this._sessionReplayRecordingActive = false
+      this._sessionReplayStartFailed = false
+      if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
+        await this.initializeNativePlugin(options, remoteConfig, false)
+      }
       return
     }
 
@@ -3896,6 +3899,11 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  // Set by stopSessionRecording(), cleared by startSessionRecording().
+  private _isReplayExplicitlyStopped(): boolean {
+    return !this._sessionReplayWanted && !this._sessionReplayStartedByApp
   }
 
   // Runs on _sessionReplayEvalChain. Resumes the current session, which optIn() or reset() already
@@ -4103,6 +4111,10 @@ export class PostHog extends PostHogCore {
 
   private _maybeActivateTriggerGroups(eventName: unknown, eventProperties: unknown): void {
     if (this._sessionReplayTriggerGroups === null || typeof eventName !== 'string') {
+      return
+    }
+    // A stopped recording activates nothing until the app starts it again.
+    if (this._isReplayExplicitlyStopped()) {
       return
     }
     // super.getSessionId() for the same reason as _maybeActivateEventTrigger: the capture path
