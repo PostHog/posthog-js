@@ -1,6 +1,11 @@
 import { record } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
-import type { SessionContext, SessionRecordingPersistedConfig, SessionStartReason } from '@posthog/browser-common'
+import type {
+    CapturedEventInfo,
+    SessionContext,
+    SessionRecordingPersistedConfig,
+    SessionStartReason,
+} from '@posthog/browser-common'
 import { buildNetworkRequestOptions } from '@posthog/browser-common/replay/network-config'
 import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/network-plugin'
 import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
@@ -103,6 +108,8 @@ export interface RecorderHost {
     /** Whether the project accepts gzip request bodies. */
     gzipEnabled(): boolean
     documentWasEverVisible(): boolean
+    /** Events admitted before the recorder first started. Later calls return none. */
+    takeEarlyEvents(): readonly CapturedEventInfo[]
 }
 
 const recordFunction = record as unknown as RrwebRecord
@@ -265,8 +272,10 @@ export class SessionRecorder {
         this._strategy.onRemoteConfig(config)
 
         this._removeEventTriggerListener?.()
+        let checkEventTriggers: ((event: CaptureResult) => void) | undefined
         this._removeEventTriggerListener = this._strategy.setupEventTriggerListeners(
             (callback) => {
+                checkEventTriggers = callback
                 const subscription = this._client.onEvent((info) => callback(info as unknown as CaptureResult))
                 return () => subscription.dispose()
             },
@@ -286,6 +295,12 @@ export class SessionRecorder {
         this._listen()
         if (this.status === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
+        }
+        // events captured while the recorder loaded can still activate this session's event triggers
+        for (const event of this._host.takeEarlyEvents()) {
+            if (event.properties.$session_id === this._sessionId) {
+                checkEventTriggers?.(event as unknown as CaptureResult)
+            }
         }
     }
 
