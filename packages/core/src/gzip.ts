@@ -98,7 +98,7 @@ const CRC_VALIDATED_COMPRESSIONS_BEFORE_TRUST = 3
 let crcValidatedCompressions = 0
 
 /** @internal */
-export const resetNativeGzipTrustForTests = (): void => {
+export const __resetNativeGzipTrustForTests = (): void => {
   crcValidatedCompressions = 0
 }
 

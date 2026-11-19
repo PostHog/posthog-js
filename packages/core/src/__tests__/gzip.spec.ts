@@ -5,7 +5,7 @@ import {
   isGzipRequest,
   isNativeAsyncGzipError,
   isNativeAsyncGzipReadError,
-  resetNativeGzipTrustForTests,
+  __resetNativeGzipTrustForTests,
 } from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -161,80 +161,58 @@ describe('gzip', () => {
       }
     })
 
-    it('rejects malformed native gzip output when no stream error is thrown', async () => {
+    const withNativeOutput = async (output: Uint8Array, run: () => Promise<void>): Promise<void> => {
       const CompressionStream = globalThis.CompressionStream
-
       ;(globalThis as any).CompressionStream = vi.fn(() => ({
-        writable: {
-          getWriter: () => ({
-            write: vi.fn(() => Promise.resolve()),
-            close: vi.fn(() => Promise.resolve()),
-            abort: vi.fn(() => Promise.resolve()),
-          }),
-        },
+        writable: new WritableStream(),
         readable: new ReadableStream({
           start(controller) {
-            controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+            controller.enqueue(output)
             controller.close()
           },
         }),
       }))
-
       try {
-        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).rejects.toHaveProperty(
-          'name',
-          'NativeGzipValidationError'
-        )
+        await run()
       } finally {
         ;(globalThis as any).CompressionStream = CompressionStream
       }
+    }
+
+    const expectValidationError = (result: Promise<unknown>): Promise<void> =>
+      expect(result).rejects.toHaveProperty('name', 'NativeGzipValidationError')
+
+    const nodeGzipWithFlippedTrailerByte = async (offsetFromEnd: 8 | 4): Promise<Uint8Array> => {
+      const bytes = new Uint8Array(await promisify(gzip)(API_TEST_INPUT))
+      bytes[bytes.length - offsetFromEnd] ^= 0xff
+      return bytes
+    }
+
+    it('rejects malformed native gzip output when no stream error is thrown', async () => {
+      await withNativeOutput(new Uint8Array([1, 2, 3, 4]), () =>
+        expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
+      )
     })
 
-    describe('native output trust', () => {
-      const withNativeOutput = async (output: Uint8Array, run: () => Promise<void>): Promise<void> => {
-        const CompressionStream = globalThis.CompressionStream
-        ;(globalThis as any).CompressionStream = vi.fn(() => ({
-          writable: new WritableStream(),
-          readable: new ReadableStream({
-            start(controller) {
-              controller.enqueue(output)
-              controller.close()
-            },
-          }),
-        }))
-        try {
-          await run()
-        } finally {
-          ;(globalThis as any).CompressionStream = CompressionStream
-        }
+    it('stops checking the crc once native gzip has passed it, but keeps checking the size', async () => {
+      __resetNativeGzipTrustForTests()
+      const badCrc = await nodeGzipWithFlippedTrailerByte(8)
+      const badSize = await nodeGzipWithFlippedTrailerByte(4)
+
+      await withNativeOutput(badCrc, () =>
+        expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
+      )
+
+      for (let i = 0; i < 3; i++) {
+        await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
       }
 
-      const nodeGzip = async (input: string, corrupt: 'crc' | 'size'): Promise<Uint8Array> => {
-        const bytes = new Uint8Array(await promisify(gzip)(input))
-        bytes[bytes.length - (corrupt === 'crc' ? 8 : 4)] ^= 0xff
-        return bytes
-      }
-
-      beforeEach(() => resetNativeGzipTrustForTests())
-
-      it.each([
-        ['a corrupt crc before native gzip is trusted', 'crc', 0, true],
-        ['a corrupt crc after native gzip is trusted', 'crc', 3, false],
-        ['a wrong size after native gzip is trusted', 'size', 3, true],
-      ] as const)('%s', async (_name, corrupt, priorCompressions, rejects) => {
-        for (let i = 0; i < priorCompressions; i++) {
-          await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
-        }
-
-        await withNativeOutput(await nodeGzip(API_TEST_INPUT, corrupt), async () => {
-          const result = gzipCompress(API_TEST_INPUT, false, { rethrow: true })
-          if (rejects) {
-            await expect(result).rejects.toHaveProperty('name', 'NativeGzipValidationError')
-          } else {
-            await expect(result).resolves.not.toBeNull()
-          }
-        })
+      await withNativeOutput(badCrc, async () => {
+        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).resolves.not.toBeNull()
       })
+      await withNativeOutput(badSize, () =>
+        expectValidationError(gzipCompress(API_TEST_INPUT, false, { rethrow: true }))
+      )
     })
 
     it('compressed random data should match node', async () => {
