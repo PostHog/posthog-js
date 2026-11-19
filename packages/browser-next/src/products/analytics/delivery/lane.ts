@@ -32,6 +32,8 @@ export class Lane<E> {
     private _driveEpoch = 0
     private _activeEpoch = 0
     private _forceTarget: number | undefined
+    /** The last event an immediate flush covered; it survives one failed drain until those events are attempted. */
+    private _immediateTarget: number | undefined
 
     constructor(
         private readonly _buffer: EventBuffer<E>,
@@ -47,6 +49,7 @@ export class Lane<E> {
             } else if (change === 'purge') {
                 this._retryBlocked = false
                 this._forceTarget = undefined
+                this._immediateTarget = undefined
                 this._clearTimer()
                 this._cancelActive()
             } else {
@@ -74,7 +77,11 @@ export class Lane<E> {
         this._schedule()
     }
 
-    flush(): Promise<void> {
+    /**
+     * Drives delivery through the events queued now. With `immediate`, a failure of an earlier batch does not
+     * cancel the first attempt of those events: one more drain is forced for them.
+     */
+    flush(immediate = false): Promise<void> {
         this._buffer._expireQueue(this._buffer._now())
         const attached = this._delivery
         if (
@@ -89,6 +96,7 @@ export class Lane<E> {
         this._retryBlocked = false
         this._clearTimer()
         this._forceTarget = Math.max(this._forceTarget ?? 0, target)
+        if (immediate) this._immediateTarget = target
         const epoch = this._drain ? this._activeEpoch : this._beginDrive(true)
         if (!epoch) {
             return Promise.resolve()
@@ -202,9 +210,20 @@ export class Lane<E> {
         if (this._forceTarget !== undefined && this._settledId >= this._forceTarget) {
             this._forceTarget = undefined
         }
+        if (this._immediateTarget !== undefined && this._settledId >= this._immediateTarget) {
+            this._immediateTarget = undefined
+        }
         if (!this._drain) {
             this._resolveFlushWaiters(false)
         }
+    }
+
+    private _takeUnattemptedImmediateTarget(): number | undefined {
+        const target = this._immediateTarget
+        this._immediateTarget = undefined
+        return target !== undefined && this._buffer._queue.some((entry) => entry[0] <= target && entry[4] === 0)
+            ? target
+            : undefined
     }
 
     private _reportError(error: unknown): void {
@@ -457,7 +476,7 @@ export class Lane<E> {
                         if (completionGeneration === this._buffer._generation) {
                             this._trimQueue()
                             this._retryBlocked = true
-                            this._forceTarget = undefined
+                            this._forceTarget = this._takeUnattemptedImmediateTarget()
                             this._updateSettled()
                         }
                     } else {
