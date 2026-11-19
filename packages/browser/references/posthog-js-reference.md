@@ -4005,23 +4005,24 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 
 ### `FeatureFlagsConfig`
 
-| Property | Modifier | Type |
-| ------ | ------ | ------ |
-| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` |
-| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> |
-| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> |
-| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` |
-| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` |
-| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` |
-| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] |
-| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` |
-| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] |
-| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` |
-| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` |
-| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` |
-| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` |
-| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` |
-| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` |
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` | - |
+| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> | - |
+| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> | - |
+| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` | - |
+| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` | - |
+| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` | - |
+| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Events still report the bootstrapped payload as supplied. |
+| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] | - |
+| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] | - |
+| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` | - |
+| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` | - |
+| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` | - |
+| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` | - |
+| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` | - |
 
 ### `FeatureFlagsConfigSource`
 

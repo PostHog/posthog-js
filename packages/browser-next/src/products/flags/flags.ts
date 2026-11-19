@@ -26,11 +26,9 @@ const serializePayloads = (payloads: Readonly<Record<string, JsonType>>): Record
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
-    const bootstrap = snapshot.bootstrap ?? {}
     const config: { -readonly [Key in keyof FeatureFlagsConfig]: FeatureFlagsConfig[Key] } = {
-        bootstrap: bootstrap.featureFlagPayloads
-            ? { ...bootstrap, featureFlagPayloads: serializePayloads(bootstrap.featureFlagPayloads) }
-            : bootstrap,
+        bootstrap: snapshot.bootstrap ?? {},
+        encodeBootstrapPayloads: true,
         remoteRequestsDisabled: false,
         featureFlagsDisabled: snapshot.featureFlagEvaluation === false,
         onlyEvaluateSurveyFeatureFlags: snapshot.onlyEvaluateSurveyFeatureFlags ?? false,

@@ -646,3 +646,24 @@ it('returns bootstrapped payloads with their original types', async () => {
         expect(flags.getFeatureFlag(result.key, { sendFeatureFlagEvent: false })).toEqual(result)
     }
 })
+
+it('reports bootstrapped payloads as supplied on flag calls', async () => {
+    const client = await create({
+        flags: {
+            featureFlagEvaluation: false,
+            bootstrap: {
+                featureFlags: { sku: true, healthy: true },
+                featureFlagPayloads: { sku: '123', healthy: { ok: true } },
+            },
+        },
+    })
+    const flags = requireInstalled(client.featureFlags)
+    const captured = vi.fn()
+    client.onEvent(captured)
+    flags.getFeatureFlag('sku')
+    flags.getFeatureFlag('healthy')
+    expect(captured.mock.calls.map(([event]) => event.properties.$feature_flag_bootstrapped_payload)).toEqual([
+        '123',
+        { ok: true },
+    ])
+})

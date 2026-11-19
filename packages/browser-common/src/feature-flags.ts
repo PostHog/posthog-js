@@ -762,7 +762,9 @@ export class PostHogFeatureFlags implements Extension {
             const featureFlagPayloads = Object.keys(bootstrapPayloads)
                 .filter((key) => featureFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
-                    res[key] = bootstrapPayloads[key]
+                    res[key] = config.encodeBootstrapPayloads
+                        ? JSON.stringify(bootstrapPayloads[key])
+                        : bootstrapPayloads[key]
                     return res
                 }, {})
 
