@@ -156,6 +156,11 @@ export class WebVitalsAutocapture implements Extension {
         this._client = undefined
     }
 
+    /** Discard metrics that are buffered but not yet captured. */
+    clearPendingMetrics(): void {
+        this._clearBuffer()
+    }
+
     private get _perfConfig(): PostHogConfig['capture_performance'] {
         return this._options.getConfig().capture_performance
     }
