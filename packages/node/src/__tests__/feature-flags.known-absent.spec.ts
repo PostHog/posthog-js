@@ -151,6 +151,26 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()[0]).not.toHaveProperty('person_property_keys_known_absent')
     })
 
+    it('do not find an entry for a group type named like an Object.prototype member', async () => {
+      setup({
+        flags: [
+          flag('org-flag', [{ key: 'tier', type: 'group', group_type_index: 0, operator: 'exact', value: 'gold' }], {
+            aggregation_group_type_index: 0,
+          }),
+        ],
+        group_type_mapping: { '0': 'constructor' },
+      })
+
+      expect(
+        await posthog.getFeatureFlag('org-flag', 'user', {
+          groups: { constructor: 'acme' },
+          groupProperties: { constructor: { tier: 'gold' } },
+          groupPropertyKeysKnownAbsent: {},
+        })
+      ).toBe(true)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
     it('apply in mixed group conditions of a person flag', async () => {
       setup({
         flags: [
@@ -250,6 +270,35 @@ describe('known-absent property keys', () => {
       for (const body of flagsRequests()) {
         expect(body.person_property_keys_known_absent).toEqual(['plan'])
       }
+    })
+
+    it('sends a __proto__ group type as a normal key', async () => {
+      setup(inconclusive, { flag: 'remote' })
+
+      await posthog.getFeatureFlag('flag', 'user', {
+        groupPropertyKeysKnownAbsent: JSON.parse('{"__proto__": ["tier"]}'),
+      })
+      const sent = flagsRequests()[0].group_property_keys_known_absent
+      expect(Object.keys(sent)).toEqual(['__proto__'])
+      expect(sent['__proto__']).toEqual(['tier'])
+    })
+
+    it('sends the keys as they were when evaluation started', async () => {
+      setup(inconclusive, { flag: 'remote' })
+      const personKeys = ['plan']
+      const organizationKeys = ['tier']
+
+      const result = posthog.getFeatureFlag('flag', 'user', {
+        personPropertyKeysKnownAbsent: personKeys,
+        groupPropertyKeysKnownAbsent: { organization: organizationKeys },
+      })
+      personKeys.push('email')
+      organizationKeys.push('size')
+      expect(await result).toBe('remote')
+      expect(flagsRequests()[0]).toMatchObject({
+        person_property_keys_known_absent: ['plan'],
+        group_property_keys_known_absent: { organization: ['tier'] },
+      })
     })
 
     it('omits the fields when nothing was listed', async () => {

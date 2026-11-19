@@ -436,7 +436,13 @@ function readKnownAbsentPropertyKeys(options: {
   personPropertyKeysKnownAbsent?: string[]
   groupPropertyKeysKnownAbsent?: Record<string, string[]>
 }): KnownAbsentPropertyKeys {
-  const { personPropertyKeysKnownAbsent, groupPropertyKeysKnownAbsent } = options
+  // Copies, so the keys sent to `/flags` are the ones validated and used locally.
+  const personPropertyKeysKnownAbsent = options.personPropertyKeysKnownAbsent?.slice()
+  const groupPropertyKeysKnownAbsent = options.groupPropertyKeysKnownAbsent
+    ? Object.fromEntries(
+        Object.entries(options.groupPropertyKeysKnownAbsent).map(([groupType, keys]) => [groupType, keys.slice()])
+      )
+    : undefined
   const result: KnownAbsentPropertyKeys = {
     request: { personPropertyKeysKnownAbsent, groupPropertyKeysKnownAbsent },
   }
@@ -447,15 +453,17 @@ function readKnownAbsentPropertyKeys(options: {
     result.person = new Set(personPropertyKeysKnownAbsent.filter((key) => !key.startsWith(PERSON_METADATA_KEY_PREFIX)))
   }
   if (groupPropertyKeysKnownAbsent) {
-    result.groups = {}
+    // No prototype, so a group type such as `constructor` has no inherited entry.
+    const groups: Record<string, ReadonlySet<string>> = Object.create(null)
     for (const [groupType, keys] of Object.entries(groupPropertyKeysKnownAbsent)) {
       if (keys.length > MAX_KNOWN_ABSENT_PROPERTY_KEYS) {
         throw new Error(
           `groupPropertyKeysKnownAbsent allows at most ${MAX_KNOWN_ABSENT_PROPERTY_KEYS} keys per group type`
         )
       }
-      result.groups[groupType] = new Set(keys)
+      groups[groupType] = new Set(keys)
     }
+    result.groups = groups
   }
   return result
 }

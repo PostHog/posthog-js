@@ -1147,12 +1147,12 @@ export abstract class PostHogCoreStateless {
     if (personKeysKnownAbsent && personKeysKnownAbsent.length > 0) {
       extraPayload['person_property_keys_known_absent'] = [...personKeysKnownAbsent]
     }
-    const groupKeysKnownAbsent: Record<string, string[]> = {}
-    for (const [groupType, keys] of Object.entries(knownAbsentPropertyKeys?.groupPropertyKeysKnownAbsent ?? {})) {
-      if (keys && keys.length > 0) {
-        groupKeysKnownAbsent[groupType] = [...keys]
-      }
-    }
+    // fromEntries keeps a group type such as `__proto__` as a normal key.
+    const groupKeysKnownAbsent: Record<string, string[]> = Object.fromEntries(
+      Object.entries(knownAbsentPropertyKeys?.groupPropertyKeysKnownAbsent ?? {})
+        .filter(([, keys]) => keys && keys.length > 0)
+        .map(([groupType, keys]) => [groupType, [...keys]])
+    )
     if (Object.keys(groupKeysKnownAbsent).length > 0) {
       extraPayload['group_property_keys_known_absent'] = groupKeysKnownAbsent
     }
