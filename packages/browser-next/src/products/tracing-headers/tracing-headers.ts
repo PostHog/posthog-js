@@ -1,7 +1,7 @@
 import { patchFetch, patchXHR } from '@posthog/browser-common/utils/tracing-headers'
 import type { TracingHeadersSession } from '@posthog/browser-common/utils/tracing-headers'
 import type { BrowserExtension } from '../../core/context/browser-client'
-import type { IPostHog } from '../../core/types'
+import type { IPostHog, NewSessionReason } from '../../core/types'
 import { analyticsOf } from '../analytics/analytics-core'
 import { snapshotTracingHeadersOptions, type TracingHeadersOptions } from './tracing-headers-options'
 
@@ -18,13 +18,22 @@ const readSession = (client: IPostHog): TracingHeadersSession | undefined => {
     const analytics = analyticsOf(client)
     const state = analytics?._core._state
     if (!state) return undefined
-    const current = state.peekSession()
+    const previous = state.session
+    let current = state.peekSession()
+    let reason: NewSessionReason | undefined
     // Like posthog-js, a session past its maximum length rotates even on a read-only check.
-    if (current && Date.now() - current.sessionStartTimestamp <= MAX_SESSION_LENGTH) return current
-    const prepared = state.prepareSessionForEvent()
-    if (!state.sessionAdmitted(prepared)) return state.peekSession()
-    if (prepared.reason) analytics._newSessionPublisher.publish({ ...prepared.context, reason: prepared.reason })
-    return prepared.context
+    if (!(current && Date.now() - current.sessionStartTimestamp <= MAX_SESSION_LENGTH)) {
+        const prepared = state.prepareSessionForEvent()
+        if (state.sessionAdmitted(prepared)) {
+            current = prepared.context
+            reason = prepared.reason
+        } else {
+            current = state.peekSession()
+        }
+    }
+    // Reading can commit a session or this tab's window ID, so notify observers as capture would have.
+    analytics._publishSessionCommit(previous, state.session, reason)
+    return current
 }
 
 /**
