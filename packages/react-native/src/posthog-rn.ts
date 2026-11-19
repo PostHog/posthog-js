@@ -509,6 +509,8 @@ export class PostHog extends PostHogCore {
   private _captureResendCount = 0
   private _captureResendAt = 0
   private _captureResendTimer?: ReturnType<typeof setTimeout>
+  // Set once shutdown() returns, so a capture response that lands later schedules no resend.
+  private _captureShutDown = false
 
   /**
    * The project token the client was created with.
@@ -933,6 +935,7 @@ export class PostHog extends PostHogCore {
         this._captureResendTimer = undefined
       }
       this._captureResendAt = 0
+      this._captureShutDown = true
       this._replayDebugBundleAcceptedAt = undefined
       this._replayDebugBundleClaimed = false
       this._errorTracking.shutdown()
@@ -1050,6 +1053,9 @@ export class PostHog extends PostHogCore {
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
+    if (this._captureShutDown) {
+      return
+    }
     const maxWaitMs = 30_000
     const jitter = 0.75 + 0.5 * Math.random()
     const backoffMs = Math.min(1000 * 2 ** this._captureResendCount * jitter, maxWaitMs)
