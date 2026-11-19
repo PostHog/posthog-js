@@ -187,6 +187,17 @@ describe('manual exception capture', () => {
         expect(fromObject.$exception_list[0].value).toContain('object message')
     })
 
+    it('ends the stack synthesized for a non-Error value at the application caller', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+        const reportFromApp = () => tracking.captureException('plain message')
+
+        reportFromApp()
+
+        const [properties] = await exceptions(posthog, sent)
+        expect(properties.$exception_list[0].stacktrace.frames.at(-1).function).toBe('reportFromApp')
+    })
+
     it('keeps every frame of a supplied stack that starts with a frame', async () => {
         const sent: CapturedEvent[] = []
         const { posthog, tracking } = await createWith(sent)
