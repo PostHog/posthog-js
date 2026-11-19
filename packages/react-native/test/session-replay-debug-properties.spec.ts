@@ -383,6 +383,53 @@ describe('PostHog RN session replay debug properties', () => {
     expect(activated.$recording_status).toBe('active')
   })
 
+  it('Under v2 pending trigger conditions name the pending group legs, never the v1 conditions', async () => {
+    currentSessionRecording = {
+      version: 2,
+      linkedFlag: 'v1-flag',
+      eventTriggers: ['$pageview'],
+      triggerGroups: [
+        {
+          id: 'g1',
+          name: 'Checkout',
+          sampleRate: 1,
+          conditions: {
+            matchType: 'all',
+            events: [{ name: 'purchase' }],
+            flag: { flag: 'replay-flag' },
+          },
+        },
+      ],
+      endpoint: '/s/',
+    }
+    currentFlags = { 'replay-flag': false, 'v1-flag': false }
+    await warmup()
+
+    const client = await readyClient({ enableSessionReplay: true })
+    const pending = captureOne(client, '$screen').properties
+    expect(pending.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
+    expect(pending.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+      'trigger group "Checkout": event condition not matched',
+      'trigger group "Checkout": linked flag condition not matched',
+    ])
+
+    client.capture('purchase')
+    await wait(50)
+    await waitForNativePluginEvaluation(client)
+    advanceClock(30_000)
+    expect(captureOne(client, '$screen').properties.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+      'trigger group "Checkout": linked flag condition not matched',
+    ])
+
+    currentFlags = { 'replay-flag': true, 'v1-flag': false }
+    await reloadAndSettle(client)
+    advanceClock(30_000)
+    const recording = captureOne(client, '$screen').properties
+    expect(recording.$sdk_debug_replay_capture_mode).toBe('screenshot')
+    expect(recording.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
+    expect(recording.$recording_status).toBe('active')
+  })
+
   it('Debug values win over same-named caller or registered properties', async () => {
     const client = await readyClient()
     client.register({ $recording_status: 'registered', $sdk_debug_session_start: 'registered' })
@@ -577,7 +624,7 @@ describe('PostHog RN session replay debug properties', () => {
       expect(properties.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
     })
 
-    it('names pending trigger groups as a pending condition until one records, like posthog-ios', async () => {
+    it('names the pending trigger group legs until one records', async () => {
       currentSessionRecording = {
         version: 2,
         triggerGroups: [
@@ -595,7 +642,9 @@ describe('PostHog RN session replay debug properties', () => {
       const client = await readyClient({ enableSessionReplay: true })
       const waiting = captureOne(client, '$screen').properties
       expect(waiting.$recording_status).toBe('disabled')
-      expect(waiting.$sdk_debug_replay_pending_trigger_conditions).toEqual(['trigger_groups'])
+      expect(waiting.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+        'trigger group "Purchases": event condition not matched',
+      ])
 
       client.capture('purchase')
       await waitForNativePluginEvaluation(client)

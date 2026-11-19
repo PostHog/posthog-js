@@ -424,35 +424,71 @@ export class SessionReplayTriggerGroupsEvaluator {
     return { shouldRecord, hasPendingGroups, minDurationMs, groupsCount: this.groups.length, matchedGroups }
   }
 
+  // Read-only: describes the legs keeping groups pending, as `trigger group "<name>": <condition>`,
+  // while no group records the session.
+  pendingConditions(sessionId: string, flags: Record<string, FeatureFlagValue> | null | undefined): string[] {
+    const activatedSession = this.activationSessionId === sessionId
+    const pending: string[] = []
+    for (const group of this.groups) {
+      const legs = this.legStatuses(group, flags, activatedSession)
+      const status = combineLegs(group, legs)
+      if (status === TriggerStatus.ACTIVATED && this.peekSamplingDecision(group, sessionId)) {
+        return []
+      }
+      if (status !== TriggerStatus.PENDING || legs === null) {
+        continue
+      }
+      // Screens stand in for the url leg. Order: url, event, flag.
+      const labels: [TriggerStatus, string][] = [
+        [legs.screen, 'URL condition not matched'],
+        [legs.event, 'event condition not matched'],
+        [legs.flag, 'linked flag condition not matched'],
+      ]
+      for (const [legStatus, label] of labels) {
+        if (legStatus === TriggerStatus.PENDING) {
+          pending.push(`trigger group "${group.name}": ${label}`)
+        }
+      }
+    }
+    return pending
+  }
+
   private groupStatus(
     group: SessionReplayTriggerGroup,
     flags: Record<string, FeatureFlagValue> | null | undefined,
     activatedSession: boolean
   ): TriggerStatus {
+    return combineLegs(group, this.legStatuses(group, flags, activatedSession))
+  }
+
+  // null for a group with no conditions, which records every session it samples in.
+  private legStatuses(
+    group: SessionReplayTriggerGroup,
+    flags: Record<string, FeatureFlagValue> | null | undefined,
+    activatedSession: boolean
+  ): TriggerLegStatuses | null {
     const conditions = group.conditions
     const hasEvents = conditions.hasEventsLeg ?? conditions.events.length > 0
     const hasUrls = conditions.hasUrlsLeg ?? conditions.urls.length > 0
     const hasFlag = conditions.hasFlagLeg ?? conditions.flag !== null
 
     if (!hasEvents && !hasUrls && !hasFlag) {
-      return TriggerStatus.ACTIVATED
+      return null
     }
 
-    const eventLeg = !hasEvents
-      ? TriggerStatus.DISABLED
-      : activatedSession && this.eventActivatedGroupIds.has(group.id)
-        ? TriggerStatus.ACTIVATED
-        : TriggerStatus.PENDING
-    const screenLeg = !hasUrls
-      ? TriggerStatus.DISABLED
-      : activatedSession && this.screenActivatedGroupIds.has(group.id)
-        ? TriggerStatus.ACTIVATED
-        : TriggerStatus.PENDING
-    const flagLeg = hasFlag ? this.flagLegStatus(conditions.flag, flags) : TriggerStatus.DISABLED
-
-    return conditions.matchType === 'any'
-      ? orTriggerStatus(eventLeg, screenLeg, flagLeg)
-      : andTriggerStatus(eventLeg, screenLeg, flagLeg)
+    return {
+      event: !hasEvents
+        ? TriggerStatus.DISABLED
+        : activatedSession && this.eventActivatedGroupIds.has(group.id)
+          ? TriggerStatus.ACTIVATED
+          : TriggerStatus.PENDING,
+      screen: !hasUrls
+        ? TriggerStatus.DISABLED
+        : activatedSession && this.screenActivatedGroupIds.has(group.id)
+          ? TriggerStatus.ACTIVATED
+          : TriggerStatus.PENDING,
+      flag: hasFlag ? this.flagLegStatus(conditions.flag, flags) : TriggerStatus.DISABLED,
+    }
   }
 
   private flagLegStatus(
@@ -502,16 +538,18 @@ export class SessionReplayTriggerGroupsEvaluator {
   }
 
   private samplingDecision(group: SessionReplayTriggerGroup, sessionId: string): boolean {
+    const sampled = this.peekSamplingDecision(group, sessionId)
+    this.samplingDecisions.set(group.id, { sessionId, sampleRate: group.sampleRate, sampled })
+    return sampled
+  }
+
+  private peekSamplingDecision(group: SessionReplayTriggerGroup, sessionId: string): boolean {
     const stored = this.samplingDecisions.get(group.id)
     if (stored && stored.sessionId === sessionId && stored.sampleRate === group.sampleRate) {
       return stored.sampled
     }
-
     // A missing rate samples in, like the web clamp fallback.
-    const sampled = group.sampleRate !== null ? sampleOnTriggerProperty(sessionId + group.id, group.sampleRate) : true
-
-    this.samplingDecisions.set(group.id, { sessionId, sampleRate: group.sampleRate, sampled })
-    return sampled
+    return group.sampleRate !== null ? sampleOnTriggerProperty(sessionId + group.id, group.sampleRate) : true
   }
 
   private resetActivationForNewSession(sessionId: string): void {
@@ -521,6 +559,21 @@ export class SessionReplayTriggerGroupsEvaluator {
       this.screenActivatedGroupIds.clear()
     }
   }
+}
+
+type TriggerLegStatuses = {
+  event: TriggerStatus
+  screen: TriggerStatus
+  flag: TriggerStatus
+}
+
+function combineLegs(group: SessionReplayTriggerGroup, legs: TriggerLegStatuses | null): TriggerStatus {
+  if (legs === null) {
+    return TriggerStatus.ACTIVATED
+  }
+  return group.conditions.matchType === 'any'
+    ? orTriggerStatus(legs.event, legs.screen, legs.flag)
+    : andTriggerStatus(legs.event, legs.screen, legs.flag)
 }
 
 type StoredSamplingDecision = {

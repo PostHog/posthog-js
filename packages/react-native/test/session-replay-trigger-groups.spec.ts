@@ -761,4 +761,78 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
     expect(evaluator.evaluate('s1', null, undefined).shouldRecord).toBe(false)
     expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(true)
   })
+
+  describe('pendingConditions', () => {
+    const allLegs = conditions({
+      events: [{ name: 'purchase', properties: [] }],
+      urls: [/^Checkout$/],
+      flag: { flag: 'replay-flag', variant: null },
+    })
+
+    it('names every pending leg of a pending group, in url, event, flag order', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([group({ name: 'Checkout', conditions: allLegs })])
+
+      expect(evaluator.pendingConditions('s1', { 'replay-flag': false })).toEqual([
+        'trigger group "Checkout": URL condition not matched',
+        'trigger group "Checkout": event condition not matched',
+        'trigger group "Checkout": linked flag condition not matched',
+      ])
+    })
+
+    it('drops the legs that have matched', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([group({ name: 'Checkout', conditions: allLegs })])
+      evaluator.onEvent('s1', 'purchase', undefined, undefined)
+
+      expect(evaluator.pendingConditions('s1', { 'replay-flag': true })).toEqual([
+        'trigger group "Checkout": URL condition not matched',
+      ])
+    })
+
+    it('lists the pending groups only, prefixed by each group name', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([
+        group({
+          id: 'g1',
+          name: 'Purchases',
+          conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }),
+        }),
+        group({ id: 'g2', name: 'Sampled out', sampleRate: 0 }),
+        group({ id: 'g3', name: 'Flagged', conditions: conditions({ flag: { flag: 'replay-flag', variant: null } }) }),
+      ])
+
+      expect(evaluator.pendingConditions('s1', null)).toEqual([
+        'trigger group "Purchases": event condition not matched',
+        'trigger group "Flagged": linked flag condition not matched',
+      ])
+    })
+
+    it('is empty while a group records the session', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([
+        group({ id: 'g1', conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) }),
+        group({ id: 'g2', sampleRate: 1 }),
+      ])
+
+      expect(evaluator.pendingConditions('s1', null)).toEqual([])
+    })
+
+    it('is empty when no group is pending', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([group({ sampleRate: 0 })])
+
+      expect(evaluator.pendingConditions('s1', null)).toEqual([])
+    })
+
+    it('writes no sampling decision or activation', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([group({ sampleRate: 1 })])
+
+      evaluator.pendingConditions('s1', null)
+      const stored = (evaluator as unknown as { samplingDecisions: Map<string, unknown> }).samplingDecisions
+      expect(stored.size).toBe(0)
+      expect(evaluator.getActivation()).toBeNull()
+    })
+  })
 })
