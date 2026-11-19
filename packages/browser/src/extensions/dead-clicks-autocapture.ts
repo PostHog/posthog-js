@@ -6,6 +6,7 @@ import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../u
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfigResult } from '../types'
 import type { Extension } from './types'
+import { getExtensionLoader } from '../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[Dead Clicks]')
 
@@ -74,17 +75,13 @@ export class DeadClicksAutocapture implements Extension {
             cb()
             return
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this.instance,
-            'dead-clicks-autocapture',
-            (err) => {
-                if (err) {
-                    logger.error('failed to load script', err)
-                    return
-                }
-                cb()
+        getExtensionLoader(this.instance)?.(this.instance, 'dead-clicks-autocapture', (err) => {
+            if (err) {
+                logger.error('failed to load script', err)
+                return
             }
-        )
+            cb()
+        })
     }
 
     private _start() {
