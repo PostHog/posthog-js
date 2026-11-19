@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.427.0
+
+### Minor Changes
+
+- [#5709](https://github.com/PostHog/posthog-js/pull/5709) [`1016d81`](https://github.com/PostHog/posthog-js/commit/1016d81c33ba0f673d0bcc2c49a851cb0e102f52) Thanks [@marandaneto](https://github.com/marandaneto)! - Add an explicit per-select session replay masking policy.
+  (2026-11-19)
+
 ## 1.426.0
 
 ### Minor Changes
