@@ -955,6 +955,65 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(replay.startRecording).not.toHaveBeenCalled()
     })
 
+    describe('the sampleRate sent to native', () => {
+      const sampleRateAtSetup = (): number | undefined =>
+        setup.mock.calls[0][2].sessionReplay.sdkReplayConfig.sampleRate
+
+      const launchWithCachedConfig = async (
+        sessionRecording: any,
+        options: Record<string, any> = {}
+      ): Promise<void> => {
+        currentSessionRecording = sessionRecording
+        // The remote rate comes from the cached /config, so serve the config there too.
+        ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+          const res = url.includes('flags')
+            ? { featureFlags: currentFlags, sessionRecording }
+            : { status: 'ok', sessionRecording }
+          return { status: 200, json: () => Promise.resolve(res) }
+        })
+        await warmup()
+        setup.mockClear()
+        posthog = newPostHog({ ...replayOnlyOptions, ...options })
+        await posthog.ready()
+        await settle()
+      }
+
+      const everyone = { id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }
+
+      it('is 1 under v2 without a local rate, ignoring the leftover v1 project rate', async () => {
+        await launchWithCachedConfig({ ...v2Config([everyone]), sampleRate: 0.2 })
+
+        expect(sampleRateAtSetup()).toBe(1)
+      })
+
+      it('is the local rate under v2', async () => {
+        await launchWithCachedConfig(
+          { ...v2Config([everyone]), sampleRate: 0.2 },
+          { sessionReplayConfig: { sampleRate: 0.3 } }
+        )
+
+        expect(sampleRateAtSetup()).toBe(0.3)
+      })
+
+      it.each([2, -1])('is 1 under v2 when the local rate %s is invalid', async (invalidRate) => {
+        await launchWithCachedConfig(v2Config([everyone]), { sessionReplayConfig: { sampleRate: invalidRate } })
+
+        expect(sampleRateAtSetup()).toBe(1)
+      })
+
+      it('is the remote rate under v1 without a local rate', async () => {
+        await launchWithCachedConfig({ endpoint: '/s/', sampleRate: 0.5 })
+
+        expect(sampleRateAtSetup()).toBe(0.5)
+      })
+
+      it('is the local rate under v1 when both are set', async () => {
+        await launchWithCachedConfig({ endpoint: '/s/', sampleRate: 0.5 }, { sessionReplayConfig: { sampleRate: 0.3 } })
+
+        expect(sampleRateAtSetup()).toBe(0.3)
+      })
+    })
+
     describe('on a first launch with nothing cached', () => {
       let releaseConfig: () => void
 
