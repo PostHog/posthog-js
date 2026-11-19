@@ -239,7 +239,7 @@ export class Analytics {
         // Immediate events stay buffered, keeping retries and the teardown handoff, but start delivery now.
         // During teardown, the handoff that is already running delivers them.
         if (delivery === 'immediate' && !this._isTearingDown) {
-            this._driver?.flush().catch(this._deliveryHost.reportFailure)
+            this._driver?.flush(true).catch(this._deliveryHost.reportFailure)
         }
         return true
     }

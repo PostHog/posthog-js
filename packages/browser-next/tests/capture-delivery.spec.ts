@@ -109,6 +109,42 @@ describe('immediate capture with default delivery', () => {
         }
     })
 
+    // The sender makes four attempts per drain; with no flush timer, a failed batch then waits for a later trigger.
+    it.each([
+        ['attempts the event after an earlier batch exhausts its retries', 4, [['earlier', 'instant']]],
+        [
+            'makes one more drain, not an endless retry, while delivery keeps failing',
+            Infinity,
+            Array(4).fill(['earlier', 'instant']),
+        ],
+    ])('%s', async (_name, failures, afterEarlierBatch) => {
+        vi.useFakeTimers()
+        try {
+            const attempts: string[][] = []
+            const fetch: BrowserFetch = async (_input, init) => {
+                const batch = (JSON.parse(String(init?.body)) as { batch: { event: string; uuid: string }[] }).batch
+                attempts.push(batch.map((event) => event.event))
+                if (attempts.length <= failures) return new Response('{}', { status: 503 })
+                const results = Object.fromEntries(batch.map((event) => [event.uuid, { result: 'ok' }]))
+                return new Response(JSON.stringify({ results }), { status: 200 })
+            }
+            const posthog = await createDefault(recordingOptions(fetch))
+
+            posthog.capture('earlier')
+            void posthog.flush()
+            await vi.advanceTimersByTimeAsync(0)
+            posthog.capture('instant', null, { delivery: 'immediate' })
+            await vi.advanceTimersByTimeAsync(300_000)
+
+            expect(attempts).toEqual([...Array(4).fill(['earlier']), ...afterEarlierBatch])
+            const shutdown = posthog.shutdown(0)
+            await vi.runAllTimersAsync()
+            await shutdown
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('hands an in-flight immediate event to the keepalive request when the page hides', async () => {
         const target = stubWindowEvents()
         const requests: RecordedRequest[] = []
