@@ -419,6 +419,22 @@ describe('session recording ingestion controls', () => {
         expect(network.snapshots.length).toBeGreaterThan(0)
     })
 
+    it('activates an event trigger on the initial pageview captured before the recorder loaded', async () => {
+        const {
+            replay,
+            posthog,
+            transport: network,
+        } = await setup({ eventTriggers: ['$pageview'] }, {}, { capturePageview: true })
+        await started(replay)
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        expect(status(posthog)).toBe('active')
+        expect(network.snapshots.length).toBeGreaterThan(0)
+        await posthog.flush()
+        expect(network.analytics.filter((event) => event.event === '$pageview')).toHaveLength(1)
+    })
+
     it('waits for a linked flag', async () => {
         let publish:
             | ((flags: Array<{ key: string; enabled: boolean; variant: string | undefined }>) => void)

@@ -1,4 +1,5 @@
 import type {
+    CapturedEventInfo,
     DeepReadonly,
     Disposable,
     RemoteConfig,
@@ -33,6 +34,7 @@ export type { SessionRecordingOptions, SessionRecordingConfiguration } from './s
 
 const RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
 const STALE_CONFIG = '$sdk_debug_replay_stale_config'
+const MAX_EARLY_EVENTS = 100
 
 const validSampleRate = (rate: unknown): number | null => {
     if (rate === null || rate === undefined) return null
@@ -99,6 +101,9 @@ class SessionRecordingProduct implements SessionRecordingExtension {
     // the configuration recording started with on this page: received fresh, or saved and still fresh at setup
     private _trustedConfig: SessionRecordingPersistedConfig | undefined
     private _receivedConfig = false
+    // events admitted before the recorder first starts, such as the initial `$pageview`, so they can still match
+    // an event trigger once it loads
+    private _earlyEvents: CapturedEventInfo[] | undefined = []
     private _subscriptions: Disposable[] = []
 
     constructor(
@@ -140,7 +145,10 @@ class SessionRecordingProduct implements SessionRecordingExtension {
                 this._trustedConfig = { ...this._trustedConfig, cache_timestamp: Date.now() }
                 client.kv.set(SESSION_RECORDING_REMOTE_CONFIG, this._trustedConfig)
             }),
-            client.onRemoteConfig((result) => this._onRemoteConfig(result))
+            client.onRemoteConfig((result) => this._onRemoteConfig(result)),
+            client.onEvent((event) => {
+                if (this._earlyEvents && this._earlyEvents.length < MAX_EARLY_EVENTS) this._earlyEvents.push(event)
+            })
         )
         this._startIfEnabledOrStop()
     }
@@ -314,6 +322,11 @@ class SessionRecordingProduct implements SessionRecordingExtension {
                     remoteConfig: () => this._persistedConfig() ?? this._trustedConfig,
                     gzipEnabled: () => this._gzipEnabled,
                     documentWasEverVisible: () => this._documentWasEverVisible,
+                    takeEarlyEvents: () => {
+                        const events = this._earlyEvents ?? []
+                        this._earlyEvents = undefined
+                        return events
+                    },
                 })
                 return this._recorder
             })
