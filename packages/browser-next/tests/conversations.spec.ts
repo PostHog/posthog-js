@@ -271,6 +271,31 @@ describe('conversations', () => {
         expect(request?.url.searchParams.get('_')).toMatch(/^\d+$/)
     })
 
+    it('fails a stalled widget request with a network error after 60 seconds', async () => {
+        const { client } = await createClient(
+            { conversations: widgetConfig() },
+            {
+                fetch: (input, init) =>
+                    new URL(String(input)).pathname.startsWith('/api/conversations/')
+                        ? new Promise<Response>((_, reject) => {
+                              // oxlint-disable-next-line posthog-js/no-add-event-listener
+                              init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+                          })
+                        : Promise.resolve(new Response('{}')),
+            }
+        )
+        const extension = await loaded(client)
+        vi.useFakeTimers()
+        try {
+            let failure: unknown
+            void extension.getTickets().catch((error: unknown) => (failure = error))
+            await vi.advanceTimersByTimeAsync(60_000)
+            expect(failure).toMatchObject({ kind: 'network' })
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('resolves API calls to null before conversations load', async () => {
         const { client } = await createClient(
             {},
