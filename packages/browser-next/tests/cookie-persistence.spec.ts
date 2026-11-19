@@ -495,4 +495,25 @@ describe('cookie persistence', () => {
         expect(after?.session_id).not.toBe(oldSession)
         expect(sessions).toEqual([oldSession, after?.session_id])
     })
+
+    it('shares person processing that another subdomain enables for the same identity', async () => {
+        const app = await create(new MemoryStorage())
+        app.capture('app_started')
+        visit('www.example.com')
+        const sent: SentEvent[] = []
+        const www = await create(new MemoryStorage(), sent)
+        www.capture('before_profile')
+
+        visit('app.example.com')
+        app.createPersonProfile()
+        visit('www.example.com')
+        www.register({ color: 'blue' })
+        expect(jar.read()?.$epp).toBe(true)
+        www.capture('after_profile')
+        await www.flush()
+        expect(sent.find((event) => event.event === 'after_profile')).toMatchObject({
+            distinct_id: app.distinctId,
+            options: { process_person_profile: true },
+        })
+    })
 })
