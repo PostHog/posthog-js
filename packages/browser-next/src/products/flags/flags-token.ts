@@ -21,11 +21,17 @@ export interface FeatureFlags extends BrowserExtension {
     /** Refresh remotely and await its outcome. Calls during an active evaluation wait for a follow-up request. */
     reloadFeatureFlags(): Promise<FeatureFlagsReloadResult>
     onFeatureFlags(callback: FlagsCallback): Disposable
-    /** Merge local person-property overrides for evaluation. Reloads by default; does not update a person profile. */
+    /**
+     * Merge local person-property overrides for evaluation. Reloads by default; an empty object does nothing.
+     * Does not update a person profile.
+     */
     setPersonPropertiesForFlags(properties: Record<string, unknown>, reloadFeatureFlags?: boolean): void
     /** Clear all local person-property overrides. Reloads by default. */
     resetPersonPropertiesForFlags(reloadFeatureFlags?: boolean): void
-    /** Merge local evaluation properties per group type. Reloads by default; does not associate groups or update profiles. */
+    /**
+     * Merge local evaluation properties per group type. Reloads by default; an empty object does nothing.
+     * Does not associate groups or update profiles.
+     */
     setGroupPropertiesForFlags(
         propertiesByGroupType: Record<string, Record<string, unknown>>,
         reloadFeatureFlags?: boolean
