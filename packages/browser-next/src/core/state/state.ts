@@ -219,6 +219,10 @@ const createInitialState = (deviceId = createId(), anonymousId = deviceId): Pers
     extensionData: emptyRecord<Record<string, unknown>>(),
 })
 
+/** The identity a record describes, compared to notice an identify or reset made by another subdomain. */
+const identityOf = (state: PersistedState): string =>
+    JSON.stringify([state.distinctId, state.isIdentified, state.deviceId])
+
 /** Seeds an identified ID beside the generated anonymous ID, or replaces the anonymous ID. */
 const seedIdentity = (state: PersistedState, distinctId: string, identified: boolean): void => {
     state.distinctId = distinctId
@@ -321,6 +325,10 @@ export class BrowserState {
     private _bootstrapSession: BootstrapSession | undefined
     private _stateReadPending = false
     private _generated: boolean
+    // Only the cookie adapter keeps stale writers from replacing the stored identity, so only it is adopted live.
+    private readonly _sharesIdentity: boolean
+    /** The stored identity this context last read, which a sibling subdomain's change replaces. */
+    private _storedIdentity: string | undefined
     private _lastConsentValue: unknown = null
     private _ignoredConsentValue: unknown
     private _hasIgnoredConsentValue = false
@@ -350,6 +358,7 @@ export class BrowserState {
         } catch {
             this._storage = storage
         }
+        this._sharesIdentity = this._storage !== storage
         this._windowStorageFactory = windowStorageFactory
         const windowPrefix = persistenceKey ?? `ph_${projectToken}`
         this._windowKey = `${windowPrefix}_window_id`
@@ -374,6 +383,7 @@ export class BrowserState {
         this._stateReadPending = !stateRead
         if (stateRead) {
             this._save()
+            this._storedIdentity = identityOf(this._state)
         }
     }
 
@@ -394,6 +404,27 @@ export class BrowserState {
         } else {
             this._save(false)
         }
+        this._storedIdentity = identityOf(this._state)
+        return true
+    }
+
+    /**
+     * Adopts an identity that another subdomain stored since this context last read it, as posthog-js does before
+     * each identity operation and event. Session authority still follows revisions. Returns whether it changed.
+     */
+    adoptStoredIdentity(): boolean {
+        const known = this._storedIdentity
+        const [, stored] = this._sharesIdentity && known ? this._readPersistedState() : []
+        if (!stored) {
+            return false
+        }
+        this._storedIdentity = identityOf(stored)
+        if (this._storedIdentity === known || this._storedIdentity === identityOf(this._state)) {
+            return false
+        }
+        // The stored record already drops groups and caches that belonged to this context's identity.
+        copyAuthority(stored, this._state)
+        this._state = stored
         return true
     }
 

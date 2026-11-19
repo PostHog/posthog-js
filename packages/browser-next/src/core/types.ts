@@ -212,7 +212,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     readonly onSessionId: Listener<SessionContext>
     /** Fires when consent changes, including changes observed from another tab. Does not replay. */
     readonly onConsentChange: Listener<ConsentChangeInfo>
-    /** Fires after identification, independently of capture consent. Does not replay. */
+    /**
+     * Fires after identification, independently of capture consent, including an identification this client adopts
+     * from another subdomain through cookie persistence. Does not replay.
+     */
     readonly onIdentify: Listener<IdentifyInfo>
     /** Local person-property changes, independently of capture consent. Does not replay. */
     readonly onChangeProperties: Listener<ChangePropertiesInfo>
@@ -220,7 +223,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     readonly onGroup: Listener<GroupInfo>
     /** Fires after group-only reset clears local membership. Does not replay. */
     readonly onGroupsReset: Listener<void>
-    /** Fires after local identity and persisted extension state are reset. Does not replay. */
+    /**
+     * Fires after local identity and persisted extension state are reset, including a reset this client adopts from
+     * another subdomain through cookie persistence. Does not replay.
+     */
     readonly onReset: Listener<void>
     resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
     resolveExtension<Name extends keyof BrowserProducts>(name: Name): Promise<BrowserProducts[Name] | undefined>
