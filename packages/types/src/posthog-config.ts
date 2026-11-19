@@ -714,6 +714,9 @@ export interface SessionRecordingOptions {
      * policy returns 'masked'. The callback is responsible for sanitizing its output.
      * Unmasked selects retain their choices, including duplicate-valued options.
      * Masked native `<selectedcontent>` clones are omitted. Static option labels remain visible.
+     * Pointer events are not covered: clicks on options in listbox-style selects (`multiple`,
+     * `size` > 1 or a customizable picker) still record the clicked option and position.
+     * Block selects whose choices must stay private, for example with `ph-no-capture`.
      * Omit this option to preserve legacy `maskInputFn` behavior.
      * Use a pure policy. It is evaluated for input events, select subtree mutations
      * and snapshots; changes to external state take effect at the next such capture.
