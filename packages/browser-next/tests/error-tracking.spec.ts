@@ -234,6 +234,16 @@ describe('manual exception capture', () => {
         expect(properties).not.toHaveProperty('$debug_images')
     })
 
+    it('returns false when the event is dropped before it is queued', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+
+        expect(tracking.captureException(new Error('oversized'), { attachment: 'x'.repeat(8 * 1024 * 1024) })).toBe(
+            false
+        )
+        expect(await exceptions(posthog, sent)).toEqual([])
+    })
+
     it('lists the caught exception first and its cause last', async () => {
         const sent: CapturedEvent[] = []
         const { posthog, tracking } = await createWith(sent)
