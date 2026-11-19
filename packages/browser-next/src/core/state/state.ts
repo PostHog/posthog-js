@@ -601,25 +601,28 @@ export class BrowserState {
         this._windowRemove(this._primaryWindowKey)
     }
 
+    // Each choice is stored before listeners learn of it, so a listener that reads consent sees the new choice.
     optIn(): boolean {
         this._consentChoice = 'granted'
-        this._applyConsent('granted')
         const written = this._writeConsent('1')
+        this._applyConsent('granted')
         this._save()
         return written
     }
 
     optOut(): boolean {
         this._consentChoice = 'denied'
+        const written = this._writeConsent('0')
         this._applyConsent('denied')
-        return this._writeConsent('0')
+        return written
     }
 
     /** Forgets the persisted choice, returning consent to the configured default. */
     clearConsent(): boolean {
         this._consentChoice = undefined
+        const written = this._writeConsent(null)
         this._applyConsent(this._defaultConsent)
-        return this._writeConsent(null)
+        return written
     }
 
     keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
