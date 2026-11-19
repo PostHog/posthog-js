@@ -147,19 +147,26 @@ export const createConversations = (
     }
 
     const complete = (renderer: Renderer, posthog: IPostHog, config: ConversationsRemoteConfig): void => {
+        let created: ConversationsManager | undefined
         try {
-            manager = renderer.initConversations(
+            const active = renderer.initConversations(
                 () =>
-                    new renderer.ConversationsManager(
+                    (created = new renderer.ConversationsManager(
                         config,
                         createHost(posthog),
                         new renderer.ConversationsPersistence(
                             renderer.getConversationsStorageKey(posthog.projectToken),
                             localStorage
                         )
-                    )
+                    ))
             )
             loadFailed = false
+            if (active !== created) {
+                // The page has one widget. Only the client that created it controls and destroys it.
+                posthog.logger.warn('Another PostHog client on this page already shows conversations.')
+                return
+            }
+            manager = active
         } catch (error) {
             manager = undefined
             loadFailed = true
