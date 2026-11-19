@@ -162,6 +162,17 @@ const mergeCookie = (local: string | null, cookie: Values | undefined): string |
     // Old posthog-js cookies store [lastActivityTimestamp, sessionId] only.
     const sessionStartTimestamp: unknown = start ?? lastActivityTimestamp
     const validRevision = typeof revision === 'string' && REVISION.test(revision) ? revision : undefined
+    const knownSession = isRecord(record?.session) ? record.session : undefined
+    // posthog-js omits the revision when it records activity. Activity in the session this context already knows
+    // keeps that session's revision, so the newer activity applies instead of looking like an older session.
+    const knownRevision =
+        knownSession !== undefined &&
+        knownSession.sessionId === sessionId &&
+        knownSession.sessionStartTimestamp === sessionStartTimestamp &&
+        typeof knownSession.revision === 'string' &&
+        REVISION.test(knownSession.revision)
+            ? knownSession.revision
+            : undefined
     if (
         typeof sessionId === 'string' &&
         sessionId &&
@@ -169,12 +180,12 @@ const mergeCookie = (local: string | null, cookie: Values | undefined): string |
         isTimestamp(sessionStartTimestamp) &&
         (validRevision || Number.isSafeInteger(sessionStartTimestamp))
     ) {
-        // posthog-js omits the revision; a session start time orders sessions the same way browser revisions do.
+        // Otherwise a session start time orders posthog-js sessions the same way browser revisions do.
         merged.session = {
             sessionId,
             sessionStartTimestamp,
             lastActivityTimestamp,
-            revision: validRevision ?? String(sessionStartTimestamp),
+            revision: validRevision ?? knownRevision ?? String(sessionStartTimestamp),
         }
     } else if (validRevision) {
         merged.sessionReset = validRevision

@@ -1,6 +1,6 @@
 import { cookiePersistence, type CookiePersistenceOptions } from '../src/persistence/cookie'
 import type { IPostHog } from '../src/core/types'
-import { createClient, MemoryStorage, STATE_KEY, storedState, type SentEvent } from './identity-fixtures'
+import { createClient, MemoryStorage, STATE_KEY, storedState, uuidv7, type SentEvent } from './identity-fixtures'
 
 const COOKIE = 'ph_ph_test_posthog'
 
@@ -238,6 +238,32 @@ describe('cookie persistence', () => {
         expect(jar.read()?.$sesid[1]).toBe(rotated)
         www.capture('adopt')
         expect(www.session?.sessionId).toBe(rotated)
+    })
+
+    it('continues a session that posthog-js keeps active on another subdomain', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        try {
+            const now = Date.now()
+            const start = now - 60_000
+            const sessionId = uuidv7(start)
+            const sent: SentEvent[] = []
+            const app = await create(new MemoryStorage(), sent, {}, { bootstrap: { sessionId } })
+            app.capture('first')
+            expect(app.session?.sessionId).toBe(sessionId)
+
+            // posthog-js records activity as [lastActivityTimestamp, sessionId, sessionStartTimestamp].
+            vi.setSystemTime(now + 25 * 60_000)
+            jar.write({ ...jar.read(), $sesid: [Date.now(), sessionId, start] })
+
+            vi.setSystemTime(now + 31 * 60_000)
+            app.capture('continuation')
+            await app.flush()
+
+            expect(sent.find((event) => event.event === 'continuation')?.session_id).toBe(sessionId)
+            expect(jar.read()?.$sesid[1]).toBe(sessionId)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('shares person processing with another subdomain', async () => {
