@@ -246,7 +246,9 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                 // The builder would trim the first line of every stack of a non-Error value, including one the
                 // caller supplied. Trim only the SDK frame from the fallback stack and parse every stack whole.
                 const syntheticException = new Error('PostHog syntheticException')
-                syntheticException.stack = (syntheticException.stack ?? '').split('\n').slice(1).join('\n')
+                const lines = (syntheticException.stack ?? '').split('\n')
+                // V8 puts an `Error: message` line before the SDK frame; other engines start with the frame.
+                syntheticException.stack = lines.slice(lines[0] === String(syntheticException) ? 2 : 1).join('\n')
                 const exceptionProperties = builder.buildFromUnknown(error, {
                     syntheticException,
                     skipFirstLines: 0,

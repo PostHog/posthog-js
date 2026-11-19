@@ -341,7 +341,8 @@ test('the script served from the PostHog CDN captures exceptions for non-Error v
     await page.route(fixture, (route) =>
         route.fulfill({
             contentType: 'text/html',
-            body: `<!doctype html><script src="${prefix}script.js?${options}"></script>`,
+            body: `<!doctype html><script src="${prefix}script.js?${options}"></script>
+                <script>function reportFromApp(tracking) { return tracking.captureException('business failure') }</script>`,
         })
     )
     await page.goto(fixture)
@@ -349,20 +350,20 @@ test('the script served from the PostHog CDN captures exceptions for non-Error v
     const results = await page.evaluate(async () => {
         const client = window.posthog as IPostHog
         const tracking = await client.resolveExtension('errorTracking')
-        const results = [
-            tracking?.captureException('business failure'),
-            tracking?.captureException(new Error('native')),
-        ]
+        const { reportFromApp } = window as unknown as { reportFromApp: (target: typeof tracking) => boolean }
+        const results = [reportFromApp(tracking), tracking?.captureException(new Error('native'))]
         await client.flush()
         return results
     })
     expect(results).toEqual([true, true])
     const events = (await backend.inspect()).events as Array<{
         event: string
-        properties: { $exception_list?: Array<{ value: string }> }
+        properties: { $exception_list: [{ value: string; stacktrace: { frames: Array<{ function: string }> } }] }
     }>
-    const values = events
+    const exceptions = events
         .filter((event) => event.event === '$exception')
-        .map((event) => event.properties.$exception_list?.[0]?.value)
-    expect(values).toEqual(['business failure', 'native'])
+        .map((event) => event.properties.$exception_list[0])
+    expect(exceptions.map((exception) => exception.value)).toEqual(['business failure', 'native'])
+    // The stack synthesized for a non-Error value ends at the application caller, not inside the SDK.
+    expect(exceptions[0]?.stacktrace.frames.at(-1)?.function).toBe('reportFromApp')
 })
