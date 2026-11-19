@@ -6,10 +6,8 @@ import type { Disposable } from './disposable'
 import type { Extension } from './extension'
 import type { RemoteConfigResult } from './types/remote-config'
 import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from './constants'
-import { window, location } from './utils/globals'
 import { addEventListener } from './utils/general-utils'
-import { maskQueryParams } from './utils/request-utils'
-import { PERSONAL_DATA_URL_PARAMS, MASKED } from './utils/event-utils'
+import { MASKED, maskQueryParams, PERSONAL_DATA_URL_PARAMS } from './utils/url-masking'
 
 export interface WebVitalsReportOpts {
     reportAllChanges?: boolean
@@ -57,6 +55,10 @@ export interface WebVitalsAutocaptureOptions {
 // the metric observer registration function from the web-vitals library (onLCP, onCLS, ...).
 // it takes the report callback plus an optional ReportOpts (e.g. `reportSoftNavs`).
 type WebVitalsMetricCallback = (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+
+// Read browser globals when used rather than at import, so importing this module touches no browser state.
+const getWindow = (): (Window & typeof globalThis) | undefined => (typeof window === 'undefined' ? undefined : window)
+const getLocation = (): Location | undefined => (typeof location === 'undefined' ? undefined : location)
 
 export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
@@ -147,6 +149,7 @@ export class WebVitalsAutocapture implements Extension {
         if (this._disposed) return
         this._disposed = true
         this._remoteConfigSubscription?.dispose()
+        const window = getWindow()
         window?.document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
         window?.removeEventListener('pagehide', this._onPageHide)
         this._clearBuffer()
@@ -209,7 +212,7 @@ export class WebVitalsAutocapture implements Extension {
 
     public get isEnabled(): boolean {
         // Always disable web vitals if we're not on http or https
-        const protocol = location?.protocol
+        const protocol = getLocation()?.protocol
         if (protocol !== 'http:' && protocol !== 'https:') {
             this._client?.logger.info('[Web Vitals] disabled on non-http/https protocols')
             return false
@@ -270,7 +273,7 @@ export class WebVitalsAutocapture implements Extension {
     }
 
     private _maskedURL(url?: string): string | undefined {
-        const href = url || window?.location.href
+        const href = url || getWindow()?.location.href
         if (!href) {
             this._client?.logger.error('[Web Vitals] Could not determine current URL')
             return undefined
@@ -414,7 +417,7 @@ export class WebVitalsAutocapture implements Extension {
     }
 
     private _onVisibilityChange = () => {
-        if (window?.document.visibilityState === 'hidden') {
+        if (getWindow()?.document.visibilityState === 'hidden') {
             this._flushToCapture(true)
         }
     }
@@ -487,6 +490,7 @@ export class WebVitalsAutocapture implements Extension {
         // Register after the web-vitals observers so their hidden-page callbacks
         // can place final LCP, CLS and INP reports into the buffer before it drains.
         if (this._disposed) return
+        const window = getWindow()
         addEventListener(window?.document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
         addEventListener(window, 'pagehide', this._onPageHide)
 
