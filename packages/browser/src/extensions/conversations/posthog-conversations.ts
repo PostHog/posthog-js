@@ -22,6 +22,7 @@ import type { ConversationsUnavailableReason } from '../../posthog-conversations
 
 export type { ConversationsUnavailableReason }
 import { Extension } from '../types'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[Conversations]')
 const NOT_AVAILABLE = 'Conversations not available yet.'
@@ -163,7 +164,7 @@ export class PostHogConversations implements Extension {
             }
 
             // If we reach here, conversations code is not loaded yet
-            const loadExternalDependency = phExtensions.loadExternalDependency
+            const loadExternalDependency = getExtensionLoader(this._instance)
             if (!loadExternalDependency) {
                 this._handleLoadError(LOAD_EXT_NOT_FOUND)
                 return

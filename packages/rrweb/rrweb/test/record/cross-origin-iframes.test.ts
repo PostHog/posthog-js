@@ -39,9 +39,11 @@ interface IWindow extends Window {
   };
   emit: (e: eventWithTime) => undefined;
   snapshots: eventWithTime[];
+  nonInteractive: boolean[];
 }
 type ExtraOptions = {
   usePackFn?: boolean;
+  selectMasking?: boolean;
 };
 
 async function injectRecordScript(
@@ -73,15 +75,20 @@ async function injectRecordScript(
   options = options || {};
   await frame.evaluate((options) => {
     (window as unknown as IWindow).snapshots = [];
+    (window as unknown as IWindow).nonInteractive = [];
     const { record } = (window as unknown as IWindow).rrweb;
     const config: recordOptions<eventWithTime> = {
       recordCrossOriginIframes: true,
       recordCanvas: true,
-      emit(event) {
+      emit(event, _isCheckout, nonInteractive) {
         (window as unknown as IWindow).snapshots.push(event);
+        (window as unknown as IWindow).nonInteractive.push(
+          nonInteractive === true,
+        );
         (window as unknown as IWindow).emit(event);
       },
     };
+    if (options.selectMasking) config.selectMaskingFn = () => 'masked';
     record(config);
   }, options);
 
@@ -798,6 +805,67 @@ describe('cross origin iframes', function (this: ISuite) {
         ),
       );
       expect(JSON.stringify(attachment)).toContain('"tagName":"form"');
+    });
+  });
+
+  describe('select masking policy', function (this: ISuite) {
+    const ctx: ISuite = setup.call(
+      this,
+      `
+        <!DOCTYPE html>
+        <html>
+          <body>
+            <iframe src="{SERVER_URL}/html/form.html" style="width: 400px; height: 400px;"></iframe>
+          </body>
+        </html>
+      `,
+      { selectMasking: true },
+    );
+
+    async function relayedSelectInputs(
+      action: (select: HTMLSelectElement) => void,
+    ) {
+      const frame = ctx.page.mainFrame().childFrames()[0];
+      await ctx.page.evaluate(() => {
+        (window as unknown as IWindow).snapshots = [];
+        (window as unknown as IWindow).nonInteractive = [];
+      });
+      await frame.evaluate(
+        `(${action.toString()})(document.querySelector('select'))`,
+      );
+      await waitForCondition(
+        () =>
+          ctx.page.evaluate(() =>
+            (window as unknown as IWindow).snapshots.some(
+              (event) => event.type === 3 && event.data.source === 5,
+            ),
+          ),
+        { timeout: 5_000 },
+      );
+      return ctx.page.evaluate(() => {
+        const { snapshots, nonInteractive } = window as unknown as IWindow;
+        return snapshots.flatMap((event, index) =>
+          event.type === 3 && event.data.source === 5
+            ? [nonInteractive[index]]
+            : [],
+        );
+      });
+    }
+
+    it('relays non-interactive mutation-derived select inputs', async () => {
+      const inputs = await relayedSelectInputs((select) => {
+        select.dataset.layout = 'ready';
+      });
+      expect(inputs.length).toBeGreaterThan(0);
+      expect(inputs.every(Boolean)).toBe(true);
+    });
+
+    it('keeps relayed native select changes interactive', async () => {
+      const inputs = await relayedSelectInputs((select) => {
+        select.selectedIndex = 1;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(inputs).toEqual([false]);
     });
   });
 });
