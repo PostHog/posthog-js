@@ -8,6 +8,7 @@ import { assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '@posthog/browser-common/constants'
 import { isFunction, isNullish } from '@posthog/core'
 import { Extension } from './types'
+import { getExtensionLoader } from '../utils/extension-loader'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -175,7 +176,7 @@ export class Toolbar implements Extension {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this._setToolbarState(ToolbarState.LOADING)
 
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
+            getExtensionLoader(this.instance)?.(this.instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('[Toolbar] Failed to load', err)
                     this._setToolbarState(ToolbarState.UNINITIALIZED)

@@ -710,6 +710,29 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Opt in to explicit select selection masking, overriding the select category setting.
+     * Masked selects use `maskInputFn` for replacement text but omit selection identity metadata.
+     * Returning original text from `maskInputFn` still records that text, even when this
+     * policy returns 'masked'. The callback is responsible for sanitizing its output.
+     * Unmasked selects retain their choices, including duplicate-valued options.
+     * Masked native `<selectedcontent>` clones are omitted. Static option labels remain visible.
+     * Pointer events are not covered: clicks on options in listbox-style selects (`multiple`,
+     * `size` > 1 or a customizable picker) still record the clicked option and position.
+     * Block selects whose choices must stay private, for example with `ph-no-capture`.
+     * Omit this option to preserve legacy `maskInputFn` behavior.
+     * Use a pure policy. It is evaluated for input events, select subtree mutations
+     * and snapshots; changes to external state take effect at the next such capture.
+     * Keep the callback reference stable. Replacing it restarts recording and discards
+     * queued old-policy data; changing its return value does not require a restart.
+     * Pending buffers are not carried across page loads with this option, because
+     * callback compatibility cannot be verified across pages.
+     * Invalid return values and exceptions resolve to masked. Recording does not start
+     * if the loaded recorder or driver does not support this option. Policy transitions
+     * also require a matching replay player.
+     */
+    selectMaskingFn?: (element: HTMLSelectElement) => 'masked' | 'unmasked'
+
+    /**
      * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
      * including rendering attributes such as `class`, `id`, `style`, `src`, `href`, and
      * synthesized form values. Only rrweb-generated layout metadata is retained, so this
@@ -1856,6 +1879,37 @@ export interface PostHogConfig {
      * @default 'fallback'
      */
     strict_script_versioning: boolean | 'fallback'
+
+    /**
+     * Requires Subresource Integrity (SRI) for every extension script the SDK loads, such as
+     * recorder.js, surveys.js or web-vitals.js.
+     *
+     * When enabled, each extension loads only from the exact-version path
+     * `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set,
+     * using the SHA-384 hashes built into this SDK bundle. A missing hash, an integrity failure
+     * or a `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin`
+     * disables only that feature. The SDK never retries through the mutable legacy path,
+     * whatever {@link strict_script_versioning} says. The asset host, or a reverse proxy in
+     * front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`).
+     *
+     * This mode also disables site apps, overriding {@link opt_in_site_apps}, including site app
+     * code preloaded by the token-specific `/array/<token>/array.js`. It refuses the toolbar and the
+     * executable `/array/<token>/config.js` remote config, which is then fetched as JSON.
+     *
+     * The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK
+     * code you already trust: an npm build, or an `array.js` you pin yourself. Because the
+     * extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an
+     * exact-version `loader.js` that itself has an `integrity` attribute pins every extension too.
+     * The token-specific `/array/<token>/array.js` changes with project configuration, so it cannot be
+     * pinned: use `/static/<sdk version>/array.js`, the loader or npm instead. The guarantee does not
+     * cover an unpinned initial loader, third-party widgets such as Intercom or Crisp, or a malicious
+     * release with valid hashes.
+     * Extensions share page globals, so if another PostHog instance or any other code on the page
+     * already ran unverified extension code, this instance reuses it and the guarantee does not hold.
+     *
+     * @default false
+     */
+    require_subresource_integrity?: boolean
 
     /**
      * Optional host override for static assets loaded by PostHog, such as

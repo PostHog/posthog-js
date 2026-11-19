@@ -1118,8 +1118,11 @@ describe('main Electron client', () => {
         expect(
             await window.send({ type: 'setPersonProperties', properties: { private: true } }, generation)
         ).toMatchObject({ ok: false, error: expect.stringContaining('Stale') })
+        // The renderer limit allows 100 requests per one-second window. Hold the clock so a slow runner
+        // cannot start a new window during the burst; 101 requests exceed the limit even in a fresh window.
+        vi.spyOn(performance, 'now').mockReturnValue(performance.now())
         let response: BridgeResponse | undefined
-        for (let i = 0; i < 100; i++)
+        for (let i = 0; i < 101; i++)
             response = await window.send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: false })
         expect(response).toMatchObject({ ok: false, error: expect.stringContaining('rate limit') })
         await owner.flush()

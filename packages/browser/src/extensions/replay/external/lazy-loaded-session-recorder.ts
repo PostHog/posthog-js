@@ -28,6 +28,7 @@ import {
     circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
+    getReplayPendingBufferKey,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
@@ -138,7 +139,7 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
 // next page in the same tab. sessionStorage dies with the tab, so a visit that really ended
 // there still honours the gate that held them
-export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
+export { PENDING_BUFFER_STORAGE_SUFFIX } from './sessionrecording-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -500,6 +501,8 @@ function isRecordingPausedEvent(e: eventWithTime) {
 }
 
 export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
+    readonly supportsSelectMasking = true
+    private _selectMaskingFn: SessionRecordingOptions['selectMaskingFn']
     private _endpoint: string = BASE_ENDPOINT
     private _mutationThrottler?: MutationThrottler
     /**
@@ -566,6 +569,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskRegionsFnFailed = false
     // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
     private _hasLoggedRecorderCallbackError = false
+    private _hasLoggedSelectMaskingError = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -658,9 +662,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // A shared persistence_name also shares session/window IDs, but must not share replay
         // data across project tokens. Encode the pair without ambiguous separators and use a
         // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
-        const persistenceName = this._instance.config.persistence_name || this._instance.config.token
-        this._pendingBufferStorageKey =
-            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
+        this._pendingBufferStorageKey = getReplayPendingBufferKey(this._instance.config)
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(
@@ -1736,6 +1738,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        if (
+            discardProducerEvents &&
+            (this._selectMaskingFn || this._instance.config.session_recording.selectMaskingFn)
+        ) {
+            sessionStore._remove(this._pendingBufferStorageKey)
+        }
         // Reuse the internal hold as a synchronous discard guard. rrweb teardown can emit enough
         // data to hit the size cap, but discard must never flush it.
         this._holdFlushUntilInteraction = true
@@ -1969,7 +1977,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             : processEvent()
     }
 
-    onRRwebEmit(rawEvent: eventWithTime) {
+    onRRwebEmit(rawEvent: eventWithTime, nonInteractive?: boolean) {
         // late event after sessionManager teardown (e.g. cookieless opt-out) — _sessionManager would throw
         if (!this._instance.sessionManager) {
             return
@@ -2076,7 +2084,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // right after, and running it here first can adopt a pending rotation before the
             // marker is captured — attributing a marker backdated by the idle gap to the new
             // session, which drags the new recording's start back and makes its prefix unplayable
-            this._updateWindowAndSessionIds(event)
+            this._updateWindowAndSessionIds(event, nonInteractive)
         }
 
         // Route lifecycle events using their payload IDs:
@@ -2327,6 +2335,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * recording opens partway through the session.
      */
     private _parkBufferForNextPage(): void {
+        // Callback identity and captured closure state cannot be verified on the next page.
+        if (this._selectMaskingFn || this._instance.config.session_recording.selectMaskingFn) {
+            return
+        }
         if (
             this._buffer.data.length === 0 ||
             this._buffer.size === this._lastParkedBufferSize ||
@@ -2349,6 +2361,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         sessionStore._remove(this._pendingBufferStorageKey)
 
         if (
+            this._instance.config.session_recording.selectMaskingFn ||
             !isObject(parked) ||
             !isArray(parked.data) ||
             parked.data.length === 0 ||
@@ -2705,19 +2718,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _isInteractiveEvent(event: eventWithTime) {
+    private _isInteractiveEvent(event: eventWithTime, nonInteractive?: boolean) {
         return (
+            !nonInteractive &&
             event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
             ACTIVE_SOURCES.indexOf(event.data?.source as IncrementalSource) !== -1
         )
     }
 
-    private _updateWindowAndSessionIds(event: eventWithTime) {
+    private _updateWindowAndSessionIds(event: eventWithTime, nonInteractive?: boolean) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
 
-        const isUserInteraction = this._isInteractiveEvent(event)
+        const isUserInteraction = this._isInteractiveEvent(event, nonInteractive)
 
         if (!isUserInteraction && this._isIdle !== true) {
             // We check if the lastActivityTimestamp is old enough to go idle
@@ -2867,6 +2881,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllInputs: true,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
+            selectMaskingFn: undefined,
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
             slimDOMOptions: {},
@@ -2993,6 +3008,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        if (sessionRecordingOptions.selectMaskingFn && rrwebRecord.supportsSelectMasking !== true) {
+            logger.error('Session recording has not started: the recorder does not support selectMaskingFn.')
+            return
+        }
+
         this._mutationThrottler =
             this._mutationThrottler ??
             new MutationThrottler(rrwebRecord, {
@@ -3024,10 +3044,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
+        const selectMaskingFn = sessionRecordingOptions.selectMaskingFn
+        this._selectMaskingFn = selectMaskingFn
+        if (selectMaskingFn) {
+            // rrweb masks the select when the policy throws; rethrow so that stays the case.
+            sessionRecordingOptions.selectMaskingFn = (select) => {
+                try {
+                    return selectMaskingFn(select)
+                } catch (error) {
+                    if (!this._hasLoggedSelectMaskingError) {
+                        this._hasLoggedSelectMaskingError = true
+                        logger.warn('selectMaskingFn threw; affected selects are recorded as masked.', error)
+                    }
+                    throw error
+                }
+            }
+        }
         const activePlugins = this._gatherRRWebPlugins()
         const sourceHandoff = this._styleRuleSourceHandoff
         this._stopRrweb = rrwebRecord({
-            emit: (event) => {
+            emit: (event, _isCheckout, nonInteractive) => {
                 if (sourceHandoff?.cancelled) {
                     return
                 }
@@ -3039,7 +3075,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     sourceHandoff.cancel()
                     return
                 }
-                this.onRRwebEmit(event)
+                this.onRRwebEmit(event, nonInteractive)
             },
             plugins: activePlugins,
             errorHandler: (error, context) => {

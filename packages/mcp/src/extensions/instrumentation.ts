@@ -37,7 +37,7 @@ import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException, httpStatus } from './exceptions'
+import { captureException, clientErrorType, httpStatus } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
@@ -206,7 +206,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
     const sessionSchemas =
       (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
-      data.toolInputSchemas.get(schemaSessionId)
+      data.toolInputSchemas.get(schemaSessionId) ??
+      data.toolInputSchemas.get(SEEDED_LISTING)
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
@@ -479,6 +480,7 @@ function publishSuccessfulToolEvent(
       const resultError = resultBeforeInstructions ?? result
       event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
+      event.errorType = clientErrorType(capturedError ?? resultError)
     } else {
       event.isError = false
     }
@@ -505,6 +507,7 @@ function publishFailedToolEvent(
     event.isError = true
     event.error = captureException(error)
     event.errorStatus = httpStatus(error)
+    event.errorType = clientErrorType(error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
@@ -592,6 +595,7 @@ function publishResourceEvent(
     if ('error' in outcome) {
       event.isError = true
       event.error = captureException(outcome.error)
+      event.errorType = clientErrorType(outcome.error)
     } else {
       event.isError = false
       if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
@@ -882,6 +886,26 @@ export async function handleListToolsRequest(
     captureEvent(server, event, data.logger, requestAttribution)
   }
   return response
+}
+
+/** Input schemas from a listing no client asked for, which belongs to no session. */
+const SEEDED_LISTING = ''
+
+/**
+ * Caches what a client's own `tools/list` on this server would: which analytics
+ * parameters each tool owns, its input schema, description and category. For a
+ * server built per session or per request, whose first call can arrive before
+ * any listing it served.
+ */
+export function cacheToolListing(server: MCPServerLike, tools: CompatibleToolsListLike['tools']): void {
+  const data = getServerTrackingData(server)
+  if (!data) {
+    return
+  }
+  cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+  data.toolInputSchemas.set(SEEDED_LISTING, new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema])))
+  cacheToolDescriptions(data.toolDescriptions, tools)
+  cacheToolCategories(data.toolCategories, tools)
 }
 
 function cacheToolAnalyticsParameterOwnership(

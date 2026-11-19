@@ -533,6 +533,22 @@ jobs:
         if: steps.changed.outputs.rrweb-changed == 'true'
         run: pnpm --filter @posthog/rrweb exec puppeteer browsers install chrome
 
+      - name: Install Brave for native selected-content tests
+        if: steps.changed.outputs.rrweb-changed == 'true'
+        env:
+          BRAVE_VERSION: '1.99.57'
+          BRAVE_SHA256: '734bd9e1d24bc0a94c03b0a43845107dd8a29f572c652023cf7177f5fc3a5f38'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/brave-selectedcontent-$BRAVE_VERSION.zip"
+          directory="$RUNNER_TEMP/brave-selectedcontent-$BRAVE_VERSION"
+          curl --fail --location --retry 3 "https://github.com/brave/brave-browser/releases/download/v$BRAVE_VERSION/brave-browser-$BRAVE_VERSION-linux-amd64.zip" -o "$archive"
+          echo "$BRAVE_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p "$directory"
+          unzip -q "$archive" -d "$directory"
+          "$directory/brave" --version
+          echo "RRWEB_SELECTED_CONTENT_BROWSER=$directory/brave" >> "$GITHUB_ENV"
+
       - name: Run rrweb tests
         if: steps.changed.outputs.rrweb-changed == 'true'
         run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run lint test:rrweb --filter='./packages/rrweb/**'
@@ -647,6 +663,15 @@ jobs:
           WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+
+      # Core bundles embed the SHA-384 of every extension, so the build must be byte-for-byte reproducible.
+      - name: Check posthog-js build is deterministic
+        working-directory: packages/browser
+        run: |
+          cp -R dist "$RUNNER_TEMP/first-dist"
+          pnpm build
+          diff -r "$RUNNER_TEMP/first-dist" dist
+          node scripts/embed-extension-integrity.mjs verify
 
   generate-references:
     # Runs the generator the release workflow uses, so a doc comment or type that breaks it

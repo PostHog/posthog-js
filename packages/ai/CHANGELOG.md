@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.21.1
+
+### Patch Changes
+
+- [#5764](https://github.com/PostHog/posthog-js/pull/5764) [`93a47d8`](https://github.com/PostHog/posthog-js/commit/93a47d8b3c9e6f16fc9015f56c7ef1caa8ef8030) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix(ai): stop logging a parse error for streamed Anthropic tool calls that take no arguments
+  (2026-11-18)
+
 ## 8.21.0
 
 ### Minor Changes

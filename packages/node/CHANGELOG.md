@@ -1,5 +1,24 @@
 # posthog-node
 
+## 6.0.4
+
+### Patch Changes
+
+- [#5782](https://github.com/PostHog/posthog-js/pull/5782) [`13f08ee`](https://github.com/PostHog/posthog-js/commit/13f08eef5768c944588504fe221ac5d4fd83d0ee) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Send transactional email requests to `/api/messaging/` instead of the `/api/projects/@current/` alias, which PostHog is removing. Needs PostHog Cloud, or a self-hosted PostHog from 2026-11-18 or later. Older self-hosted versions answer these calls with a 404.
+  (2026-11-18)
+
+## 6.0.3
+
+### Patch Changes
+
+- [#5747](https://github.com/PostHog/posthog-js/pull/5747) [`59d9656`](https://github.com/PostHog/posthog-js/commit/59d96564102246bcc1b5ebdb36fd54091fb7ffdc) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop null-valued custom exception properties after `beforeSend` without undoing redaction or changing array positions.
+  (2026-11-18)
+
+- [#5747](https://github.com/PostHog/posthog-js/pull/5747) [`59d9656`](https://github.com/PostHog/posthog-js/commit/59d96564102246bcc1b5ebdb36fd54091fb7ffdc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve falsy JSON payloads in feature flag snapshots from legacy flag responses.
+  (2026-11-18)
+- Updated dependencies [[`3000ae0`](https://github.com/PostHog/posthog-js/commit/3000ae0f01bad0e01b34b110f1f66dd43361a32c), [`59d9656`](https://github.com/PostHog/posthog-js/commit/59d96564102246bcc1b5ebdb36fd54091fb7ffdc)]:
+  - @posthog/core@1.69.1
+
 ## 6.0.2
 
 ### Patch Changes
