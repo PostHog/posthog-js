@@ -8,7 +8,7 @@ for (const mode of ['static', 'dynamic', 'acquired'] as const) {
         await page.evaluate(() => window.surveysHarness.display())
         await expect(page.getByText('What can we improve?')).toBeVisible()
         await page.getByRole('textbox').fill('A clearer example')
-        await page.getByRole('button', { name: /submit survey/i }).click()
+        await page.getByRole('button', { name: /^submit$/i }).click()
         await expect
             .poll(() =>
                 page.evaluate(
@@ -39,7 +39,7 @@ test('remote-enabled automatic surveys preserve consent and release polling/rend
     await expect(page.getByText('What can we improve?')).toBeVisible()
     await page.evaluate(() => window.surveysHarness.optOut())
     await page.getByRole('textbox').fill('denied response')
-    await page.getByRole('button', { name: /submit survey/i }).click()
+    await page.getByRole('button', { name: /^submit$/i }).click()
     expect(
         await page.evaluate(() => window.surveysHarness.events().filter(({ event }) => event === 'survey sent'))
     ).toEqual([])
@@ -60,7 +60,7 @@ test('event-targeted survey activates from admitted capture and remembered submi
     await page.evaluate(() => window.surveysHarness.capture())
     await expect(page.getByText('What can we improve?')).toBeVisible()
     await page.getByRole('textbox').fill('event response')
-    await page.getByRole('button', { name: /submit survey/i }).click()
+    await page.getByRole('button', { name: /^submit$/i }).click()
     await expect
         .poll(() =>
             page.evaluate(() => window.surveysHarness.events().filter(({ event }) => event === 'survey sent').length)
@@ -83,7 +83,7 @@ for (const mode of ['ready', 'denied', 'disposed', 'loading'] as const) {
         )
         await expect(page.getByText('What can we improve?')).toBeVisible()
         await page.getByRole('textbox').fill('First answer')
-        await page.getByRole('button', { name: /submit survey/i }).click()
+        await page.getByRole('button', { name: /^submit$/i }).click()
         await expect(page.getByText('Anything else?')).toBeVisible()
         if (mode === 'denied') await page.evaluate(() => window.surveysHarness.optOut())
         if (mode === 'disposed') await page.evaluate(() => window.surveysHarness.dispose())
