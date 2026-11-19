@@ -2665,7 +2665,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     if (response.status < 200 || response.status >= 300) {
-      this._events.emit('error', new RemoteConfigPayloadError(flagKey, response.status))
+      const error = new RemoteConfigPayloadError(flagKey, response.status)
+      this._logger.warn(error.message)
+      this._events.emit('error', error)
       return undefined
     }
 
