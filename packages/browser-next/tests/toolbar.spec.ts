@@ -255,6 +255,43 @@ describe('toolbar', () => {
         expect(toolbarScripts()).toHaveLength(2)
     })
 
+    it('keeps the pending script when Turbolinks fires its initial page load event', async () => {
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        client.toolbar?.loadToolbar()
+        window.dispatchEvent(new Event('turbolinks:load'))
+        expect(toolbarScripts()).toHaveLength(1)
+        await client.dispose()
+    })
+
+    it('keeps a script waiting for the body when Turbolinks fires its initial page load event', async () => {
+        const body = document.body
+        document.documentElement.removeChild(body)
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        try {
+            client.toolbar?.loadToolbar()
+        } finally {
+            document.documentElement.appendChild(body)
+        }
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        window.dispatchEvent(new Event('turbolinks:load'))
+        expect(toolbarScripts()).toHaveLength(1)
+        await client.dispose()
+    })
+
+    it('inserts a script into a body Turbolinks replaces while the toolbar loads', async () => {
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        client.toolbar?.loadToolbar()
+        const body = document.body
+        document.documentElement.replaceChild(document.createElement('body'), body)
+        try {
+            window.dispatchEvent(new Event('turbolinks:load'))
+            expect(toolbarScripts()).toHaveLength(1)
+        } finally {
+            await client.dispose()
+            document.documentElement.replaceChild(body, document.body)
+        }
+    })
+
     it('inserts one current script for each Turbolinks body replacement', async () => {
         vi.useFakeTimers({ toFake: ['Date'] })
         vi.setSystemTime(10 * 60 * 1000)

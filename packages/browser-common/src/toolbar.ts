@@ -121,7 +121,11 @@ export const loadToolbar = (
             win.ph_toolbar_state = LOADED
             callToolbar(params, instance, logger, win)
         })
+        let body = document?.body
         watchPageReplacement(() => {
+            // Turbolinks also fires on the initial page load. A pending script stays in use until the body is replaced.
+            if (win.ph_toolbar_state === LOADING && (!body || body === document?.body)) return
+            body = document?.body
             win.ph_toolbar_state = UNINITIALIZED
             // This watcher keeps running, so a reload does not register another one.
             loadToolbar(params, instance, logger, loadScript, () => {})
