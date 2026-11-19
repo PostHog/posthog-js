@@ -1,5 +1,7 @@
 import type { FeatureFlagValue, FeatureFlagResult, JsonType, PostHogEventProperties } from '@posthog/core'
 
+import type { AutocaptureState } from './autocapture'
+
 export const COMMAND_CHANNEL = 'posthog:command:v1'
 export const STATE_CHANNEL = 'posthog:state:v1'
 export const BRIDGE_KEY = '__POSTHOG_ELECTRON__'
@@ -33,6 +35,8 @@ export interface State {
     anonymousId: string
     sessionId: string
     optedOut: boolean
+    disabled?: boolean
+    autocapture?: AutocaptureState
     featureFlags: Record<string, FeatureFlagValue>
     flagsLoaded?: boolean
     flagRevision: number
@@ -57,6 +61,7 @@ export type Command =
     | { type: 'optOut' }
     | { type: 'flag'; key: string; flagRevision: number; value: FeatureFlagValue | null }
     | { type: 'reloadFeatureFlags' }
+    | { type: 'loadAutocaptureConfig' }
     | { type: 'flush' }
     | { type: 'exception'; properties: Properties }
 
@@ -87,7 +92,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function assertJson(value: unknown, depth = 0): void {
+export function assertJson(value: unknown, depth = 0, allowReservedKeys = false): void {
     let remaining = MAX_MESSAGE_BYTES
     const spend = (size: number): void => {
         remaining -= size
@@ -110,7 +115,7 @@ export function assertJson(value: unknown, depth = 0): void {
             for (const key in item) {
                 if (!Object.hasOwn(item, key)) continue
                 spend(key.length + 3)
-                if (['__proto__', 'constructor', 'prototype'].includes(key))
+                if (!allowReservedKeys && ['__proto__', 'constructor', 'prototype'].includes(key))
                     throw new Error('Unsafe PostHog property key')
                 visit(item[key], level + 1)
             }
@@ -146,6 +151,7 @@ export function validateRequest(value: unknown): asserts value is Request {
         case 'optIn':
         case 'optOut':
         case 'reloadFeatureFlags':
+        case 'loadAutocaptureConfig':
         case 'flush':
             return
         case 'capture':
