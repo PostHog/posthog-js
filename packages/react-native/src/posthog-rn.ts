@@ -430,6 +430,8 @@ export class PostHog extends PostHogCore {
   private _logsStorage: PostHogRNStorage
   private _aiStorage: PostHogRNStorage
   private _aiLane: CaptureAiLane
+  // Set while `_shutdown` runs: core's drain loop calls `flush()`, and the AI lane drains on its own there.
+  private _shuttingDown = false
   private _captureAiSender?: V1CaptureSender
   private _captureAiCompression: 'gzip' | 'none' = 'gzip'
   private _captureAiTimeoutMs = CAPTURE_AI_DEFAULT_TIMEOUT_MS
@@ -914,6 +916,7 @@ export class PostHog extends PostHogCore {
       nativeSessionOwner = undefined
     }
     const start = Date.now()
+    this._shuttingDown = true
     try {
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
       const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
@@ -1667,7 +1670,7 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     // Signal both lanes before waiting on either.
-    const aiFlush = this.isDisabled ? Promise.resolve() : this._aiLane.flush()
+    const aiFlush = this.isDisabled || this._shuttingDown ? Promise.resolve() : this._aiLane.flush()
     return Promise.all([super.flush(), aiFlush]).then(() => undefined)
   }
 

@@ -192,6 +192,28 @@ describe('React Native captureAi', () => {
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
 
+  it('does not report an analytics shutdown timeout because of a stuck AI request', async () => {
+    const logs = (['debug', 'info', 'log', 'warn', 'error'] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => {})
+    )
+    respond = (request) => (request.path === AI_PATH ? new Promise(() => {}) : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+
+    try {
+      client.captureAi('$ai_generation')
+      client.capture('button_clicked')
+      await client.shutdown(300)
+
+      const output = logs.flatMap((spy) => spy.mock.calls.map((args) => args.join(' '))).join('\n')
+      expect(output).not.toContain('Timeout while shutting down')
+      expect(sent(ANALYTICS_PATH)).toEqual([['button_clicked']])
+      expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+    } finally {
+      posthog = undefined
+      logs.forEach((spy) => spy.mockRestore())
+    }
+  })
+
   it('keeps AI events after a retryable status without failing flush() or shutdown()', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const client = await newPostHog()
