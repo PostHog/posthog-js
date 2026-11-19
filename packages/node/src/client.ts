@@ -96,6 +96,7 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import type { CaptureError } from './capture-v1/errors'
+import { RemoteConfigPayloadError } from './remote-config-errors'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
@@ -2640,7 +2641,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param flagKey - The feature flag key
-   * @returns Promise that resolves to the remote config payload or undefined
+   * @returns Promise that resolves to:
+   * - the payload, when the flag has one
+   * - `null`, when the flag is disabled
+   * - `undefined`, when the flag has no payload, or the request failed. A response with a status
+   *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `status` and `flagKey` on the
+   *   client's `error` event; a network error or timeout emits the underlying error there.
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
@@ -2658,7 +2664,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return undefined
     }
 
-    const parsed = await response.json()
+    if (response.status < 200 || response.status >= 300) {
+      this._events.emit('error', new RemoteConfigPayloadError(flagKey, response.status))
+      return undefined
+    }
+
+    // A flag with no payload is answered with an empty body
+    const body = await response.text()
+    if (!body) {
+      return undefined
+    }
+
+    const parsed = JSON.parse(body)
     // The payload from the endpoint is stored as a JSON encoded string. So when we return
     // it, it's effectively double encoded. As far as we know, we should never get single-encoded
     // JSON, but we'll be defensive here just in case.
