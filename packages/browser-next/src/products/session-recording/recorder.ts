@@ -75,6 +75,7 @@ const SESSION_TOUCH_INTERVAL_MS = 1000
 // each `$snapshot` stays below ~1MB so ingestion never rejects it
 const MAX_SNAPSHOT_BYTES = 1024 * 1024 * 0.9
 const DEFAULT_ENDPOINT = '/s/'
+const MAX_SESSION_LENGTH = 24 * 60 * 60 * 1000
 
 const USER_INTERACTION_SOURCES: readonly number[] = [
     IncrementalSource.MouseMove,
@@ -608,8 +609,14 @@ export class SessionRecorder {
             this._delivery.teardown()
             return
         }
-        // a passive visit that started held still ships on a clean unload; a rotation-born hold does not
-        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._host.documentWasEverVisible()) {
+        // a passive visit that started held still ships on a clean unload within its session's maximum length;
+        // a rotation-born hold does not
+        if (
+            this._holdFlushUntilInteraction &&
+            this._heldEpochShipsOnUnload &&
+            this._host.documentWasEverVisible() &&
+            Date.now() - this._sessionStartTimestamp <= MAX_SESSION_LENGTH
+        ) {
             this._holdFlushUntilInteraction = false
         }
         this._flushBuffer(true)

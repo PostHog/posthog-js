@@ -114,6 +114,19 @@ describe('session recording timing', () => {
         expect(resumed.map((event) => event.type)).toContain(2)
     })
 
+    it('drops a held recording on unload once its session passed the maximum length', async () => {
+        const { replay, transport: network } = await setup()
+        await started(replay)
+
+        advance(25 * 60 * 60_000)
+        document.body.appendChild(document.createElement('span'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        window.dispatchEvent(new Event('pagehide'))
+        await replay.flush?.()
+
+        expect(network.snapshots).toHaveLength(0)
+    })
+
     it('holds a recording born from an idle rotation, even when the page unloads', async () => {
         const { replay, posthog, transport: network } = await setup()
         await started(replay)
