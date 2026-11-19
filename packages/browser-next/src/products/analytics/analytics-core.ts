@@ -301,6 +301,8 @@ export class Analytics {
     ): AnalyticsMessage | undefined {
         if (!isNonEmptyString(event) || this._disposed || !this._core.canCapture) return undefined
         if (!this._acceptRateLimit(skipRateLimit)) return undefined
+        // An identity another subdomain stored replaces this context's registered properties before they are read.
+        this._adoptStoredIdentity()
         const snapshot = this._snapshotProperties(properties, options)
         if (!snapshot) return undefined
         const candidate = this._prepareCapture(event, snapshot)
@@ -351,7 +353,6 @@ export class Analytics {
     }
 
     private _prepareCapture(event: string, snapshot: CaptureProperties): PreparedCapture | undefined {
-        this._adoptStoredIdentity()
         const state = this._core._state
         const processPersonProfile = this._hasPersonProcessing()
         if (processPersonProfile) this._requirePersonProcessing()
