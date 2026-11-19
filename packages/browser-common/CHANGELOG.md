@@ -1,5 +1,18 @@
 # @posthog/browser-common
 
+## 0.12.1
+
+### Patch Changes
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip autocapture when ancestor privacy checks cannot complete.
+  (2026-11-19)
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor autocapture privacy markers across shadow hosts and slots before collecting text and attributes.
+  (2026-11-19)
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Expose a narrow autocapture client type for shared renderer integrations.
+  (2026-11-19)
+
 ## 0.12.0
 
 ### Minor Changes
