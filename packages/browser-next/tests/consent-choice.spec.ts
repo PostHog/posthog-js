@@ -68,6 +68,24 @@ describe('explicit consent status', () => {
         expect(posthog.getExplicitConsentStatus()).toBe('denied')
     })
 
+    it.each([
+        ['optIn', null, 'granted:granted'],
+        ['optOut', null, 'denied:denied'],
+        ['clearOptInOut', '0', 'implicit:pending'],
+    ] as const)('reports the new choice to consent listeners after %s', async (method, stored, change) => {
+        const storage = new MemoryStorage()
+        if (stored !== null) storage.setItem(CONSENT_KEY, stored)
+        const posthog = await create(storage)
+        const changes: string[] = []
+        posthog.onConsentChange(({ current }) => {
+            // Records the status before a nested notification can append another change.
+            const index = changes.push(current) - 1
+            changes[index] = `${current}:${posthog.getExplicitConsentStatus()}`
+        })
+        posthog[method]()
+        expect(changes).toEqual([change])
+    })
+
     it('keeps choices in memory without storage', async () => {
         const posthog = await create(false)
         posthog.optOut()
