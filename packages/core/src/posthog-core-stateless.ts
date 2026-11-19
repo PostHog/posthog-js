@@ -26,6 +26,7 @@ import {
   Logger,
   GetFlagsResult,
   FeatureFlagRequestError,
+  PostHogFlagsKnownAbsentPropertyKeys,
 } from './types'
 import {
   allSettled,
@@ -1065,7 +1066,8 @@ export abstract class PostHogCoreStateless {
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     disableGeoip?: boolean,
-    flagKeysToEvaluate?: string[]
+    flagKeysToEvaluate?: string[],
+    knownAbsentPropertyKeys?: PostHogFlagsKnownAbsentPropertyKeys
   ): Promise<{
     flags: PostHogFlagsResponse['featureFlags'] | undefined
     payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
@@ -1079,7 +1081,8 @@ export abstract class PostHogCoreStateless {
       personProperties,
       groupProperties,
       disableGeoip,
-      flagKeysToEvaluate
+      flagKeysToEvaluate,
+      knownAbsentPropertyKeys
     )
   }
 
@@ -1089,7 +1092,8 @@ export abstract class PostHogCoreStateless {
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     disableGeoip?: boolean,
-    flagKeysToEvaluate?: string[]
+    flagKeysToEvaluate?: string[],
+    knownAbsentPropertyKeys?: PostHogFlagsKnownAbsentPropertyKeys
   ): Promise<{
     flags: PostHogFlagsResponse['featureFlags'] | undefined
     payloads: PostHogFlagsResponse['featureFlagPayloads'] | undefined
@@ -1103,7 +1107,8 @@ export abstract class PostHogCoreStateless {
       personProperties,
       groupProperties,
       disableGeoip,
-      flagKeysToEvaluate
+      flagKeysToEvaluate,
+      knownAbsentPropertyKeys
     )
 
     if (!featureFlagDetails) {
@@ -1127,7 +1132,8 @@ export abstract class PostHogCoreStateless {
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     disableGeoip?: boolean,
-    flagKeysToEvaluate?: string[]
+    flagKeysToEvaluate?: string[],
+    knownAbsentPropertyKeys?: PostHogFlagsKnownAbsentPropertyKeys
   ): Promise<PostHogFeatureFlagDetails | undefined> {
     await this._initPromise
 
@@ -1136,6 +1142,19 @@ export abstract class PostHogCoreStateless {
     }
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
+    }
+    const personKeysKnownAbsent = knownAbsentPropertyKeys?.personPropertyKeysKnownAbsent
+    if (personKeysKnownAbsent && personKeysKnownAbsent.length > 0) {
+      extraPayload['person_property_keys_known_absent'] = [...personKeysKnownAbsent]
+    }
+    const groupKeysKnownAbsent: Record<string, string[]> = {}
+    for (const [groupType, keys] of Object.entries(knownAbsentPropertyKeys?.groupPropertyKeysKnownAbsent ?? {})) {
+      if (keys && keys.length > 0) {
+        groupKeysKnownAbsent[groupType] = [...keys]
+      }
+    }
+    if (Object.keys(groupKeysKnownAbsent).length > 0) {
+      extraPayload['group_property_keys_known_absent'] = groupKeysKnownAbsent
     }
     const result = await this.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
 

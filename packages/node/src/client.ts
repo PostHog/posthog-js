@@ -40,6 +40,7 @@ import type {
   StartSpanOptions,
   TraceSdkContext,
   UnresolvedFlagReason,
+  PostHogFlagsKnownAbsentPropertyKeys,
 } from '@posthog/core'
 import {
   AllFlagsOptions,
@@ -416,6 +417,47 @@ function buildFlagEventProperties(flagValues: Record<string, FeatureFlagValue> |
     additionalProperties['$active_feature_flags'] = activeFlags
   }
   return additionalProperties
+}
+
+// The flags service rejects longer lists, so they fail here instead of on a remote fallback.
+const MAX_KNOWN_ABSENT_PROPERTY_KEYS = 1000
+// Persons-table fields such as `created_at` are not person properties, so known absence never hides them.
+const PERSON_METADATA_KEY_PREFIX = '__posthog_person_metadata__'
+
+type KnownAbsentPropertyKeys = {
+  /** The caller's lists, unchanged, for the `/flags` request. */
+  request: PostHogFlagsKnownAbsentPropertyKeys
+  person?: ReadonlySet<string>
+  groups?: Record<string, ReadonlySet<string>>
+}
+
+/** Throws when a list is over the flags service limit; never truncates. */
+function readKnownAbsentPropertyKeys(options: {
+  personPropertyKeysKnownAbsent?: string[]
+  groupPropertyKeysKnownAbsent?: Record<string, string[]>
+}): KnownAbsentPropertyKeys {
+  const { personPropertyKeysKnownAbsent, groupPropertyKeysKnownAbsent } = options
+  const result: KnownAbsentPropertyKeys = {
+    request: { personPropertyKeysKnownAbsent, groupPropertyKeysKnownAbsent },
+  }
+  if (personPropertyKeysKnownAbsent) {
+    if (personPropertyKeysKnownAbsent.length > MAX_KNOWN_ABSENT_PROPERTY_KEYS) {
+      throw new Error(`personPropertyKeysKnownAbsent allows at most ${MAX_KNOWN_ABSENT_PROPERTY_KEYS} keys`)
+    }
+    result.person = new Set(personPropertyKeysKnownAbsent.filter((key) => !key.startsWith(PERSON_METADATA_KEY_PREFIX)))
+  }
+  if (groupPropertyKeysKnownAbsent) {
+    result.groups = {}
+    for (const [groupType, keys] of Object.entries(groupPropertyKeysKnownAbsent)) {
+      if (keys.length > MAX_KNOWN_ABSENT_PROPERTY_KEYS) {
+        throw new Error(
+          `groupPropertyKeysKnownAbsent allows at most ${MAX_KNOWN_ABSENT_PROPERTY_KEYS} keys per group type`
+        )
+      }
+      result.groups[groupType] = new Set(keys)
+    }
+  }
+  return result
 }
 
 // The actual exported Nodejs API.
@@ -2127,7 +2169,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
     disableGeoip?: boolean,
-    flagKeysToEvaluate?: string[]
+    flagKeysToEvaluate?: string[],
+    knownAbsentPropertyKeys?: PostHogFlagsKnownAbsentPropertyKeys
   ): Promise<PostHogFeatureFlagDetails | undefined> {
     const details = await super.getFeatureFlagDetailsStateless(
       distinctId,
@@ -2135,7 +2178,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       personProperties,
       groupProperties,
       disableGeoip,
-      flagKeysToEvaluate
+      flagKeysToEvaluate,
+      knownAbsentPropertyKeys
     )
     if (details !== undefined && !isPlainObject(details.flags)) {
       const message = '/flags response has a non-object `flags` field, treating it as a failed request'
@@ -2163,6 +2207,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -2174,6 +2220,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return undefined
     }
 
+    const knownAbsentPropertyKeys = readKnownAbsentPropertyKeys(options)
     const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
@@ -2207,7 +2254,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId,
       groups,
       this.personPropertiesForLocalEvaluation(distinctId, personProperties),
-      groupProperties
+      groupProperties,
+      knownAbsentPropertyKeys
     )
 
     // set defaults
@@ -2274,7 +2322,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         personProperties,
         groupProperties,
         disableGeoip,
-        [key]
+        [key],
+        knownAbsentPropertyKeys.request
       )
 
       if (flagsResponse === undefined) {
@@ -2456,6 +2505,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -2527,6 +2578,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       /** @deprecated THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. */
       sendFeatureFlagEvents?: boolean
@@ -2717,6 +2770,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -2855,6 +2910,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
+    const knownAbsentPropertyKeys = readKnownAbsentPropertyKeys(resolvedOptions || {})
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
       resolvedDistinctId,
@@ -2869,7 +2925,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       resolvedDistinctId,
       groups,
       this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
-      groupProperties
+      groupProperties,
+      knownAbsentPropertyKeys
     )
 
     // set defaults
@@ -2895,7 +2952,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         personProperties,
         groupProperties,
         disableGeoip,
-        flagKeys
+        flagKeys,
+        knownAbsentPropertyKeys.request
       )
       featureFlags = {
         ...featureFlags,
@@ -3037,6 +3095,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const { groups, disableGeoip } = resolvedOptions || {}
     const flagKeys = resolvedOptions?.flagKeys ?? undefined
+    const knownAbsentPropertyKeys = readKnownAbsentPropertyKeys(resolvedOptions || {})
 
     if (flagKeys?.length === 0) {
       return new FeatureFlagEvaluations({
@@ -3062,7 +3121,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       resolvedDistinctId,
       groups,
       this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
-      groupProperties
+      groupProperties,
+      knownAbsentPropertyKeys
     )
 
     if (onlyEvaluateLocally == undefined) {
@@ -3114,7 +3174,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         personProperties,
         groupProperties,
         disableGeoip,
-        flagKeys
+        flagKeys,
+        knownAbsentPropertyKeys.request
       )
       if (details) {
         this._minimalFlagCalledEvents = details.minimalFlagCalledEvents === true
@@ -3976,6 +4037,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const finalPersonProperties = sendFeatureFlagsOptions?.personProperties || {}
     const finalGroupProperties = sendFeatureFlagsOptions?.groupProperties || {}
     const flagKeys = sendFeatureFlagsOptions?.flagKeys
+    const { personPropertyKeysKnownAbsent, groupPropertyKeysKnownAbsent } = sendFeatureFlagsOptions || {}
+    const knownAbsentPropertyKeys = readKnownAbsentPropertyKeys({
+      personPropertyKeysKnownAbsent,
+      groupPropertyKeysKnownAbsent,
+    })
 
     // Check if we should only evaluate locally
     const onlyEvaluateLocally =
@@ -3993,6 +4059,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           groups: groupsWithStringValues,
           personProperties: finalPersonProperties,
           groupProperties: finalGroupProperties,
+          personPropertyKeysKnownAbsent,
+          groupPropertyKeysKnownAbsent,
           disableGeoip,
           onlyEvaluateLocally: true,
           flagKeys,
@@ -4014,6 +4082,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         groups: groupsWithStringValues,
         personProperties: finalPersonProperties,
         groupProperties: finalGroupProperties,
+        personPropertyKeysKnownAbsent,
+        groupPropertyKeysKnownAbsent,
         disableGeoip,
         onlyEvaluateLocally: true,
         flagKeys,
@@ -4027,7 +4097,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         groups,
         finalPersonProperties,
         finalGroupProperties,
-        disableGeoip
+        disableGeoip,
+        undefined,
+        knownAbsentPropertyKeys.request
       )
     ).flags
   }
@@ -4061,13 +4133,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     groups?: Record<string, string>,
     personProperties?: Properties,
-    groupProperties?: Record<string, Properties>
+    groupProperties?: Record<string, Properties>,
+    knownAbsentPropertyKeys?: KnownAbsentPropertyKeys
   ): FeatureFlagEvaluationContext {
     return {
       distinctId,
       groups: groups || {},
       personProperties: personProperties || {},
       groupProperties: groupProperties || {},
+      personPropertyKeysKnownAbsent: knownAbsentPropertyKeys?.person,
+      groupPropertyKeysKnownAbsent: knownAbsentPropertyKeys?.groups,
       evaluationCache: {},
     }
   }

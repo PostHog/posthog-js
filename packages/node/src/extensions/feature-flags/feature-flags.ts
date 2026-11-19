@@ -142,6 +142,10 @@ export type FeatureFlagEvaluationContext = {
   groups: Record<string, string>
   personProperties: Record<string, any>
   groupProperties: Record<string, Record<string, any>>
+  /** Person property keys known to be absent, without person-metadata keys. */
+  personPropertyKeysKnownAbsent?: ReadonlySet<string>
+  /** Group property keys known to be absent, by group type name. */
+  groupPropertyKeysKnownAbsent?: Record<string, ReadonlySet<string>>
   evaluationCache: Record<string, FeatureFlagValue>
   definitions?: FlagEvaluationSnapshot
 }
@@ -445,7 +449,13 @@ class FeatureFlagsPoller {
       }
 
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationContext)
+      return await this.matchFeatureFlagProperties(
+        flag,
+        groups[groupName],
+        focusedGroupProperties,
+        evaluationContext,
+        evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
+      )
     } else {
       const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
       if (bucketingValue === undefined) {
@@ -461,7 +471,13 @@ class FeatureFlagsPoller {
           getDefinitionUnresolvedReason(flag, evaluationContext.definitions!) ?? 'missing_context'
         )
       }
-      return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
+      return await this.matchFeatureFlagProperties(
+        flag,
+        bucketingValue,
+        personProperties,
+        evaluationContext,
+        evaluationContext.personPropertyKeysKnownAbsent
+      )
     }
   }
 
@@ -608,7 +624,8 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     bucketingValue: string,
     properties: Record<string, any>,
-    evaluationContext: FeatureFlagEvaluationContext
+    evaluationContext: FeatureFlagEvaluationContext,
+    knownAbsentKeys?: ReadonlySet<string>
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
@@ -641,6 +658,7 @@ class FeatureFlagsPoller {
             : flagAggregation
 
         let effectiveProperties = properties
+        let effectiveKnownAbsentKeys = knownAbsentKeys
 
         // Mixed-override path: condition-level aggregation differs from flag-level.
         // This assumes flag-level aggregation is null/undefined for mixed flags.
@@ -660,6 +678,7 @@ class FeatureFlagsPoller {
               continue
             }
             effectiveProperties = groupProperties[groupName]
+            effectiveKnownAbsentKeys = evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
             effectiveBucketingValue = groups[groupName]
           }
         }
@@ -669,7 +688,8 @@ class FeatureFlagsPoller {
           effectiveBucketingValue,
           condition,
           effectiveProperties,
-          evaluationContext
+          evaluationContext,
+          effectiveKnownAbsentKeys
         )
         if (matchResult === 'match') {
           const variantOverride = condition.variant
@@ -755,7 +775,8 @@ class FeatureFlagsPoller {
     bucketingValue: string,
     condition: FeatureFlagCondition,
     properties: Record<string, any>,
-    evaluationContext: FeatureFlagEvaluationContext
+    evaluationContext: FeatureFlagEvaluationContext,
+    knownAbsentKeys?: ReadonlySet<string>
   ): Promise<ConditionMatchResult> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const definitions = evaluationContext.definitions!
@@ -781,18 +802,25 @@ class FeatureFlagsPoller {
               definitions.cohorts,
               this.debugMode,
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
-              definitions.propertyMatchingVersion
+              definitions.propertyMatchingVersion,
+              knownAbsentKeys
             )
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
-          } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
+          } else if (!knownAbsentKeys?.has(prop.key) && !Object.prototype.hasOwnProperty.call(properties, prop.key)) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
             assertFeatureFlagFilterSupported(prop)
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
             continue
           } else {
-            matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
+            matches = matchProperty(
+              prop,
+              properties,
+              warnFunction,
+              definitions.propertyMatchingVersion,
+              knownAbsentKeys
+            )
           }
         } catch (e) {
           if (e instanceof RequiresServerEvaluation) {
@@ -1447,9 +1475,14 @@ function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   warnFunction?: (msg: string) => void,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>
 ): boolean {
-  return matchFeatureFlagProperty(property, propertyValues, { warnFunction, propertyMatchingVersion })
+  return matchFeatureFlagProperty(property, propertyValues, {
+    warnFunction,
+    propertyMatchingVersion,
+    knownAbsentKeys,
+  })
 }
 
 function parseSemver(value: string): [number, number, number] {
@@ -1472,7 +1505,8 @@ async function matchCohort(
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>
 ): Promise<boolean> {
   const cohortId = String(property.value)
   checkCohortExists(cohortId, cohortProperties)
@@ -1484,7 +1518,8 @@ async function matchCohort(
     cohortProperties,
     debugMode,
     flagDependencyEvaluator,
-    propertyMatchingVersion
+    propertyMatchingVersion,
+    knownAbsentKeys
   )
   return property.operator === 'not_in' ? !inCohort : inCohort
 }
@@ -1495,7 +1530,8 @@ async function matchPropertyGroup(
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>
 ): Promise<boolean> {
   // The backend's canonical empty PropertyGroup is {}.
   if (!propertyGroup || Object.keys(propertyGroup).length === 0) {
@@ -1525,7 +1561,8 @@ async function matchPropertyGroup(
           cohortProperties,
           debugMode,
           flagDependencyEvaluator,
-          propertyMatchingVersion
+          propertyMatchingVersion,
+          knownAbsentKeys
         )
         if (propertyGroupType === 'AND') {
           if (!matches) {
@@ -1572,7 +1609,8 @@ async function matchPropertyGroup(
             cohortProperties,
             debugMode,
             flagDependencyEvaluator,
-            propertyMatchingVersion
+            propertyMatchingVersion,
+            knownAbsentKeys
           )
         } else if (prop.type === 'flag') {
           if (!flagDependencyEvaluator) {
@@ -1582,7 +1620,7 @@ async function matchPropertyGroup(
           }
           matches = await flagDependencyEvaluator(prop)
         } else {
-          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion)
+          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion, knownAbsentKeys)
         }
 
         const negation = prop.negation || false

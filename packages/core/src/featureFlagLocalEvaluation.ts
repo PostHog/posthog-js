@@ -16,6 +16,8 @@ export type MatchFeatureFlagPropertyOptions = {
   semverParsingPolicy?: FeatureFlagSemverParsingPolicy
   /** Only version 2 enables explicit equality; absent/other versions use service legacy matching. */
   propertyMatchingVersion?: number
+  /** Keys the caller knows are absent. A listed key is absent even when `propertyValues` has a value for it. */
+  knownAbsentKeys?: ReadonlySet<string>
 }
 
 export type FeatureFlagVariant = {
@@ -40,6 +42,16 @@ const NULL_VALUES_ALLOWED_OPERATORS = [
   'ends_with',
   'not_ends_with',
   'regex',
+  'not_regex',
+]
+
+// Operators that match a known-absent key, like the flags service. Every other operator does not match.
+const KNOWN_ABSENT_MATCHING_OPERATORS = [
+  'is_not_set',
+  'is_not',
+  'not_icontains',
+  'not_starts_with',
+  'not_ends_with',
   'not_regex',
 ]
 
@@ -576,6 +588,11 @@ export function matchFeatureFlagProperty(
   propertyValues: Record<string, any>,
   options: MatchFeatureFlagPropertyOptions = {}
 ): boolean {
+  if (options.knownAbsentKeys?.has(property.key)) {
+    // An unusable filter stays inconclusive even for a known-absent key.
+    assertFeatureFlagFilterSupported(property, options)
+    return KNOWN_ABSENT_MATCHING_OPERATORS.includes(property.operator || 'exact')
+  }
   try {
     return matchPropertyValue(property, propertyValues, options)
   } catch (e) {
