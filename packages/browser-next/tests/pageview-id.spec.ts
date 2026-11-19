@@ -1,6 +1,7 @@
 import { createPostHog as createDefault } from '../src/composition/npm/core'
 import type { IPostHog } from '../src/core/types'
 import {
+    MemoryStorage,
     recordCapture,
     recordedEvents,
     recordingOptions,
@@ -25,6 +26,31 @@ describe('pageview ID', () => {
     afterEach(async () => {
         await posthog.shutdown()
         vi.useRealTimers()
+    })
+
+    it('has no pageview ID once its session has expired', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+        posthog.capture('$pageview')
+        await posthog.flush()
+        vi.setSystemTime(new Date('2026-01-01T01:00:00Z'))
+
+        expect(posthog.getPageViewId()).toBeUndefined()
+    })
+
+    it('has no pageview ID after another tab resets', async () => {
+        const storage = new MemoryStorage()
+        const options = { ...recordingOptions(recordCapture([])), storage }
+        const first = await createDefault(options)
+        const second = await createDefault(options)
+        try {
+            first.capture('$pageview')
+            second.reset()
+
+            expect(first.getPageViewId()).toBeUndefined()
+        } finally {
+            await Promise.all([first.shutdown(), second.shutdown()])
+        }
     })
 
     it('has no pageview ID before a pageview is captured', async () => {

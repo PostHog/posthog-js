@@ -78,8 +78,8 @@ export class Lane<E> {
     }
 
     /**
-     * Drives delivery through the events queued now. With `immediate`, a failure of an earlier batch does not
-     * cancel the first attempt of those events: one more drain is forced for them.
+     * Drives delivery through the events queued now. With `immediate`, one more drain is forced if an earlier batch
+     * fails before those events are attempted; behind a full batch of older events, they can still wait for the next drain.
      */
     flush(immediate = false): Promise<void> {
         this._buffer._expireQueue(this._buffer._now())
