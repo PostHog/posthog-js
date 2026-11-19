@@ -50,6 +50,15 @@ const localStorage = (): Storage | undefined => {
     }
 }
 
+/** Removes the widget state that `getConversationsStorageKey()` in the renderer chunk names. */
+const removeStoredWidget = (token: string): void => {
+    try {
+        localStorage()?.removeItem('ph_conv_' + token)
+    } catch {
+        // Without usable storage there is no widget state to remove.
+    }
+}
+
 /**
  * Starts the client with a verified identity, as posthog-js bootstraps `identity_distinct_id`: a visitor without
  * earlier sessions takes the ID without an `$identify` event, while one with earlier anonymous activity is identified
@@ -225,7 +234,9 @@ export const createConversations = (
             subscriptions.push(
                 posthog.onReset(() => {
                     // Reset starts a fresh widget session for the next visitor, without a verified identity.
-                    manager?.reset()
+                    if (manager) manager.reset()
+                    // Without a widget, for example while opted out or loading, the previous session is still stored.
+                    else removeStoredWidget(posthog.projectToken)
                     manager = undefined
                     generation++
                     identity = undefined
