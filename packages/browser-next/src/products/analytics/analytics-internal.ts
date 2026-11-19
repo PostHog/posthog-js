@@ -40,7 +40,7 @@ export interface AnalyticsDelivery extends LaneDelivery<AnalyticsMessage> {
 
 /** Delivery driver attached to the client's event buffer. A driver without an immediate path reports immediate capture as unavailable. */
 export interface AnalyticsDriver {
-    /** With `immediate`, a failed earlier batch does not cancel the first attempt of the events queued now. */
+    /** With `immediate`, one more drain is forced if an earlier batch fails before the events queued now are attempted. */
     flush(immediate?: boolean): Promise<void>
     deliverImmediate?: AnalyticsDelivery['deliverImmediate']
     deliverUnload(messages: readonly AnalyticsMessage[]): void

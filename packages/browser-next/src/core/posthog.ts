@@ -379,7 +379,9 @@ class PostHog implements IPostHog {
     }
 
     getPageViewId(): string | undefined {
-        return this._analytics._pageview?.[0]
+        const pageview = this._analytics._pageview
+        // A pageview belongs to its session, so an expired or rotated session has none.
+        return pageview && pageview[1] === this._state.activeSessionId ? pageview[0] : undefined
     }
 
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
