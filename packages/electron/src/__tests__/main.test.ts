@@ -634,17 +634,21 @@ describe('main Electron client', () => {
         // Call the SDK listener directly: emitting would also reach the test runner's rejection listener.
         const listener = process.rawListeners('unhandledRejection').at(-1) as (reason: unknown) => void
         listener(new RangeError('main rejection'))
-        // Strict mode escalates to the monitor and then emits unhandledRejection for the same rejection.
+        // Node's strict mode escalates to the monitor before emitting unhandledRejection; only the listener reports it.
         const strict = new RangeError('strict rejection')
         EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', strict, 'unhandledRejection')
-        // A different rejection arriving in between must still be reported.
-        listener(new RangeError('interleaved rejection'))
         listener(strict)
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new TypeError('main throw'),
+            'uncaughtException'
+        )
         await owner.flush()
         expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
             'main rejection',
             'strict rejection',
-            'interleaved rejection',
+            'main throw',
         ])
         expect(batches[0]).toMatchObject({
             properties: {

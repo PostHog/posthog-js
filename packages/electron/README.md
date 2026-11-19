@@ -163,7 +163,7 @@ Consent is checked before inspecting error properties or submitting exception da
     })
     ```
 
-    This installs `process.on('unhandledRejection')`, which changes Node's default handling: Electron no longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the process (`strict` still does). Each rejection is reported once with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. The listener is removed at shutdown.
+    This installs `process.on('unhandledRejection')`, which changes Node's default handling: Electron no longer prints `UnhandledPromiseRejectionWarning`, and Node's `throw` mode no longer terminates the process. If Node's `strict` mode is in effect, a rejection that ends the process before the listener runs is not captured. Each rejection is reported once with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. The listener is removed at shutdown.
 
 - Or keep the default and capture from your own handler:
 
