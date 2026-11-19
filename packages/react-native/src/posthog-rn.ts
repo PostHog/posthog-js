@@ -370,6 +370,7 @@ export class PostHog extends PostHogCoreBase {
   private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _appLanguage: string | undefined
+  private _malformedFlagPayloads = new Set<string>()
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
@@ -1735,7 +1736,11 @@ export class PostHog extends PostHogCoreBase {
     try {
       return JSON.parse(payload)
     } catch {
-      this._logger.warn('Feature flag payload is not valid JSON; reading it as null.')
+      // Payloads are decoded on every flag read, so each malformed one is reported once.
+      if (!this._malformedFlagPayloads.has(payload)) {
+        this._malformedFlagPayloads.add(payload)
+        this._logger.warn('Feature flag payload is not valid JSON; reading it as null.')
+      }
       return null
     }
   }
