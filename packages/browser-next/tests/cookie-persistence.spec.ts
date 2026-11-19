@@ -463,4 +463,36 @@ describe('cookie persistence', () => {
         www.register({ color: 'blue' })
         expect(jar.read()?.distinct_id).toBe(app.distinctId)
     })
+
+    it('starts a new session in an open tab after a posthog-js reset', async () => {
+        const now = Date.now()
+        const oldSession = uuidv7(now - 60_000)
+        jar.write({
+            distinct_id: 'legacy-user',
+            $device_id: 'legacy-device',
+            $user_state: 'identified',
+            $sesid: [now, oldSession, now - 60_000],
+        })
+        visit('www.example.com')
+        const sent: SentEvent[] = []
+        const www = await create(new MemoryStorage(), sent)
+        www.capture('before_reset')
+        const sessions: string[] = []
+        www.onSessionId(({ sessionId }) => sessions.push(sessionId))
+
+        // posthog-js reset() writes a new anonymous identity and an empty session.
+        jar.write({
+            distinct_id: 'legacy-anonymous',
+            $device_id: 'legacy-device',
+            $user_state: 'anonymous',
+            $sesid: [null, null, null],
+        })
+        www.capture('after_reset')
+        await www.flush()
+
+        const after = sent.find((event) => event.event === 'after_reset')
+        expect(after).toMatchObject({ distinct_id: 'legacy-anonymous' })
+        expect(after?.session_id).not.toBe(oldSession)
+        expect(sessions).toEqual([oldSession, after?.session_id])
+    })
 })
