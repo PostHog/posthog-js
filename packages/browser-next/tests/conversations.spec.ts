@@ -471,6 +471,7 @@ describe('conversations loading', () => {
     }
 
     it('reports initializing while the renderer loads and starts over after a reset during loading', async () => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ widgetSessionId: 'previous-session' }))
         const { client, extension, renderer } = await createDeferred()
         expect(extension.getUnavailableReason()).toBe('initializing')
 
@@ -479,6 +480,7 @@ describe('conversations loading', () => {
 
         await loaded(client)
         expect(renderer.load).toHaveBeenCalledTimes(2)
+        expect(extension.getWidgetSessionId()).not.toBe('previous-session')
     })
 
     it('does not create a widget when opted out while the renderer loads', async () => {
@@ -520,6 +522,18 @@ describe('conversations consent', () => {
         client.optIn()
         await loaded(client)
         expect(extension.getWidgetSessionId()).toBe(sessionId)
+    })
+
+    it('starts a fresh widget session after a reset while opted out', async () => {
+        const { client } = await createClient({ conversations: widgetConfig() })
+        const extension = await loaded(client)
+        const sessionId = extension.getWidgetSessionId()
+
+        client.optOut()
+        client.reset()
+        client.optIn()
+        await loaded(client)
+        expect(extension.getWidgetSessionId()).not.toBe(sessionId)
     })
 
     it('waits for opt-in when capture starts opted out', async () => {
