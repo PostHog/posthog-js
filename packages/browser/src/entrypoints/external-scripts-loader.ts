@@ -2,6 +2,10 @@ import type { PostHog } from '../posthog-core'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isString } from '@posthog/core'
+import { EXTENSION_INTEGRITY } from '../utils/extension-integrity'
+import { SUBRESOURCE_INTEGRITY_PATTERN } from '../utils/loader-script'
+import { LoadExternalDependency, setBundledExtensionLoader } from '../utils/extension-loader'
 
 const logger = createLogger('[ExternalScriptsLoader]')
 
@@ -21,7 +25,18 @@ const findScript = (url: string): HTMLScriptElement | undefined => {
     return undefined
 }
 
-const loadScript = (posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) => {
+type LoadCallback = (error?: string | Event, event?: Event) => void
+
+const refuse = (callback: LoadCallback, error: string, configError?: boolean): void => {
+    if (configError) {
+        logger.critical(error)
+    } else {
+        logger.warn(error)
+    }
+    callback(error)
+}
+
+const loadScript = (posthog: PostHog, url: string, callback: LoadCallback, integrity?: string) => {
     if (posthog.config.disable_external_dependency_loading) {
         logger.warn(`${url} was requested but loading of external scripts is disabled.`)
         return callback('Loading of external scripts is disabled')
@@ -38,6 +53,9 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         let scriptTag: HTMLScriptElement | null = document.createElement('script')
         scriptTag.type = 'text/javascript'
         scriptTag.crossOrigin = 'anonymous'
+        if (integrity) {
+            scriptTag.integrity = integrity
+        }
         scriptTag.src = url
         scriptTag.onload = (event) => {
             ;(scriptTag as any).__posthog_loading_callback_fired = true
@@ -54,6 +72,18 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
 
         if (!scriptTag) {
             return callback('prepare_external_dependency_script returned null')
+        }
+        // The hook may rewrite src for proxies or self-hosting: the hash still pins the bytes.
+        // Browsers never apply integrity to inline code, so a src is required.
+        if (
+            integrity &&
+            (!scriptTag.src || scriptTag.integrity !== integrity || scriptTag.crossOrigin !== 'anonymous')
+        ) {
+            return refuse(
+                callback,
+                `prepare_external_dependency_script must keep src, integrity and crossOrigin 'anonymous' for ${url}`,
+                true
+            )
         }
 
         // Preparation runs on a detached candidate, never on a shared script that
@@ -139,11 +169,37 @@ const legacyScriptUrl = (posthog: PostHog, kind: PostHogExtensionKind): string =
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.loadExternalDependency = (
+const loadExternalDependency: LoadExternalDependency = (
     posthog: PostHog,
     kind: PostHogExtensionKind,
-    callback: (error?: string | Event, event?: Event) => void
+    callback: LoadCallback
 ): void => {
+    if (posthog.config.require_subresource_integrity) {
+        if (kind === 'remote-config' || kind === 'toolbar') {
+            return refuse(
+                callback,
+                `${kind} can't be integrity-verified, so it is not loaded with require_subresource_integrity`
+            )
+        }
+        // Without native support, assigning integrity only sets an ignored property.
+        if (!document || !('integrity' in document.createElement('script'))) {
+            return refuse(callback, 'This browser does not support Subresource Integrity', true)
+        }
+        const file = `${kind}.js`
+        const integrity = EXTENSION_INTEGRITY[file]
+        if (!isString(integrity) || !SUBRESOURCE_INTEGRITY_PATTERN.test(integrity)) {
+            return refuse(callback, `No integrity hash for ${file}`, true)
+        }
+        // Never fall back to a mutable URL: integrity applies to the exact-version bytes.
+        loadScript(
+            posthog,
+            posthog.requestRouter.endpointFor('assets', `/static/${posthog.version}/${file}`),
+            callback,
+            integrity
+        )
+        return
+    }
+
     // remote-config always loads from the token-specific path
     if (kind === 'remote-config') {
         const url = posthog.requestRouter.endpointFor('assets', `/array/${posthog.config.token}/config.js`)
@@ -189,12 +245,16 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 
     loadScript(posthog, legacyScriptUrl(posthog, kind), callback)
 }
+setBundledExtensionLoader(loadExternalDependency)
+assignableWindow.__PosthogExtensions__.loadExternalDependency = loadExternalDependency
 
-assignableWindow.__PosthogExtensions__.loadSiteApp = (
-    posthog: PostHog,
-    url: string,
-    callback: (error?: string | Event, event?: Event) => void
-): void => {
+assignableWindow.__PosthogExtensions__.loadSiteApp = (posthog: PostHog, url: string, callback: LoadCallback): void => {
+    if (posthog.config.require_subresource_integrity) {
+        return refuse(
+            callback,
+            `Site apps can't be integrity-verified, so ${url} is not loaded with require_subresource_integrity`
+        )
+    }
     const scriptUrl = posthog.requestRouter.endpointFor('api', url)
 
     loadScript(posthog, scriptUrl, callback)
