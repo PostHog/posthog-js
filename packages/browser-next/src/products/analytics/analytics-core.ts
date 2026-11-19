@@ -126,7 +126,8 @@ export class Analytics {
         readonly _core: AnalyticsCore,
         options: AnalyticsOptions,
         createDelivery: AnalyticsDeliveryFactory,
-        private readonly _urlSanitization: UrlSanitizationOptions
+        /** The client's URL policy, which logs and web vitals apply to the URLs they record. */
+        readonly _urlSanitization: UrlSanitizationOptions
     ) {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))

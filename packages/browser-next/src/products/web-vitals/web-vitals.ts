@@ -3,11 +3,14 @@ import {
     WebVitalsAutocapture,
     type WebVitalsCallbackFlavor,
     type WebVitalsCallbacks,
+    type WebVitalsAutocaptureOptions,
     type WebVitalsMetricCallbacks,
 } from '@posthog/browser-common/web-vitals'
 import type { PerformanceCaptureConfig } from '@posthog/types'
 import type { BrowserProducts } from '../../core/context/browser-client'
 import type { IPostHog } from '../../core/types'
+import { analyticsOf } from '../analytics/analytics-core'
+import { recordedUrl } from '../analytics/properties/page-properties'
 import type { WebVitalsOptions } from './web-vitals-options'
 
 export type { WebVitalsOptions, WebVitalsMetric } from './web-vitals-options'
@@ -60,24 +63,37 @@ const toPerformanceConfig = (options: WebVitalsOptions): PerformanceCaptureConfi
     }
 }
 
+// Measured URLs follow the client's `urlSanitization`, as events' `$current_url` does.
+class BrowserNextWebVitals extends WebVitalsAutocapture {
+    constructor(
+        options: WebVitalsAutocaptureOptions,
+        private readonly _recordUrl: (href: string | undefined) => string | undefined
+    ) {
+        super(options)
+    }
+
+    // The URL the library measured, such as a soft navigation's, or else the live page URL.
+    protected override _maskedURL(url?: string): string | undefined {
+        return this._recordUrl(url || globalThis.window?.location?.href)
+    }
+}
+
 /** Include web vitals capture statically instead of loading it when the project enables it. */
 export const webVitals = (options: WebVitalsOptions = {}): BrowserProducts['webVitals'] => {
-    const config = {
-        capture_performance: toPerformanceConfig(options),
-        disable_capture_url_hashes: options.disableCaptureUrlHashes ?? true,
-        mask_personal_data_properties: options.maskPersonalDataProperties ?? true,
-        custom_personal_data_properties: [...(options.customPersonalDataProperties ?? [])],
-    }
+    const config = { capture_performance: toPerformanceConfig(options) }
     let client: IPostHog | undefined
     let resetSubscription: Disposable | undefined
-    const shared = new WebVitalsAutocapture({
-        getConfig: () => config,
-        loadObservers: (getFlavor, onLoad) => {
-            loadCallbacks(getFlavor(), () => !!client?.canCapture)
-                .then(onLoad)
-                .catch((error: unknown) => client?.logger.error('[Web Vitals] failed to start', error))
+    const shared = new BrowserNextWebVitals(
+        {
+            getConfig: () => config,
+            loadObservers: (getFlavor, onLoad) => {
+                loadCallbacks(getFlavor(), () => !!client?.canCapture)
+                    .then(onLoad)
+                    .catch((error: unknown) => client?.logger.error('[Web Vitals] failed to start', error))
+            },
         },
-    })
+        (href) => client && recordedUrl(href, analyticsOf(client)!._urlSanitization)?.href
+    )
     return {
         name: 'webVitals',
         setup: (value) => {

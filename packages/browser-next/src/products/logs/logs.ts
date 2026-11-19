@@ -1,4 +1,3 @@
-import { sanitizeUrl } from '@posthog/browser-common/utils/sanitize-url'
 import type { Client, Disposable } from '@posthog/browser-common'
 import type { IPostHog } from '../../core/types'
 import { PostHogLogs } from '@posthog/browser-common/logs'
@@ -6,10 +5,12 @@ import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
 import type { ConsoleLogsHost } from '@posthog/browser-common/console-logs'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
+import { analyticsOf } from '../analytics/analytics-core'
+import { recordedUrl } from '../analytics/properties/page-properties'
 import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
-export type { LogsOptions, CaptureLogOptions, UrlCaptureOptions } from './logs-options'
+export type { LogsOptions, CaptureLogOptions } from './logs-options'
 export type { LogsExtension } from './logs-internal'
 
 interface LogsEnvironment {
@@ -18,14 +19,14 @@ interface LogsEnvironment {
     disposed: boolean
 }
 
-const readSdkContext = (environment: LogsEnvironment, config: LogsOptions) => {
+const readSdkContext = (environment: LogsEnvironment) => {
     const client = environment.client!
     const session = client.session
     const distinctId = client.distinctId
     let currentUrl: string | undefined
     try {
-        const href = environment.browserWindow?.location?.href
-        if (href) currentUrl = sanitizeUrl(href, config.urlCapture ?? {})
+        // The page URL is shaped like events' `$current_url`.
+        currentUrl = recordedUrl(environment.browserWindow?.location?.href, analyticsOf(client)!._urlSanitization)?.href
     } catch {
         /* Unavailable location is omitted. */
     }
@@ -44,7 +45,7 @@ class BrowserNextLogs extends PostHogLogs {
         private readonly _environment: LogsEnvironment
     ) {
         super({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true }, () =>
-            readSdkContext(_environment, config)
+            readSdkContext(_environment)
         )
     }
 
