@@ -13,6 +13,7 @@ import {
     getEventTarget,
     getSafeText,
     isAngularStyleAttr,
+    isAutocapturePrivacyBlocked,
     isSensitiveElement,
     makeSafeText,
     MAX_DOM_ANCESTOR_DEPTH,
@@ -25,7 +26,8 @@ import {
 
 import RageClick from './rageclick'
 import type { EventName, Properties } from '@posthog/types'
-import type { RemoteConfigResult } from './types/remote-config'
+import type { RemoteConfig } from './types/remote-config'
+import type { Listener } from './pubsub'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 
@@ -150,7 +152,7 @@ export function getPropertiesFromElement(
         })
 
     // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
-    each(elem.attributes, function (attr: Attr) {
+    each(isAutocapturePrivacyBlocked(elem) ? [] : elem.attributes, function (attr: Attr) {
         // Only capture attributes we know are safe
         if (isSensitiveElement(elem) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
 
@@ -211,30 +213,23 @@ export function autocapturePropertiesForElement(
     const targetElementList: Element[] = [target]
     const seen = new Set<Node>([target])
     let curEl: Element = target
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
+    while (!isTag(curEl, 'body')) {
         // bail out of abnormally deep or cyclic (patched parentNode) ancestor chains
         if (targetElementList.length >= MAX_DOM_ANCESTOR_DEPTH) {
             break
         }
-        if (isShadowRoot(curEl.parentNode)) {
-            const host = curEl.parentNode.host
-            if (seen.has(host)) {
-                break
-            }
-            seen.add(host)
-            targetElementList.push(host)
-            curEl = host
-            continue
-        }
-        if (!isElementNode(curEl.parentNode)) {
+        const parent: ParentNode | null = curEl.assignedSlot || curEl.parentNode
+        const ancestor: Element | null = isShadowRoot(parent)
+            ? parent.host
+            : parent && isElementNode(parent)
+              ? parent
+              : null
+        if (!ancestor || seen.has(ancestor)) {
             break
         }
-        if (seen.has(curEl.parentNode)) {
-            break
-        }
-        seen.add(curEl.parentNode)
-        targetElementList.push(curEl.parentNode)
-        curEl = curEl.parentNode
+        seen.add(ancestor)
+        targetElementList.push(ancestor)
+        curEl = ancestor
     }
 
     // Keep the original path for privacy and selector checks, but attribute icon clicks
@@ -261,7 +256,12 @@ export function autocapturePropertiesForElement(
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
-        if (isTag(el, 'a') && !maskAllElementAttributes && !elementAttributeIgnoreList?.includes('href')) {
+        if (
+            shouldCaptureEl &&
+            isTag(el, 'a') &&
+            !maskAllElementAttributes &&
+            !elementAttributeIgnoreList?.includes('href')
+        ) {
             const hrefAttr = el.getAttribute('href')
             href =
                 shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
@@ -339,6 +339,14 @@ export function autocapturePropertiesForElement(
     return { props, target }
 }
 
+export type AutocaptureRemoteConfigResult =
+    | { ok: true; config: Pick<RemoteConfig, 'autocapture_opt_out' | 'elementsChainAsString'> }
+    | { ok: false }
+
+export type AutocaptureClient = Pick<Client, 'distinctId' | 'kv' | 'capture'> & {
+    readonly onRemoteConfig: Listener<AutocaptureRemoteConfigResult>
+}
+
 export const AutocaptureExtension = 'autocapture' as ExtensionToken<Autocapture>
 
 export class Autocapture implements Extension {
@@ -352,7 +360,7 @@ export class Autocapture implements Extension {
     _elementsChainAsString = false
     private _listenerWindow: Window | undefined
     private _listenerDocument: Document | undefined
-    private _client: Client | undefined
+    private _client: AutocaptureClient | undefined
     private readonly _config: AutocaptureConfig = {
         enabled: false,
         rageclick: false,
@@ -403,7 +411,7 @@ export class Autocapture implements Extension {
             ) {
                 return true
             }
-            const parent: ParentNode | null = el.parentNode
+            const parent: ParentNode | null = el.assignedSlot || el.parentNode
             el = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
         }
         return false
@@ -486,12 +494,10 @@ export class Autocapture implements Extension {
         this._elementSelectors = null
     }
 
-    setup(client: Client): void {
+    setup(client: AutocaptureClient): void {
         this._compileUrlPatterns()
         this._client = client
-        const subscription = client.onRemoteConfig(
-            this.onRemoteConfig.bind(this) as Parameters<Client['onRemoteConfig']>[0]
-        )
+        const subscription = client.onRemoteConfig(this.onRemoteConfig.bind(this))
         if (this._disposed) {
             subscription.dispose()
             return
@@ -622,7 +628,7 @@ export class Autocapture implements Extension {
         }
     }
 
-    public onRemoteConfig(result: RemoteConfigResult): void {
+    public onRemoteConfig(result: AutocaptureRemoteConfigResult): void {
         if (this._disposed) {
             return
         }

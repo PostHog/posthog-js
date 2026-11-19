@@ -6,7 +6,10 @@
         "module": "ESNext",
         "moduleResolution": "bundler",
         "lib": ["ES2022", "DOM"],
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "paths": {
+            "@posthog/electron/renderer": ["./src/renderer/index.ts"]
+        }
     },
     "include": ["src/**/*.ts", "tsdown.config.mts", "vitest.config.ts"]
 }

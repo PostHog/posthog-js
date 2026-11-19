@@ -361,6 +361,46 @@ describe('SiteApps', () => {
             expect(posthog.on).toHaveBeenCalledWith('eventCaptured', expect.any(Function))
         })
 
+        describe('with require_subresource_integrity', () => {
+            beforeEach(() => {
+                posthog.config.require_subresource_integrity = true
+                mockLogger.critical.mockClear()
+            })
+
+            it('does not run preloaded site apps even with opt_in_site_apps', () => {
+                init()
+                siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+                expect(siteAppsInstance.isEnabled).toBe(false)
+                expect(appConfigs).toEqual([])
+                expect(siteAppsInstance.apps).toEqual({})
+                expect(posthog._addCaptureHook).not.toHaveBeenCalled()
+                expect(posthog.on).not.toHaveBeenCalled()
+                expect(mockLogger.critical).toHaveBeenCalledTimes(1)
+                expect(mockLogger.critical).toHaveBeenCalledWith(
+                    'opt_in_site_apps is ignored: require_subresource_integrity disables site apps'
+                )
+            })
+
+            it('does not load legacy site app URLs from remote config', () => {
+                siteAppsInstance.initialize()
+                siteAppsInstance.onRemoteConfig({
+                    ok: true,
+                    config: { siteApps: [{ id: 'sri', url: '/site_app/sri' }] } as RemoteConfig,
+                })
+
+                expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
+                expect(assignableWindow['__$$ph_site_app_sri']).toBeUndefined()
+            })
+
+            it('does not warn when site apps were not requested', () => {
+                posthog.config.opt_in_site_apps = false
+                siteAppsInstance.initialize()
+
+                expect(mockLogger.critical).not.toHaveBeenCalled()
+            })
+        })
+
         it('does not sets up the eventCaptured listener if no site apps', () => {
             init()
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
