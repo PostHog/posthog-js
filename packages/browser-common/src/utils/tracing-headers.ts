@@ -184,8 +184,13 @@ const addTracingHeaders = (
     }
     const currentDistinctId = getDistinctId()
     if (currentDistinctId) {
-        headers.set(DISTINCT_ID_HEADER, currentDistinctId)
-        hasAddedHeaders = true
+        try {
+            headers.set(DISTINCT_ID_HEADER, currentDistinctId)
+            hasAddedHeaders = true
+        } catch {
+            // A distinct ID can contain characters a header value cannot (for example non-Latin-1 text),
+            // so the request goes out without it.
+        }
     }
     return hasAddedHeaders
 }
@@ -355,11 +360,15 @@ export const patchFetch = (
                 const requestUrl = getRequestUrl(win, url)
                 if (requestUrl) {
                     if (isRequest(url)) {
+                        // Prepare the headers first: constructing the Request below takes the caller's body, so a
+                        // failure after it would leave the fallback with a body that has already been used.
+                        const tracingHeaders = new Headers()
+                        addTracingHeaders(hostnames, getDistinctId, getSession, requestUrl, tracingHeaders)
                         // For fetch(Request, init), construct a new Request so init overrides are applied and the
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         const req = new Request(url, init)
-                        addTracingHeaders(hostnames, getDistinctId, getSession, req.url, req.headers)
+                        tracingHeaders.forEach((value, name) => req.headers.set(name, value))
                         addTraceparentHeader(win, traceparentTargets, req.url, req.headers)
                         fetchArgs = [req]
                     } else {
@@ -429,10 +438,15 @@ export const patchXHR = (
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
-                const headers = new Headers()
+                let headers = new Headers()
                 const requestUrl = getRequestUrl(win, url)
                 if (requestUrl) {
-                    addTracingHeaders(hostnames, getDistinctId, getSession, requestUrl, headers)
+                    try {
+                        addTracingHeaders(hostnames, getDistinctId, getSession, requestUrl, headers)
+                    } catch {
+                        // Do not let tracing header preparation break the host app's XHR.
+                        headers = new Headers()
+                    }
                 }
                 if (pendingTraceparents) {
                     pendingTraceparents.delete(xhr)
