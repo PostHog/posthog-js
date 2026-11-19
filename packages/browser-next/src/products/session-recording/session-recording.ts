@@ -72,6 +72,10 @@ const toPersistedConfig = (
     }
 }
 
+/** Whether two saved replay configurations differ only in when they were saved. */
+const sameConfig = (a: SessionRecordingPersistedConfig, b: SessionRecordingPersistedConfig): boolean =>
+    JSON.stringify({ ...a, cache_timestamp: 0 }) === JSON.stringify({ ...b, cache_timestamp: 0 })
+
 const hasDocumentEverBeenVisible = (): boolean => {
     try {
         const document = globalThis.document
@@ -269,6 +273,7 @@ class SessionRecordingProduct implements SessionRecordingExtension {
         if (persisted.sampleRate === null) {
             client.kv.remove([SESSION_RECORDING_IS_SAMPLED, SESSION_RECORDING_SAMPLE_RATE])
         }
+        const previous = this._trustedConfig
         this._trustedConfig = persisted
         this._receivedConfig = true
         client.kv.set(SESSION_RECORDING_REMOTE_CONFIG, persisted)
@@ -278,6 +283,8 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             return
         }
         if (this._status === 'awaiting_config' || this._status === 'missing_config') this._status = 'disabled'
+        // a recorder started from a saved configuration restarts so what it records next follows the fresh one
+        if (this._recorder?.isStarted && previous && !sameConfig(previous, persisted)) this._recorder.stop()
         this._startIfEnabledOrStop()
     }
 
