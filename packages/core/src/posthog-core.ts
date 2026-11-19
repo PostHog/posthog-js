@@ -1068,6 +1068,20 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return parsePayload(payload)
   }
 
+  // A v1 response carries raw payloads, so they're decoded with this client's decoder as they're read.
+  protected getFlagsResponseFormat(): {
+    version: 2 | 4
+    read: (body: unknown) => PostHogFeatureFlagsResponse
+  } {
+    return {
+      version: super.getFlagsResponseFormat().version,
+      read: (body) =>
+        normalizeFlagsResponse(body as PostHogV1FlagsResponse | PostHogV2FlagsResponse, (payload) =>
+          this.decodeFeatureFlagPayload(payload)
+        ),
+    }
+  }
+
   /**
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
