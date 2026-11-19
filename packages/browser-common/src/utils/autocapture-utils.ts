@@ -6,8 +6,7 @@ import { logger } from './logger'
 import { getTargetingUrl, type UrlTargetingInstance } from './url-targeting-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './element-utils'
 
-// Real DOM trees are at most a few hundred nodes deep; a patched parentNode
-// chain could otherwise trap ancestor walks in an unbounded loop.
+// Bound walks through very deep trees or cyclic, patched parentNode chains.
 export const MAX_DOM_ANCESTOR_DEPTH = 1000
 
 export function splitClassString(s: string): string[] {
@@ -308,7 +307,8 @@ export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfi
         ? DEFAULT_DEAD_CLICK_IGNORE_LIST
         : (_config?.css_selector_ignorelist ?? DEFAULT_DEAD_CLICK_IGNORE_LIST)
 
-    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const { targetElementList, isComplete } = getElementAndParentsForElement(el, false)
+    if (!isComplete) return false
 
     // we don't capture if we match the ignore list
     return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
@@ -371,7 +371,8 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const { targetElementList, isComplete } = getElementAndParentsForElement(el, false)
+    if (!isComplete) return false
 
     if (contentIgnorelist && shouldIgnoreByContent(contentIgnorelist, clickedControlText(el, targetElementList))) {
         return false
@@ -388,20 +389,30 @@ const cannotCheckForAutocapture = (el: Element | null) => {
 const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
     const win = typeof window === 'undefined' ? undefined : window
     if (!win || cannotCheckForAutocapture(el)) {
-        return { parentIsUsefulElement: false, targetElementList: [] }
+        return { parentIsUsefulElement: false, targetElementList: [], isComplete: false }
     }
 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
     let curEl: Element = el
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if (isShadowRoot(curEl.parentNode)) {
-            targetElementList.push(curEl.parentNode.host)
-            curEl = curEl.parentNode.host
+    const seen = new Set<Element>([el])
+    while (!isTag(curEl, 'body')) {
+        const parent: ParentNode | null = curEl.assignedSlot || curEl.parentNode
+        const parentNode: Element | null = isShadowRoot(parent)
+            ? parent.host
+            : parent && isElementNode(parent)
+              ? parent
+              : null
+        if (!parentNode) break
+        if (seen.has(parentNode) || seen.size >= MAX_DOM_ANCESTOR_DEPTH) {
+            return { parentIsUsefulElement, targetElementList, isComplete: false }
+        }
+        seen.add(parentNode)
+        if (isShadowRoot(parent)) {
+            targetElementList.push(parentNode)
+            curEl = parentNode
             continue
         }
-        const parentNode = getParentElement(curEl)
-        if (!parentNode) break
         if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
@@ -416,7 +427,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         targetElementList.push(parentNode)
         curEl = parentNode
     }
-    return { parentIsUsefulElement, targetElementList }
+    return { parentIsUsefulElement, targetElementList, isComplete: true }
 }
 
 // dead-click skips a click only when the click target is — or is inside — an <a>.
@@ -431,8 +442,8 @@ export function shouldSkipDeadClick(el: Element | null): boolean {
     if (!win || cannotCheckForAutocapture(el)) {
         return false
     }
-    const { targetElementList } = getElementAndParentsForElement(el, false)
-    return targetElementList.some((node) => isTag(node, 'a'))
+    const { targetElementList, isComplete } = getElementAndParentsForElement(el, false)
+    return !isComplete || targetElementList.some((node) => isTag(node, 'a'))
 }
 
 /*
@@ -479,7 +490,11 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    const { parentIsUsefulElement, targetElementList } = getElementAndParentsForElement(el, captureOnAnyElement)
+    const { parentIsUsefulElement, targetElementList, isComplete } = getElementAndParentsForElement(
+        el,
+        captureOnAnyElement
+    )
+    if (!isComplete) return false
 
     if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
         return false
@@ -520,6 +535,28 @@ export function shouldCaptureDomEvent(
     }
 }
 
+export function isAutocapturePrivacyBlocked(el: Element): boolean {
+    const seen = new Set<Node>()
+    let depth = 0
+    let curEl: Element | null = el
+    while (curEl) {
+        // Abnormal (too deep or cyclic) chain: we can't finish the sensitivity
+        // checks, so fail closed and don't capture.
+        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
+            return true
+        }
+        seen.add(curEl)
+
+        const classes = getClassNames(curEl)
+        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
+            return true
+        }
+        const parent: ParentNode | null = curEl.assignedSlot || curEl.parentNode
+        curEl = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+    }
+    return false
+}
+
 /*
  * Check whether a DOM element should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
@@ -527,21 +564,7 @@ export function shouldCaptureDomEvent(
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
-    const seen = new Set<Node>()
-    let depth = 0
-    for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
-        // Abnormal (too deep or cyclic) chain: we can't finish the sensitivity
-        // checks, so fail closed and don't capture.
-        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
-            return false
-        }
-        seen.add(curEl)
-
-        const classes = getClassNames(curEl)
-        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
-            return false
-        }
-    }
+    if (isAutocapturePrivacyBlocked(el)) return false
 
     if (includes(getClassNames(el), 'ph-include')) {
         return true
