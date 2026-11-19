@@ -391,6 +391,7 @@ export class PostHog extends PostHogCore {
   private _fatalJsCaptureNativeInitialized: boolean = false
   private _pushNativeUnsupported: boolean = false
   private _sessionReplayMacOSWarned: boolean = false
+  private _triggerGroupsLegacyPluginWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
   // True when the last evaluation wanted to record but the native start failed, so the next
@@ -3478,9 +3479,12 @@ export class PostHog extends PostHogCore {
           }
         }
 
+        // Under v2 trigger groups JS owns replay, so native must not start (or, after a JS pause,
+        // restart) the recorder from its own remote config: JS starts it with startRecording().
+        const nativeAutoStart = enableSessionReplay && this._sessionReplayTriggerGroups === null
         const pluginConfig = {
           sessionReplay: {
-            enabled: enableSessionReplay,
+            enabled: nativeAutoStart,
             sdkReplayConfig,
             decideReplayConfig: cachedSessionReplayConfig,
           },
@@ -3530,6 +3534,14 @@ export class PostHog extends PostHogCore {
         this._pushNativeUnsupported = true
         if (!enableSessionReplay) {
           return false
+        }
+        // start() always turns native automatic replay on, so native can resume a recorder JS paused.
+        if (this._sessionReplayTriggerGroups !== null && !this._triggerGroupsLegacyPluginWarned) {
+          this._triggerGroupsLegacyPluginWarned = true
+          this._logger.warn(
+            'Session replay trigger groups need @posthog/react-native-plugin for PostHog to fully control the recorder. ' +
+              'With posthog-react-native-session-replay, the native SDK may resume a recording a trigger group paused.'
+          )
         }
         nativeSessionOwner = this
         if (!(await OptionalReactNativePlugin.isEnabled())) {
@@ -3773,9 +3785,18 @@ export class PostHog extends PostHogCore {
       }
       // Record the actual outcome; on failure it stays false so the next reload retries.
       // (Already initialized means replay was paused by an earlier flag-off, so resume it.)
-      this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
-        ? await this._startSessionRecording(true)
-        : await this.initializeNativePlugin(options, remoteConfig, true)
+      if (this._sessionReplayNativeInitialized) {
+        this._sessionReplayRecordingActive = await this._startSessionRecording(true)
+      } else {
+        // setup() leaves native replay off under trigger groups, so start it explicitly.
+        const startAfterSetup =
+          this._sessionReplayTriggerGroups !== null &&
+          !!OptionalReactNativePlugin?.setup &&
+          !this._isNativePluginInitialized()
+        const initialized = await this.initializeNativePlugin(options, remoteConfig, true)
+        this._sessionReplayRecordingActive =
+          initialized && startAfterSetup ? await this._startSessionRecording(true) : initialized
+      }
       this._sessionReplayStartFailed = this._sessionReplayRecordingActive !== true
     } else {
       this._logger.info('Session replay disabled.')
