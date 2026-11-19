@@ -67,13 +67,19 @@ describe('require_subresource_integrity callers', () => {
 
     const loadedKinds = () => bundledLoader.mock.calls.map(([, kind]) => kind)
 
-    it('initializes with defaults and keeps capturing when remote config is refused', () => {
+    it.each([
+        ['without site apps, never requests config.js', false],
+        ['with opt_in_site_apps, refuses config.js', true],
+    ])('loads remote config as JSON and keeps capturing %s', (_, optInSiteApps) => {
         const sendRequest = vi.spyOn(PostHog.prototype, '_send_request').mockImplementation(({ callback }) => {
             callback?.({ statusCode: 200, json: createRemoteConfig() })
         })
-        const { posthog, onCapture } = init({ advanced_disable_feature_flags: false })
+        const { posthog, onCapture } = init({
+            advanced_disable_feature_flags: false,
+            opt_in_site_apps: optInSiteApps,
+        })
 
-        expect(loadedKinds()).toContain('remote-config')
+        expect(loadedKinds().includes('remote-config')).toBe(optInSiteApps)
         expect(document.getElementsByTagName('script')).toHaveLength(0)
         expect(posthog.__loaded).toBe(true)
         expect(sendRequest).toHaveBeenCalledWith(
