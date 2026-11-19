@@ -187,6 +187,35 @@ describe('manual exception capture', () => {
         expect(fromObject.$exception_list[0].value).toContain('object message')
     })
 
+    it('keeps every frame of a supplied stack that starts with a frame', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+        const stack = 'crash@https://example.test/app.js:40:2\nentry@https://example.test/app.js:10:2'
+        const native = new Error('native')
+        native.stack = stack
+
+        tracking.captureException({ message: 'serialized', stack })
+        tracking.captureException(native)
+
+        const functions = (await exceptions(posthog, sent)).map((properties) =>
+            properties.$exception_list[0].stacktrace.frames.map((frame: { function: string }) => frame.function)
+        )
+        expect(functions).toEqual([
+            ['entry', 'crash'],
+            ['entry', 'crash'],
+        ])
+    })
+
+    it('drops exceptions thrown by the PostHog SDK', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent)
+        const error = new Error('sdk failure')
+        error.stack = 'Error: sdk failure\n    at run (https://us-assets.i.posthog.com/static/browser/0/script.js:1:2)'
+
+        expect(tracking.captureException(error)).toBe(false)
+        expect(await exceptions(posthog, sent)).toEqual([])
+    })
+
     it('lists the caught exception first and its cause last', async () => {
         const sent: CapturedEvent[] = []
         const { posthog, tracking } = await createWith(sent)

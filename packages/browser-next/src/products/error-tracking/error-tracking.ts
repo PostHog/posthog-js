@@ -71,14 +71,18 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
     let autocaptureSources = ''
     const unwrap: Array<() => void> = []
 
-    const send = ({ client, logger }: ActiveErrorTracking, properties: ExceptionProperties): boolean => {
+    const send = (
+        { client, logger }: ActiveErrorTracking,
+        properties: ExceptionProperties,
+        capturePostHogExceptions = false
+    ): boolean => {
         try {
             const drop = getExceptionDrop(
                 properties.$exception_list,
                 {
                     suppressionRules,
                     captureExtensionExceptions: config.captureExtensionExceptions ?? remoteCaptureExtensionExceptions,
-                    capturePostHogExceptions: false,
+                    capturePostHogExceptions,
                 },
                 logger
             )
@@ -221,12 +225,20 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
             try {
                 const current = active
                 if (!current?.client.canCapture) return false
+                // The builder would trim the first line of every stack of a non-Error value, including one the
+                // caller supplied. Trim only the SDK frame from the fallback stack and parse every stack whole.
+                const syntheticException = new Error('PostHog syntheticException')
+                syntheticException.stack = (syntheticException.stack ?? '').split('\n').slice(1).join('\n')
                 const exceptionProperties = builder.buildFromUnknown(error, {
-                    syntheticException: new Error('PostHog syntheticException'),
+                    syntheticException,
+                    skipFirstLines: 0,
                     mechanism: { handled: true },
                 })
+                // A synthetic exception's stack is the SDK's fallback or one supplied with a non-Error value, not a
+                // throw site, so its frames do not show that the SDK threw it.
+                const synthetic = exceptionProperties.$exception_list[0]?.mechanism?.synthetic === true
                 // SDK-owned exception properties take precedence over caller properties.
-                return send(current, { ...properties, ...exceptionProperties })
+                return send(current, { ...properties, ...exceptionProperties }, synthetic)
             } catch {
                 // Do not log: console.error may be wrapped and would re-enter exception capture.
                 return false
