@@ -127,7 +127,8 @@ export const createConversations = (
         },
         _sendRequest: ({ path, method, data, headers, timestampMode, callback }) => {
             const url = timestampMode ? `${path}${path.includes('?') ? '&' : '?'}_=${Date.now()}` : path
-            posthog.sendRequest(url, { method, headers, ...(data ? { body: data } : {}) }).then(
+            // posthog-js's default deadline, so a stalled request fails instead of holding a poll open.
+            posthog.sendRequest(url, { method, headers, timeoutMs: 60_000, ...(data ? { body: data } : {}) }).then(
                 (response) => callback(response),
                 (error: unknown) => callback({ statusCode: 0, error })
             )
