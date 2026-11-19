@@ -38,6 +38,22 @@ interface ActiveErrorTracking {
 // The browser-next logger writes its prefix as a separate first console argument.
 const DIAGNOSTIC_PREFIX = /^\[PostHog\](?: |$)/
 
+// SDK- and processor-owned exception properties. A null value leaves the key out of the sent event, so neither
+// caller nor registered properties can supply it.
+const UNSET_OWNED_PROPERTIES = {
+    $exception_source: null,
+    $debug_images: null,
+    $exception_types: null,
+    $exception_values: null,
+    $exception_sources: null,
+    $exception_functions: null,
+    $exception_fingerprint_version: null,
+    $exception_fingerprint_record: null,
+    $exception_issue_id: null,
+    $exception_release: null,
+    $cymbal_errors: null,
+}
+
 const toAutocaptureConfig = (
     value: boolean | ExceptionAutocaptureOptions | undefined
 ): Parameters<typeof resolveExceptionAutocaptureConfig>[0] => {
@@ -114,7 +130,7 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                     })
                     return
                 }
-                send(current, { ...properties, $exception_source: source })
+                send(current, { ...UNSET_OWNED_PROPERTIES, ...properties, $exception_source: source })
             } catch {
                 // Automatic capture must never throw into the page.
             }
@@ -238,7 +254,7 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                 // throw site, so its frames do not show that the SDK threw it.
                 const synthetic = exceptionProperties.$exception_list[0]?.mechanism?.synthetic === true
                 // SDK-owned exception properties take precedence over caller properties.
-                return send(current, { ...properties, ...exceptionProperties }, synthetic)
+                return send(current, { ...properties, ...UNSET_OWNED_PROPERTIES, ...exceptionProperties }, synthetic)
             } catch {
                 // Do not log: console.error may be wrapped and would re-enter exception capture.
                 return false
