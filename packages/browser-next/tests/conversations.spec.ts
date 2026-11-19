@@ -456,6 +456,21 @@ describe('conversations identity', () => {
         expect(request?.url.searchParams.has('widget_session_id')).toBe(false)
     })
 
+    it('uses the claims the identity option had when the extension was created', async () => {
+        const email = { value: 'old@example.com', hash: 'old-hash' }
+        const extension = conversations({ identity: { distinctId: 'user-2', hash: 'hash-2', claims: { email } } })
+        email.value = 'new@example.com'
+        email.hash = 'new-hash'
+        const { client, requests } = await createClient({ conversations: widgetConfig() }, { extensions: [extension] })
+        await loaded(client)
+
+        await extension.getTickets()
+
+        const [request] = conversationRequests(requests, '/widget/tickets')
+        expect(request?.url.searchParams.get('identity_email')).toBe('old@example.com')
+        expect(request?.url.searchParams.get('identity_hash_email')).toBe('old-hash')
+    })
+
     it('clears the verified identity and starts a fresh widget session on reset', async () => {
         const { client, requests } = await createClient({ conversations: widgetConfig() })
         const extension = await loaded(client)
