@@ -221,12 +221,14 @@ const toCookie = (record: Values, existing: Values | undefined, stale: boolean):
     const reset = record.sessionReset !== undefined || (!identified && existing?.distinct_id !== record.distinctId)
     const value: Values = existing && (stale || !reset) ? existing : {}
     if (!stale) {
+        // Another subdomain can enable person processing for this identity before this context reads it.
+        const processing = value.$epp === true && sameIdentity(value, [record.distinctId, identified])
         value.distinct_id = record.distinctId
         value.$device_id = record.deviceId
         value.$user_state = identified ? 'identified' : 'anonymous'
         const extensionData = record.extensionData
         const data = isRecord(extensionData) ? extensionData[CLIENT_KV_NAMESPACE] : undefined
-        if (isRecord(data) && data.personProcessingEnabled === true) value.$epp = true
+        if (processing || (isRecord(data) && data.personProcessingEnabled === true)) value.$epp = true
         else delete value.$epp
     }
     const session = record.session

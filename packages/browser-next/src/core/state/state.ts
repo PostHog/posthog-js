@@ -419,7 +419,14 @@ export class BrowserState {
             return false
         }
         this._storedIdentity = identityOf(stored)
-        if (this._storedIdentity === known || this._storedIdentity === identityOf(this._state)) {
+        if (this._storedIdentity === identityOf(this._state)) {
+            // Another subdomain can enable person processing without changing the identity.
+            if (stored.extensionData[CLIENT_KV_NAMESPACE]?.personProcessingEnabled === true) {
+                ;(this._state.extensionData[CLIENT_KV_NAMESPACE] ??= emptyRecord()).personProcessingEnabled = true
+            }
+            return false
+        }
+        if (this._storedIdentity === known) {
             return false
         }
         // The stored record already drops groups and caches that belonged to this context's identity.
