@@ -37,8 +37,12 @@ describe('known-absent property keys', () => {
   }
 
   afterEach(async () => {
-    mockedFetch.mockReset()
-    await posthog.shutdown()
+    try {
+      // Shutdown flushes queued events, so the fetch mock must still be in place.
+      await posthog.shutdown()
+    } finally {
+      mockedFetch.mockReset()
+    }
   })
 
   it.each([
