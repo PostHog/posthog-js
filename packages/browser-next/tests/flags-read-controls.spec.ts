@@ -606,3 +606,22 @@ it.each([
     expect(await refresh).toEqual({ status: 'error' })
     expect(flags.getFeatureFlag('test', fresh)?.variant).toBe('remote')
 })
+
+it('returns injected payloads with their original types from every read', async () => {
+    const client = await create({ flags: { featureFlagEvaluation: false } })
+    const flags = requireInstalled(client.featureFlags)
+    const delivered: FeatureFlagResult[][] = []
+    flags.onFeatureFlags((next) => delivered.push(next))
+    flags.updateFlags({ sku: true, healthy: true }, { sku: '123', healthy: { ok: true } })
+    flags.updateFlags({ quoted: true }, { quoted: '"text"' }, { merge: true })
+    const expected = [
+        { key: 'sku', enabled: true, variant: undefined, payload: '123' },
+        { key: 'healthy', enabled: true, variant: undefined, payload: { ok: true } },
+        { key: 'quoted', enabled: true, variant: undefined, payload: '"text"' },
+    ]
+    expect(flags.getAllFeatureFlags()).toEqual(expected)
+    expect(delivered.at(-1)).toEqual(expected)
+    for (const result of expected) {
+        expect(flags.getFeatureFlag(result.key, { sendFeatureFlagEvent: false })).toEqual(result)
+    }
+})

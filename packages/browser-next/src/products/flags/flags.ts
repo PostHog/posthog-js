@@ -226,7 +226,11 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         updateFlags: (values, payloads, settings) => {
             if (disposed) return
             try {
-                shared.updateFlags(values, payloads, settings)
+                // Reads decode stored payloads once, as serialized server payloads, so store injected values serialized.
+                const serialized =
+                    payloads &&
+                    Object.fromEntries(Object.entries(payloads).map(([key, payload]) => [key, JSON.stringify(payload)]))
+                shared.updateFlags(values, serialized, settings)
             } catch (error) {
                 client?.logger.error('Feature flags update failed', error)
             }
