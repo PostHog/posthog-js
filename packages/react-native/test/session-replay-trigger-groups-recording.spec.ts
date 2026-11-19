@@ -421,6 +421,160 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(2))
   })
 
+  describe('an explicit startSessionRecording()', () => {
+    const flagGroup = {
+      id: 'g1',
+      name: 'Flagged',
+      sampleRate: 1,
+      conditions: { matchType: 'any', flag: { flag: 'replay-flag' } },
+    }
+
+    it('waits for a pending group with replay off, and a matching event starts it', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      posthog.capture('purchase')
+      await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+    })
+
+    it('waits for a pending group with replay on, and a matching event starts it', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.startSessionRecording()
+      expect(replay.start).not.toHaveBeenCalled()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      posthog.capture('purchase')
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    })
+
+    it('waits for a pending flag leg, and a flags load that turns the flag on starts it', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.startSessionRecording()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+    })
+
+    it('does not record a session the groups sample out', async () => {
+      currentSessionRecording = v2Config([{ id: 'g1', name: 'None', sampleRate: 0, conditions: { matchType: 'all' } }])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      await posthog.reloadFeatureFlagsAsync()
+      posthog.capture('purchase')
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.startRecording).not.toHaveBeenCalled()
+      expect(replay.start).not.toHaveBeenCalled()
+    })
+
+    it('records when a group already records the session', async () => {
+      currentSessionRecording = v2Config([
+        purchaseGroup,
+        { id: 'g2', name: 'Always', sampleRate: 1, conditions: { matchType: 'all' } },
+      ])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+    })
+
+    it('holds a new-session start in the session it rotated into, and a matching event starts it there', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      const originalSessionId = posthog.getSessionId()
+      await posthog.startSessionRecording(false)
+      expect(replay.startRecording).not.toHaveBeenCalled()
+      const newSessionId = posthog.getSessionId()
+      expect(newSessionId).not.toEqual(originalSessionId)
+
+      posthog.capture('purchase')
+      await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+      expect(replay.startRecording).toHaveBeenCalledWith(true)
+      expect(posthog.getSessionId()).toEqual(newSessionId)
+      expect(
+        posthog.getPersistedProperty<any>(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)?.sessionId
+      ).toEqual(newSessionId)
+      expect(replay.startSession.mock.calls.map(([id]) => id)).toEqual([newSessionId])
+    })
+
+    it('rotates once and starts a new-session start that a group already records', async () => {
+      currentSessionRecording = v2Config([
+        { id: 'g2', name: 'Always', sampleRate: 1, conditions: { matchType: 'all' } },
+      ])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      const originalSessionId = posthog.getSessionId()
+      await posthog.startSessionRecording(false)
+      const newSessionId = posthog.getSessionId()
+      expect(newSessionId).not.toEqual(originalSessionId)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+      expect(replay.startRecording).toHaveBeenCalledWith(true)
+      expect(replay.startSession.mock.calls.map(([id]) => id)).toEqual([newSessionId])
+      expect(replay.endSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the v1 new-session start rotating after native setup', async () => {
+      currentSessionRecording = { endpoint: '/s/' }
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      const originalSessionId = posthog.getSessionId()
+      await posthog.startSessionRecording(false)
+      const newSessionId = posthog.getSessionId()
+      expect(newSessionId).not.toEqual(originalSessionId)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+      expect(replay.startRecording).toHaveBeenCalledWith(false)
+      expect(replay.startSession.mock.calls.map(([id]) => id)).toEqual([originalSessionId, newSessionId])
+    })
+
+    it('keeps the v1 explicit start ungated by v1 event triggers', async () => {
+      currentSessionRecording = { eventTriggers: ['purchase'], endpoint: '/s/' }
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+    })
+  })
+
   const rotateSession = (): void => {
     posthog.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 31 * 60 * 1000)
     posthog.getSessionId()

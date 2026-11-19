@@ -165,6 +165,8 @@ const EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES: { [key: string]: JsonType | undefin
 type ManualRecordingStartRequest = {
   pending: boolean
   retryCount: number
+  // False until the request has moved into the new session it asked for.
+  resumeCurrent: boolean
   timer?: ReturnType<typeof setTimeout>
   // Set for the opt-in restore: holds the start until an event trigger fires in the current session.
   awaitEventTrigger?: boolean
@@ -2200,7 +2202,7 @@ export class PostHog extends PostHogCore {
     if (!this.optedOut && !isMacOS()) {
       this._sessionReplayWanted = true
     }
-    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0, resumeCurrent }
     this._manualRecordingStartRequest = request
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
     // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
@@ -2208,7 +2210,7 @@ export class PostHog extends PostHogCore {
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        await this._attemptManualRecordingStart(request, resumeCurrent)
+        await this._attemptManualRecordingStart(request)
       })
     await this._sessionReplayEvalChain
   }
@@ -2218,10 +2220,7 @@ export class PostHog extends PostHogCore {
     this._manualRecordingStartRequest = undefined
   }
 
-  private async _attemptManualRecordingStart(
-    request: ManualRecordingStartRequest,
-    resumeCurrent: boolean
-  ): Promise<boolean> {
+  private async _attemptManualRecordingStart(request: ManualRecordingStartRequest): Promise<boolean> {
     if (this._manualRecordingStartRequest !== request) {
       return false
     }
@@ -2243,9 +2242,29 @@ export class PostHog extends PostHogCore {
       }
       return false
     }
+    // An explicit start keeps the v2 trigger group gates. A pending group holds the request, and a
+    // matching event or flags load retries it.
+    const groupsDecision = await this._evaluateTriggerGroupsForManualStart(request)
+    if (this._manualRecordingStartRequest !== request) {
+      return false
+    }
+    if (groupsDecision && !groupsDecision.shouldRecord) {
+      if (groupsDecision.hasPendingGroups) {
+        request.pending = true
+        // Native optIn() restarts the recorder by itself.
+        if (this._sessionReplayNativeInitialized) {
+          await this._stopSessionRecording()
+        }
+      } else {
+        this._cancelManualRecordingStart()
+      }
+      return false
+    }
     this._sessionReplayStartedByApp = true
 
-    const started = await this._startSessionRecording(resumeCurrent)
+    const started = await this._startSessionRecording(request.resumeCurrent)
+    // A retry resumes the session this attempt started in.
+    request.resumeCurrent = true
     // Cancellation is synchronous; a bridge call already in flight can still finish later.
     // Do not let its result revive the old request or leave its recorder running.
     if (this._manualRecordingStartRequest !== request) {
@@ -2261,6 +2280,39 @@ export class PostHog extends PostHogCore {
       this._scheduleManualRecordingStartRetry(request)
     }
     return started
+  }
+
+  // null under v1. With replay off the evaluation leaves the groups disarmed, so this arms them from
+  // the cached config, which also lets a matching event activate a group and retry the request.
+  // A new-session start rotates first, so the groups decide for the session that records.
+  private async _evaluateTriggerGroupsForManualStart(
+    request: ManualRecordingStartRequest
+  ): Promise<SessionReplayTriggerGroupsDecision | null> {
+    await this._initPromise
+    const triggerGroups = parseSessionRecordingTriggerGroups(
+      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)
+    )
+    if (triggerGroups === null || this._manualRecordingStartRequest !== request) {
+      return null
+    }
+    if (!request.resumeCurrent && OptionalReactNativePlugin) {
+      this._rotateSessionForManualStart()
+      request.resumeCurrent = true
+    }
+    const sessionId = super.getSessionId()
+    this._sessionReplayTriggerGroups = triggerGroups
+    this._triggerGroupsEvaluator.onConfig(triggerGroups)
+    this._triggerGroupsEvaluator.restoreActivation(
+      sessionId,
+      this.getPersistedProperty<SessionReplayTriggerGroupsActivation>(
+        PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
+      )
+    )
+    return this._triggerGroupsEvaluator.evaluate(
+      sessionId,
+      this.getKnownFeatureFlags(),
+      this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+    )
   }
 
   private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
@@ -2279,10 +2331,21 @@ export class PostHog extends PostHogCore {
       this._sessionReplayEvalChain = this._sessionReplayEvalChain
         .catch(() => {})
         .then(async () => {
-          // The original attempt already rotated the session if resumeCurrent was false.
-          await this._attemptManualRecordingStart(request, true)
+          await this._attemptManualRecordingStart(request)
         })
     }, delay)
+  }
+
+  // Before native setup there is no native session to sync: setup reads the rotated id itself.
+  private _rotateSessionForManualStart(): void {
+    if (this._isNativePluginInitialized()) {
+      this._rotateReplaySession()
+    } else {
+      super.resetSessionId()
+      this._currentSessionId = super.getSessionId()
+    }
+    // An explicit start into a new session is its own decision: don't re-evaluate it as a rotation.
+    this._replayEvaluatedSessionId = super.getSessionId()
   }
 
   private _rotateReplaySession(): void {
@@ -3674,7 +3737,7 @@ export class PostHog extends PostHogCore {
       }
       const request = this._manualRecordingStartRequest
       if (request?.pending && !restoreAppRecording) {
-        await this._attemptManualRecordingStart(request, true)
+        await this._attemptManualRecordingStart(request)
       }
       return
     }
@@ -3851,9 +3914,14 @@ export class PostHog extends PostHogCore {
   // rotated, waits for an event trigger in that session, and retries like a manual start.
   private _restoreAppRecording(): Promise<boolean> {
     this._cancelManualRecordingStart()
-    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0, awaitEventTrigger: true }
+    const request: ManualRecordingStartRequest = {
+      pending: false,
+      retryCount: 0,
+      resumeCurrent: true,
+      awaitEventTrigger: true,
+    }
     this._manualRecordingStartRequest = request
-    return this._attemptManualRecordingStart(request, true)
+    return this._attemptManualRecordingStart(request)
   }
 
   // Whether the cached linked flag lets replay record. If the Flags API has not returned yet,
