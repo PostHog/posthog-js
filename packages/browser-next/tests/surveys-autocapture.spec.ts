@@ -29,6 +29,13 @@ const definition: Survey = {
         actions: { values: [{ id: 1, name: 'trigger', steps: [{ event: '$autocapture', selector: '.first' }] }] },
     },
 }
+// A sanitizer that rejects the page URL leaves events without one, so local action matching uses the targeting URL.
+const withoutPageUrl = {
+    sanitize: (): never => {
+        throw new Error('omit the page URL')
+    },
+}
+
 const base = {
     projectToken: 'test',
     navigator: false,
@@ -175,6 +182,7 @@ describe('survey autocapture selectors', () => {
         const client = await createPostHog({
             ...base,
             storage: false,
+            urlSanitization: withoutPageUrl,
             surveys: { automaticDisplay: false, getCurrentUrl: () => 'https://example.test/target' },
             fetch: async () => new Response(JSON.stringify({ surveys: [targeted] })),
         })
@@ -225,6 +233,7 @@ describe('survey autocapture selectors', () => {
         const client = await createPostHog({
             ...base,
             storage: false,
+            urlSanitization: withoutPageUrl,
             surveys: { automaticDisplay: false, getCurrentUrl: () => 'https://example.test/target' },
             fetch: async () => new Response(JSON.stringify({ surveys: [action, event, cancel] })),
         })

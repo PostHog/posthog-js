@@ -12,7 +12,10 @@ export interface SurveysOptions {
     overrideDisplayLanguage?: string
     /** Prepare each survey stylesheet, for example to apply a CSP nonce. */
     prepareStylesheet?: StylesheetPreparer
-    /** Override the URL used by survey targeting. */
+    /**
+     * Override the URL used by survey URL conditions. Survey action triggers match on the event's `$current_url`,
+     * so rewrite that with `urlSanitization.sanitize`.
+     */
     getCurrentUrl?: (url: string) => string
 }
 

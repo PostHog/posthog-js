@@ -79,6 +79,29 @@ With default browser storage, session properties use Core-owned per-tab storage,
 
 Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event or after the current session expires remain pending for the next admitted session. Registration does not extend session activity. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
 
+## Page URL and title
+
+Every event carries the page URL as `$current_url`, with its `$host` and `$pathname`, read from `window.location` when the event is captured. `$pageview` events also carry the document `title`. Without a `window` or `document`, these properties are omitted. Registered and caller values replace them for that event. Web vitals replaces only `$current_url`, with the URL of the page it measured.
+
+By default, the URL is the full page URL, as in `posthog-js`, except that credentials are always removed. `urlSanitization` selects what is kept:
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    urlSanitization: {
+        path: true, // default true; false records `/`
+        query: true, // default true; false drops query parameters
+        hash: false, // default true; false drops the fragment
+        sanitize: (url) => {
+            url.searchParams.delete('token')
+            return url
+        },
+    },
+})
+```
+
+`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Web vitals, logs and session replay record URLs with their own options. The classic script's query options cannot set `urlSanitization`.
+
 ## Migrating from the analytics extension
 
 Earlier 0.x versions exposed analytics as a separate product. It is now part of the client:
@@ -517,7 +540,7 @@ Both factories start one JSON remote-config request during initialization, witho
 
 When remote configuration advertises gzip, eligible normal batches use native `CompressionStream`; delivery remains uncompressed while configuration is unresolved or compression is unavailable, invalid, stalled, or larger than the JSON body. While offline, finalized events remain admitted and avoid network attempts until an `online` notification. On `pagehide`, or `unload` where `pagehide` is unavailable, queued analytics receive one synchronous uncompressed handoff through headered keepalive Fetch under one conservative aggregate body budget. Beacon remains disabled until Capture V1 supports the required metadata without request headers.
 
-One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Events captured after a `$pageview` in the same session carry its UUID as `$pageview_id`, and `posthog.getPageViewId()` returns it. Navigation tracking, URL/title enrichment, and page-leave capture remain optional product behavior.
+One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Events captured after a `$pageview` in the same session carry its UUID as `$pageview_id`, and `posthog.getPageViewId()` returns it. Events carry the page URL and pageviews the title (see [Page URL and title](#page-url-and-title)). Pageviews for client-side navigation and page-leave capture are not available yet.
 
 Consent is stored separately from identity under `__ph_opt_in_out_<project-token>`. Use `consentPersistenceName` to supply a shared key verbatim. The client reads established `1`/`true`/`yes` and `0`/`false`/`no` values, including raw boolean and numeric compatibility values, and writes `1` or `0`. Configured extensions still initialize under prior denial. Identity, key-value persistence, remote configuration, feature flag evaluation and the early-access listing remain available, as in `posthog-js`, while analytics capture and other request transmission are consent-gated.
 

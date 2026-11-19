@@ -247,6 +247,23 @@ describe('session recording page URLs', () => {
             })
             .filter(([tag]) => tags.includes(tag))
 
+    it('does not report a URL change after a pageview whose recorded URL drops parts of the page URL', async () => {
+        window.history.replaceState(null, '', '/checkout?step=2')
+        const { posthog, replay, transport: network } = await setup({}, {}, { urlSanitization: { query: false } })
+        await started(replay)
+
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'xy')
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$pageview', '$url_changed'])).toEqual([
+            ['$pageview', 'http://localhost:3000/checkout'],
+            ['$pageview', 'http://localhost:3000/checkout'],
+        ])
+    })
+
     it('omits $url_changed fallback markers when capturePageview is enabled', async () => {
         const { replay, transport: network } = await setup({}, {}, { capturePageview: true })
         await started(replay)

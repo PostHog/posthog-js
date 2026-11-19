@@ -32,6 +32,7 @@ export type {
     SendRequestInit,
     SessionContext,
     StorageLike,
+    UrlSanitizationOptions,
 } from '../../core/types'
 
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'

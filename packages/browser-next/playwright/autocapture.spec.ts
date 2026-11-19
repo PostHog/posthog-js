@@ -56,7 +56,7 @@ test('masking retains action selectors without exposing text or attributes', asy
     expect(await page.evaluate(() => window.autocaptureHarness.eligible())).toBe(true)
 })
 
-test('URL-constrained DOM actions match local context without adding it to the captured event', async ({ page }) => {
+test('URL-constrained DOM actions match the page URL captured on the event', async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => window.autocaptureHarness.initialize('dynamic', false, false, '/eligible'))
     await page.locator('.trigger circle').click()
@@ -67,6 +67,6 @@ test('URL-constrained DOM actions match local context without adding it to the c
     const events = await page.evaluate(() =>
         window.autocaptureHarness.events().filter(({ event }) => event === '$autocapture')
     )
-    expect(events).toHaveLength(2)
-    for (const event of events) expect(event.properties).not.toHaveProperty('$current_url')
+    const origin = new URL(page.url()).origin
+    expect(events.map((event) => event.properties.$current_url)).toEqual([`${origin}/`, `${origin}/eligible`])
 })

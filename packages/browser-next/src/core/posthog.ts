@@ -36,6 +36,7 @@ import type {
     ResetOptions,
     RuntimeOptions,
     StorageLike,
+    UrlSanitizationOptions,
 } from './types'
 import { version } from '../primitives/version'
 import type { FlagsExtension } from '../products/flags/flags-internal'
@@ -278,6 +279,7 @@ class PostHog implements IPostHog {
             return subscription
         }
         let analyticsOptions: AnalyticsOptions = {}
+        let urlSanitization: UrlSanitizationOptions = {}
         try {
             analyticsOptions = options.analytics ?? {}
             if ((analyticsOptions as unknown) === false) {
@@ -285,10 +287,11 @@ class PostHog implements IPostHog {
                     'The `analytics: false` option was removed in this version, so events are captured. Set `capturePageview: false` to skip the initial $pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture.'
                 )
             }
+            urlSanitization = { ...options.urlSanitization }
         } catch {
             // Unreadable analytics options retain the defaults.
         }
-        this._analytics = new Analytics(this, analyticsOptions, createDelivery)
+        this._analytics = new Analytics(this, analyticsOptions, createDelivery, urlSanitization)
         this.onEvent = this._analytics._eventPublisher.listener
         this.onIdentify = this._analytics._identifyPublisher.listener
         this.onChangeProperties = this._analytics._changePropertiesPublisher.listener
