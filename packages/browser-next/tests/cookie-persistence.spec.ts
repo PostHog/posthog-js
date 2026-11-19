@@ -117,6 +117,20 @@ describe('cookie persistence', () => {
         expect(jar.read()).toMatchObject({ distinct_id: 'user-1', $initial_person_info: { r: '$direct' } })
     })
 
+    it('keeps posthog-js cookie keys when identify follows an adopted subdomain reset', async () => {
+        const app = await create(new MemoryStorage())
+        visit('www.example.com')
+        const www = await create(new MemoryStorage())
+        visit('app.example.com')
+        app.reset()
+        // posthog-js on another page records initial person info for the new anonymous user.
+        jar.write({ ...(jar.read() as Record<string, unknown>), $initial_person_info: { r: '$direct' } })
+        visit('www.example.com')
+        www.identify('user-1')
+
+        expect(jar.read()).toMatchObject({ distinct_id: 'user-1', $initial_person_info: { r: '$direct' } })
+    })
+
     it('keeps posthog-js cookie keys when identify follows an adopted posthog-js reset', async () => {
         const now = Date.now()
         jar.write({
