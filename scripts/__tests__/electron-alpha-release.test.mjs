@@ -156,6 +156,11 @@ test('manual alpha workflow has no default publishing, stable promotion, or buil
     )
     assert.equal((workflow.match(/id-token: write/g) ?? []).length, 1)
     const build = workflow.split('    build:\n')[1].split('    publish:\n')[0]
+    assert.deepEqual(
+        [...build.matchAll(/^ +ref: (.+)$/gm)].map(([, ref]) => ref),
+        ['${{ github.sha }}'],
+        'Build checkout must use the immutable dispatch commit, not a workflow input'
+    )
     assert.doesNotMatch(build, /id-token:|secrets\.|npm publish/)
     assert.doesNotMatch(workflow, /--tag latest|changeset pre|pnpm bump|git push/)
     for (const action of workflow.matchAll(/uses: ([^\n]+)/g)) assert.match(action[1], /@[a-f0-9]{40} #/)
