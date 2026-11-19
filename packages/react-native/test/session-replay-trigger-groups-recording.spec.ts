@@ -280,6 +280,30 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
   })
 
+  it('warns once that trigger groups need the setup() plugin, and still follows the group decision', async () => {
+    currentSessionRecording = v2Config([purchaseGroup])
+    await warmup()
+
+    posthog = newPostHog()
+    const warn = vi.spyOn((posthog as any)._logger, 'warn')
+    const legacyWarnings = (): number =>
+      warn.mock.calls.filter(([message]) => String(message).includes('@posthog/react-native-plugin for PostHog')).length
+    await posthog.ready()
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+    expect(legacyWarnings()).toBe(0)
+
+    replay.start.mockImplementationOnce(async () => {
+      throw new Error('native start failed')
+    })
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    posthog.capture('purchase')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
+
+    expect(legacyWarnings()).toBe(1)
+  })
+
   it('does not re-evaluate replay on every match while a group is sampled out', async () => {
     currentSessionRecording = v2Config([{ ...purchaseGroup, sampleRate: 0 }])
     await warmup()
@@ -576,4 +600,98 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
     }
   )
+
+  describe('with the setup() plugin', () => {
+    // Models the native recorder: setup() starts it only when asked to, and startRecording() only
+    // when native accepts (it refuses until its remote config loads).
+    let nativeAccepts = true
+    let nativeRecording = false
+    const setup = vi.fn(async (_sessionId: string, _sdkOptions: any, pluginConfig: any) => {
+      nativeRecording = pluginConfig.sessionReplay.enabled && nativeAccepts
+    })
+    const replayEnabledAtSetup = (): boolean[] => setup.mock.calls.map(([, , config]) => config.sessionReplay.enabled)
+
+    beforeEach(() => {
+      nativeAccepts = true
+      nativeRecording = false
+      setup.mockClear()
+      ;(replay as any).setup = setup
+      ;(replay as any).setOptOut = vi.fn(async () => {})
+      replay.isEnabled.mockImplementation(async () => nativeRecording)
+      replay.startRecording.mockImplementation(async () => {
+        nativeRecording = nativeAccepts
+      })
+      replay.stopRecording.mockImplementation(async () => {
+        nativeRecording = false
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      delete (replay as any).setup
+      delete (replay as any).setOptOut
+      replay.startRecording.mockImplementation(async () => {})
+      replay.stopRecording.mockImplementation(async () => {})
+    })
+
+    const settle = async (): Promise<void> => {
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+    }
+
+    const flagGroup = {
+      id: 'g1',
+      name: 'Flagged',
+      sampleRate: 1,
+      conditions: { matchType: 'any', flag: { flag: 'replay-flag' } },
+    }
+
+    it('sets native up with replay off and starts the recorder explicitly', async () => {
+      currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
+      await warmup()
+      setup.mockClear()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await settle()
+
+      expect(replayEnabledAtSetup()).toEqual([false])
+      expect(replay.startRecording.mock.calls).toEqual([[true]])
+      expect(nativeRecording).toBe(true)
+      expect(replay.start).not.toHaveBeenCalled()
+    })
+
+    it('stops native on a JS pause without ever setting it up to start on its own', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': true }
+      await warmup()
+      setup.mockClear()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await settle()
+      expect(nativeRecording).toBe(true)
+
+      currentFlags = { 'replay-flag': false }
+      await posthog.reloadFeatureFlagsAsync()
+      await settle()
+
+      expect(replay.stopRecording).toHaveBeenCalled()
+      expect(nativeRecording).toBe(false)
+      expect(replayEnabledAtSetup()).not.toContain(true)
+    })
+
+    it('keeps native automatic replay on for a v1 config', async () => {
+      currentSessionRecording = { endpoint: '/s/' }
+      await warmup()
+      setup.mockClear()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await settle()
+
+      expect(replayEnabledAtSetup()).toEqual([true])
+      expect(replay.startRecording).not.toHaveBeenCalled()
+    })
+  })
 })
