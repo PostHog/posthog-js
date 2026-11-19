@@ -167,6 +167,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         setPersonPropertiesForFlags: (properties, reloadFeatureFlags) => {
             if (disposed) return
             try {
+                if (!Object.keys(properties).length) return
                 shared.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
             } catch (error) {
                 client?.logger.error('Feature flags person properties update failed', error)
@@ -183,6 +184,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         setGroupPropertiesForFlags: (propertiesByGroupType, reloadFeatureFlags) => {
             if (disposed) return
             try {
+                if (!Object.keys(propertiesByGroupType).length) return
                 shared.setGroupPropertiesForFlags(propertiesByGroupType, reloadFeatureFlags)
             } catch (error) {
                 client?.logger.error('Feature flags group properties update failed', error)

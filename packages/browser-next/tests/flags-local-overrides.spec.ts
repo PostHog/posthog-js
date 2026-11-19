@@ -255,9 +255,9 @@ describe('local flag evaluation overrides', () => {
                 throw new Error('delegate failure')
             })
             expect(() => {
-                flags.setPersonPropertiesForFlags({}, false)
+                flags.setPersonPropertiesForFlags({ plan: 'pro' }, false)
                 flags.resetPersonPropertiesForFlags(false)
-                flags.setGroupPropertiesForFlags({}, false)
+                flags.setGroupPropertiesForFlags({ company: { size: 5 } }, false)
                 flags.resetGroupPropertiesForFlags()
             }).not.toThrow()
             expect(delegate).toHaveBeenCalledOnce()
@@ -307,4 +307,18 @@ describe('local flag evaluation overrides', () => {
         for (const method of methods) expect(method).not.toHaveBeenCalled()
         expect(fetch).not.toHaveBeenCalled()
     })
+})
+
+it.each(['person', 'group'] as const)('does not reload for an empty %s override map', async (kind) => {
+    const { flags, fetch } = await create()
+    const apply = (empty: boolean) =>
+        kind === 'person'
+            ? flags.setPersonPropertiesForFlags(empty ? {} : { plan: 'pro' })
+            : flags.setGroupPropertiesForFlags(empty ? {} : { company: { plan: 'pro' } })
+    apply(true)
+    await vi.advanceTimersByTimeAsync(5)
+    expect(fetch).not.toHaveBeenCalled()
+    apply(false)
+    await vi.advanceTimersByTimeAsync(5)
+    expect(fetch).toHaveBeenCalledOnce()
 })
