@@ -90,6 +90,8 @@ test('encoded-size metrics normalize numeric variation, not malformed types', ()
 test('timing-dependent extension init debug properties are omitted', () => {
     const debug = { $sdk_debug_extensions_init_method: 'synchronous', $sdk_debug_extensions_init_time_ms: 3 }
     assert.deepEqual(n(snapshot([event({})])), n(snapshot([event(debug)])))
+    assert(changed(snapshot([event({})]), snapshot([event({ $sdk_debug_extensions_init_time_ms: false })])))
+    assert(changed(snapshot([event({})]), snapshot([event({ $sdk_debug_extensions_init_method: 'other' })])))
     const stored = (registered) => ({
         api: { storage: { session: { ph_x_session_registered_properties: registered } } },
     })

@@ -1397,6 +1397,10 @@ export class PostHog implements PostHogInterface {
                     : 'synchronous',
                 [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
             })
+        } else if (this._sessionRegisteredPropKeys.has(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)) {
+            // An earlier page load in this session may have registered them.
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
         }
         if (this.config.__preview_deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
