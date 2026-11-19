@@ -439,8 +439,6 @@ export class PostHog extends PostHogCore {
   private _sessionReplayTriggerGroups: SessionReplayTriggerGroup[] | null = null
   private _triggerGroupsEvaluator = new SessionReplayTriggerGroupsEvaluator()
   private _triggerGroupsDebugRegistered = false
-  // The last v2 decision left no group recording and at least one still able to activate.
-  private _triggerGroupsPending = false
   private _eventsStoragePreloadSucceeded = true
   private _fatalCaptureObservation?: {
     eventUuid: string
@@ -998,16 +996,14 @@ export class PostHog extends PostHogCore {
                 sessionReplay['linkedFlag'],
                 (this.getKnownFeatureFlags() ?? {}) as { [key: string]: FeatureFlagValue }
               ).status
-        // As on posthog-ios. The decision belongs to the session it was evaluated for.
-        const triggerGroupsPending =
-          this._sessionReplayTriggerGroups !== null &&
-          this._triggerGroupsPending &&
-          this._replayEvaluatedSessionId === sessionId
-        const pending = [
-          eventTriggerStatus === 'trigger_pending' ? 'event_trigger' : undefined,
-          linkedFlagTriggerStatus === 'trigger_pending' ? 'linked_flag' : undefined,
-          triggerGroupsPending ? 'trigger_groups' : undefined,
-        ].filter((condition): condition is string => condition !== undefined)
+        // Under v2 the pending trigger group legs replace the v1 conditions.
+        const pending =
+          this._sessionReplayTriggerGroups !== null
+            ? this._triggerGroupsEvaluator.pendingConditions(sessionId, this.getKnownFeatureFlags())
+            : [
+                eventTriggerStatus === 'trigger_pending' ? 'event_trigger' : undefined,
+                linkedFlagTriggerStatus === 'trigger_pending' ? 'linked_flag' : undefined,
+              ].filter((condition): condition is string => condition !== undefined)
         pendingTriggerConditions = pending.length > 0 ? pending : undefined
       }
 
@@ -4288,11 +4284,9 @@ export class PostHog extends PostHogCore {
       $sdk_debug_replay_matched_recording_trigger_groups: decision.matchedGroups,
     })
     this._triggerGroupsDebugRegistered = true
-    this._triggerGroupsPending = !decision.shouldRecord && decision.hasPendingGroups
   }
 
   private _unregisterTriggerGroupsDebugProperties(): void {
-    this._triggerGroupsPending = false
     if (!this._triggerGroupsDebugRegistered) {
       return
     }
