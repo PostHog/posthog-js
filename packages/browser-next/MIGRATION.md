@@ -191,11 +191,11 @@ const groups = posthog.groups
 
 `group()` returns nothing and does not wait for backend ingestion or feature flag evaluation. Use `posthog.groupIdentify(type, key, properties)` to update a group's properties without changing membership. Treat `groups` as readonly application state, not a mutable configuration object.
 
-| Before                                                  | After / migration status                                                                                                                                                       |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `legacy.resetGroups()`                                  | `posthog.resetGroups()`. It clears group memberships and keeps identity, sessions and registered properties.                                                                   |
-| `legacy.setGroupPropertiesForFlags(properties, reload)` | **TODO:** no matching method on the browser flags facade. `posthog.group(type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
-| `legacy.resetGroupPropertiesForFlags(type)`             | **TODO:** no matching method on the browser flags facade.                                                                                                                      |
+| Before                                                  | After / migration status                                                                                                                                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `legacy.resetGroups()`                                  | `posthog.resetGroups()`. It clears group memberships and keeps identity, sessions and registered properties.                                                                                                             |
+| `legacy.setGroupPropertiesForFlags(properties, reload)` | `featureFlags.setGroupPropertiesForFlags(properties, reload)`; see [Feature flags](#feature-flags). `posthog.group(type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
+| `legacy.resetGroupPropertiesForFlags(type)`             | `featureFlags.resetGroupPropertiesForFlags(type)`; see [Feature flags](#feature-flags).                                                                                                                                  |
 
 ## Super properties
 
