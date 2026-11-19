@@ -42,8 +42,6 @@ const insertScript = (url: string, options: ToolbarOptions, callback: (error?: u
         script.type = 'text/javascript'
         script.crossOrigin = 'anonymous'
         script.src = url
-        script.onload = () => finish()
-        script.onerror = (error) => finish(error)
         try {
             script = options.prepareScript ? options.prepareScript(script) : script
         } catch (error) {
@@ -54,6 +52,9 @@ const insertScript = (url: string, options: ToolbarOptions, callback: (error?: u
             finish(new Error('prepareScript returned null'))
             return
         }
+        // prepareScript can return another element, so the handlers go on the one inserted.
+        script.onload = () => finish()
+        script.onerror = (error) => finish(error)
         const first = document.querySelector('body > script')
         if (first) first.parentNode?.insertBefore(script, first)
         else document.body.appendChild(script)
