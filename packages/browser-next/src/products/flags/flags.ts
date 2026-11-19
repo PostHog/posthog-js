@@ -4,7 +4,7 @@ import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-c
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { IPostHog } from '../../core/types'
 import type { FlagsExtension } from './flags-internal'
-import type { FeatureFlagResult, FlagsOptions } from './flags-options'
+import type { FeatureFlagResult, FlagsOptions, JsonType } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
@@ -19,11 +19,18 @@ export type {
     FeatureFlagsReloadResult,
 } from './flags-options'
 
+// Reads decode stored payloads once, as serialized server payloads, so store supplied values serialized.
+const serializePayloads = (payloads: Readonly<Record<string, JsonType>>): Record<string, JsonType> =>
+    Object.fromEntries(Object.entries(payloads).map(([key, payload]) => [key, JSON.stringify(payload)]))
+
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
+    const bootstrap = snapshot.bootstrap ?? {}
     const config: { -readonly [Key in keyof FeatureFlagsConfig]: FeatureFlagsConfig[Key] } = {
-        bootstrap: snapshot.bootstrap ?? {},
+        bootstrap: bootstrap.featureFlagPayloads
+            ? { ...bootstrap, featureFlagPayloads: serializePayloads(bootstrap.featureFlagPayloads) }
+            : bootstrap,
         remoteRequestsDisabled: false,
         featureFlagsDisabled: snapshot.featureFlagEvaluation === false,
         onlyEvaluateSurveyFeatureFlags: snapshot.onlyEvaluateSurveyFeatureFlags ?? false,
@@ -229,11 +236,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         updateFlags: (values, payloads, settings) => {
             if (disposed) return
             try {
-                // Reads decode stored payloads once, as serialized server payloads, so store injected values serialized.
-                const serialized =
-                    payloads &&
-                    Object.fromEntries(Object.entries(payloads).map(([key, payload]) => [key, JSON.stringify(payload)]))
-                shared.updateFlags(values, serialized, settings)
+                shared.updateFlags(values, payloads && serializePayloads(payloads), settings)
             } catch (error) {
                 client?.logger.error('Feature flags update failed', error)
             }

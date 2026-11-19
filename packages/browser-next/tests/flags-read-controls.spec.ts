@@ -625,3 +625,24 @@ it('returns injected payloads with their original types from every read', async 
         expect(flags.getFeatureFlag(result.key, { sendFeatureFlagEvent: false })).toEqual(result)
     }
 })
+
+it('returns bootstrapped payloads with their original types', async () => {
+    const client = await create({
+        flags: {
+            featureFlagEvaluation: false,
+            bootstrap: {
+                featureFlags: { sku: true, healthy: true },
+                featureFlagPayloads: { sku: '123', healthy: { ok: true } },
+            },
+        },
+    })
+    const flags = requireInstalled(client.featureFlags)
+    const expected = [
+        { key: 'sku', enabled: true, variant: undefined, payload: '123' },
+        { key: 'healthy', enabled: true, variant: undefined, payload: { ok: true } },
+    ]
+    expect(flags.getAllFeatureFlags()).toEqual(expected)
+    for (const result of expected) {
+        expect(flags.getFeatureFlag(result.key, { sendFeatureFlagEvent: false })).toEqual(result)
+    }
+})
