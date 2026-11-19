@@ -7,6 +7,7 @@ import type { PostHog } from './posthog-core'
 import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
 import { LogsExtension } from './extension-tokens'
 import { assignableWindow } from './utils/globals'
+import { getExtensionLoader } from './utils/extension-loader'
 
 export { RECORDER_MAX_AGE_MS } from '@posthog/browser-common/logs'
 
@@ -43,7 +44,7 @@ export class PostHogLogs extends SharedLogs {
             logger.error('PostHog Extensions not found.')
             return undefined
         }
-        const loadExternalDependency = phExtensions.loadExternalDependency
+        const loadExternalDependency = getExtensionLoader(this._instance)
         if (!loadExternalDependency) {
             logger.error(LOAD_EXT_NOT_FOUND)
             return undefined

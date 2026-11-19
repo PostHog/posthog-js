@@ -1,4 +1,5 @@
 import Config from './config'
+import { getBundledExtensionLoader, LoadExternalDependency } from './utils/extension-loader'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
@@ -538,6 +539,7 @@ export class PostHog implements PostHogInterface {
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
+    __loadExternalDependency?: LoadExternalDependency = getBundledExtensionLoader()
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     // Keys registered via register_for_session — cleared when the PostHog session rotates
     _sessionRegisteredPropKeys: Set<string> = new Set()

@@ -43,6 +43,7 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = /* @__PURE__ */ createLogger(LOGGER_PREFIX)
@@ -206,30 +207,26 @@ export class SessionRecording implements Extension {
             // Consent and session state can change while the recorder chunk is loading.
             // Only the recorder that initiated this load may finish starting with its manager.
             const sessionManager = this._instance.sessionManager
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (
-                        this._sessionRecordingDisposed ||
-                        !this._isRecordingEnabled ||
-                        this._instance.sessionManager !== sessionManager
-                    ) {
-                        this._recordingStatus = DISABLED
-                        return
-                    }
-                    if (err) {
-                        // most often this is an ad blocker matching the `/static/<script>.js` path.
-                        // flag it on the session so a blocked recorder is visible in analytics
-                        // instead of only in the browser console
-                        this._instance.register_for_session({
-                            [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
-                        })
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
+            getExtensionLoader(this._instance)?.(this._instance, this._scriptName, (err) => {
+                if (
+                    this._sessionRecordingDisposed ||
+                    !this._isRecordingEnabled ||
+                    this._instance.sessionManager !== sessionManager
+                ) {
+                    this._recordingStatus = DISABLED
+                    return
                 }
-            )
+                if (err) {
+                    // most often this is an ad blocker matching the `/static/<script>.js` path.
+                    // flag it on the session so a blocked recorder is visible in analytics
+                    // instead of only in the browser console
+                    this._instance.register_for_session({
+                        [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+                    })
+                    return logger.error('could not load recorder', err)
+                }
+                this._onScriptLoaded(startReason)
+            })
         } else {
             this._onScriptLoaded(startReason)
         }
