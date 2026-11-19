@@ -1,42 +1,66 @@
-import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-
 import { SDK_DEBUG_EXTENSIONS_INIT_METHOD, SDK_DEBUG_EXTENSIONS_INIT_TIME_MS } from '../constants'
 import { PostHog } from '../posthog-core'
+import { PostHogConfig } from '../types'
+import { HistoryAutocapture } from '../extensions/history-autocapture'
+import { ScrollManager } from '../scroll-manager'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
 describe('extension init debug properties', () => {
-    let instance: PostHog
+    let savedDefaults: PostHogConfig['__extensionClasses']
+    let now = 0
 
-    beforeEach(async () => {
-        instance = await createPosthogInstance(uuidv7())
-        instance.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
-        instance.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
+    beforeEach(() => {
+        savedDefaults = PostHog.__defaultExtensionClasses
+        PostHog.__defaultExtensionClasses = {}
+        vi.spyOn(performance, 'now').mockImplementation(() => now)
     })
 
     afterEach(() => {
+        PostHog.__defaultExtensionClasses = savedDefaults
         vi.restoreAllMocks()
     })
 
-    const processQueue = (hasExtensions: boolean, endTime: number) => {
-        vi.spyOn(performance, 'now').mockReturnValue(endTime)
-        instance['_processInitTaskQueue']([vi.fn()], 0, hasExtensions)
+    const initWith = async (
+        extensionClasses: PostHogConfig['__extensionClasses'],
+        initDurationMs: number
+    ): Promise<Record<string, unknown>> => {
+        const scrollSpy = vi.spyOn(ScrollManager.prototype, 'startMeasuringScrollPosition').mockImplementation(() => {
+            now += initDurationMs
+        })
+        const posthog = await createPosthogInstance(undefined, {
+            capture_pageview: false,
+            __extensionClasses: extensionClasses,
+        })
+        expect(scrollSpy).toHaveBeenCalled()
+        return posthog.sessionPersistence!.properties()
     }
 
-    it('registers the init method and time when extensions took measurable time', () => {
-        processQueue(true, 12)
+    it('registers the init method and time when extensions took measurable time', async () => {
+        const initialize = vi.spyOn(HistoryAutocapture.prototype, 'initialize').mockImplementation(() => {
+            now += 12
+        })
 
-        const sessionProps = instance.sessionPersistence!.properties()
+        const sessionProps = await initWith({ historyAutocapture: HistoryAutocapture }, 0)
+
+        expect(initialize).toHaveBeenCalled()
         expect(sessionProps[SDK_DEBUG_EXTENSIONS_INIT_METHOD]).toBe('synchronous')
         expect(sessionProps[SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]).toBe(12)
     })
 
-    it.each([
-        ['no extensions were loaded', false, 12],
-        ['extension init time rounds to zero', true, 0.4],
-    ])('does not register them when %s', (_case, hasExtensions, endTime) => {
-        processQueue(hasExtensions, endTime)
+    it('does not register them when no extensions are bundled, even if init takes time', async () => {
+        const sessionProps = await initWith({}, 12)
 
-        const sessionProps = instance.sessionPersistence!.properties()
+        expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
+        expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
+    })
+
+    it('does not register them when extension init time rounds to zero', async () => {
+        vi.spyOn(HistoryAutocapture.prototype, 'initialize').mockImplementation(() => {
+            now += 0.4
+        })
+
+        const sessionProps = await initWith({ historyAutocapture: HistoryAutocapture }, 0)
+
         expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
         expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
     })
