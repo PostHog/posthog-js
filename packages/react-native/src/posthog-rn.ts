@@ -3396,9 +3396,9 @@ export class PostHog extends PostHogCore {
       true
     )
     // Under v2, per-group sampling replaces the remote rate; forwarding it would gate recording twice.
-    const remoteSampleRateRaw = parseSessionRecordingTriggerGroups(
-      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)
-    )
+    const isTriggerGroupsConfig =
+      parseSessionRecordingTriggerGroups(this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)) !== null
+    const remoteSampleRateRaw = isTriggerGroupsConfig
       ? undefined
       : getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
 
@@ -3414,7 +3414,11 @@ export class PostHog extends PostHogCore {
           ? remoteSampleRateRaw
           : undefined
 
-    const sampleRate = localSampleRateValid ?? remoteSampleRateValid
+    // Native samples on its own /config rate, which still carries the project's leftover v1 rate
+    // under v2, unless a local rate overrides it. 1 keeps native from sampling at all.
+    const sampleRate = isTriggerGroupsConfig
+      ? (localSampleRateValid ?? 1)
+      : (localSampleRateValid ?? remoteSampleRateValid)
 
     if (localCaptureLog && !remoteConsoleLogEnabled) {
       this._logger.info('captureLog disabled by remote config (consoleLogRecordingEnabled=false).')
@@ -3439,7 +3443,12 @@ export class PostHog extends PostHogCore {
           `Remove sessionReplayConfig.sampleRate to follow the project setting.`
       )
     } else if (typeof sampleRate === 'number') {
-      const source = localSampleRateValid !== undefined ? 'local config' : 'remote config'
+      const source =
+        localSampleRateValid !== undefined
+          ? 'local config'
+          : isTriggerGroupsConfig
+            ? 'trigger groups default'
+            : 'remote config'
       this._logger.info(`sampleRate set from ${source} (${sampleRate}).`)
     } else if (cachedRemoteConfig === undefined) {
       this._logger.warn(
