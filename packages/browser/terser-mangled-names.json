@@ -776,6 +776,7 @@
         "_remoteConfigSubscription",
         "_remoteConfigSuccessful",
         "_remoteEnabled",
+        "_remoteFlagsLoaded",
         "_remove",
         "_removeAllTriggerListeners",
         "_removeDomEventHandlers",
