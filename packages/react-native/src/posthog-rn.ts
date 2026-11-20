@@ -531,7 +531,7 @@ export class PostHog extends PostHogCore {
   }
 
   /**
-   * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+   * Creates a new PostHog instance for React Native. See [`PostHogOptions`](#posthogoptions) for all configuration options.
    *
    * If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
    *

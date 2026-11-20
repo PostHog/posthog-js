@@ -169,7 +169,7 @@ import { PostHogProvider } from 'posthog-react-native'
 
 export default function App() {
   return (
-    <PostHogProvider apiKey="<ph_project_api_key>" options={{ host: 'https://us.i.posthog.com' }}>
+    <PostHogProvider projectToken="<ph_project_token>" options={{ host: 'https://us.i.posthog.com' }}>
       <YourApp />
     </PostHogProvider>
   )
@@ -190,6 +190,38 @@ posthog.capture('signed_up', { plan: 'pro' })
 ```tsx
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
+
+### Offline behavior
+
+The SDK keeps capturing events while the device is offline. With the default `persistence: 'file'`, events stay queued in device file storage across app restarts and flush once the device is online.
+
+- `maxQueueSize` sets the maximum number of queued events.
+- When the queue is full, the oldest event is evicted first.
+
+### Disable for local development
+
+Pass `disabled: __DEV__` in `PostHogProvider` options to turn off tracking during development. Calls through `usePostHog()` still work as safe no-ops.
+
+```tsx
+import { PostHogProvider } from 'posthog-react-native'
+
+export function App() {
+  return (
+    <PostHogProvider
+      projectToken="<ph_project_token>"
+      options={{ host: 'https://us.i.posthog.com', disabled: __DEV__ }}
+    >
+      <YourApp />
+    </PostHogProvider>
+  )
+}
+```
+
+### Proxy, projects, and allowlists
+
+- Set up a [reverse proxy](https://posthog.com/docs/advanced/proxy) so tracking blockers don't drop events.
+- If you run a website and mobile app together, [group them in one project](https://posthog.com/docs/settings/projects) to track users across platforms.
+- If a firewall or WAF blocks PostHog requests, allowlist PostHog's public IPs listed in the [webhook IP allowlist](https://posthog.com/docs/data-pipelines/destinations/webhook).
 
 ### Choose an iOS dependency path for the native plugin
 
@@ -229,7 +261,7 @@ The SDK can't detect a real install. It stores a marker the first time it loads 
 
 > **new PostHog**(`projectToken`, `options?`): `PostHog`
 
-Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+Creates a new PostHog instance for React Native. See [`PostHogOptions`](#posthogoptions) for all configuration options.
 
 If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
 
@@ -271,9 +303,9 @@ export function MyApp1() {
 
 > **PostHogProvider**(`props`): `Element` \| `null`
 
-PostHogProvider is a React component that provides PostHog functionality to your React Native app. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+PostHogProvider is a React component that provides PostHog functionality to your React Native app. See [`PostHogOptions`](#posthogoptions) for all configuration options.
 
-Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
+Autocapturing navigation requires further configuration. See [`PostHogAutocaptureOptions`](#posthogautocaptureoptions)
 for more information about autocapturing navigation.
 
 This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.
@@ -2795,7 +2827,7 @@ const user: RequiredUser = {
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="capturescreens"></a> `captureScreens?` | `boolean` | Capture the screen name (or route name) and properties Only used for expo-router, @react-navigation/native and react-native-navigation For react-native-navigation, you need to call initReactNativeNavigation before using this option See example: https://posthog.com/docs/libraries/react-native#with-react-native-navigation-and-autocapture For @react-navigation/native v6 and below, you need to wrap the PostHogProvider within the NavigationContainer See example: https://posthog.com/docs/libraries/react-native#with-react-navigationnative-and-autocapture For @react-navigation/native v7 and above, because of a library change, you'll need to capture the screens manually and disable this option You can use the onStateChange callback from the NavigationContainer to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored See example: https://reactnavigation.org/docs/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events For expo-router, expo-router uses @react-navigation/native, but does not expose the NavigationContainer, you'll need to capture the screens manually and disable this option expo-router always has access to a URL, you can use the URL to capture the screens automatically using the screen capture method You can use the 'usePostHog()' hook or your own posthog instance to capture the screens Since captureScreens is disabled, you don't need to pass the navigationRef, the navigation mutation object is also ignored See example: https://docs.expo.dev/router/reference/screen-tracking/ and https://posthog.com/docs/libraries/react-native#manually-capturing-screen-capture-events **Default** `true` |
+| <a id="capturescreens"></a> `captureScreens?` | `boolean` | Capture the screen name (or route name) and properties Only used for expo-router, @react-navigation/native and react-native-navigation For react-native-navigation, call `initReactNativeNavigation` before using this option. For @react-navigation/native v6 and below, wrap `PostHogProvider` within `NavigationContainer`. For @react-navigation/native v7 and above, because of a library change, you'll need to capture screens manually and disable this option. You can use the `onStateChange` callback from `NavigationContainer` to capture screens with [`PostHog.screen`](#posthogscreen). You can use the `usePostHog()` hook or your own `PostHog` instance to capture screens. Since `captureScreens` is disabled, you don't need to pass `navigationRef`, and the navigation mutation object is ignored. See: https://reactnavigation.org/docs/screen-tracking/ For expo-router, expo-router uses @react-navigation/native, but does not expose `NavigationContainer`, so capture screens manually and disable this option. expo-router always has access to a URL, so you can pass the URL to [`PostHog.screen`](#posthogscreen). You can use the `usePostHog()` hook or your own `PostHog` instance to capture screens. Since `captureScreens` is disabled, you don't need to pass `navigationRef`, and the navigation mutation object is ignored. See: https://docs.expo.dev/router/reference/screen-tracking/ **Default** `true` |
 | <a id="capturetouches"></a> `captureTouches?` | `boolean` | Enable autocapture of touch events. On React Native Web this also captures `click` events — mouse, trackpad, keyboard activation and programmatic clicks — emitted with `$event_type: 'click'`, since browsers fire `touchend` only for touch input. **Default** `false` |
 | <a id="customlabelprop"></a> `customLabelProp?` | `string` | Custom prop name used to label elements for autocapture **Default** `'ph-label'` |
 | <a id="ignorelabels"></a> `ignoreLabels?` | `string`[] | List of element labels to ignore during autocapture **Default** `[]` |

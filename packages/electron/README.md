@@ -38,7 +38,7 @@ app.whenReady().then(async () => {
     })
     posthog.registerWindow(window, { allowedUrls: [pathToFileURL(page).href] })
     await window.loadFile(page)
-    await posthog.capture('application_ready')
+    posthog.capture('application_ready')
 })
 ```
 
@@ -56,26 +56,26 @@ Bundle this code for the browser with Vite, esbuild or your existing renderer bu
 import { init } from '@posthog/electron/renderer'
 
 const posthog = await init()
-await posthog.capture('button_clicked', { button: 'save' })
+posthog.capture('button_clicked', { button: 'save' })
 await posthog.identify('user-123', { plan: 'pro' })
 await posthog.group('organization', 'org-456', { name: 'Example' })
 await posthog.register({ workspace: 'primary' })
 await posthog.reloadFeatureFlags()
 const enabled = posthog.isFeatureEnabled('new-ui')
 const payload = posthog.getFeatureFlagPayload('new-ui')
-await posthog.captureException(new Error('Example handled error'))
+posthog.captureException(new Error('Example handled error'))
 await posthog.flush()
 ```
 
-Main and renderer mutations return promises. Await identity/reset/consent changes before captures that depend on them. A resolved call is an asynchronous operation receipt, not proof that an event was sent: consent, filtering and queue limits can prevent admission. Accepted renderer captures acknowledge completed file writes in main, **not** server delivery or fsync/power-loss durability. `flush()` waits for prior commands and attempts main delivery; delivery errors reject it, and a successful response is not a guarantee of eventual ingestion/query visibility. Cache getters are synchronous after `await init()`.
+`capture()`, `screen()` and `captureException()` return nothing and never throw or reject, like the Node SDK. They queue the event and return immediately. Main reports storage write failures and unusable properties through its `onError`, and silently drops captures after shutdown. `captureException()` is also dropped across an identity change. `capture()` and `screen()` called after an unawaited `identify()` or `reset()` use the new identity. Renderer and utility report failed capture requests through their own `onError`. A refused request, such as a stale command or one over the rate limit, means the event was dropped. A utility timeout only means the child stopped waiting: main may still store and deliver the event, so do not retry it. Captures made synchronously inside the renderer or utility `onError`, and `captureException(error)` for the error it received, don't report their own failures, so they can't loop. An async `onError` that captures a different event after an `await` is not covered: if main keeps refusing requests, each failed capture calls `onError` again. Don't capture unconditionally from an async `onError`. Other main and renderer mutations return promises. Await identity/reset/consent changes before captures that depend on them, because commands run in call order. A resolved call is an asynchronous operation receipt, not proof that an event was sent: consent, filtering and queue limits can prevent admission. `flush()` waits for prior commands and attempts main delivery; delivery errors reject it, and a successful response is not a guarantee of eventual ingestion/query visibility. Cache getters are synchronous after `await init()`.
 
-One identity/session is shared across the app, not one per window. Use `reset()` on logout before identifying a different account. Reset preserves opt-out state, project autocapture settings, install markers and accepted queued events with their original identities. Stale renderer commands around an account change are rejected rather than assigned to the new user; their promise rejects so the app can decide whether a fresh action is appropriate. Do not blindly replay a rejected capture under another user.
+One identity/session is shared across the app, not one per window. Use `reset()` on logout before identifying a different account. Reset preserves opt-out state, project autocapture settings, install markers and accepted queued events with their original identities. Stale renderer commands around an account change are rejected rather than assigned to the new user. A stale mutation's promise rejects so the app can decide whether a fresh action is appropriate. A stale capture is dropped and reported through `onError`. Do not blindly replay it under another user.
 
 `onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions, DOM autocapture observers and automatic exception listeners.
 
 ## Main and renderer helpers
 
-These helpers are available in **both main and renderer**. Mutations return `Promise<void>`; getters read cached state synchronously and never fetch flags. Await main `ready()` or renderer `init()` before using cached state. Renderer identity getters return `''` and consent is conservatively opted out until synchronized; `getState()` throws until its first snapshot.
+These helpers are available in **both main and renderer**. Mutations return `Promise<void>`, except `screen()`, which returns nothing like `capture()`; getters read cached state synchronously and never fetch flags. Await main `ready()` or renderer `init()` before using cached state. Renderer identity getters return `''` and consent is conservatively opted out until synchronized; `getState()` throws until its first snapshot.
 
 | Helpers                                                                                                                 | Behavior                                                                                                                                                                                                                 |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -147,11 +147,36 @@ const posthog = init({ projectToken: '<ph_project_token>', enableExceptionAutoca
 const posthog = await init({ enableExceptionAutocapture: true })
 ```
 
-Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled. Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
+Listeners start after SDK readiness. Main observes `uncaughtExceptionMonitor`; renderer observes `error` and `unhandledrejection` with `addEventListener`. Reports use `handled: false`, the appropriate `onuncaughtexception` / `onerror` / `onunhandledrejection` mechanism and canonical Node/browser hook sources. Renderer resource-load errors are excluded. Existing error handlers, `window.onerror`, default browser reporting, warnings and process termination behavior are not replaced or cancelled (except with the opt-in `captureUnhandledRejections`, below). Listeners are removed at main shutdown or renderer disposal, with no retired capture lifetime. Automatic reporting is rate-limited using core's default exception limiter with a single bucket per client; reporting failures are contained.
 
 Consent is checked before inspecting error properties or submitting exception data; opted-out errors are not retained for later opt-in. Capture uses the existing bridge's identity generation checks, so stale reports are dropped rather than replayed as a new user. Renderer same-document dispose/reinit retains request sequencing for the same SDK module and stable preload bridge; this does not coordinate separately bundled SDK copies or distinct transports.
 
-**Main-process limitations:** monitor-only observation sees rejections only when Node escalates them to an uncaught exception (`throw` mode without a host `unhandledRejection` handler, or `strict` mode). **Electron 42 defaults to warning-only rejections, so main-process rejections are not automatically captured in that default mode.** Host-handled rejections and non-escalating `warn`, `warn-with-error-code` or `none` modes are not automatically captured. No SDK rejection listener is installed, because it would change Node's default behavior. Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
+**Main-process unhandled promise rejections are not captured by default.** By default, main observes only `uncaughtExceptionMonitor`, which sees a rejection only when Node escalates it to an uncaught exception. Electron's main process (all supported versions, 41+) forces Node's `warn-with-error-code` mode and ignores `--unhandled-rejections` set on the command line or in `NODE_OPTIONS`. An unhandled rejection prints `UnhandledPromiseRejectionWarning` and sets `process.exitCode = 1`, but the process keeps running and the monitor never sees it. Choose one of:
+
+- Opt in to the SDK listener with `captureUnhandledRejections: true` (requires `enableExceptionAutocapture: true`):
+
+    ```js
+    const posthog = init({
+        projectToken: '<ph_project_token>',
+        enableExceptionAutocapture: true,
+        captureUnhandledRejections: true,
+    })
+    ```
+
+    This installs `process.on('unhandledRejection')`. Node only applies its default handling when no `unhandledRejection` listener exists, so while the SDK listener is installed an unhandled rejection no longer prints `UnhandledPromiseRejectionWarning` or sets `process.exitCode = 1`. If your app reads `process.exitCode` to decide whether a run failed, set it yourself. This lasts until shutdown, including while the user is opted out: consent stops reporting, not the listener. If your app already has an `unhandledRejection` listener, Node's default handling is already off and nothing else changes. The SDK makes one capture attempt per rejection, subject to consent and rate limiting, with the `onunhandledrejection` mechanism and `node.process_unhandled_rejection` source. Delivery is not guaranteed.
+
+- Or keep the default and capture from your own handler. Adding the first `unhandledRejection` listener has the same effect on the warning and `process.exitCode` as the SDK listener.
+
+    ```js
+    const onUnhandledRejection = (reason) => {
+        posthog.captureException(reason)
+    }
+    process.on('unhandledRejection', onUnhandledRejection)
+    ```
+
+    During teardown, call `process.removeListener('unhandledRejection', onUnhandledRejection)`.
+
+Fatal reports are best effort: the SDK never delays termination or forces an exit, and abrupt termination can happen before queued capture, disk writes or delivery complete. Use manual capture in application-owned recovery handlers if needed. This is JavaScript error capture, **not native crash reporting or native symbolication**.
 
 ### React renderer (optional)
 
@@ -181,9 +206,7 @@ function App() {
     return (
         <button
             disabled={!enabled}
-            onClick={() =>
-                void client.capture('new_ui_clicked', { variant: variant ?? null, payload: payload ?? null })
-            }
+            onClick={() => client.capture('new_ui_clicked', { variant: variant ?? null, payload: payload ?? null })}
         >
             Try the new UI
         </button>
@@ -221,18 +244,18 @@ const { init } = require('@posthog/electron/utility')
 
 async function run() {
     const posthog = await init()
-    await posthog.capture('background_work_completed', { task: 'thumbnail' })
+    posthog.capture('background_work_completed', { task: 'thumbnail' })
     try {
         throw new Error('Example handled utility error')
     } catch (error) {
-        await posthog.captureException(error)
+        posthog.captureException(error)
     }
     await posthog.flush()
 }
 run().catch(console.error)
 ```
 
-The utility facade has the same methods as the renderer facade above, including identity, consent, cached flags, `onStateChange()` and `dispose()`. It does not start an independent Node/browser SDK, persist files, or send analytics HTTP requests. Main remains the single authority for identity, consent, queue, session and flag exposure deduplication. Await mutations and handle rejected stale-identity commands as with renderers. Main changes are broadcast to connected children. Each utility request waits at most 10 seconds for main. A timeout rejects only that call and keeps the connection usable; it means the child stopped waiting, not that the work failed. A timed-out `flush()` can still deliver afterwards because main keeps its own retry and timeout policy. Capture and exception events carry protected `$electron_process: 'utility'` and an owner-generated `$utility_process_id` stable for that registration, not a caller-supplied PID.
+The utility facade has the same methods as the renderer facade above, including identity, consent, cached flags, `onStateChange()` and `dispose()`. `init({ onError })` accepts an optional error callback for failed requests, such as a capture over the rate limit. It does not start an independent Node/browser SDK, persist files, or send analytics HTTP requests. Main remains the single authority for identity, consent, queue, session and flag exposure deduplication. Await mutations and handle rejected stale-identity commands as with renderers. Main changes are broadcast to connected children. Each utility request waits at most 10 seconds for main. A timeout rejects only that call and keeps the connection usable; it means the child stopped waiting, not that the work failed. A timed-out `flush()` can still deliver afterwards because main keeps its own retry and timeout policy. Capture and exception events carry protected `$electron_process: 'utility'` and an owner-generated `$utility_process_id` stable for that registration, not a caller-supplied PID.
 
 No preload, window registration, global IPC channel or `ELECTRON_RUN_AS_NODE` is involved. Messages use a dedicated versioned namespace on that child's `parentPort`; unrelated application messages are ignored. Each registration has its own connection token, strictly increasing request sequence, 100 requests/second limit, 100 pending-request cap, 256 KiB JSON message bound and nesting limit. The bridge rejects timed-out requests after 10 seconds. Registration requires a handshake within 10 seconds (including children that never spawn or already exited); register immediately after forking. Exit, unregister and owner shutdown revoke the registration and reject pending child operations. `dispose()` closes the local facade; use one facade lifetime per registration. Do not retry a timed-out mutation blindly: main may already have accepted it.
 
@@ -246,7 +269,7 @@ This is **not** a sandbox or an untrusted-plugin interface: a registered utility
 - Defaults: at most 1,000 events through core's queue, a 5 MiB state file, and seven-day event retention. Configure `maxQueueSize`, `maxStorageBytes` and `maxQueueAgeMs`. Expired events and oldest events exceeding the storage cap are discarded; oversized non-queue state is rejected through the operation/error callback. Budget property/flag payload sizes accordingly.
 - Storage writes are serialized and atomically renamed. Acknowledgment means the write/rename completed, not an fsync/power-loss guarantee. Each project/host store allows **one local process writer**. A second process remains inactive (including networking), reports through `onError`, and resolves `ready()` without reading the owner's analytics. Opting in cannot activate an unowned store. Use a separate `storageDirectory` for deliberately independent instances/identities.
 - Ownership is released on normal awaited shutdown. Stale ownership is reclaimed only for a same-host PID proven absent; live, permission-denied, foreign-host or unreadable ownership is never stolen. UUID-specific `.reclaim-*` tombstones prevent competing reclaimers from removing a successor's lock; they intentionally remain on disk. A crashed reclaimer or incomplete `.owner` file can require manual recovery: stop **all** application processes before removing the stale `.owner` and associated tombstone. Do not remove these files from a running app. This policy assumes a local filesystem, not a network filesystem or distributed lock service.
-- A failed startup write is reported through `onError` without permanently disabling the client. Mutations still reject if their write fails.
+- A failed startup write is reported through `onError` without permanently disabling the client. Promise-returning mutations still reject if their write fails. Captures report the failure through `onError` instead.
 - Corrupt/unreadable existing storage falls back to opted out and empty analytics, reporting via `onError`. Call `optIn()` explicitly after addressing the cause if appropriate.
 - Network errors, 407, 408, 429 and 5xx preserve batches after bounded immediate retries; background retries use backoff, jitter and Retry-After. Permanent failures may drop the batch. Retries retain event UUIDs, but duplicate delivery remains possible. `flushInterval: 0` disables scheduled background flushes; explicit flush and queue-size-triggered flush still work.
 - Back up and investigate the store before manual ownership recovery; never erase `state.json` or delete coordination files while a writer may still be active.
