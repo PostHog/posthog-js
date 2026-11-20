@@ -196,6 +196,7 @@ describe('posthog core', () => {
             const properties = posthog.capture('x')!.properties
 
             expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+            expect(properties.$recording_status).toBeDefined()
             expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
         })
 

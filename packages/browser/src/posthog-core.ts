@@ -2304,7 +2304,6 @@ export class PostHog implements PostHogInterface {
 
         let retryQueueSize: number | undefined
         try {
-            retryQueueSize = this._retryQueue?.length
             if (this.sessionRecording) {
                 const replayProperties = this.sessionRecording.sdkDebugProperties
                 const includeDebugProperties = !this._replayDebugPropertiesPaused && isReplayDebugEvent(eventName)
@@ -2314,6 +2313,7 @@ export class PostHog implements PostHogInterface {
                     }
                 }
             }
+            retryQueueSize = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
