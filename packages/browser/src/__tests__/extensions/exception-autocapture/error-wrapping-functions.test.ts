@@ -324,4 +324,100 @@ describe('error wrapping functions', () => {
             expect(() => con.error('boom')).toThrow(error)
         })
     })
+
+    describe('stopping', () => {
+        const targets = [
+            {
+                name: 'window.onerror',
+                owner: () => win,
+                key: 'onerror',
+                wrap: () => wrapOnError(captureFn),
+                fire: (handler: any) => handler('message', 'source', 1, 1, new Error('boom')),
+            },
+            {
+                name: 'window.onunhandledrejection',
+                owner: () => win,
+                key: 'onunhandledrejection',
+                wrap: () => wrapUnhandledRejection(captureFn),
+                fire: (handler: any) => handler({ reason: new Error('boom') }),
+            },
+            {
+                name: 'console.error',
+                owner: () => console as any,
+                key: 'error',
+                wrap: () => wrapConsoleError(captureFn),
+                fire: (handler: any) => handler('boom'),
+            },
+        ]
+
+        let restoreGlobal: () => void
+
+        afterEach(() => {
+            restoreGlobal?.()
+        })
+
+        const setUp = (owner: any, key: string) => {
+            const saved = owner[key]
+            restoreGlobal = () => {
+                owner[key] = saved
+            }
+            const original = vi.fn()
+            owner[key] = original
+            return original
+        }
+
+        it.each(targets)('$name: restores the original handler when nothing was installed on top', (target) => {
+            const owner = target.owner()
+            const original = setUp(owner, target.key)
+            const unwrap = target.wrap()
+            const posthogHandler = owner[target.key]
+
+            unwrap()
+
+            expect(owner[target.key]).toBe(original)
+            expect(posthogHandler.__POSTHOG_INSTRUMENTED__).toBeUndefined()
+        })
+
+        it.each(targets)('$name: keeps a handler installed on top and stops capturing', (target) => {
+            const owner = target.owner()
+            const original = setUp(owner, target.key)
+            const unwrap = target.wrap()
+            const posthogHandler = owner[target.key]
+            // e.g. another error tool or logs capture that chains to the handler it found
+            const laterHandler = vi.fn((...args: any[]) => posthogHandler(...args))
+            owner[target.key] = laterHandler
+
+            unwrap()
+
+            expect(owner[target.key]).toBe(laterHandler)
+            expect(posthogHandler.__POSTHOG_INSTRUMENTED__).toBeUndefined()
+
+            target.fire(owner[target.key])
+
+            expect(laterHandler).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
+        it.each(targets)('$name: captures once after restarting on top of a later handler', (target) => {
+            const owner = target.owner()
+            const original = setUp(owner, target.key)
+            const unwrapFirst = target.wrap()
+            const firstHandler = owner[target.key]
+            const laterHandler = vi.fn((...args: any[]) => firstHandler(...args))
+            owner[target.key] = laterHandler
+            unwrapFirst()
+
+            const unwrapSecond = target.wrap()
+            target.fire(owner[target.key])
+
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            expect(laterHandler).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledTimes(1)
+
+            unwrapSecond()
+
+            expect(owner[target.key]).toBe(laterHandler)
+        })
+    })
 })
