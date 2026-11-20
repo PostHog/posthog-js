@@ -93,6 +93,19 @@ describe('page context', () => {
         })
     })
 
+    it('omits page context that a registered or session property sets to null', async () => {
+        const client = await create()
+        client.register({ $current_url: null, $host: null })
+        client.registerForSession({ $pathname: null })
+        client.capture('$pageview')
+
+        const [event] = await sent(client)
+        expect(event).not.toHaveProperty('$current_url')
+        expect(event).not.toHaveProperty('$host')
+        expect(event).not.toHaveProperty('$pathname')
+        expect(event).toHaveProperty('$pageview_id')
+    })
+
     it('drops the query and fragment when disabled', async () => {
         const client = await create({ urlSanitization: { query: false, hash: false } })
         client.capture('custom')
