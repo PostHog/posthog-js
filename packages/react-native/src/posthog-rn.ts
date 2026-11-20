@@ -33,6 +33,8 @@ import {
 import {
   AI_CAPTURE_ENDPOINT,
   ANALYTICS_CAPTURE_ENDPOINT,
+  CaptureError,
+  type CaptureDroppedEvent,
   V1CaptureSender,
   canonicalizeUuid,
   serializeV1Event,
@@ -992,17 +994,24 @@ export class PostHog extends PostHogCore {
    */
   protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
     const queuedUuids = new Map<SerializedV1Event, string | undefined>()
+    const drops: CaptureDroppedEvent[] = []
     for (const message of batchMessages) {
       if (!message) {
         continue
       }
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
       const problem = wireProblem(message)
       if (problem) {
         this._logger.warn(`Dropping event "${String(message.event)}": ${problem}.`)
+        drops.push({ uuid: (queuedUuid && canonicalizeUuid(queuedUuid)) ?? String(queuedUuid), details: problem })
         continue
       }
-      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
       queuedUuids.set(this._serializeForCapture(message), queuedUuid)
+    }
+    if (drops.length > 0) {
+      const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+      error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: invalid event name or id`
+      this._events.emit('error', error)
     }
 
     let deferral: V1SendDeferral | undefined
