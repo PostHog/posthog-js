@@ -119,13 +119,15 @@ Earlier 0.x versions exposed analytics as a separate product. It is now part of 
 
 Capture is part of every client, so `analytics: false` (ignored, with a debug warning) and `/core` without the analytics extension no longer turn it off. Both entrypoints send the initial `$pageview`, `$feature_flag_called` the first time each flag value is read when flags is installed, and events from other installed products. Set `capturePageview: false` to skip the initial pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture. `optOutByDefault: true` stops all capture until `optIn()`, but it also blocks flag and other product requests.
 
+Pages that load the `/static/browser/0/` alias receive this change automatically, and 0.4.x `client.analytics?.…` calls, such as `client.analytics?.capture()` in a ready handler, silently do nothing. Change each `client.analytics?.…` call to the same method on `client`.
+
 Extensions share the client's key-value store, as posthog-js extensions share its persistence. Data saved by earlier 0.x versions under per-extension namespaces is not migrated.
 
 The logs `urlCapture` option and `UrlCaptureOptions` type are removed. Logs' `url.full` now follows the client's [`urlSanitization`](#page-url-and-title), which also applies to events, and includes the query string by default. `urlCapture` dropped the query string by default, so use `urlSanitization: { query: false }` to keep 0.4.x's default of origin and path, and `urlSanitization: { path: false, query: false }` in place of `urlCapture: { path: false }`.
 
 ## Classic script installation (draft CDN distribution)
 
-The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
+The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. Assets are published under `/static/browser/<exact-version-or-major>/`. The major alias, such as `/static/browser/0/`, moves to every stable release, including breaking 0.x minors; use an exact-version URL to avoid automatic upgrades. For example:
 
 ```html
 <script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
