@@ -299,9 +299,38 @@ export class PostHog {
         return pending
     }
 
-    capture(event: string, properties?: Properties): Promise<void> {
-        if (!event.trim() || event === '$snapshot') return Promise.resolve()
-        return this._run(() => this._core.capture(event, properties))
+    /**
+     * Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`; captures
+     * after shutdown or across an identity change are dropped.
+     */
+    capture(event: string, properties?: Properties): void {
+        if (typeof event !== 'string' || !event.trim() || event === '$snapshot') return
+        this._captureEvent(event, properties)
+    }
+    private _captureEvent(event: string, properties: Properties | undefined, screenName?: string): void {
+        let copy: Properties | undefined
+        try {
+            // The caller can't await capture, so copy properties now rather than when the queued work runs.
+            copy = this._snapshotEventProperties(properties)
+        } catch (error) {
+            this._report(error)
+            return
+        }
+        void this._run(() => {
+            if (this._core.optedOut || this._core.isDisabled) return
+            let captured: Properties | undefined
+            try {
+                // copy may still be the caller's object when inspection was deferred; apply toJSON before capturing.
+                captured = copy === undefined ? undefined : snapshot(copy)
+            } catch (error) {
+                this._report(error)
+                return
+            }
+            // A screen name wins over a supplied $screen_name.
+            this._core.capture(event, screenName === undefined ? captured : { ...captured, $screen_name: screenName })
+        }).catch(() => {
+            // Storage reports its own write failures through onError; shutdown and identity changes drop the event.
+        })
     }
     /**
      * Link the current distinct ID to an alias without switching identity or reloading flags.
@@ -329,17 +358,11 @@ export class PostHog {
     }
     /**
      * Capture an event-only $screen; name wins over properties.$screen_name without setting persistent screen context.
-     * Resolves after local persistence, not delivery; ignored when opted out.
+     * Fire-and-forget: never throws or rejects; ignored when opted out.
      */
-    async screen(name: string, properties?: Properties): Promise<void> {
-        if (!name?.trim()) return Promise.resolve()
-        const copy = this._snapshotEventProperties(properties)
-        return this._run(() => {
-            if (!this._core.optedOut && !this._core.isDisabled) {
-                // copy may still be the caller's object when inspection was deferred; apply toJSON before spreading.
-                this._core.capture('$screen', { ...(copy === undefined ? {} : snapshot(copy)), $screen_name: name })
-            }
-        })
+    screen(name: string, properties?: Properties): void {
+        if (typeof name !== 'string' || !name.trim()) return
+        this._captureEvent('$screen', properties, name)
     }
     /**
      * Update the current person's $set/$set_once properties without changing identity; empty updates do nothing.
@@ -486,8 +509,9 @@ export class PostHog {
         this._generation++
         await this._core.optOut()
     }
-    captureException(error: unknown, properties?: Properties): Promise<void> {
-        return this._captureException(error, properties)
+    /** Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`. */
+    captureException(error: unknown, properties?: Properties): void {
+        void this._captureException(error, properties).catch(() => {})
     }
     protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
         const canCapture = (): boolean => !this._core.isDisabled && !this._core.optedOut
@@ -769,9 +793,8 @@ export class PostHog {
         const previous = this._foreground
         this._foreground = active
         if (active) {
-            if (previous === false)
-                void this.capture('Application Opened', { from_background: true }).catch((error) => this._report(error))
-        } else void this.capture('Application Backgrounded').catch((error) => this._report(error))
+            if (previous === false) this.capture('Application Opened', { from_background: true })
+        } else this.capture('Application Backgrounded')
     }
 
     private async _handle(event: IpcMainInvokeEvent, value: unknown): Promise<Response> {

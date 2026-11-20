@@ -131,7 +131,7 @@ app.whenReady()
         assert.equal(preferences.sandbox, true)
         assert.equal(preferences.contextIsolation, true)
         assert.equal(preferences.nodeIntegration, false)
-        await posthog.captureException(new SyntaxError('main manual'))
+        posthog.captureException(new SyntaxError('main manual'))
         const initialRejection = triggerMain('initial')
         await evaluate(window, (fixture) => fixture.trigger('initial'))
         await initialRejection
@@ -197,7 +197,7 @@ app.whenReady()
                 const event = new ErrorEvent('error', { message: 'disabled getter probe' })
                 Object.defineProperty(event, 'error', { get })
                 window.dispatchEvent(event)
-                await fixture.posthog.captureException(Object.defineProperty({}, 'message', { get }), {
+                fixture.posthog.captureException(Object.defineProperty({}, 'message', { get }), {
                     get privateProperty() {
                         reads++
                         return 'private value'

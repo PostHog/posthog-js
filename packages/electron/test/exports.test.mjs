@@ -133,7 +133,7 @@ test('utility facade imports and captures handled errors in ordinary Node withou
         const { init } = await import(${JSON.stringify(new URL('dist/utility.mjs', root).href)})
         const client = await init()
         try {
-            await client.captureException(new TypeError('ordinary Node utility proof'), { source: 'node-test' })
+            client.captureException(new TypeError('ordinary Node utility proof'), { source: 'node-test' })
             await client.flush()
             assert.deepEqual(requests.map(({ command }) => command.type), ['hello', 'exception', 'flush'])
             assert.deepEqual(requests.map(({ sequence }) => sequence), [1, 2, 3])
