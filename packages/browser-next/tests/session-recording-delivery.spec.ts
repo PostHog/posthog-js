@@ -164,6 +164,23 @@ describe('snapshot delivery', () => {
         })
     })
 
+    it('keeps backing off after the failed batch is evicted from the queue', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup(() => 503)
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(40_000)
+            expect(requests).toHaveLength(6)
+
+            for (let index = 0; index < 100; index++) delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(0)
+            expect(requests).toHaveLength(6)
+
+            await vi.advanceTimersByTimeAsync(21_000)
+            expect(requests).toHaveLength(7)
+        })
+    })
+
     it('waits at least as long as Retry-After asks', async () => {
         await withRetryClock(async () => {
             const { delivery, requests } = setup(() =>
