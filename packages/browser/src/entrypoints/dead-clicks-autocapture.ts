@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
+import { isFunction, isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
 import {
     getEventTarget,
     isTextSelectionTarget,
@@ -405,6 +405,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // so it can never feed the post-click selection timeout. Keep the candidate queued until the
     // check so it can still deduplicate another click on the same node.
     private _queueCandidate(candidate: DeadClickCandidate): void {
+        if (isFunction(this.instance.is_capturing) && !this.instance.is_capturing()) {
+            return
+        }
         candidate.selectionChangedDelayMs = priorLivenessDelay(
             candidate.timestamp,
             this._lastSelectionChanged,

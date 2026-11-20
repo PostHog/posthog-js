@@ -4934,6 +4934,7 @@ export class PostHog implements PostHogInterface {
         // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
+            this.heatmaps?.getAndClearBuffer()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {

@@ -260,6 +260,47 @@ describe('heatmaps', () => {
         expect(beforeSendMock.mock.calls).toEqual([])
     })
 
+    describe('consent', () => {
+        const sentHeatmapPoints = () =>
+            beforeSendMock.mock.calls
+                .map(([event]) => event)
+                .filter((event) => event.event === '$$heatmap')
+                .flatMap((event) => Object.values(event.properties.$heatmap_data).flat())
+
+        it('does not send a click made before consent once the visitor opts in', () => {
+            posthog.opt_out_capturing()
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 1, clientY: 1 }))
+
+            posthog.opt_in_capturing()
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 2, clientY: 2 }))
+            vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints()).toEqual([expect.objectContaining({ x: 2, y: 2, type: 'click' })])
+        })
+
+        it('does not send a mouse move made before consent when consent arrives within the debounce', () => {
+            posthog.opt_out_capturing()
+            posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent())
+
+            posthog.opt_in_capturing()
+            vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints()).toEqual([])
+        })
+
+        it('discards points collected before an opt-out when the visitor opts back in', () => {
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+            posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent())
+
+            posthog.opt_out_capturing()
+            vi.advanceTimersByTime(500)
+            posthog.opt_in_capturing()
+            vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints()).toEqual([])
+        })
+    })
+
     describe('onRemoteConfig', () => {
         it('does not overwrite persistence when called with empty config', () => {
             // Set up existing persisted value

@@ -252,7 +252,7 @@ export class Heatmaps implements Extension {
     }
 
     private _onClick(e: MouseEvent, type: string = 'click'): void {
-        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e) || !this.instance.is_capturing()) {
             return
         }
 
@@ -272,13 +272,16 @@ export class Heatmaps implements Extension {
     }
 
     private _onMouseMove(e: Event): void {
-        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e) || !this.instance.is_capturing()) {
             return
         }
 
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
+            if (!this.instance.is_capturing()) {
+                return
+            }
             this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
         }, 500)
     }

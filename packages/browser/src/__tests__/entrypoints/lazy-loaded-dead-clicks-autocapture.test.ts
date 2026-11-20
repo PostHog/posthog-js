@@ -76,6 +76,17 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
         })
 
+        it('does not report a click made while capturing is off after capturing turns on', () => {
+            fakeInstance.is_capturing = () => false
+            triggerMouseEvent(document.body, 'click')
+
+            fakeInstance.is_capturing = () => true
+            vi.setSystemTime(4000)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
         it('does not store clicks after stop', () => {
             lazyLoadedDeadClicksAutocapture.start(document)
             lazyLoadedDeadClicksAutocapture.stop()
