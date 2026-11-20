@@ -167,6 +167,27 @@ describe('session recording timing', () => {
         expect(rotated.flatMap((event) => event.properties.$snapshot_data).map((event) => event.type)).toContain(2)
     })
 
+    it('does not report the previous session start on the event that rotates the session', async () => {
+        const { replay, posthog } = await setup()
+        await started(replay)
+        interact()
+        await replay.flush?.()
+        const firstSession = posthog.session!
+
+        await goIdle()
+        advance(31 * 60_000)
+        let properties: Record<string, unknown> = {}
+        const subscription = posthog.onEvent((event) => (properties = event.properties))
+        posthog.capture('$pageview')
+        subscription.dispose()
+
+        const session = posthog.session!
+        expect(session.sessionId).not.toBe(firstSession.sessionId)
+        expect(properties.$session_id).toBe(session.sessionId)
+        expect(properties).toHaveProperty('$sdk_debug_replay_internal_buffer_size')
+        expect([undefined, session.sessionStartTimestamp]).toContain(properties.$sdk_debug_session_start)
+    })
+
     it('rotates the session on interaction after the session expired', async () => {
         const { replay, posthog, transport: network } = await setup()
         await started(replay)
