@@ -71,24 +71,6 @@ describe('PostHog React Native', () => {
         })
       )
     })
-
-    it('should support deprecated evaluationEnvironments field', async () => {
-      posthog = new PostHog('test-token', {
-        evaluationEnvironments: ['production', 'mobile'],
-        flushInterval: 0,
-      })
-      await posthog.ready()
-
-      await posthog.reloadFeatureFlagsAsync()
-
-      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/flags/?v=2&config=true'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"evaluation_contexts":["production","mobile"]'),
-        })
-      )
-    })
   })
 
   let mockStorage: PostHogCustomStorage

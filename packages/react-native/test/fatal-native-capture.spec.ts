@@ -8,7 +8,6 @@ AppState.addEventListener = vi.fn()
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
     startSession: vi.fn(() => Promise.resolve()),
     endSession: vi.fn(() => Promise.resolve()),

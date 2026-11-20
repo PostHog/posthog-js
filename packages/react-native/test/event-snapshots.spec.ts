@@ -66,7 +66,6 @@ const createClient = (options: ConstructorParameters<typeof PostHog>[1] = {}): P
     persistence: 'memory',
     flushInterval: 0,
     disableCompression: true,
-    disableRemoteConfig: true,
     disableSurveys: true,
     captureAppLifecycleEvents: false,
     capturePushNotificationSubscriptions: false,

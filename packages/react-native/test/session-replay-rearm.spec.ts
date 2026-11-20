@@ -3,15 +3,13 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect, wait } from './test-utils'
 
-// Mock the native plugin bridge so we can assert which native calls happen. No `setup`
-// key, so the SDK takes the legacy start() path (same surface as the standalone
-// posthog-react-native-session-replay package).
+// Mock the native plugin bridge so we can assert which native calls happen.
 // NOTE: the factory must be self-contained (vi hoists it above any const), so we
 // build the vi.fn()s inline and reach them through the imported module handle below.
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
     endSession: vi.fn(async () => {}),
     isEnabled: vi.fn(async () => false),
@@ -22,7 +20,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: vi.Mock
+  setup: vi.Mock
   startSession: vi.Mock
   endSession: vi.Mock
   isEnabled: vi.Mock
@@ -33,6 +31,10 @@ const replay = OptionalReactNativePlugin as unknown as {
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
 AppState.addEventListener = vi.fn()
+
+// Push is on by default and would set up the native plugin before replay starts, so it's
+// off here: setup() then runs only when replay starts recording.
+const pushOff = { capturePushNotificationSubscriptions: false, capturePushNotificationOpened: false }
 
 describe('PostHog RN session replay re-arm after flags reload', () => {
   vi.useRealTimers()
@@ -46,7 +48,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
   let currentSessionRecording: any = {}
 
   beforeEach(() => {
-    replay.start.mockClear()
+    replay.setup.mockClear()
     replay.startSession.mockClear()
     replay.endSession.mockClear()
     replay.startRecording.mockClear()
@@ -54,7 +56,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     replay.identify.mockClear()
     replay.isEnabled.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
-    replay.start.mockImplementation(async () => {})
+    replay.setup.mockImplementation(async () => {})
 
     currentFlags = {}
     currentSessionRecording = {}
@@ -79,11 +81,16 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
   })
 
   afterEach(async () => {
+    // Push is off, so setup() only runs to start replay: every call must enable it.
+    for (const [, , pluginConfig] of replay.setup.mock.calls) {
+      expect(pluginConfig.sessionReplay.enabled).toBe(true)
+    }
     await posthog.shutdown()
   })
 
   const newPostHog = (): PostHog =>
     new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
@@ -95,7 +102,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await posthog.ready()
 
     // Native recording starts once at bootstrap.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
     // Native is now enabled; the subsequent identify path should rotate, not re-init.
     replay.isEnabled.mockImplementation(async () => true)
@@ -105,7 +112,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
 
     // Should not start a second native session (no double-init).
     await new Promise((r) => setTimeout(r, 50))
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('warm start: linked-flag off -> on after identify re-arms recording (matches native auto re-arm)', async () => {
@@ -118,13 +125,13 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await warmup.reloadFeatureFlagsAsync()
     await wait(50)
     await warmup.shutdown()
-    replay.start.mockClear()
+    replay.setup.mockClear()
 
     // Phase 2 (next launch): bootstrap respects the cached linked flag (false) -> no recording.
     posthog = newPostHog()
     await posthog.ready()
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // User logs in; the linked flag now evaluates TRUE on the next flags reload.
     currentFlags = { 'replay-flag': true }
@@ -132,7 +139,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await posthog.reloadFeatureFlagsAsync()
 
     // The linked flag now evaluates true on reload, so replay re-arms and native start is called.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
   })
 
   it('reset() keeps the project-level recording config (not user data) so replay survives an identity change', async () => {
@@ -144,7 +151,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await posthog.reloadFeatureFlagsAsync()
 
     // Armed for the first user, and the project-level recording config is cached.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     expect(posthog.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)).toBeTruthy()
 
     // Native is now enabled; the post-reset reload should re-evaluate, not start a second session.
@@ -158,7 +165,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await wait(50)
 
     expect(posthog.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)).toBeTruthy()
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('pauses recording when the linked flag turns off and resumes when it turns back on', async () => {
@@ -170,7 +177,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await posthog.reloadFeatureFlagsAsync()
 
     // Linked flag is active -> recording starts.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Linked flag turns off (e.g. the identified user is outside the rollout) -> recording pauses.
@@ -182,7 +189,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     currentFlags = { 'replay-flag': true }
     await posthog.reloadFeatureFlagsAsync()
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 
   it('retries resume on the next flags reload when startRecording fails', async () => {
@@ -192,7 +199,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     posthog = newPostHog()
     await posthog.ready()
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Pause via flag off.
@@ -218,7 +225,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     posthog = newPostHog()
     await posthog.ready()
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Flag turns off, but the native stop call fails once -> recording state must NOT clear.
@@ -243,11 +250,12 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await warmup.reloadFeatureFlagsAsync()
     await wait(50)
     await warmup.shutdown()
-    replay.start.mockClear()
+    replay.setup.mockClear()
     ;((globalThis as any).window.fetch as vi.Mock).mockClear()
 
     // Next launch never evaluates flags itself: the cached linked flag (false) gates bootstrap.
     posthog = new PostHog('test-token', {
+      ...pushOff,
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
@@ -255,11 +263,11 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     })
     await posthog.ready()
     await wait(50)
-    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.setup).not.toHaveBeenCalled()
 
     // The app pushes its locally evaluated flags -> the featureflags emit re-arms replay.
     posthog.updateFlags({ 'replay-flag': true })
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
 
     // The SDK never hits the flags endpoint when remote feature flags are disabled.
     const flagsCalls = ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
@@ -272,14 +280,14 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
 
     // First native start throws -> init fails and the armed state must roll back.
-    replay.start.mockRejectedValueOnce(new Error('native start failed'))
+    replay.setup.mockRejectedValueOnce(new Error('native start failed'))
 
     posthog = newPostHog()
     await posthog.ready()
 
     // The bootstrap arm fails and rolls back; the flags load re-arms and retries.
     // Without the rollback the failed attempt would suppress every later attempt.
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(2))
   })
 
   it('does not stop again on a later reload once the flag is already off', async () => {
@@ -289,7 +297,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     posthog = newPostHog()
     await posthog.ready()
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Flag off -> one pause.
@@ -311,7 +319,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     posthog = newPostHog()
     await posthog.ready()
     await posthog.reloadFeatureFlagsAsync()
-    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     replay.isEnabled.mockImplementation(async () => true)
 
     // Hold the native stop open so the next evaluation runs while the pause is in flight.
@@ -338,6 +346,6 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     // Once the stop completes, the queued resume runs and recording ends on (not stuck off).
     releaseStop()
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
-    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.setup).toHaveBeenCalledTimes(1)
   })
 })

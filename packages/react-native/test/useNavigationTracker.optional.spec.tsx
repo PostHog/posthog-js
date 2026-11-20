@@ -8,7 +8,7 @@ vi.mock('../src/optional/OptionalReactNativeNavigation', () => ({ OptionalReactN
 it('does nothing when the optional navigation package is not installed', async () => {
   const client = new PostHog('test-token', { disabled: true, persistence: 'memory' })
   const screen = vi.spyOn(client, 'screen').mockResolvedValue(undefined)
-  const { unmount } = renderHook(() => useNavigationTracker(undefined, undefined, client))
+  const { unmount } = renderHook(() => useNavigationTracker(undefined, client))
   unmount()
   await client.shutdown()
   expect(screen).not.toHaveBeenCalled()

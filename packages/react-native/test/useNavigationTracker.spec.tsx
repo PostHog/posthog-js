@@ -35,7 +35,7 @@ afterEach(async () => {
 describe('useNavigationTracker', () => {
   it('tracks the initial route and index-only tab transitions with the same routes array', () => {
     mock.state.routes.push({ name: 'Settings' })
-    const { rerender } = renderHook(() => useNavigationTracker(undefined, undefined, client))
+    const { rerender } = renderHook(() => useNavigationTracker(undefined, client))
     expect(client.screen).toHaveBeenLastCalledWith('Home', undefined)
     mock.state = { ...mock.state, index: 1 }
     rerender()
@@ -61,7 +61,7 @@ describe('useNavigationTracker', () => {
     mock.navigation.getCurrentRoute.mockReturnValue(focusedRoute)
     const routeToName = vi.fn(() => 'Redacted screen')
     const routeToProperties = vi.fn(() => ({ safe: true }))
-    renderHook(() => useNavigationTracker({ routeToName, routeToProperties }, undefined, client))
+    renderHook(() => useNavigationTracker({ routeToName, routeToProperties }, client))
     expect(routeToName).toHaveBeenCalledWith('users/[id]', params)
     expect(routeToProperties).toHaveBeenCalledWith('Redacted screen', params)
     expect(client.screen).toHaveBeenCalledWith('Redacted screen', { safe: true })
@@ -69,7 +69,7 @@ describe('useNavigationTracker', () => {
 
   it('does not capture screens during server rendering', () => {
     const Tracker = (): null => {
-      useNavigationTracker(undefined, undefined, client)
+      useNavigationTracker(undefined, client)
       return null
     }
     renderToString(<Tracker />)
@@ -78,7 +78,7 @@ describe('useNavigationTracker', () => {
 
   it('does not capture until navigation is ready and state updates', () => {
     mock.navigation.isReady.mockReturnValue(false)
-    const { rerender } = renderHook(() => useNavigationTracker(undefined, undefined, client))
+    const { rerender } = renderHook(() => useNavigationTracker(undefined, client))
     expect(client.screen).not.toHaveBeenCalled()
     mock.navigation.isReady.mockReturnValue(true)
     mock.state = { ...mock.state }
@@ -86,15 +86,15 @@ describe('useNavigationTracker', () => {
     expect(client.screen).toHaveBeenCalledWith('Home', undefined)
   })
 
-  it('supports a ready root ref and older navigation without isReady', () => {
+  it('supports older navigation without isReady', () => {
     delete mock.navigation.isReady
-    renderHook(() => useNavigationTracker(undefined, { current: mock.navigation } as any, client))
+    renderHook(() => useNavigationTracker(undefined, client))
     expect(client.screen).toHaveBeenCalledWith('Home', undefined)
   })
 
   it('does not capture without a navigation object or current route', () => {
     mock.navigation = undefined
-    const { rerender } = renderHook(() => useNavigationTracker(undefined, undefined, client))
+    const { rerender } = renderHook(() => useNavigationTracker(undefined, client))
     expect(client.screen).not.toHaveBeenCalled()
     mock.navigation = { getCurrentRoute: () => undefined }
     rerender()
@@ -104,7 +104,7 @@ describe('useNavigationTracker', () => {
   it('retries initial tracking once when state is not yet available', () => {
     mock.state = undefined
     mock.navigation.getCurrentRoute.mockReturnValue({ name: 'Initial' })
-    renderHook(() => useNavigationTracker(undefined, undefined, client))
+    renderHook(() => useNavigationTracker(undefined, client))
     expect(client.screen).not.toHaveBeenCalled()
     act(() => {
       vi.advanceTimersByTime(1)
@@ -115,7 +115,7 @@ describe('useNavigationTracker', () => {
   it('cancels the pending initial retry on unmount', () => {
     mock.state = undefined
     mock.navigation.getCurrentRoute.mockReturnValue({ name: 'Unmounted' })
-    const { unmount } = renderHook(() => useNavigationTracker(undefined, undefined, client))
+    const { unmount } = renderHook(() => useNavigationTracker(undefined, client))
     unmount()
     act(() => {
       vi.runAllTimers()
