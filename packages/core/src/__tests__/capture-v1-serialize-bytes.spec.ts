@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-describe('capture v1 serialization without TextEncoder', () => {
+describe('capture v1 serialization byte counts', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.resetModules()
@@ -17,13 +17,22 @@ describe('capture v1 serialization without TextEncoder', () => {
     expect(serialized.bytes).toBe(Buffer.byteLength(serialized.json))
   })
 
-  it.each([
-    ['ascii', 'hello'],
-    ['two-byte', 'é'],
-    ['three-byte', '€'],
-    ['surrogate pair', '🦔'],
-    ['lone surrogate', 'a\uD800b'],
-  ])('counts UTF-8 bytes for %s properties', async (_name, value) => {
+  it.each(
+    [
+      ['ascii', 'hello'],
+      ['two-byte', 'é'],
+      ['three-byte', '€'],
+      ['surrogate pair', '🦔'],
+      ['lone surrogate', 'a\uD800b'],
+    ].flatMap(([name, value]) => [
+      [name, 'with', value],
+      [name, 'without', value],
+    ])
+  )('counts UTF-8 bytes for %s properties %s TextEncoder', async (_name, encoder, value) => {
+    if (encoder === 'without') {
+      vi.stubGlobal('TextEncoder', undefined)
+    }
+    vi.resetModules()
     const { serializeV1Event } = await import('@/capture-v1/serialize')
     const serialized = serializeV1Event({
       event: 'e',
