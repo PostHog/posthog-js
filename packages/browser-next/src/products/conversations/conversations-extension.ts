@@ -101,6 +101,8 @@ export const createConversations = (
     let remoteConfig: ConversationsRemoteConfig | undefined
     let remoteConfigOk: boolean | undefined
     let manager: ConversationsManager | undefined
+    // The page's widget when another client created it. As in posthog-js, a reset from any client resets it.
+    let shared: ConversationsManager | undefined
     let initializing = false
     let loadFailed = false
     // Bumped by reset and disposal so a renderer that finishes loading afterwards starts over.
@@ -164,6 +166,7 @@ export const createConversations = (
             loadFailed = false
             if (active !== created) {
                 // The page has one widget. Only the client that created it controls and destroys it.
+                shared = active
                 posthog.logger.warn('Another PostHog client on this page already shows conversations.')
                 return
             }
@@ -245,11 +248,11 @@ export const createConversations = (
             subscriptions.push(
                 posthog.onReset(() => {
                     // Reset starts a fresh widget session for the next visitor, without a verified identity.
-                    if (manager) manager.reset()
-                    // Without a widget, for example while the renderer loads or another client owns it, the previous
-                    // session is still stored.
+                    const widget = manager ?? shared
+                    if (widget) widget.reset()
+                    // Without a widget, for example while the renderer loads, the previous session is still stored.
                     else removeStoredWidget(posthog.projectToken)
-                    manager = undefined
+                    manager = shared = undefined
                     generation++
                     identity = undefined
                     loadFailed = false
