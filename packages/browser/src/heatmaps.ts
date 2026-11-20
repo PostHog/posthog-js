@@ -9,7 +9,7 @@ import {
     shouldCaptureRageclick,
 } from '@posthog/browser-common/utils/autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isNumber, isNullish, isEmptyObject, isObject, stripUrlHash } from '@posthog/core'
+import { isNumber, isNullish, isEmptyObject, isObject, isUndefined, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
@@ -75,6 +75,8 @@ export class Heatmaps implements Extension {
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
     private _buffer: HeatmapEventBuffer
+    private _mouseMoveCapturing = false
+    private _consentChangedAt = 0
     private _flushInterval: ReturnType<typeof setInterval> | null = null
     private _deadClicksCapture: DeadClicksAutocapture | undefined
     private _onClickHandler: ((e: Event) => void) | undefined
@@ -157,10 +159,17 @@ export class Heatmaps implements Extension {
         return buffer
     }
 
+    public discardPending(): void {
+        this._consentChangedAt = Date.now()
+        clearTimeout(this._mouseMoveTimeout)
+        this._mouseMoveTimeout = undefined
+        this.getAndClearBuffer()
+    }
+
     private _onDeadClick(click: DeadClickCandidate): void {
         // heatmaps only plots click coordinates; this also rejects swipe candidates (never
         // expected on this path), since a swipe's TouchEvent has no clientX/clientY
-        if (!isValidMouseEvent(click.originalEvent)) {
+        if (!isValidMouseEvent(click.originalEvent) || click.timestamp <= this._consentChangedAt) {
             return
         }
         this._onClick(click.originalEvent, 'deadclick')
@@ -226,6 +235,7 @@ export class Heatmaps implements Extension {
         }
 
         clearTimeout(this._mouseMoveTimeout)
+        this._mouseMoveTimeout = undefined
 
         this._deadClicksCapture?.stop()
 
@@ -272,17 +282,21 @@ export class Heatmaps implements Extension {
     }
 
     private _onMouseMove(e: Event): void {
-        if (isElementInToolbar(e.target) || !isValidMouseEvent(e) || !this.instance.is_capturing()) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
             return
+        }
+
+        if (isUndefined(this._mouseMoveTimeout)) {
+            this._mouseMoveCapturing = this.instance.is_capturing()
         }
 
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
-            if (!this.instance.is_capturing()) {
-                return
+            this._mouseMoveTimeout = undefined
+            if (this._mouseMoveCapturing && this.instance.is_capturing()) {
+                this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
             }
-            this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
         }, 500)
     }
 
