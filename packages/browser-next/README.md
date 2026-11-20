@@ -36,24 +36,21 @@ Both entrypoints share identity, session, consent and persistence behavior. Inst
 
 `personProfiles: 'always' | 'never' | 'identified_only'` defaults to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. SDK-computed processing metadata takes precedence over caller properties; `$process_person_profile` does not change the SDK's underlying processing state.
 
-Less common identity operations are separate imports, so applications that don't use them don't ship them:
+Person and group operations are client methods:
 
 ```ts
-import { alias, createPersonProfile, setPersonProperties, unsetPersonProperties } from '@posthog/browser/person'
-import { group, groupIdentify, resetGroups } from '@posthog/browser/groups'
-
-alias(posthog, 'account-123')
-setPersonProperties(posthog, { plan: 'pro' })
-group(posthog, 'organization', 'current-group')
-groupIdentify(posthog, 'organization', 'another-group', { plan: 'enterprise' })
-resetGroups(posthog)
+posthog.alias('account-123')
+posthog.setPersonProperties({ plan: 'pro' })
+posthog.group('organization', 'current-group')
+posthog.groupIdentify('organization', 'another-group', { plan: 'enterprise' })
+posthog.resetGroups()
 ```
 
 Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
 
-`alias(posthog, targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `posthog.identify()` to switch the ambient identity.
+`posthog.alias(targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `posthog.identify()` to switch the ambient identity.
 
-`group(posthog, type, key, properties?)` persists ambient membership. `groupIdentify(posthog, type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number. Alias and group-profile events require capture consent and are suppressed in `never` mode. `resetGroups(posthog)` clears memberships, retaining identity, sessions, person properties and other stored state. When flags is installed it also clears group properties used for evaluation and requests a reload. It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
+`posthog.group(type, key, properties?)` persists ambient membership. `posthog.groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number. Alias and group-profile events require capture consent and are suppressed in `never` mode. `posthog.resetGroups()` clears memberships, retaining identity, sessions, person properties and other stored state. When flags is installed it also clears group properties used for evaluation and requests a reload. It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
 
 ## Persistent event properties
 
@@ -91,8 +88,8 @@ Earlier 0.x versions exposed analytics as a separate product. It is now part of 
 | `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                       |
 | `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                       |
 | `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                         |
-| `posthog.analytics?.alias()`, person helpers                                  | `@posthog/browser/person` functions                                |
-| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | `@posthog/browser/groups` functions                                |
+| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                       |
+| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                       |
 | `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing |
 | `IPostHogInternal`, `sharedClient`                                            | Extensions receive the `IPostHog` client in `setup()`              |
 
@@ -119,7 +116,7 @@ Only these query options are supported; omitted options use the existing factory
 
 Unknown parameters are ignored. Invalid recognized values prevent installation and log a generic diagnostic without the URL or token. This query interface does not accept objects, callbacks, or extensions; use the npm factory for those configurations.
 
-After the existing `createPostHog()` factory resolves, the script assigns `window.posthog` and dispatches `posthog:ready` on `window`, with the client in `event.detail`. Readiness includes extension setup, not remote configuration, flag evaluation, or successful event delivery. Because script users can't import modules, the global client also has the group and person functions as methods: `group`, `groupIdentify`, `resetGroups`, `alias`, `createPersonProfile`, `setPersonProperties`, `unsetPersonProperties` and `setInternalOrTestUser`, each taking the same arguments without the client. An early consumer subscribes to the event; a late consumer checks the global:
+After the existing `createPostHog()` factory resolves, the script assigns `window.posthog` and dispatches `posthog:ready` on `window`, with the client in `event.detail`. Readiness includes extension setup, not remote configuration, flag evaluation, or successful event delivery. An early consumer subscribes to the event; a late consumer checks the global:
 
 ```js
 function onPostHogReady(client) {

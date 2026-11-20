@@ -1,7 +1,5 @@
 import type { Extension } from '@posthog/browser-common'
 import { createPostHog as createDefault } from '../src/composition/npm/core'
-import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
-import { alias, setPersonProperties, unsetPersonProperties } from '../src/products/analytics/person'
 import type { BrowserFetch, CorePostHogOptions, IPostHog, StorageLike } from '../src/core/types'
 
 class MemoryStorage implements StorageLike {
@@ -120,13 +118,13 @@ describe('single client', () => {
 
     it('keeps groups and person helpers outside the client', async () => {
         posthog.identify('user-1')
-        group(posthog, 'company', 'acme', { name: 'Acme' })
-        groupIdentify(posthog, 'company', 'other', { plan: 'paid' })
-        setPersonProperties(posthog, { plan: 'paid' })
-        unsetPersonProperties(posthog, 'legacy')
-        alias(posthog, 'alias-1')
+        posthog.group('company', 'acme', { name: 'Acme' })
+        posthog.groupIdentify('company', 'other', { plan: 'paid' })
+        posthog.setPersonProperties({ plan: 'paid' })
+        posthog.unsetPersonProperties('legacy')
+        posthog.alias('alias-1')
         posthog.capture('after_group')
-        resetGroups(posthog)
+        posthog.resetGroups()
         posthog.capture('after_reset')
         await posthog.flush()
         const byName = (name: string) => events(sent).filter((event) => event.event === name)

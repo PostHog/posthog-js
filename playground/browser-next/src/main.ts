@@ -1,6 +1,5 @@
 import { createPostHog } from '@posthog/browser'
 import type { BrowserFetch, IPostHog, RemoteConfig } from '@posthog/browser'
-import { group } from '@posthog/browser/groups'
 
 import './style.css'
 import { EventQueueVisualizer } from './queue-visualizer'
@@ -385,7 +384,7 @@ element<HTMLButtonElement>('identify').addEventListener('click', () =>
 )
 element<HTMLButtonElement>('group').addEventListener('click', () =>
     enqueue('Group', () => {
-        group(requireClient(), 'sandbox_run', runId, syntheticProperties({ sandbox_group: true }))
+        requireClient().group('sandbox_run', runId, syntheticProperties({ sandbox_group: true }))
     })
 )
 element<HTMLButtonElement>('reset').addEventListener('click', () =>

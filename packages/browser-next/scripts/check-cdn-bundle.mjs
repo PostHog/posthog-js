@@ -19,9 +19,6 @@ const requiredInitial = [
     './src/products/analytics/delivery/capture-v1.ts',
     './src/products/analytics/delivery/lane.ts',
     './src/composition/script/entry.ts',
-    // Script users have no module imports, so the global client carries the group and person methods.
-    './src/products/analytics/groups.ts',
-    './src/products/analytics/person.ts',
 ]
 const assertInitialModules = (entries) => {
     for (const required of requiredInitial) {

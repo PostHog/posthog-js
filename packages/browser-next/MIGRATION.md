@@ -155,20 +155,20 @@ The new shutdown is idempotent and bounded. `await posthog.dispose()` uses the s
 
 ## Identity and person properties
 
-| Before                                                                                 | After / migration status                                                                                                                                                  |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy.identify(id, set, setOnce)`                                                    | `posthog.identify(id, set, setOnce)`. It updates local identity synchronously and returns nothing; it does not acknowledge event delivery.                                |
-| `legacy.get_distinct_id()`                                                             | `posthog.distinctId`.                                                                                                                                                     |
-| `legacy.reset()`                                                                       | `posthog.reset()`. It generates a new anonymous distinct ID, retains the device ID, clears group/extension state, and resets the session. Consent is retained.            |
-| `legacy.reset(true)` or `legacy.reset({ resetDeviceID, bootstrap })`                   | **TODO:** device-ID replacement and reset bootstrap have no equivalent options on `reset()`. Do not silently discard the arguments.                                       |
-| `legacy.setPersonProperties(set, setOnce)`                                             | `setPersonProperties(posthog, set, setOnce)` from `@posthog/browser/person`. It keeps the current identity and does not identify the user.                                |
-| `legacy.unsetPersonProperties(names)`                                                  | `unsetPersonProperties(posthog, names)` from `@posthog/browser/person`. It sends `$unset` for the properties and removes them from local feature flag evaluation context. |
-| `legacy.people.set(properties)` / `legacy.people.set(name, value, callback)`           | `setPersonProperties(posthog, properties)` or `setPersonProperties(posthog, { [name]: value })`. There is no callback.                                                    |
-| `legacy.people.set_once(properties)` / `legacy.people.set_once(name, value, callback)` | `setPersonProperties(posthog, undefined, properties)` or `setPersonProperties(posthog, undefined, { [name]: value })`. There is no callback.                              |
-| `legacy.alias(alias, original)`                                                        | `alias(posthog, alias)` from `@posthog/browser/person` links `alias` to the current distinct ID without changing the current identity. There is no `original` argument.   |
-| `legacy.createPersonProfile()`                                                         | `createPersonProfile(posthog)` from `@posthog/browser/person`.                                                                                                            |
-| `legacy.setInternalOrTestUser()`                                                       | `setInternalOrTestUser(posthog)` from `@posthog/browser/person`. It sets the `$internal_or_test_user` person property.                                                    |
-| `legacy.setIdentity(id, hash)` / `legacy.clearIdentity()`                              | **TODO:** no HMAC/conversations identity API. This is separate from analytics `identify()` / `reset()`.                                                                   |
+| Before                                                                                 | After / migration status                                                                                                                                       |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy.identify(id, set, setOnce)`                                                    | `posthog.identify(id, set, setOnce)`. It updates local identity synchronously and returns nothing; it does not acknowledge event delivery.                     |
+| `legacy.get_distinct_id()`                                                             | `posthog.distinctId`.                                                                                                                                          |
+| `legacy.reset()`                                                                       | `posthog.reset()`. It generates a new anonymous distinct ID, retains the device ID, clears group/extension state, and resets the session. Consent is retained. |
+| `legacy.reset(true)` or `legacy.reset({ resetDeviceID, bootstrap })`                   | **TODO:** device-ID replacement and reset bootstrap have no equivalent options on `reset()`. Do not silently discard the arguments.                            |
+| `legacy.setPersonProperties(set, setOnce)`                                             | `posthog.setPersonProperties(set, setOnce)`. It keeps the current identity and does not identify the user.                                                     |
+| `legacy.unsetPersonProperties(names)`                                                  | `posthog.unsetPersonProperties(names)`. It sends `$unset` for the properties and removes them from local feature flag evaluation context.                      |
+| `legacy.people.set(properties)` / `legacy.people.set(name, value, callback)`           | `posthog.setPersonProperties(properties)` or `posthog.setPersonProperties({ [name]: value })`. There is no callback.                                           |
+| `legacy.people.set_once(properties)` / `legacy.people.set_once(name, value, callback)` | `posthog.setPersonProperties(undefined, properties)` or `posthog.setPersonProperties(undefined, { [name]: value })`. There is no callback.                     |
+| `legacy.alias(alias, original)`                                                        | `posthog.alias(alias)` links `alias` to the current distinct ID without changing the current identity. There is no `original` argument.                        |
+| `legacy.createPersonProfile()`                                                         | `posthog.createPersonProfile()`.                                                                                                                               |
+| `legacy.setInternalOrTestUser()`                                                       | `posthog.setInternalOrTestUser()`. It sets the `$internal_or_test_user` person property.                                                                       |
+| `legacy.setIdentity(id, hash)` / `legacy.clearIdentity()`                              | **TODO:** no HMAC/conversations identity API. This is separate from analytics `identify()` / `reset()`.                                                        |
 
 **Persistence matters:** the new default state record is separate from legacy identity storage. Changing the import does not migrate an existing distinct ID, cookies, or cross-subdomain identity. **TODO:** document the supported historical-state migration before recommending a production identity cutover.
 
@@ -184,19 +184,17 @@ const groups = legacy.getGroups()
 After:
 
 ```ts
-import { group } from '@posthog/browser/groups'
-
-group(posthog, 'organization', 'org-123', { plan: 'paid' })
+posthog.group('organization', 'org-123', { plan: 'paid' })
 const groups = posthog.groups
 ```
 
-`group()` returns nothing and does not wait for backend ingestion or feature flag evaluation. Use `groupIdentify(posthog, type, key, properties)` from the same import to update a group's properties without changing membership. Treat `groups` as readonly application state, not a mutable configuration object.
+`group()` returns nothing and does not wait for backend ingestion or feature flag evaluation. Use `posthog.groupIdentify(type, key, properties)` to update a group's properties without changing membership. Treat `groups` as readonly application state, not a mutable configuration object.
 
-| Before                                                  | After / migration status                                                                                                                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy.resetGroups()`                                  | `resetGroups(posthog)` from `@posthog/browser/groups`. It clears group memberships and keeps identity, sessions and registered properties.                                      |
-| `legacy.setGroupPropertiesForFlags(properties, reload)` | **TODO:** no matching method on the browser flags facade. `group(posthog, type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
-| `legacy.resetGroupPropertiesForFlags(type)`             | **TODO:** no matching method on the browser flags facade.                                                                                                                       |
+| Before                                                  | After / migration status                                                                                                                                                       |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `legacy.resetGroups()`                                  | `posthog.resetGroups()`. It clears group memberships and keeps identity, sessions and registered properties.                                                                   |
+| `legacy.setGroupPropertiesForFlags(properties, reload)` | **TODO:** no matching method on the browser flags facade. `posthog.group(type, key, properties)` also associates a group and captures analytics, unlike a local flag override. |
+| `legacy.resetGroupPropertiesForFlags(type)`             | **TODO:** no matching method on the browser flags facade.                                                                                                                      |
 
 ## Super properties
 

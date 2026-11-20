@@ -2,8 +2,6 @@ import { requireInstalledExtension } from './helpers'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { flags } from '../src/products/flags/flags'
-import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
-import { alias } from '../src/products/analytics/person'
 import type { FlagsOptions } from '../src/products/flags/flags'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, MemoryStorage } from './helpers'
@@ -226,7 +224,7 @@ describe('flags', () => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, optOutByDefault: true })
         client.identify('person', { plan: 'pro' })
-        group(client, 'organization', 'team', { size: 5 })
+        client.group('organization', 'team', { size: 5 })
         client.optIn()
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
@@ -282,11 +280,11 @@ describe('flags', () => {
         const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
         const client = await create({ fetch })
         client.identify('member', { plan: 'paid' })
-        group(client, 'organization', 'acme', { region: 'west' })
-        group(client, 'project', 'web', { stage: 'production' })
+        client.group('organization', 'acme', { region: 'west' })
+        client.group('project', 'web', { stage: 'production' })
         await vi.advanceTimersByTimeAsync(5)
         fetch.mockClear()
-        resetGroups(client)
+        client.resetGroups()
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('retained')?.enabled).toBe(true)
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledOnce()
@@ -302,11 +300,11 @@ describe('flags', () => {
         const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { retained: true } })))
         const client = await create({ fetch })
         client.identify('member', { plan: 'paid' })
-        group(client, 'organization', 'acme', { region: 'west' })
+        client.group('organization', 'acme', { region: 'west' })
         await vi.advanceTimersByTimeAsync(5)
         fetch.mockClear()
-        alias(client, 'another-account')
-        groupIdentify(client, 'organization', 'external', { region: 'east' }, { set: { plan: 'other' } })
+        client.alias('another-account')
+        client.groupIdentify('organization', 'external', { region: 'east' }, { set: { plan: 'other' } })
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).not.toHaveBeenCalled()
         const reload = requireInstalledExtension(client.featureFlags).reloadFeatureFlags()
@@ -326,8 +324,8 @@ describe('flags', () => {
         vi.useFakeTimers()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })
-        group(client, 'org', 'A', { plan: 'paid' })
-        group(client, 'org', 'B')
+        client.group('org', 'A', { plan: 'paid' })
+        client.group('org', 'B')
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(init?.body)).groups).toEqual({ org: 'B' })
@@ -396,7 +394,7 @@ describe('flags', () => {
         const first = await create({ storage, flags: { featureFlagEvaluation: false } })
         requireInstalledExtension(first.featureFlags).updateFlags({ saved: 'blue' }, { saved: { enabled: true } })
         first.kv.set('unrelated', 1)
-        group(first, 'organization', 'team')
+        first.group('organization', 'team')
         await first.dispose()
 
         const reloaded = await create({ storage, flags: { featureFlagEvaluation: false } })

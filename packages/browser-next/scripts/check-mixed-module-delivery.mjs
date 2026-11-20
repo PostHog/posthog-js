@@ -57,10 +57,6 @@ for (const name of guardedGlobals) {
 let createPostHog
 let createEsmPostHog
 let createCorePostHog
-let commonJsGroups
-let esmGroups
-let commonJsPerson
-let esmPerson
 let flags
 let logs
 let commonJsLogs
@@ -77,10 +73,6 @@ try {
         throw new Error('Common feature flags token differs between module formats')
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
-    commonJsGroups = require('@posthog/browser/groups')
-    esmGroups = await import('@posthog/browser/groups')
-    commonJsPerson = require('@posthog/browser/person')
-    esmPerson = await import('@posthog/browser/person')
     ;({ createPostHog: createEsmPostHog } = await import('@posthog/browser'))
     await import('@posthog/browser/core')
     ;({ flags } = await import('@posthog/browser/flags'))
@@ -290,11 +282,7 @@ process.stdout.write(
     'Built CommonJS/ESM dynamic flags product/shared lookup, async reload, reset and disposal passed\n'
 )
 
-// Each client format is paired with the other format's groups and person modules.
-for (const [create, { group, groupIdentify, resetGroups }, { alias }] of [
-    [createPostHog, esmGroups, esmPerson],
-    [createEsmPostHog, commonJsGroups, commonJsPerson],
-]) {
+for (const create of [createPostHog, createEsmPostHog]) {
     const requests = []
     let scoped
     const client = await create({
@@ -342,9 +330,9 @@ for (const [create, { group, groupIdentify, resetGroups }, { alias }] of [
         identifies++
     })
     client.kv.set('retained', true)
-    group(client, 'organization', 'current')
-    alias(client, 'account-123')
-    groupIdentify(client, 'organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
+    client.group('organization', 'current')
+    client.alias('account-123')
+    client.groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-profile-uuid' })
     assert.deepEqual(client.groups, { organization: 'current' })
     assert.deepEqual(
         { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId },
@@ -352,7 +340,7 @@ for (const [create, { group, groupIdentify, resetGroups }, { alias }] of [
     )
     client.capture('before_group_reset')
     const session = client.session
-    resetGroups(client)
+    client.resetGroups()
     assert.deepEqual(client.groups, {})
     assert.deepEqual(client.session, session)
     assert.equal(client.kv.get('retained'), true)
@@ -375,13 +363,13 @@ for (const [create, { group, groupIdentify, resetGroups }, { alias }] of [
     assert.deepEqual(events[3].properties.$groups, { organization: 'current' })
     assert.deepEqual(events[4].properties.$groups, {})
     await client.dispose()
-    resetGroups(client)
-    alias(client, 'disposed')
-    groupIdentify(client, 'organization', 'disposed')
+    client.resetGroups()
+    client.alias('disposed')
+    client.groupIdentify('organization', 'disposed')
     assert.equal(groupResets, 1)
     assert.equal(requests.length, 1)
 }
-process.stdout.write('Built CommonJS/ESM client with cross-format alias, group profile and group-only reset passed\n')
+process.stdout.write('Built CommonJS/ESM client alias, group profile and group-only reset passed\n')
 
 for (const create of [createPostHog, createEsmPostHog]) {
     const requests = []
@@ -480,7 +468,7 @@ for (const create of [createPostHog, createEsmPostHog]) {
     assert.equal(inline.properties.plan, 'immediate')
     assert.deepEqual(inline.properties.nested, { count: 9 })
     assert.equal(Object.hasOwn(inline.properties, 'initial'), false)
-    commonJsGroups.resetGroups(client)
+    client.resetGroups()
     assert.deepEqual(client.getProperty('nested'), { count: 9 })
     dynamic.dispose()
     await client.dispose()
@@ -566,7 +554,7 @@ for (const create of [createPostHog, createEsmPostHog]) {
         assert.equal(Object.hasOwn(queued.properties, 'removed'), false)
         assert.equal(Object.hasOwn(queued.properties, 'nullable'), false)
         assert.equal(inline.properties.precedence, 'caller')
-        esmGroups.resetGroups(client)
+        client.resetGroups()
         client.capture('after_group_reset')
         await client.flush()
         const groupReset = requests.flatMap(({ batch }) => batch).find(({ event }) => event === 'after_group_reset')

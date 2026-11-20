@@ -1,6 +1,5 @@
 import { createBufferedPostHog as createPostHog, localRemoteConfig } from './helpers'
 import type { GroupInfo, IdentifyInfo, IPostHog } from '../src/composition/npm/core'
-import { group, resetGroups } from '../src/products/analytics/groups'
 
 const clients: IPostHog[] = []
 const create = async (setup: (client: IPostHog) => void) => {
@@ -48,7 +47,7 @@ describe('browser client identity listeners', () => {
             },
             'person'
         )
-        group(client, 'organization', 'team', { size: 5 })
+        client.group('organization', 'team', { size: 5 })
         expect(grouped).toHaveBeenCalledWith(
             { type: 'organization', key: 'team', changed: true, properties: { size: 5 } },
             { organization: 'team' }
@@ -69,8 +68,8 @@ describe('browser client identity listeners', () => {
             value.onReset(reset)
         })
         client.identify('member')
-        group(client, 'organization', 'acme')
-        resetGroups(client)
+        client.group('organization', 'acme')
+        client.resetGroups()
         expect(groupsReset).toHaveBeenCalledTimes(1)
         expect(groupsReset).toHaveBeenCalledWith({}, 'member', true)
         expect(reset).not.toHaveBeenCalled()
@@ -98,11 +97,11 @@ describe('browser client identity listeners', () => {
             set: { plan: 'pro' },
             setOnce: undefined,
         })
-        group(client, 'organization', 'team')
-        group(client, 'organization', 'team')
-        group(client, '', 'team')
+        client.group('organization', 'team')
+        client.group('organization', 'team')
+        client.group('', 'team')
         expect(grouped).toHaveBeenCalledTimes(1)
-        group(client, 'organization', 'team', { size: 5 })
+        client.group('organization', 'team', { size: 5 })
         expect(grouped).toHaveBeenLastCalledWith({
             type: 'organization',
             key: 'team',
@@ -135,8 +134,8 @@ describe('browser client identity listeners', () => {
             value.onGroupsReset(removed).dispose()
         })
         expect(() => client.identify('person')).not.toThrow()
-        expect(() => group(client, 'organization', 'team')).not.toThrow()
-        expect(() => resetGroups(client)).not.toThrow()
+        expect(() => client.group('organization', 'team')).not.toThrow()
+        expect(() => client.resetGroups()).not.toThrow()
         expect(() => client.reset()).not.toThrow()
         expect(identify).toHaveBeenCalledTimes(1)
         expect(grouped).toHaveBeenCalledTimes(1)
@@ -148,8 +147,8 @@ describe('browser client identity listeners', () => {
     it('does not replay events and stops publishing after disposal', async () => {
         const client = await create(() => {})
         client.identify('person')
-        group(client, 'organization', 'team')
-        resetGroups(client)
+        client.group('organization', 'team')
+        client.resetGroups()
         client.reset()
         const identify = vi.fn()
         const grouped = vi.fn()
@@ -165,8 +164,8 @@ describe('browser client identity listeners', () => {
         expect(reset).not.toHaveBeenCalled()
         await client.dispose()
         client.identify('later')
-        group(client, 'organization', 'later')
-        resetGroups(client)
+        client.group('organization', 'later')
+        client.resetGroups()
         client.reset()
         expect(groupsReset).not.toHaveBeenCalled()
         expect(identify).not.toHaveBeenCalled()

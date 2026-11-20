@@ -4,7 +4,6 @@ import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src/composition/npm'
 import { createPostHog as createDeliveredPostHog } from '../src/composition/npm/core'
 import type { BrowserFetch, CaptureOptions, CorePostHogOptions, RemoteConfig } from '../src/composition/npm/core'
-import { group } from '../src/products/analytics/groups'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
@@ -338,7 +337,7 @@ describe('@posthog/browser core', () => {
         })
 
         first.identify('user-123')
-        group(first, 'organization', 'org-123')
+        first.group('organization', 'org-123')
         first.kv.set('key', { value: 1 })
         const anonymousId = first.anonymousId
         await first.dispose()
@@ -438,7 +437,7 @@ describe('@posthog/browser core', () => {
         expect(anonymousId).not.toBe('')
 
         posthog.identify('user-before-consent')
-        group(posthog, 'organization', 'group-before-consent')
+        posthog.group('organization', 'group-before-consent')
         posthog.capture('before_consent')
         expect(requests).toHaveLength(0)
         expect(posthog.distinctId).toBe('user-before-consent')
@@ -810,7 +809,7 @@ describe('@posthog/browser core', () => {
         const session = posthog.session
         posthog.capture('blocked')
         posthog.identify('blocked-user')
-        group(posthog, 'organization', 'blocked-org')
+        posthog.group('organization', 'blocked-org')
         posthog.reset()
         posthog.kv.set('blocked', true)
 
@@ -1120,7 +1119,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        group(posthog, type, 'group-key')
+        posthog.group(type, 'group-key')
 
         expect(requests).toHaveLength(0)
         expect(posthog.groups).toEqual({})
@@ -1136,7 +1135,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        group(posthog, 'organization', key)
+        posthog.group('organization', key)
 
         expect(requests).toHaveLength(0)
         expect(posthog.groups).toEqual({})
@@ -1193,9 +1192,9 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        group(posthog, 'organization', 'org-123')
-        group(posthog, 'organization', 'org-123')
-        group(posthog, 'organization', 'org-123', { name: 'Acme' })
+        posthog.group('organization', 'org-123')
+        posthog.group('organization', 'org-123')
+        posthog.group('organization', 'org-123', { name: 'Acme' })
 
         await posthog.flush()
         const events = requests.flatMap((request) => request.body?.batch as Record<string, unknown>[])

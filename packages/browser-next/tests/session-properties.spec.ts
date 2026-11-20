@@ -1,8 +1,6 @@
 import type { AnalyticsOptions } from '../src/core/types'
 import type { IPostHog } from '../src/core/types'
 import { analyticsOf } from '../src/products/analytics/analytics-core'
-import { resetGroups, group } from '../src/products/analytics/groups'
-import { setPersonProperties, unsetPersonProperties } from '../src/products/analytics/person'
 import { BrowserState } from '../src/core/state/state'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
 import { ClientRateLimiter } from '../src/products/analytics/admission/rate-limiter'
@@ -331,7 +329,7 @@ describe('session registered properties', () => {
     it('preserves group-only context cleanup and clears session properties on full reset', async () => {
         const { client, requests } = await create()
         client.registerForSession({ session_only: true })
-        resetGroups(client)
+        client.resetGroups()
         expect(storedSessionProperty(client, 'session_only')).toBe(true)
         client.reset()
         expect(storedSessionProperty(client, 'session_only')).toBeUndefined()
@@ -791,12 +789,12 @@ describe('session enrichment preserves person admission and caller serialization
                 if (nested) return
                 nested = true
                 expect(storedSessionProperty(client, 'context')).toBe(true)
-                unsetPersonProperties(client, 'plan')
+                client.unsetPersonProperties('plan')
             }
             if (notification === 'onEvent') client.onEvent(unset)
             else client.onNewSession(unset)
-            setPersonProperties(client, { plan: 'paid' })
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(nested).toBe(true)
             expect(events(requests).map(({ properties }) => [properties.$set, properties.$unset])).toEqual([
@@ -817,10 +815,10 @@ describe('session enrichment preserves person admission and caller serialization
             write(key, value)
             if (!key.endsWith('_tab_analytics') || nested) return
             nested = true
-            unsetPersonProperties(client, 'plan')
+            client.unsetPersonProperties('plan')
         })
-        setPersonProperties(client, { plan: 'paid' })
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ properties }) => [properties.$set, properties.$unset])).toEqual([
             [{ plan: 'paid' }, undefined],
@@ -894,10 +892,10 @@ describe('session reset storage callbacks', () => {
             write(key, value)
             if (!key.endsWith('_tab_analytics') || nested) return
             nested = true
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
         })
         client.reset()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests)).toHaveLength(1)
         expect(events(requests)[0]?.properties.$set).toEqual({ plan: 'paid' })
@@ -911,7 +909,7 @@ describe('protected session capture metadata size', () => {
         async (method) => {
             const { client, requests } = await create(true)
             client.registerForSession({ $groups: null })
-            group(client, 'organization', 'a'.repeat(8 * 1024 * 1024))
+            client.group('organization', 'a'.repeat(8 * 1024 * 1024))
             await client[method]('oversized_metadata')
             await client.flush()
             expect(events(requests)).toHaveLength(0)

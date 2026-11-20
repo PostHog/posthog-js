@@ -1,51 +1,9 @@
 import { createPostHog } from '../npm/index'
 import { createLogger } from '../../platform/logger'
-import { group, groupIdentify, resetGroups } from '../../products/analytics/groups'
-import {
-    alias,
-    createPersonProfile,
-    setInternalOrTestUser,
-    setPersonProperties,
-    unsetPersonProperties,
-} from '../../products/analytics/person'
-import type { IPostHog, PostHogOptions } from '../../core/types'
+import type { PostHogOptions } from '../../core/types'
 
 const installation = Symbol.for('posthog.browser.snippet')
 
-/**
- * Script users have no module imports, so the global client also carries the npm package's
- * group and person functions as methods.
- */
-const scriptMethods = {
-    group,
-    groupIdentify,
-    resetGroups,
-    alias,
-    createPersonProfile,
-    setPersonProperties,
-    unsetPersonProperties,
-    setInternalOrTestUser,
-} as const
-
-export type ScriptPostHog = IPostHog & {
-    [Name in keyof typeof scriptMethods]: (typeof scriptMethods)[Name] extends (
-        posthog: IPostHog,
-        ...args: infer Args
-    ) => infer Result
-        ? (...args: Args) => Result
-        : never
-}
-
-const withScriptMethods = (client: IPostHog): ScriptPostHog => {
-    for (const [name, method] of Object.entries(scriptMethods)) {
-        Object.defineProperty(client, name, {
-            configurable: true,
-            value: (...args: unknown[]) =>
-                (method as (posthog: IPostHog, ...rest: unknown[]) => unknown)(client, ...args),
-        })
-    }
-    return client as ScriptPostHog
-}
 type SnippetWindow = Window & { posthog?: unknown; [installation]?: boolean }
 
 /** Query options are deliberately limited to primitives; omitted options retain factory defaults. */
@@ -88,7 +46,7 @@ export async function startSnippet(scriptUrl: string, target: SnippetWindow): Pr
             await client.dispose()
             return
         }
-        target.posthog = withScriptMethods(client)
+        target.posthog = client
         target.dispatchEvent(new CustomEvent('posthog:ready', { detail: client }))
     } catch {
         // Never expose the script URL, token, or customer-controlled error text.

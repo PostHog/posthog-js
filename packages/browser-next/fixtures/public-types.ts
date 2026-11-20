@@ -14,14 +14,6 @@ import type {
     IPostHog as CorePostHog,
     PersonProfileMode as CorePersonProfileMode,
 } from '@posthog/browser/core'
-import { group, groupIdentify, resetGroups } from '@posthog/browser/groups'
-import {
-    alias,
-    createPersonProfile,
-    setInternalOrTestUser,
-    setPersonProperties,
-    unsetPersonProperties,
-} from '@posthog/browser/person'
 import type { Client, Extension as SharedExtension, ExtensionToken } from '@posthog/browser-common'
 
 const personProfiles: PersonProfileMode = 'identified_only'
@@ -112,21 +104,21 @@ export const publicClient = async (posthog: IPostHog): Promise<void> => {
     void plan
     posthog.registerDynamicEventProperties(() => ({ page: 'home' })).dispose()
 
-    group(posthog, 'company', 'company-123', { name: 'Company' })
-    groupIdentify(posthog, 'organization', 0, { plan: 'paid' }, { uuid: 'group-uuid', timestamp: new Date() })
-    groupIdentify(posthog, 'organization', 'external')
+    posthog.group('company', 'company-123', { name: 'Company' })
+    posthog.groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-uuid', timestamp: new Date() })
+    posthog.groupIdentify('organization', 'external')
     // @ts-expect-error Group keys are strings or numbers.
-    groupIdentify(posthog, 'organization', true)
-    resetGroups(posthog)
-    alias(posthog, 'account-123')
+    posthog.groupIdentify('organization', true)
+    posthog.resetGroups()
+    posthog.alias('account-123')
     // @ts-expect-error Alias targets are strings.
-    alias(posthog, 42)
-    createPersonProfile(posthog)
-    setPersonProperties(posthog, { plan: 'paid' }, { initial: true })
-    setPersonProperties(posthog, undefined, { initial: true })
-    unsetPersonProperties(posthog, 'plan')
-    unsetPersonProperties(posthog, ['plan', 'initial'] as const)
-    setInternalOrTestUser(posthog)
+    posthog.alias(42)
+    posthog.createPersonProfile()
+    posthog.setPersonProperties({ plan: 'paid' }, { initial: true })
+    posthog.setPersonProperties(undefined, { initial: true })
+    posthog.unsetPersonProperties('plan')
+    posthog.unsetPersonProperties(['plan', 'initial'] as const)
+    posthog.setInternalOrTestUser()
 
     const subscriptions = [
         posthog.onEvent(({ event, properties }) => void [event, properties]),
@@ -151,8 +143,4 @@ export const publicClient = async (posthog: IPostHog): Promise<void> => {
     posthog.featureFlags?.getFeatureFlag('flag')
     // @ts-expect-error Analytics is part of the client, not a product namespace.
     void posthog.analytics
-    // @ts-expect-error Less common analytics operations are function imports.
-    posthog.group('company', 'company-123')
-    // @ts-expect-error Less common analytics operations are function imports.
-    posthog.alias('account-123')
 }
