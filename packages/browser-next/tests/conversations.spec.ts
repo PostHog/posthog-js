@@ -387,6 +387,22 @@ describe('conversations with several clients', () => {
         expect(document.getElementById('ph-conversations-widget-container')).toBe(widget)
         expect(owner.isVisible()).toBe(true)
     })
+
+    it('resets the shared widget when a client that did not create it resets, as in posthog-js', async () => {
+        const config = widgetConfig({ widgetEnabled: true })
+        const owner = await loaded((await createClient({ conversations: config })).client)
+        const previousSession = owner.getWidgetSessionId()
+
+        const { client } = await createClient({ conversations: config })
+        await client.resolveExtension('conversations')
+        await vi.waitFor(() => expect(client.conversations?.getUnavailableReason()).not.toBe('initializing'))
+        client.reset()
+
+        await vi.waitFor(() => expect(client.conversations?.getWidgetSessionId()).toBeTruthy())
+        expect(client.conversations?.getWidgetSessionId()).not.toBe(previousSession)
+        expect(storedWidget().widgetSessionId).toBe(client.conversations?.getWidgetSessionId())
+        expect(owner.isVisible()).toBe(false)
+    })
 })
 
 describe('conversations identity', () => {
