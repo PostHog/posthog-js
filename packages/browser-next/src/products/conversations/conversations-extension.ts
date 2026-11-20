@@ -180,7 +180,7 @@ export const createConversations = (
 
     const loadIfEnabled = (): void => {
         const posthog = client
-        if (!posthog || manager || initializing || disposed || posthog.isOptedOut || !enabled) return
+        if (!posthog || manager || initializing || disposed || !enabled) return
         const config = remoteConfig
         if (!config?.token) {
             posthog.logger.error('Conversations enabled but missing token in remote config.')
@@ -238,7 +238,10 @@ export const createConversations = (
             client = posthog
             await posthog.kv.initialize()
             if (disposed) return
-            if (identity) bootstrapIdentity(posthog, identity.distinctId)
+            // As in posthog-js, the identity seeds the distinct ID only when setup bootstrap supplies none.
+            if (identity && !(posthog as unknown as { _hasBootstrapDistinctId?: boolean })._hasBootstrapDistinctId) {
+                bootstrapIdentity(posthog, identity.distinctId)
+            }
             subscriptions.push(
                 posthog.onReset(() => {
                     // Reset starts a fresh widget session for the next visitor, without a verified identity.
@@ -251,11 +254,6 @@ export const createConversations = (
                     loadFailed = false
                     pendingPanelAction = undefined
                     loadIfEnabled()
-                }),
-                posthog.onConsentChange(({ current }) => {
-                    // Requests are not sent while opted out, so the widget cannot work then.
-                    if (current === 'denied') unload()
-                    else loadIfEnabled()
                 }),
                 posthog.onRemoteConfig((result) =>
                     onRemoteConfig(
@@ -302,7 +300,6 @@ export const createConversations = (
         isAvailable: () => enabled === true && !!manager,
         getUnavailableReason: (): ConversationsUnavailableReason | null => {
             if (enabled === true && manager) return null
-            if (client?.isOptedOut) return 'consent_opted_out'
             if (remoteConfigOk === false) return 'remote_config_failed'
             if (enabled === undefined) return remoteConfigOk ? 'disabled_in_project' : 'remote_config_pending'
             if (!enabled) return 'disabled_in_project'

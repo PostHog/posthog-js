@@ -4,8 +4,6 @@ import type { ToolbarParams } from '@posthog/types'
 export type { ToolbarParams } from '@posthog/types'
 
 export interface ToolbarOptions {
-    /** PostHog app origin the toolbar signs in to. Defaults to the app origin for a PostHog Cloud `apiHost`, otherwise `apiHost`. */
-    uiHost?: string
     /** Origin that serves `/static/toolbar.js`. Defaults to the client's asset host. */
     assetHost?: string
     /** Disable toolbar telemetry when the client uses a self-hosted or proxied `apiHost`. */

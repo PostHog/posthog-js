@@ -21,6 +21,7 @@ const runtime = (fetch: BrowserFetch | undefined): RequestRuntime => [
         api: 'https://example.com/proxy',
         flags: 'https://example.com/proxy',
         assets: 'https://example.com/proxy',
+        ui: 'https://example.com',
     },
     'ph_test',
     fetch,

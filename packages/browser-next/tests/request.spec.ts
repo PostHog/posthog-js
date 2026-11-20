@@ -7,6 +7,7 @@ const runtime = (fetch: BrowserFetch): RequestRuntime => [
         api: 'https://api.example.com/posthog',
         flags: 'https://flags.example.com/proxy',
         assets: 'https://assets.example.com/static-proxy',
+        ui: 'https://example.com',
     },
     'ph_test',
     fetch,
