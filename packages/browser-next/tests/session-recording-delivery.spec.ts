@@ -31,7 +31,7 @@ const decode = async (
 }
 
 const setup = (
-    respond: (request: Request) => number | Response = () => 200,
+    respond: (request: Request) => number | Response | Promise<Response> = () => 200,
     options: {
         gzip?: boolean
         canDeliver?: () => boolean
@@ -44,7 +44,7 @@ const setup = (
     const fetch: BrowserFetch = async (input, init = {}) => {
         const request = { url: String(input), init }
         requests.push(request)
-        const response = respond(request)
+        const response = await respond(request)
         return response instanceof Response ? response : new Response('{}', { status: response })
     }
     const delivery = createSnapshotDelivery({
@@ -228,6 +228,27 @@ describe('snapshot delivery', () => {
             await vi.advanceTimersByTimeAsync(60_000)
 
             expect(requests).toHaveLength(6)
+        })
+    })
+
+    it('aborts a stalled request after 60 seconds and retries it, as posthog-js does', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup(({ init }) =>
+                requests.length === 1
+                    ? new Promise<Response>((_resolve, reject) => {
+                          init.signal!.onabort = () => reject(new DOMException('', 'AbortError'))
+                      })
+                    : 200
+            )
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(60_000)
+            const flushed = delivery.flush()
+            await vi.advanceTimersByTimeAsync(1_000)
+
+            expect(requests).toHaveLength(2)
+            expect((await decode(requests[1]!))[0]!.uuid).toBe((await decode(requests[0]!))[0]!.uuid)
+            await expect(flushed).resolves.toBeUndefined()
         })
     })
 
