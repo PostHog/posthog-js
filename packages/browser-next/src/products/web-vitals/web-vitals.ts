@@ -45,7 +45,7 @@ const loadCallbacks = async (
 
 // Map onto the posthog-js `capture_performance` settings the shared implementation reads.
 const toPerformanceConfig = (options: WebVitalsOptions): PerformanceCaptureConfig => {
-    const { enabled, allowedMetrics, attribution, delayedFlushMs, maxValue, previewSoftNavigations } = options
+    const { enabled, allowedMetrics, attribution, delayedFlushMs, previewSoftNavigations } = options
     return {
         ...(enabled === undefined ? {} : { web_vitals: enabled }),
         ...(allowedMetrics ? { web_vitals_allowed_metrics: [...allowedMetrics] } : {}),
@@ -56,7 +56,6 @@ const toPerformanceConfig = (options: WebVitalsOptions): PerformanceCaptureConfi
                       attribution === true || attribution === false ? attribution : [...attribution],
               }),
         ...(delayedFlushMs === undefined ? {} : { web_vitals_delayed_flush_ms: delayedFlushMs }),
-        ...(maxValue === undefined ? {} : { __web_vitals_max_value: maxValue }),
         ...(previewSoftNavigations === undefined ? {} : { __preview_web_vitals_soft_navs: previewSoftNavigations }),
     }
 }
