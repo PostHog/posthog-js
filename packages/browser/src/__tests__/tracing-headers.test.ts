@@ -66,6 +66,14 @@ describe('tracing headers', () => {
         })
     }
 
+    const mockFetch = () => {
+        const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+            Promise.resolve(new Response())
+        )
+        setWindowFetch(originalFetch)
+        return originalFetch
+    }
+
     beforeAll(() => {
         ;(globalThis as any).Request = TestRequest
     })
@@ -345,10 +353,7 @@ describe('tracing headers', () => {
         })
 
         it('matches a Request by its destination, not an overridden url property', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
+            const originalFetch = mockFetch()
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
             const request = new Request('https://other.example/path')
@@ -362,10 +367,7 @@ describe('tracing headers', () => {
         })
 
         it('sends a Request with its body and no PostHog headers when the distinct ID is not a valid header value', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
+            const originalFetch = mockFetch()
             restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any)
 
             const request = new Request('https://example.com/path', { body: 'request-body', method: 'POST' })
@@ -380,10 +382,7 @@ describe('tracing headers', () => {
         })
 
         it('keeps the caller headers and traceparent but adds no PostHog headers when the distinct ID is not a valid header value', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
+            const originalFetch = mockFetch()
             restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any, ['example.com'])
 
             await window.fetch('https://example.com/path', {
@@ -405,10 +404,7 @@ describe('tracing headers', () => {
         })
 
         it('sends a Request with its unread body when preparing tracing headers fails', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
+            const originalFetch = mockFetch()
             restoreFetchPatch = patchFns._patchFetch(
                 ['example.com'],
                 () => {
@@ -511,14 +507,6 @@ describe('tracing headers', () => {
 
     describe('traceparent', () => {
         const TRACEPARENT_PATTERN = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
-
-        const mockFetch = () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
-            return originalFetch
-        }
 
         const downstreamHeaders = (originalFetch: ReturnType<typeof mockFetch>, call = 0): Headers => {
             const [input, init] = originalFetch.mock.calls[call]
