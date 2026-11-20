@@ -100,7 +100,7 @@ const allProductsDisabled = {
 }
 
 test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {
-    await page.goto(location({ ...allProductsDisabled }))
+    await page.goto(location(allProductsDisabled))
     await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
     const summary = await page.evaluate(() => {
@@ -130,9 +130,43 @@ test('core is embedded in the first response; disabled products do not request c
     expect((await assetRequests()).map((request) => request.path)).toEqual([`${assetPrefix}script.js`])
 })
 
+test('remotely enabled web vitals load the real library from chunks and deliver FCP, LCP and CLS when the page is left', async ({
+    page,
+    context,
+    browserName,
+}) => {
+    test.skip(browserName !== 'chromium', 'Paint timing and unload delivery are only verified in headless Chromium')
+    // FCP and LCP need contentful paint, and the fixture body has no visible content.
+    await context.addInitScript(() => {
+        // oxlint-disable-next-line posthog-js/no-add-event-listener -- Runs in the page, outside the SDK.
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.append(Object.assign(document.createElement('h1'), { textContent: 'Web vitals fixture' }))
+        })
+    })
+    // Only web vitals stays enabled, so every chunk request belongs to it.
+    await page.goto(location({ ...allProductsDisabled, webVitals: null }))
+    await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
+    // Remote config activation, the product chunk and the library chunks all load before the network goes idle.
+    await page.waitForLoadState('networkidle')
+    expect((await assetRequests()).some((request) => request.path.includes('/chunks/'))).toBe(true)
+    const webVitalsEvents = async () =>
+        (await backend.inspect()).events.filter((event) => (event as { event?: string }).event === '$web_vitals')
+    expect(await webVitalsEvents()).toEqual([])
+    await page.goto(location(allProductsDisabled))
+    // Navigating away fires pagehide before visibilitychange, so LCP and CLS are finalized after the
+    // pagehide flush and arrive in a second unload-delivered event; merge the delivered properties.
+    const delivered = async () =>
+        Object.assign({}, ...(await webVitalsEvents()).map((event) => (event as { properties: object }).properties))
+    await expect.poll(delivered).toMatchObject({
+        $web_vitals_FCP_value: expect.any(Number),
+        $web_vitals_LCP_value: expect.any(Number),
+        $web_vitals_CLS_value: expect.any(Number),
+    })
+})
+
 for (const [profile, options] of Object.entries({
     default: {},
-    disabled: { ...allProductsDisabled },
+    disabled: allProductsDisabled,
     denied: { optOutByDefault: 'true' },
 })) {
     test(`records actual startup script bytes for ${profile}`, async ({ page }) => {

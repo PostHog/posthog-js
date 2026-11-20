@@ -7,6 +7,7 @@ import type { Extension } from './extension'
 import type { RemoteConfigResult } from './types/remote-config'
 import { DOM_EVENT_VISIBILITYCHANGE, WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from './constants'
 import { addEventListener } from './utils/general-utils'
+import { continueWith } from './utils/promise-utils'
 import { MASKED, maskQueryParams, PERSONAL_DATA_URL_PARAMS } from './utils/url-masking'
 
 export interface WebVitalsReportOpts {
@@ -29,10 +30,10 @@ export type WebVitalsCallbackFlavor =
     | 'web-vitals-with-attribution-soft-navs'
 
 export type WebVitalsMetricCallbacks = {
-    onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onLCP: WebVitalsMetricCallback
+    onCLS: WebVitalsMetricCallback
+    onFCP: WebVitalsMetricCallback
+    onINP: WebVitalsMetricCallback
 }
 
 export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
@@ -141,8 +142,7 @@ export class WebVitalsAutocapture implements Extension {
             if (this._loadRequests === loadRequests) this.startIfEnabled()
         }
 
-        const ready = client.kv.initialize()
-        return ready ? ready.then(start) : start()
+        return continueWith(client.kv.initialize(), start)
     }
 
     dispose(): void {
