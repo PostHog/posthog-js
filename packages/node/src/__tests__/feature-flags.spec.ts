@@ -2923,6 +2923,90 @@ describe('local evaluation', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  describe('person_metadata filters', () => {
+    // A cohort can filter on Person metadata > First seen. /flags reads that value from the persons
+    // table and ignores a `created_at` person property, so local evaluation must not match it
+    // against the person properties the caller passes.
+    const firstSeenFilter = {
+      key: 'created_at',
+      type: 'person_metadata',
+      operator: 'is_date_after',
+      value: '2025-01-01',
+    }
+
+    const flagTargeting = (properties: Record<string, any>[], cohorts: Record<string, any> = {}) => ({
+      flags: [
+        {
+          id: 1,
+          name: 'First seen flag',
+          key: 'first-seen-flag',
+          active: true,
+          filters: { groups: [{ properties, rollout_percentage: 100 }] },
+        },
+      ],
+      cohorts,
+    })
+
+    const createClient = (localFlags: any): PostHog => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags,
+          // the person was created in 2020, so the server's answer is false
+          decideFlags: { 'first-seen-flag': false },
+        })
+      )
+      return new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+    }
+
+    it.each([
+      [
+        'in a cohort',
+        flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], { '7': { type: 'AND', values: [firstSeenFilter] } }),
+      ],
+      ['in a flag condition', flagTargeting([firstSeenFilter])],
+    ])('falls back to /flags instead of matching a created_at person property (%s)', async (_, localFlags) => {
+      posthog = createClient(localFlags)
+
+      const result = await posthog.getFeatureFlag('first-seen-flag', 'test-distinct-id', {
+        personProperties: { created_at: '2026-06-01' },
+      })
+
+      expect(result).toBe(false)
+      expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+    })
+
+    it('does not evaluate the flag locally when only local evaluation is allowed', async () => {
+      posthog = createClient(
+        flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], { '7': { type: 'AND', values: [firstSeenFilter] } })
+      )
+
+      const result = await posthog.getFeatureFlag('first-seen-flag', 'test-distinct-id', {
+        personProperties: { created_at: '2026-06-01' },
+        onlyEvaluateLocally: true,
+      })
+
+      expect(result).toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    })
+
+    it('still matches person filters locally', async () => {
+      posthog = createClient(
+        flagTargeting([{ key: 'created_at', type: 'person', operator: 'is_date_after', value: '2025-01-01' }])
+      )
+
+      const result = await posthog.getFeatureFlag('first-seen-flag', 'test-distinct-id', {
+        personProperties: { created_at: '2026-06-01' },
+      })
+
+      expect(result).toBe(true)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+    })
+  })
+
   it('should fallback to API when getFeatureFlagPayload evaluates flag with static cohort (no matchValue)', async () => {
     // When getFeatureFlagPayload is called WITHOUT a matchValue, it evaluates the flag.
     // If the flag has static cohorts, evaluation throws RequiresServerEvaluation.
