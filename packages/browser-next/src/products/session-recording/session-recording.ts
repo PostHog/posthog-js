@@ -92,11 +92,6 @@ const hasDocumentEverBeenVisible = (): boolean => {
     }
 }
 
-const uiHostFor = (apiHost: string, configured: string | undefined): string => {
-    const host = (configured || apiHost.replace('.i.posthog.com', '.posthog.com')).replace(/\/$/, '')
-    return host === 'https://app.posthog.com' ? 'https://us.posthog.com' : host
-}
-
 class SessionRecordingProduct implements SessionRecordingExtension {
     readonly name = 'sessionRecording'
     private _client: IPostHog | undefined
@@ -234,9 +229,9 @@ class SessionRecordingProduct implements SessionRecordingExtension {
     getSessionReplayUrl(options?: SessionReplayUrlOptions): string {
         const client = this._client
         const session = client?.session
-        const apiHost = client && analyticsOf(client)?._core._requestRuntime[0].api
-        if (!client || !session || apiHost === undefined) return ''
-        let url = `${uiHostFor(apiHost, this._options.uiHost)}/project/${client.projectToken}/replay/${session.sessionId}`
+        const uiHost = client && analyticsOf(client)?._core._requestRuntime[0].ui
+        if (!client || !session || uiHost === undefined) return ''
+        let url = `${uiHost}/project/${client.projectToken}/replay/${session.sessionId}`
         if (options?.withTimestamp && session.sessionStartTimestamp) {
             const lookBack = options.timestampLookBack ?? 10
             const offset = Math.max(Math.floor((Date.now() - session.sessionStartTimestamp) / 1000) - lookBack, 0)

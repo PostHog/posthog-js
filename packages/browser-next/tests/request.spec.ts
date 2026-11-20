@@ -12,6 +12,7 @@ const runtime = (fetch: BrowserFetch): RequestRuntime => [
     'ph_test',
     fetch,
     undefined,
+    { remaining: 52_428 },
 ]
 
 const abortableFetch = () =>

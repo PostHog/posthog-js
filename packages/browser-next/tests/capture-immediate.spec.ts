@@ -277,6 +277,7 @@ describe('captureImmediate', () => {
                     'ph_test',
                     fetch,
                     undefined,
+                    { remaining: 52_428 },
                 ],
                 canRetry: () => true,
                 onAvailable() {},

@@ -90,6 +90,7 @@ export const setup = async (
         extensions?: BrowserExtension[]
         optOutByDefault?: boolean
         capturePageview?: boolean
+        uiHost?: string
     } = {}
 ): Promise<Setup> => {
     const network = transport()
@@ -105,6 +106,7 @@ export const setup = async (
         remoteConfig: remoteConfig(config),
         analytics: { flushAt: 100, flushInterval: 0 },
         optOutByDefault: overrides.optOutByDefault ?? false,
+        ...(overrides.uiHost ? { uiHost: overrides.uiHost } : {}),
         extensions: [...(overrides.extensions ?? []), replay],
     })
     clients.push(posthog)

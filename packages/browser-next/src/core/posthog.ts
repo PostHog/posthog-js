@@ -24,7 +24,7 @@ import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from
 import { deepFreeze } from '../primitives/immutable'
 import { createLogger, type LogState } from '../platform/logger'
 import { snapshotPersonProfileMode } from '../products/analytics/properties/person-processing'
-import { sendRequest, type RequestRuntime } from '../platform/request'
+import { KEEPALIVE_BUDGET_BYTES, sendRequest, type RequestRuntime } from '../platform/request'
 import { BrowserState, CLIENT_KV_NAMESPACE, getDefaultSessionStorage, getDefaultStorage } from './state/state'
 import type {
     BrowserFetch,
@@ -250,6 +250,7 @@ class PostHog implements IPostHog {
             projectToken,
             browserFetch,
             browserNavigator,
+            { remaining: KEEPALIVE_BUDGET_BYTES },
         ]
         this._remoteConfig = options.remoteConfig
         this._remoteConfigTimeoutMs =
