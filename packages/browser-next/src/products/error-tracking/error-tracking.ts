@@ -91,7 +91,7 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
     const send = (
         { client, logger }: ActiveErrorTracking,
         properties: ExceptionProperties,
-        capturePostHogExceptions = false
+        capturePostHogExceptions: boolean
     ): boolean => {
         try {
             const drop = getExceptionDrop(
@@ -132,7 +132,11 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                     })
                     return
                 }
-                send(current, { ...UNSET_OWNED_PROPERTIES, ...properties, $exception_source: source })
+                // For a console value without an Error, the SDK builds the stack inside its own console wrapper, so
+                // its frames do not show that the SDK threw it. Other synthetic stacks keep the SDK filter.
+                const synthetic =
+                    source === 'browser.console' && properties.$exception_list[0]?.mechanism?.synthetic === true
+                send(current, { ...UNSET_OWNED_PROPERTIES, ...properties, $exception_source: source }, synthetic)
             } catch {
                 // Automatic capture must never throw into the page.
             }
