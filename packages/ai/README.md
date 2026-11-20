@@ -315,6 +315,13 @@ Use `getItemRevision`, `updateItem`, and `updateItemPayload` for item correction
 Omitted fields keep their stored values. An explicit `null` clears a nullable field.
 Each payload shares its owner's revision. A result change also advances the parent item's revision.
 Updates return the current revision, including when an unchanged score keeps the same revision.
+If an update acknowledgment returns a lower revision than you submitted, the promise rejects
+with code `invalid_response` and persistence `unknown`.
+
+Passing `payload: {}` stores an empty first payload or preserves the fields of an existing payload.
+Either write advances the owner's revision. A deleted or expired payload rejects even `{}` with
+HTTP 409 `payload_unavailable`. When you change a result's status from `error` to another status,
+the server removes any stored `errorMessage` (wire field `error_message`) from its payload.
 
 `deleteItemPayload` and `deleteResultPayload` remove only the stored payload. A deleted payload
 cannot be restored on that record. `deleteItem` permanently removes the item and its results.

@@ -87,6 +87,25 @@ it.each([
   expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'DELETE', body: undefined })
 })
 
+it.each([
+  ['updateItemPayload', ITEM],
+  ['updateResultPayload', RESULT],
+] as const)('%s sends an explicitly empty payload', async (method, id) => {
+  const fetch = mockFetch()
+    .mockResolvedValueOnce(reply({ revision: 4 }))
+    .mockResolvedValueOnce(reply({ code: 'payload_unavailable' }, 409))
+  const experiment = client().resumeExperiment(ID)
+
+  await expect(experiment[method](id, { revision: 3, payload: {} })).resolves.toBe(4)
+  await expect(experiment[method](id, { revision: 4, payload: {} })).rejects.toMatchObject({
+    status: 409,
+    code: 'payload_unavailable',
+  })
+  expect(fetch).toHaveBeenCalledTimes(2)
+  expect(requestBody(fetch, 0)).toEqual({ revision: 3, payload: {} })
+  expect(requestBody(fetch, 1)).toEqual({ revision: 4, payload: {} })
+})
+
 it('uses the upload score encoding and leaves omitted outcome fields for the server to resolve', async () => {
   const fetch = mockFetch().mockImplementation(() => reply({ revision: 0 }))
   const experiment = client().resumeExperiment(ID)
