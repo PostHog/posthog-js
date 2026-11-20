@@ -32,11 +32,11 @@ import { init } from '@posthog/electron/renderer'
 
 const client = await init()
 await client.identify('account-123', { plan: 'pro' })
-await client.capture('document_saved', { format: 'pdf' })
+client.capture('document_saved', { format: 'pdf' })
 await client.reset() // logout; app-wide, not just this window
 ```
 
-Mutations return promises rather than browser-style synchronous receipts. Await ordering-sensitive operations and handle rejections. A resolved capture is an operation receipt; if admitted, it acknowledges main's completed file write/rename, **not** server delivery or fsync. Consent, filters and queue limits may prevent an event from being admitted. Use `flush()` to attempt pending delivery and handle delivery errors; it does not establish ingestion/query visibility or exactly-once delivery.
+`capture()`, `screen()` and `captureException()` return nothing and never throw or reject, like the Node SDK. Failures go to `onError`. Other mutations return promises rather than browser-style synchronous receipts. Await ordering-sensitive operations, such as `identify()` and `reset()`, and handle their rejections. A resolved mutation is an operation receipt; it acknowledges main's completed file write/rename, **not** server delivery or fsync. Consent, filters and queue limits may prevent an event from being admitted. Use `flush()` to attempt pending delivery and handle delivery errors; it does not establish ingestion/query visibility or exactly-once delivery.
 
 For React 18+, replace browser providers with `@posthog/electron/react` and pass `client={initializedRendererClient}`. The provider does not accept a token, initialize another SDK or own disposal. Do not cast the renderer facade to the browser SDK's `PostHog` type. For DOM autocapture, explicitly opt in on renderer initialization; main's remote configuration and consent remain authoritative. Do not assume full browser SDK API parity or automatic page views. Review masking, URL handling and DOM allowlists in the real app.
 

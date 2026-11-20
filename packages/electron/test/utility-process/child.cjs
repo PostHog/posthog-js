@@ -2,7 +2,8 @@ const assert = require('node:assert/strict')
 const { init } = require('@posthog/electron/utility')
 
 async function run() {
-    const client = await init()
+    const errors = []
+    const client = await init({ onError: (error) => errors.push(error) })
     await Promise.all([client.ready(), client.ready()])
     await client.ready()
     const port = process.parentPort
@@ -25,23 +26,23 @@ async function run() {
                     await client.identify('utility-user')
                     break
                 case 'capture':
-                    await client.capture(data.value, { $electron_process: 'spoof', $utility_process_id: 'spoof' })
+                    client.capture(data.value, { $electron_process: 'spoof', $utility_process_id: 'spoof' })
+                    await client.flush()
                     break
                 case 'burst': {
-                    for (let i = 0; i < 110; i++) {
-                        try {
-                            await client.capture(`burst-${i}`)
-                        } catch (error) {
-                            assert.match(error.message, /rate limit/)
-                        }
-                    }
+                    for (let i = 0; i < 110; i++) client.capture(`burst-${i}`)
+                    // Main may accept the whole burst on a slow runner; the unit test covers throttling itself.
+                    await client.flush().catch((error) => assert.match(error.message, /rate limit/))
+                    for (const error of errors.splice(0)) assert.match(error.message, /rate limit/)
                     await new Promise((resolve) => setTimeout(resolve, 1100))
-                    await client.capture('after-rate-window')
+                    client.capture('after-rate-window')
                     await client.flush()
+                    assert.deepEqual(errors, [])
                     break
                 }
                 case 'exception':
-                    await client.captureException(new Error('handled utility fixture'))
+                    client.captureException(new Error('handled utility fixture'))
+                    await client.flush()
                     break
                 case 'optOut':
                     await client.optOut()
@@ -68,7 +69,7 @@ async function run() {
                         timedOut = true
                     }
                     assert.equal(timedOut, true)
-                    await client.capture('after-slow-flush')
+                    client.capture('after-slow-flush')
                     break
                 }
                 case 'pending':

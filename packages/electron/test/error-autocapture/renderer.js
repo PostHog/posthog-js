@@ -39,5 +39,5 @@ window.fixtureReady = (async () => {
             posthog = await init(options)
         },
     }
-    await posthog.captureException(new SyntaxError('renderer manual'))
+    posthog.captureException(new SyntaxError('renderer manual'))
 })()
