@@ -107,7 +107,7 @@ export interface PostHogOptions {
     fetch?: BrowserFetch | false
     /** Navigator implementation. Pass `false` to disable navigator capabilities. */
     navigator?: BrowserNavigator | false
-    /** Start with capture disabled until `optIn()` runs. */
+    /** Start with capture disabled until `optIn()` runs. Feature flags still load, as in posthog-js. */
     optOutByDefault?: boolean
     /** Capture one initial `$pageview` after configured extensions install. Defaults to `true`. */
     capturePageview?: boolean
