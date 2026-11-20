@@ -128,7 +128,12 @@ describe('session recording controls', () => {
 })
 
 describe('session recording debug properties', () => {
-    const OPTIONAL = ['$sdk_debug_replay_internal_buffer_size', '$sdk_debug_replay_remote_trigger_matching_config']
+    const OPTIONAL = [
+        '$sdk_debug_replay_internal_buffer_size',
+        '$sdk_debug_replay_remote_trigger_matching_config',
+        '$sdk_debug_session_start',
+        '$sdk_debug_replay_pending_trigger_conditions',
+    ]
     const captured = (
         posthog: IPostHog,
         event: string,
@@ -155,6 +160,18 @@ describe('session recording debug properties', () => {
             expect(optionalKeys(properties)).toEqual([])
         }
         expect(optionalKeys(captured(posthog, '$pageview'))).toEqual(OPTIONAL)
+    })
+
+    it('reports the session start and pending trigger conditions with the optional diagnostics', async () => {
+        const { posthog, replay } = await setup({ eventTriggers: ['checkout'] })
+        await started(replay)
+
+        const properties = captured(posthog, '$pageview')
+
+        expect(properties.$recording_status).toBe('buffering')
+        expect(properties.$sdk_debug_replay_pending_trigger_conditions).toEqual(['event condition not matched'])
+        expect(properties.$sdk_debug_session_start).toEqual(expect.any(Number))
+        expect(properties.$sdk_debug_session_start).toBeGreaterThan(0)
     })
 
     it('keeps an optional diagnostic the caller supplies on a custom event', async () => {
