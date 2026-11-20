@@ -540,13 +540,18 @@ export class PostHogMCP extends PostHog {
     if (!this.#serverBuild) {
       return event
     }
-    return {
-      ...event,
-      properties: {
-        ...event.properties,
-        [PostHogMCPAnalyticsProperty.ServerBuild]:
-          event.properties?.[PostHogMCPAnalyticsProperty.ServerBuild] ?? this.#serverBuild,
-      },
+    try {
+      return {
+        ...event,
+        properties: {
+          ...event.properties,
+          [PostHogMCPAnalyticsProperty.ServerBuild]:
+            event.properties?.[PostHogMCPAnalyticsProperty.ServerBuild] ?? this.#serverBuild,
+        },
+      }
+    } catch {
+      // Unreadable properties go to the client unchanged, which drops the event without throwing or logging its content.
+      return event
     }
   }
 }
