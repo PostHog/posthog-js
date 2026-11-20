@@ -126,6 +126,24 @@ describe('React Native capture v1 delivery', () => {
     ])
   })
 
+  it('reports an event dropped before sending on the error channel', async () => {
+    const uuid = '0198c0de-1234-7abc-8def-0123456789ab'
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    posthog.capture('\ud800', {}, { uuid })
+    posthog.capture('sent')
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['sent']])
+    expect(errors).toEqual([
+      expect.objectContaining({
+        name: 'CaptureError',
+        drops: [{ uuid, details: 'event name or id is not well-formed Unicode' }],
+        retryExhausted: [],
+      }),
+    ])
+  })
+
   // With Math.random stubbed to 0 the first resend waits 750 ms.
   const stubJitter = () => vi.spyOn(Math, 'random').mockReturnValue(0)
   const queuedEvents = (): string[] =>
