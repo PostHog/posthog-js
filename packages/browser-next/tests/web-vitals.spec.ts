@@ -169,8 +169,8 @@ describe('web vitals', () => {
     })
 
     it.each([
-        ['the default', undefined, 'http://localhost:3000/page?gclid=abc&utm_source=ads#access_token=secret'],
-        ['query: false', { query: false }, 'http://localhost:3000/page#access_token=secret'],
+        ['the default', undefined, 'http://localhost:3000/page?gclid=abc&utm_source=ads'],
+        ['query: false', { query: false }, 'http://localhost:3000/page'],
         [
             'sanitize',
             {
@@ -227,10 +227,10 @@ describe('web vitals', () => {
         window.dispatchEvent(new Event('pagehide'))
 
         const metric = events[0]!.properties.$web_vitals_LCP_event as Record<string, unknown>
-        expect(events[0]!.properties.$current_url).toBe('http://localhost:3000/route#tab')
+        expect(events[0]!.properties.$current_url).toBe('http://localhost:3000/route')
         expect(metric).toMatchObject({
-            navigationURL: 'http://localhost:3000/route#tab',
-            $current_url: 'http://localhost:3000/route#tab',
+            navigationURL: 'http://localhost:3000/route',
+            $current_url: 'http://localhost:3000/route',
             attribution: { url: 'https://cdn.example/hero.png', target: 'img' },
         })
     })

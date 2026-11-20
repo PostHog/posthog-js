@@ -170,6 +170,29 @@ describe('session recording page URLs', () => {
     })
 })
 
+describe('session recording URL sanitization', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'))
+
+    it('applies the client urlSanitization to recorded page URLs, as posthog-js applies its URL settings', async () => {
+        window.history.replaceState(null, '', '/account/42?token=secret-token')
+        const sanitize = (url: URL) => {
+            url.searchParams.delete('token')
+            url.pathname = url.pathname.replace(/\/\d+$/, '/:id')
+            return url
+        }
+        const { posthog, replay, transport: network } = await setup({}, {}, { urlSanitization: { sanitize } })
+        await started(replay)
+
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        const serialized = JSON.stringify(recordedEvents(network))
+        expect(serialized).toContain('http://localhost:3000/account/:id')
+        expect(serialized).not.toContain('secret-token')
+    })
+})
+
 describe('session recording debug properties', () => {
     const OPTIONAL = [
         '$sdk_debug_replay_internal_buffer_size',

@@ -83,7 +83,7 @@ Registration and removal are local, do not create a session, and remain availabl
 
 Every event carries the page URL as `$current_url`, with its `$host` and `$pathname`, read from `window.location` when the event is captured. `$pageview` events also carry the document `title`. Without a `window` or `document`, these properties are omitted. Registered and caller values replace them for that event. Web vitals replaces only `$current_url`, with the URL of the page it measured.
 
-By default, the URL is the full page URL, as in `posthog-js`, except that credentials are always removed. `urlSanitization` selects what is kept:
+By default, the URL is the page URL without its fragment, as with `posthog-js`'s current `defaults`, and credentials are always removed. `urlSanitization` selects what is kept:
 
 ```ts
 const posthog = await createPostHog({
@@ -91,7 +91,7 @@ const posthog = await createPostHog({
     urlSanitization: {
         path: true, // default true; false records `/`
         query: true, // default true; false drops query parameters
-        hash: false, // default true; false drops the fragment
+        hash: true, // default false; true keeps the fragment, which can carry tokens
         sanitize: (url) => {
             url.searchParams.delete('token')
             return url
@@ -100,7 +100,7 @@ const posthog = await createPostHog({
 })
 ```
 
-`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Logs and web vitals record their URLs with the same `urlSanitization`; session replay records URLs with its own options. The classic script's query options cannot set `urlSanitization`.
+`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Logs, web vitals and session replay record their URLs with the same `urlSanitization`; replay then applies its own `maskCapturedNetworkRequestFn`. Conversations sends the page URL without its fragment, independently of `urlSanitization`, because its restore links return to that page. The classic script's query options cannot set `urlSanitization`.
 
 ## Migrating from the analytics extension
 
@@ -354,7 +354,7 @@ logger.captureLog({ body: 'Checkout completed' })
 
 An explicit logs extension takes precedence over the top-level option, including `false`. The manual core entrypoint never loads logs automatically. Both paths accept the same options: `captureConsoleLogs`, `serviceName`, `serviceVersion`, `environment`, `resourceAttributes`, `beforeSend`, `flushIntervalMs`, `maxBufferSize`, and `maxLogsPerInterval`. Defaults match the legacy browser SDK: a 3,000ms flush interval, 100-record flush trigger, and 1,000 programmatic logs per interval. Console logs have a separate bounded queue and `console` scope, without the programmatic rate cap. Console service defaults to `posthog-browser-logs`; programmatic service defaults to `unknown_service`.
 
-Logs includes the current page URL as `url.full`, shaped by the client's [`urlSanitization`](#page-url-and-title) like events' `$current_url`: the full URL without credentials by default. A URL that can't be recorded is omitted; the log is still captured.
+Logs includes the current page URL as `url.full`, shaped by the client's [`urlSanitization`](#page-url-and-title) like events' `$current_url`: the URL without credentials or fragment by default. A URL that can't be recorded is omitted; the log is still captured.
 
 The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits the client's capture queue and all installed extensions' flush methods, including logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 

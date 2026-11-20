@@ -62,9 +62,9 @@ afterEach(async () => {
 
 describe('logs', () => {
     it.each([
-        ['static', 'the default', undefined, 'https://example.test/path?email=private#route'],
-        ['dynamic', 'the default', undefined, 'https://example.test/path?email=private#route'],
-        ['static', 'query: false', { query: false }, 'https://example.test/path#route'],
+        ['static', 'the default', undefined, 'https://example.test/path?email=private'],
+        ['dynamic', 'the default', undefined, 'https://example.test/path?email=private'],
+        ['static', 'query: false', { query: false }, 'https://example.test/path'],
         ['dynamic', 'path and hash: false', { path: false, hash: false }, 'https://example.test/?email=private'],
         [
             'static',
@@ -75,7 +75,7 @@ describe('logs', () => {
                     return url
                 },
             },
-            'https://example.test/path#route',
+            'https://example.test/path',
         ],
     ] as const)(
         'records the page URL of %s programmatic and console logs with %s urlSanitization',
@@ -262,7 +262,7 @@ describe('logs', () => {
                 expect.arrayContaining([
                     { key: 'log.source', value: { stringValue: 'console.log' } },
                     { key: 'host', value: { stringValue: 'example.test' } },
-                    { key: 'url.full', value: { stringValue: 'https://example.test/path?email=private#secret' } },
+                    { key: 'url.full', value: { stringValue: 'https://example.test/path?email=private' } },
                 ])
             )
             await client.dispose()

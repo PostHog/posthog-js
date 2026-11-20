@@ -760,11 +760,10 @@ export class SessionRecorder {
     }
 
     private _maskUrl(rawUrl: string): string | undefined {
-        // fragments often hold tokens (for example OAuth redirects); posthog-js strips them from replay URLs by default
-        const hashIndex = rawUrl.indexOf('#')
-        const url = hashIndex < 0 ? rawUrl : rawUrl.slice(0, hashIndex)
+        // the client's urlSanitization applies first, as posthog-js applies its URL settings before the replay mask
+        const url = this._analytics?.recordUrl(rawUrl)
         const mask = this._host.options.maskCapturedNetworkRequestFn
-        if (!mask) return url
+        if (!url || !mask) return url
         try {
             // page URLs are masked with the network request callback, which reads only `name` here
             // oxlint-disable-next-line typescript/consistent-type-assertions
