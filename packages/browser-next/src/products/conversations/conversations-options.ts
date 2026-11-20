@@ -89,8 +89,9 @@ export interface ConversationsExtension extends BrowserExtension {
     getWidgetSessionId(): string | null
     /**
      * Use a server-verified identity for conversations instead of the anonymous widget session. `hash` is the
-     * HMAC-SHA256 of `distinctId`, signed on your server with the Secret API key from Support settings. Also links
-     * `distinctId` to the current person. Clears signed claims, which belong to the previous identity.
+     * HMAC-SHA256 of `distinctId`, signed on your server with the Identity verification secret from Support settings
+     * (not a project secret or personal API key). Also links `distinctId` to the current person. Clears signed claims,
+     * which belong to the previous identity.
      */
     setIdentity(distinctId: string, hash: string): void
     /** Stop using a verified identity and return to the anonymous widget session. */
