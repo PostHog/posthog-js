@@ -269,17 +269,16 @@ describe('renderer exception autocapture', () => {
         Object.defineProperty(event, 'error', { get: getter })
         const rejection = new TestRejectionEvent(null)
         Object.defineProperty(rejection, 'reason', { get: getter })
-        let manual: Promise<void> | undefined
         try {
             target.dispatchEvent(event)
             target.dispatchEvent(rejection)
-            manual = client.captureException(Object.defineProperty({}, 'message', { get: getter }))
+            client.captureException(Object.defineProperty({}, 'message', { get: getter }))
             await Promise.resolve()
             expect(getter).not.toHaveBeenCalled()
         } finally {
             release()
             await withdrawing
-            await manual
+            await client.flush()
         }
         expect(commands()).toEqual([])
     })
