@@ -371,6 +371,8 @@ class PostHog implements IPostHog {
     reset(options?: boolean | ResetOptions): void {
         // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
         if (!this._canMutate()) return
+        // Before-reset hooks, such as the replay flush, still see the previous identity and consent.
+        this._analytics.prepareReset()
         // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
         // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
         // Consent listeners hear of it afterwards, so what they capture belongs to the new identity.
