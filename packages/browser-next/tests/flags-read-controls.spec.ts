@@ -554,43 +554,7 @@ it('suppresses remaining reload notifications if a listener disposes the flags o
     expect(afterDispose).not.toHaveBeenCalled()
 })
 
-const quotaLimited = { quotaLimited: ['feature_flags'] }
-const flagResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
-
-it.each([
-    ['quota-limited', quotaLimited],
-    ['flagless', {}],
-    [
-        'partially failed',
-        { flags: { preview: { key: 'preview', enabled: false, failed: true } }, errorsWhileComputingFlags: true },
-    ],
-])('keeps fresh reads unavailable after a %s evaluation over bootstrap values', async (_label, failedResponse) => {
-    vi.useFakeTimers()
-    let failing = true
-    const fetch = vi.fn(async () => flagResponse(failing ? failedResponse : { featureFlags: { preview: false } }))
-    const client = await create({
-        fetch,
-        flags: { refreshIntervalMs: 0, bootstrap: { featureFlags: { preview: true } } },
-    })
-    const flags = requireInstalled(client.featureFlags)
-    const fresh = { fresh: true, sendFeatureFlagEvent: false }
-    const initial = flags.reloadFeatureFlags()
-    await vi.advanceTimersByTimeAsync(5)
-    expect(await initial).toEqual({ status: 'error' })
-    expect(flags.getFeatureFlag('preview', { sendFeatureFlagEvent: false })?.enabled).toBe(true)
-    expect(flags.getFeatureFlag('preview', fresh)).toBeUndefined()
-
-    failing = false
-    const retry = flags.reloadFeatureFlags()
-    await vi.advanceTimersByTimeAsync(5)
-    expect(await retry).toEqual({ status: 'loaded' })
-    expect(flags.getFeatureFlag('preview', fresh)?.enabled).toBe(false)
-})
-
-it.each([
-    ['quota-limited', () => flagResponse(quotaLimited)],
-    ['server error', () => flagResponse({}, 500)],
-])('keeps fresh reads of loaded values after a later %s refresh', async (_label, failedResponse) => {
+it('makes fresh reads follow the latest flag response, as posthog-js does', async () => {
     vi.useFakeTimers()
     const fetch = vi.fn(async () => remoteFlags())
     const client = await create({ fetch, flags: { refreshIntervalMs: 0 } })
@@ -599,12 +563,13 @@ it.each([
     const initial = flags.reloadFeatureFlags()
     await vi.advanceTimersByTimeAsync(5)
     expect(await initial).toEqual({ status: 'loaded' })
+    expect(flags.getFeatureFlag('test', fresh)?.variant).toBe('remote')
 
-    fetch.mockImplementation(async () => failedResponse())
+    fetch.mockImplementation(async () => new Response('{}', { status: 500 }))
     const refresh = flags.reloadFeatureFlags()
     await vi.advanceTimersByTimeAsync(5)
     expect(await refresh).toEqual({ status: 'error' })
-    expect(flags.getFeatureFlag('test', fresh)?.variant).toBe('remote')
+    expect(flags.getFeatureFlag('test', fresh)).toBeUndefined()
 })
 
 it('returns injected payloads with their original types from every read', async () => {

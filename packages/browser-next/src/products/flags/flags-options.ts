@@ -28,16 +28,13 @@ export interface FlagsReadOptions {
     /** Emit a deduplicated `$feature_flag_called` event. Defaults to true. */
     sendFeatureFlagEvent?: boolean
     /**
-     * Return undefined until this SDK instance has loaded flags from the server
-     * without errors, instead of using persisted or bootstrapped values.
-     * Quota-limited responses and responses with `errorsWhileComputingFlags`
-     * do not count.
+     * Return undefined unless the latest flag request in this SDK instance
+     * succeeded, instead of using persisted or bootstrapped values, as in
+     * posthog-js.
      *
      * Use this to avoid showing a previously enabled feature that has since
      * been disabled on the server while the initial flag request is pending.
-     *
-     * After remote flags load, reads use local values normally, even if a
-     * later refresh fails. This option does not force or wait for a reload.
+     * This option does not force or wait for a reload.
      */
     fresh?: boolean
 }

@@ -351,7 +351,6 @@ export class PostHogFeatureFlags implements Extension {
     private _flagCallsPendingCapture = new Map<string, PendingFlagCall>()
     private _sendingFlagCallsPendingCapture: boolean = false
     private _flagsLoadedFromRemote: boolean = false
-    private _remoteFlagsLoaded: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
     private _refreshInterval: ReturnType<typeof setInterval> | undefined
@@ -817,11 +816,6 @@ export class PostHogFeatureFlags implements Extension {
         return this._hasLoadedFlags
     }
 
-    /** Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true. */
-    get hasLoadedRemoteFlags(): boolean {
-        return this._remoteFlagsLoaded
-    }
-
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
     }
@@ -1211,14 +1205,6 @@ export class PostHogFeatureFlags implements Extension {
                 flagErrors.push(FeatureFlagError.QUOTA_LIMITED)
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
-            const status: FeatureFlagsReloadResult['status'] = data.disable_flags
-                ? 'skipped'
-                : flagErrors.length || (!json.flags && !json.featureFlags)
-                  ? 'error'
-                  : 'loaded'
-            if (status === 'loaded') {
-                this._remoteFlagsLoaded = true
-            }
 
             if (isQuotaLimited) {
                 this._logger.warn(
@@ -1227,7 +1213,14 @@ export class PostHogFeatureFlags implements Extension {
             } else if (!data.disable_flags) {
                 this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
             }
-            this._settleReloads(completions, status)
+            this._settleReloads(
+                completions,
+                data.disable_flags
+                    ? 'skipped'
+                    : flagErrors.length || (!json.flags && !json.featureFlags)
+                      ? 'error'
+                      : 'loaded'
+            )
             requestAdditionalReload()
         }
         const handleError = (error: unknown): void => {
@@ -1933,18 +1926,7 @@ export class PostHogFeatureFlags implements Extension {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
-    /**
-     * Records an early access enrollment in stored flags and person properties, and captures it.
-     *
-     * @param options.updateBootstrappedFlags Also apply the value to active bootstrapped flags, which otherwise
-     *        take precedence over stored flags until the next evaluation.
-     */
-    updateEarlyAccessFeatureEnrollment(
-        key: string,
-        isEnrolled: boolean,
-        stage?: string,
-        options?: { updateBootstrappedFlags?: boolean }
-    ): void {
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
         const existing_early_access_features: EarlyAccessFeature[] = this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
         const feature = existing_early_access_features.find((f) => f.flagKey === key)
 
@@ -1982,24 +1964,17 @@ export class PostHogFeatureFlags implements Extension {
                 : {}),
             [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
         })
-        const flagState: FeatureFlagsState = {
+        this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
             ...(replacesFailure
                 ? { [PERSISTENCE_FEATURE_FLAG_DETAILS]: flagDetails, [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloads }
                 : {}),
-        }
-        this._set({
-            ...flagState,
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
                 ...enrollmentPersonProp,
             },
         })
-        if (options?.updateBootstrappedFlags && this._bootstrapState) {
-            // The new state was derived from the bootstrapped values, so it keeps their other flags and payloads.
-            this._bootstrapState = { ...this._bootstrapState, ...flagState }
-        }
         this._fireFeatureFlagsCallbacks()
         try {
             this._client?.capture('$feature_enrollment_update', properties)
@@ -2008,31 +1983,23 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    /**
-     * Calls back with cached early access features, or fetches, caches and delivers them.
-     *
-     * @param options.ignoreFailedResponses Keep the cache and skip the callback unless the request succeeds with a
-     *        feature list.
-     */
     getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
         force_reload = false,
-        stages?: EarlyAccessFeatureStage[],
-        options?: { ignoreFailedResponses?: boolean }
+        stages?: EarlyAccessFeatureStage[]
     ): void {
         const existing_early_access_features = this._prop(PERSISTENCE_EARLY_ACCESS_FEATURES)
         if (existing_early_access_features && !force_reload) {
             callback(existing_early_access_features)
             return
         }
-        void this._getEarlyAccessFeatures(callback, stages, !!options?.ignoreFailedResponses)
+        void this._getEarlyAccessFeatures(callback, stages)
     }
 
     // TODO: Consider moving early access features to their own extension.
     private async _getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
-        stages: EarlyAccessFeatureStage[] | undefined,
-        ignoreFailedResponses: boolean
+        stages?: EarlyAccessFeatureStage[]
     ): Promise<void> {
         const client = this._client
         if (!client) {
@@ -2053,9 +2020,6 @@ export class PostHogFeatureFlags implements Extension {
                 return
             }
             earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
-            if (ignoreFailedResponses && (response.statusCode !== 200 || !isArray(earlyAccessFeatures))) {
-                return
-            }
             this._set({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
         } catch (error) {
             this._logger.error('Early access feature request failed', error)
@@ -2217,7 +2181,6 @@ export class PostHogFeatureFlags implements Extension {
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false
-        this._remoteFlagsLoaded = false
         this.$anon_distinct_id = undefined
         this._clearDebouncer()
         this._override_warning = false

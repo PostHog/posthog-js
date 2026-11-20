@@ -6358,18 +6358,6 @@ Legacy constructor and configuration mapping for the shared flags extension.
 
 `boolean`
 
-##### hasLoadedRemoteFlags
-
-###### Get Signature
-
-> **get** **hasLoadedRemoteFlags**(): `boolean`
-
-Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true.
-
-###### Returns
-
-`boolean`
-
 #### Methods
 
 ##### \_callFlagsEndpoint()
@@ -6464,19 +6452,15 @@ Release final resources synchronously. Feature-level start/stop remains extensio
 
 ##### getEarlyAccessFeatures()
 
-> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`, `options?`): `void`
-
-Calls back with cached early access features, or fetches, caches and delivers them.
+> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`): `void`
 
 ###### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `callback` | `EarlyAccessFeatureCallback` | - |
-| `force_reload?` | `boolean` | - |
-| `stages?` | `EarlyAccessFeatureStage`[] | - |
-| `options?` | \{ `ignoreFailedResponses?`: `boolean`; \} | - |
-| `options.ignoreFailedResponses?` | `boolean` | Keep the cache and skip the callback unless the request succeeds with a feature list. |
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | `EarlyAccessFeatureCallback` |
+| `force_reload?` | `boolean` |
+| `stages?` | `EarlyAccessFeatureStage`[] |
 
 ###### Returns
 
@@ -7027,19 +7011,15 @@ are unset so flags re-evaluate without the removed values.
 
 ##### updateEarlyAccessFeatureEnrollment()
 
-> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`, `options?`): `void`
-
-Records an early access enrollment in stored flags and person properties, and captures it.
+> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`): `void`
 
 ###### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `string` | - |
-| `isEnrolled` | `boolean` | - |
-| `stage?` | `string` | - |
-| `options?` | \{ `updateBootstrappedFlags?`: `boolean`; \} | - |
-| `options.updateBootstrappedFlags?` | `boolean` | Also apply the value to active bootstrapped flags, which otherwise take precedence over stored flags until the next evaluation. |
+| Parameter | Type |
+| ------ | ------ |
+| `key` | `string` |
+| `isEnrolled` | `boolean` |
+| `stage?` | `string` |
 
 ###### Returns
 
@@ -7124,18 +7104,6 @@ interface SessionReplayExtension extends Extension {
 ###### Get Signature
 
 > **get** **hasLoadedFlags**(): `boolean`
-
-###### Returns
-
-`boolean`
-
-##### hasLoadedRemoteFlags
-
-###### Get Signature
-
-> **get** **hasLoadedRemoteFlags**(): `boolean`
-
-Whether an evaluation has loaded without errors since the last reset. Later failed refreshes keep it true.
 
 ###### Returns
 
@@ -7235,19 +7203,15 @@ Release final resources synchronously. Feature-level start/stop remains extensio
 
 ##### getEarlyAccessFeatures()
 
-> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`, `options?`): `void`
-
-Calls back with cached early access features, or fetches, caches and delivers them.
+> **getEarlyAccessFeatures**(`callback`, `force_reload?`, `stages?`): `void`
 
 ###### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `callback` | `EarlyAccessFeatureCallback` | - |
-| `force_reload?` | `boolean` | - |
-| `stages?` | `EarlyAccessFeatureStage`[] | - |
-| `options?` | \{ `ignoreFailedResponses?`: `boolean`; \} | - |
-| `options.ignoreFailedResponses?` | `boolean` | Keep the cache and skip the callback unless the request succeeds with a feature list. |
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | `EarlyAccessFeatureCallback` |
+| `force_reload?` | `boolean` |
+| `stages?` | `EarlyAccessFeatureStage`[] |
 
 ###### Returns
 
@@ -7783,19 +7747,15 @@ are unset so flags re-evaluate without the removed values.
 
 ##### updateEarlyAccessFeatureEnrollment()
 
-> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`, `options?`): `void`
-
-Records an early access enrollment in stored flags and person properties, and captures it.
+> **updateEarlyAccessFeatureEnrollment**(`key`, `isEnrolled`, `stage?`): `void`
 
 ###### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `string` | - |
-| `isEnrolled` | `boolean` | - |
-| `stage?` | `string` | - |
-| `options?` | \{ `updateBootstrappedFlags?`: `boolean`; \} | - |
-| `options.updateBootstrappedFlags?` | `boolean` | Also apply the value to active bootstrapped flags, which otherwise take precedence over stored flags until the next evaluation. |
+| Parameter | Type |
+| ------ | ------ |
+| `key` | `string` |
+| `isEnrolled` | `boolean` |
+| `stage?` | `string` |
 
 ###### Returns
 
