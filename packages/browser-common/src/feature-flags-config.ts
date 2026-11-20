@@ -8,7 +8,8 @@ export interface FeatureFlagsConfig {
     }
     /**
      * Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied.
-     * Events still report the bootstrapped payload as supplied.
+     * Only `$feature_flag_bootstrapped_payload` reports the supplied value; `$feature_flag_payload` reports the stored
+     * JSON string, like payloads from `/flags`.
      */
     readonly encodeBootstrapPayloads?: boolean
     readonly remoteRequestsDisabled: boolean

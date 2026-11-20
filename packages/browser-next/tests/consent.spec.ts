@@ -977,6 +977,12 @@ describe('portable consent persistence', () => {
     it.each([
         ['a capture request', '/i/v1/analytics/events', { method: 'POST', body: {} }],
         ['another path on the flags host', '/i/v1/analytics/events', flagsEvaluation],
+        ['a dot-segment path on the flags host', '/flags/../i/v1/analytics/events', flagsEvaluation],
+        [
+            'a percent-encoded dot-segment path on the flags host',
+            '/flags/%2e%2e/i/v1/analytics/events',
+            flagsEvaluation,
+        ],
         ['the API host', '/flags/?v=2', { ...flagsEvaluation, target: 'api' }],
         ['query options', '/flags/?v=2', { ...flagsEvaluation, query: { distinct_id: 'person' } }],
         ['headers', '/flags/?v=2', { ...flagsEvaluation, headers: { 'X-Person': 'person' } }],
@@ -987,12 +993,48 @@ describe('portable consent persistence', () => {
         expect(fetch).not.toHaveBeenCalled()
     })
 
+    it('sends the flags evaluation request to a flags host with a path while analytics consent is denied', async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: new MemoryStorage(),
+            navigator: false,
+            fetch,
+            optOutByDefault: true,
+            flagsHost: 'https://proxy.example.com/ingest',
+        })
+        await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 200 })
+        expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^https:\/\/proxy\.example\.com\/ingest\/flags\/\?v=2&/)
+    })
+
     it('refuses the flags evaluation request from a blocked client', async () => {
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
         const posthog = await createOptedOut(fetch, { webdriver: true })
         await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 0 })
         expect(fetch).not.toHaveBeenCalled()
     })
+
+    it.each([true, false])(
+        'resolves sendRequest(path, null) from untyped callers (optOutByDefault=%s)',
+        async (optOutByDefault) => {
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+            const posthog = await createPostHog({
+                remoteConfig: localRemoteConfig,
+                projectToken: 'ph_test',
+                storage: new MemoryStorage(),
+                navigator: false,
+                fetch,
+                optOutByDefault,
+            })
+            let result: Promise<unknown> | undefined
+            expect(() => {
+                // Verify untyped JavaScript consumers.
+                result = posthog.sendRequest('/api/surveys/', null as unknown as SendRequestInit)
+            }).not.toThrow()
+            await expect(result).resolves.toHaveProperty('statusCode')
+        }
+    )
 
     it('publishes cached remote config once for each subscription regardless of consent', async () => {
         const storage = new MemoryStorage()

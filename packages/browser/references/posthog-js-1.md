@@ -4013,7 +4013,7 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 | <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` | - |
 | <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` | - |
 | <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` | - |
-| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Events still report the bootstrapped payload as supplied. |
+| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Only `$feature_flag_bootstrapped_payload` reports the supplied value; `$feature_flag_payload` reports the stored JSON string, like payloads from `/flags`. |
 | <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] | - |
 | <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` | - |
 | <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] | - |
