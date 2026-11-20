@@ -104,7 +104,7 @@ export const errorTracking = (options: ErrorTrackingOptions = {}): ErrorTracking
                 logger
             )
             if (drop) {
-                if (steps) addExceptionStep(steps, drop.step, undefined, logger)
+                // Steps outlive captures, so recording drops there would push out the application's own steps.
                 logger.info(drop.log)
                 return false
             }
