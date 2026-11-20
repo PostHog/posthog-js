@@ -23,6 +23,17 @@ export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_repla
 export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
 export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'
 export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
+// sessionStorage key for replay data parked while a recording waits to start; the eager and lazy code both need it
+export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
+
+export function getReplayPendingBufferKey(config: { persistence_name?: string; token: string }): string {
+    return (
+        'ph' +
+        PENDING_BUFFER_STORAGE_SUFFIX +
+        '_' +
+        JSON.stringify([config.persistence_name || config.token, config.token])
+    )
+}
 
 // session recording statuses, reported as `$recording_status`
 export const DISABLED = 'disabled'

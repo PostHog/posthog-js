@@ -11,17 +11,6 @@ export interface SnapshotBuffer {
     windowId: string
 }
 
-export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
-
-export function getReplayPendingBufferKey(config: { persistence_name?: string; token: string }): string {
-    return (
-        'ph' +
-        PENDING_BUFFER_STORAGE_SUFFIX +
-        '_' +
-        JSON.stringify([config.persistence_name || config.token, config.token])
-    )
-}
-
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {
     const ancestors: any[] = []
