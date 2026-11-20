@@ -16,6 +16,10 @@ try {
         const item = new api.EvaluationItem({ input: false });
         const result = new api.EvaluationResult({ item, scorerVersionId: item.id, value: 0 });
         if (result.toJSON().value !== 0) throw new Error('Invalid declaration');
+        const calculated = new api.EvaluationResult({ item, scorerVersionId: item.id, calculate: true });
+        const restored = api.EvaluationResult.fromJSON(calculated.toJSON(), { item });
+        if (!restored.calculate || Object.keys(restored.toJSON()).length !== 3) throw new Error('Invalid calculation');
+        if (typeof client.scorers.validateComposition !== 'function') throw new Error('Missing formula validation');
         client.close();
     `
   execFileSync(process.execPath, ['--eval', `const api = require('@posthog/ai/evaluations'); ${smoke}`], {

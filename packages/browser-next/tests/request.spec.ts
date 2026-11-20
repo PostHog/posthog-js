@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { sendRequest, type RequestRuntime } from '../src/request'
-import type { BrowserFetch } from '../src/types'
+import { sendRequest, type RequestRuntime } from '../src/platform/request'
+import type { BrowserFetch } from '../src/core/types'
 
 const runtime = (fetch: BrowserFetch): RequestRuntime => [
     {

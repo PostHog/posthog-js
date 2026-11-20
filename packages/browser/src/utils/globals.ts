@@ -29,7 +29,11 @@ import type {
 // only importing types here, so won't affect the bundle
 // oxlint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
-import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
+import type {
+    TraceparentTargets,
+    TracingHeadersDistinctId,
+    TracingHeadersHostnames,
+} from '../extensions/tracing-headers-types'
 import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
 
 /*
@@ -222,6 +226,7 @@ export type PostHogExtensionKind =
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
+    readonly supportsSelectMasking?: boolean
     start: (startReason?: SessionStartReason) => void
     stop: () => void
     discard: (options?: { discardProducerEvents?: boolean }) => void
@@ -320,12 +325,14 @@ interface PostHogExtensions {
         _patchFetch: (
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
-            sessionManager?: SessionIdManager
+            sessionManager?: SessionIdManager,
+            traceparentTargets?: TraceparentTargets
         ) => () => void
         _patchXHR: (
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
-            sessionManager?: SessionIdManager
+            sessionManager?: SessionIdManager,
+            traceparentTargets?: TraceparentTargets
         ) => () => void
     }
     initDeadClicksAutocapture?: (
@@ -335,7 +342,9 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
-    initSessionRecording?: (ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface
+    initSessionRecording?: ((ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface) & {
+        supportsSelectMasking?: boolean
+    }
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 

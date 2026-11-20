@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
-import type { HighLevelMCPServerLike, UserIdentity } from '../types'
+import type { HighLevelMCPServerLike, ToolCallback, UserIdentity } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -26,7 +26,7 @@ describe('identify option', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     client = setup.client
     cleanup = setup.cleanup
   })
@@ -116,12 +116,11 @@ describe('identify option', () => {
     const identify = vi.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
     instrument(server, fakePostHog(), { enableConversationId: false, context: true, identify })
 
-    server.tool!(
-      'post_track_tool',
-      'A tool added after tracking was enabled',
-      { message: z.string() },
-      async (args: { message: string }) => ({ content: [{ type: 'text', text: `Got: ${args.message}` }] })
-    )
+    server.tool!('post_track_tool', 'A tool added after tracking was enabled', { message: z.string() }, (async (args: {
+      message: string
+    }) => ({
+      content: [{ type: 'text', text: `Got: ${args.message}` }],
+    })) as ToolCallback)
 
     await client.request(
       {
@@ -173,9 +172,80 @@ describe('identify option', () => {
     const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
     expect(toolCalls).toHaveLength(2)
     for (const toolCall of toolCalls) {
-      expect(toolCall.properties.$process_person_profile).toBe(false)
+      expect(toolCall.options).toEqual({ process_person_profile: false })
+      expect(toolCall.properties).not.toHaveProperty('$process_person_profile')
       expect(toolCall.distinct_id).toBe(toolCall.properties.$session_id)
     }
+
+    await capture.stop()
+  })
+
+  it.each([
+    {
+      name: 'eventOptions callback',
+      options: { eventOptions: async () => ({ process_person_profile: true }) },
+    },
+    {
+      name: 'eventProperties callback',
+      options: { eventProperties: async () => ({ $process_person_profile: true }) },
+    },
+  ])('lets an explicit process_person_profile from the $name beat the anonymous default', async ({ options }) => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), options)
+
+    await client.request(
+      { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'missing' } } },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const payloads = capture.getCaptures()
+    expect(payloads.map((payload) => payload.event)).toEqual(['$mcp_tool_call', '$exception'])
+    for (const payload of payloads) {
+      expect(payload.options).toEqual({ process_person_profile: true })
+      expect(payload.properties).not.toHaveProperty('$process_person_profile')
+    }
+
+    await capture.stop()
+  })
+
+  it('sends eventOptions without the anonymous default once identified', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), {
+      enableConversationId: false,
+      identify: async () => ({ distinctId: 'session-user' }),
+      eventOptions: async () => ({ cookieless_mode: true }),
+    })
+
+    await callAddTodo(client)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall.distinct_id).toBe('session-user')
+    expect(toolCall.options).toEqual({ cookieless_mode: true })
+
+    await capture.stop()
+  })
+
+  it('captures without the callback options when eventOptions throws', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    const logger = vi.fn()
+    instrument(server, fakePostHog(), {
+      logger,
+      eventOptions: async () => {
+        throw new Error('options boom')
+      },
+    })
+
+    const result = await callAddTodo(client)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(result.content[0].text).toContain('Added todo')
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[0].options).toEqual({ process_person_profile: false })
+    expect(logger).toHaveBeenCalledWith(expect.stringContaining('eventOptions callback error: Error: options boom'))
 
     await capture.stop()
   })
@@ -232,6 +302,7 @@ describe('identify option', () => {
     const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
     expect(toolCall).toBeDefined()
     // Identity resolved → real person, so we do NOT opt out of person processing.
+    expect(toolCall.options).toBeUndefined()
     expect(toolCall.properties.$process_person_profile).toBeUndefined()
     expect(toolCall.distinct_id).toBe('session-user')
     // properties go straight to $set.

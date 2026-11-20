@@ -1,0 +1,411 @@
+{
+  "pythonRevision": "a39cdd7a4e5824c2df020481276e2bbc12a9db06",
+  "cases": [
+    {
+      "name": "scorers.create",
+      "resource": "scorers",
+      "method": "create",
+      "args": [
+        {
+          "name": "Combined",
+          "kind": "numeric",
+          "config": {
+            "max": 2
+          },
+          "calculation": "composite",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/projects/123/llm_analytics/score_definitions/",
+        "params": {},
+        "retrySafe": false,
+        "body": {
+          "name": "Combined",
+          "kind": "numeric",
+          "config": {
+            "max": 2
+          },
+          "calculation": "composite",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+        "name": "Quality",
+        "description": "",
+        "kind": "numeric",
+        "archived": false,
+        "current_version": 1,
+        "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "config": {
+          "min": 0,
+          "max": 1
+        },
+        "created_by": null,
+        "created_at": "2026-10-02T10:00:00Z",
+        "updated_at": "2026-10-02T10:00:00Z",
+        "team": 123,
+        "calculation": "composite",
+        "composition": {
+          "expression": "quality * 2",
+          "inputs": [
+            {
+              "alias": "quality",
+              "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "scorers.create_version",
+      "resource": "scorers",
+      "method": "createVersion",
+      "args": [
+        "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+        {
+          "config": {
+            "max": 2
+          },
+          "baseVersion": 1,
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/new_version/",
+        "params": {},
+        "retrySafe": false,
+        "body": {
+          "config": {
+            "max": 2
+          },
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          },
+          "base_version": 1
+        }
+      },
+      "response": {
+        "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+        "name": "Quality",
+        "description": "",
+        "kind": "numeric",
+        "archived": false,
+        "current_version": 1,
+        "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "config": {
+          "min": 0,
+          "max": 1
+        },
+        "created_by": null,
+        "created_at": "2026-10-02T10:00:00Z",
+        "updated_at": "2026-10-02T10:00:00Z",
+        "team": 123,
+        "calculation": "composite",
+        "composition": {
+          "expression": "quality * 2",
+          "inputs": [
+            {
+              "alias": "quality",
+              "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "scorers.list",
+      "resource": "scorers",
+      "method": "list",
+      "args": [
+        {
+          "calculation": "composite",
+          "inputDefinitionId": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+          "tags": ["Quality"],
+          "offset": 2
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/projects/123/llm_analytics/score_definitions/",
+        "params": {
+          "limit": 100,
+          "offset": 2,
+          "calculation": "composite",
+          "input_definition_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+          "tags": "[\"Quality\"]",
+          "tag_match": "any"
+        },
+        "retrySafe": true
+      },
+      "response": {
+        "count": 1,
+        "results": [
+          {
+            "id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+            "name": "Quality",
+            "description": "",
+            "kind": "numeric",
+            "archived": false,
+            "current_version": 1,
+            "current_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+            "config": {
+              "min": 0,
+              "max": 1
+            },
+            "created_by": null,
+            "created_at": "2026-10-02T10:00:00Z",
+            "updated_at": "2026-10-02T10:00:00Z",
+            "team": 123,
+            "calculation": "composite",
+            "composition": {
+              "expression": "quality * 2",
+              "inputs": [
+                {
+                  "alias": "quality",
+                  "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+                }
+              ]
+            }
+          }
+        ],
+        "next": null,
+        "previous": null
+      }
+    },
+    {
+      "name": "scorers.get_version",
+      "resource": "scorers",
+      "method": "getVersion",
+      "args": ["8cba6d9e-d2ee-4b23-a545-a61057da5870", "f72481ec-1310-41de-b5bb-d20e1c59f121"],
+      "request": {
+        "method": "GET",
+        "path": "/api/projects/123/llm_analytics/score_definitions/8cba6d9e-d2ee-4b23-a545-a61057da5870/versions/f72481ec-1310-41de-b5bb-d20e1c59f121/",
+        "params": {},
+        "retrySafe": true
+      },
+      "response": {
+        "id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "definition_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+        "version": 1,
+        "kind": "numeric",
+        "config": {
+          "min": 0,
+          "max": 1
+        },
+        "created_at": "2026-10-02T10:00:00Z",
+        "created_by": null,
+        "calculation": "composite",
+        "composition": {
+          "expression": "quality * 2",
+          "inputs": [
+            {
+              "alias": "quality",
+              "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "scorers.validate_composition",
+      "resource": "scorers",
+      "method": "validateComposition",
+      "args": [
+        {
+          "kind": "numeric",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/projects/123/llm_analytics/score_definitions/validate_composition/",
+        "params": {},
+        "retrySafe": true,
+        "body": {
+          "kind": "numeric",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "valid": true
+      }
+    },
+    {
+      "name": "scorers.validate_composition",
+      "resource": "scorers",
+      "method": "validateComposition",
+      "args": [
+        {
+          "kind": "numeric",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          },
+          "config": {}
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/projects/123/llm_analytics/score_definitions/validate_composition/",
+        "params": {},
+        "retrySafe": true,
+        "body": {
+          "kind": "numeric",
+          "composition": {
+            "expression": "quality * 2",
+            "inputs": [
+              {
+                "alias": "quality",
+                "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+              }
+            ]
+          },
+          "config": {}
+        }
+      },
+      "response": {
+        "valid": true
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "result",
+      "options": {
+        "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+        "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "calculate": true
+      },
+      "wire": {
+        "calculate": true,
+        "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+        "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121"
+      }
+    },
+    {
+      "kind": "result",
+      "options": {
+        "item": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+        "scorerVersionId": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "calculate": false,
+        "value": false
+      },
+      "wire": {
+        "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+        "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+        "status": "ok",
+        "value": false
+      }
+    }
+  ],
+  "compositeUpload": {
+    "body": {
+      "items": [
+        {
+          "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "payload": {
+            "input": "question",
+            "output": "answer"
+          }
+        }
+      ],
+      "results": [
+        {
+          "calculate": true,
+          "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "scorer_version_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870"
+        },
+        {
+          "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+          "status": "ok",
+          "value": false
+        }
+      ]
+    },
+    "response": {
+      "items": [
+        {
+          "id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "created": true,
+          "accepted_at": "2026-10-02T12:00:00Z"
+        }
+      ],
+      "results": [
+        {
+          "id": "694bcf35-d8dd-5183-b566-fac77adc6291",
+          "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "scorer_version_id": "8cba6d9e-d2ee-4b23-a545-a61057da5870",
+          "created": true,
+          "accepted_at": "2026-10-02T12:00:00Z",
+          "status": "error",
+          "error_code": "composite_formula_error"
+        },
+        {
+          "id": "c925afd6-1595-5d46-b4d0-31ccc06ee3b6",
+          "item_id": "7d1e9d28-9b64-4c95-b4ad-3e6fa6b975b1",
+          "scorer_version_id": "f72481ec-1310-41de-b5bb-d20e1c59f121",
+          "created": true,
+          "accepted_at": "2026-10-02T12:00:00Z",
+          "status": "ok",
+          "error_code": null
+        }
+      ]
+    }
+  }
+}

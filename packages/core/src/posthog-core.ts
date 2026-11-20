@@ -14,6 +14,7 @@ import type {
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
+  GetFlagsResult,
   PostHogFlagsStorageFormat,
   FeatureFlagDetail,
   Survey,
@@ -134,9 +135,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         const currentFeatureFlagDetails = this.getKnownFeatureFlagDetails() || { flags: {}, requestId: undefined }
         const newFeatureFlagDetails = {
+          ...this.getStoredFlagDetails(),
+          requestError: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
-            ...currentFeatureFlagDetails.flags,
+            ...Object.fromEntries(
+              Object.entries(currentFeatureFlagDetails.flags).filter(
+                ([key, detail]) =>
+                  !detail.failed ||
+                  !Object.prototype.hasOwnProperty.call(normalizedBootstrapFeatureFlagDetails.flags, key)
+              )
+            ),
           },
           requestId: normalizedBootstrapFeatureFlagDetails.requestId,
         }
@@ -819,6 +828,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
+  // An SDK can discard an obsolete result without recording it as a request failure.
+  protected getFlagsForContext(
+    ...args: Parameters<PostHogCoreStateless['getFlags']>
+  ): Promise<GetFlagsResult | undefined> {
+    return super.getFlags(...args)
+  }
+
   private async _flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const sendAnonDistinctId = options?.sendAnonDistinctId ?? true
     const fetchConfig = options?.fetchConfig ?? false
@@ -842,7 +858,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
-        const result = await super.getFlags(
+        const result = await this.getFlagsForContext(
           distinctId,
           groups as PostHogGroupProperties,
           personProperties,
@@ -851,6 +867,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           fetchConfig
         )
 
+        if (result === undefined) return undefined
         if (!result.success) {
           if (!this.disableRemoteFeatureFlags) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a
@@ -895,7 +912,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
             const filteredFlags: Record<string, FeatureFlagDetail> = {}
             for (const key in res.flags) {
-              if (!res.flags[key].failed) {
+              // A failed record carries diagnostics, but cannot replace a successful cached value.
+              if (!res.flags[key].failed || getFeatureFlagValue(currentFlagDetails?.flags[key]) === undefined) {
                 filteredFlags[key] = res.flags[key]
               }
             }
@@ -1097,6 +1115,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
+      if (flagValue === undefined && featureFlag?.failed) {
+        errors.push(FeatureFlagError.EVALUATION_FAILED)
+      }
+
       const bootstrappedResponse = this.getBootstrappedFeatureFlags()?.[key]
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
@@ -1131,7 +1153,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         case 'getFeatureFlagPayload':
           return details ? { key, enabled: false, payload: null } : undefined
         case 'getFeatureFlag':
-          return details && Object.keys(details.flags).length ? { key, enabled: false, payload: null } : undefined
+          return details && Object.keys(details.featureFlags).length
+            ? { key, enabled: false, payload: null }
+            : undefined
         case undefined:
           return undefined
       }
@@ -1360,7 +1384,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const existingPayloads: Record<string, JsonType> = {}
       for (const key in existingDetails) {
         const storedPayload = existingDetails[key].metadata?.payload
-        if (storedPayload !== undefined) {
+        if (!existingDetails[key].failed && storedPayload !== undefined) {
           existingPayloads[key] = parsePayload(storedPayload)
         }
       }

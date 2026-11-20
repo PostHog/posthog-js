@@ -140,10 +140,13 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(jsonStringify(data))
-        const encodedBody = encodeToDataString(b64data)
+        // /i/v0/e/ rejects form-urlencoded bodies, so beacons post the bare base64 as
+        // text/plain, which is still CORS-simple
+        const isBeacon = options.transport === 'sendBeacon'
+        const encodedBody = isBeacon ? b64data : encodeToDataString(b64data)
 
         return {
-            contentType: CONTENT_TYPE_FORM,
+            contentType: isBeacon ? CONTENT_TYPE_PLAIN : CONTENT_TYPE_FORM,
             body: encodedBody,
             estimatedSize: new Blob([encodedBody]).size,
         }
@@ -160,7 +163,7 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
         // beacon bodies must keep a CORS-simple content type even on the gzip-failure
-        // fallback — uncompressed application/json preflights, base64 form data does not
+        // fallback — uncompressed application/json preflights, base64 text/plain does not
         if (options.transport === 'sendBeacon') {
             return {
                 url: extendURLParams(options.url, { compression: Compression.Base64 }),
@@ -329,6 +332,7 @@ const xhr = (options: TransportRequestOptions) => {
             readRetryAfter(() => req.getResponseHeader('Retry-After'))
         )
     }
+    options.onSend?.(url)
     req.send(body)
 }
 
@@ -440,6 +444,7 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
             signal: aborter?.signal,
             ...options.fetchOptions,
         }
+        options.onSend?.(url)
         const requestSize = estimatedSize ?? (isUndefined(body) ? 0 : undefined)
         // Respect runtime opt-out, but do not let untyped options override the safety budget
         // or beacon-rejection fallback. A replaced body has no trustworthy encoded size.

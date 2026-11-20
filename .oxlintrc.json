@@ -131,12 +131,13 @@
             }
         },
         {
-            "files": ["compliance/node/v2/**"],
+            "files": ["compliance/node/v2/**", "compliance/node/adapter.mjs"],
             "env": { "node": true },
             "rules": {
                 "compat/compat": "off",
                 "posthog-js/no-direct-null-check": "off",
                 "posthog-js/no-direct-array-check": "off",
+                "posthog-js/no-direct-function-check": "off",
                 "posthog-js/no-direct-number-check": "off",
                 "posthog-js/no-direct-undefined-check": "off"
             }
@@ -144,6 +145,8 @@
         {
             "files": [
                 "packages/core/**",
+                "packages/docusaurus/**",
+                "packages/electron/**",
                 "packages/mcp/**",
                 "packages/nextjs-config/**",
                 "packages/nuxt/**",
@@ -177,7 +180,7 @@
             }
         },
         {
-            "files": ["**/*.cjs"],
+            "files": ["**/*.cjs", "packages/docusaurus/src/index.js", "packages/docusaurus/test/**"],
             "rules": {
                 "typescript/no-require-imports": "off"
             }
