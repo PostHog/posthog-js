@@ -1,6 +1,7 @@
 import { createPostHog } from '../src/composition/npm/index'
 import type { IPostHog } from '../src/core/types'
 import { localRemoteConfig } from './helpers'
+import { MemoryStorage } from './identity-fixtures'
 
 class TestDocument extends EventTarget {
     constructor(public visibilityState: DocumentVisibilityState) {
@@ -78,6 +79,29 @@ describe('root initial pageview', () => {
         expect(observed).toEqual(['$pageview'])
         expect(add.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
+    })
+
+    it('does not capture the held-back initial pageview when consent is cleared, as posthog-js does', async () => {
+        vi.stubGlobal('document', new TestDocument('visible'))
+        const storage = new MemoryStorage()
+        storage.setItem(`__ph_opt_in_out_${options.projectToken}`, '0')
+        const observed: string[] = []
+        const client = await createPostHog({
+            ...options,
+            storage,
+            extensions: [
+                {
+                    name: 'observer',
+                    setup(host) {
+                        host.onEvent(({ event }) => observed.push(event))
+                    },
+                },
+            ],
+        })
+        clients.push(client)
+        client.clearOptInOut()
+        expect(client.hasOptedOut()).toBe(false)
+        expect(observed).toEqual([])
     })
 
     it('does not start a session for a bot-blocked initial pageview', async () => {

@@ -177,19 +177,4 @@ describe('clearing the consent choice', () => {
         expect(posthog.getExplicitConsentStatus()).toBe('pending')
         expect(posthog.hasOptedOut()).toBe(false)
     })
-
-    it('starts the initial pageview that a stored denial held', async () => {
-        const storage = new MemoryStorage()
-        storage.setItem(CONSENT_KEY, '0')
-        const sent: SentEvent[] = []
-        vi.stubGlobal('document', { visibilityState: 'visible' })
-        try {
-            const posthog = await create(storage, sent, { capturePageview: true })
-            posthog.clearOptInOut()
-            await posthog.flush()
-            expect(sent.map((event) => event.event)).toEqual(['$pageview'])
-        } finally {
-            vi.unstubAllGlobals()
-        }
-    })
 })

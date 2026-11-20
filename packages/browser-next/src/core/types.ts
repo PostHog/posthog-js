@@ -177,8 +177,8 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     ): Promise<CaptureSummary>
     identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
     /**
-     * Starts a new anonymous identity and session, retaining consent. Pass `true`, as in posthog-js, or
-     * `{ resetDeviceId: true }` to also replace the device ID.
+     * Starts a new anonymous identity and session, and forgets the stored consent choice. Pass `true`, as in
+     * posthog-js, or `{ resetDeviceId: true }` to also replace the device ID.
      */
     reset(options?: boolean | ResetOptions): void
     register(properties: Record<string, unknown>): void

@@ -329,6 +329,8 @@ class PostHog implements IPostHog {
 
     reset(options?: boolean | ResetOptions): void {
         const bootstrap = this._analytics.reset(options)
+        // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android.
+        this.clearOptInOut()
         if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 
@@ -442,7 +444,6 @@ class PostHog implements IPostHog {
         if (this._state.clearConsent()) {
             this._dispatchConsentChange()
         }
-        this._startInitialPageview()
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {

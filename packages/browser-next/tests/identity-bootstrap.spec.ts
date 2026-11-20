@@ -192,13 +192,14 @@ describe('reset options', () => {
         ).toEqual(['blue', undefined])
     })
 
-    it('retains consent', async () => {
+    it('clears the stored consent choice, as posthog-js, iOS and Android do', async () => {
         const storage = new MemoryStorage()
         const posthog = await create(storage)
         posthog.optOut()
         posthog.reset({ resetDeviceId: true, bootstrap: { distinctId: 'anon-2' } })
-        expect(storage.getItem(CONSENT_KEY)).toBe('0')
-        expect(posthog.hasOptedOut()).toBe(true)
+        expect(storage.getItem(CONSENT_KEY)).toBeNull()
+        expect(posthog.getExplicitConsentStatus()).toBe('pending')
+        expect(posthog.hasOptedOut()).toBe(false)
     })
 })
 
