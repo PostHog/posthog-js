@@ -689,6 +689,9 @@ export type PostHogFeatureFlag = {
     // group's property filters match but the rollout percentage excludes the user, rather than
     // continuing to evaluate later groups.
     early_exit?: boolean
+    // Early-access feature flag. The person's opt-in, stored in the person property
+    // `$feature_enrollment/<flag key>`, decides the flag before holdouts and release conditions.
+    feature_enrollment?: boolean
   }
   deleted: boolean
   active: boolean
