@@ -264,13 +264,18 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                         item >= 0))
             )
                 continue
-            if (
-                /^api\.storage\.(?:local|session)$/.test(path) &&
-                child.endsWith('_session_registered_properties') &&
-                Array.isArray(item)
-            ) {
-                item = item.filter((key) => !extensionInitDebugProperties.has(key))
-                if (!item.length) continue
+            if (/^api\.storage\.(?:local|session)$/.test(path) && child.endsWith('_session_registered_properties')) {
+                // Browser storage holds the list as a JSON string.
+                let registered = item
+                if (typeof registered === 'string') {
+                    try {
+                        registered = JSON.parse(registered)
+                    } catch {}
+                }
+                if (Array.isArray(registered)) {
+                    item = registered.filter((key) => !extensionInitDebugProperties.has(key))
+                    if (!item.length) continue
+                }
             }
             if (
                 webVitals &&

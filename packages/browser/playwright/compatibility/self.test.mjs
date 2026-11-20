@@ -100,6 +100,12 @@ test('timing-dependent extension init debug properties are omitted', () => {
     })
     assert.deepEqual(n(stored(Object.keys(debug))), n({ api: { storage: { session: {} } } }))
     assert.deepEqual(n(stored([...Object.keys(debug), '$other'])), n(stored(['$other'])))
+    // Browser storage holds the list as a JSON string.
+    assert.deepEqual(n(stored(JSON.stringify(Object.keys(debug)))), n({ api: { storage: { session: {} } } }))
+    assert.deepEqual(
+        n(stored(JSON.stringify([...Object.keys(debug), '$other']))),
+        n(stored(JSON.stringify(['$other'])))
+    )
 })
 
 test('OpenTelemetry identity/version/clock normalization preserves record contents', () => {
