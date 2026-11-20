@@ -202,6 +202,36 @@ describe('reset options', () => {
         expect(posthog.hasOptedOut()).toBe(false)
     })
 
+    it('keeps an opt-out that an onReset listener applies again', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent)
+        posthog.optOut()
+        posthog.onReset(() => posthog.optOut())
+        posthog.reset()
+        posthog.capture('after_reset')
+        await posthog.flush()
+        expect(posthog.hasOptedOut()).toBe(true)
+        expect(sent).toEqual([])
+    })
+
+    it('keeps an opt-in that an onReset listener applies again when capture is opted out by default', async () => {
+        const posthog = await create(new MemoryStorage(), [], { optOutByDefault: true })
+        posthog.optIn()
+        posthog.onReset(() => posthog.optIn())
+        posthog.reset()
+        expect(posthog.hasOptedOut()).toBe(false)
+    })
+
+    it('rejects an event an onReset listener captures when capture is opted out by default', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
+        posthog.optIn()
+        posthog.onReset(() => posthog.capture('captured_on_reset'))
+        posthog.reset()
+        await posthog.flush()
+        expect(sent).toEqual([])
+    })
+
     it('delivers events captured before it when capture is opted out by default', async () => {
         const sent: SentEvent[] = []
         const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
