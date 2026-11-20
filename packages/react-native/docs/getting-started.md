@@ -21,7 +21,7 @@ import { PostHogProvider } from 'posthog-react-native'
 
 export default function App() {
   return (
-    <PostHogProvider apiKey="<ph_project_api_key>" options={{ host: 'https://us.i.posthog.com' }}>
+    <PostHogProvider projectToken="<ph_project_token>" options={{ host: 'https://us.i.posthog.com' }}>
       <YourApp />
     </PostHogProvider>
   )
@@ -55,11 +55,14 @@ The SDK keeps capturing events while the device is offline. With the default `pe
 Pass `disabled: __DEV__` in `PostHogProvider` options to turn off tracking during development. Calls through `usePostHog()` still work as safe no-ops.
 
 ```tsx
-import { PostHogProvider, usePostHog } from 'posthog-react-native'
+import { PostHogProvider } from 'posthog-react-native'
 
 export function App() {
   return (
-    <PostHogProvider apiKey="<ph_project_api_key>" options={{ host: 'https://us.i.posthog.com', disabled: __DEV__ }}>
+    <PostHogProvider
+      projectToken="<ph_project_token>"
+      options={{ host: 'https://us.i.posthog.com', disabled: __DEV__ }}
+    >
       <YourApp />
     </PostHogProvider>
   )
