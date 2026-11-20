@@ -25,7 +25,6 @@ import {
 } from '@posthog/browser-common/replay/trigger-matching'
 import {
     estimateSize,
-    getReplayPendingBufferKey,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     type SnapshotBuffer,
     splitBuffer,
@@ -33,6 +32,7 @@ import {
     UNSTRINGIFIABLE_EVENT_SIZE,
 } from '@posthog/browser-common/replay/sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from '@posthog/browser-common/replay/sessionrecording-utils'
+import { getReplayPendingBufferKey } from '@posthog/browser-common/replay/replay-constants'
 import { strFromU8 } from 'fflate'
 import {
     buildCompressedFullSnapshotEvent,
@@ -154,7 +154,7 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
 // next page in the same tab. sessionStorage dies with the tab, so a visit that really ended
 // there still honours the gate that held them
-export { PENDING_BUFFER_STORAGE_SUFFIX } from './sessionrecording-utils'
+export { PENDING_BUFFER_STORAGE_SUFFIX } from '@posthog/browser-common/replay/replay-constants'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)

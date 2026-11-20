@@ -38,13 +38,13 @@ import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtension
 import {
     AWAITING_CONFIG,
     DISABLED,
+    getReplayPendingBufferKey,
     LAZY_LOADING,
     MISSING_CONFIG,
 } from '@posthog/browser-common/replay/replay-constants'
 import type { SessionRecordingStatus, TriggerType } from '@posthog/browser-common/replay/trigger-matching'
 import type { Extension } from '../types'
 import { sessionStore } from '../../storage'
-import { getReplayPendingBufferKey } from './external/sessionrecording-utils'
 import { getExtensionLoader } from '../../utils/extension-loader'
 
 const LOGGER_PREFIX = '[SessionRecording]'
