@@ -6,7 +6,7 @@ export default defineConfig({
     alias: [
       // Exercise workspace dependency sources without requiring their dist artifacts.
       {
-        find: '@posthog/core',
+        find: /^@posthog\/core$/,
         replacement: fileURLToPath(new URL('../core/src/index.ts', import.meta.url)),
       },
       {

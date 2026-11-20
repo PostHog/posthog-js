@@ -17,7 +17,7 @@ import type {
   TracesConfig,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
-import type { V1EventOptions } from './capture-v1/types'
+import type { V1EventOptions } from '@posthog/core/capture-v1'
 
 /** Processing options sent with an event to capture v1. */
 export type EventOptions = V1EventOptions

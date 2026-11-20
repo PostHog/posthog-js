@@ -2,8 +2,8 @@
 
 import type { PostHogFetchOptions } from '@posthog/core'
 
-import { V1CaptureSender } from '@/capture-v1/sender'
-import { serializeV1Event } from '@/capture-v1/serialize'
+import { V1CaptureSender } from '@posthog/core/capture-v1'
+import { serializeV1Event } from '@posthog/core/capture-v1'
 import { PostHog } from '@/entrypoints/index.node'
 import { captureCalls, v1Response } from './utils'
 import { okResponse } from './utils/v1-wiring'

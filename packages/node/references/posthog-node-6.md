@@ -291,14 +291,14 @@ successful HTTP status does not mean every event was accepted.
 
 #### Properties
 
-| Property | Modifier | Type | Default value | Overrides |
-| ------ | ------ | ------ | ------ | ------ |
-| <a id="cause"></a> `cause?` | `public` | `unknown` | `undefined` | `Error.cause` |
-| <a id="drops"></a> `drops` | `readonly` | `CaptureDroppedEvent`[] | `undefined` | - |
-| <a id="endpoint"></a> `endpoint` | `readonly` | `CaptureEndpoint` | `undefined` | - |
-| <a id="name"></a> `name` | `public` | `string` | `'CaptureError'` | `Error.name` |
-| <a id="requestid"></a> `requestId` | `readonly` | `string` | `undefined` | - |
-| <a id="retryexhausted"></a> `retryExhausted` | `readonly` | `string`[] | `undefined` | - |
+| Property | Modifier | Type | Overrides |
+| ------ | ------ | ------ | ------ |
+| <a id="cause"></a> `cause?` | `public` | `unknown` | `Error.cause` |
+| <a id="drops"></a> `drops` | `readonly` | `CaptureDroppedEvent`[] | - |
+| <a id="endpoint"></a> `endpoint` | `readonly` | `CaptureEndpoint` | - |
+| <a id="name"></a> `name` | `public` | `string` | `Error.name` |
+| <a id="requestid"></a> `requestId` | `readonly` | `string` | - |
+| <a id="retryexhausted"></a> `retryExhausted` | `readonly` | `string`[] | - |
 
 ## Identify
 

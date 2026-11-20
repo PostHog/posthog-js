@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
+// capture-v1/transform.spec.ts checks timezone-less timestamps against a non-UTC zone.
+process.env.TZ = 'America/Los_Angeles'
+
 export default defineConfig({
   resolve: {
     alias: [{ find: /^@\/(.*)$/, replacement: `${fileURLToPath(new URL('./src', import.meta.url))}/$1` }],
