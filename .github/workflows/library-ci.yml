@@ -101,8 +101,8 @@ jobs:
       - name: Check dependency cooldowns
         run: pnpm test:dependency-cooldown
 
-      - name: Check Electron alpha release isolation
-        run: pnpm test:electron-alpha-release
+      - name: Check Electron release configuration
+        run: pnpm test:electron-release
 
       - name: Check task graph
         run: pnpm test:build-graph

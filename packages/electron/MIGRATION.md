@@ -1,6 +1,6 @@
-# Migrating to the coordinated Electron alpha
+# Migrating to the coordinated Electron SDK
 
-This is an opt-in migration from a renderer-only `posthog-js` integration or separate main `posthog-node` and browser clients. It is not a drop-in replacement for either SDK. The alpha is not published by the documentation/release-preparation PR; use a published, reviewed **exact alpha version** only after the [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-alpha-releases) pass.
+This is an opt-in migration from a renderer-only `posthog-js` integration or separate main `posthog-node` and browser clients. It is not a drop-in replacement for either SDK. Use a published, reviewed **exact version** after the [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-releases) pass.
 
 ## 1. Inventory and remove duplicate ownership
 
@@ -51,4 +51,4 @@ Authenticated proxies are unsupported (`credentials: 'omit'`); retained HTTP 407
 - Validate the **installed registry dependency** path, not just local tarballs that override core. Required core hooks and the browser-common type seam must be available at the declared minimum dependency versions.
 - Compare wire identity, consent, session, flag exposure and event counts before/after migration; check offline/restart and account-switch behavior without mixing old/new clients.
 - Validate your packaged app, including signed installers and standalone or composed preloads, on every OS/runtime you ship. SDK CI passed local-tarball packaging on macOS, Windows and Linux; the optional-feature lane ran on macOS only. Those jobs do not verify runtime behavior with registry-resolved dependencies or published-harness acceptance.
-- Roll out to an internal/small alpha cohort first. Rollback is an application deployment decision, not automatic conversion of the Electron store back into browser/Node storage. Keep consent intact on rollback and prevent both implementations from capturing simultaneously.
+- Roll out to an internal or small initial cohort first. Rollback is an application deployment decision, not automatic conversion of the Electron store back into browser/Node storage. Keep consent intact on rollback and prevent both implementations from capturing simultaneously.

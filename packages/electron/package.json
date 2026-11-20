@@ -15,6 +15,7 @@
         "dist",
         "README.md",
         "MIGRATION.md",
+        "CHANGELOG.md",
         "LICENSE"
     ],
     "main": "dist/main.cjs",
@@ -75,7 +76,6 @@
     },
     "publishConfig": {
         "access": "public",
-        "tag": "alpha",
         "registry": "https://registry.npmjs.org"
     },
     "peerDependencies": {

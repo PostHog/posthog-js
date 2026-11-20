@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { assertCoreHooks, checkRegistry, metadata, packageName, validateManifest } from '../electron-alpha-release.mjs'
+import { assertCoreHooks, checkRegistry, metadata, packageName, validateManifest } from '../electron-release.mjs'
 
 // CLI status also enforces unrelated changed-package policy and requires a Git base branch.
 const require = createRequire(import.meta.url)
@@ -44,6 +44,7 @@ test('only an exact reviewed x.y.z version with external stable lower bounds is 
     for (const patch of [
         { name: '@posthog/core' },
         { private: true },
+        { publishConfig: { tag: 'alpha' } },
         { bundledDependencies: ['@posthog/core'] },
         { dependencies: {} },
         { dependencies: { '@posthog/core': 'workspace:^' } },
@@ -53,7 +54,7 @@ test('only an exact reviewed x.y.z version with external stable lower bounds is 
         assert.throws(() => validateManifest({ ...manifest, ...patch }, manifest.version))
 })
 
-test('registry checks require unpublished alpha and published cooled-down dependency lower bounds', async () => {
+test('registry checks require an unpublished version and cooled-down dependency lower bounds', async () => {
     await checkRegistry(manifest, manifest.version, mockRegistry(), now)
     for (const options of [
         { age: 6 },
@@ -86,31 +87,14 @@ test('published core must actually implement both required hooks, including inhe
     assertCoreHooks({ PostHogCore: Complete })
 })
 
-test('stable release discovery deliberately excludes Electron while retaining core release', async () => {
-    const config = JSON.parse(readFileSync('.changeset/config.json', 'utf8'))
-    assert.ok(config.ignore.includes(packageName))
-    const stable = readFileSync('.github/workflows/release.yml', 'utf8')
-    assert.doesNotMatch(stable, /name: ['"]?@posthog\/electron/)
-    assert.match(stable, /name: '@posthog\/core'/)
-    for (const file of readdirSync('.changeset').filter((file) => file.endsWith('.md') && file !== 'README.md')) {
-        const frontmatter = readFileSync(join('.changeset', file), 'utf8').split('---')[1]
-        assert.ok(!frontmatter?.includes(packageName), `${file}: ignored Electron must not appear in stable changesets`)
-    }
-    const plan = await getReleasePlan(process.cwd())
-    for (const release of plan.releases.filter((release) => release.name === packageName)) {
-        assert.equal(release.type, 'none')
-        assert.equal(release.newVersion, release.oldVersion, 'Dependency updates must not version Electron')
-    }
-})
-
-test('release planning works without Git refs and keeps the ignored Electron version unchanged', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'electron-alpha-plan-'))
+test('Changesets handles an Electron patch after the initial version', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'electron-release-plan-'))
     const json = (path, value) => writeFileSync(join(directory, path), JSON.stringify(value))
     try {
         mkdirSync(join(directory, '.changeset'))
         mkdirSync(join(directory, 'packages/core'), { recursive: true })
         mkdirSync(join(directory, 'packages/electron'), { recursive: true })
-        json('package.json', { name: 'alpha-plan-fixture', private: true })
+        json('package.json', { name: 'electron-release-fixture', private: true })
         writeFileSync(join(directory, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
         json('packages/core/package.json', { name: '@posthog/core', version: '1.0.0' })
         json('packages/electron/package.json', {
@@ -123,54 +107,49 @@ test('release planning works without Git refs and keeps the ignored Electron ver
             changelog: false,
         })
         writeFileSync(join(directory, '.changeset/core.md'), "---\n'@posthog/core': patch\n---\nCore hooks.\n")
-        const plan = await getReleasePlan(directory)
-        assert.equal(plan.releases.find(({ name }) => name === '@posthog/core')?.newVersion, '1.0.1')
-        for (const release of plan.releases.filter(({ name }) => name === packageName)) {
-            assert.equal(release.type, 'none')
-            assert.equal(release.newVersion, '0.1.0')
-        }
+        const first = await getReleasePlan(directory)
+        assert.equal(first.releases.find(({ name }) => name === '@posthog/core')?.newVersion, '1.0.1')
+        assert.ok(!first.releases.some(({ name }) => name === packageName))
+        writeFileSync(
+            join(directory, '.changeset/electron.md'),
+            "---\n'@posthog/electron': patch\n---\nElectron fix.\n"
+        )
+        const next = await getReleasePlan(directory)
+        assert.equal(next.releases.find(({ name }) => name === packageName)?.newVersion, '0.1.1')
     } finally {
         rmSync(directory, { recursive: true, force: true })
     }
 })
 
-test('manual alpha workflow has no default publishing, stable promotion, or build OIDC credentials', () => {
-    const workflow = readFileSync('.github/workflows/release-electron-alpha.yml', 'utf8')
-    assert.match(workflow, /permissions: \{\}/)
-    assert.doesNotMatch(workflow, /^ {4}(push|pull_request|pull_request_target):/m)
-    assert.match(workflow, /if: inputs.publish == true/)
-    assert.match(workflow, /environment: Electron Alpha NPM/)
-    assert.match(workflow, /version: 11\.7\.0/)
-    assert.match(workflow, /node-version: 24/)
-    assert.match(workflow, /--tag alpha --registry https:\/\/registry.npmjs.org --provenance/)
-    assert.match(workflow, /--ignore-scripts --access public/)
-    assert.match(workflow, /consumer target\/electron-alpha\/electron.tgz/)
-    assert.match(workflow, /sha256sum --check/)
-    assert.equal(
-        (workflow.match(/test "\$SOURCE_SHA" = "\$GITHUB_SHA"/g) ?? []).length,
-        2,
-        'validate and publish must bind tarball source to npm provenance dispatch SHA'
+test('shared release publishes Electron with the default npm tag after its registry check', () => {
+    const config = JSON.parse(readFileSync('.changeset/config.json', 'utf8'))
+    assert.ok(!config.ignore.includes(packageName), 'Electron must participate in Changesets')
+    const workflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const validate = workflow.split('    validate-electron-package:\n')[1].split('    publish:\n')[0]
+    const publish = workflow.split('    publish:\n')[1].split('    gate-posthog-js-publish:\n')[0]
+    assert.match(validate, /ref: \$\{\{ needs\.version-bump\.outputs\.commit-hash \}\}/)
+    assert.match(validate, /persist-credentials: false/)
+    assert.match(validate, /node scripts\/electron-release\.mjs "\$tarball" "\$VERSION"/)
+    assert.doesNotMatch(validate, /id-token:|contents: write|secrets\.|npm publish/)
+    assert.match(publish, /needs:\s*\[[^\]]*\bvalidate-electron-package\b/)
+    assert.match(publish, /name: '@posthog\/electron'/)
+    assert.match(
+        publish,
+        /if: steps\.check-package-version\.outputs\.is-new-version == 'true' && matrix\.package\.name == '@posthog\/electron'/
     )
-    assert.equal((workflow.match(/id-token: write/g) ?? []).length, 1)
-    const build = workflow.split('    build:\n')[1].split('    publish:\n')[0]
-    assert.deepEqual(
-        [...build.matchAll(/^ +ref: (.+)$/gm)].map(([, ref]) => ref),
-        ['${{ github.sha }}'],
-        'Build checkout must use the immutable dispatch commit, not a workflow input'
+    const gate = publish.indexOf('name: Require Electron registry compatibility')
+    assert.ok(gate >= 0 && gate < publish.indexOf('name: Publish ${{ matrix.package.name }} to NPM'))
+    assert.match(
+        publish,
+        /if \[ "\$VALIDATION_RESULT" != 'success' \] \|\| \[ "\$VALIDATED_VERSION" != "\$PACKAGE_VERSION" \] \|\|\s*\[ "\$VALIDATED_SOURCE" != "\$\(git rev-parse HEAD\)" \]; then/
     )
-    assert.doesNotMatch(build, /id-token:|secrets\.|npm publish/)
-    assert.doesNotMatch(workflow, /--tag latest|changeset pre|pnpm bump|git push/)
-    for (const action of workflow.matchAll(/uses: ([^\n]+)/g)) assert.match(action[1], /@[a-f0-9]{40} #/)
     const pkg = JSON.parse(readFileSync('packages/electron/package.json', 'utf8'))
     assert.notEqual(pkg.private, true)
     assert.match(pkg.version, /^\d+\.\d+\.\d+$/)
-    for (const example of ['examples/example-electron', 'examples/example-electron/packaging']) {
-        const manifest = JSON.parse(readFileSync(join(example, 'package.json'), 'utf8'))
-        assert.equal(manifest.dependencies[packageName], pkg.version)
-    }
-    assert.equal(pkg.publishConfig.tag, 'alpha')
+    assert.equal(pkg.publishConfig.tag, undefined)
     assert.equal(pkg.publishConfig.registry, 'https://registry.npmjs.org')
     assert.ok(pkg.files.includes('MIGRATION.md'))
+    assert.ok(pkg.files.includes('CHANGELOG.md'))
 })
 
 test('native optional-feature CI keeps merged fixtures on one pinned macOS runtime without publishing privileges', () => {

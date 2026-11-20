@@ -1,14 +1,14 @@
-# @posthog/electron (alpha)
+# @posthog/electron
 
 Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge and explicitly registered utility processes use `process.parentPort`.
 
-This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
+The SDK supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
-**Release status:** not published by this PR. Platform CI passed local-tarball packaging on macOS, Windows and Linux. That does not establish registry dependency compatibility or published SDK-harness acceptance. See [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-alpha-releases) and [migration](./MIGRATION.md). Do not interpret local tarball tests with a core override as proof that an npm consumer can install this alpha.
+See the [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-releases) and [migration guide](./MIGRATION.md). Local tarball tests with a core override do not prove compatibility with npm dependencies.
 
 ## Setup
 
-After a maintainer clears the release gates and publishes the alpha, install it explicitly with `pnpm add @posthog/electron@alpha` alongside your application's Electron development dependency. Pin the resolved alpha version for reproducible builds; `latest` is not the alpha channel. Electron 41+ is the initial experimental runtime range, not an assertion that every OS/runtime combination has passed. Validate your packaged application on every OS/runtime you ship. Do not bundle Electron into your application JavaScript.
+Install with `pnpm add @posthog/electron` alongside your application's Electron development dependency. Pin the resolved version for reproducible builds. Electron 41+ is the initial experimental runtime range, not an assertion that every OS/runtime combination has passed. Validate your packaged application on every OS/runtime you ship. Do not bundle Electron into your application JavaScript.
 
 ### Main process
 
@@ -101,7 +101,7 @@ Alias and person-profile updates respect `personProfiles: 'never'`. Opt-out bloc
 
 Malformed JSON payloads from detailed flag responses return `null` and report through `onError`. Valid JSON retains its decoded value, including strings, `false`, `0` and `null`. Legacy flag responses and bootstrap payloads can preserve malformed input as a string; already-decoded strings are returned unchanged rather than parsed again.
 
-Electron sends anonymous and distinct IDs for flag evaluation, but the alpha does not send a separate `$device_id`. Device-ID bucketing is not supported.
+Electron sends anonymous and distinct IDs for flag evaluation, but the SDK does not send a separate `$device_id`. Device-ID bucketing is not supported.
 
 ## Opt-in DOM autocapture
 
@@ -262,7 +262,7 @@ The SDK makes only a **best-effort flush** on uncancelled `will-quit`; it never 
 
 ## Networking limits
 
-Requests use Chromium's isolated in-memory `session.fromPartition('posthog-electron')`, not Node's fetch or the default browser session. A host can configure that session's proxy with Electron's `setProxy()` after app readiness and before capture/flush. SDK requests omit cookies and HTTP credentials. **Authenticated proxies are not currently supported**: a 407 is retained for retry/configuration recovery, not evidence of authenticated-proxy compatibility. Applications requiring authenticated enterprise proxies must treat this alpha limitation as a production-readiness gate.
+Requests use Chromium's isolated in-memory `session.fromPartition('posthog-electron')`, not Node's fetch or the default browser session. A host can configure that session's proxy with Electron's `setProxy()` after app readiness and before capture/flush. SDK requests omit cookies and HTTP credentials. **Authenticated proxies are not currently supported**: a 407 is retained for retry/configuration recovery, not evidence of authenticated-proxy compatibility. Applications requiring authenticated enterprise proxies must treat this limitation as a production-readiness gate.
 
 TLS certificate verification remains Chromium's default. The SDK does not disable verification, install certificate-error overrides, or trust arbitrary private CAs. Validate your actual enterprise trust/proxy deployment separately. There is no exactly-once guarantee: interrupted delivery may be retried with the same UUID and can duplicate events.
 
@@ -288,4 +288,4 @@ For loopback subprocess delivery/network tests and their real-versus-synthetic c
 
 The example installs tarballs, not source symlinks. No PostHog credentials are needed for its smoke test. The isolated autocapture test uses only local mock endpoints and real sandboxed Electron windows. It checks click/change/submit delivery, delayed config/kill switches, consent/reset/disposal, masking, sensitive-canary exclusion from IPC/network/disk, and absence of recorder requests/artifacts.
 
-Local core tarball overrides are useful source-integration evidence **only**. The separate alpha workflow verifies the packed manifest's real registry dependency lower bounds and required core hooks without overrides; it must pass before publication. Windows/Linux execution, packaged-app compatibility and published harness conformance must be recorded separately, not inferred from unit/build checks.
+Local core tarball overrides are source-integration evidence **only**. The shared release workflow checks the packed manifest's registry dependency minimums and required core hooks without overrides before publishing Electron. Packaged runtime and published harness results must be recorded separately from unit and build checks.

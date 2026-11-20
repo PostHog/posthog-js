@@ -14,7 +14,8 @@ export function validateManifest(manifest, version) {
     assert.match(version, plainVersion, 'Only exact x.y.z versions are permitted')
     assert.equal(manifest.name, packageName)
     assert.equal(manifest.version, version, 'Commit and requested version must match; no CI version rewriting')
-    assert.ok(!manifest.private, 'Alpha must be publishable')
+    assert.ok(!manifest.private, 'Electron must be publishable')
+    assert.equal(manifest.publishConfig?.tag, undefined, 'Use the shared release default npm tag')
     assert.ok(manifest.dependencies?.['@posthog/core'], 'Core must remain an external registry dependency')
     assert.ok(!manifest.bundledDependencies && !manifest.bundleDependencies, 'No bundled dependencies')
     for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
@@ -54,25 +55,8 @@ export async function checkRegistry(manifest, version, fetchMetadata = fetch, no
     }
 }
 
-function git(...args) {
-    return execFileSync('git', args, { encoding: 'utf8' }).trim()
-}
-
-export function validateSource(sha, version) {
-    assert.match(sha, /^[a-f0-9]{40}$/, 'A full immutable source SHA is required')
-    assert.match(version, plainVersion, 'Only exact x.y.z versions are permitted')
-    assert.equal(git('rev-parse', `${sha}^{commit}`), sha)
-    git('merge-base', '--is-ancestor', sha, 'origin/main')
-    const manifest = JSON.parse(git('show', `${sha}:packages/electron/package.json`))
-    assert.equal(manifest.name, packageName)
-    assert.equal(manifest.version, version)
-    const config = JSON.parse(git('show', `${sha}:.changeset/config.json`))
-    assert.ok(config.ignore.includes(packageName), 'Source must isolate Electron from stable Changesets versioning')
-    assert.equal(git('tag', '--list', `${packageName}@${version}`), '', 'Release tag must not already exist')
-}
-
 export function unpack(tarball) {
-    const directory = mkdtempSync(join(tmpdir(), 'electron-alpha-package-'))
+    const directory = mkdtempSync(join(tmpdir(), 'electron-release-package-'))
     execFileSync('tar', ['-xzf', resolve(tarball), '-C', directory])
     const manifest = JSON.parse(readFileSync(join(directory, 'package/package.json'), 'utf8'))
     return { directory, manifest }
@@ -87,7 +71,7 @@ export function assertCoreHooks(core) {
 // This is deliberately independent of the repo's tarball-rewriting pnpmfile and
 // local core overrides. Test the declared lower bounds, not a newer lucky resolution.
 export function registryConsumer(tarball, manifest) {
-    const directory = mkdtempSync(join(tmpdir(), 'electron-alpha-registry-consumer-'))
+    const directory = mkdtempSync(join(tmpdir(), 'electron-registry-consumer-'))
     process.stdout.write(`Registry-only consumer (retained for inspection): ${directory}\n`)
     const root = JSON.parse(readFileSync('package.json', 'utf8'))
     const electron = JSON.parse(readFileSync('packages/electron/package.json', 'utf8'))
@@ -162,20 +146,13 @@ for (const name of ${JSON.stringify(Object.keys(manifest.dependencies))}) {
 }
 
 async function main() {
-    const [command, target, version] = process.argv.slice(2)
-    if (command === 'source') {
-        validateSource(target, version)
-    } else if (command === 'package' || command === 'consumer') {
-        const { manifest } = unpack(target)
-        await checkRegistry(manifest, version)
-        if (command === 'consumer') registryConsumer(target, manifest)
-        process.stdout.write(`${packageName}@${version}: ${command} checks passed\n`)
-        process.stdout.write(`SHA-256: ${createHash('sha256').update(readFileSync(target)).digest('hex')}\n`)
-    } else {
-        throw new Error(
-            'Usage: node scripts/electron-alpha-release.mjs <source|package|consumer> <sha|tarball> <version>'
-        )
-    }
+    const [tarball, version] = process.argv.slice(2)
+    assert.ok(tarball && version, 'Usage: node scripts/electron-release.mjs <tarball> <version>')
+    const { manifest } = unpack(tarball)
+    await checkRegistry(manifest, version)
+    registryConsumer(tarball, manifest)
+    process.stdout.write(`${packageName}@${version}: registry consumer checks passed\n`)
+    process.stdout.write(`SHA-256: ${createHash('sha256').update(readFileSync(tarball)).digest('hex')}\n`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
