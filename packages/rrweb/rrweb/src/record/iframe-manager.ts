@@ -24,7 +24,11 @@ export class IframeManager {
     new WeakMap();
   private mirror: Mirror;
   private mutationCb: mutationCallBack;
-  private wrappedEmit: (e: eventWithoutTime, isCheckout?: boolean) => void;
+  private wrappedEmit: (
+    e: eventWithoutTime,
+    isCheckout?: boolean,
+    nonInteractive?: boolean,
+  ) => void;
   private loadListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private pageHideListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private stylesheetManager: StylesheetManager;
@@ -59,7 +63,11 @@ export class IframeManager {
     mutationCb: mutationCallBack;
     stylesheetManager: StylesheetManager;
     recordCrossOriginIframes: boolean;
-    wrappedEmit: (e: eventWithoutTime, isCheckout?: boolean) => void;
+    wrappedEmit: (
+      e: eventWithoutTime,
+      isCheckout?: boolean,
+      nonInteractive?: boolean,
+    ) => void;
   }) {
     this.mutationCb = options.mutationCb;
     this.wrappedEmit = options.wrappedEmit;
@@ -262,6 +270,7 @@ export class IframeManager {
       this.wrappedEmit(
         transformedEvent,
         crossOriginMessageEvent.data.isCheckout,
+        crossOriginMessageEvent.data.nonInteractive === true,
       );
   }
 

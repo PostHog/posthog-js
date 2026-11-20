@@ -335,7 +335,7 @@ class FeatureFlagsPoller {
             { skipLoadCheck: true }
           )
           response[flag.key] = matchValue
-          if (matchPayload) {
+          if (matchPayload !== undefined && matchPayload !== null) {
             payloads[flag.key] = matchPayload
           }
         } catch (e) {

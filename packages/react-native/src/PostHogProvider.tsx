@@ -72,9 +72,9 @@ function PostHogNavigationHook({
 }
 
 /**
- * PostHogProvider is a React component that provides PostHog functionality to your React Native app. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+ * PostHogProvider is a React component that provides PostHog functionality to your React Native app. See [`PostHogOptions`](#posthogoptions) for all configuration options.
  *
- * Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
+ * Autocapturing navigation requires further configuration. See [`PostHogAutocaptureOptions`](#posthogautocaptureoptions)
  * for more information about autocapturing navigation.
  *
  * This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.

@@ -29,6 +29,10 @@ const replayNodeAttributes = new RegExp(
     `^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data\\.node(?:\\.childNodes\\[\\d+\\])*\\.attributes$`
 )
 const storageRoot = /^api\.storage\.(?:local|session)\.[^.]+$/
+const extensionInitDebugProperties = new Set([
+    '$sdk_debug_extensions_init_method',
+    '$sdk_debug_extensions_init_time_ms',
+])
 const storageProperty = /^api\.storage\.(?:local|session)\.[^.]+\.[^.]+(?:\[\d+\])?$/
 const storedSessionId =
     /^api\.storage\.(?:local|session)\.[^.]+\.(?:\$client_session_props|\$sess_rec_flush_size)\.sessionId$/
@@ -249,13 +253,30 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)
+            // Current cores register these only when extension init takes at least 1 ms, and historical cores
+            // always register them, possibly with 0, so presence and value vary by machine.
             if (
-                child === '$sdk_debug_extensions_init_time_ms' &&
                 debugProperties &&
-                typeof item === 'number' &&
-                Number.isFinite(item)
+                ((child === '$sdk_debug_extensions_init_method' && ['synchronous', 'deferred'].includes(item)) ||
+                    (child === '$sdk_debug_extensions_init_time_ms' &&
+                        typeof item === 'number' &&
+                        Number.isFinite(item) &&
+                        item >= 0))
             )
-                item = '<cpu-duration-ms>'
+                continue
+            if (/^api\.storage\.(?:local|session)$/.test(path) && child.endsWith('_session_registered_properties')) {
+                // Browser storage holds the list as a JSON string.
+                let registered = item
+                if (typeof registered === 'string') {
+                    try {
+                        registered = JSON.parse(registered)
+                    } catch {}
+                }
+                if (Array.isArray(registered)) {
+                    item = registered.filter((key) => !extensionInitDebugProperties.has(key))
+                    if (!item.length) continue
+                }
+            }
             if (
                 webVitals &&
                 ((sdkProperties.test(path) && child === '$web_vitals_FCP_value') ||

@@ -185,7 +185,31 @@ describe('posthog core', () => {
             }
         })
 
-        it('drops replay diagnostics from events while replay is stopped but keeps status and retry queue size', () => {
+        it('reports a retry queue read failure without throwing', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            posthog._retryQueue = {
+                get length(): number {
+                    throw new Error('boom')
+                },
+            } as any
+
+            const properties = posthog.capture('x')!.properties
+
+            expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+            expect(properties.$recording_status).toBeDefined()
+            expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
+        })
+
+        it('drops registered and caller retry queue sizes while the retry queue is empty', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            posthog.register({ $sdk_debug_retry_queue_size: -1 })
+
+            const properties = posthog.capture('x', { $sdk_debug_retry_queue_size: -2 })!.properties
+
+            expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
+        })
+
+        it('drops replay diagnostics from events while replay is stopped but keeps status', () => {
             const posthog = posthogWith({ capture_pageview: false, autocapture: false })
             const recorderKeys = {
                 $recording_status: 'active',
@@ -213,7 +237,6 @@ describe('posthog core', () => {
             for (const event of ['custom_event', '$pageview', '$autocapture']) {
                 const properties = posthog.capture(event)!.properties
                 expect(properties).toMatchObject({ $recording_status: 'disabled' })
-                expect(properties).toHaveProperty('$sdk_debug_retry_queue_size')
                 for (const key of [...Object.keys(persisted), ...Object.keys(recorderKeys)]) {
                     if (key !== '$recording_status') {
                         expect(properties).not.toHaveProperty(key)
@@ -426,11 +449,12 @@ describe('posthog core', () => {
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith(defaultConfig, defaultOverrides)
 
-            posthog.capture(eventName, {}, {})
+            posthog.capture('first_bot_event', {}, {})
             posthog.capture(eventName, {}, {})
 
             expect(warnSpy).toHaveBeenCalledTimes(1)
             expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('opt_out_useragent_filter'))
+            expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('first_bot_event'))
             warnSpy.mockRestore()
             navigatorSpy.mockRestore()
         })
@@ -913,8 +937,19 @@ describe('posthog core', () => {
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'disabled',
-                $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
+            })
+        })
+
+        it('attaches the retry queue size only while requests are waiting to be retried', () => {
+            expect(posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)).not.toHaveProperty(
+                '$sdk_debug_retry_queue_size'
+            )
+
+            posthog._retryQueue = { length: 2 } as any
+
+            expect(posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)).toMatchObject({
+                $sdk_debug_retry_queue_size: 2,
             })
         })
 
@@ -1062,7 +1097,6 @@ describe('posthog core', () => {
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'disabled',
-                $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
         })

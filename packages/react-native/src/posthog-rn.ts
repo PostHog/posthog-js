@@ -445,7 +445,7 @@ export class PostHog extends PostHogCore {
   }
 
   /**
-   * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+   * Creates a new PostHog instance for React Native. See [`PostHogOptions`](#posthogoptions) for all configuration options.
    *
    * If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
    *
@@ -977,10 +977,12 @@ export class PostHog extends PostHogCore {
   }
 
   // Read apart from the replay keys so a failure building those still reports the queue depth.
+  // Below flushAt the queue is ordinary batching, so the depth is only reported once it backs up.
   private _pendingQueueSize(): number | undefined {
     try {
       const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
-      return Array.isArray(queue) ? queue.length : 0
+      const depth = Array.isArray(queue) ? queue.length : 0
+      return depth > 0 && depth >= this.flushAt ? depth : undefined
     } catch {
       return undefined
     }

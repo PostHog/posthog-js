@@ -357,16 +357,20 @@ describe(`Segment integration`, () => {
                 $initialization_time: expect.any(String),
                 $insert_id: expect.any(String),
                 $raw_user_agent: expect.any(String),
-                $sdk_debug_extensions_init_time_ms: expect.any(Number),
                 $time: expect.any(Number),
                 $timezone: expect.any(String),
                 $timezone_offset: expect.any(Number),
             })
         )
+        const {
+            $sdk_debug_extensions_init_method: _initMethod,
+            $sdk_debug_extensions_init_time_ms: _initTime,
+            ...properties
+        } = event.properties ?? {}
         expect({
             ...event,
             properties: {
-                ...event.properties,
+                ...properties,
                 token: '<generated-token>',
                 $session_id: '<generated-session-id>',
                 $window_id: '<generated-window-id>',
@@ -374,7 +378,6 @@ describe(`Segment integration`, () => {
                 $initialization_time: '<initialization-time>',
                 $insert_id: '<insert-id>',
                 $raw_user_agent: '<user-agent>',
-                $sdk_debug_extensions_init_time_ms: '<extension-init-time>',
                 $time: '<event-time>',
                 $timezone: '<runtime-timezone>',
                 $timezone_offset: '<runtime-timezone-offset>',

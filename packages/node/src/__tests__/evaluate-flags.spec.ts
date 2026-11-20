@@ -971,6 +971,37 @@ describe('evaluateFlags', () => {
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
+    it('keeps falsy JSON payloads (0, false, "") for locally evaluated flags', async () => {
+      const flagWithPayload = (id: number, key: string, payload: string) => ({
+        id,
+        name: key,
+        key,
+        active: true,
+        filters: {
+          groups: [{ variant: null, properties: [], rollout_percentage: 100 }],
+          payloads: { true: payload },
+        },
+      })
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              flagWithPayload(1, 'zero-payload', '0'),
+              flagWithPayload(2, 'false-payload', 'false'),
+              flagWithPayload(3, 'empty-string-payload', '""'),
+            ],
+          },
+        })
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlagPayload('zero-payload')).toBe(0)
+      expect(flags.getFlagPayload('false-payload')).toBe(false)
+      expect(flags.getFlagPayload('empty-string-payload')).toBe('')
+    })
+
     it('attaches $feature_flag_definitions_loaded_at on locally-evaluated $feature_flag_called events', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('local-flag')
