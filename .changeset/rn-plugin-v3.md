@@ -6,7 +6,7 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 
 - **Breaking:** require React Native 0.75 or later
 - **Breaking:** require iOS 15 or later and macOS 12 or later
-- **Breaking:** require posthog-ios 4.0, which needs Xcode 26
+- **Breaking:** require posthog-ios 4.0.2 or a later 4.0.x version, which needs Xcode 26
 - **Breaking:** require posthog-android 4.0
 - Fail the Android build instead of crashing at runtime when another dependency would raise `posthog-android` past 4.x
 - **Breaking:** resolve posthog-ios through Swift Package Manager instead of CocoaPods trunk and ignore the `posthog.useSpm` Podfile property
