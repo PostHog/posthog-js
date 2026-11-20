@@ -1,5 +1,6 @@
 import { cookiePersistence, type CookiePersistenceOptions } from '../src/persistence/cookie'
 import type { IPostHog } from '../src/core/types'
+import { tracingHeaders } from '../src/products/tracing-headers/tracing-headers'
 import { createClient, MemoryStorage, STATE_KEY, storedState, uuidv7, type SentEvent } from './identity-fixtures'
 
 const COOKIE = 'ph_ph_test_posthog'
@@ -330,6 +331,34 @@ describe('cookie persistence', () => {
             session_id: app.session!.sessionId,
             properties: { $device_id: app.deviceId },
         })
+    })
+
+    it('sends tracing headers for the identity and session another subdomain reset to from an open tab', async () => {
+        const downstream = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+            Promise.resolve(new Response('ok'))
+        )
+        const browser = { location: { href: 'https://app.example.com/' }, fetch: downstream }
+        vi.stubGlobal('window', browser)
+        const app = await create(
+            new MemoryStorage(),
+            [],
+            {},
+            {
+                extensions: [tracingHeaders({ hostnames: ['api.example.com'] })],
+            }
+        )
+        app.capture('baseline')
+        visit('www.example.com')
+        const www = await create(new MemoryStorage())
+        www.reset()
+        www.identify('user-2')
+        www.capture('after_reset')
+
+        visit('app.example.com')
+        await browser.fetch('https://api.example.com/work')
+        const headers = new Headers(downstream.mock.calls[0]![1]?.headers)
+        expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('user-2')
+        expect(headers.get('X-POSTHOG-SESSION-ID')).toBe(www.session!.sessionId)
     })
 
     it('notifies listeners when an open tab adopts another subdomain identity', async () => {
