@@ -200,7 +200,7 @@ subscription?.dispose()
 
 Pass `getFeatureFlag(key, { sendFeatureFlagEvent: false })` for a read without an exposure event. Omitted or undefined `sendFeatureFlagEvent` defaults to sending. `getAllFeatureFlags()` returns a synchronous snapshot of all known structured results, including disabled flags and payloads, without exposure events. Changing the snapshot or its JSON payloads does not change stored flags.
 
-`getFeatureFlag(key, { fresh: true })` returns undefined until this instance has loaded flags from the server, ignoring bootstrap and persisted values before then. Use it to avoid briefly showing a feature that has since been disabled. The `fresh` option does not itself force or await a reload; ordinary stale-cache auto-refresh still applies. Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+`getFeatureFlag(key, { fresh: true })` returns undefined until this instance has loaded flags from the server without errors, ignoring bootstrap and persisted values before then. Quota-limited responses and responses with `errorsWhileComputingFlags` do not count, and a later failed refresh does not hide loaded values. Use it to avoid briefly showing a feature that has since been disabled. The `fresh` option does not itself force or await a reload; ordinary stale-cache auto-refresh still applies. Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
 
 ```ts
 if (featureFlags) {
