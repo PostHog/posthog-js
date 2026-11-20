@@ -1,5 +1,6 @@
 import type { IPostHog } from '../../core/types'
-import { analyticsOf, isValidDistinctId } from './analytics-core'
+import { isValidDistinctId } from './identifiers'
+import { analyticsOf } from './analytics-of'
 import { personPropertyNames, snapshotPersonProperties } from './properties/person-processing'
 
 /** Enables person processing for the current identity without identifying it. */

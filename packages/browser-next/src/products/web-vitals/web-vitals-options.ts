@@ -17,12 +17,6 @@ export interface WebVitalsOptions {
      * fresh measurement window. Relies on Chrome's experimental Soft Navigation Detection API. Defaults to false.
      */
     previewSoftNavigations?: boolean
-    /** Strip URL fragments from captured URLs. Defaults to true. */
-    disableCaptureUrlHashes?: boolean
-    /** Mask campaign parameters that can identify a person, such as `gclid`, in captured URLs. Defaults to true. */
-    maskPersonalDataProperties?: boolean
-    /** Additional URL query parameters to mask when `maskPersonalDataProperties` is enabled. */
-    customPersonalDataProperties?: readonly string[]
 }
 
 export type WebVitalsConfiguration = false | WebVitalsOptions

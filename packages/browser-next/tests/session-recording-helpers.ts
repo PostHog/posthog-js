@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib'
 import type { SessionRecordingRemoteConfig } from '@posthog/browser-common'
 import { createPostHog as createCore, type RemoteConfig } from '../src/composition/npm/core'
-import type { BrowserFetch, IPostHog, StorageLike } from '../src/core/types'
+import type { BrowserFetch, IPostHog, StorageLike, UrlSanitizationOptions } from '../src/core/types'
 import { sessionRecording } from '../src/products/session-recording/session-recording'
 import type { SessionRecordingExtension } from '../src/products/session-recording/session-recording-internal'
 import type { SessionRecordingOptions } from '../src/products/session-recording/session-recording-options'
@@ -91,6 +91,7 @@ export const setup = async (
         optOutByDefault?: boolean
         capturePageview?: boolean
         uiHost?: string
+        urlSanitization?: UrlSanitizationOptions
     } = {}
 ): Promise<Setup> => {
     const network = transport()
@@ -107,6 +108,7 @@ export const setup = async (
         analytics: { flushAt: 100, flushInterval: 0 },
         optOutByDefault: overrides.optOutByDefault ?? false,
         ...(overrides.uiHost ? { uiHost: overrides.uiHost } : {}),
+        ...(overrides.urlSanitization ? { urlSanitization: overrides.urlSanitization } : {}),
         extensions: [...(overrides.extensions ?? []), replay],
     })
     clients.push(posthog)

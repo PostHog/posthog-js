@@ -40,6 +40,7 @@ export type {
     SendRequestInit,
     SessionContext,
     StorageLike,
+    UrlSanitizationOptions,
 } from '../../core/types'
 
 export type {

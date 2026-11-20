@@ -1,5 +1,5 @@
 import { createPostHog } from '../src/composition/npm/index'
-import { analyticsOf } from '../src/products/analytics/analytics-core'
+import { analyticsOf } from '../src/products/analytics/analytics-of'
 import type { IPostHog, StorageLike } from '../src/core/types'
 import {
     clientOptions,
