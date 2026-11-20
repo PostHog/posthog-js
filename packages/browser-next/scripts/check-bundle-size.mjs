@@ -34,7 +34,7 @@ const toolbarInput = /(^|\/)(products\/toolbar\/(toolbar|toolbar-extension)|dist
 const conversationsInput =
     /(^|\/)(products\/conversations\/(conversations|conversations-extension)\.(m?js|ts)|dist\/conversations(-renderer)?[/.])/
 const sessionRecordingInput =
-    /(^|\/)(products\/session-recording\/(session-recording|recorder|snapshot-delivery|replay-trigger-host)|dist\/replay\/[^/]+)\.(m?js|ts)$/
+    /(^|\/)(products\/session-recording\/(session-recording|recorder|rrweb|snapshot-delivery|replay-trigger-host)|dist\/replay\/[^/]+)\.(m?js|ts)$/
 const productInputs = [
     flagsInput,
     autocaptureInput,

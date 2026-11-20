@@ -15,6 +15,7 @@ import type {
     ConversationsTheme,
     ConversationsUnavailableReason,
 } from './conversations-options'
+import type { SessionRecordingExtension } from '../session-recording/session-recording-internal'
 
 type Renderer = typeof import('@posthog/browser-common/conversations-renderer')
 
@@ -117,7 +118,15 @@ export const createConversations = (
     const createHost = (posthog: IPostHog): ConversationsHost => ({
         _getDistinctId: () => posthog.distinctId,
         _getSessionId: () => posthog.session?.sessionId,
-        _getSessionReplayUrl: () => undefined,
+        _getSessionReplayUrl: () => {
+            // a session ID alone does not prove a recording exists, so link the replay only while the recorder is
+            // started; that includes sampled-out and trigger-pending sessions, so the link can point at a recording
+            // that was never sent (posthog-js links unconditionally)
+            const replay = posthog.getExtension<SessionRecordingExtension>('sessionRecording')
+            return replay?.sessionRecordingStarted()
+                ? replay.getSessionReplayUrl({ withTimestamp: true, timestampLookBack: 30 })
+                : undefined
+        },
         _getCurrentUrl: currentUrl,
         _isIdentified: () => isIdentified(posthog),
         _getPersonProperties: () => posthog.kv.get<Record<string, unknown>>(STORED_PERSON_PROPERTIES_KEY),

@@ -91,7 +91,7 @@
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "vitest run",
-        "test:built": "node scripts/check-mixed-module-delivery.mjs",
+        "test:built": "node scripts/check-mixed-module-delivery.mjs && node scripts/check-packed-dependencies.mjs",
         "test:browser": "pnpm --filter @posthog-tooling/sdk-mock-server build && playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
@@ -105,8 +105,6 @@
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
-        "@posthog/rrweb-plugin-console-record": "workspace:*",
-        "@posthog/rrweb-record": "workspace:*",
         "@posthog/types": "workspace:^",
         "web-vitals": "^6.2.1"
     },
@@ -114,6 +112,8 @@
         "@playwright/test": "1.52.0",
         "@posthog-tooling/sdk-mock-server": "workspace:*",
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@posthog/rrweb-plugin-console-record": "workspace:*",
+        "@posthog/rrweb-record": "workspace:*",
         "@rslib/core": "catalog:",
         "@rspack/core": "2.1.10",
         "esbuild": "^0.25.0",

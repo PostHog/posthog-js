@@ -111,6 +111,7 @@ export class Analytics {
     private readonly _rateLimiter: ClientRateLimiter
     private readonly _dynamicEventProperties: Array<(event: string) => Record<string, unknown>> = []
     private readonly _teardownCallbacks = new Set<() => void>()
+    private readonly _beforeResetPublisher: Publisher<void>
     private readonly _buffer: EventBuffer<AnalyticsMessage>
     private readonly _deliveryHost: CaptureHost
 
@@ -128,6 +129,7 @@ export class Analytics {
         this._groupPublisher = new Publisher(report('A group'))
         this._groupsResetPublisher = new Publisher(report('A group reset'))
         this._resetPublisher = new Publisher(report('A reset'))
+        this._beforeResetPublisher = new Publisher(report('A reset'))
         this._personProfiles = snapshotPersonProfileMode(() => options.personProfiles)
         this._rateLimiter = new ClientRateLimiter()
         this._registeredProperties = new RegisteredProperties(_core.kv)
@@ -181,6 +183,11 @@ export class Analytics {
         }
     }
 
+    /** Runs a callback as `reset()` begins, while the previous identity, consent and extension state still apply. */
+    onBeforeReset(callback: () => void): Disposable {
+        return this._beforeResetPublisher.listener(callback)
+    }
+
     async flush(): Promise<void> {
         if (!this._disposed) await this._driver?.flush()
     }
@@ -202,6 +209,7 @@ export class Analytics {
             this._groupPublisher,
             this._groupsResetPublisher,
             this._resetPublisher,
+            this._beforeResetPublisher,
         ] as Array<Publisher<unknown>>) {
             publisher.dispose()
         }
@@ -575,6 +583,7 @@ export class Analytics {
         // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
         if (this._disposed || !this._core._canMutate()) return undefined
         this._core._state.prepare()
+        this._beforeResetPublisher.publish(undefined)
         const { resetDeviceId, bootstrap } =
             options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
         const { distinctId, isIdentifiedId } = bootstrap ?? {}

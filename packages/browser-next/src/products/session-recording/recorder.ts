@@ -1,5 +1,4 @@
-import { record } from '@posthog/rrweb-record'
-import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
+import { getRecordConsolePlugin, record } from './rrweb'
 import type {
     CapturedEventInfo,
     SessionContext,
@@ -188,7 +187,8 @@ export class SessionRecorder {
         this._delivery = createSnapshotDelivery({
             runtime: this._analytics!._core._requestRuntime,
             endpoint: () => this._config?.endpoint || DEFAULT_ENDPOINT,
-            canDeliver: () => !this._client.isOptedOut && !this._analytics!._core._disposed,
+            // core owns delivery authority, so replay follows the same consent rule as analytics
+            canDeliver: () => this._analytics!._core._canDeliver(),
             gzipEnabled: () => _host.gzipEnabled(),
             reportFailure: (error) => this._client.logger.error('Session recording delivery failed', error),
             reportWarning: (message) => this._client.logger.warn(message),

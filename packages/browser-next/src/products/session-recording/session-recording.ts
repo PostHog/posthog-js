@@ -9,6 +9,9 @@ import type {
 } from '@posthog/browser-common'
 import {
     RECORDING_REMOTE_CONFIG_TTL_MS,
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
@@ -36,6 +39,14 @@ const RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
 const STALE_CONFIG = '$sdk_debug_replay_stale_config'
 const MAX_EARLY_EVENTS = 100
 const DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+// the debug properties replay registers for the session; a dynamic property set to undefined leaves them off an event
+// without deleting them, so they return when replay is turned on again
+const WITHHELD_SESSION_DEBUG_PROPERTIES = {
+    [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: undefined,
+    [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: undefined,
+    [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: undefined,
+    [RECORDING_SCRIPT_NOT_LOADED]: undefined,
+}
 
 // SDK events that carry the optional replay diagnostics, at most once per interval, as in posthog-js
 const carriesOptionalDebugProperties = (event: string): boolean =>
@@ -135,6 +146,11 @@ class SessionRecordingProduct implements SessionRecordingExtension {
         }
         this._subscriptions.push(
             analyticsOf(client)!.registerDynamicEventProperties((event) => {
+                // while replay is intentionally off, events carry only the disabled status, as sdk-specs
+                // session-replay-debug-properties requires
+                if (this._isIntentionallyOff()) {
+                    return { ...WITHHELD_SESSION_DEBUG_PROPERTIES, $recording_status: 'disabled' }
+                }
                 const optional = !this._debugPropertiesPaused && carriesOptionalDebugProperties(event)
                 return {
                     ...(optional && this._staleConfig ? { [STALE_CONFIG]: true } : {}),
@@ -142,8 +158,14 @@ class SessionRecordingProduct implements SessionRecordingExtension {
                 }
             }),
             client.onConsentChange(({ current }) => {
-                if (current === 'denied') this._recorder?.discard()
+                // purge only when core withholds delivery: an explicit opt-out drops recorded data, while a denial
+                // that core still lets deliver (a cleared choice) keeps what was recorded before it
+                if (current === 'denied' && !analyticsOf(client)!._core._canDeliver()) this._recorder?.discard()
                 this._startIfEnabledOrStop()
+            }),
+            analyticsOf(client)!.onBeforeReset(() => {
+                // send what was recorded while the previous identity, consent and triggers still apply, as posthog-js does
+                if (this._recorder?.isStarted) void this._recorder.flush()
             }),
             client.onReset(() => {
                 // reset clears saved extension state; keep recording the next session under this page's configuration
@@ -255,6 +277,11 @@ class SessionRecordingProduct implements SessionRecordingExtension {
     private _persistedConfig(): SessionRecordingPersistedConfig | undefined {
         const value = this._client?.kv.get<SessionRecordingPersistedConfig>(SESSION_RECORDING_REMOTE_CONFIG)
         return value && typeof value === 'object' ? value : undefined
+    }
+
+    /** Turned off locally or by the saved remote configuration; awaiting configuration is not off. */
+    private _isIntentionallyOff(): boolean {
+        return this._disabledLocally || this._persistedConfig()?.enabled === false
     }
 
     private _isRecordingEnabled(): boolean {
