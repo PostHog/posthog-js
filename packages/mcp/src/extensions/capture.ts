@@ -103,6 +103,9 @@ export function captureEvent(
 
   return sink.capture(fullEvent, {
     enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
+    captureParameters: data.options.captureParameters,
+    captureResponse: data.options.captureResponse,
+    captureErrorMessages: data.options.captureErrorMessages,
     beforeSend: data.options.beforeSend,
   })
 }

@@ -171,6 +171,22 @@ export interface MCPAnalyticsOptions {
    * fanning out into PostHog error tracking.
    */
   enableExceptionAutocapture?: boolean
+  /**
+   * Capture tool arguments as `$mcp_parameters`. Defaults to `true`.
+   * Set to `false` to omit argument values before sanitisation or event creation.
+   * Argument key names in `$mcp_input_keys` remain available.
+   */
+  captureParameters?: boolean
+  /** Capture tool results as `$mcp_response`. Defaults to `true`. */
+  captureResponse?: boolean
+  /**
+   * Capture exception messages and stack traces. Defaults to `true`.
+   * When false, omit `$mcp_error_message`, the `$exception` sibling, and a
+   * failed tool's `$mcp_response` (which can echo the same error message).
+   * Successful tool responses remain independently controlled by captureResponse.
+   * Error flags, safe error categories and HTTP status remain available.
+   */
+  captureErrorMessages?: boolean
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
