@@ -75,6 +75,10 @@ export class ExtensionRegistry<Host extends object> {
         if (this._disposed) throw new Error('The extension registry is disposed')
         if (this._retired.has(extension)) throw new Error('The extension instance has already been disposed')
         const names = [extension.name, ...Object.keys(extension.bindings ?? {})]
+        // A binding named after its own extension would make `getExtension(name)` disagree with `posthog[name]`.
+        if (new Set(names).size !== names.length) {
+            throw new Error(`Extension name "${extension.name}" is invalid or already in use`)
+        }
         for (const key of names) {
             if (!key || this._lookup.has(key) || this._reserved.has(key) || key in this._host) {
                 throw new Error(`Extension name "${key}" is invalid or already in use`)

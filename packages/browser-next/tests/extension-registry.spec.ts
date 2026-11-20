@@ -315,6 +315,7 @@ describe('extension registry lookup namespace', () => {
         ['an installed name', { name: 'owner' }],
         ['an installed binding', { name: 'next', bindings: { common: binding() } }],
         ['a binding that reuses an installed name', { name: 'next', bindings: { owner: binding() } }],
+        ['a binding that reuses its own name', { name: 'next', bindings: { next: binding() } }],
         ['a name that reuses an installed binding', { name: 'common' }],
         ['a host member', { name: 'resolve' }],
         ['an empty name', { name: '' }],
