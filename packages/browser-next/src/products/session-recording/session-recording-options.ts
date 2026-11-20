@@ -30,6 +30,8 @@ export type SessionRecordingRecorderOptions = Pick<
 >
 
 export interface SessionRecordingOptions extends SessionRecordingRecorderOptions {
+    /** Canvas capture options shared with posthog-js. `maskRegionsFn` masks regions of recorded canvases. */
+    canvasCapture?: Pick<NonNullable<PostHogSessionRecordingOptions['canvasCapture']>, 'maskRegionsFn'>
     /** Load session recording without recording until `startSessionRecording()` runs. Defaults to false. */
     disableSessionRecording?: boolean
     /** Record console logs in replays. Overrides the project setting when set. */
@@ -57,6 +59,7 @@ export const snapshotSessionRecordingOptions = (options: SessionRecordingOptions
     ...options,
     ...(options.maskInputOptions ? { maskInputOptions: { ...options.maskInputOptions } } : {}),
     ...(options.sampling ? { sampling: { ...options.sampling } } : {}),
+    ...(options.canvasCapture ? { canvasCapture: { ...options.canvasCapture } } : {}),
     ...(Array.isArray(options.attributeFilter) ? { attributeFilter: [...options.attributeFilter] } : {}),
     ...(options.slimDOMOptions && typeof options.slimDOMOptions === 'object'
         ? { slimDOMOptions: { ...options.slimDOMOptions } }

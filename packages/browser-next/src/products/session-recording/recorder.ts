@@ -152,6 +152,7 @@ export class SessionRecorder {
     private _stopRrweb: listenerHandler | undefined
     private _mutationThrottler: MutationThrottler | undefined
     private _rrwebError = false
+    private _maskRegionsFnFailed = false
     private _sessionId = ''
     private _windowId = ''
     private _sessionStartTimestamp = 0
@@ -468,6 +469,27 @@ export class SessionRecorder {
             recordOptions.recordCanvas = true
             recordOptions.sampling = { ...recordOptions.sampling, canvas: clamp(canvas.fps, 12, 4) }
             recordOptions.dataURLOptions = { type: 'image/webp', quality: clamp(canvas.quality, 1, 0.4) }
+            const maskRegionsFn = options.canvasCapture?.maskRegionsFn
+            if (typeof maskRegionsFn === 'function') {
+                recordOptions.canvasMasking = {
+                    configured: () => true,
+                    // as in posthog-js, a frame without regions is skipped rather than recorded unmasked
+                    regionsFn: (element) => {
+                        try {
+                            return maskRegionsFn(element) ?? null
+                        } catch (error) {
+                            if (!this._maskRegionsFnFailed) {
+                                this._maskRegionsFnFailed = true
+                                this._client.logger.warn(
+                                    'canvasCapture.maskRegionsFn threw, canvas frames will be skipped',
+                                    error
+                                )
+                            }
+                            return null
+                        }
+                    },
+                }
+            }
         }
         return recordOptions
     }

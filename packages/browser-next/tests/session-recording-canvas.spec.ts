@@ -42,4 +42,36 @@ describe('canvas recording', () => {
 
         expect(recordOptions()?.recordCanvas).toBeUndefined()
     })
+
+    it('masks canvas regions with canvasCapture.maskRegionsFn, failing closed when it throws', async () => {
+        const canvas = document.createElement('canvas')
+        const region = { x: 1, y: 2, width: 3, height: 4 }
+        const maskRegionsFn = vi
+            .fn()
+            .mockReturnValueOnce([region])
+            .mockReturnValueOnce(undefined)
+            .mockImplementationOnce(() => {
+                throw new Error('provider failed')
+            })
+        const canvasCapture = { maskRegionsFn }
+        const pending = setup({ recordCanvas: true }, { canvasCapture })
+        // options are snapshotted when the extension is created, before recording starts
+        canvasCapture.maskRegionsFn = vi.fn()
+        const { replay } = await pending
+        await started(replay)
+
+        const masking = recordOptions()?.canvasMasking
+        expect(masking?.configured?.()).toBe(true)
+        expect(masking?.regionsFn?.(canvas)).toEqual([region])
+        expect(masking?.regionsFn?.(canvas)).toBeNull()
+        expect(masking?.regionsFn?.(canvas)).toBeNull()
+        expect(maskRegionsFn).toHaveBeenCalledWith(canvas)
+    })
+
+    it('does not mask canvases without canvasCapture.maskRegionsFn', async () => {
+        const { replay } = await setup({ recordCanvas: true })
+        await started(replay)
+
+        expect(recordOptions()?.canvasMasking).toBeUndefined()
+    })
 })
