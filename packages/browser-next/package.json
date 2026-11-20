@@ -47,6 +47,11 @@
             "types": "./dist/products/autocapture/autocapture.d.ts",
             "require": "./dist/products/autocapture/autocapture.js",
             "import": "./dist/products/autocapture/autocapture.mjs"
+        },
+        "./persistence/cookie": {
+            "types": "./dist/persistence/cookie.d.ts",
+            "require": "./dist/persistence/cookie.js",
+            "import": "./dist/persistence/cookie.mjs"
         }
     },
     "scripts": {

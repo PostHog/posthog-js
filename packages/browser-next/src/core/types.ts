@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '../products/flags/flags-options'
+import type { FlagsConfiguration, FlagsOptions } from '../products/flags/flags-options'
 import type {
     BrowserExtension as Extension,
     BrowserProducts,
@@ -47,6 +47,42 @@ export interface NewSessionInfo extends SessionContext {
     readonly reason: NewSessionReason
 }
 
+/** Whether the user explicitly opted in, explicitly opted out, or has not chosen. */
+export type ExplicitConsentStatus = 'granted' | 'denied' | 'pending'
+
+/** Identity and session values to use instead of generated ones. */
+export interface BootstrapOptions {
+    /** Distinct ID to use when no identity is stored. An identified ID also identifies a stored anonymous user. */
+    distinctId?: string
+    /** Whether `distinctId` identifies a known person rather than an anonymous user. */
+    isIdentifiedId?: boolean
+    /**
+     * UUIDv7 session ID to continue, such as one passed from another domain. Like a generated session, it starts with
+     * the first admitted event, so `session` and `onSessionId` report it from then on.
+     */
+    sessionId?: string
+}
+
+export interface ResetOptions {
+    /** Also replace the device ID. */
+    resetDeviceId?: boolean
+    /**
+     * Seed the new identity and next session instead of generating them. With feature flags, `featureFlags` and
+     * `featureFlagPayloads` are served for the new identity until flags load.
+     */
+    bootstrap?: BootstrapOptions & FlagsOptions['bootstrap']
+}
+
+/**
+ * Shares identity and session state through a cookie. Create one with `cookiePersistence()` from
+ * `@posthog/browser/persistence/cookie`; only instances it returns are supported. `wrap` and the state record it
+ * reads and writes are internal, so their shape can change in any release.
+ */
+export interface CookiePersistence {
+    /** Wraps the state storage so the identity record also reads from and writes to the cookie. */
+    wrap(storage: StorageLike, stateKey: string, projectToken: string): StorageLike
+}
+
 export interface PostHogOptions {
     /** PostHog project token. */
     projectToken: string
@@ -58,6 +94,13 @@ export interface PostHogOptions {
     storage?: StorageLike | false
     /** Override the storage key. */
     persistenceKey?: string
+    /** Also persist identity and session state in a cookie, sharing them across subdomains. */
+    cookie?: CookiePersistence
+    /**
+     * Identity and session values to use instead of generated ones. A stored identity takes precedence, except that an
+     * identified bootstrap ID identifies a stored anonymous user, as in posthog-js.
+     */
+    bootstrap?: BootstrapOptions
     /** Override the consent key verbatim. Defaults to `__ph_opt_in_out_<projectToken>`. */
     consentPersistenceName?: string
     /** Fetch implementation. Pass `false` to disable network requests. */
@@ -140,7 +183,16 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
         options?: CaptureOptions
     ): Promise<CaptureSummary>
     identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
-    reset(): void
+    /**
+     * Starts a new anonymous identity and session, and forgets the stored consent choice. Pass `true`, as in
+     * posthog-js, or `{ resetDeviceId: true }` to also replace the device ID.
+     *
+     * With `optOutByDefault`, capture returns to the default (opted out), so calling `reset()` after `optIn()` stops
+     * capture. Reset first, then opt in again if needed: `posthog.reset(); posthog.optIn()`. Events captured before
+     * the reset, in this or another tab, are still delivered. Consent listeners hear of the forgotten choice after the
+     * new identity is in place and `onReset` listeners have run.
+     */
+    reset(options?: boolean | ResetOptions): void
     register(properties: Record<string, unknown>): void
     registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void
     unregister(property: string): void
@@ -171,9 +223,17 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     /** Marks the current person as an internal or test user. */
     setInternalOrTestUser(): void
     readonly onNewSession: Listener<NewSessionInfo>
+    /**
+     * Fires with the current session immediately when one exists, then whenever this tab's session or window ID
+     * changes, including when it adopts a sibling tab's session. Sessions start with admitted events, not subscriptions.
+     */
+    readonly onSessionId: Listener<SessionContext>
     /** Fires when consent changes, including changes observed from another tab. Does not replay. */
     readonly onConsentChange: Listener<ConsentChangeInfo>
-    /** Fires after identification, independently of capture consent. Does not replay. */
+    /**
+     * Fires after identification, independently of capture consent, including an identification this client adopts
+     * from another subdomain through cookie persistence. Does not replay.
+     */
     readonly onIdentify: Listener<IdentifyInfo>
     /** Local person-property changes, independently of capture consent. Does not replay. */
     readonly onChangeProperties: Listener<ChangePropertiesInfo>
@@ -181,7 +241,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     readonly onGroup: Listener<GroupInfo>
     /** Fires after group-only reset clears local membership. Does not replay. */
     readonly onGroupsReset: Listener<void>
-    /** Fires after local identity and persisted extension state are reset. Does not replay. */
+    /**
+     * Fires after local identity and persisted extension state are reset, including a reset this client adopts from
+     * another subdomain through cookie persistence. Does not replay.
+     */
     readonly onReset: Listener<void>
     resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
     resolveExtension<Name extends keyof BrowserProducts>(name: Name): Promise<BrowserProducts[Name] | undefined>
@@ -192,6 +255,13 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
+    /** The stored opt-in or opt-out choice, independently of `optOutByDefault`. */
+    getExplicitConsentStatus(): ExplicitConsentStatus
+    /**
+     * Forgets the stored opt-in or opt-out choice, returning consent to the configured default. Events captured before
+     * the call are still delivered.
+     */
+    clearOptInOut(): void
     getRemoteConfig(): Promise<RemoteConfig | undefined>
     /** Change the options in `RuntimeOptions`. Other creation options are fixed for the client's lifetime. */
     setConfig(options: RuntimeOptions): void
