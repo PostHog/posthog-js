@@ -115,11 +115,12 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             }
         },
         getFeatureFlag: (key, options) => {
-            // Fresh reads wait for an error-free evaluation. The shared `fresh` check instead follows the latest HTTP
-            // status, so it accepts quota-limited responses and rejects cached values after a later failed refresh.
-            if (disposed || (options?.fresh && !shared.hasLoadedRemoteFlags)) return undefined
+            if (disposed) return undefined
             try {
-                return shared.getFeatureFlagResult(key, { send_event: options?.sendFeatureFlagEvent ?? true })
+                return shared.getFeatureFlagResult(key, {
+                    send_event: options?.sendFeatureFlagEvent ?? true,
+                    fresh: options?.fresh === true,
+                })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
@@ -216,8 +217,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                         }
                     },
                     forceReload,
-                    stages,
-                    { ignoreFailedResponses: true }
+                    stages
                 )
             } catch (error) {
                 client?.logger.error('Early access feature listing failed', error)
@@ -226,7 +226,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         updateEarlyAccessFeatureEnrollment: (key, isEnrolled, stage) => {
             if (disposed) return
             try {
-                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage, { updateBootstrappedFlags: true })
+                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
             } catch (error) {
                 client?.logger.error('Early access feature enrollment failed', error)
             }
