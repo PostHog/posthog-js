@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.453.1
+
+### Patch Changes
+
+- [#5830](https://github.com/PostHog/posthog-js/pull/5830) [`895636b`](https://github.com/PostHog/posthog-js/commit/895636b1e013f0f1ac02c446452fccd6a6204f6a) Thanks [@marandaneto](https://github.com/marandaneto)! - Only attach the queue-size debug property while the queue is backed up: `$sdk_debug_retry_queue_size` on web when requests are waiting to be retried, and `$sdk_debug_pending_queue_size` on React Native once the queue reaches `flushAt`
+  (2026-11-20)
+
+- [#5824](https://github.com/PostHog/posthog-js/pull/5824) [`363fe3a`](https://github.com/PostHog/posthog-js/commit/363fe3a555aa53532c2f8bd10c8c020104fb2106) Thanks [@marandaneto](https://github.com/marandaneto)! - Only register `$sdk_debug_extensions_init_method` and `$sdk_debug_extensions_init_time_ms` when extensions were loaded and their initialization took measurable time.
+  (2026-11-20)
+
 ## 1.453.0
 
 ### Minor Changes
