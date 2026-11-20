@@ -27,7 +27,7 @@ import { DeadClicksAutocapture } from './dead-clicks-autocapture'
 import { ExceptionObserver } from './exception-autocapture'
 import { HistoryAutocapture } from './history-autocapture'
 import { TracingHeaders } from './tracing-headers'
-import { WebVitalsAutocapture } from './web-vitals'
+import { BrowserWebVitalsAutocapture } from '../browser-web-vitals'
 import { SessionRecording } from './replay/session-recording'
 import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
@@ -63,7 +63,7 @@ export const AnalyticsExtensions = {
     historyAutocapture: HistoryAutocapture,
     heatmaps: Heatmaps,
     deadClicksAutocapture: DeadClicksAutocapture,
-    webVitalsAutocapture: WebVitalsAutocapture,
+    webVitalsAutocapture: BrowserWebVitalsAutocapture,
 } as const satisfies ExtensionClasses
 
 /** Exception and error capture. Requires both the observer (capture hook) and exceptions (forwarding). */
@@ -133,7 +133,7 @@ export const AllExtensions = {
     historyAutocapture: HistoryAutocapture,
     heatmaps: Heatmaps,
     deadClicksAutocapture: DeadClicksAutocapture,
-    webVitalsAutocapture: WebVitalsAutocapture,
+    webVitalsAutocapture: BrowserWebVitalsAutocapture,
     exceptionObserver: ExceptionObserver,
     exceptions: PostHogExceptions,
     productTours: PostHogProductTours,

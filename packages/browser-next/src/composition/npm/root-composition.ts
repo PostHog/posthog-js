@@ -1,4 +1,4 @@
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '@posthog/browser-common/constants'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE, WEB_VITALS_ENABLED_SERVER_SIDE } from '@posthog/browser-common/constants'
 import { SURVEYS } from '@posthog/browser-common/surveys-config'
 import type { DeepReadonly } from '@posthog/browser-common'
 import { snapshotAutocaptureOptions } from '../../products/autocapture/autocapture-options'
@@ -6,6 +6,7 @@ import { snapshotSurveysOptions } from '../../products/surveys/surveys-options'
 import { snapshotLogsOptions } from '../../products/logs/logs-options'
 import type { BrowserExtension } from '../../core/context/browser-client'
 import type { IPostHog, PostHogOptions, RemoteConfig } from '../../core/types'
+import type { WebVitalsOptions } from '../../products/web-vitals/web-vitals-options'
 import type { AutomaticExtension, ExtensionLoader } from '../../core/extensions/registry'
 
 type Activation = AutomaticExtension<IPostHog>['activate']
@@ -107,6 +108,23 @@ const configureAutocapture = (options: PostHogOptions): ProductDefinition | unde
     }
 }
 
+const configureWebVitals = (options: PostHogOptions): ProductDefinition | undefined => {
+    const configuration = options?.webVitals
+    if (configuration === false || configuration?.enabled === false) return
+    const snapshot: WebVitalsOptions | undefined = configuration && JSON.parse(JSON.stringify(configuration))
+    return {
+        load: () => import('../../products/web-vitals/web-vitals').then(({ webVitals }) => webVitals(snapshot)),
+        activate:
+            snapshot?.enabled === true
+                ? undefined
+                : activateFromSignals(
+                      (host) => host.kv.get(WEB_VITALS_ENABLED_SERVER_SIDE) === true,
+                      ({ capturePerformance }) =>
+                          typeof capturePerformance === 'object' && capturePerformance?.web_vitals === true
+                  ),
+    }
+}
+
 export const createProductComposition = (options: PostHogOptions): ProductComposition => {
     const composition: ProductComposition = {
         extensions: [...(options?.extensions ?? [])],
@@ -118,5 +136,6 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
     registerProduct(composition, 'logs', 'logs', () => configureLogs(options))
     registerProduct(composition, 'surveys', 'surveys', () => configureSurveys(options))
     registerProduct(composition, 'autocapture', 'autocapture', () => configureAutocapture(options))
+    registerProduct(composition, 'webVitals', 'web vitals', () => configureWebVitals(options))
     return composition
 }

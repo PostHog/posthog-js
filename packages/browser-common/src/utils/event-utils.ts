@@ -1,6 +1,8 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
-import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam } from './request-utils'
+import { MASKED, maskQueryParams, PERSONAL_DATA_CAMPAIGN_PARAMS } from './url-masking'
+export { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from './url-masking'
 import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
@@ -22,30 +24,6 @@ const URL_REGEX_PREFIX = 'https?://(.*)'
 
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
 // https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
-
-// The list of campaign parameters that could be considered personal data under e.g. GDPR.
-// These can be masked in URLs and properties before being sent to posthog.
-export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
-    'gclid', // google ads
-    'gclsrc', // google ads 360
-    'dclid', // google display ads
-    'gbraid', // google ads, web to app
-    'wbraid', // google ads, app to web
-    'fbclid', // facebook
-    'msclkid', // microsoft
-    'twclid', // twitter
-    'li_fat_id', // linkedin
-    'igshid', // instagram
-    'ttclid', // tiktok
-    'rdt_cid', // reddit
-    'epik', // pinterest
-    'qclid', // quora
-    'sccid', // snapchat
-    'oppref', // openai ads
-    'bfcid', // freebuff
-    'irclid', // impact
-    '_kx', // klaviyo
-]
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
@@ -81,8 +59,6 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$viewport_width',
     '$raw_user_agent',
 ]
-
-export const MASKED = '<masked>'
 
 // Campaign params that can be read from the cookie store
 export const COOKIE_CAMPAIGN_PARAMS = [
