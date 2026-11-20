@@ -12,12 +12,6 @@ const CLOUD_HOST = /^https:\/\/(app|us|us-assets|eu|eu-assets)(\.i)?\.posthog\.c
 
 const trimHost = (host: string): string => host.trim().replace(/\/+$/, '')
 
-/** The app origin for an API host, matching posthog-js: Cloud ingestion hosts map to their app host. */
-export const getUiHost = (apiHost: string): string => {
-    const host = apiHost.replace('.i.posthog.com', '.posthog.com')
-    return host === 'https://app.posthog.com' ? 'https://us.posthog.com' : host
-}
-
 /** Reads the toolbar state from the current URL hash. */
 export const readLocationHashState = (): string | null => {
     try {
@@ -95,7 +89,7 @@ export const createToolbar = (options: ToolbarOptions, stateHash: string | null)
                 {
                     token: posthog.projectToken,
                     ...params,
-                    apiURL: trimHost(options.uiHost ?? '') || getUiHost(apiHost),
+                    apiURL: hosts?.ui ?? apiHost,
                     ...(options.disableMetrics && !CLOUD_HOST.test(apiHost) ? { instrument: false } : {}),
                 },
                 // The toolbar application reads private posthog-js state from this instance, so it runs without one.

@@ -37,8 +37,8 @@ export interface ConversationsOptions {
     theme?: ConversationsTheme
     /**
      * Server-verified identity to start with, like posthog-js `identity_distinct_id`, `identity_hash` and
-     * `identity_claims`. An anonymous visitor takes `identity.distinctId` as their distinct ID. Change it later with
-     * `setIdentity()`.
+     * `identity_claims`. An anonymous visitor takes `identity.distinctId` as their distinct ID, unless setup `bootstrap`
+     * supplies one. Change it later with `setIdentity()`.
      */
     identity?: ConversationsIdentity
     /** Prepare the widget stylesheet, for example to apply a CSP nonce. */

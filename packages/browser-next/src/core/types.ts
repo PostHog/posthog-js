@@ -95,6 +95,11 @@ export interface PostHogOptions {
     apiHost?: string
     /** Origin used for requests targeting feature flags. Defaults to `apiHost`. */
     flagsHost?: string
+    /**
+     * PostHog app origin, used by the toolbar and session replay links. Defaults to the app origin for a PostHog
+     * Cloud `apiHost`, otherwise `apiHost`.
+     */
+    uiHost?: string
     /** Storage implementation. Pass `false` to keep all state in memory. */
     storage?: StorageLike | false
     /** Override the storage key. */

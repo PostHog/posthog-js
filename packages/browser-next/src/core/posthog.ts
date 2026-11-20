@@ -79,6 +79,11 @@ const getAssetsHost = (apiHost: string): string => {
     }
     return apiHost
 }
+/** The PostHog app origin, as posthog-js resolves `ui_host`: Cloud ingestion hosts map to their app host. */
+export const getUiHost = (uiHost: string | undefined, apiHost: string): string => {
+    const host = normalizeHost(uiHost || apiHost.replace('.i.posthog.com', '.posthog.com'))
+    return host === 'https://app.posthog.com' ? 'https://us.posthog.com' : host
+}
 const getDefaultFetch = (): BrowserFetch | undefined => {
     try {
         return globalThis.fetch?.bind(globalThis)
@@ -125,6 +130,8 @@ class PostHog implements IPostHog {
     private readonly _logState: LogState
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     readonly _registry: ExtensionRegistry<IPostHog>
+    /** Whether setup bootstrap supplied a distinct ID, which takes precedence over a conversations identity. */
+    readonly _hasBootstrapDistinctId: boolean
     readonly _requestRuntime: RequestRuntime
     readonly _analytics: Analytics
     readonly _state: BrowserState
@@ -237,6 +244,7 @@ class PostHog implements IPostHog {
                 api: apiHost,
                 flags: normalizeHost(options.flagsHost ?? apiHost),
                 assets: getAssetsHost(apiHost),
+                ui: getUiHost(options.uiHost, apiHost),
             },
             projectToken,
             browserFetch,
@@ -301,6 +309,7 @@ class PostHog implements IPostHog {
             return subscription
         }
         this._registry = new ExtensionRegistry<IPostHog>(this, this.logger, loaders, () => this._canMutate())
+        this._hasBootstrapDistinctId = !!options.bootstrap?.distinctId
         if (options.bootstrap) this._analytics.bootstrap(options.bootstrap)
     }
 
@@ -495,17 +504,18 @@ class PostHog implements IPostHog {
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
         // Untyped callers may pass null, so normalize before reading options.
         const options = init ?? {}
-        // As in posthog-js, flags evaluate while opted out. The early-access catalogue carries no person data, so it
-        // stays available too. Capture consent gates every other request.
+        // As in posthog-js, flags evaluate and the conversations widget works while opted out. The early-access
+        // catalogue carries no person data, so it stays available too. Capture consent gates every other request.
         const resolvedPath = resolveRequestPath(this._requestRuntime[0][options.target ?? 'api'], path)
         const allowedWhileOptedOut =
-            (options.target === 'flags'
+            (options.target !== 'flags' && path.startsWith('/api/conversations/')) ||
+            ((options.target === 'flags'
                 ? resolvedPath === '/flags/'
                 : EARLY_ACCESS_CATALOGUE_PATH.test(path) &&
                   (options.method ?? 'GET') === 'GET' &&
                   options.body === undefined) &&
-            !options.query &&
-            !options.headers
+                !options.query &&
+                !options.headers)
         return sendRequest(
             this._requestRuntime,
             path,

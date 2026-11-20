@@ -268,7 +268,12 @@ describe('captureImmediate', () => {
             posthog,
             {
                 runtime: [
-                    { api: 'https://example.com', flags: 'https://example.com', assets: 'https://example.com' },
+                    {
+                        api: 'https://example.com',
+                        flags: 'https://example.com',
+                        assets: 'https://example.com',
+                        ui: 'https://example.com',
+                    },
                     'ph_test',
                     fetch,
                     undefined,
