@@ -392,10 +392,11 @@ export class Analytics {
         const pageviewId = isPageview ? uuid : activePageviewId
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
         // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
+        // As in posthog-js, a registered or session null also omits page context.
         const owned = (key: string): boolean => snapshot.overrides.has(key)
         const page = pageProperties(event, this._urlSanitization, this._reportSanitizeFailure)
-        for (const key in page) if (owned(key)) delete page[key]
-        const defaults: Record<string, unknown> = page
+        const defaults: Record<string, unknown> = { ...page }
+        for (const key in page) if (owned(key) || key in snapshot.observed) delete defaults[key]
         if (pageviewId && !owned('$pageview_id')) defaults.$pageview_id = pageviewId
         if (activePageviewId && (isPageview || event === '$pageleave') && !owned('$prev_pageview_id'))
             defaults.$prev_pageview_id = activePageviewId
@@ -431,7 +432,9 @@ export class Analytics {
                     return undefined
                 }
             }
-            const changed = applySessionProperties(snapshot, this._sessionProperties.values(session.sessionId))
+            const sessionValues = this._sessionProperties.values(session.sessionId)
+            const changed = applySessionProperties(snapshot, sessionValues)
+            for (const key in sessionValues) if (key in page) delete defaults[key]
             message.properties = { ...defaults, ...snapshot.message, ...metadata }
             if (changed) bytes = utf8Bytes(JSON.stringify(message))
             return {
