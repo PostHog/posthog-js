@@ -196,11 +196,13 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
     // consecutive failed deliveries; the retry interval backs off with them and resets on success
     let failures = 0
     let retryInterval = RETRY_INTERVAL_MS
+    // the queue waits out the backoff, as the other client SDKs pause theirs, even once the failed batch is evicted or expires
+    let retryAt = 0
     lane.attach({
         batchSize: MAX_BATCH_SNAPSHOTS,
-        // each snapshot sends on arrival, except while a failed batch at the front of the queue waits to retry
+        // each snapshot sends on arrival, except while a failed delivery waits to retry
         get flushAt() {
-            return (buffer._queue[0]?.[5] ?? 0) > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : 1
+            return retryAt > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : 1
         },
         get flushInterval() {
             return retryInterval
@@ -239,6 +241,7 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
                 failures = 0
                 retryInterval = RETRY_INTERVAL_MS
             }
+            retryAt = retry.length ? buffer._now() + retryInterval : 0
             return retry.length ? { retry } : undefined
         },
     })
