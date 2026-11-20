@@ -2,9 +2,13 @@ import type { UrlSanitizationOptions } from '../../../core/types'
 
 /**
  * Shapes a page URL by the client's `urlSanitization`, as events, logs and web vitals record it. Returns undefined
- * when there is no URL or it can't be recorded, such as when `sanitize` fails.
+ * when there is no URL or it can't be recorded, such as when `sanitize` fails, which `onSanitizeFailure` reports.
  */
-export const recordedUrl = (href: string | undefined, options: UrlSanitizationOptions): URL | undefined => {
+export const recordedUrl = (
+    href: string | undefined,
+    options: UrlSanitizationOptions,
+    onSanitizeFailure: (error: unknown) => void
+): URL | undefined => {
     if (!href) return undefined
     try {
         // `String` turns a returned `URL` into its href and anything else into an invalid URL, which throws.
@@ -18,17 +22,22 @@ export const recordedUrl = (href: string | undefined, options: UrlSanitizationOp
         if (options.query === false) url.search = ''
         if (options.hash !== true) url.hash = ''
         return url
-    } catch {
+    } catch (error) {
+        if (options.sanitize) onSanitizeFailure(error)
         return undefined
     }
 }
 
 /** The page context read at capture time: the sanitized URL on every event, and the title on `$pageview`. */
-export const pageProperties = (event: string, options: UrlSanitizationOptions): Record<string, unknown> => {
+export const pageProperties = (
+    event: string,
+    options: UrlSanitizationOptions,
+    onSanitizeFailure: (error: unknown) => void
+): Record<string, unknown> => {
     const properties: Record<string, unknown> = {}
     try {
         // A worker's `location` is its script URL, not a page.
-        const url = recordedUrl(globalThis.window?.location?.href, options)
+        const url = recordedUrl(globalThis.window?.location?.href, options, onSanitizeFailure)
         if (url) {
             properties.$current_url = url.href
             properties.$host = url.host

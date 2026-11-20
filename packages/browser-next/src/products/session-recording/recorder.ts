@@ -1026,8 +1026,9 @@ export class SessionRecorder {
 
     private _liveHref(): string | undefined {
         try {
-            const location = globalThis.window?.location
-            return location ? this._maskUrl(location.origin + location.pathname + location.search) : undefined
+            // the full href goes through the same policy as Meta events, so both compare like-for-like
+            const href = globalThis.window?.location?.href
+            return href ? this._maskUrl(href) : undefined
         } catch {
             // URL processing failures do not interrupt recording.
             return undefined
@@ -1314,8 +1315,7 @@ export class SessionRecorder {
 
     private _currentMaskedHostname(): string | undefined {
         try {
-            const href = globalThis.window?.location?.href
-            const masked = href ? this._maskUrl(href) : undefined
+            const masked = this._liveHref()
             return masked ? new URL(masked).hostname || undefined : undefined
         } catch {
             return undefined

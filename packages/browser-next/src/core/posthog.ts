@@ -291,7 +291,7 @@ class PostHog implements IPostHog {
         } catch {
             // Unreadable analytics options retain the defaults.
         }
-        this._analytics = new Analytics(this, analyticsOptions, createDelivery, urlSanitization)
+        this._analytics = new Analytics(this, analyticsOptions, createDelivery, urlSanitization, this._logState)
         this.onEvent = this._analytics._eventPublisher.listener
         this.onIdentify = this._analytics._identifyPublisher.listener
         this.onChangeProperties = this._analytics._changePropertiesPublisher.listener
