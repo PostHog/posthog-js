@@ -136,6 +136,27 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     getProperty(property: string): unknown
     registerForSession(properties: Record<string, unknown>): void
     unregisterForSession(property: string): void
+    /** Links another distinct ID to the current person without changing the current identity. */
+    alias(aliasId: string): void
+    /** Associates future events with a group and, when person processing is enabled, records its properties. */
+    group(type: string, key: string, properties?: Record<string, unknown>): void
+    /** Sends a group-profile update without changing group membership. */
+    groupIdentify(
+        type: string,
+        key: string | number,
+        properties?: Record<string, unknown>,
+        options?: CaptureOptions
+    ): void
+    /** Clears group memberships, retaining identity, sessions and registered properties. */
+    resetGroups(): void
+    /** Enables person processing for the current identity without identifying it. */
+    createPersonProfile(): void
+    /** Sets person properties for the current identity. */
+    setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    /** Removes person properties from the current identity. */
+    unsetPersonProperties(names: string | readonly string[]): void
+    /** Marks the current person as an internal or test user. */
+    setInternalOrTestUser(): void
     readonly onNewSession: Listener<NewSessionInfo>
     /** Fires when consent changes, including changes observed from another tab. Does not replay. */
     readonly onConsentChange: Listener<ConsentChangeInfo>

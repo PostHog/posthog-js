@@ -5,7 +5,6 @@ import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Disposable } from '@posthog/browser-common'
 import type { IPostHog } from '../src/core/types'
-import { group } from '../src/products/analytics/groups'
 
 import type { BrowserFetch, RemoteConfig, SendRequestInit, StorageLike } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
@@ -557,7 +556,7 @@ describe('portable consent persistence', () => {
             extensions: [{ name: 'getter-reader', setup: (client) => void (extensionClient = client) }],
         })
         posthog.identify('private-person')
-        await group(posthog, 'company', 'private-company')
+        await posthog.group('company', 'private-company')
         const anonymousId = posthog.anonymousId
         const deviceId = posthog.deviceId
         const groups = posthog.groups

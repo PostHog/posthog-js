@@ -1,7 +1,6 @@
 import { createPostHog } from '../src/composition/npm/core'
 import { flags } from '../src/products/flags/flags'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
-import { setPersonProperties } from '../src/products/analytics/person'
 import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
 
 const clients: Array<Awaited<ReturnType<typeof createPostHog>>> = []
@@ -40,7 +39,7 @@ describe('identify person-property serialization', () => {
                 },
             }
             if (method === 'identify') client.identify('new-id', properties)
-            else setPersonProperties(client, properties)
+            else client.setPersonProperties(properties)
             expect(warn).toHaveBeenCalledOnce()
             expect(warn).toHaveBeenCalledWith(expect.any(String), 'Person properties must be JSON-serializable objects')
             expect(JSON.stringify(warn.mock.calls)).not.toContain('private-value')

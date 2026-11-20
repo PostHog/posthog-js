@@ -33,16 +33,6 @@
             "require": "./dist/products/flags/flags.js",
             "import": "./dist/products/flags/flags.mjs"
         },
-        "./groups": {
-            "types": "./dist/products/analytics/groups.d.ts",
-            "require": "./dist/products/analytics/groups.js",
-            "import": "./dist/products/analytics/groups.mjs"
-        },
-        "./person": {
-            "types": "./dist/products/analytics/person.d.ts",
-            "require": "./dist/products/analytics/person.js",
-            "import": "./dist/products/analytics/person.mjs"
-        },
         "./logs": {
             "types": "./dist/products/logs/logs.d.ts",
             "import": "./dist/products/logs/logs.mjs",

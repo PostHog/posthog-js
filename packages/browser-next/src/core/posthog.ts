@@ -15,6 +15,8 @@ import type {
 import { Publisher } from '@posthog/browser-common/pubsub'
 
 import { Analytics } from '../products/analytics/analytics-core'
+import * as groups from '../products/analytics/groups'
+import * as person from '../products/analytics/person'
 import type { AnalyticsDeliveryFactory } from '../products/analytics/analytics-internal'
 import type { AnalyticsOptions } from '../products/analytics/analytics-options'
 import { isLikelyBot } from './state/bot-filter'
@@ -317,6 +319,43 @@ class PostHog implements IPostHog {
 
     unregisterForSession(property: string): void {
         this._analytics.unregisterForSession(property)
+    }
+
+    alias(aliasId: string): void {
+        person.alias(this, aliasId)
+    }
+
+    group(type: string, key: string, properties?: Record<string, unknown>): void {
+        groups.group(this, type, key, properties)
+    }
+
+    groupIdentify(
+        type: string,
+        key: string | number,
+        properties?: Record<string, unknown>,
+        options?: CaptureOptions
+    ): void {
+        groups.groupIdentify(this, type, key, properties, options)
+    }
+
+    resetGroups(): void {
+        groups.resetGroups(this)
+    }
+
+    createPersonProfile(): void {
+        person.createPersonProfile(this)
+    }
+
+    setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void {
+        person.setPersonProperties(this, set, setOnce)
+    }
+
+    unsetPersonProperties(names: string | readonly string[]): void {
+        person.unsetPersonProperties(this, names)
+    }
+
+    setInternalOrTestUser(): void {
+        person.setInternalOrTestUser(this)
     }
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {

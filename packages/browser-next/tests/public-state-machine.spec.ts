@@ -1,5 +1,4 @@
 import { localRemoteConfig } from './helpers'
-import { group } from '../src/products/analytics/groups'
 import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'
 import { MemoryStorage } from './helpers'
 
@@ -41,7 +40,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
         posthog.identify('baseline-user')
-        group(posthog, 'company', 'baseline-company')
+        posthog.group('company', 'baseline-company')
         posthog.capture('baseline-event')
         expect(observed).toEqual(['$identify', '$groupidentify', 'baseline-event'])
         observed.length = 0
@@ -59,7 +58,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         posthog.reset()
         posthog.capture('closing-capture')
         posthog.identify('closing-user')
-        group(posthog, 'company', 'closing-company')
+        posthog.group('company', 'closing-company')
         expect(observed).toEqual([])
 
         await Promise.resolve()
@@ -74,7 +73,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         posthog.reset()
         posthog.capture('disposed-capture')
         posthog.identify('disposed-user')
-        group(posthog, 'company', 'disposed-company')
+        posthog.group('company', 'disposed-company')
         await posthog.flush()
         expect(posthog.shutdown()).toBe(shutdown)
         expect(posthog.dispose()).toBe(shutdown)

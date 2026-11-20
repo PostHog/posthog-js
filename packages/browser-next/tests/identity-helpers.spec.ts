@@ -1,6 +1,4 @@
 import { createPostHog, type AnalyticsOptions, type IPostHog } from '../src/composition/npm/core'
-import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
-import { alias, setPersonProperties } from '../src/products/analytics/person'
 import { BrowserState } from '../src/core/state/state'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
 import { createFetch, localRemoteConfig, MemoryStorage, type SentRequest } from './helpers'
@@ -40,15 +38,6 @@ afterEach(async () => {
 })
 
 describe('analytics alias', () => {
-    it('keeps helpers safe for objects that are not clients', () => {
-        const notClient = {} as IPostHog
-        expect(() => {
-            alias(notClient, 'account')
-            groupIdentify(notClient, 'organization', 0)
-            resetGroups(notClient)
-        }).not.toThrow()
-    })
-
     it('links the current ID without changing identity or publishing identity notifications', async () => {
         const { client, requests } = await create()
         const original = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
@@ -59,7 +48,7 @@ describe('analytics alias', () => {
         client.onGroup(grouped)
         const observed = vi.fn()
         client.onEvent(observed)
-        alias(client, 'account-123')
+        client.alias('account-123')
         expect(observed).toHaveBeenCalledWith(
             expect.objectContaining({
                 event: '$create_alias',
@@ -91,7 +80,7 @@ describe('analytics alias', () => {
     it('retains alias-enabled person processing across reload and clears it on reset', async () => {
         const storage = new MemoryStorage()
         const first = await create({}, storage)
-        alias(first.client, 'account-123')
+        first.client.alias('account-123')
         await first.client.flush()
         await first.client.dispose()
         const second = await create({}, storage)
@@ -110,7 +99,7 @@ describe('analytics alias', () => {
         const first = await create(mode === 'never' ? { personProfiles: 'never' } : {}, storage)
         const distinctId = first.client.distinctId
         if (mode === 'denied') first.client.optOut()
-        alias(first.client, 'account-123')
+        first.client.alias('account-123')
         if (mode === 'denied') first.client.optIn()
         await first.client.dispose()
         expect(events(first.requests)).toHaveLength(0)
@@ -129,7 +118,7 @@ describe('analytics alias', () => {
         for (const target of invalid) {
             expect(() => {
                 // @ts-expect-error Exercise JavaScript callers with malformed target IDs.
-                alias(client, target)
+                client.alias(target)
             }).not.toThrow()
         }
         client.capture('ordinary')
@@ -141,13 +130,13 @@ describe('analytics alias', () => {
     it('uses ordinary capture rate limiting and makes retained handles inert after disposal', async () => {
         const { client, requests } = await create()
         for (let index = 0; index < 100; index++) client.capture('ordinary')
-        alias(client, 'limited')
+        client.alias('limited')
         await client.flush()
         expect(events(requests).filter(({ event }) => event === '$create_alias')).toHaveLength(0)
         expect(events(requests).filter(({ event }) => event === '$$client_ingestion_warning')).toHaveLength(1)
         await client.dispose()
         const delivered = events(requests).length
-        expect(() => alias(client, 'disposed')).not.toThrow()
+        expect(() => client.alias('disposed')).not.toThrow()
         expect(events(requests)).toHaveLength(delivered)
     })
 })
@@ -155,14 +144,14 @@ describe('analytics alias', () => {
 describe('analytics group helpers', () => {
     it('updates a group profile with capture options without changing ambient membership', async () => {
         const { client, requests } = await create()
-        group(client, 'organization', 'current')
+        client.group('organization', 'current')
         const grouped = vi.fn()
         client.onGroup(grouped)
         const uuid = '12345678-1234-4234-8234-123456789abc'
         const timestamp = new Date('2026-01-02T03:04:05Z')
         const properties = { plan: 'paid', nested: { size: 5 } }
         const set = { role: 'admin' }
-        groupIdentify(client, 'organization', 0, properties, { uuid, timestamp, set })
+        client.groupIdentify('organization', 0, properties, { uuid, timestamp, set })
         properties.nested.size = 9
         set.role = 'changed'
         expect(client.groups).toEqual({ organization: 'current' })
@@ -186,7 +175,7 @@ describe('analytics group helpers', () => {
     it('processes an anonymous group profile without identifying the user or joining that group', async () => {
         const { client, requests } = await create()
         const distinctId = client.distinctId
-        groupIdentify(client, 'organization', 'external')
+        client.groupIdentify('organization', 'external')
         client.capture('after_group_profile')
         expect(client.distinctId).toBe(distinctId)
         expect(client.groups).toEqual({})
@@ -209,16 +198,16 @@ describe('analytics group helpers', () => {
         for (const key of invalid) {
             expect(() => {
                 // @ts-expect-error Exercise malformed group keys from JavaScript.
-                groupIdentify(client, 'organization', key)
+                client.groupIdentify('organization', key)
             }).not.toThrow()
         }
-        groupIdentify(client, '', 'external')
+        client.groupIdentify('', 'external')
         expect(warn).toHaveBeenCalledTimes(invalid.length + 1)
         expect(warn).toHaveBeenCalledWith('Group identify requires a non-empty type and a string or finite numeric key')
         client.capture('ordinary')
         const cycle: Record<string, unknown> = {}
         cycle.self = cycle
-        expect(() => groupIdentify(client, 'organization', 'external', cycle)).not.toThrow()
+        expect(() => client.groupIdentify('organization', 'external', cycle)).not.toThrow()
         await client.flush()
         expect(events(requests)).toMatchObject([{ event: 'ordinary', options: { process_person_profile: false } }])
         expect(events(requests)).toHaveLength(1)
@@ -228,8 +217,8 @@ describe('analytics group helpers', () => {
         const storage = new MemoryStorage()
         const { client, requests } = await create({}, storage)
         client.identify('member')
-        group(client, 'organization', 'acme')
-        group(client, 'project', 'web')
+        client.group('organization', 'acme')
+        client.group('project', 'web')
         client.kv.set('retained', true)
         client.capture('before_group_reset')
         const before = {
@@ -240,7 +229,7 @@ describe('analytics group helpers', () => {
         }
         const reset = vi.fn()
         client.onReset(reset)
-        resetGroups(client)
+        client.resetGroups()
         expect(client.groups).toEqual({})
         expect({
             distinctId: client.distinctId,
@@ -271,7 +260,7 @@ describe('analytics group helpers', () => {
     it('clears persisted flag group properties when the flags extension is absent (#5673)', async () => {
         const storage = new MemoryStorage()
         const { client } = await create({}, storage)
-        group(client, 'company', 'company-1')
+        client.group('company', 'company-1')
         expect(client.groups).toEqual({ company: 'company-1' })
 
         const flagsStore = client.kv
@@ -281,7 +270,7 @@ describe('analytics group helpers', () => {
         expect(flagsStore.get('$stored_group_properties')).toEqual({ company: { plan: 'paid' } })
         expect(flagsStore.get('retained_flag')).toBe(true)
 
-        resetGroups(client)
+        client.resetGroups()
         expect(client.groups).toEqual({})
         expect(flagsStore.get('$stored_group_properties')).toBeUndefined()
         expect(flagsStore.get('retained_flag')).toBe(true)
@@ -299,12 +288,12 @@ describe('analytics group helpers', () => {
         async (mode) => {
             const storage = new MemoryStorage()
             const original = await create({}, storage)
-            group(original.client, 'organization', 'old')
+            original.client.group('organization', 'old')
             await original.client.dispose()
             const current = await create(mode === 'never' ? { personProfiles: 'never' } : {}, storage)
             if (mode === 'denied') current.client.optOut()
-            groupIdentify(current.client, 'organization', 'external')
-            resetGroups(current.client)
+            current.client.groupIdentify('organization', 'external')
+            current.client.resetGroups()
             expect(current.client.groups).toEqual({})
             if (mode === 'denied') current.client.optIn()
             current.client.capture('ordinary')
@@ -316,14 +305,14 @@ describe('analytics group helpers', () => {
 
     it('does not create a session for empty group cleanup and makes disposed controls inert', async () => {
         const { client, requests } = await create()
-        resetGroups(client)
+        client.resetGroups()
         expect(client.session).toBeUndefined()
-        group(client, 'organization', 'retained')
+        client.group('organization', 'retained')
         await client.dispose()
         const groups = client.groups
         const count = events(requests).length
-        resetGroups(client)
-        groupIdentify(client, 'organization', 'late')
+        client.resetGroups()
+        client.groupIdentify('organization', 'late')
         expect(client.groups).toEqual(groups)
         expect(events(requests)).toHaveLength(count)
     })
@@ -334,9 +323,9 @@ describe('identity helper admission and group reset isolation', () => {
         'retains explicit processing enablement from %s after group-only reset',
         async (method) => {
             const { client, requests } = await create()
-            if (method === 'alias') alias(client, 'account')
-            else groupIdentify(client, 'organization', 42)
-            resetGroups(client)
+            if (method === 'alias') client.alias('account')
+            else client.groupIdentify('organization', 42)
+            client.resetGroups()
             client.capture('after_cleanup')
             await client.flush()
             expect(events(requests).at(-1)).toMatchObject({
@@ -349,10 +338,10 @@ describe('identity helper admission and group reset isolation', () => {
 
     it('retains person-property deduplication on group-only reset', async () => {
         const { client, requests } = await create()
-        setPersonProperties(client, { plan: 'paid' })
-        group(client, 'organization', 'acme')
-        resetGroups(client)
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.group('organization', 'acme')
+        client.resetGroups()
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).filter(({ event }) => event === '$set')).toHaveLength(1)
     })
@@ -365,8 +354,8 @@ describe('identity helper admission and group reset isolation', () => {
             client.onEvent(observed)
             const reject = vi.spyOn(BrowserState.prototype, 'sessionAdmitted').mockReturnValue(false)
             try {
-                if (method === 'alias') alias(client, 'account')
-                else groupIdentify(client, 'organization', 'external')
+                if (method === 'alias') client.alias('account')
+                else client.groupIdentify('organization', 'external')
                 expect(observed).not.toHaveBeenCalled()
                 expect(client.session).toBeUndefined()
             } finally {
@@ -385,7 +374,7 @@ describe('identity helper admission and group reset isolation', () => {
         client.onEvent(observed)
         const reject = vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValue(false)
         try {
-            groupIdentify(client, 'organization', 42, { plan: 'paid' })
+            client.groupIdentify('organization', 42, { plan: 'paid' })
             expect(observed).not.toHaveBeenCalled()
             expect(client.session).toBeUndefined()
             expect(client.groups).toEqual({})
@@ -401,8 +390,7 @@ describe('identity helper admission and group reset isolation', () => {
         client.optOut()
         const serialize = vi.fn(() => ({ plan: 'paid' }))
         const readUuid = vi.fn(() => 'ignored')
-        groupIdentify(
-            client,
+        client.groupIdentify(
             'organization',
             'external',
             { toJSON: serialize },

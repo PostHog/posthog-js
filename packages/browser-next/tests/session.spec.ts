@@ -1,6 +1,5 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { group } from '../src/products/analytics/groups'
 import { createPostHog as createDeliveringPostHog } from '../src/composition/npm/core'
 import type { NewSessionInfo, StorageLike } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
@@ -551,7 +550,7 @@ describe('browser-next session state', () => {
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
         await staleIdentity.identify('identified-user')
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
-        await group(staleGroup, 'organization', 'group')
+        await staleGroup.group('organization', 'group')
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
 
         await staleKv.capture('adopt')

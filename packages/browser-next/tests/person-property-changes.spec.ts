@@ -2,7 +2,6 @@ import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import type { CaptureOptions, IPostHog } from '../src/composition/npm/core'
 import { createPostHog } from '../src/composition/npm/core'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
-import { setPersonProperties, unsetPersonProperties } from '../src/products/analytics/person'
 import { flags } from '../src/products/flags/flags'
 import { BrowserState } from '../src/core/state/state'
 import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
@@ -43,8 +42,8 @@ describe('person-property changes', () => {
         client.onChangeProperties(changed)
         client.onIdentify(identified)
         const id = client.distinctId
-        setPersonProperties(client, { plan: 'paid' }, { source: 'docs' })
-        unsetPersonProperties(client, 'plan')
+        client.setPersonProperties({ plan: 'paid' }, { source: 'docs' })
+        client.unsetPersonProperties('plan')
         expect(changed.mock.calls.map(([info]) => info)).toEqual([
             { set: { plan: 'paid' }, setOnce: { source: 'docs' } },
             { unset: ['plan'] },
@@ -74,9 +73,9 @@ describe('person-property changes', () => {
 
     it('does not reenter identity listeners through a property-only setter', async () => {
         const { client, requests } = await create()
-        const listener = vi.fn(() => setPersonProperties(client, { plan: 'paid' }))
+        const listener = vi.fn(() => client.setPersonProperties({ plan: 'paid' }))
         client.onIdentify(listener)
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(listener).not.toHaveBeenCalled()
         expect(events(requests)).toHaveLength(1)
@@ -84,7 +83,7 @@ describe('person-property changes', () => {
 
     it('snapshots property notifications and supports listener disposal and failure isolation', async () => {
         const { client } = await create()
-        setPersonProperties(client, { initial: true })
+        client.setPersonProperties({ initial: true })
         const changed = vi.fn()
         const removed = vi.fn()
         client.onChangeProperties(() => {
@@ -94,13 +93,13 @@ describe('person-property changes', () => {
         client.onChangeProperties(removed).dispose()
         expect(changed).not.toHaveBeenCalled()
         const set = { plan: { name: 'paid' } }
-        expect(() => setPersonProperties(client, set)).not.toThrow()
+        expect(() => client.setPersonProperties(set)).not.toThrow()
         set.plan.name = 'changed'
         expect(changed).toHaveBeenCalledWith({ set: { plan: { name: 'paid' } }, setOnce: {} })
         expect(removed).not.toHaveBeenCalled()
         await client.dispose()
-        unsetPersonProperties(client, 'plan')
-        setPersonProperties(client, { later: true })
+        client.unsetPersonProperties('plan')
+        client.setPersonProperties({ later: true })
         expect(changed).toHaveBeenCalledTimes(1)
     })
 
@@ -112,7 +111,7 @@ describe('person-property changes', () => {
             await client.flush()
             requests.length = 0
             const set = (plan: string) =>
-                method === 'setter' ? setPersonProperties(client, { plan }) : client.identify('member', { plan })
+                method === 'setter' ? client.setPersonProperties({ plan }) : client.identify('member', { plan })
             await set('paid')
             await client.flush()
             client.optOut()
@@ -133,15 +132,15 @@ describe('person-property changes', () => {
         'invalidates an earlier signature after a local update rejected by %s',
         async (seam) => {
             const { client, requests } = await create()
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             const rejection =
                 seam === 'enqueue'
                     ? vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
                     : vi.spyOn(BrowserState.prototype, 'sessionAdmitted').mockReturnValueOnce(false)
-            setPersonProperties(client, { plan: 'free' })
+            client.setPersonProperties({ plan: 'free' })
             rejection.mockRestore()
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(storedPersonProperties(client)).toEqual({ plan: 'paid' })
             expect(events(requests).map(({ properties }) => properties.$set)).toEqual([
@@ -154,13 +153,13 @@ describe('person-property changes', () => {
     it('invalidates the prior signature when a changed local setter is rate limited', async () => {
         const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
         const { client, requests } = await create()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         for (let index = 0; index < 99; index++) client.capture('burst')
-        setPersonProperties(client, { plan: 'free' })
+        client.setPersonProperties({ plan: 'free' })
         expect(storedPersonProperties(client)).toEqual({ plan: 'free' })
         now.mockReturnValue(2_000)
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(storedPersonProperties(client)).toEqual({ plan: 'paid' })
         expect(
@@ -222,12 +221,12 @@ describe('person-property changes', () => {
 
     it('invalidates before event observers and retains a later admitted observer update', async () => {
         const { client, requests } = await create()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         client.onEvent(({ event }) => {
-            if (event === 'downgrade') setPersonProperties(client, { plan: 'paid' })
+            if (event === 'downgrade') client.setPersonProperties({ plan: 'paid' })
         })
         client.capture('downgrade', null, { set: { plan: 'free' } })
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ properties }) => properties.$set)).toEqual([
             { plan: 'paid' },

@@ -4,13 +4,6 @@ import { createPostHog, type AnalyticsOptions, type IPostHog } from '../src/comp
 import { createPostHog as createRootPostHog } from '../src/composition/npm'
 import { BrowserState } from '../src/core/state/state'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
-import { group } from '../src/products/analytics/groups'
-import {
-    createPersonProfile,
-    setInternalOrTestUser,
-    setPersonProperties,
-    unsetPersonProperties,
-} from '../src/products/analytics/person'
 import { createFetch, localRemoteConfig, MemoryStorage, type SentRequest } from './helpers'
 
 const options = {
@@ -50,16 +43,6 @@ afterEach(async () => {
 })
 
 describe('analytics person profiles', () => {
-    it('keeps person controls safe for objects that are not clients', () => {
-        const notClient = {} as IPostHog
-        expect(() => {
-            createPersonProfile(notClient)
-            setPersonProperties(notClient, { plan: 'paid' })
-            unsetPersonProperties(notClient, 'plan')
-            setInternalOrTestUser(notClient)
-        }).not.toThrow()
-    })
-
     it('defaults to identified_only and protects the processing flag from caller properties', async () => {
         const { client, requests } = await create()
         client.capture('anonymous', { $process_person_profile: true })
@@ -77,8 +60,8 @@ describe('analytics person profiles', () => {
         const storage = new MemoryStorage()
         const first = await create({}, storage)
         const anonymousId = first.client.distinctId
-        createPersonProfile(first.client)
-        createPersonProfile(first.client)
+        first.client.createPersonProfile()
+        first.client.createPersonProfile()
         expect(first.client.distinctId).toBe(anonymousId)
         await first.client.flush()
         expect(events(first.requests)).toMatchObject([
@@ -125,14 +108,14 @@ describe('analytics person profiles', () => {
         const identity = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
         const observed = vi.fn()
         client.onEvent(observed)
-        createPersonProfile(client)
-        createPersonProfile(client)
+        client.createPersonProfile()
+        client.createPersonProfile()
         await client.flush()
         expect(events(requests)).toEqual([])
         expect(observed).not.toHaveBeenCalled()
         expect(client.session).toBeUndefined()
         client.optIn()
-        createPersonProfile(client)
+        client.createPersonProfile()
         await client.flush()
         expect(events(requests)).toEqual([])
         expect(client.session).toBeUndefined()
@@ -150,7 +133,7 @@ describe('analytics person profiles', () => {
             identity
         )
         client.reset()
-        createPersonProfile(client)
+        client.createPersonProfile()
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['after_opt_in', '$set'])
     })
@@ -159,7 +142,7 @@ describe('analytics person profiles', () => {
         const { client, requests } = await create()
         client.identify('user-123', { plan: 'paid' })
         client.identify('user-123', { amount: BigInt(1) })
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['$identify'])
         const serialize = vi
@@ -174,7 +157,7 @@ describe('analytics person profiles', () => {
         await client.flush()
         expect(events(requests)).toHaveLength(1)
         client.identify('next-user', set)
-        setPersonProperties(client, { plan: 'enterprise' })
+        client.setPersonProperties({ plan: 'enterprise' })
         await client.flush()
         expect(serialize).toHaveBeenCalledTimes(2)
         expect(events(requests).map(({ event }) => event)).toEqual(['$identify', '$set'])
@@ -186,7 +169,7 @@ describe('analytics person profiles', () => {
 
     it('processes anonymous captures in always mode and needs no explicit profile event', async () => {
         const { client, requests } = await create({ personProfiles: 'always' })
-        createPersonProfile(client)
+        client.createPersonProfile()
         client.capture('anonymous')
         await client.flush()
         expect(events(requests)).toMatchObject([{ event: 'anonymous', options: { process_person_profile: true } }])
@@ -196,12 +179,12 @@ describe('analytics person profiles', () => {
     it('suppresses person and group operations in never mode while allowing unprocessed captures', async () => {
         const { client, requests } = await create({ personProfiles: 'never' })
         const anonymousId = client.distinctId
-        createPersonProfile(client)
-        setPersonProperties(client, { email: 'test@example.com' })
-        unsetPersonProperties(client, 'email')
-        setInternalOrTestUser(client)
+        client.createPersonProfile()
+        client.setPersonProperties({ email: 'test@example.com' })
+        client.unsetPersonProperties('email')
+        client.setInternalOrTestUser()
         client.identify('user-123')
-        group(client, 'organization', 'org-123', { plan: 'paid' })
+        client.group('organization', 'org-123', { plan: 'paid' })
         expect(client.distinctId).toBe(anonymousId)
         expect(client.groups).toEqual({})
         client.capture('ordinary', { $process_person_profile: true })
@@ -213,11 +196,11 @@ describe('analytics person profiles', () => {
     it('updates properties on the current anonymous identity and shares deduplication with identify', async () => {
         const { client, requests } = await create()
         const anonymousId = client.distinctId
-        setPersonProperties(client, { plan: 'paid' }, { first_seen: 'today' })
-        setPersonProperties(client, { plan: 'paid' }, { first_seen: 'today' })
+        client.setPersonProperties({ plan: 'paid' }, { first_seen: 'today' })
+        client.setPersonProperties({ plan: 'paid' }, { first_seen: 'today' })
         expect(client.distinctId).toBe(anonymousId)
         client.identify('user-123', { plan: 'paid' }, { first_seen: 'today' })
-        setPersonProperties(client, { plan: 'paid' }, { first_seen: 'today' })
+        client.setPersonProperties({ plan: 'paid' }, { first_seen: 'today' })
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['$set', '$identify'])
         expect(events(requests)[0]).toMatchObject({
@@ -230,7 +213,7 @@ describe('analytics person profiles', () => {
     it('does not deduplicate the anonymous-to-identified transition for the same ID', async () => {
         const { client, requests } = await create()
         const id = client.distinctId
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         client.identify(id, { plan: 'paid' })
         client.identify(id, { plan: 'paid' })
         await client.flush()
@@ -240,7 +223,7 @@ describe('analytics person profiles', () => {
 
     it('enables person processing when group context is established', async () => {
         const { client, requests } = await create()
-        group(client, 'organization', 'org-123')
+        client.group('organization', 'org-123')
         client.capture('grouped')
         await client.flush()
         expect(events(requests).map(({ event, options }) => [event, options.process_person_profile])).toEqual([
@@ -279,10 +262,10 @@ describe('analytics person profiles', () => {
         })
         clients.push(client)
         const identity = client.distinctId
-        setPersonProperties(client, { plan: 'paid' }, { plan: 'free', first_seen: 'today' })
-        setPersonProperties(client, undefined, { plan: 'other', first_seen: 'later' })
+        client.setPersonProperties({ plan: 'paid' }, { plan: 'free', first_seen: 'today' })
+        client.setPersonProperties(undefined, { plan: 'other', first_seen: 'later' })
         expect(storedPersonProperties(client)).toEqual({ plan: 'paid', first_seen: 'today' })
-        unsetPersonProperties(client, ['plan', '', 'first_seen'])
+        client.unsetPersonProperties(['plan', '', 'first_seen'])
         expect(storedPersonProperties(client)).toEqual({})
         expect(client.distinctId).toBe(identity)
         await client.flush()
@@ -292,20 +275,20 @@ describe('analytics person profiles', () => {
     it('does not cache a property update that capture could not admit', async () => {
         const { client, requests } = await create()
         client.optOut()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         client.optIn()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['$set'])
     })
 
     it('allows re-setting a property after unset and after reset', async () => {
         const { client, requests } = await create()
-        setPersonProperties(client, { plan: 'paid' })
-        unsetPersonProperties(client, 'plan')
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.unsetPersonProperties('plan')
+        client.setPersonProperties({ plan: 'paid' })
         client.reset()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['$set', '$set', '$set', '$set'])
         expect(events(requests)[0]?.distinct_id).not.toBe(events(requests).at(-1)?.distinct_id)
@@ -316,11 +299,11 @@ describe('analytics person profiles', () => {
         for (const value of [false, 0, '', { toJSON: () => null }, { toJSON: () => ['value'] }]) {
             expect(() => {
                 // @ts-expect-error Exercise malformed dictionaries supplied by JavaScript callers.
-                setPersonProperties(client, value, { valid: true })
+                client.setPersonProperties(value, { valid: true })
             }).not.toThrow()
             expect(() => {
                 // @ts-expect-error Exercise the independent set-once argument boundary.
-                setPersonProperties(client, { valid: true }, value)
+                client.setPersonProperties({ valid: true }, value)
             }).not.toThrow()
         }
         client.capture('still_anonymous')
@@ -333,7 +316,7 @@ describe('analytics person profiles', () => {
 
     it('unsets a single-character property name', async () => {
         const { client, requests } = await create()
-        unsetPersonProperties(client, 'x')
+        client.unsetPersonProperties('x')
         await client.flush()
         expect(events(requests)).toMatchObject([{ event: '$set', properties: { $unset: ['x'] } }])
     })
@@ -342,11 +325,11 @@ describe('analytics person profiles', () => {
         const { client, requests } = await create()
         const cycle: Record<string, unknown> = {}
         cycle.self = cycle
-        expect(() => setPersonProperties(client, cycle)).not.toThrow()
-        setPersonProperties(client)
-        setPersonProperties(client, {}, {})
-        unsetPersonProperties(client, [])
-        setInternalOrTestUser(client)
+        expect(() => client.setPersonProperties(cycle)).not.toThrow()
+        client.setPersonProperties()
+        client.setPersonProperties({}, {})
+        client.unsetPersonProperties([])
+        client.setInternalOrTestUser()
         await client.flush()
         expect(events(requests)).toMatchObject([
             { event: '$set', properties: { $set: { $internal_or_test_user: true } } },
@@ -357,10 +340,10 @@ describe('analytics person profiles', () => {
     it('keeps person controls on the current identity and stops them after disposal', async () => {
         const { client, requests } = await create()
         const identity = { distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }
-        createPersonProfile(client)
-        setPersonProperties(client, { plan: 'paid' })
-        unsetPersonProperties(client, ['plan'] as const)
-        setInternalOrTestUser(client)
+        client.createPersonProfile()
+        client.setPersonProperties({ plan: 'paid' })
+        client.unsetPersonProperties(['plan'] as const)
+        client.setInternalOrTestUser()
         expect({ distinctId: client.distinctId, anonymousId: client.anonymousId, deviceId: client.deviceId }).toEqual(
             identity
         )
@@ -368,10 +351,10 @@ describe('analytics person profiles', () => {
         expect(events(requests).map(({ event }) => event)).toEqual(['$set', '$set', '$set', '$set'])
         await client.dispose()
         expect(() => {
-            createPersonProfile(client)
-            setPersonProperties(client, { plan: 'paid' })
-            unsetPersonProperties(client, 'plan')
-            setInternalOrTestUser(client)
+            client.createPersonProfile()
+            client.setPersonProperties({ plan: 'paid' })
+            client.unsetPersonProperties('plan')
+            client.setInternalOrTestUser()
         }).not.toThrow()
         expect(events(requests)).toHaveLength(4)
     })
@@ -386,12 +369,12 @@ describe('analytics person profiles', () => {
                 seam === 'enqueue'
                     ? vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
                     : vi.spyOn(BrowserState.prototype, 'sessionAdmitted').mockReturnValueOnce(false)
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             expect(observed).not.toHaveBeenCalled()
             expect(client.session).toBeUndefined()
             reject.mockRestore()
-            setPersonProperties(client, { plan: 'paid' })
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(events(requests)).toMatchObject([{ event: '$set', properties: { $set: { plan: 'paid' } } }])
             expect(events(requests)).toHaveLength(1)
@@ -407,12 +390,12 @@ describe('analytics person profiles', () => {
             const unset = () => {
                 if (nested) return
                 nested = true
-                unsetPersonProperties(client, 'plan')
+                client.unsetPersonProperties('plan')
             }
             if (notification === 'onEvent') client.onEvent(unset)
             else client.onNewSession(unset)
-            setPersonProperties(client, { plan: 'paid' })
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(events(requests).map(({ properties }) => [properties.$set, properties.$unset])).toEqual([
                 [{ plan: 'paid' }, undefined],
@@ -436,10 +419,10 @@ describe('analytics person profiles', () => {
             client.onEvent(() => {
                 if (nested) return
                 nested = true
-                unsetPersonProperties(client, 'plan')
+                client.unsetPersonProperties('plan')
             })
             client.identify(target, { plan: 'paid' })
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(events(requests)).toHaveLength(3)
             expect(
@@ -458,10 +441,10 @@ describe('analytics person profiles', () => {
         client.onEvent(() => {
             if (nested) return
             nested = true
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
         })
-        unsetPersonProperties(client, 'plan')
-        setPersonProperties(client, { plan: 'paid' })
+        client.unsetPersonProperties('plan')
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).map(({ properties }) => [properties.$set, properties.$unset])).toEqual([
             [undefined, ['plan']],
@@ -478,11 +461,11 @@ describe('analytics person profiles', () => {
             const setAgain = () => {
                 if (nested) return
                 nested = true
-                setPersonProperties(client, { plan: 'paid' })
+                client.setPersonProperties({ plan: 'paid' })
             }
             if (notification === 'onEvent') client.onEvent(setAgain)
             else client.onNewSession(setAgain)
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(nested).toBe(true)
             expect(events(requests)).toHaveLength(1)
@@ -496,10 +479,10 @@ describe('analytics person profiles', () => {
         client.onEvent(() => {
             if (nested) return
             nested = true
-            setPersonProperties(client, { plan: 'free' })
+            client.setPersonProperties({ plan: 'free' })
         })
-        setPersonProperties(client, { plan: 'paid' })
-        setPersonProperties(client, { plan: 'free' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.setPersonProperties({ plan: 'free' })
         await client.flush()
         expect(events(requests).map(({ properties }) => properties.$set)).toEqual([{ plan: 'paid' }, { plan: 'free' }])
     })
@@ -514,10 +497,10 @@ describe('analytics person profiles', () => {
                 nested = true
                 if (seam === 'enqueue') vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
                 else vi.spyOn(BrowserState.prototype, 'sessionAdmitted').mockReturnValueOnce(false)
-                unsetPersonProperties(client, 'plan')
+                client.unsetPersonProperties('plan')
             })
-            setPersonProperties(client, { plan: 'paid' })
-            setPersonProperties(client, { plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
+            client.setPersonProperties({ plan: 'paid' })
             await client.flush()
             expect(events(requests).map(({ properties }) => properties.$set)).toEqual([
                 { plan: 'paid' },
@@ -533,11 +516,11 @@ describe('analytics person profiles', () => {
             if (nested) return
             nested = true
             vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
-            setPersonProperties(client, { plan: 'free' })
+            client.setPersonProperties({ plan: 'free' })
         })
-        setPersonProperties(client, { plan: 'paid' })
-        setPersonProperties(client, { plan: 'paid' })
-        setPersonProperties(client, { plan: 'free' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.setPersonProperties({ plan: 'free' })
         await client.flush()
         expect(events(requests).map(({ properties }) => properties.$set)).toEqual([
             { plan: 'paid' },
@@ -550,11 +533,11 @@ describe('analytics person profiles', () => {
         const { client, requests } = await create({ flushAt: 100 })
         const identified = vi.fn()
         client.onIdentify(identified)
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         vi.spyOn(EventBuffer.prototype, 'enqueue').mockReturnValueOnce(false)
-        unsetPersonProperties(client, 'plan')
+        client.unsetPersonProperties('plan')
         expect(identified).not.toHaveBeenCalled()
-        setPersonProperties(client, { plan: 'free' })
+        client.setPersonProperties({ plan: 'free' })
         await client.flush()
         expect(events(requests).map(({ properties }) => properties.$set)).toEqual([{ plan: 'paid' }, { plan: 'free' }])
     })
@@ -563,10 +546,10 @@ describe('analytics person profiles', () => {
         const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
         const { client, requests } = await create()
         for (let index = 0; index < 100; index++) client.capture('burst')
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         now.mockReturnValue(2_000)
-        setPersonProperties(client, { plan: 'paid' })
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests).filter(({ event }) => event === '$set')).toHaveLength(1)
     })
@@ -586,7 +569,7 @@ describe('analytics person profiles', () => {
         const setOnce = { first: { source: 'docs' } }
         const captured = vi.fn()
         client.onEvent(captured)
-        setPersonProperties(client, set, setOnce)
+        client.setPersonProperties(set, setOnce)
         set.plan.name = 'changed'
         setOnce.first.source = 'changed'
         await client.flush()
@@ -609,7 +592,7 @@ describe('analytics person profiles', () => {
         const { client, requests } = await create()
         const anonymousId = client.distinctId
         client.capture('anonymous')
-        createPersonProfile(client)
+        client.createPersonProfile()
         client.capture('profile_enabled')
         client.reset()
         const resetId = client.distinctId
@@ -633,7 +616,7 @@ describe('analytics person profiles', () => {
     it('keeps explicit profile enablement in the client key-value store until reset', async () => {
         const storage = new MemoryStorage()
         const { client } = await create({}, storage)
-        createPersonProfile(client)
+        client.createPersonProfile()
         const stored = JSON.parse(storage.getItem('ph_ph_person_profiles_posthog_browser_v2') ?? '{}')
         expect(stored.extensionData.core).toEqual({ personProcessingEnabled: true })
         expect(client.kv.get('personProcessingEnabled')).toBe(true)
@@ -658,7 +641,7 @@ describe('analytics person profiles', () => {
         clients.push(client)
         configuration.personProfiles = 'always'
         client.identify('ignored')
-        createPersonProfile(client)
+        client.createPersonProfile()
         client.capture('after_mutation', { $process_person_profile: true })
         await client.flush()
         expect(events(requests)).toMatchObject([
@@ -706,16 +689,16 @@ describe('analytics person profiles', () => {
         })
         clients.push(client)
         const anonymousId = client.distinctId
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         expect(storedPersonProperties(client)).toEqual({ plan: 'paid' })
-        unsetPersonProperties(client, 'plan')
+        client.unsetPersonProperties('plan')
         expect(storedPersonProperties(client)).toEqual({})
         await client.flush()
         expect(events(requests)).toEqual([])
         expect(client.session).toBeUndefined()
         expect(client.distinctId).toBe(anonymousId)
         client.optIn()
-        setPersonProperties(client, { plan: 'paid' })
+        client.setPersonProperties({ plan: 'paid' })
         await client.flush()
         expect(events(requests)).toHaveLength(1)
         expect(events(requests)).toMatchObject([
@@ -740,10 +723,10 @@ describe('analytics person profiles', () => {
         const grouped = vi.fn()
         client.onIdentify(identified)
         client.onGroup(grouped)
-        setPersonProperties(client, { plan: 'paid' })
-        unsetPersonProperties(client, 'plan')
+        client.setPersonProperties({ plan: 'paid' })
+        client.unsetPersonProperties('plan')
         client.identify('ignored')
-        group(client, 'company', 'ignored', { plan: 'paid' })
+        client.group('company', 'ignored', { plan: 'paid' })
         expect(storedPersonProperties(client)).toEqual(before)
         expect(identified).not.toHaveBeenCalled()
         expect(grouped).not.toHaveBeenCalled()

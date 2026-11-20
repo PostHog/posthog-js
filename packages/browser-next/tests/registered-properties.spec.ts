@@ -1,6 +1,4 @@
 import type { AnalyticsOptions } from '../src/core/types'
-import { group, groupIdentify, resetGroups } from '../src/products/analytics/groups'
-import { alias } from '../src/products/analytics/person'
 import { BrowserState } from '../src/core/state/state'
 import { createPostHog } from '../src/composition/npm/core'
 import { createFetch, localRemoteConfig, MemoryStorage, requireInstalledExtension, type SentRequest } from './helpers'
@@ -291,11 +289,11 @@ describe('registered analytics properties', () => {
     it('enriches identity operations and survives group-only cleanup but not full reset', async () => {
         const { client, requests } = await create()
         client.register({ context: 'application' })
-        alias(client, 'account')
+        client.alias('account')
         client.identify('member')
-        group(client, 'organization', 'current')
-        groupIdentify(client, 'organization', 'other')
-        resetGroups(client)
+        client.group('organization', 'current')
+        client.groupIdentify('organization', 'other')
+        client.resetGroups()
         expect(client.getProperty('context')).toBe('application')
         await client.flush()
         expect(events(requests)).toHaveLength(4)

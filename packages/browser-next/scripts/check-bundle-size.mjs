@@ -31,8 +31,6 @@ const productInputs = [flagsInput, autocaptureInput, logsInput, surveysInput]
 
 // Client modules selected by entrypoint or explicit import.
 const analyticsCoreInput = /(^|\/)products\/analytics\/analytics-core\.(m?js|ts)$/
-const groupsInput = /(^|\/)products\/analytics\/groups\.(m?js|ts)$/
-const personInput = /(^|\/)products\/analytics\/person\.(m?js|ts)$/
 const durableDeliveryInputs = [
     /(^|\/)analytics-delivery\.(m?js|ts)$/,
     /(^|\/)delivery\/lane\.(m?js|ts)$/,
@@ -95,7 +93,7 @@ const assertBoundary = (name, inputs, { required = [], forbidden = [] }) => {
 }
 
 // Initial graphs of /core and the root entry hold the client only: no optional product or heavy dependency.
-const clientOnly = [...productInputs, groupsInput, personInput, coreInput, surveyUiInput, surveyRenderingInput]
+const clientOnly = [...productInputs, coreInput, surveyUiInput, surveyRenderingInput]
 const coreBoundary = {
     required: [analyticsCoreInput, ...durableDeliveryInputs],
     forbidden: [...clientOnly, rootCompositionInput],
@@ -247,10 +245,6 @@ if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
 
 await measureStatic('core minimal', 'fixtures/minimal.ts', coreBoundary)
 await measureStatic('core', 'fixtures/core.ts', coreBoundary)
-const groupsPersonInputs = await measureStatic('core with groups and person', 'fixtures/groups-person.ts', {
-    required: [groupsInput, personInput, ...durableDeliveryInputs],
-    forbidden: [...productInputs, coreInput, surveyUiInput, rootCompositionInput],
-})
 await measureRoot()
 const staticFlagsInputs = await measureStatic('static flags', 'fixtures/static-flags.ts', undefined, {
     allowProducts: true,
@@ -264,15 +258,12 @@ await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', unde
 await measureSplit('dynamic autocapture', 'fixtures/dynamic-autocapture.ts')
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.
-for (const [guard, boundary, inputs, graph] of [
-    ['core', coreBoundary, staticFlagsInputs, 'static flags'],
-    ['core', coreBoundary, groupsPersonInputs, 'groups and person'],
-]) {
+for (const [guard, boundary, inputs, graph] of [['core', coreBoundary, staticFlagsInputs, 'static flags']]) {
     assert.throws(
         () => assertBoundary(guard, inputs, boundary),
         /forbidden modules|must include/,
         `The ${guard} guard must reject the real ${graph} graph`
     )
 }
-stdout.write('Negative controls: core guards reject real flags and groups/person graphs\n')
+stdout.write('Negative controls: core guard rejects the real flags graph\n')
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

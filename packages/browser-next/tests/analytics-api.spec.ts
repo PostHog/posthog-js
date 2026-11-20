@@ -2,7 +2,6 @@ import type { CaptureOptions } from '@posthog/browser-common'
 import { createPostHog, type IPostHog } from '../src/composition/npm/core'
 import { BrowserState } from '../src/core/state/state'
 import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
-import { group } from '../src/products/analytics/groups'
 import { createFetch, localRemoteConfig, type SentRequest } from './helpers'
 
 const options = {
@@ -35,7 +34,7 @@ afterEach(async () => {
 })
 
 describe('client analytics API', () => {
-    it('exposes common analytics operations on the client and keeps less common ones in function imports', async () => {
+    it('exposes analytics, person and group operations on the client', async () => {
         const { client } = await create()
         for (const name of [
             'capture',
@@ -49,14 +48,6 @@ describe('client analytics API', () => {
             'registerForSession',
             'unregisterForSession',
             'registerDynamicEventProperties',
-            'onEvent',
-            'getExtension',
-        ] as const) {
-            expect(typeof client[name], name).toBe('function')
-        }
-        expect(typeof client.isRateLimited).toBe('boolean')
-        for (const name of [
-            'analytics',
             'alias',
             'group',
             'groupIdentify',
@@ -65,9 +56,13 @@ describe('client analytics API', () => {
             'setPersonProperties',
             'unsetPersonProperties',
             'setInternalOrTestUser',
-        ]) {
-            expect(name in client, name).toBe(false)
+            'onEvent',
+            'getExtension',
+        ] as const) {
+            expect(typeof client[name], name).toBe('function')
         }
+        expect(typeof client.isRateLimited).toBe('boolean')
+        expect('analytics' in client).toBe(false)
     })
 
     it('admits capture synchronously and sends its snapshotted properties', async () => {
@@ -94,7 +89,7 @@ describe('client analytics API', () => {
         client.onGroup(() => changes.push('group'))
         client.onReset(() => changes.push('reset'))
         client.identify('user-123')
-        group(client, 'company', 'company-123')
+        client.group('company', 'company-123')
         expect(client.distinctId).toBe('user-123')
         expect(client.groups).toEqual({ company: 'company-123' })
         client.reset()
@@ -111,7 +106,7 @@ describe('client analytics API', () => {
         const registration = client.registerDynamicEventProperties(() => ({ source: 'dynamic' }))
         client.capture('captured')
         client.identify('person')
-        group(client, 'company', 'company-123')
+        client.group('company', 'company-123')
         await client.captureImmediate('immediate')
         registration.dispose()
         client.capture('after_disposal')
@@ -180,7 +175,7 @@ describe('client capture admission', () => {
         const distinctId = client.distinctId
         await client.dispose()
         expect(() => client.identify('disposed')).not.toThrow()
-        expect(() => group(client, 'organization', 'disposed', { invalid: true })).not.toThrow()
+        expect(() => client.group('organization', 'disposed', { invalid: true })).not.toThrow()
         expect(client.distinctId).toBe(distinctId)
         expect(client.groups).toEqual({})
         expect(events(requests)).toHaveLength(0)

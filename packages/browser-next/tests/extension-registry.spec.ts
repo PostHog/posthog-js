@@ -3,8 +3,6 @@ import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-t
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { ExtensionRegistry } from '../src/core/extensions/registry'
 import { flags } from '../src/products/flags/flags'
-import { group, resetGroups } from '../src/products/analytics/groups'
-import { setPersonProperties } from '../src/products/analytics/person'
 import type { IPostHog } from '../src/core/types'
 import { createBufferedPostHog as createPostHog, createFetch, localRemoteConfig } from './helpers'
 
@@ -588,13 +586,13 @@ describe('feature flags in the client namespace', () => {
                 reload.mockClear()
                 client.identify('person')
                 expect(reload).toHaveBeenCalledTimes(1)
-                group(client, 'company', 'team')
+                client.group('company', 'team')
                 expect(reload).toHaveBeenCalledTimes(2)
-                resetGroups(client)
+                client.resetGroups()
                 expect(reload).toHaveBeenCalledTimes(3)
                 client.reset()
                 expect(reload).toHaveBeenCalledTimes(4)
-                setPersonProperties(client, { plan: 'paid' })
+                client.setPersonProperties({ plan: 'paid' })
                 expect(reload).toHaveBeenCalledTimes(5)
                 expect(reset).toHaveBeenCalledOnce()
                 await registry.dispose()
@@ -605,9 +603,9 @@ describe('feature flags in the client namespace', () => {
             reload.mockClear()
             reset.mockClear()
             client.identify('after-cleanup')
-            setPersonProperties(client, { plan: 'free' })
-            group(client, 'company', 'after-cleanup')
-            resetGroups(client)
+            client.setPersonProperties({ plan: 'free' })
+            client.group('company', 'after-cleanup')
+            client.resetGroups()
             client.reset()
             expect(reload).not.toHaveBeenCalled()
             expect(reset).not.toHaveBeenCalled()
