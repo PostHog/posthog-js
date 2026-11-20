@@ -11,8 +11,8 @@ const MAX_SESSION_LENGTH = 86_400_000
 
 /**
  * Returns the persisted session without extending it or rotating it for inactivity, matching posthog-js's
- * read-only session check, so background requests neither keep a session alive nor start new ones. Starts a
- * session, as capture would, only when none exists, a reset is pending, or it reached its maximum length.
+ * read-only session check, so background requests neither keep a session alive nor rotate it for inactivity.
+ * Starts a session, as capture would, only when none exists, a reset is pending, or it reached its maximum length.
  */
 const readSession = (client: IPostHog): TracingHeadersSession | undefined => {
     const analytics = analyticsOf(client)
@@ -45,7 +45,7 @@ export const tracingHeaders = (options: TracingHeadersOptions = {}): BrowserExte
     const restores: Array<() => void> = []
     let client: IPostHog | undefined
 
-    // The XHR patch reads these outside its own error handling, so they must not throw.
+    // Read failures are logged and treated as missing values, so one failed read does not drop the other headers.
     const whenCapturing =
         <T>(read: (posthog: IPostHog) => T | undefined) =>
         (): T | undefined => {
