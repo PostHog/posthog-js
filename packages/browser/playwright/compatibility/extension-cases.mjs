@@ -55,7 +55,7 @@ export function assertExceptionDelivery(network) {
     assert.equal(events.at(-1).properties.compat_source, 'manual', 'Lost manual exception properties')
 }
 
-// The app doesn't send temporaryToken; the core passes every field through, so it marks the credential handoff.
+// The app doesn't send temporaryToken; the core forwards unknown fields to ph_load_toolbar, so it marks the credential handoff.
 export const toolbarState = {
     action: 'ph_authorize',
     token: 'phc_COMPAT',
