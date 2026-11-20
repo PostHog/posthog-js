@@ -156,6 +156,12 @@ Plugin 2.x used `posthog-ios` 3.92 and `posthog-android` 3.74, so recordings als
 
 See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
 
+#### iOS background replay capture is removed
+
+`posthog-ios` 4.0 removes background capture, which rendered the screen off the main thread, so a frame could show content that had already moved away from its mask. If you set `screenshotModeBackgroundCapture: true` in `sessionReplayConfig`, iOS replay now records with the standard capture method, on the main thread once the screen has settled, and the plugin logs a message. Remove the option. If standard capture costs too much main-thread time on complex screens, try the experimental `iOSCaptureMethod: 'gpu'`.
+
+**If ignored:** replay keeps recording with the standard capture method, and the plugin logs the message each time it sets up replay.
+
 #### iOS uploads pause while cellular data is off
 
 Native uploads, such as session replay and native crash reports, pause while the device is on cellular and cellular data is turned off for your app, instead of sending requests that fail. They resume when the device has a usable connection, such as Wi-Fi.
@@ -228,5 +234,6 @@ If you ship 3.0 and then go back to 2.x, 2.x sends the native crash reports and 
 - [ ] Direct `start()` calls now use `setup()`, and direct `setup()` calls pass `throttleDelayMs`.
 - [ ] Reverse proxies and self-hosted instances serve `/i/v1/*`, proxies pass the `Authorization`, `Content-*`, `User-Agent` and `PostHog-*` headers and the response through unchanged and don't authenticate with `Authorization`, and they don't redirect capture requests to another origin.
 - [ ] Your distinct IDs are 200 bytes or shorter, or you accept that native events with longer ones are dropped.
+- [ ] `screenshotModeBackgroundCapture` is removed from `sessionReplayConfig`.
 - [ ] If you want `$app_language`, your app calls `posthog.setAppLanguage()`.
 - [ ] Native code and native libraries that call `posthog-ios` or `posthog-android` directly are updated for 4.0.
