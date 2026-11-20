@@ -4,4 +4,4 @@
 'posthog-js': patch
 ---
 
-Add tracing headers to `@posthog/browser`, sharing the fetch and XHR patching with posthog-js through `@posthog/browser-common`.
+Add tracing headers to `@posthog/browser`. In posthog-js, a distinct ID that cannot be sent as a header no longer breaks XHR or `fetch(Request)`: those requests go out without PostHog tracing headers.
