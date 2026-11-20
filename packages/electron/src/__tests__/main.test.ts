@@ -612,6 +612,95 @@ describe('main Electron client', () => {
         expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
     })
 
+    it('opts in to an unhandledRejection listener that captures each rejection once', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const rejections = process.rawListeners('unhandledRejection')
+        const ignored = await start({ captureUnhandledRejections: true })
+        await ignored.ready()
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        await ignored.shutdown(100)
+        const disabled = await start({
+            enableExceptionAutocapture: true,
+            captureUnhandledRejections: true,
+            disabled: true,
+        })
+        await disabled.ready()
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        await disabled.shutdown(100)
+        const owner = await start({ enableExceptionAutocapture: true, captureUnhandledRejections: true })
+        await owner.ready()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        expect(process.rawListeners('unhandledRejection')).toHaveLength(rejections.length + 1)
+        // Call the SDK listener directly: emitting would also reach the test runner's rejection listener.
+        const listener = process.rawListeners('unhandledRejection').at(-1) as (reason: unknown) => void
+        listener(new RangeError('main rejection'))
+        // Node's strict mode escalates to the monitor before emitting unhandledRejection; only the listener reports it.
+        const strict = new RangeError('strict rejection')
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', strict, 'unhandledRejection')
+        listener(strict)
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new TypeError('main throw'),
+            'uncaughtException'
+        )
+        await owner.flush()
+        expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
+            'main rejection',
+            'strict rejection',
+            'main throw',
+        ])
+        expect(batches[0]).toMatchObject({
+            properties: {
+                $exception_source: 'node.process_unhandled_rejection',
+                $exception_list: [{ type: 'RangeError', mechanism: { type: 'onunhandledrejection', handled: false } }],
+            },
+        })
+        await owner.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+    })
+
+    it('ignores aborted rejections without spending the exception rate limit', async () => {
+        const owner = await start({ enableExceptionAutocapture: true, captureUnhandledRejections: true })
+        await owner.ready()
+        const listener = process.rawListeners('unhandledRejection').at(-1) as (reason: unknown) => void
+        // More aborts than the rate limit's burst, so a counted abort would block the real rejection below.
+        for (let i = 0; i < 20; i++) listener(new DOMException('The operation was aborted.', 'AbortError'))
+        listener(Object.assign(new Error('aborted fetch'), { name: 'AbortError' }))
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            Object.assign(new Error('aborted escalation'), { name: 'AbortError' }),
+            'unhandledRejection'
+        )
+        // A name getter that re-emits the same rejection must not recurse.
+        const reentrant = new Error('reentrant')
+        let reads = 0
+        Object.defineProperty(reentrant, 'name', {
+            get() {
+                if (++reads < 50) listener(reentrant)
+                return 'AbortError'
+            },
+        })
+        expect(() => listener(reentrant)).not.toThrow()
+        expect(reads).toBe(1)
+        listener(new RangeError('real rejection'))
+        // An uncaught AbortError is not a rejection, so it is still reported.
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            Object.assign(new Error('thrown abort'), { name: 'AbortError' }),
+            'uncaughtException'
+        )
+        await owner.flush()
+        expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
+            'real rejection',
+            'thrown abort',
+        ])
+        await owner.shutdown(100)
+    })
+
     it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
         const monitors = process.rawListeners('uncaughtExceptionMonitor')
         const owner = await start()
@@ -675,9 +764,9 @@ describe('main Electron client', () => {
             throw new Error('must not inspect')
         })
         const optOut = owner.optOut()
-        const capture = owner.captureException(Object.defineProperty({}, 'message', { get: getter }))
+        owner.captureException(Object.defineProperty({}, 'message', { get: getter }))
         await optOut
-        await expect(capture).rejects.toThrow('Stale PostHog identity')
+        await owner.flush()
         expect(getter).not.toHaveBeenCalled()
         expect(batches).toEqual([])
     })
@@ -796,8 +885,10 @@ describe('main Electron client', () => {
                 preloadFeatureFlags: false,
                 flushInterval: 0,
             })
-            if (operation === 'screen') await client.screen('Private', properties)
-            else if (operation === 'set') await client.setPersonProperties(properties)
+            if (operation === 'screen') {
+                client.screen('Private', properties)
+                await client.flush()
+            } else if (operation === 'set') await client.setPersonProperties(properties)
             else await client.setPersonProperties(undefined, properties)
             expect(client.optedOut).toBe(true)
             expect(inspect).not.toHaveBeenCalled()
@@ -944,10 +1035,9 @@ describe('main Electron client', () => {
         expect(payloadParses).toBeLessThanOrEqual(3 * count)
     })
     it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
-        const captures: Promise<void>[] = []
         const onError = vi.fn((error: unknown) => {
             // Finite guard proves recursive reporting without risking an unbounded test loop.
-            if (onError.mock.calls.length <= 3) captures.push(owner.captureException(error))
+            if (onError.mock.calls.length <= 3) owner.captureException(error)
         })
         const owner = await start({ onError })
         mock.fetch.mockResolvedValueOnce(
@@ -960,7 +1050,6 @@ describe('main Electron client', () => {
             )
         )
         await owner.reloadFeatureFlags()
-        await Promise.all(captures)
         await owner.flush()
         expect(owner.getFeatureFlagPayload('broken')).toBeNull()
         expect(owner.getFeatureFlagResult('broken', { sendFeatureFlagEvent: false })).toMatchObject({
@@ -983,7 +1072,6 @@ describe('main Electron client', () => {
             )
         )
         await owner.reloadFeatureFlags()
-        await Promise.all(captures)
         await owner.flush()
         expect(onError).toHaveBeenCalledTimes(3)
         mock.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ flags: {} })))
@@ -1148,16 +1236,16 @@ describe('main Electron client', () => {
             committed = true
         })
         let acknowledged = false
-        const capture = owner.capture('pending-shutdown').then(() => {
+        owner.capture('pending-shutdown')
+        const flushing = owner.flush().then(() => {
             acknowledged = true
         })
-        const flushing = owner.flush()
         await vi.waitFor(() => expect(release).toBeTypeOf('function'))
         await owner.shutdown(1)
         expect(acknowledged).toBe(false)
         expect(committed).toBe(false)
         release()
-        await Promise.all([capture, flushing])
+        await flushing
         expect(committed).toBe(true)
         const namespace = (await fs.readdir(directory))[0]
         const persisted = JSON.parse(await fs.readFile(join(directory, namespace, 'state.json'), 'utf8'))
@@ -1182,7 +1270,8 @@ describe('main Electron client', () => {
         try {
             Object.defineProperty(process, 'getSystemVersion', { configurable: true, value: () => '15.7.1' })
             const owner = await start()
-            await owner.capture('system-version')
+            owner.capture('system-version')
+            await owner.flush()
             Reflect.deleteProperty(process, 'getSystemVersion')
             await owner.capture('os-release')
             await owner.flush()
@@ -1209,7 +1298,8 @@ describe('main Electron client', () => {
         }
         const first = new RendererPostHog(bridge)
         await first.ready()
-        await first.capture('before-dispose')
+        first.capture('before-dispose')
+        await first.flush()
         first.dispose()
         const second = new RendererPostHog(bridge)
         try {
@@ -1247,11 +1337,13 @@ describe('main Electron client', () => {
     })
 
     it.each(['cycle', 'bigint'])('does not poison accepted events after rejecting %s properties', async (kind) => {
-        const owner = await start()
-        await owner.capture('before-invalid')
+        const onError = vi.fn()
+        const owner = await start({ onError })
+        owner.capture('before-invalid')
         const properties: Record<string, unknown> = {}
         properties.invalid = kind === 'cycle' ? properties : 1n
-        await Reflect.apply(owner.capture, owner, ['invalid', properties]).catch(() => {})
+        expect(() => Reflect.apply(owner.capture, owner, ['invalid', properties])).not.toThrow()
+        expect(onError).toHaveBeenCalledOnce()
         await owner.capture('after-invalid')
         await owner.flush()
         expect(batches.map(({ event }) => event)).toEqual(['before-invalid', 'after-invalid'])
@@ -1372,9 +1464,9 @@ describe('main Electron client', () => {
                     expect(facade.getFeatureFlag('test')).toBe('variant')
                     expect(facade.isFeatureEnabled('test')).toBe(true)
                 }
-                if (operation === 'capture') await expect(facade.capture('after-flag-reads')).resolves.toBeUndefined()
+                if (operation === 'capture') facade.capture('after-flag-reads')
                 else await expect(facade.identify('alice')).resolves.toBeUndefined()
-                await owner.flush()
+                await facade.flush()
                 expect(request.mock.calls.filter(([value]) => value.command.type === 'flag')).toHaveLength(1)
                 expect(batches.filter((event) => event.event === '$feature_flag_called')).toHaveLength(1)
                 if (operation === 'capture') {
@@ -1471,7 +1563,9 @@ describe('main Electron client', () => {
     it('does not send expired queued events', async () => {
         vi.useFakeTimers({ toFake: ['Date'] })
         const owner = await start({ maxQueueAgeMs: 10 })
-        await owner.capture('expired')
+        owner.capture('expired')
+        // Mutations run in call order, so this resolves once the capture is queued, without delivering it.
+        await owner.unregister('unused')
         vi.setSystemTime(Date.now() + 20)
         await owner.flush()
         expect(batches).toEqual([])
@@ -1689,7 +1783,11 @@ describe('main Electron client', () => {
         await shutdown
         expect(owner.shutdown()).toBe(shutdown)
         expect(mock.handlers.has(COMMAND_CHANNEL)).toBe(false)
-        await expect(owner.capture('after-shutdown')).rejects.toThrow('shut down')
+        expect(() => Reflect.apply(owner.capture, owner, [undefined])).not.toThrow()
+        expect(() => Reflect.apply(owner.screen, owner, [42])).not.toThrow()
+        expect(() => owner.capture('after-shutdown')).not.toThrow()
+        expect(() => owner.screen('after-shutdown')).not.toThrow()
+        expect(() => owner.captureException(new Error('after-shutdown'))).not.toThrow()
     })
     it('gates opted-out capture before exception/property inspection and disk mutation but permits identify flags', async () => {
         const owner = await start()

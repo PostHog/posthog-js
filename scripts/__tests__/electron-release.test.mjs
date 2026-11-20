@@ -21,7 +21,7 @@ const now = Date.parse('2026-11-20T00:00:00Z')
 function mockRegistry({ target = null, age = 8, missing = false, status = 200 } = {}) {
     return async (url) => {
         const name = decodeURIComponent(url.split('/').at(-1))
-        const version = name === '@posthog/core' ? '1.67.3' : '0.10.9'
+        const version = { '@posthog/core': '1.67.3', '@posthog/browser-common': '0.10.9' }[name] ?? '1.0.0'
         if (name === packageName) return { status: target ? 200 : 404, ok: !!target, json: async () => target }
         return {
             status,
@@ -56,8 +56,14 @@ test('only an exact reviewed x.y.z version with external stable lower bounds is 
 
 test('registry checks require an unpublished version and cooled-down dependency lower bounds', async () => {
     await checkRegistry(manifest, manifest.version, mockRegistry(), now)
+    await checkRegistry(manifest, manifest.version, mockRegistry({ age: 0 }), now)
+    const thirdParty = { ...manifest, dependencies: { ...manifest.dependencies, 'third-party': '^1.0.0' } }
+    await checkRegistry(thirdParty, manifest.version, mockRegistry(), now)
+    await assert.rejects(
+        checkRegistry(thirdParty, manifest.version, mockRegistry({ age: 6 }), now),
+        /third-party@1\.0\.0 must satisfy the seven-day cooldown/
+    )
     for (const options of [
-        { age: 6 },
         { missing: true },
         { status: 401 },
         { status: 429 },
