@@ -3,7 +3,7 @@ import { TOOLBAR_ID } from '@posthog/browser-common/constants'
 import { createPostHog as createRootPostHog } from '../src/composition/npm'
 import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
 import { toolbar } from '../src/products/toolbar/toolbar'
-import { getUiHost } from '../src/products/toolbar/toolbar-extension'
+import { getUiHost } from '../src/core/posthog'
 import type { ToolbarParams } from '../src/products/toolbar/toolbar-options'
 import type { CorePostHogOptions, RemoteConfig } from '../src/core/types'
 
@@ -58,10 +58,11 @@ afterEach(() => {
 describe('toolbar', () => {
     it('loads the toolbar from an authorization hash, restores the desired hash and saves the parameters', async () => {
         location.hash = `__posthog=${encodeState(authorizeState)}`
-        const extension = toolbar({ uiHost: 'https://app.example.com/' })
+        const extension = toolbar()
         const client = await createCorePostHog({
             ...options,
             apiHost: 'https://ingest.example.com',
+            uiHost: 'https://app.example.com/',
             extensions: [extension],
         })
 
@@ -372,7 +373,8 @@ describe('automatic toolbar loading', () => {
         const client = await createRootPostHog({
             ...options,
             flags: false,
-            toolbar: { uiHost: 'https://ui.example.com' },
+            uiHost: 'https://ui.example.com',
+            toolbar: {},
         })
         const resolved = await client.resolveExtension('toolbar')
         expect(resolved?.loadToolbar()).toBe(true)
@@ -392,6 +394,11 @@ describe('getUiHost', () => {
         ['https://app.posthog.com', 'https://us.posthog.com'],
         ['https://ph.example.com/ingest', 'https://ph.example.com/ingest'],
     ])('maps %s to %s', (apiHost, uiHost) => {
-        expect(getUiHost(apiHost)).toBe(uiHost)
+        expect(getUiHost(undefined, apiHost)).toBe(uiHost)
+    })
+
+    it('prefers the configured host, mapped as in posthog-js', () => {
+        expect(getUiHost('https://ui.example.com/', 'https://us.i.posthog.com')).toBe('https://ui.example.com')
+        expect(getUiHost('https://app.posthog.com', 'https://eu.i.posthog.com')).toBe('https://us.posthog.com')
     })
 })

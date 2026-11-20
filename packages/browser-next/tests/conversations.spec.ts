@@ -448,6 +448,22 @@ describe('conversations identity', () => {
         expect(events).not.toContain('$identify')
     })
 
+    it('keeps a setup bootstrap distinct ID over the configured identity, as posthog-js does', async () => {
+        const extension = conversations({ identity: { distinctId: 'user-6', hash: 'hash-6' } })
+        const client = await createCorePostHog({
+            ...baseOptions,
+            storage: new MemoryStorage(),
+            fetch: createConversationsFetch([]),
+            remoteConfig: remote({ conversations: widgetConfig() }),
+            bootstrap: { distinctId: 'bootstrapped-anonymous' },
+            extensions: [extension],
+        })
+        clients.push(client)
+        await loaded(client)
+
+        expect(client.distinctId).toBe('bootstrapped-anonymous')
+    })
+
     it('identifies a visitor with earlier anonymous activity and preserves a different identified person', async () => {
         const storage = new MemoryStorage()
         const first = await createClient({}, { storage })
@@ -569,19 +585,6 @@ describe('conversations loading', () => {
         expect(extension.getWidgetSessionId()).not.toBe('previous-session')
     })
 
-    it('does not create a widget when opted out while the renderer loads', async () => {
-        const { client, extension, renderer } = await createDeferred()
-
-        client.optOut()
-        renderer.release()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(extension.isAvailable()).toBe(false)
-        expect(extension.getUnavailableReason()).toBe('consent_opted_out')
-
-        client.optIn()
-        await loaded(client)
-    })
-
     it('does not create a widget when disposed while the renderer loads', async () => {
         const { client, extension, renderer } = await createDeferred()
 
@@ -596,39 +599,16 @@ describe('conversations loading', () => {
 })
 
 describe('conversations consent', () => {
-    it('unloads while opted out and loads again after opting in', async () => {
-        const { client } = await createClient({ conversations: widgetConfig() })
+    it('keeps the widget and its requests working while capture is opted out, as posthog-js does', async () => {
+        const { client, requests } = await createClient({ conversations: widgetConfig() }, { optOutByDefault: true })
         const extension = await loaded(client)
         const sessionId = extension.getWidgetSessionId()
 
         client.optOut()
-        expect(extension.isAvailable()).toBe(false)
-        expect(extension.getUnavailableReason()).toBe('consent_opted_out')
-
-        client.optIn()
-        await loaded(client)
+        expect(extension.isAvailable()).toBe(true)
         expect(extension.getWidgetSessionId()).toBe(sessionId)
-    })
-
-    it('starts a fresh widget session after a reset while opted out', async () => {
-        const { client } = await createClient({ conversations: widgetConfig() })
-        const extension = await loaded(client)
-        const sessionId = extension.getWidgetSessionId()
-
-        client.optOut()
-        client.reset()
-        client.optIn()
-        await loaded(client)
-        expect(extension.getWidgetSessionId()).not.toBe(sessionId)
-    })
-
-    it('waits for opt-in when capture starts opted out', async () => {
-        const { client } = await createClient({ conversations: widgetConfig() }, { optOutByDefault: true })
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(client.conversations?.getUnavailableReason()).toBe('consent_opted_out')
-
-        client.optIn()
-        await loaded(client)
+        expect(await extension.getTickets()).toEqual({ count: 0, results: [] })
+        expect(conversationRequests(requests, '/widget/tickets')).toHaveLength(1)
     })
 })
 
