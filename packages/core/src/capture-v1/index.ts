@@ -1,7 +1,7 @@
 /**
- * Capture V1 transport shared by the PostHog SDKs. `CaptureError`, `CaptureDroppedEvent`,
- * `CaptureErrorParams` and `CaptureEndpoint` are public through posthog-node and follow semver;
- * everything else is internal to PostHog SDKs and can change in any release.
+ * Capture V1 transport shared by the PostHog SDKs. It follows semver, because the SDKs depend on
+ * core with a caret range. `CaptureError`, `CaptureDroppedEvent`, `CaptureErrorParams` and
+ * `CaptureEndpoint` are also public through posthog-node.
  *
  * @packageDocumentation
  */
