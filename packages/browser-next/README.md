@@ -337,7 +337,7 @@ The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits 
 
 ## Error tracking
 
-Supplying an `errorTracking` options object loads error tracking during initialization. With no explicit configuration, it loads when the project's remote configuration enables exception autocapture, from the saved remote setting, or through `resolveExtension('errorTracking')`. Use `errorTracking: false` to disable automatic inclusion.
+Supplying an `errorTracking` options object loads error tracking during initialization. With no explicit configuration, it loads when the project's remote configuration enables exception autocapture, from the saved remote setting, or through `resolveExtension('errorTracking')`. Error tracking stays out of core, so `posthog.errorTracking` is undefined until it loads: to capture exceptions manually in a project without exception autocapture, pass `errorTracking: {}`, which loads it without turning on autocapture, or await `resolveExtension('errorTracking')` first. Use `errorTracking: false` to disable automatic inclusion.
 
 ```ts
 const posthog = await createPostHog({
