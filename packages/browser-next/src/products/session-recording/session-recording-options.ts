@@ -48,8 +48,6 @@ export interface SessionRecordingOptions extends SessionRecordingRecorderOptions
      * minutes. Recording resumes under the same session when the user interacts again before the session expires.
      */
     sessionIdleThresholdMs?: number
-    /** Origin of the PostHog app used by `getSessionReplayUrl()`. Defaults to the app that matches `apiHost`. */
-    uiHost?: string
 }
 
 export type SessionRecordingConfiguration = false | SessionRecordingOptions

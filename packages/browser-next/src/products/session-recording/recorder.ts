@@ -114,6 +114,12 @@ export interface RecorderHost {
 
 const recordFunction = record as unknown as RrwebRecord
 
+/** A number from 0 to `max`, parsing numeric strings, or `fallback` when there is none. */
+const clamp = (value: unknown, max: number, fallback: number): number => {
+    const number = typeof value === 'string' ? parseFloat(value) : value
+    return Number.isFinite(number) ? Math.min(Math.max(number as number, 0), max) : fallback
+}
+
 /**
  * Records replay activity that is not a captured event on the current session, rotating an expired
  * session as a captured event would. Returns the active session, or `undefined` when capture is not
@@ -455,6 +461,13 @@ export class SessionRecorder {
                 sampling.mouseInteraction = options.sampling.mouseInteraction
             }
             recordOptions.sampling = sampling
+        }
+        const canvas = this._config?.canvasRecording
+        if (canvas?.enabled) {
+            // the project's canvas setting, with posthog-js's defaults and limits
+            recordOptions.recordCanvas = true
+            recordOptions.sampling = { ...recordOptions.sampling, canvas: clamp(canvas.fps, 12, 4) }
+            recordOptions.dataURLOptions = { type: 'image/webp', quality: clamp(canvas.quality, 1, 0.4) }
         }
         return recordOptions
     }
