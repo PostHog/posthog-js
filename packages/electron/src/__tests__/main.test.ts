@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { release, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, powerMonitor, type BrowserWindow, type IpcMainInvokeEvent, type UtilityProcess } from 'electron'
 import {
     COMMAND_CHANNEL,
     MAX_MESSAGE_BYTES,
@@ -16,6 +16,7 @@ import {
     type Response as BridgeResponse,
     type State,
 } from '../shared/protocol'
+import { envelope } from '../utility/protocol'
 
 const mock = vi.hoisted(() => ({
     handlers: new Map<string, (event: IpcMainInvokeEvent, value: unknown) => Promise<BridgeResponse>>(),
@@ -125,6 +126,188 @@ function renderer(owner: PostHog, id: number) {
         },
     }
 }
+
+function utility(owner: PostHog) {
+    const replies = new EventEmitter()
+    const child = Object.assign(new EventEmitter(), { postMessage: (message: any) => replies.emit('reply', message) })
+    const dispose = owner.registerUtilityProcess(child as unknown as UtilityProcess)
+    let token: string
+    replies.once('reply', (message) => {
+        token = message.token
+    })
+    child.emit('message', envelope({ kind: 'connect' }))
+    let sequence = 0
+    const send = (command: Command, generation = owner.getState().generation): Promise<BridgeResponse> =>
+        new Promise((resolve) => {
+            const current = ++sequence
+            const listener = (message: any): void => {
+                if (message.kind === 'closed') {
+                    replies.removeListener('reply', listener)
+                    resolve({ ok: false, error: 'closed' })
+                } else if (message.kind === 'response' && message.sequence === current) {
+                    replies.removeListener('reply', listener)
+                    resolve(message.response)
+                }
+            }
+            replies.on('reply', listener)
+            child.emit(
+                'message',
+                envelope({ kind: 'request', token, request: { version: 1, sequence: current, generation, command } })
+            )
+        })
+    return { send, child, dispose }
+}
+
+describe('main utility owner routing', () => {
+    it('routes added API and project-config commands through the same protected owner', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'alias', alias: 'linked' })
+        await child.send({
+            type: 'screen',
+            name: 'Utility',
+            properties: { $screen_name: 'spoof', $electron_process: 'main' },
+        })
+        await child.send({
+            type: 'setPersonProperties',
+            properties: { plan: 'pro' },
+            propertiesOnce: { source: 'utility' },
+        })
+        await child.send({
+            type: 'setPersonPropertiesForFlags',
+            properties: { region: 'eu' },
+            reloadFeatureFlags: false,
+        })
+        await child.send({
+            type: 'setGroupPropertiesForFlags',
+            properties: { company: { tier: 'pro' } },
+            reloadFeatureFlags: false,
+        })
+        await child.send({ type: 'reloadFeatureFlags' })
+        expect(JSON.parse(mock.fetch.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+            person_properties: { region: 'eu' },
+            group_properties: { company: { tier: 'pro' } },
+        })
+        await child.send({ type: 'resetPersonPropertiesForFlags', reloadFeatureFlags: false })
+        await child.send({ type: 'resetGroupPropertiesForFlags', reloadFeatureFlags: false })
+        mock.fetch.mockResolvedValueOnce(
+            new Response(JSON.stringify({ autocapture_opt_out: true, surveys: [{ id: 'excluded' }] }))
+        )
+        expect(await child.send({ type: 'loadAutocaptureConfig' })).toMatchObject({
+            ok: true,
+            state: { autocapture: { status: 'loaded', autocapture_opt_out: true } },
+        })
+        await child.send({ type: 'flush' })
+        const screen = batches.find(({ event }) => event === '$screen')!
+        expect(screen.properties).toMatchObject({ $screen_name: 'Utility', $electron_process: 'utility' })
+        expect(screen.properties.$utility_process_id).toBeTypeOf('string')
+        expect(batches.find(({ event }) => event === '$set')?.properties).toMatchObject({
+            $set: { plan: 'pro' },
+            $set_once: { source: 'utility' },
+            $electron_process: 'utility',
+        })
+        expect(batches.some(({ event }) => event === '$create_alias')).toBe(true)
+        expect(JSON.stringify(owner.getState())).not.toContain('excluded')
+    })
+
+    it.each(['renderer', 'utility'] as const)(
+        'does not let an in-flight %s flag reload block later identity changes',
+        async (source) => {
+            const owner = await start()
+            const endpoint = source === 'utility' ? utility(owner) : renderer(owner, 3)
+            await endpoint.send({ type: 'hello' })
+            let resolve!: (response: Response) => void
+            mock.fetch.mockImplementationOnce(
+                () =>
+                    new Promise((done) => {
+                        resolve = done
+                    })
+            )
+            const reloading = endpoint.send({ type: 'reloadFeatureFlags' })
+            await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+            let identified = false
+            const identifying = owner.identify('later-user').then(() => {
+                identified = true
+            })
+            try {
+                await vi.waitFor(() => expect(identified).toBe(true), { timeout: 200 })
+            } finally {
+                resolve(new Response(JSON.stringify({ featureFlags: { obsolete: true } })))
+                await identifying
+                await reloading
+            }
+            expect(owner.getDistinctId()).toBe('later-user')
+            expect(owner.getFeatureFlag('obsolete', { sendEvent: false })).not.toBe(true)
+        }
+    )
+
+    it('shares main identity, consent and session while protecting utility capture and exception attribution', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'identify', distinctId: 'utility-alice' })
+        expect(owner.getDistinctId()).toBe('utility-alice')
+        const properties = { $electron_process: 'renderer', $utility_process_id: 'spoof' }
+        await child.send({ type: 'capture', event: 'utility-work', properties })
+        await child.send({
+            type: 'exception',
+            properties: {
+                ...properties,
+                $exception_list: [{ type: 'Error', value: 'utility handled', mechanism: { handled: true } }],
+            },
+        })
+        await child.send({ type: 'flush' })
+        const events = batches.filter((event) => ['utility-work', '$exception'].includes(event.event))
+        expect(events).toHaveLength(2)
+        for (const event of events) {
+            expect(event.distinct_id).toBe('utility-alice')
+            expect(event.properties.$electron_process).toBe('utility')
+            expect(event.properties.$utility_process_id).not.toBe('spoof')
+            expect(event.properties.$session_id).toBe(owner.getSessionId())
+        }
+        expect(events[0].properties.$utility_process_id).toBe(events[1].properties.$utility_process_id)
+        const generation = owner.getState().generation
+        await owner.optOut()
+        expect((await child.send({ type: 'capture', event: 'stale' }, generation)).ok).toBe(false)
+        await child.send({ type: 'capture', event: 'blocked' })
+        await child.send({ type: 'reset' })
+        expect(owner.optedOut).toBe(true)
+        await owner.flush()
+        expect(batches.some((event) => ['stale', 'blocked'].includes(event.event))).toBe(false)
+    })
+
+    it('checks observed flag revision and identity inside the serialized utility command path', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        await child.send({ type: 'reloadFeatureFlags' })
+        const state = owner.getState()
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision })
+        await child.send({ type: 'flag', key: 'test', value: 'variant', flagRevision: state.flagRevision - 1 })
+        await owner.flush()
+        expect(batches.filter((event) => event.event === '$feature_flag_called')).toHaveLength(1)
+        expect(batches.find((event) => event.event === '$feature_flag_called')?.properties.$electron_process).toBe(
+            'utility'
+        )
+        await owner.reset()
+        expect((await child.send({ type: 'capture', event: 'old-identity' }, state.generation)).ok).toBe(false)
+    })
+
+    it('revokes queued utility mutations when the child exits', async () => {
+        const owner = await start()
+        const child = utility(owner)
+        await child.send({ type: 'hello' })
+        const queued = child.send({ type: 'identify', distinctId: 'disconnected' })
+        child.child.emit('exit', 1)
+        expect(await queued).toMatchObject({ ok: false })
+        await owner.flush()
+        expect(owner.getDistinctId()).not.toBe('disconnected')
+        expect(child.child.listenerCount('message')).toBe(0)
+        child.dispose()
+    })
+})
 
 async function publicClient(owner: PostHog, process: 'main' | 'renderer') {
     if (process === 'main') return { api: owner, dispose: () => {} }
@@ -369,6 +552,136 @@ describe.each(['main', 'renderer'] as const)('%s public contracts through the ma
 })
 
 describe('main Electron client', () => {
+    it('opts in to monitor-only exception capture without changing host error handlers', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const uncaught = process.rawListeners('uncaughtException')
+        const rejections = process.rawListeners('unhandledRejection')
+        const owner = await start({ enableExceptionAutocapture: true })
+        await owner.ready()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        // Unit dispatch only; the installed-package fixture raises real asynchronous throws/rejections.
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new TypeError('main throw'),
+            'uncaughtException'
+        )
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            new RangeError('main rejection'),
+            'unhandledRejection'
+        )
+        await owner.captureException(new Error('manual'))
+        await owner.flush()
+        expect(batches).toHaveLength(3)
+        expect(batches[0]).toMatchObject({
+            event: '$exception',
+            properties: {
+                $electron_process: 'main',
+                $exception_source: 'node.process_uncaught_exception',
+                $exception_list: [
+                    {
+                        type: 'TypeError',
+                        value: 'main throw',
+                        mechanism: { type: 'onuncaughtexception', handled: false },
+                    },
+                ],
+            },
+        })
+        expect(batches[0].properties.$exception_list[0].stacktrace.frames.length).toBeGreaterThan(0)
+        expect(batches[1]).toMatchObject({
+            properties: {
+                $exception_source: 'node.process_unhandled_rejection',
+                $exception_list: [{ mechanism: { type: 'onunhandledrejection', handled: false } }],
+            },
+        })
+        expect(batches[2]).toMatchObject({
+            properties: { $exception_list: [{ mechanism: { type: 'generic', handled: true } }] },
+        })
+        expect(batches[2].properties).not.toHaveProperty('$exception_source')
+        await owner.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        expect(process.rawListeners('uncaughtException')).toEqual(uncaught)
+        expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
+        const replacement = await start({ enableExceptionAutocapture: true })
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toHaveLength(monitors.length + 1)
+        await replacement.shutdown(100)
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+    })
+
+    it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
+        const monitors = process.rawListeners('uncaughtExceptionMonitor')
+        const owner = await start()
+        expect(process.rawListeners('uncaughtExceptionMonitor')).toEqual(monitors)
+        await owner.shutdown(100)
+        const optedOut = await start({ enableExceptionAutocapture: true, defaultOptIn: false })
+        await optedOut.optOut()
+        const getter = vi.fn(() => {
+            throw new Error('private getter')
+        })
+        const secret = Object.defineProperty(new Error(), 'message', { get: getter })
+        const persist = vi.spyOn(ElectronStorage.prototype, 'flush')
+        persist.mockClear()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', secret, 'uncaughtException')
+        await optedOut.captureException(secret)
+        await Promise.resolve()
+        expect(getter).not.toHaveBeenCalled()
+        expect(persist).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+        await optedOut.optIn()
+        EventEmitter.prototype.emit.call(process, 'uncaughtExceptionMonitor', new Error('allowed'), 'uncaughtException')
+        await optedOut.flush()
+        expect(batches).toHaveLength(1)
+    })
+
+    it('synchronizes disabled state before renderer exception inspection or IPC without changing consent', async () => {
+        const owner = await start({ disabled: true, enableExceptionAutocapture: true })
+        const window = renderer(owner, 1)
+        const request = vi.fn((request: Request) => mock.handlers.get(COMMAND_CHANNEL)!(window.event, request))
+        const api = new RendererPostHog({ request, subscribe: () => () => {} }, { enableExceptionAutocapture: true })
+        const host = vi.fn()
+        globalThis.window.addEventListener('error', host)
+        try {
+            await api.ready()
+            const getter = vi.fn(() => new Error('disabled private error'))
+            const event = new ErrorEvent('error')
+            Object.defineProperty(event, 'error', { get: getter })
+            globalThis.window.dispatchEvent(event)
+            await api.captureException(new Error('disabled manual error'))
+            await Promise.resolve()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello'])
+            expect(getter).not.toHaveBeenCalled()
+            expect(host).toHaveBeenCalledTimes(1)
+            expect(api.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(owner.getState()).toMatchObject({ disabled: true, optedOut: false })
+            expect(api.hasOptedOutCapturing()).toBe(false)
+            await api.optIn()
+            await api.captureException(new Error('still disabled'))
+            await api.flush()
+            expect(request.mock.calls.map(([value]) => value.command.type)).toEqual(['hello', 'optIn', 'flush'])
+            expect(batches).toEqual([])
+        } finally {
+            api.dispose()
+            globalThis.window.removeEventListener('error', host)
+        }
+    })
+
+    it('checks consent again when queued exception work executes', async () => {
+        const owner = await start({ enableExceptionAutocapture: true })
+        const getter = vi.fn(() => {
+            throw new Error('must not inspect')
+        })
+        const optOut = owner.optOut()
+        const capture = owner.captureException(Object.defineProperty({}, 'message', { get: getter }))
+        await optOut
+        await expect(capture).rejects.toThrow('Stale PostHog identity')
+        expect(getter).not.toHaveBeenCalled()
+        expect(batches).toEqual([])
+    })
+
     it.each(['screen', 'set', 'setOnce'] as const)(
         'snapshots ready main %s properties at invocation',
         async (operation) => {
@@ -630,7 +943,6 @@ describe('main Electron client', () => {
         expect(results.map(({ payload }) => payload)).toEqual(Array.from({ length: count }, (_, index) => ({ index })))
         expect(payloadParses).toBeLessThanOrEqual(3 * count)
     })
-
     it('reports an unchanged malformed flag payload once before a callback captures the SDK error', async () => {
         const captures: Promise<void>[] = []
         const onError = vi.fn((error: unknown) => {
@@ -689,7 +1001,6 @@ describe('main Electron client', () => {
         await owner.reloadFeatureFlags()
         expect(onError).toHaveBeenCalledTimes(4)
     })
-
     it.each(['screen', 'set', 'setOnce'] as const)('does not inspect opted-out %s properties', async (operation) => {
         const owner = await start()
         await owner.optOut()
@@ -1095,7 +1406,6 @@ describe('main Electron client', () => {
         expect(await page.send({ type: 'hello' })).toMatchObject({ ok: true })
         expect(await page.send({ type: 'capture', event: 'after-new-handshake' })).toMatchObject({ ok: true })
     })
-
     it('counts cold start and aggregate focus transitions once across windows', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
         const owner = await start({ captureAppLifecycleEvents: true })

@@ -1,4 +1,12 @@
-import { app, powerMonitor, ipcMain, type BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import {
+    app,
+    powerMonitor,
+    ipcMain,
+    type BrowserWindow,
+    type IpcMainInvokeEvent,
+    type WebContents,
+    type UtilityProcess,
+} from 'electron'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import {
@@ -9,8 +17,11 @@ import {
     type FeatureFlagValue,
     type JsonType,
 } from '@posthog/core'
+import type { EventHint } from '@posthog/core/error-tracking'
 import { ElectronCore } from './client'
+import { startProcessExceptionAutocapture } from './exception-autocapture'
 import { ElectronStorage } from './storage'
+import { attachUtilityProcess, type UtilityRegistration } from '../utility/attach'
 import {
     COMMAND_CHANNEL,
     STATE_CHANNEL,
@@ -67,6 +78,7 @@ export interface PostHogOptions extends Pick<
     maxStorageBytes?: number
     maxQueueAgeMs?: number
     captureAppLifecycleEvents?: boolean
+    enableExceptionAutocapture?: boolean
     appBuild?: string
     onError?: (error: unknown) => void
 }
@@ -95,6 +107,7 @@ export class PostHog {
     private _core: ElectronCore
     private _ready: Promise<void>
     private _windows = new Map<number, RegisteredWindow>()
+    private _utilities = new Map<UtilityProcess, UtilityRegistration>()
     private _revision = 0
     private _generation = 0
     private _closed = false
@@ -108,6 +121,7 @@ export class PostHog {
     private _focusTimer?: ReturnType<typeof setTimeout>
     private _timer?: ReturnType<typeof setInterval>
     private _foreground = false
+    private _stopExceptionAutocapture?: () => void
     private _cancelReady!: () => void
     private _cleanups: (() => void)[] = []
     private _tail: Promise<unknown> = Promise.resolve()
@@ -180,6 +194,12 @@ export class PostHog {
         if (this._closing || this._core.isDisabled) return
         await app.whenReady()
         if (this._closing) return
+        if (!this._closing && this._options.enableExceptionAutocapture === true) {
+            this._stopExceptionAutocapture = startProcessExceptionAutocapture(
+                () => !this._closing && !this._core.isDisabled && !this._core.optedOut,
+                (error, properties, hint) => this._captureException(error, properties, hint)
+            )
+        }
         if (!this._core.isDisabled && this._options.captureAppLifecycleEvents !== false) {
             const previous = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppVersion)
             const previousBuild = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppBuild)
@@ -247,7 +267,8 @@ export class PostHog {
         operation: () => void | Promise<unknown>,
         generation?: number,
         authorize?: () => void,
-        changesConsent = false
+        changesConsent = false,
+        shouldRun?: () => boolean
     ): Promise<void> {
         if (this._closing) throw new Error('PostHog is shut down')
         if (changesConsent) this._pendingConsent++
@@ -258,6 +279,7 @@ export class PostHog {
                 if (generation !== undefined && generation !== this._generation)
                     throw new Error('Stale PostHog identity')
                 authorize?.()
+                if (shouldRun && !shouldRun()) return
                 await operation()
                 await this._core.persist()
                 this._scheduleState()
@@ -457,17 +479,28 @@ export class PostHog {
         await this._core.optOut()
     }
     captureException(error: unknown, properties?: Properties): Promise<void> {
-        return this._run(() => {
-            if (this._core.optedOut || this._core.isDisabled) return
-            try {
-                const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error)
-                this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
-                    _originatedFromCaptureException: true,
-                })
-            } catch (captureError) {
-                this._report(captureError)
-            }
-        })
+        return this._captureException(error, properties)
+    }
+    protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
+        const canCapture = (): boolean => !this._core.isDisabled && !this._core.optedOut
+        if (!canCapture()) return Promise.resolve()
+        return this._run(
+            () => {
+                if (this._core.optedOut || this._core.isDisabled) return
+                try {
+                    const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+                    this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
+                        _originatedFromCaptureException: true,
+                    })
+                } catch (captureError) {
+                    this._report(captureError)
+                }
+            },
+            this._generation,
+            undefined,
+            false,
+            canCapture
+        )
     }
     getDistinctId(): string {
         return this._core.getDistinctId()
@@ -591,10 +624,14 @@ export class PostHog {
         await this._core.persist()
         this._scheduleState()
     }
-    async flush(): Promise<void> {
+    flush(): Promise<void> {
+        return this._flush()
+    }
+    private async _flush(authorize?: () => void): Promise<void> {
         await this._ready
         await this._tail
         if (this._closed) return
+        authorize?.()
         await this._core.flush()
         await this._core.persist()
     }
@@ -615,6 +652,7 @@ export class PostHog {
             anonymousId: this._core.getAnonymousId(),
             sessionId: this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? '',
             optedOut: this._core.optedOut,
+            disabled: this._core.isDisabled,
             autocapture: this._core.getAutocaptureState(),
             featureFlags: flags,
             flagsLoaded: details !== undefined,
@@ -642,6 +680,7 @@ export class PostHog {
             if (serialized === this._lastPublished) return
             this._lastPublished = serialized
             state.revision = ++this._revision
+            for (const registered of this._utilities.values()) registered.publish(state)
             for (const registered of this._windows.values()) {
                 if (
                     !registered.contents.isDestroyed() &&
@@ -697,6 +736,20 @@ export class PostHog {
         window.on('blur', blur)
         this._windows.set(contents.id, registration)
         return dispose
+    }
+
+    /** Register only a trusted utilityProcess.fork() result, immediately after forking. */
+    registerUtilityProcess(child: UtilityProcess): () => void {
+        if (this._closing) throw new Error('PostHog is shut down')
+        if (this._utilities.has(child)) throw new Error('PostHog utility process is already registered')
+        const registration = attachUtilityProcess(
+            child,
+            (command, context, generation, authorize) => this._execute(command, context, generation, authorize),
+            () => this.getState(),
+            () => this._utilities.delete(child)
+        )
+        this._utilities.set(child, registration)
+        return registration.dispose
     }
 
     private _updateFocus(): void {
@@ -770,12 +823,17 @@ export class PostHog {
         generation: number,
         authorize: () => void
     ): Promise<void> {
-        if (command.type === 'hello') return
-        if (command.type === 'flush') return this.flush()
+        if (command.type === 'hello') return this._run(() => {}, undefined, authorize)
+        if (command.type === 'flush') return this._flush(authorize)
         if (command.type === 'reloadFeatureFlags') return this._reloadFeatureFlags(generation, authorize)
         // Withdrawal from any window must survive an immediate quit, like a main-process optOut().
         if (command.type === 'optOut') return this._changeConsent(true, undefined, authorize)
         if (command.type === 'loadAutocaptureConfig') {
+            await this._ready
+            await this._tail
+            if (this._closing) return
+            if (generation !== this._generation) throw new Error('Stale PostHog identity')
+            authorize()
             await this._core.loadAutocaptureConfig()
             if (!this._closing) await this._core.persist()
             this._scheduleState()
@@ -843,6 +901,9 @@ export class PostHog {
     shutdown(timeoutMs = 2000): Promise<void> {
         if (this._shutdownPromise) return this._shutdownPromise
         this._closing = true
+        for (const registration of this._utilities.values()) registration.dispose()
+        this._stopExceptionAutocapture?.()
+        this._stopExceptionAutocapture = undefined
         clearInterval(this._timer)
         clearTimeout(this._focusTimer)
         let timer: ReturnType<typeof setTimeout> | undefined
