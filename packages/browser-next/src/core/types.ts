@@ -89,7 +89,8 @@ export interface UrlSanitizationOptions {
     hash?: boolean
     /**
      * Rewrite a copy of the page URL before `path`, `query` and `hash` apply. Return an absolute URL or URL string.
-     * Throwing or returning anything else omits `$current_url`, `$host` and `$pathname` from the event.
+     * Throwing or returning anything else omits `$current_url`, `$host` and `$pathname` from the event. Replay can
+     * apply it to a URL it already returned, so sanitizing a sanitized URL must not change it.
      */
     sanitize?: (url: URL) => URL | string
 }
