@@ -4,6 +4,7 @@ import { createPostHog as createRoot } from '../src/composition/npm'
 import { errorTracking } from '../src/products/error-tracking/error-tracking'
 import type { ErrorTrackingExtension, ErrorTrackingOptions } from '../src/products/error-tracking/error-tracking'
 import type { BrowserFetch, IPostHog, PostHogOptions, RemoteConfig } from '../src/core/types'
+import { createLogger as createCommonLogger } from '@posthog/browser-common/utils/logger'
 import { MemoryStorage, createRemoteConfigFetch, localRemoteConfig } from './helpers'
 
 interface CapturedEvent {
@@ -493,6 +494,83 @@ describe('exception autocapture', () => {
             value: 'payment failed',
             mechanism: { synthetic: true, type: 'onconsole' },
         })
+    })
+
+    it('drops a console Error whose own stack is in a PostHog CDN script', async () => {
+        const sent: CapturedEvent[] = []
+        const consoleError = vi.fn()
+        pageConsole.error = consoleError
+        const { posthog } = await createWith(sent, { captureExceptions: { captureConsoleErrors: true } })
+        await waitForWrapped(() => pageConsole.error, consoleError)
+        const error = new TypeError('sdk failure')
+        error.stack =
+            'TypeError: sdk failure\n    at run (https://us-assets.i.posthog.com/static/browser/0/chunks/1.js:1:2)'
+        pageConsole.error('Request failed', error)
+
+        expect(await exceptions(posthog, sent)).toEqual([])
+        expect(consoleError).toHaveBeenCalledOnce()
+    })
+
+    // Console instrumentation installed after error tracking, such as an error monitor's breadcrumbs or session
+    // recording's rrweb console plugin, whose patch() marker points only at the method it replaced. The shared
+    // browser-common logger follows a single marker level, so its diagnostics reach error tracking's wrapper.
+    const consoleLayers: Array<[string, (below: typeof pageConsole.error) => typeof pageConsole.error]> = [
+        [
+            'a foreign wrapper',
+            (below) =>
+                function foreignWrapper(...args: unknown[]) {
+                    return below.apply(pageConsole, args)
+                },
+        ],
+        [
+            'an rrweb patch() layer',
+            (below) => {
+                const layer = function rrwebLayer(...args: unknown[]) {
+                    return below.apply(pageConsole, args)
+                }
+                Object.defineProperty(layer, '__rrweb_original__', { value: below })
+                return layer
+            },
+        ],
+    ]
+
+    it.each(consoleLayers)('ignores browser-common SDK diagnostics under %s', async (_, installLayer) => {
+        const sent: CapturedEvent[] = []
+        const consoleError = vi.fn()
+        pageConsole.error = consoleError
+        const { posthog } = await createWith(sent, { captureExceptions: { captureConsoleErrors: true } })
+        await waitForWrapped(() => pageConsole.error, consoleError)
+        pageConsole.error = installLayer(pageConsole.error)
+        ;(window as any).POSTHOG_DEBUG = true
+        try {
+            createCommonLogger('[AutoCapture]').error('Failed to capture event')
+        } finally {
+            delete (window as any).POSTHOG_DEBUG
+        }
+
+        expect(await exceptions(posthog, sent)).toEqual([])
+        expect(consoleError).toHaveBeenCalledWith('[PostHog.js] [AutoCapture]', 'Failed to capture event')
+    })
+
+    it('captures application console errors whose first argument only resembles an SDK prefix', async () => {
+        const sent: CapturedEvent[] = []
+        const consoleError = vi.fn()
+        pageConsole.error = consoleError
+        const { posthog } = await createWith(sent, { captureExceptions: { captureConsoleErrors: true } })
+        await waitForWrapped(() => pageConsole.error, consoleError)
+
+        pageConsole.error('[PostHog.js]x', 'detail')
+        pageConsole.error('[PostHogJS] boom', 'detail')
+        pageConsole.error('[PostHog.jsx] component', 'detail')
+        pageConsole.error('Checkout failed', 'order 42')
+
+        const captured = await exceptions(posthog, sent)
+        expect(captured.map((properties) => properties.$exception_list[0].value)).toEqual([
+            '[PostHog.js]x detail',
+            '[PostHogJS] boom detail',
+            '[PostHog.jsx] component detail',
+            'Checkout failed order 42',
+        ])
     })
 
     it('drops an unhandled error without an Error object located in a PostHog CDN script', async () => {
