@@ -2100,7 +2100,12 @@ export class PostHog implements PostHogInterface {
             }
         }
 
-        if (this.sessionRecording && !this._replayDebugPropertiesPaused && isReplayDebugEvent(event_name)) {
+        if (
+            this.sessionRecording &&
+            !this.sessionRecording.isReplayOff &&
+            !this._replayDebugPropertiesPaused &&
+            isReplayDebugEvent(event_name)
+        ) {
             this._replayDebugPropertiesPaused = true
             setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
         }
