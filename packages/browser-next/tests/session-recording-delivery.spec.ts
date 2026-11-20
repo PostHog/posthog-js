@@ -330,6 +330,25 @@ describe('snapshot delivery', () => {
             expect(sent.sort()).toEqual(messages.map((snapshot) => snapshot.uuid).sort())
         })
 
+        it('sends an over-budget backlog in a few requests rather than one per snapshot', async () => {
+            const { beacons, navigator, settled } = beaconRecorder()
+            const { delivery, requests } = setup(() => 200, { navigator, gzip: true })
+            const messages = Array.from({ length: 16 }, () => large('s1'))
+
+            for (const snapshot of messages) delivery.enqueue(snapshot, 10)
+            delivery.teardown()
+            await settled()
+            await vi.waitFor(() => expect(requests.length).toBeGreaterThan(0))
+            await delivery.flush()
+
+            expect(beacons.length + requests.length).toBeLessThanOrEqual(5)
+            const sent = [
+                ...beacons.flatMap((beacon) => ids(beacon.bytes)),
+                ...requests.flatMap((request) => ids(request.init.body as Uint8Array)),
+            ]
+            expect(sent.sort()).toEqual(messages.map((snapshot) => snapshot.uuid).sort())
+        })
+
         it('falls back to a regular request when the browser rejects the beacon', async () => {
             const { navigator } = beaconRecorder(() => false)
             const { delivery, requests } = setup(() => 200, { navigator, gzip: true })
