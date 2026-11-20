@@ -8,7 +8,9 @@ export const exceptionCases = [
 ]
 
 // The fixture throws these on purpose; any other page error or rejection still fails the cell.
-// Firefox also reports unhandled rejections as page errors.
+// The SDK's onunhandledrejection handler returns false, which cancels the event, so Chromium and
+// WebKit don't report the rejection as a page error; Playwright's Firefox reports it regardless.
+// A change to this list may indicate an SDK change rather than a browser change.
 export const expectedPageErrors = (scenario, engine) => {
     if (scenario !== 'exceptions') return []
     return engine === 'firefox' ? ['compat-uncaught', 'compat-rejection'] : ['compat-uncaught']
@@ -53,6 +55,7 @@ export function assertExceptionDelivery(network) {
     assert.equal(events.at(-1).properties.compat_source, 'manual', 'Lost manual exception properties')
 }
 
+// The app doesn't send temporaryToken; the core passes every field through, so it marks the credential handoff.
 export const toolbarState = {
     action: 'ph_authorize',
     token: 'phc_COMPAT',
@@ -61,8 +64,8 @@ export const toolbarState = {
     toolbarVersion: 'toolbar',
 }
 
-// Applications authorize the toolbar with a base64 JSON state in the URL hash.
-export const toolbarPath = () => `/#__posthog=${encodeURIComponent(btoa(JSON.stringify(toolbarState)))}`
+// The PostHog app authorizes the toolbar with URL-encoded JSON state in the URL hash.
+export const toolbarPath = () => `/#__posthog=${encodeURIComponent(JSON.stringify(toolbarState))}`
 
 // The PostHog app serves toolbar.js; this stand-in records the core's handoff.
 export const toolbarScript = `window.ph_load_toolbar = function (params, posthog) {

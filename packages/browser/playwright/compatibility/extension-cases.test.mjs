@@ -164,7 +164,8 @@ test('deliberate errors must occur exactly once while other errors remain unexpe
             () => withoutDeliberateErrors(observed, rejections, 'rejections'),
             /Missing or duplicate deliberate rejections/
         )
-    // Chromium and WebKit do not report rejections as page errors, so one there is unexpected.
+    // The SDK cancels the rejection event, so Chromium and WebKit don't report it as a page error;
+    // one there is unexpected.
     assert.deepEqual(
         withoutDeliberateErrors(
             errors('compat-uncaught', 'compat-rejection'),
