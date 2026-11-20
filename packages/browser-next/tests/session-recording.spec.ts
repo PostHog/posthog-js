@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 import { createPostHog as createRoot } from '../src/composition/npm/index'
+import { analyticsOf } from '../src/products/analytics/analytics-core'
 import { createSessionRecording } from '../src/products/session-recording/session-recording'
 import type { BrowserExtension } from '../src/core/context/browser-client'
 import type { IPostHog } from '../src/core/types'
 import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
 import {
     clients,
+    decompressEvent,
+    interact,
     isCompressed,
     snapshotEvents,
     MemoryStorage,
@@ -18,6 +21,7 @@ import {
     started,
     transport,
     typeInto,
+    type Transport,
 } from './session-recording-helpers'
 
 beforeEach(() => {
@@ -193,6 +197,47 @@ describe('session recording debug properties', () => {
         vi.advanceTimersByTime(30_000)
         expect(optionalKeys(captured(posthog, '$autocapture'))).toEqual(OPTIONAL)
     })
+
+    describe('while replay is intentionally off', () => {
+        const replayKeys = (properties: Record<string, unknown>): Record<string, unknown> =>
+            Object.fromEntries(
+                Object.entries(properties).filter(
+                    ([key]) =>
+                        key === '$recording_status' ||
+                        key.startsWith('$sdk_debug_replay_') ||
+                        key.startsWith('$sdk_debug_rrweb_') ||
+                        key === '$sdk_debug_recording_script_not_loaded' ||
+                        key === '$sdk_debug_session_start'
+                )
+            )
+
+        it('reports only the disabled status after stopSessionRecording(), and the diagnostics again on restart', async () => {
+            const { posthog, replay } = await setup({
+                eventTriggers: ['go'],
+                urlTriggers: [{ url: 'nomatch', matching: 'regex' }],
+            })
+            await started(replay)
+            expect(captured(posthog, 'before_stop').$sdk_debug_replay_event_trigger_status).toBe('trigger_pending')
+
+            replay.stopSessionRecording()
+            expect(replayKeys(captured(posthog, 'after_stop'))).toEqual({ $recording_status: 'disabled' })
+            expect(replayKeys(captured(posthog, '$pageview'))).toEqual({ $recording_status: 'disabled' })
+
+            replay.startSessionRecording()
+            await started(replay)
+            expect(captured(posthog, 'after_restart').$sdk_debug_replay_event_trigger_status).toBe('trigger_pending')
+        })
+
+        it('withholds replay diagnostics saved for the session while the project turns replay off', async () => {
+            const { posthog } = await setup(false)
+            posthog.registerForSession({
+                $sdk_debug_replay_event_trigger_status: 'trigger_pending',
+                $sdk_debug_recording_script_not_loaded: true,
+            })
+
+            expect(replayKeys(captured(posthog, '$pageview'))).toEqual({ $recording_status: 'disabled' })
+        })
+    })
 })
 
 describe('session recording delivery', () => {
@@ -252,6 +297,21 @@ describe('session recording delivery', () => {
 })
 
 describe('session recording attribution', () => {
+    const MARKER = 'recorded-before-reset'
+    const recordMarker = async (): Promise<void> => {
+        const marker = document.createElement('p')
+        marker.textContent = MARKER
+        document.body.appendChild(marker)
+        interact()
+        await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    const sentWithMarker = (network: Transport) =>
+        snapshotEvents(network).find((event) =>
+            JSON.stringify(
+                (event.properties.$snapshot_data as Array<Record<string, any>>).map(decompressEvent)
+            ).includes(MARKER)
+        )
+
     it('keeps the opening full snapshot when the person is identified before any interaction', async () => {
         const { replay, posthog, transport: network } = await setup()
         await started(replay)
@@ -281,6 +341,44 @@ describe('session recording attribution', () => {
             .filter((event) => event.properties.$session_id === posthog.session!.sessionId)
             .flatMap((event) => event.properties.$snapshot_data as Array<{ type: number }>)
         expect(next.filter((event) => event.type === 4)).toHaveLength(1)
+    })
+
+    it.each([
+        ['an event trigger', { eventTriggers: ['go'] }],
+        ['a URL trigger', { urlTriggers: [{ url: 'localhost', matching: 'regex' as const }] }],
+    ])('sends what a session activated by %s recorded before reset under the previous identity', async (_, config) => {
+        const { replay, posthog, transport: network } = await setup(config)
+        await started(replay)
+        interact()
+        posthog.capture('go')
+        await replay.flush?.()
+        expect(network.snapshots.length).toBeGreaterThan(0)
+        const { distinctId } = posthog
+        const sessionId = posthog.session?.sessionId
+
+        // the user does something, then logs out before the next flush
+        await recordMarker()
+        posthog.reset()
+        await replay.flush?.()
+
+        expect(sentWithMarker(network)?.properties).toMatchObject({ $session_id: sessionId, distinct_id: distinctId })
+    })
+
+    it('keeps replay recorded before reset under optOutByDefault while core still allows delivery', async () => {
+        const { replay, posthog, transport: network } = await setup({}, {}, { optOutByDefault: true })
+        posthog.optIn()
+        await started(replay)
+        const { distinctId } = posthog
+        const sessionId = posthog.session?.sessionId
+        await recordMarker()
+        // reset clears the opt-in, so consent returns to its default denial; core decides whether data recorded
+        // before that denial may still be delivered (a cleared choice keeps it, an explicit opt-out does not)
+        vi.spyOn(analyticsOf(posthog)!._core, '_canDeliver').mockReturnValue(true)
+
+        posthog.reset()
+        await replay.flush?.()
+
+        expect(sentWithMarker(network)?.properties).toMatchObject({ $session_id: sessionId, distinct_id: distinctId })
     })
 })
 
