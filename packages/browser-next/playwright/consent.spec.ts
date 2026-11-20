@@ -80,3 +80,21 @@ test('a rapid cross-tab denial purges queued work before a later grant', async (
     await first.evaluate(() => window.consentHarness.flush())
     expect(await first.evaluate(() => window.consentHarness.requests())).toBe(0)
 })
+
+test('a reset in one tab keeps work another tab captured with consent', async ({ context }) => {
+    const resetting = await context.newPage()
+    const observer = await context.newPage()
+    await Promise.all([resetting.goto('/'), observer.goto('/')])
+
+    await resetting.evaluate(() => window.optOutByDefaultHarness.optIn())
+    await expect.poll(() => observer.evaluate(() => window.optOutByDefaultHarness.hasOptedOut())).toBe(false)
+    await observer.evaluate(() => window.optOutByDefaultHarness.capture('before-reset'))
+
+    await resetting.evaluate(() => window.optOutByDefaultHarness.reset())
+    await expect.poll(() => observer.evaluate(() => window.optOutByDefaultHarness.clearedChoiceEvents())).toBe(1)
+    await observer.evaluate(async () => {
+        await window.optOutByDefaultHarness.capture('after-reset')
+        await window.optOutByDefaultHarness.flush()
+    })
+    expect(await observer.evaluate(() => window.optOutByDefaultHarness.delivered())).toEqual(['before-reset'])
+})

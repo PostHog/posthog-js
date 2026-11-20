@@ -121,7 +121,7 @@ describe('clearing the consent choice', () => {
         expect(sent.map((event) => event.event)).toEqual(['after_clear'])
     })
 
-    it('returns to opted out when capture is opted out by default', async () => {
+    it('returns to opted out when capture is opted out by default and delivers events queued before it', async () => {
         const sent: SentEvent[] = []
         const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
         posthog.optIn()
@@ -130,7 +130,7 @@ describe('clearing the consent choice', () => {
         expect(posthog.hasOptedOut()).toBe(true)
         posthog.capture('after_clear')
         await posthog.flush()
-        expect(sent).toEqual([])
+        expect(sent.map((event) => event.event)).toEqual(['queued_before_clear'])
     })
 
     it('publishes the consent transition', async () => {
@@ -159,6 +159,19 @@ describe('clearing the consent choice', () => {
             { current: 'denied', previous: 'implicit' },
             { current: 'implicit', previous: 'denied' },
         ])
+    })
+
+    it('keeps events another client queued with consent when this client resets', async () => {
+        const storage = new SubscribableStorage()
+        const resetting = await create(storage, [], { optOutByDefault: true })
+        const sent: SentEvent[] = []
+        const observer = await create(storage, sent, { optOutByDefault: true })
+        resetting.optIn()
+        observer.capture('queued_before_reset')
+        resetting.reset()
+        observer.capture('after_reset')
+        await observer.flush()
+        expect(sent.map((event) => event.event)).toEqual(['queued_before_reset'])
     })
 
     it('keeps the cleared choice in memory when storage removal fails', async () => {

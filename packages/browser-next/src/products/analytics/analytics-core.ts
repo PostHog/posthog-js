@@ -65,7 +65,7 @@ const eventTimestamp = (timestamp: Date | undefined): string => {
 }
 
 /** Snapshots JSON options so later caller mutations and hostile getters cannot affect identity operations. */
-export const snapshotOptions = <T extends object>(options: T | undefined): Partial<T> => {
+const snapshotOptions = <T extends object>(options: T | undefined): Partial<T> => {
     try {
         const snapshot: unknown = JSON.parse(JSON.stringify(options ?? {}))
         return typeof snapshot === 'object' && snapshot !== null ? (snapshot as Partial<T>) : {}
@@ -497,9 +497,8 @@ export class Analytics {
         if (!state.adoptStoredIdentity()) return
         if (!state.isIdentified) return this._resetIdentityState()
         this._lastPersonProperties = undefined
-        const distinctId = state.distinctId
         this._identifyPublisher.publish({
-            distinctId,
+            distinctId: state.distinctId,
             previousDistinctId,
             wasIdentified,
             set: undefined,

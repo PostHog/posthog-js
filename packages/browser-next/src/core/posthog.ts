@@ -119,6 +119,8 @@ class PostHog implements IPostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     _immediateAuthority = {}
+    /** Whether work admitted before a cleared consent choice may still deliver while consent rests at its default denial. */
+    private _clearedChoiceRetainsWork = false
     private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
     _disposed = false
@@ -188,11 +190,12 @@ class PostHog implements IPostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            (consent, previous) => {
-                if (consent === 'denied') {
-                    this._immediateAuthority = {}
-                    this._analytics?.purge()
-                }
+            (consent, previous, explicit) => {
+                // Only an explicit opt-out purges. A cleared choice (`reset()` or `clearOptInOut()`, here or in another
+                // context) affects future events only, so its return to a default denial keeps admitted work.
+                if (consent !== 'denied') this._clearedChoiceRetainsWork = false
+                else if (!explicit) this._clearedChoiceRetainsWork = true
+                else this._revokeAdmittedWork()
                 this._consentChangePublisher.publish({ current: consent, previous })
             },
             options.cookie
@@ -328,6 +331,8 @@ class PostHog implements IPostHog {
     }
 
     reset(options?: boolean | ResetOptions): void {
+        // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
+        if (!this._canMutate()) return
         const bootstrap = this._analytics.reset(options)
         // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android.
         this.clearOptInOut()
@@ -424,7 +429,12 @@ class PostHog implements IPostHog {
     }
 
     optOut(): void {
-        if (!this._disposed && this._state.optOut()) {
+        if (this._disposed) {
+            return
+        }
+        // Consent is already denied after a cleared choice, so an explicit denial purges the work it kept.
+        if (this._clearedChoiceRetainsWork) this._revokeAdmittedWork()
+        if (this._state.optOut()) {
             this._dispatchConsentChange()
         }
     }
@@ -818,7 +828,17 @@ class PostHog implements IPostHog {
     }
 
     _canDeliver(): boolean {
-        return !this._disposed && !this._blocked && !this.hasOptedOut()
+        return (
+            !this._disposed &&
+            !this._blocked &&
+            (!this.hasOptedOut() || (this._clearedChoiceRetainsWork && this._state.consentChoice === undefined))
+        )
+    }
+
+    private _revokeAdmittedWork(): void {
+        this._clearedChoiceRetainsWork = false
+        this._immediateAuthority = {}
+        this._analytics?.purge()
     }
 }
 

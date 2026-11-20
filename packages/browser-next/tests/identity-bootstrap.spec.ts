@@ -201,6 +201,96 @@ describe('reset options', () => {
         expect(posthog.getExplicitConsentStatus()).toBe('pending')
         expect(posthog.hasOptedOut()).toBe(false)
     })
+
+    it('delivers events captured before it when capture is opted out by default', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
+        posthog.optIn()
+        posthog.capture('logged_out')
+        posthog.reset()
+        posthog.capture('after_reset')
+        await posthog.flush()
+        expect(posthog.hasOptedOut()).toBe(true)
+        expect(sent.map((event) => event.event)).toEqual(['logged_out'])
+    })
+
+    it('delivers events captured before it when consent is granted again before flush', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
+        posthog.optIn()
+        posthog.capture('logged_out')
+        posthog.reset()
+        posthog.optIn()
+        await posthog.flush()
+        expect(sent.map((event) => event.event)).toEqual(['logged_out'])
+    })
+
+    it('purges events captured before it when the user then opts out', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })
+        posthog.optIn()
+        posthog.capture('logged_out')
+        posthog.reset()
+        posthog.optOut()
+        posthog.optIn()
+        await posthog.flush()
+        expect(sent).toEqual([])
+    })
+
+    it('rejects group identify while only events captured before it may deliver', async () => {
+        const storage = new MemoryStorage()
+        const sent: SentEvent[] = []
+        const posthog = await create(storage, sent, { optOutByDefault: true })
+        posthog.optIn()
+        posthog.capture('logged_out')
+        posthog.reset()
+        posthog.groupIdentify('company', 'acme', { name: 'Acme' })
+        await posthog.flush()
+        expect(sent.map((event) => event.event)).toEqual(['logged_out'])
+        expect(JSON.stringify(storedState(storage).extensionData ?? {})).not.toContain('personProcessingEnabled')
+    })
+
+    it('keeps the stored consent choice while shutdown is pending', async () => {
+        const storage = new MemoryStorage()
+        const posthog = await createClient(storage, [], { fetch: () => new Promise<Response>(() => {}) })
+        posthog.identify('user-a')
+        posthog.optOut()
+        void posthog.shutdown()
+        posthog.reset()
+        expect(storage.getItem(CONSENT_KEY)).toBe('0')
+        expect(storedState(storage).distinctId).toBe('user-a')
+    })
+})
+
+describe('generated session IDs', () => {
+    const versionOf = (uuid: string | undefined): string | undefined => uuid?.replace(/-/g, '')[12]
+
+    it('are UUIDv7 IDs that encode the session start', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent)
+        posthog.capture('first')
+        await posthog.flush()
+        const sessionId = sent[0]?.session_id
+        expect(versionOf(sessionId)).toBe('7')
+        expect(parseInt(sessionId!.replace(/-/g, '').slice(0, 12), 16)).toBe(posthog.session?.sessionStartTimestamp)
+    })
+
+    it('generates UUIDv7 window IDs', async () => {
+        const posthog = await create(new MemoryStorage())
+        posthog.capture('first')
+        expect(versionOf(posthog.session?.windowId)).toBe('7')
+    })
+
+    it('can be continued by another client through bootstrap', async () => {
+        const first = await create(new MemoryStorage())
+        first.capture('on_first')
+        const sessionId = first.session!.sessionId
+        const sent: SentEvent[] = []
+        const second = await create(new MemoryStorage(), sent, { bootstrap: { sessionId } })
+        second.capture('on_second')
+        await second.flush()
+        expect(sent[0]?.session_id).toBe(sessionId)
+    })
 })
 
 describe('setup bootstrap', () => {
