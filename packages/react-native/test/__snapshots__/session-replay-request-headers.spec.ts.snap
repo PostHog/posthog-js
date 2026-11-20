@@ -62,7 +62,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
         "captureLog": true,
         "captureNetworkTelemetry": false,
         "captureTouches": true,
-        "iOSCaptureMethod": "background",
+        "iOSCaptureMethod": "standard",
         "iOSdebouncerDelayMs": 1000,
         "maskAllImages": false,
         "maskAllSandboxedViews": true,

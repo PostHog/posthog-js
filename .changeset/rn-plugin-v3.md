@@ -5,7 +5,7 @@
 Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md) for upgrade steps
 
 - **Breaking:** require React Native 0.75 or later
-- **Breaking:** require iOS 15 or later and macOS 11 or later
+- **Breaking:** require iOS 15 or later and macOS 12 or later
 - **Breaking:** require posthog-ios 4.0, which needs Xcode 26
 - **Breaking:** require posthog-android 4.0
 - Fail the Android build instead of crashing at runtime when another dependency would raise `posthog-android` past 4.x
@@ -19,6 +19,7 @@ Release `@posthog/react-native-plugin` 3.0. See the [migration guide](https://gi
 - **Breaking:** drop native events whose distinct ID is empty, whitespace-only or over 200 bytes, instead of shortening the ID
 - **Breaking:** omit `null` property values from native iOS events and keep `null` list elements in native Android events
 - **Breaking:** report `$locale` on native events as the device's preferred language, as a full language tag with region, such as `de-CH` instead of `de`, and as `he`, `id` and `yi` instead of the legacy `iw`, `in` and `ji` on Android. On iOS, an English-only app on a French device sends `fr-FR` instead of `en`
+- **Breaking:** ignore `screenshotModeBackgroundCapture` on iOS, because posthog-ios 4.0 removed background screenshot capture. Remove it, or set `iOSCaptureMethod: 'gpu'`
 - Always record session replay as masked screenshots on iOS and Android, the mode the plugin already used
 - Accept `projectToken` as well as `apiKey` in `setup()` options on Android
 - Pause iOS native uploads (session replay, native crash reports) while the device is on cellular and cellular data is turned off for the app, instead of sending requests that fail

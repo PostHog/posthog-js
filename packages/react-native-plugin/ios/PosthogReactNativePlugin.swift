@@ -408,18 +408,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
 
             config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
-            // posthog-react-native before iOSCaptureMethod only sends the boolean.
-            switch sdkReplayConfig["iOSCaptureMethod"] as? String {
-            case "gpu":
-                config.sessionReplayConfig.captureMethod = .gpu
-            case "background":
-                config.sessionReplayConfig.captureMethod = .background
-            case "standard":
-                config.sessionReplayConfig.captureMethod = .standard
-            default:
-                let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-                config.sessionReplayConfig.captureMethod = screenshotModeBackgroundCapture ? .background : .standard
-            }
+            // posthog-ios 4.0 removed background capture, so screenshotModeBackgroundCapture is ignored.
+            config.sessionReplayConfig.captureMethod = sdkReplayConfig["iOSCaptureMethod"] as? String == "gpu" ? .gpu : .standard
 
             let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
             if !endpoint.isEmpty {
