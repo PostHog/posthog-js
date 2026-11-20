@@ -603,4 +603,24 @@ describe('cookie persistence', () => {
             options: { process_person_profile: true },
         })
     })
+
+    it.each([
+        ['$groupidentify', (client: IPostHog) => client.groupIdentify('company', 'acme', { name: 'Acme' })],
+        ['$create_alias', (client: IPostHog) => client.alias('alias-1')],
+    ])('sends %s with person processing after an open tab adopts another subdomain reset', async (event, call) => {
+        const sent: SentEvent[] = []
+        const app = await create(new MemoryStorage(), sent)
+        app.capture('baseline')
+        visit('www.example.com')
+        const www = await create(new MemoryStorage())
+        www.reset()
+
+        visit('app.example.com')
+        call(app)
+        await app.flush()
+        expect(sent.find((sentEvent) => sentEvent.event === event)).toMatchObject({
+            distinct_id: www.distinctId,
+            options: { process_person_profile: true },
+        })
+    })
 })

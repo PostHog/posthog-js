@@ -47,6 +47,6 @@ export const setInternalOrTestUser = (posthog: IPostHog): void =>
 /** Links another distinct ID to the current person without changing the current identity. */
 export const alias = (posthog: IPostHog, aliasId: string): void => {
     const analytics = analyticsOf(posthog)
-    if (!analytics || !isValidDistinctId(aliasId) || !posthog.canCapture) return
+    if (!analytics || !isValidDistinctId(aliasId) || !posthog.canCapture || !analytics._canMutate()) return
     if (analytics._requirePersonProcessing()) analytics._capture('$create_alias', { alias: aliasId })
 }
