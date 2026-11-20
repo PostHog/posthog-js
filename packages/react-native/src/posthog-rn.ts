@@ -31,6 +31,7 @@ import {
   type SendBatchOutcome,
 } from '@posthog/core'
 import {
+  AI_CAPTURE_ENDPOINT,
   ANALYTICS_CAPTURE_ENDPOINT,
   CaptureError,
   type CaptureDroppedEvent,
@@ -48,11 +49,20 @@ import {
   createLogsStorage,
   createEventsMemoryStorage,
   createLogsMemoryStorage,
+  createAiStorage,
+  createAiMemoryStorage,
 } from './storage'
+import {
+  CaptureAiLane,
+  CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES,
+  CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE,
+  CAPTURE_AI_DEFAULT_TIMEOUT_MS,
+} from './capture-ai-lane'
 import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
+import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
@@ -311,6 +321,44 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   logs?: PostHogLogsConfig
 
   /**
+   * How {@link PostHog.captureAi} request bodies are compressed, separately from
+   * `disableCompression`. `'gzip'` is used only where the runtime provides `CompressionStream`;
+   * elsewhere bodies are sent uncompressed.
+   *
+   * @default 'gzip'
+   */
+  captureAiCompression?: 'gzip' | 'none'
+
+  /**
+   * Maximum number of {@link PostHog.captureAi} events kept in their queue before the oldest are
+   * dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps
+   * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
+   *
+   * Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is
+   * killed, older events and an event over 5 MiB are lost.
+   *
+   * @default 100
+   */
+  captureAiMaxQueueSize?: number
+
+  /**
+   * Timeout, in milliseconds, of a {@link PostHog.captureAi} request. AI requests can carry several
+   * MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default.
+   *
+   * @default 60000
+   */
+  captureAiRequestTimeoutMs?: number
+
+  /**
+   * Maximum size, in bytes, of a serialized {@link PostHog.captureAi} event. The SDK drops a larger
+   * event and `captureAi()` returns `undefined`. Use it to lower the limit: PostHog drops AI events
+   * whose properties are over 8 MiB, so a larger value, or a value of `0` or less, uses the default.
+   *
+   * @default 8454144 (8 MiB plus 64 KiB for the rest of the event)
+   */
+  captureAiMaxEventBytes?: number
+
+  /**
    * Overrides the language used when rendering translated survey copy.
    * When unset, the SDK falls back to the persisted person property `language`
    * and then the device locale.
@@ -375,6 +423,12 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
+/**
+ * Marks a `captureAi()` event so `enqueue()` routes it to the AI lane. `_admission` gets the uuid of
+ * the event the lane queued, per call, so a nested `captureAi()` can't overwrite it.
+ */
+type CaptureAiOptions = PostHogCaptureOptions & { _captureAi?: true; _admission?: { uuid?: string } }
+
 // sdk-specs event-batcher: capture v1 requests carry at most 5 MiB of event bytes.
 const CAPTURE_V1_BATCH_BYTE_TARGET = 5 * 1024 * 1024
 
@@ -382,6 +436,13 @@ export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
+  private _aiStorage: PostHogRNStorage
+  private _aiLane: CaptureAiLane
+  // Set while `_shutdown` runs: core's drain loop calls `flush()`, and the AI lane drains on its own there.
+  private _shuttingDown = false
+  private _captureAiSender?: V1CaptureSender
+  private _captureAiCompression: 'gzip' | 'none' = 'gzip'
+  private _captureAiTimeoutMs = CAPTURE_AI_DEFAULT_TIMEOUT_MS
   private _appProperties: PostHogCustomAppProperties = {}
   private _appLanguage: string | undefined
   private _currentSessionId?: string | undefined
@@ -457,6 +518,8 @@ export class PostHog extends PostHogCore {
   private _captureResendTimer?: ReturnType<typeof setTimeout>
   // Set once shutdown() returns, so a capture response that lands later schedules no resend.
   private _captureShutDown = false
+  // AI events emitted to listeners; debug mode logs only their name and uuid, since they carry prompts and outputs.
+  private _emittedAiEvents = new WeakSet<object>()
 
   /**
    * The project token the client was created with.
@@ -563,9 +626,12 @@ export class PostHog extends PostHogCore {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
+      // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
+      // database at 6 MB by default, so an AI queue there could break every other key's writes.
+      this._aiStorage = theStorage === OptionalAsyncStorage ? createAiMemoryStorage() : createAiStorage(theStorage)
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
-      const preloads: Array<['events' | 'logs', Promise<void>]> = []
+      const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []
       if (this._eventsStorage.preloadPromise) {
         void this._eventsStorage.preloadPromise.catch(() => {
           this._eventsStoragePreloadSucceeded = false
@@ -574,6 +640,9 @@ export class PostHog extends PostHogCore {
       }
       if (this._logsStorage.preloadPromise) {
         preloads.push(['logs', this._logsStorage.preloadPromise])
+      }
+      if (this._aiStorage.preloadPromise) {
+        preloads.push(['AI events', this._aiStorage.preloadPromise])
       }
       if (preloads.length > 0) {
         storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
@@ -587,6 +656,11 @@ export class PostHog extends PostHogCore {
     } else {
       this._eventsStorage = createEventsMemoryStorage()
       this._logsStorage = createLogsMemoryStorage()
+      this._aiStorage = createAiMemoryStorage()
+    }
+    this._aiLane = this._createCaptureAiLane(options)
+    if (this.isDisabled) {
+      this._aiLane.stop()
     }
 
     // Seed from sync `AppState.currentState` so the very first capture (which
@@ -664,6 +738,7 @@ export class PostHog extends PostHogCore {
       // Persist pending writes before the OS may suspend the process.
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
+      void this._aiStorage.waitForPersist()
 
       if (state === 'active') {
         this.getSessionId()
@@ -852,11 +927,17 @@ export class PostHog extends PostHogCore {
       nativeSessionOwner = undefined
     }
     const start = Date.now()
+    this._shuttingDown = true
     try {
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
       const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
-      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(remainingMs)])
+      await Promise.all([
+        this._logs.shutdown(logsBudgetMs),
+        super._shutdown(remainingMs),
+        this.isDisabled ? Promise.resolve() : raceWithTimeout(this._aiLane.shutdown(), remainingMs),
+      ])
     } finally {
+      this._aiLane.stop()
       // The final flush can schedule another resend; nothing may send after shutdown.
       if (this._captureResendTimer) {
         clearTimeout(this._captureResendTimer)
@@ -870,7 +951,11 @@ export class PostHog extends PostHogCore {
       // Sync drain runs inside waitForPersist before the race below; the race
       // only bounds the await for in-flight async writes.
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
-      const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+      const drain = Promise.all([
+        this._eventsStorage.waitForPersist(),
+        this._logsStorage.waitForPersist(),
+        this._aiStorage.waitForPersist(),
+      ])
       await raceWithTimeout(drain, remainingMs)
     }
   }
@@ -892,6 +977,13 @@ export class PostHog extends PostHogCore {
       return ''
     }
     return `${this.getLibraryId()}/${this.getLibraryVersion()}`
+  }
+
+  protected describeDebugPayload(payload: any): any {
+    if (payload && typeof payload === 'object' && this._emittedAiEvents.has(payload)) {
+      return { event: payload.event, uuid: payload.uuid }
+    }
+    return super.describeDebugPayload(payload)
   }
 
   protected getCustomHeaders(): { [key: string]: string } {
@@ -979,7 +1071,8 @@ export class PostHog extends PostHogCore {
     if (Date.now() < this._captureResendAt) {
       return Promise.resolve()
     }
-    return super.flushAutomatic()
+    // Analytics only: the AI lane runs its own timer and resend wait.
+    return super.flush()
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
@@ -1004,18 +1097,40 @@ export class PostHog extends PostHogCore {
   }
 
   private _getCaptureV1Sender(): V1CaptureSender {
-    this._captureV1Sender ??= new V1CaptureSender(
+    this._captureV1Sender ??= this._newCaptureV1Sender(
+      ANALYTICS_CAPTURE_ENDPOINT,
+      this.disableCompression ? 'none' : 'gzip',
+      this.requestTimeout
+    )
+    return this._captureV1Sender
+  }
+
+  private _getCaptureAiSender(): V1CaptureSender {
+    this._captureAiSender ??= this._newCaptureV1Sender(
+      AI_CAPTURE_ENDPOINT,
+      this._captureAiCompression,
+      this._captureAiTimeoutMs
+    )
+    return this._captureAiSender
+  }
+
+  private _newCaptureV1Sender(
+    path: typeof ANALYTICS_CAPTURE_ENDPOINT | typeof AI_CAPTURE_ENDPOINT,
+    compression: 'gzip' | 'none',
+    requestTimeoutMs: number
+  ): V1CaptureSender {
+    return new V1CaptureSender(
       {
         host: this.host,
-        path: ANALYTICS_CAPTURE_ENDPOINT,
+        path,
         apiKey: this.projectToken,
         libraryId: this.getLibraryId(),
         libraryVersion: this.getLibraryVersion(),
         userAgent: this.getCustomUserAgent() || undefined,
         extraHeaders: this.getCustomHeaders(),
         historicalMigration: this.historicalMigration,
-        compression: this.disableCompression ? 'none' : 'gzip',
-        requestTimeoutMs: this.requestTimeout,
+        compression,
+        requestTimeoutMs,
         // Resends wait between flushes instead, so a failure never holds a flush open.
         maxRetries: 0,
         isDebug: this.isDebug,
@@ -1030,7 +1145,74 @@ export class PostHog extends PostHogCore {
         },
       }
     )
-    return this._captureV1Sender
+  }
+
+  private _createCaptureAiLane(options?: PostHogOptions): CaptureAiLane {
+    const positive = (value: number | undefined): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+    const compression = options?.captureAiCompression
+    if (compression === 'gzip' || compression === 'none') {
+      this._captureAiCompression = compression
+    } else if (compression !== undefined) {
+      this._logger.warn(`captureAiCompression "${String(compression)}" is not supported; using gzip.`)
+    }
+    this._captureAiTimeoutMs = positive(options?.captureAiRequestTimeoutMs) ?? CAPTURE_AI_DEFAULT_TIMEOUT_MS
+    let maxEventBytes = positive(options?.captureAiMaxEventBytes) ?? CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES
+    if (maxEventBytes > CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES) {
+      this._logger.warn(
+        `captureAiMaxEventBytes ${maxEventBytes} is over the ${CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES}-byte limit; using the limit.`
+      )
+      maxEventBytes = CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES
+    }
+    return new CaptureAiLane(
+      this._aiStorage,
+      {
+        flushAt: this.flushAt,
+        maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? 100),
+        flushIntervalMs: options?.flushInterval ?? 10000,
+        maxQueueSize: Math.max(
+          1,
+          Math.floor(positive(options?.captureAiMaxQueueSize) ?? CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE)
+        ),
+        maxEventBytes: Math.floor(maxEventBytes),
+      },
+      () => this._getCaptureAiSender(),
+      this._logger
+    )
+  }
+
+  protected enqueue(type: string, message: any, options?: PostHogCaptureOptions, explicitRoute?: string): void {
+    if ((options as CaptureAiOptions | undefined)?._captureAi) {
+      this._enqueueAi(type, message, options)
+      return
+    }
+    super.enqueue(type, message, options, explicitRoute)
+  }
+
+  private _enqueueAi(type: string, message: any, options?: PostHogCaptureOptions): void {
+    this.wrap(() => {
+      if (this.optedOut) {
+        return
+      }
+      const processed = this.processBeforeEnqueue(this.prepareMessage(message, options), true)
+      if (processed === null) {
+        return
+      }
+      const normalized = this.normalizeMessage(processed)
+      if (this._aiLane.enqueue(normalized)) {
+        const admission = (options as CaptureAiOptions | undefined)?._admission
+        if (admission) {
+          admission.uuid = normalized.uuid as string
+        }
+        try {
+          this._maybeActivateEventTrigger(normalized.event)
+        } catch (e) {
+          this._logger.error(`Session replay event trigger check failed: ${e}.`)
+        }
+        this._emittedAiEvents.add(normalized)
+        this._events.emit(type, normalized)
+      }
+    })
   }
 
   getCommonEventProperties(): PostHogEventProperties {
@@ -1527,7 +1709,67 @@ export class PostHog extends PostHogCore {
    * still resolves.
    */
   flush(): Promise<void> {
-    return super.flush()
+    // Signal both lanes before waiting on either.
+    // Waits for initialization so AI events captured before it are queued first.
+    const aiFlush =
+      this.isDisabled || this._shuttingDown ? Promise.resolve() : this._initPromise.then(() => this._aiLane.flush())
+    return Promise.all([super.flush(), aiFlush]).then(() => undefined)
+  }
+
+  /**
+   * Captures an AI observability event, such as `$ai_generation`, `$ai_span`, `$ai_trace` or
+   * `$ai_embedding`, and sends it to PostHog's AI endpoint (`/i/v1/ai/events`), which accepts much
+   * larger events than {@link PostHog.capture}.
+   *
+   * Takes the same arguments as `capture()` and goes through the same `before_send`. The event is
+   * queued separately from other events and sent unchanged: the SDK doesn't redact or truncate
+   * prompts, outputs or media. An event over `captureAiMaxEventBytes` (8 MiB plus 64 KiB by default)
+   * is dropped. PostHog drops an event sent here whose name doesn't start with `$ai_`. `capture()`
+   * never sends events here, even ones named `$ai_*`.
+   *
+   * AI events use `flushAt`, `maxBatchSize` and `flushInterval` like other events, and
+   * `captureAiCompression`, `captureAiMaxQueueSize` and `captureAiRequestTimeoutMs` instead of the analytics
+   * settings. Requests carry up to about 5 MiB of events, and the SDK sends as soon as that much is
+   * queued. Up to 50 MiB of AI events are kept; beyond that, the oldest are dropped.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * posthog.captureAi('$ai_generation', {
+   *   $ai_trace_id: traceId,
+   *   $ai_model: 'gpt-4o',
+   *   $ai_provider: 'openai',
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param event The AI event name, such as `$ai_generation`
+   * @param properties Properties attached only to this event
+   * @param options Same options as `capture()`
+   * @returns The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled or opted out,
+   * the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
+   * finishes initializing it returns the UUID, and those checks run once initialization completes.
+   */
+  captureAi(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): string | undefined {
+    // Before initialization, consent isn't loaded yet; the lane checks it once initialization completes.
+    if (this.isDisabled || (this._isInitialized && this.optedOut)) {
+      return undefined
+    }
+    if (typeof event !== 'string' || event === '') {
+      this._logger.warn('captureAi() needs a non-empty event name; the event was not captured.')
+      return undefined
+    }
+    if (!event.startsWith('$ai_')) {
+      this._logger.debug(`captureAi() called with non-AI event "${event}"; PostHog drops it on the AI endpoint.`)
+    }
+    const uuid = (typeof options?.uuid === 'string' ? canonicalizeUuid(options.uuid) : undefined) ?? uuidv7()
+    const initialized = this._isInitialized
+    const admission: { uuid?: string } = {}
+    const aiOptions: CaptureAiOptions = { ...options, uuid, _captureAi: true, _admission: admission }
+    this.capture(event, properties, aiOptions)
+    return initialized ? admission.uuid : uuid
   }
 
   /**
@@ -3844,7 +4086,11 @@ export class PostHog extends PostHogCore {
    * debug keys and gates the optional bundle to one accepted eligible event per
    * REPLAY_DEBUG_PROPERTIES_INTERVAL_MS.
    */
-  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+  // `deferEventTrigger` leaves the replay event trigger to the caller, which checks it once the event is queued.
+  protected processBeforeEnqueue(
+    message: PostHogEventProperties,
+    deferEventTrigger = false
+  ): PostHogEventProperties | null {
     this._stampReplayDebugProperties(message)
     const claimedBundle = this._claimReplayDebugBundle(message)
     let accepted = false
@@ -3884,7 +4130,9 @@ export class PostHog extends PostHogCore {
         observation.queued = !suppress
       }
       try {
-        this._maybeActivateEventTrigger(processed?.['event'])
+        if (!deferEventTrigger) {
+          this._maybeActivateEventTrigger(processed?.['event'])
+        }
         this._refreshStaleNativeStatus()
       } catch (e) {
         this._logger.error(`Session replay event trigger check failed: ${e}.`)

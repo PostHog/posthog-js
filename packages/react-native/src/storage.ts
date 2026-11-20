@@ -6,6 +6,7 @@ import { PostHogCustomStorage } from './types'
 // instance bound to one of these files.
 const EVENTS_STORAGE_FILE = '.posthog-rn.json'
 const LOGS_STORAGE_FILE = '.posthog-rn-logs.json'
+const AI_STORAGE_FILE = '.posthog-rn-ai.json'
 const POSTHOG_STORAGE_VERSION = 'v1'
 
 // Window over which storage mutations coalesce into one disk write. The
@@ -222,6 +223,9 @@ export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
 
     super(storage, storageKey)
   }
+
+  // The memory cache is the only copy, so serializing it would only hold a second one in memory.
+  persist(): void {}
 }
 
 // Factory functions that bind the storage instance to the correct SDK-internal
@@ -235,10 +239,18 @@ export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogR
   return new PostHogRNStorage(customStorage, LOGS_STORAGE_FILE)
 }
 
+export function createAiStorage(customStorage: PostHogCustomStorage): PostHogRNStorage {
+  return new PostHogRNStorage(customStorage, AI_STORAGE_FILE)
+}
+
 export function createEventsMemoryStorage(): PostHogRNStorage {
   return new PostHogRNSyncMemoryStorage(EVENTS_STORAGE_FILE)
 }
 
 export function createLogsMemoryStorage(): PostHogRNStorage {
   return new PostHogRNSyncMemoryStorage(LOGS_STORAGE_FILE)
+}
+
+export function createAiMemoryStorage(): PostHogRNStorage {
+  return new PostHogRNSyncMemoryStorage(AI_STORAGE_FILE)
 }
