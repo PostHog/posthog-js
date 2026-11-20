@@ -121,6 +121,8 @@ class PostHog implements IPostHog {
     _immediateAuthority = {}
     /** Whether work admitted before a cleared consent choice may still deliver while consent rests at its default denial. */
     private _clearedChoiceRetainsWork = false
+    /** Consent changes raised during `reset()`, published in order once the new identity and `onReset` are done. */
+    private _heldConsentChanges: ConsentChangeInfo[] | undefined
     private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
     _disposed = false
@@ -199,7 +201,9 @@ class PostHog implements IPostHog {
                     this._clearedChoiceRetainsWork = false
                 } else if (!explicit) this._clearedChoiceRetainsWork = true
                 else this._revokeAdmittedWork()
-                this._consentChangePublisher.publish({ current: consent, previous })
+                const change = { current: consent, previous }
+                if (this._heldConsentChanges) this._heldConsentChanges.push(change)
+                else this._consentChangePublisher.publish(change)
             },
             options.cookie
         )
@@ -338,8 +342,16 @@ class PostHog implements IPostHog {
         if (!this._canMutate()) return
         // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
         // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
-        this.clearOptInOut()
-        const bootstrap = this._analytics.reset(options)
+        // Consent listeners hear of it afterwards, so what they capture belongs to the new identity.
+        const held: ConsentChangeInfo[] = (this._heldConsentChanges = [])
+        let bootstrap: ResetOptions['bootstrap']
+        try {
+            this.clearOptInOut()
+            bootstrap = this._analytics.reset(options)
+        } finally {
+            this._heldConsentChanges = undefined
+        }
+        for (const change of held) this._consentChangePublisher.publish(change)
         if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 

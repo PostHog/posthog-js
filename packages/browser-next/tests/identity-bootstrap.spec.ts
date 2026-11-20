@@ -232,6 +232,50 @@ describe('reset options', () => {
         expect(sent).toEqual([])
     })
 
+    it('attributes an event a consent listener captures during reset to the new identity', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent)
+        posthog.identify('user-1')
+        posthog.optOut()
+        posthog.onConsentChange(({ current }) => {
+            if (current !== 'denied') posthog.capture('consent_granted')
+        })
+        posthog.reset()
+        await posthog.flush()
+        expect(sent.map((event) => [event.event, event.distinct_id])).toEqual([['consent_granted', posthog.distinctId]])
+    })
+
+    it('keeps person properties a consent listener sets during reset off the opted-out user', async () => {
+        const sent: SentEvent[] = []
+        const posthog = await create(new MemoryStorage(), sent)
+        posthog.identify('user-1')
+        posthog.optOut()
+        posthog.onConsentChange(({ current }) => posthog.setPersonProperties({ analytics_consent: current }))
+        posthog.reset()
+        await posthog.flush()
+        expect(sent.filter((event) => event.distinct_id === 'user-1')).toEqual([])
+    })
+
+    it('tells consent listeners about an onReset opt-in after the clear, in order', async () => {
+        const posthog = await create(new MemoryStorage(), [])
+        posthog.optOut()
+        const seen: string[] = []
+        posthog.onConsentChange(({ current, previous }) => seen.push(`${previous}->${current}`))
+        posthog.onReset(() => posthog.optIn())
+        posthog.reset()
+        expect(seen).toEqual(['denied->implicit', 'implicit->granted'])
+    })
+
+    it('leaves consent listeners at denied when an onReset listener opts out under optOutByDefault', async () => {
+        const posthog = await create(new MemoryStorage(), [], { optOutByDefault: true })
+        posthog.optIn()
+        const seen: string[] = []
+        posthog.onConsentChange(({ current, previous }) => seen.push(`${previous}->${current}`))
+        posthog.onReset(() => posthog.optOut())
+        posthog.reset()
+        expect(seen).toEqual(['granted->denied'])
+    })
+
     it('delivers events captured before it when capture is opted out by default', async () => {
         const sent: SentEvent[] = []
         const posthog = await create(new MemoryStorage(), sent, { optOutByDefault: true })

@@ -189,7 +189,8 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
      *
      * With `optOutByDefault`, capture returns to the default (opted out), so calling `reset()` after `optIn()` stops
      * capture. Reset first, then opt in again if needed: `posthog.reset(); posthog.optIn()`. Events captured before
-     * the reset, in this or another tab, are still delivered.
+     * the reset, in this or another tab, are still delivered. Consent listeners hear of the forgotten choice after the
+     * new identity is in place and `onReset` listeners have run.
      */
     reset(options?: boolean | ResetOptions): void
     register(properties: Record<string, unknown>): void
