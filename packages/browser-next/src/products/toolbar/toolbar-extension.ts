@@ -66,16 +66,17 @@ const insertScript = (url: string, options: ToolbarOptions, callback: (error?: u
 export const createToolbar = (options: ToolbarOptions, stateHash: string | null): ToolbarExtension => {
     let client: IPostHog | undefined
     let disposed = false
-    const reloads = new Set<() => void>()
     const pendingLoads = new Set<() => void>()
+    // A load retried after a failure registers again; one listener runs the latest reload, so it uses the latest params.
+    let pageReload: (() => void) | undefined
+    const onPageReplacement = (): void => {
+        if (!disposed) pageReload?.()
+    }
 
     const watchPageReplacement = (reload: () => void): void => {
-        const listener = (): void => {
-            if (!disposed) reload()
-        }
-        reloads.add(listener)
         // oxlint-disable-next-line posthog-js/no-add-event-listener
-        window.addEventListener('turbolinks:load', listener)
+        if (!pageReload) window.addEventListener('turbolinks:load', onPageReplacement)
+        pageReload = reload
     }
 
     const load = (params?: ToolbarParams): boolean => {
@@ -140,8 +141,8 @@ export const createToolbar = (options: ToolbarOptions, stateHash: string | null)
             disposed = true
             for (const cancel of Array.from(pendingLoads)) cancel()
             pendingLoads.clear()
-            for (const listener of reloads) window.removeEventListener('turbolinks:load', listener)
-            reloads.clear()
+            if (pageReload) window.removeEventListener('turbolinks:load', onPageReplacement)
+            pageReload = undefined
         },
     }
 }

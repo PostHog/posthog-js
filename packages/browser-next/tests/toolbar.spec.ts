@@ -310,6 +310,53 @@ describe('toolbar', () => {
         expect(toolbarWindow.ph_load_toolbar).toHaveBeenCalledTimes(4)
         await client.dispose()
     })
+
+    it('inserts one script for each Turbolinks body replacement after a failed load is retried', async () => {
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        client.toolbar?.loadToolbar()
+        toolbarScripts()[0]?.onerror?.(new Event('error'))
+        for (const script of toolbarScripts()) script.remove()
+        client.toolbar?.loadToolbar()
+        finishScriptLoad()
+        for (const script of toolbarScripts()) script.remove()
+
+        const body = document.body
+        document.documentElement.replaceChild(document.createElement('body'), body)
+        try {
+            window.dispatchEvent(new Event('turbolinks:load'))
+            expect(toolbarScripts()).toHaveLength(1)
+        } finally {
+            await client.dispose()
+            document.documentElement.replaceChild(body, document.body)
+        }
+    })
+
+    it('reloads with the parameters of a retried load after Turbolinks replaces the body', async () => {
+        const client = await createCorePostHog({ ...options, extensions: [toolbar()] })
+        client.toolbar?.loadToolbar({ temporaryToken: 'failed' } as ToolbarParams)
+        toolbarScripts()[0]?.onerror?.(new Event('error'))
+        for (const script of toolbarScripts()) script.remove()
+        client.toolbar?.loadToolbar({ temporaryToken: 'retried' } as ToolbarParams)
+        finishScriptLoad()
+        for (const script of toolbarScripts()) script.remove()
+        localStorage.clear()
+
+        const body = document.body
+        document.documentElement.replaceChild(document.createElement('body'), body)
+        try {
+            window.dispatchEvent(new Event('turbolinks:load'))
+            const scripts = toolbarScripts().length
+            finishScriptLoad()
+            expect({
+                scripts,
+                used: vi.mocked(toolbarWindow.ph_load_toolbar!).mock.lastCall?.[0].temporaryToken,
+                saved: JSON.parse(localStorage.getItem('_postHogToolbarParams') ?? '{}').temporaryToken,
+            }).toEqual({ scripts: 1, used: 'retried', saved: 'retried' })
+        } finally {
+            await client.dispose()
+            document.documentElement.replaceChild(body, document.body)
+        }
+    })
 })
 
 describe('automatic toolbar loading', () => {

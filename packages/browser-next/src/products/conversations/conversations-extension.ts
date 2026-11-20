@@ -103,7 +103,7 @@ export const createConversations = (
     let manager: ConversationsManager | undefined
     let initializing = false
     let loadFailed = false
-    // Bumped by reset, opt-out and disposal so a renderer that finishes loading afterwards starts over.
+    // Bumped by reset and disposal so a renderer that finishes loading afterwards starts over.
     let generation = 0
     // open() or close() before the manager exists.
     let pendingPanelAction: 'open' | 'close' | undefined
@@ -246,7 +246,8 @@ export const createConversations = (
                 posthog.onReset(() => {
                     // Reset starts a fresh widget session for the next visitor, without a verified identity.
                     if (manager) manager.reset()
-                    // Without a widget, for example while opted out or loading, the previous session is still stored.
+                    // Without a widget, for example while the renderer loads or another client owns it, the previous
+                    // session is still stored.
                     else removeStoredWidget(posthog.projectToken)
                     manager = undefined
                     generation++

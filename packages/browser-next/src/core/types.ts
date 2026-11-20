@@ -100,7 +100,11 @@ export interface PostHogOptions {
      * Cloud `apiHost`, otherwise `apiHost`.
      */
     uiHost?: string
-    /** Storage implementation. Pass `false` to keep all state in memory. */
+    /**
+     * Storage implementation. Pass `false` to keep all SDK state in memory. Like posthog-js, surveys, conversations and
+     * the toolbar keep their own localStorage keys regardless; conversations writes its widget session to
+     * `ph_conv_<projectToken>` even while opted out.
+     */
     storage?: StorageLike | false
     /** Override the storage key. */
     persistenceKey?: string
@@ -151,7 +155,11 @@ export interface PostHogOptions {
     errorTracking?: ErrorTrackingConfiguration
     /** Load the toolbar when the URL or a previous toolbar session authorizes it. Pass `false` to disable. */
     toolbar?: ToolbarConfiguration
-    /** Acquire conversations when remote configuration enables them, or during initialization when configured explicitly. */
+    /**
+     * Acquire conversations when remote configuration enables them, or during initialization when configured
+     * explicitly. Like posthog-js, conversations stores its widget session in `ph_conv_<projectToken>` localStorage
+     * regardless of `storage`, and sends widget requests while opted out.
+     */
     conversations?: ConversationsConfiguration
     /** Install extensions before the factory resolves. Explicit instances take precedence over automatic product options. */
     extensions?: readonly Extension[]

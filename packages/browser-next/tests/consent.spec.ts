@@ -983,6 +983,16 @@ describe('portable consent persistence', () => {
             '/flags/%2e%2e/i/v1/analytics/events',
             flagsEvaluation,
         ],
+        [
+            'a dot-segment path below conversations',
+            '/api/conversations/../../i/v1/analytics/events',
+            { method: 'POST', body: {} },
+        ],
+        [
+            'a percent-encoded dot-segment path below conversations',
+            '/api/conversations/%2e%2e/%2e%2e/i/v1/analytics/events',
+            { method: 'POST', body: {} },
+        ],
         ['the API host', '/flags/?v=2', { ...flagsEvaluation, target: 'api' }],
         ['query options', '/flags/?v=2', { ...flagsEvaluation, query: { distinct_id: 'person' } }],
         ['headers', '/flags/?v=2', { ...flagsEvaluation, headers: { 'X-Person': 'person' } }],
@@ -1006,6 +1016,25 @@ describe('portable consent persistence', () => {
         })
         await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 200 })
         expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^https:\/\/proxy\.example\.com\/ingest\/flags\/\?v=2&/)
+    })
+
+    it('sends a conversations request to an API host with a path while analytics consent is denied', async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+        const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: new MemoryStorage(),
+            navigator: false,
+            fetch,
+            optOutByDefault: true,
+            apiHost: 'https://proxy.example.com/ingest',
+        })
+        await expect(posthog.sendRequest('/api/conversations/v1/widget/tickets')).resolves.toMatchObject({
+            statusCode: 200,
+        })
+        expect(String(fetch.mock.calls[0]?.[0])).toMatch(
+            /^https:\/\/proxy\.example\.com\/ingest\/api\/conversations\/v1\/widget\/tickets/
+        )
     })
 
     it('refuses the flags evaluation request from a blocked client', async () => {
