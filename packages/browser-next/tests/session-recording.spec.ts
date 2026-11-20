@@ -377,6 +377,29 @@ describe('session recording attribution', () => {
 
         expect(sentWithMarker(network)?.properties).toMatchObject({ $session_id: sessionId, distinct_id: distinctId })
     })
+
+    it('resumes replay after reset clears an explicit opt-out, under the new identity only', async () => {
+        const { replay, posthog, transport: network } = await setup()
+        await started(replay)
+        posthog.identify('user-1')
+        await replay.flush?.()
+        posthog.optOut()
+        const before = network.snapshots.length
+        // consent listeners run after onReset restores the saved configuration, so recording can start again
+        posthog.reset()
+        interact()
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        posthog.capture('after reset')
+        interact()
+        await replay.flush?.()
+        const ids = snapshotEvents(network)
+            .slice(before)
+            .map((event) => event.properties.distinct_id)
+        expect({ resumed: ids.length > 0, ids: [...new Set(ids)] }).toEqual({
+            resumed: true,
+            ids: [posthog.distinctId],
+        })
+    })
 })
 
 describe('session recording URLs', () => {
