@@ -246,3 +246,69 @@ describe('clearing the consent choice', () => {
         expect(posthog.hasOptedOut()).toBe(false)
     })
 })
+
+describe('redriving kept work on a grant observed inside a delivery drive', () => {
+    const clients: IPostHog[] = []
+
+    afterEach(async () => {
+        await Promise.all(clients.splice(0).map((client) => client.shutdown(50)))
+        vi.unstubAllGlobals()
+    })
+
+    const setup = async () => {
+        const events = new EventTarget()
+        vi.stubGlobal('addEventListener', events.addEventListener.bind(events))
+        vi.stubGlobal('removeEventListener', events.removeEventListener.bind(events))
+        vi.stubGlobal('dispatchEvent', events.dispatchEvent.bind(events))
+        const sent: SentEvent[] = []
+        const releases: Array<() => void> = []
+        const requests = { inFlight: 0, maxInFlight: 0 }
+        const fetch: BrowserFetch = async (input, init) => {
+            if (!String(input).includes('/i/v1/analytics/events')) return new Response('{}', { status: 404 })
+            requests.inFlight++
+            requests.maxInFlight = Math.max(requests.maxInFlight, requests.inFlight)
+            await new Promise<void>((resolve) => releases.push(resolve))
+            requests.inFlight--
+            const { batch } = JSON.parse(String(init?.body)) as { batch: Array<SentEvent & { uuid: string }> }
+            sent.push(...batch)
+            const results = Object.fromEntries(batch.map((event) => [event.uuid, { result: 'ok' }]))
+            return new Response(JSON.stringify({ results }), { status: 200 })
+        }
+        // Without `subscribe`, this client sees another context's choice only on its next consent read.
+        const storage = new MemoryStorage()
+        const posthog = await createClient(storage, sent, { optOutByDefault: true, fetch })
+        clients.push(posthog)
+        posthog.optIn()
+        posthog.capture('kept')
+        posthog.reset()
+        storage.setItem(CONSENT_KEY, '1')
+        // Reconnecting starts a drive whose consent read is the first to observe the other context's opt-in.
+        events.dispatchEvent(new Event('online'))
+        await vi.waitFor(() => expect(releases.length).toBe(1))
+        posthog.optIn()
+        posthog.capture('second')
+        return { posthog, sent, releases, requests }
+    }
+
+    it('keeps a single delivery drive in flight', async () => {
+        const { posthog, releases, requests } = await setup()
+        void posthog.flush()
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        releases.splice(0).forEach((release) => release())
+        expect(requests.maxInFlight).toBe(1)
+    })
+
+    it('resolves flush only after the events it covers are delivered', async () => {
+        const { posthog, sent, releases } = await setup()
+        let flushed = false
+        void posthog.flush().then(() => (flushed = true))
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        releases.shift()?.()
+        await vi.waitFor(() => expect(sent.map((event) => event.event)).toContain('kept'))
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        const observed = { flushed, sent: sent.map((event) => event.event) }
+        releases.splice(0).forEach((release) => release())
+        await vi.waitFor(() => expect(flushed).toBe(true))
+        expect(observed).toEqual({ flushed: false, sent: ['kept'] })
+    })
+})

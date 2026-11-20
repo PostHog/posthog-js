@@ -196,8 +196,9 @@ class PostHog implements IPostHog {
                 // Only an explicit opt-out purges. A cleared choice (`reset()` or `clearOptInOut()`, here or in another
                 // context) affects future events only, so its return to a default denial keeps admitted work.
                 if (consent !== 'denied') {
-                    // A grant ends any pause on kept work, so redrive it instead of waiting for the next capture.
-                    if (this._clearedChoiceRetainsWork) void this._analytics?.flush()
+                    // A grant ends any pause on kept work, so redrive it instead of waiting for the next flush. A
+                    // microtask keeps the flush out of a consent read inside a delivery drive.
+                    if (this._clearedChoiceRetainsWork) void Promise.resolve().then(() => this._analytics?.flush())
                     this._clearedChoiceRetainsWork = false
                 } else if (!explicit) this._clearedChoiceRetainsWork = true
                 else this._revokeAdmittedWork()
