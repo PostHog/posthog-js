@@ -236,6 +236,8 @@ describe('flags', () => {
         })
         requireInstalledExtension(client.featureFlags).updateFlags({ old: true })
         client.reset()
+        // Reset forgets the consent choice, returning to the opted-out default.
+        client.optIn()
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('old')).toBeUndefined()
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledTimes(2)
