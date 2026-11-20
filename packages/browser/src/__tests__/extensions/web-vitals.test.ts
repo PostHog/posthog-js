@@ -58,6 +58,43 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 })
 
 describe('web vitals', () => {
+    it('does not start from a saved hint when fresh remote config turns web vitals off while the script loads', async () => {
+        const persistenceName = `web-vitals-hint-${uuidv7()}`
+        window.localStorage.setItem(`ph_${persistenceName}`, JSON.stringify({ [WEB_VITALS_ENABLED_SERVER_SIDE]: true }))
+        const callbacks = { onLCP: vi.fn(), onCLS: vi.fn(), onFCP: vi.fn(), onINP: vi.fn() }
+        let finishLoading: (() => void) | undefined
+        assignableWindow.__PosthogExtensions__ = {
+            postHogWebVitalsCallbacksByFlavor: {},
+            loadExternalDependency: (_instance, kind, loaded) => {
+                finishLoading = () => {
+                    assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = callbacks
+                    loaded()
+                }
+            },
+        }
+        try {
+            const instance = await createPosthogInstance(uuidv7(), {
+                persistence: 'localStorage',
+                persistence_name: persistenceName,
+                capture_pageview: false,
+            })
+            // The saved hint started loading the script.
+            expect(finishLoading).toBeDefined()
+
+            instance._onRemoteConfig({
+                ok: true,
+                config: createRemoteConfig({ capturePerformance: { web_vitals: false } }),
+            })
+            finishLoading?.()
+
+            expect(callbacks.onLCP).not.toHaveBeenCalled()
+            expect(callbacks.onCLS).not.toHaveBeenCalled()
+            await instance.shutdown()
+        } finally {
+            window.localStorage.removeItem(`ph_${persistenceName}`)
+        }
+    })
+
     const resetLocation = () =>
         mockLocation.mockReturnValue({
             protocol: 'http:',
