@@ -253,14 +253,15 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)
-            // Registered only when extension init takes at least 1 ms, so presence varies by machine.
+            // Current cores register these only when extension init takes at least 1 ms, and historical cores
+            // always register them, possibly with 0, so presence and value vary by machine.
             if (
                 debugProperties &&
                 ((child === '$sdk_debug_extensions_init_method' && ['synchronous', 'deferred'].includes(item)) ||
                     (child === '$sdk_debug_extensions_init_time_ms' &&
                         typeof item === 'number' &&
                         Number.isFinite(item) &&
-                        item > 0))
+                        item >= 0))
             )
                 continue
             if (

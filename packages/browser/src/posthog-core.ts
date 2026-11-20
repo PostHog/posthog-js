@@ -1397,8 +1397,11 @@ export class PostHog implements PostHogInterface {
                     : 'synchronous',
                 [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
             })
-        } else if (this._sessionRegisteredPropKeys.has(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)) {
-            // An earlier page load in this session may have registered them.
+        } else if (
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_METHOD]) ||
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_TIME_MS])
+        ) {
+            // An earlier page load in this session may have registered them, possibly on an older SDK.
             this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
             this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
         }

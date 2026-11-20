@@ -69,6 +69,21 @@ describe('extension init debug properties', () => {
         expect(posthog._sessionRegisteredPropKeys.has(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)).toBe(false)
     })
 
+    it('removes values left by an SDK version that did not track session-registered keys', async () => {
+        const posthog = await createPosthogInstance(undefined, { capture_pageview: false })
+        posthog.sessionPersistence!.register({
+            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: 'synchronous',
+            [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: 12,
+        })
+        expect(posthog._sessionRegisteredPropKeys.has(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)).toBe(false)
+
+        posthog['_processInitTaskQueue']([], 0, false)
+
+        const sessionProps = posthog.sessionPersistence!.properties()
+        expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
+        expect(sessionProps).not.toHaveProperty(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
+    })
+
     it('does not register them when extension init time rounds to zero', async () => {
         vi.spyOn(HistoryAutocapture.prototype, 'initialize').mockImplementation(() => {
             now += 0.4
