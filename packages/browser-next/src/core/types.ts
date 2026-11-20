@@ -52,7 +52,7 @@ export type ExplicitConsentStatus = 'granted' | 'denied' | 'pending'
 
 /** Identity and session values to use instead of generated ones. */
 export interface BootstrapOptions {
-    /** Distinct ID to use when no identity is stored. */
+    /** Distinct ID to use when no identity is stored. An identified ID also identifies a stored anonymous user. */
     distinctId?: string
     /** Whether `distinctId` identifies a known person rather than an anonymous user. */
     isIdentifiedId?: boolean
@@ -96,7 +96,10 @@ export interface PostHogOptions {
     persistenceKey?: string
     /** Also persist identity and session state in a cookie, sharing them across subdomains. */
     cookie?: CookiePersistence
-    /** Identity and session values to use instead of generated ones. A stored identity takes precedence. */
+    /**
+     * Identity and session values to use instead of generated ones. A stored identity takes precedence, except that an
+     * identified bootstrap ID identifies a stored anonymous user, as in posthog-js.
+     */
     bootstrap?: BootstrapOptions
     /** Override the consent key verbatim. Defaults to `__ph_opt_in_out_<projectToken>`. */
     consentPersistenceName?: string
