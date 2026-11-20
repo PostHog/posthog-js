@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.13.3
+
+### Patch Changes
+
+- [#5801](https://github.com/PostHog/posthog-js/pull/5801) [`da31915`](https://github.com/PostHog/posthog-js/commit/da31915efee6fd853f7f57e940abc9c437561fc3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-ios 3.98.1 to reduce main-thread hangs in iOS session replay during fast scrolls and animations
+  (2026-11-19)
+
 ## 2.13.2
 
 ### Patch Changes

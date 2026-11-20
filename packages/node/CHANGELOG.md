@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.0.5
+
+### Patch Changes
+
+- [#5817](https://github.com/PostHog/posthog-js/pull/5817) [`4ae28af`](https://github.com/PostHog/posthog-js/commit/4ae28afef2bba9eba01c80104572aa03e7f1970b) Thanks [@NikitaKurpas](https://github.com/NikitaKurpas)! - fix: keep falsy payloads (`0`, `false`, `""`) for locally evaluated flags in `evaluateFlags` and `getAllFlagsAndPayloads`
+  (2026-11-19)
+
 ## 6.0.4
 
 ### Patch Changes
