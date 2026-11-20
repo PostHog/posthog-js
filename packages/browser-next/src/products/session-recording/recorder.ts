@@ -479,8 +479,9 @@ export class SessionRecorder {
             plugins.push(getRecordConsolePlugin() as unknown as RecordPlugin)
         }
         const remote = this._config?.networkPayloadCapture
-        const headers = options.recordHeaders !== false && !!(options.recordHeaders || remote?.recordHeaders)
-        const body = options.recordBody !== false && !!(options.recordBody || remote?.recordBody)
+        // a local `false` wins; otherwise structured project settings pass through, as in posthog-js
+        const headers = options.recordHeaders !== false && (options.recordHeaders || remote?.recordHeaders)
+        const body = options.recordBody !== false && (options.recordBody || remote?.recordBody)
         const remotePerformance = remote?.capturePerformance
         const remoteTiming =
             typeof remotePerformance === 'object' && remotePerformance !== null
