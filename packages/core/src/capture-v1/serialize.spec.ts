@@ -1,7 +1,8 @@
-import { type PostHogEventProperties, safeJsonStringify } from '@posthog/core'
+import type { PostHogEventProperties } from '../types'
+import { safeJsonStringify } from '../utils'
 
-import { buildV1Body, serializeV1Event, wireProblem } from '@posthog/core/capture-v1'
-import { buildV1Event } from '@posthog/core/capture-v1'
+import { buildV1Body, serializeV1Event, wireProblem } from './serialize'
+import { buildV1Event } from './transform'
 
 const utf8Bytes = (value: string): number => Buffer.byteLength(value, 'utf8')
 
