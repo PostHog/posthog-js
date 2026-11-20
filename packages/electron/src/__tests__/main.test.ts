@@ -661,6 +661,46 @@ describe('main Electron client', () => {
         expect(process.rawListeners('unhandledRejection')).toEqual(rejections)
     })
 
+    it('ignores aborted rejections without spending the exception rate limit', async () => {
+        const owner = await start({ enableExceptionAutocapture: true, captureUnhandledRejections: true })
+        await owner.ready()
+        const listener = process.rawListeners('unhandledRejection').at(-1) as (reason: unknown) => void
+        // More aborts than the rate limit's burst, so a counted abort would block the real rejection below.
+        for (let i = 0; i < 20; i++) listener(new DOMException('The operation was aborted.', 'AbortError'))
+        listener(Object.assign(new Error('aborted fetch'), { name: 'AbortError' }))
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            Object.assign(new Error('aborted escalation'), { name: 'AbortError' }),
+            'unhandledRejection'
+        )
+        // A name getter that re-emits the same rejection must not recurse.
+        const reentrant = new Error('reentrant')
+        let reads = 0
+        Object.defineProperty(reentrant, 'name', {
+            get() {
+                if (++reads < 50) listener(reentrant)
+                return 'AbortError'
+            },
+        })
+        expect(() => listener(reentrant)).not.toThrow()
+        expect(reads).toBe(1)
+        listener(new RangeError('real rejection'))
+        // An uncaught AbortError is not a rejection, so it is still reported.
+        EventEmitter.prototype.emit.call(
+            process,
+            'uncaughtExceptionMonitor',
+            Object.assign(new Error('thrown abort'), { name: 'AbortError' }),
+            'uncaughtException'
+        )
+        await owner.flush()
+        expect(batches.map((event) => event.properties.$exception_list[0].value)).toEqual([
+            'real rejection',
+            'thrown abort',
+        ])
+        await owner.shutdown(100)
+    })
+
     it('defaults to no global listeners and gates error getters and persistence before opt-out capture', async () => {
         const monitors = process.rawListeners('uncaughtExceptionMonitor')
         const owner = await start()

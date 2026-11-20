@@ -11,7 +11,11 @@ export function startProcessExceptionAutocapture(
     capture: ExceptionCapture,
     captureUnhandledRejections = false
 ): () => void {
-    const observe = createExceptionObserver(canCapture, capture)
+    const observe = createExceptionObserver(
+        canCapture,
+        capture,
+        (error, mechanism) => mechanism === 'onunhandledrejection' && isAbortError(error)
+    )
     const monitor = (error: Error, origin: NodeJS.UncaughtExceptionOrigin): void => {
         const rejection = origin === 'unhandledRejection'
         // The rejection listener reports every rejection, including any Node also escalates here.
@@ -29,5 +33,18 @@ export function startProcessExceptionAutocapture(
     return () => {
         process.removeListener('uncaughtExceptionMonitor', monitor)
         process.removeListener('unhandledRejection', rejection)
+    }
+}
+
+// An abort the app started itself and never awaited, such as a cancelled fetch. posthog-node ignores these too.
+function isAbortError(reason: unknown): boolean {
+    try {
+        return (
+            (typeof reason === 'object' || typeof reason === 'function') &&
+            reason !== null &&
+            (reason as { name?: unknown }).name === 'AbortError'
+        )
+    } catch {
+        return false
     }
 }

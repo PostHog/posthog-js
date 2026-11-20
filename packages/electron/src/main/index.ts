@@ -301,7 +301,7 @@ export class PostHog {
 
     /**
      * Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`; captures
-     * after shutdown or across an identity change are dropped.
+     * after shutdown are dropped. A capture after an unawaited `identify()` or `reset()` uses the new identity.
      */
     capture(event: string, properties?: Properties): void {
         if (typeof event !== 'string' || !event.trim() || event === '$snapshot') return
@@ -509,7 +509,10 @@ export class PostHog {
         this._generation++
         await this._core.optOut()
     }
-    /** Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`. */
+    /**
+     * Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`; reports after
+     * shutdown or across an identity change are dropped.
+     */
     captureException(error: unknown, properties?: Properties): void {
         void this._captureException(error, properties).catch(() => {})
     }
