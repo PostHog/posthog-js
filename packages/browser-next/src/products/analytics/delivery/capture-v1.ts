@@ -4,7 +4,7 @@ import { nativeGzip } from '../../../platform/gzip'
 import { MAX_ANALYTICS_BATCH_EVENTS, type AnalyticsMessage } from '../analytics-internal'
 import { createId } from '../../../primitives/id'
 import { defineErrorName } from '../../../primitives/named-error'
-import type { RequestRuntime } from '../../../platform/request'
+import { KEEPALIVE_BUDGET_BYTES, type RequestRuntime } from '../../../platform/request'
 import { utf8Bytes } from '../../../primitives/utf8'
 import { parseRetryAfter, retryDelay, safeNow } from './retry-delay'
 
@@ -13,8 +13,7 @@ const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 export const CAPTURE_V1_MAX_BATCH_EVENTS = MAX_ANALYTICS_BATCH_EVENTS
 export const CAPTURE_V1_BATCH_TARGET_BYTES = 5 * 1024 * 1024
 export const CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES = 1024
-/** Conservative share of the browser's aggregate 64 KiB keepalive body quota. */
-export const CAPTURE_V1_TEARDOWN_BUDGET_BYTES = Math.floor(64 * 1024 * 0.8)
+export const CAPTURE_V1_TEARDOWN_BUDGET_BYTES = KEEPALIVE_BUDGET_BYTES
 const DEFAULT_COMPRESSION_TIMEOUT_MS = 1_000
 
 export type CaptureV1Message = AnalyticsMessage

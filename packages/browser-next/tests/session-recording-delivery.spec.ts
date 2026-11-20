@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib'
 import { createSnapshotDelivery, type SnapshotMessage } from '../src/products/session-recording/snapshot-delivery'
 import type { BrowserFetch, BrowserNavigator } from '../src/core/types'
+import { KEEPALIVE_BUDGET_BYTES } from '../src/platform/request'
 
 interface Request {
     url: string
@@ -31,7 +32,12 @@ const decode = async (
 
 const setup = (
     respond: (request: Request) => number | Response = () => 200,
-    options: { gzip?: boolean; canDeliver?: () => boolean; navigator?: BrowserNavigator } = {}
+    options: {
+        gzip?: boolean
+        canDeliver?: () => boolean
+        navigator?: BrowserNavigator
+        keepalive?: { remaining: number }
+    } = {}
 ) => {
     const requests: Request[] = []
     const failures: unknown[] = []
@@ -47,6 +53,7 @@ const setup = (
             'ph_test',
             fetch,
             options.navigator,
+            options.keepalive ?? { remaining: KEEPALIVE_BUDGET_BYTES },
         ],
         endpoint: () => '/s/',
         canDeliver: options.canDeliver ?? (() => true),
@@ -324,9 +331,10 @@ describe('snapshot delivery', () => {
             expect(requests).toHaveLength(0)
         })
 
-        it('splits batches to fit its share of the keepalive budget and sends the rest as regular requests', async () => {
+        it('splits batches to fit the remaining keepalive budget and sends the rest as regular requests', async () => {
             const { beacons, navigator, settled } = beaconRecorder()
-            const { delivery, requests } = setup(() => 200, { navigator, gzip: true })
+            const keepalive = { remaining: 10_000 }
+            const { delivery, requests } = setup(() => 200, { navigator, gzip: true, keepalive })
             const messages = [large('s1'), large('s1'), large('s1')]
 
             for (const snapshot of messages) delivery.enqueue(snapshot, 10)
@@ -337,7 +345,8 @@ describe('snapshot delivery', () => {
 
             const beaconBytes = beacons.reduce((total, beacon) => total + beacon.bytes.byteLength, 0)
             expect(beacons.length).toBeGreaterThan(0)
-            expect(beaconBytes).toBeLessThanOrEqual(Math.floor(64 * 1024 * 0.15))
+            expect(beaconBytes).toBeLessThanOrEqual(10_000)
+            expect(keepalive.remaining).toBe(10_000 - beaconBytes)
             expect(requests.length).toBeGreaterThan(0)
             expect(requests.every((request) => request.init.keepalive !== true)).toBe(true)
             const sent = [
@@ -347,9 +356,22 @@ describe('snapshot delivery', () => {
             expect(sent.sort()).toEqual(messages.map((snapshot) => snapshot.uuid).sort())
         })
 
+        it('sends no beacons once the shared keepalive budget is spent, as posthog-js shares one pool', async () => {
+            const { beacons, navigator, settled } = beaconRecorder()
+            const { delivery, requests } = setup(() => 200, { navigator, gzip: true, keepalive: { remaining: 0 } })
+
+            delivery.enqueue(message('s1'), 10)
+            delivery.teardown()
+            await settled()
+            await vi.waitFor(() => expect(requests).toHaveLength(1))
+
+            expect(beacons).toHaveLength(0)
+            expect(requests[0]!.init.keepalive).not.toBe(true)
+        })
+
         it('sends an over-budget backlog in a few requests rather than one per snapshot', async () => {
             const { beacons, navigator, settled } = beaconRecorder()
-            const { delivery, requests } = setup(() => 200, { navigator, gzip: true })
+            const { delivery, requests } = setup(() => 200, { navigator, gzip: true, keepalive: { remaining: 10_000 } })
             const messages = Array.from({ length: 16 }, () => large('s1'))
 
             for (const snapshot of messages) delivery.enqueue(snapshot, 10)
@@ -419,6 +441,7 @@ describe('snapshot delivery', () => {
                     'ph_test',
                     fetch,
                     navigator,
+                    { remaining: KEEPALIVE_BUDGET_BYTES },
                 ],
                 endpoint: () => '/s/',
                 canDeliver: () => true,

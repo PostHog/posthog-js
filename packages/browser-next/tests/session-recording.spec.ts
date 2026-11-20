@@ -616,8 +616,8 @@ describe('session replay URL', () => {
         expect(replay.getSessionReplayUrl({ withTimestamp: true, timestampLookBack: 15 })).toMatch(/\?t=45$/)
     })
 
-    it('uses a configured UI host', async () => {
-        const { replay } = await setup({}, { uiHost: 'https://eu.posthog.com/' })
+    it('uses the client UI host', async () => {
+        const { replay } = await setup({}, {}, { uiHost: 'https://eu.posthog.com/' })
         await started(replay)
 
         expect(replay.getSessionReplayUrl()).toMatch(/^https:\/\/eu\.posthog\.com\/project\/ph_test\/replay\//)

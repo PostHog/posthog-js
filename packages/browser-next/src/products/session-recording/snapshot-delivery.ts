@@ -43,8 +43,6 @@ const RETRY_INTERVAL_MS = 1000
 const MAX_RETRY_INTERVAL_MS = 30_000
 // network errors (0) and the transient statuses the other client SDKs and sdk-specs retry-queue retry
 const RETRYABLE_STATUSES = [0, 408, 429, 500, 502, 503, 504]
-// beacons and keepalive requests share ~64 KiB per page; analytics budgets 80% of it for its own teardown
-const UNLOAD_BUDGET_BYTES = Math.floor(64 * 1024 * 0.15)
 
 const snapshotBytes = (message: SnapshotMessage): number => {
     const bytes = Number(message.properties.$snapshot_bytes)
@@ -128,9 +126,9 @@ const unloadBody = (host: SnapshotDeliveryHost, messages: readonly SnapshotMessa
 }
 
 /**
- * Hands queued snapshots to the browser as the page unloads. Beacons and keepalive requests share a
- * small per-page quota with analytics and logs, so replay uses at most its own share, splits batches to
- * fit it, and sends what does not fit as a regular request, which completes when the page lingers (for
+ * Hands queued snapshots to the browser as the page unloads. Beacons and keepalive requests draw on the
+ * client's keepalive budget, which analytics shares, so replay splits batches to fit what remains and
+ * sends what does not fit as a regular request, which completes when the page lingers (for
  * example in the back/forward cache). Snapshots leave the queue while they are sent, and return to it
  * when that send fails, so a page that survives retries them instead of losing or duplicating them.
  */
@@ -254,7 +252,7 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
             // snapshots already in flight finish on their own; resending them would duplicate them
             const queued = buffer._queue.map((entry) => entry[1])
             if (!queued.length || !host.canDeliver()) return
-            const budget = { remaining: UNLOAD_BUDGET_BYTES }
+            const budget = host.runtime[4]
             const queue = {
                 take: (messages: readonly SnapshotMessage[]) => {
                     for (const message of messages) buffer.discardQueued(message)
