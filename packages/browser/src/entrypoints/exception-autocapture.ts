@@ -30,19 +30,26 @@ const safelyBuildAndCapture = (
 const isReachableFunction = (handler: unknown): handler is (...args: any[]) => any =>
     safely(() => isFunction(handler) && isFunction(handler.call), false)
 
-const markInstrumented = (owner: any, key: string): void =>
+const markInstrumented = (wrapper: any): void =>
     safely(() => {
-        owner[key].__POSTHOG_INSTRUMENTED__ = true
+        wrapper.__POSTHOG_INSTRUMENTED__ = true
     }, undefined)
 
-// The marker lives on the wrapper, so deleting it can throw on a frozen or unreachable handler.
-// It is guarded on its own so that failure cannot skip the restore, which is the functional half.
-const restore = (owner: any, key: string, original: unknown): void => {
+// Other code (another error tool, the app, logs capture) can install its own handler on top of
+// PostHog's. Writing the original back would then remove that handler for the rest of the page.
+// So the original is restored only while PostHog's wrapper is still the installed handler.
+// Otherwise the wrapper stays in the chain: the caller has stopped it capturing, so it only
+// forwards to the original, and the handler installed on top keeps working.
+const restore = (owner: any, key: string, wrapper: unknown, original: unknown): void => {
+    // Deleting the marker can throw on a frozen or unreachable wrapper. It is guarded on its own
+    // so that failure cannot skip the restore, which is the functional half.
     safely(() => {
-        delete owner[key]?.__POSTHOG_INSTRUMENTED__
+        delete (wrapper as any).__POSTHOG_INSTRUMENTED__
     }, undefined)
     safely(() => {
-        owner[key] = original
+        if (owner[key] === wrapper) {
+            owner[key] = original
+        }
     }, undefined)
 }
 
@@ -67,21 +74,28 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
         logger.info('window not available, cannot wrap onerror')
     }
     const originalOnError = safely(() => win.onerror, undefined)
+    let capturing = true
 
-    win.onerror = function (...args: ErrorEventArgs): boolean {
-        safelyBuildAndCapture(captureFn, () =>
-            errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
-                mechanism: { handled: false },
-            })
-        )
+    const wrapper = function (...args: ErrorEventArgs): boolean {
+        if (capturing) {
+            safelyBuildAndCapture(captureFn, () =>
+                errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
+                    mechanism: { handled: false },
+                })
+            )
+        }
         if (!isReachableFunction(originalOnError)) {
             return false
         }
         return originalOnError(...args) ?? false
     }
-    markInstrumented(win, 'onerror')
+    win.onerror = wrapper
+    markInstrumented(wrapper)
 
-    return () => restore(win, 'onerror', originalOnError)
+    return () => {
+        capturing = false
+        restore(win, 'onerror', wrapper, originalOnError)
+    }
 }
 
 const wrapUnhandledRejection = (
@@ -94,21 +108,28 @@ const wrapUnhandledRejection = (
     }
 
     const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
+    let capturing = true
 
-    win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        safelyBuildAndCapture(captureFn, () =>
-            errorPropertiesBuilder.buildFromUnknown(ev, {
-                mechanism: { handled: false },
-            })
-        )
+    const wrapper = function (ev: PromiseRejectionEvent): boolean {
+        if (capturing) {
+            safelyBuildAndCapture(captureFn, () =>
+                errorPropertiesBuilder.buildFromUnknown(ev, {
+                    mechanism: { handled: false },
+                })
+            )
+        }
         if (!isReachableFunction(originalOnUnhandledRejection)) {
             return defaultReturnValue
         }
         return originalOnUnhandledRejection(ev) ?? false
     }
-    markInstrumented(win, 'onunhandledrejection')
+    win.onunhandledrejection = wrapper
+    markInstrumented(wrapper)
 
-    return () => restore(win, 'onunhandledrejection', originalOnUnhandledRejection)
+    return () => {
+        capturing = false
+        restore(win, 'onunhandledrejection', wrapper, originalOnUnhandledRejection)
+    }
 }
 
 const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
@@ -118,8 +139,9 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     }
 
     const originalConsoleError = safely(() => con.error, undefined)
+    let capturing = true
 
-    con.error = function (...args: any[]): void {
+    const wrapper = function (...args: any[]): void {
         // Check before selecting an Error argument, which loses the diagnostic prefix.
         // SDK loggers pass the prefix and diagnostic separately, including in older bundles.
         const isInternalDiagnostic = safely(
@@ -129,7 +151,7 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
                 (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
             false
         )
-        if (!isInternalDiagnostic) {
+        if (capturing && !isInternalDiagnostic) {
             safelyBuildAndCapture(captureFn, () => {
                 let event
                 if (args.length == 1) {
@@ -149,9 +171,13 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
             originalConsoleError(...args)
         }
     }
-    markInstrumented(con, 'error')
+    con.error = wrapper
+    markInstrumented(wrapper)
 
-    return () => restore(con, 'error', originalConsoleError)
+    return () => {
+        capturing = false
+        restore(con, 'error', wrapper, originalConsoleError)
+    }
 }
 
 const posthogErrorWrappingFunctions = {
