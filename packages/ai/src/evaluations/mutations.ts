@@ -13,9 +13,11 @@ export type ItemUpdate = AtLeastOne<Pick<ItemIdentifiers, keyof typeof EDITABLE_
 
 /** Omit the status to correct a field against the result's stored status. */
 export type ResultUpdate =
-  | AtLeastOne<{ status?: 'ok'; value?: ScoreInput | null; errorCode?: null }>
-  | AtLeastOne<{ status?: 'error'; value?: null; errorCode?: string | null }>
+  | { status: 'ok'; value?: ScoreInput; errorCode?: null }
+  | { status: 'error'; value?: null; errorCode?: string | null }
   | { status: 'skipped' | 'not_applicable'; value?: null; errorCode?: null }
+  | { status?: undefined; value: ScoreInput | null; errorCode?: null }
+  | { status?: undefined; value?: null; errorCode: string | null }
 
 export function itemChanges(options: RevisionOptions & ItemUpdate): WireObject {
   const source = object(options)
@@ -31,6 +33,8 @@ export function resultChanges(options: RevisionOptions & ResultUpdate): WireObje
   keys(object(options), ['revision', 'status', 'value', 'errorCode'])
   const changes: WireObject = {}
   if (options.status !== undefined) {
+    if (options.status === 'ok' && options.value === null)
+      throw new TypeError('A successful result cannot clear its score.')
     validateResultStatus(options.status, options.value, options.errorCode)
     changes.status = options.status
   }

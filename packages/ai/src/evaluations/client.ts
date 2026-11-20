@@ -424,6 +424,7 @@ export class Experiment {
     )
   }
 
+  /** Read the current revision shared by an item and its payload. */
   async getItemRevision(itemId: string, request: RequestOptions = {}): Promise<number> {
     const id = uuid(itemId)
     return this.#readRevision(`items/${id}/`, id, request)
@@ -445,6 +446,7 @@ export class Experiment {
     }, signal)
   }
 
+  /** Update the supplied item identifiers and return the current item revision. */
   async updateItem(
     itemId: string,
     options: RevisionOptions & ItemUpdate,
@@ -462,6 +464,7 @@ export class Experiment {
     return this.#patch(`results/${uuid(resultId)}/`, resultChanges(options), options.revision, request)
   }
 
+  /** Replace the supplied top-level payload fields and return the current item revision. */
   async updateItemPayload(
     itemId: string,
     options: RevisionOptions & { payload: ItemPayload },
@@ -476,6 +479,7 @@ export class Experiment {
     )
   }
 
+  /** Replace the supplied top-level payload fields and return the current result revision. */
   async updateResultPayload(
     resultId: string,
     options: RevisionOptions & { payload: ResultPayload },

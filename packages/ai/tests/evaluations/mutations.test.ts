@@ -114,11 +114,13 @@ it('uses the upload score encoding and leaves omitted outcome fields for the ser
   await experiment.updateResult(RESULT, { revision: 0, errorCode: 'timeout' })
   await experiment.updateResult(RESULT, { revision: 0, status: 'skipped' })
   await experiment.updateResult(RESULT, { revision: 0, value: null, errorCode: null })
+  await experiment.updateResult(RESULT, { revision: 0, status: 'ok' })
   expect(fetch.mock.calls[0][1].body).toContain('"value":1152921504606846976')
   expect(requestBody(fetch, 1)).toEqual({ revision: 0, value: ['a', 'z'] })
   expect(requestBody(fetch, 2)).toEqual({ revision: 0, error_code: 'timeout' })
   expect(requestBody(fetch, 3)).toEqual({ revision: 0, status: 'skipped' })
   expect(requestBody(fetch, 4)).toEqual({ revision: 0, value: null, error_code: null })
+  expect(requestBody(fetch, 5)).toEqual({ revision: 0, status: 'ok' })
 })
 
 const update = (experiment: Experiment) => experiment.updateResult(RESULT, { revision: 2, value: 0 })
@@ -188,6 +190,10 @@ it.each<[string, (experiment: Experiment) => Promise<unknown>]>([
   ['unknown result field', (e) => e.updateResult(RESULT, { revision: 0, calculate: true } as never)],
   ['unsafe score', (e) => e.updateResult(RESULT, { revision: 0, value: 9007199254740993n })],
   ['conflicting score', (e) => e.updateResult(RESULT, { revision: 0, status: 'error', value: false } as never)],
+  [
+    'null score on a successful result',
+    (e) => e.updateResult(RESULT, { revision: 0, status: 'ok', value: null } as never),
+  ],
   ['invalid error code', (e) => e.updateResult(RESULT, { revision: 0, errorCode: 'x'.repeat(129) })],
   ['missing payload', (e) => e.updateItemPayload(ITEM, { revision: 0 } as never)],
   [

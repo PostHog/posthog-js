@@ -14,6 +14,8 @@ import {
   type JSONValue,
   type ItemUpdate,
   type ResultUpdate,
+  type RevisionOptions,
+  type ScoreInput,
 } from '@posthog/ai/evaluations'
 
 const client = new OfflineEvaluations({ projectId: 123, secretKey: 'secret', timeoutMs: 15000 })
@@ -63,7 +65,7 @@ client.datasets.createItem('uuid', { input: null })
 client.datasets.updateItem('uuid', { input: false })
 // @ts-expect-error Dataset source provenance is immutable on updates.
 client.datasets.updateItem('uuid', { baseVersion: 1, sourceOutput: 'new' })
-async function examples(scorer: Scorer, error: unknown): Promise<void> {
+async function examples(scorer: Scorer, error: unknown, nullableScore: ScoreInput | null): Promise<void> {
   if (scorer.kind === 'categorical') scorer.config.options.map((o) => o.key)
   if (scorer.kind === 'numeric') scorer.config.passingRule?.threshold
   const numeric = await client.scorers.create({
@@ -87,7 +89,7 @@ async function examples(scorer: Scorer, error: unknown): Promise<void> {
   const itemId = receipt.chunks[0].items[0].id
   const resultId = receipt.chunks[0].results[0].id
   const itemUpdate: ItemUpdate = { trial: null }
-  const resultUpdate: ResultUpdate = { value: false }
+  const resultUpdate: ResultUpdate = { value: nullableScore }
   const revision: number = await run.updateItem(itemId, { revision: await run.getItemRevision(itemId), ...itemUpdate })
   const corrected: number = await run.updateResult(resultId, {
     revision: await run.getResultRevision(resultId),
@@ -95,12 +97,21 @@ async function examples(scorer: Scorer, error: unknown): Promise<void> {
   })
   await run.updateItemPayload(itemId, { revision, payload: { expectedOutput: null } })
   await run.updateResultPayload(resultId, { revision: corrected, payload: { errorMessage: null } })
+  const observed: RevisionOptions = { revision: await run.getResultRevision(resultId) }
+  await run.deleteResultPayload(resultId, observed)
+  await run.deleteResult(resultId, { revision: await run.getResultRevision(resultId) })
+  await run.deleteItemPayload(itemId, { revision: await run.getItemRevision(itemId) })
+  await run.deleteItem(itemId, { revision: await run.getItemRevision(itemId) })
+  // @ts-expect-error A delete requires an observed revision.
+  await run.deleteResult(resultId)
   // @ts-expect-error An update requires an observed revision.
   await run.updateResult(resultId, { value: true })
   // @ts-expect-error Supply at least one field to change.
   await run.updateItem(itemId, { revision })
   // @ts-expect-error Only successful results carry a score.
   await run.updateResult(resultId, { revision, status: 'error', value: 0 })
+  // @ts-expect-error A successful result cannot clear its score.
+  await run.updateResult(resultId, { revision, status: 'ok', value: null })
   // @ts-expect-error A result payload has no output field.
   await run.updateResultPayload(resultId, { revision, payload: { output: null } })
   for (const chunk of receipt.chunks)
