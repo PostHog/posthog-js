@@ -16,6 +16,13 @@ describe('page context', () => {
         return recordedEvents(requests).map((event) => event.properties)
     }
 
+    const failingSanitize = (): never => {
+        throw new Error('sanitize failed')
+    }
+
+    const sanitizeWarnings = (warn: { mock: { calls: unknown[][] } }): unknown[][] =>
+        warn.mock.calls.filter((args) => args.some((arg) => String(arg).includes('sanitize')))
+
     beforeEach(() => {
         requests = []
         vi.stubGlobal('location', new URL('https://user:secret@example.com/products/42?token=abc#section'))
@@ -133,12 +140,7 @@ describe('page context', () => {
     })
 
     it.each([
-        [
-            'throws',
-            () => {
-                throw new Error('sanitize failed')
-            },
-        ],
+        ['throws', failingSanitize],
         ['returns a relative URL', () => '/relative'],
         ['returns a non-URL value', () => 42 as unknown as string],
         ['returns a promise', () => Promise.resolve('https://example.com/') as unknown as string],
@@ -152,6 +154,33 @@ describe('page context', () => {
         expect(pageview).not.toHaveProperty('$host')
         expect(pageview).not.toHaveProperty('$pathname')
         expect(pageview?.title).toBe('Product 42')
+    })
+
+    it('warns once per client when sanitize fails', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const client = await create({ debug: true, urlSanitization: { sanitize: failingSanitize } })
+        client.capture('first')
+        client.capture('second')
+        await client.flush()
+
+        expect(sanitizeWarnings(warn)).toHaveLength(1)
+        warn.mockRestore()
+    })
+
+    it('warns once about a failing sanitize after debug is enabled at runtime', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const client = await create({ urlSanitization: { sanitize: failingSanitize } })
+        client.capture('before debug')
+        await client.flush()
+        expect(sanitizeWarnings(warn)).toHaveLength(0)
+
+        client.debug()
+        client.capture('after debug')
+        client.capture('later')
+        await client.flush()
+
+        expect(sanitizeWarnings(warn)).toHaveLength(1)
+        warn.mockRestore()
     })
 
     it('adds no page context without a location or document', async () => {

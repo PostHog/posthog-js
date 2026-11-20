@@ -100,7 +100,7 @@ const posthog = await createPostHog({
 })
 ```
 
-`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Logs, web vitals and session replay record their URLs with the same `urlSanitization`; replay then applies its own `maskCapturedNetworkRequestFn`. Conversations sends the page URL without its fragment, independently of `urlSanitization`, because its restore links return to that page. The classic script's query options cannot set `urlSanitization`.
+`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Logs, web vitals and session replay record their URLs with the same `urlSanitization`; replay then applies its own `maskCapturedNetworkRequestFn`. Conversations sends the page URL without its fragment, independently of `urlSanitization`, because its restore links return to that page. Autocapture element link `href`s are not affected by `urlSanitization`; they follow `autocapture.disableCaptureUrlHashes`. The classic script's query options cannot set `urlSanitization`.
 
 ## Migrating from the analytics extension
 
@@ -120,6 +120,8 @@ Earlier 0.x versions exposed analytics as a separate product. It is now part of 
 Capture is part of every client, so `analytics: false` (ignored, with a debug warning) and `/core` without the analytics extension no longer turn it off. Both entrypoints send the initial `$pageview`, `$feature_flag_called` the first time each flag value is read when flags is installed, and events from other installed products. Set `capturePageview: false` to skip the initial pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture. `optOutByDefault: true` stops all capture until `optIn()`, but it also blocks flag and other product requests.
 
 Extensions share the client's key-value store, as posthog-js extensions share its persistence. Data saved by earlier 0.x versions under per-extension namespaces is not migrated.
+
+The logs `urlCapture` option and `UrlCaptureOptions` type are removed. Logs' `url.full` now follows the client's [`urlSanitization`](#page-url-and-title), which also applies to events, and includes the query string by default. `urlCapture` dropped the query string by default, so use `urlSanitization: { query: false }` to keep 0.4.x's default of origin and path, and `urlSanitization: { path: false, query: false }` in place of `urlCapture: { path: false }`.
 
 ## Classic script installation (draft CDN distribution)
 

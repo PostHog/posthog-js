@@ -141,7 +141,8 @@ export interface PostHogOptions {
     optOutByDefault?: boolean
     /**
      * Shapes the page URL that every event carries as `$current_url`, with the `$host` and `$pathname` derived from it.
-     * Defaults to the full page URL, as posthog-js records it, without credentials.
+     * It also applies to logs' `url.full`, web vitals measured URLs and session replay page URLs. Defaults to the page
+     * URL without its fragment or credentials.
      */
     urlSanitization?: UrlSanitizationOptions
     /** Capture one initial `$pageview` after configured extensions install. Defaults to `true`. */

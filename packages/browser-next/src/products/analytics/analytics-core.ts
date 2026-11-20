@@ -43,6 +43,7 @@ import { pageProperties, recordedUrl } from './properties/page-properties'
 import { version } from '../../primitives/version'
 import { isNonEmptyString, isValidDistinctId } from './identifiers'
 import { utf8Bytes } from '../../primitives/utf8'
+import type { LogState } from '../../platform/logger'
 
 const numberOption = (read: () => number | undefined, fallback: number, minimum: number, maximum: number): number => {
     try {
@@ -117,12 +118,24 @@ export class Analytics {
     private readonly _beforeResetPublisher: Publisher<void>
     private readonly _buffer: EventBuffer<AnalyticsMessage>
     private readonly _deliveryHost: CaptureHost
+    private _reportedSanitizeFailure = false
+    // Warns once per client: a failing `sanitize` fails for every URL, and each one is omitted.
+    // The flag is set only while output is on, so enabling debug later still shows the warning.
+    private readonly _reportSanitizeFailure = (error: unknown): void => {
+        if (this._reportedSanitizeFailure || !this._logState.enabled) return
+        this._reportedSanitizeFailure = true
+        this._core.logger.warn(
+            'urlSanitization.sanitize failed or returned an invalid URL, so page URLs are omitted',
+            error
+        )
+    }
 
     constructor(
         readonly _core: AnalyticsCore,
         options: AnalyticsOptions,
         createDelivery: AnalyticsDeliveryFactory,
-        private readonly _urlSanitization: UrlSanitizationOptions
+        private readonly _urlSanitization: UrlSanitizationOptions,
+        private readonly _logState: LogState
     ) {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
@@ -380,7 +393,7 @@ export class Analytics {
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
         // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
         const owned = (key: string): boolean => snapshot.overrides.has(key)
-        const page = pageProperties(event, this._urlSanitization)
+        const page = pageProperties(event, this._urlSanitization, this._reportSanitizeFailure)
         for (const key in page) if (owned(key)) delete page[key]
         const defaults: Record<string, unknown> = page
         if (pageviewId && !owned('$pageview_id')) defaults.$pageview_id = pageviewId
@@ -672,7 +685,7 @@ export class Analytics {
 
     /** Shapes a page URL with the client's `urlSanitization`, as events record `$current_url`. */
     recordUrl(href: string | undefined): string | undefined {
-        return recordedUrl(href, this._urlSanitization)?.href
+        return recordedUrl(href, this._urlSanitization, this._reportSanitizeFailure)?.href
     }
 
     /** Registers a producer of properties for each event, given the event name as passed to capture. */

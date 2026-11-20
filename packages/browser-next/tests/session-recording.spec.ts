@@ -145,6 +145,20 @@ describe('session recording controls', () => {
 describe('session recording page URLs', () => {
     afterEach(() => window.history.replaceState(null, '', '/'))
 
+    // Meta events and the given custom event tags, with the URL each records
+    const urlMarkers = (
+        network: Parameters<typeof recordedEvents>[0],
+        tags: string[]
+    ): Array<[string, string | undefined]> =>
+        recordedEvents(network)
+            .filter((event) => event.type === 4 || event.type === 5)
+            .map((event): [string, string | undefined] => {
+                if (event.type === 4) return ['meta', (event.data as { href?: string }).href]
+                const data = event.data as { tag: string; payload: { href?: string } }
+                return [data.tag, data.payload?.href]
+            })
+            .filter(([tag]) => tags.includes(tag))
+
     it('does not report a URL change after a pageview whose recorded URL drops parts of the page URL', async () => {
         window.history.replaceState(null, '', '/checkout?step=2')
         const { posthog, replay, transport: network } = await setup({}, {}, { urlSanitization: { query: false } })
@@ -156,17 +170,57 @@ describe('session recording page URLs', () => {
         typeInto(document.getElementById('name') as HTMLInputElement, 'xy')
         await replay.flush?.()
 
-        const markers = recordedEvents(network)
-            .filter((event) => event.type === 5)
-            .map((event) => {
-                const data = event.data as { tag: string; payload: { href?: string } }
-                return [data.tag, data.payload.href]
-            })
-            .filter(([tag]) => tag === '$pageview' || tag === '$url_changed')
-        expect(markers).toEqual([
+        expect(urlMarkers(network, ['$pageview', '$url_changed'])).toEqual([
             ['$pageview', 'http://localhost:3000/checkout'],
             ['$pageview', 'http://localhost:3000/checkout'],
         ])
+    })
+
+    // a hash-routed app whose sanitizer moves the fragment route into the path
+    const hashRouter = (url: URL): URL => {
+        if (url.hash.startsWith('#/')) url.pathname = url.hash.slice(1)
+        url.hash = ''
+        return url
+    }
+
+    it.each([
+        ['the default urlSanitization', {}, 'http://localhost:3000/'],
+        ['hash: true', { urlSanitization: { hash: true } }, 'http://localhost:3000/#/users/7'],
+        [
+            'a sanitize that reads the fragment',
+            { urlSanitization: { sanitize: hashRouter } },
+            'http://localhost:3000/users/7',
+        ],
+    ])(
+        'does not report a URL change after a later full snapshot when the page has not navigated (%s)',
+        async (_label, overrides, recordedHref) => {
+            window.history.replaceState(null, '', '/#/users/7')
+            // a short interval so a later full snapshot re-emits the Meta event while recording
+            const { replay, transport: network } = await setup({}, { fullSnapshotIntervalMs: 50 }, overrides)
+            await started(replay)
+            await new Promise((resolve) => setTimeout(resolve, 130))
+
+            typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+            typeInto(document.getElementById('name') as HTMLInputElement, 'xy')
+            await replay.flush?.()
+
+            const markers = urlMarkers(network, ['meta', '$url_changed'])
+            expect(markers.length).toBeGreaterThan(1)
+            // every full snapshot records the same URL, and no `$url_changed` follows it
+            expect(markers).toEqual(markers.map(() => ['meta', recordedHref]))
+        }
+    )
+
+    it('reports a hash route change when hash capture is enabled', async () => {
+        window.history.replaceState(null, '', '/#/a')
+        const { replay, transport: network } = await setup({}, {}, { urlSanitization: { hash: true } })
+        await started(replay)
+
+        window.history.replaceState(null, '', '/#/b')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$url_changed'])).toEqual([['$url_changed', 'http://localhost:3000/#/b']])
     })
 })
 
