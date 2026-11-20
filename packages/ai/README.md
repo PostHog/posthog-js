@@ -195,8 +195,8 @@ Set `modelVersion` on `new EvaluationItem({ modelVersion, output })` or
 that execution. Each item can override the experiment's `modelVersion`; omitted or null values
 inherit the experiment default on the server. Dataset metadata never supplies this model.
 Model identifiers must be nonempty strings of at most 255 characters and are preserved without
-trimming. Explicit models survive serialization, retries, and recovery. Changing a model requires
-a new item UUID because model attribution is part of the immutable execution declaration.
+trimming. For a new model execution, declare a new item UUID. To correct the attribution of an
+accepted item, use `updateItem` with `modelVersion`. Keep the original declaration for upload retries.
 
 `scorers` provides create/get/list/update/createVersion/getVersion/listVersions/validateComposition. Configurations
 are typed by `kind`: `boolean`, `numeric`, or `categorical`. Store `currentVersionId` to pin a
@@ -275,7 +275,9 @@ bulk call before any request is sent.
 Receipts expose stored `status` and `errorCode`. Input errors propagate as `composite_input_error`;
 formula or output-rule failures use `composite_formula_error`. Accepted composite errors count
 toward `expectedResultCount`, while derived results add no uploaded-result billing usage.
-Exact retries return stored outcomes, subject to current access checks. Older reported receipts
+For retained results, exact upload retries acknowledge the original outcome and preserve later
+corrections, subject to current access checks. Re-uploading a deleted result while the experiment
+is open creates it again and counts as new usage for a reported result. Older reported receipts
 without outcomes expose `status: null` and `errorCode: null`. Save and restore calculation
 declarations with the same serialization and recovery methods as reported results.
 
@@ -286,10 +288,41 @@ declarations with the same serialization and recovery methods as reported result
 | Formula validation                     | Personal key: `llm_analytics:read`                                   |
 | Experiment create/upload/complete/fail | Personal or project secret key: `offline_evaluation_ingestion:write` |
 | Experiment tags                        | Personal key: `evaluation:read` / `evaluation:write`                 |
+| Item and result revision reads         | Personal key: `evaluation:read`                                      |
+| Item, result, and payload mutations    | Personal key: `evaluation:write` and evaluation editor access        |
+
+Reading a result revision, editing or deleting a result or its payload, and deleting an item
+also require `llm_analytics:read` and access to the affected scorers and composite inputs.
 
 Feature availability and permissions are enforced by the service. Known ingestion hosts map to
 the app API host; custom host path prefixes are preserved. Pagination exposes `nextOffset` or,
 for scorer versions, `nextCursor`. Retain the original filters when requesting the next page.
+
+### Correcting an accepted result
+
+Use the stored IDs from the upload receipt. You can correct a score even after the experiment
+closes. The service recomputes any dependent composite scores.
+
+```ts
+const experiment = evaluations.resumeExperiment(experimentId)
+const resultId = uploadReceipt.results[0].id
+const revision = await experiment.getResultRevision(resultId)
+const corrected = await experiment.updateResult(resultId, { revision, status: 'ok', value: false })
+await experiment.updateResultPayload(resultId, { revision: corrected, payload: { reasoning: 'Reviewed manually' } })
+```
+
+Use `getItemRevision`, `updateItem`, and `updateItemPayload` for item corrections.
+Omitted fields keep their stored values. An explicit `null` clears a nullable field.
+Each payload shares its owner's revision. A result change also advances the parent item's revision.
+Updates return the current revision, including when an unchanged score keeps the same revision.
+
+`deleteItemPayload` and `deleteResultPayload` remove only the stored payload. A deleted payload
+cannot be restored on that record. `deleteItem` permanently removes the item and its results.
+`deleteResult` removes the result and any dependent composites. Each delete takes the stored ID
+and `{ revision }` and resolves to `undefined`.
+
+The SDK sends each mutation once. If a write returns HTTP 409 `revision_conflict`, or the
+response is lost, read the current state before deciding whether to submit another change.
 
 ### Recovery, cancellation, and payloads
 

@@ -12,6 +12,8 @@ import {
   type ScorerCalculation,
   type ValidateCompositionOptions,
   type JSONValue,
+  type ItemUpdate,
+  type ResultUpdate,
 } from '@posthog/ai/evaluations'
 
 const client = new OfflineEvaluations({ projectId: 123, secretKey: 'secret', timeoutMs: 15000 })
@@ -82,6 +84,25 @@ async function examples(scorer: Scorer, error: unknown): Promise<void> {
   for (const input of inputs) if (input.kind === 'numeric') input.config.passingRule?.threshold
   const run = await client.createExperiment({ name: 'test', expectedItemCount: 9223372036854775807n })
   const receipt = await run.uploadResults([result, calculated])
+  const itemId = receipt.chunks[0].items[0].id
+  const resultId = receipt.chunks[0].results[0].id
+  const itemUpdate: ItemUpdate = { trial: null }
+  const resultUpdate: ResultUpdate = { value: false }
+  const revision: number = await run.updateItem(itemId, { revision: await run.getItemRevision(itemId), ...itemUpdate })
+  const corrected: number = await run.updateResult(resultId, {
+    revision: await run.getResultRevision(resultId),
+    ...resultUpdate,
+  })
+  await run.updateItemPayload(itemId, { revision, payload: { expectedOutput: null } })
+  await run.updateResultPayload(resultId, { revision: corrected, payload: { errorMessage: null } })
+  // @ts-expect-error An update requires an observed revision.
+  await run.updateResult(resultId, { value: true })
+  // @ts-expect-error Supply at least one field to change.
+  await run.updateItem(itemId, { revision })
+  // @ts-expect-error Only successful results carry a score.
+  await run.updateResult(resultId, { revision, status: 'error', value: 0 })
+  // @ts-expect-error A result payload has no output field.
+  await run.updateResultPayload(resultId, { revision, payload: { output: null } })
   for (const chunk of receipt.chunks)
     for (const result of chunk.results) {
       if (result.status === 'error') result.errorCode?.toUpperCase()

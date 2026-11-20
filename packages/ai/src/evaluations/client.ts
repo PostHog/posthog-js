@@ -3,12 +3,16 @@ import { Datasets } from './datasets'
 import {
   EvaluationItem,
   EvaluationResult,
+  checkedPayload,
   itemJSON,
   resultJSON,
   type EvaluationResultOptions,
+  type ItemPayload,
+  type ResultPayload,
   type ResultStatus,
 } from './declarations'
 import { EvaluationAPIError, ExperimentCreationAbortedError, parseResponse } from './errors'
+import { itemChanges, resultChanges, type ItemUpdate, type ResultUpdate, type RevisionOptions } from './mutations'
 import { Scorers } from './scorers'
 import {
   boolean,
@@ -18,6 +22,7 @@ import {
   decode,
   encode,
   identifier,
+  integer,
   keys,
   nullable,
   object,
@@ -416,6 +421,110 @@ export class Experiment {
           return responseTags(data.tags)
         }),
       request.signal
+    )
+  }
+
+  async getItemRevision(itemId: string, request: RequestOptions = {}): Promise<number> {
+    const id = uuid(itemId)
+    return this.#readRevision(`items/${id}/`, id, request)
+  }
+
+  /** The result payload endpoint includes its owner's revision even when the payload is unavailable. */
+  async getResultRevision(resultId: string, request: RequestOptions = {}): Promise<number> {
+    const id = uuid(resultId)
+    return this.#readRevision(`results/${id}/payload/`, id, request)
+  }
+
+  async #readRevision(path: string, id: string, { signal }: RequestOptions): Promise<number> {
+    return this.#queue.run(async () => {
+      const data = await this.#transport.request('GET', this.#base + path, { signal })
+      return parseResponse(data, (resource) => {
+        if (uuid(resource.id) !== id) throw new TypeError('Mismatched resource ID.')
+        return integer(resource.revision, 0)
+      })
+    }, signal)
+  }
+
+  async updateItem(
+    itemId: string,
+    options: RevisionOptions & ItemUpdate,
+    request: RequestOptions = {}
+  ): Promise<number> {
+    return this.#patch(`items/${uuid(itemId)}/`, itemChanges(options), options.revision, request)
+  }
+
+  /** Correct a reported outcome. The service recomputes dependent composite scores. */
+  async updateResult(
+    resultId: string,
+    options: RevisionOptions & ResultUpdate,
+    request: RequestOptions = {}
+  ): Promise<number> {
+    return this.#patch(`results/${uuid(resultId)}/`, resultChanges(options), options.revision, request)
+  }
+
+  async updateItemPayload(
+    itemId: string,
+    options: RevisionOptions & { payload: ItemPayload },
+    request: RequestOptions = {}
+  ): Promise<number> {
+    keys(object(options), ['revision', 'payload'])
+    return this.#patch(
+      `items/${uuid(itemId)}/payload/`,
+      { payload: checkedPayload(options.payload, 'item') },
+      options.revision,
+      request
+    )
+  }
+
+  async updateResultPayload(
+    resultId: string,
+    options: RevisionOptions & { payload: ResultPayload },
+    request: RequestOptions = {}
+  ): Promise<number> {
+    keys(object(options), ['revision', 'payload'])
+    return this.#patch(
+      `results/${uuid(resultId)}/payload/`,
+      { payload: checkedPayload(options.payload, 'result') },
+      options.revision,
+      request
+    )
+  }
+
+  async #patch(path: string, changes: WireObject, revision: number, { signal }: RequestOptions): Promise<number> {
+    if (!Object.keys(changes).length) throw new TypeError('Supply at least one field to update.')
+    const body = encode({ revision: integer(revision, 0), ...changes })
+    return this.#queue.run(async () => {
+      const data = await this.#transport.request('PATCH', this.#base + path, { signal, body })
+      return parseResponse(data, (ack) => integer(ack.revision, revision))
+    }, signal)
+  }
+
+  /** Permanently delete the item, its results, and their payloads. */
+  async deleteItem(itemId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`items/${uuid(itemId)}/`, options, request)
+  }
+
+  /** Permanently delete the result, its payload, and any dependent composites. */
+  async deleteResult(resultId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`results/${uuid(resultId)}/`, options, request)
+  }
+
+  /** Permanently remove the stored payload and retain the item and scores. */
+  async deleteItemPayload(itemId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`items/${uuid(itemId)}/payload/`, options, request)
+  }
+
+  /** Permanently remove the stored payload and retain the result. */
+  async deleteResultPayload(resultId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`results/${uuid(resultId)}/payload/`, options, request)
+  }
+
+  async #delete(path: string, options: RevisionOptions, { signal }: RequestOptions): Promise<void> {
+    keys(object(options), ['revision'])
+    const revision = integer(options.revision, 0)
+    await this.#queue.run(
+      () => this.#transport.request('DELETE', this.#base + path, { signal, params: { revision } }),
+      signal
     )
   }
 }
