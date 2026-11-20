@@ -572,12 +572,6 @@ importers:
       '@posthog/browser-common':
         specifier: workspace:^
         version: link:../browser-common
-      '@posthog/rrweb-plugin-console-record':
-        specifier: workspace:*
-        version: link:../rrweb/plugins/rrweb-plugin-console-record
-      '@posthog/rrweb-record':
-        specifier: workspace:*
-        version: link:../rrweb/record
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
@@ -594,6 +588,12 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/rrweb-plugin-console-record':
+        specifier: workspace:*
+        version: link:../rrweb/plugins/rrweb-plugin-console-record
+      '@posthog/rrweb-record':
+        specifier: workspace:*
+        version: link:../rrweb/record
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)

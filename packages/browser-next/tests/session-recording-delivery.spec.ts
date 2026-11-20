@@ -346,7 +346,8 @@ describe('snapshot delivery', () => {
             const beaconBytes = beacons.reduce((total, beacon) => total + beacon.bytes.byteLength, 0)
             expect(beacons.length).toBeGreaterThan(0)
             expect(beaconBytes).toBeLessThanOrEqual(10_000)
-            expect(keepalive.remaining).toBe(10_000 - beaconBytes)
+            // the browser accounts for beacons, so they do not hold the shared budget, as in posthog-js
+            expect(keepalive.remaining).toBe(10_000)
             expect(requests.length).toBeGreaterThan(0)
             expect(requests.every((request) => request.init.keepalive !== true)).toBe(true)
             const sent = [
@@ -399,6 +400,18 @@ describe('snapshot delivery', () => {
 
             expect(requests).toHaveLength(1)
             expect(requests[0]!.init.keepalive).toBeUndefined()
+        })
+
+        it('holds keepalive bytes in the shared budget only while the request is in flight', async () => {
+            const keepalive = { remaining: KEEPALIVE_BUDGET_BYTES }
+            const { delivery, requests } = setup(() => 200, { keepalive })
+
+            delivery.enqueue(message('s1'), 10)
+            delivery.teardown()
+
+            expect(requests[0]!.init.keepalive).toBe(true)
+            expect(keepalive.remaining).toBe(KEEPALIVE_BUDGET_BYTES - (requests[0]!.init.body as string).length)
+            await vi.waitFor(() => expect(keepalive.remaining).toBe(KEEPALIVE_BUDGET_BYTES))
         })
 
         it('uses a keepalive request without sendBeacon', async () => {
