@@ -26,7 +26,7 @@ export function parseSnippetOptions(scriptUrl: string): PostHogOptions {
         if (value !== 'true' && value !== 'false') throw new Error('Invalid boolean option')
         options[key] = value === 'true'
     }
-    for (const key of ['storage', 'flags', 'logs', 'surveys', 'autocapture', 'webVitals'] as const) {
+    for (const key of ['storage', 'flags', 'logs', 'surveys', 'autocapture', 'webVitals', 'errorTracking'] as const) {
         if (!query.has(key)) continue
         if (query.get(key) !== 'false') throw new Error('Invalid disable option')
         options[key] = false

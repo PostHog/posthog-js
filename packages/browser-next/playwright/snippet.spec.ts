@@ -97,6 +97,7 @@ const allProductsDisabled = {
     surveys: 'false',
     autocapture: 'false',
     webVitals: 'false',
+    errorTracking: 'false',
 }
 
 test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {
@@ -317,4 +318,52 @@ test('failed optional chunks leave embedded analytics usable and optional acquis
         expect.objectContaining({ event: 'snippet_early' }),
         expect.objectContaining({ event: 'optional_failure' }),
     ])
+})
+
+test('the script served from the PostHog CDN captures exceptions for non-Error values', async ({ page }) => {
+    // The PostHog SDK filter matches the CDN path; a non-Error value's fallback stack starts inside the SDK.
+    const assetPath = '/static/browser/0/'
+    const prefix = `https://us-assets.i.posthog.com${assetPath}`
+    await page.route(`${prefix}**`, (route) =>
+        route.fulfill({
+            path: `dist-cdn/${new URL(route.request().url()).pathname.slice(assetPath.length)}`,
+            contentType: 'text/javascript',
+            headers: { 'Access-Control-Allow-Origin': '*' },
+        })
+    )
+    const fixture = `${pageOrigin}/error-tracking-cdn`
+    const options = new URLSearchParams({
+        projectToken: 'phc_snippet_fixture',
+        apiHost: pageOrigin,
+        capturePageview: 'false',
+        disableBotDetection: 'true',
+    })
+    await page.route(fixture, (route) =>
+        route.fulfill({
+            contentType: 'text/html',
+            body: `<!doctype html><script src="${prefix}script.js?${options}"></script>
+                <script>function reportFromApp(tracking) { return tracking.captureException('business failure') }</script>`,
+        })
+    )
+    await page.goto(fixture)
+    await page.waitForFunction(() => !!window.posthog)
+    const results = await page.evaluate(async () => {
+        const client = window.posthog as IPostHog
+        const tracking = await client.resolveExtension('errorTracking')
+        const { reportFromApp } = window as unknown as { reportFromApp: (target: typeof tracking) => boolean }
+        const results = [reportFromApp(tracking), tracking?.captureException(new Error('native'))]
+        await client.flush()
+        return results
+    })
+    expect(results).toEqual([true, true])
+    const events = (await backend.inspect()).events as Array<{
+        event: string
+        properties: { $exception_list: [{ value: string; stacktrace: { frames: Array<{ function: string }> } }] }
+    }>
+    const exceptions = events
+        .filter((event) => event.event === '$exception')
+        .map((event) => event.properties.$exception_list[0])
+    expect(exceptions.map((exception) => exception.value)).toEqual(['business failure', 'native'])
+    // The stack synthesized for a non-Error value ends at the application caller, not inside the SDK.
+    expect(exceptions[0]?.stacktrace.frames.at(-1)?.function).toBe('reportFromApp')
 })

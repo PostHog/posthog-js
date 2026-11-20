@@ -21,6 +21,14 @@ export default defineConfig({
                 find: '@posthog/core/surveys',
                 replacement: fileURLToPath(new URL('../core/src/surveys/index.ts', import.meta.url)),
             },
+            {
+                find: '@posthog/core/error-tracking',
+                replacement: fileURLToPath(new URL('../core/src/error-tracking/index.ts', import.meta.url)),
+            },
+            {
+                find: '@posthog/core/utils',
+                replacement: fileURLToPath(new URL('../core/src/utils/index.ts', import.meta.url)),
+            },
             { find: '@posthog/core', replacement: fileURLToPath(new URL('../core/src/index.ts', import.meta.url)) },
             {
                 find: 'posthog-js',
