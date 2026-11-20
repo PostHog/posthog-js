@@ -30,6 +30,7 @@ import {
     assertConversationDelivery,
     expectedPageErrors,
     expectedRejections,
+    withoutDeliberateErrors,
 } from './extension-cases.mjs'
 import { createCompatibilityContext } from './network.mjs'
 import { directory as lab, repository, verifyInputs, digest, coreSource } from './prepare.mjs'
@@ -568,11 +569,13 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         }
         assert(!network.events.some((e) => e.event === 'compat-must-not-deliver'), 'Opted-out event reached the server')
         assert(unexpectedNetwork.length === 0, `Unexpected network: ${unexpectedNetwork}`)
-        const unexpectedPageErrors = pageErrors.filter((error) => !expectedPageErrors(scenario).includes(error.message))
-        assert(unexpectedPageErrors.length === 0, `Page errors: ${JSON.stringify(unexpectedPageErrors)}`)
-        const unexpectedRejections = api.unhandled.filter(
-            (rejection) => !expectedRejections(scenario).includes(rejection.message)
+        const unexpectedPageErrors = withoutDeliberateErrors(
+            pageErrors,
+            expectedPageErrors(scenario, engine),
+            'page errors'
         )
+        assert(unexpectedPageErrors.length === 0, `Page errors: ${JSON.stringify(unexpectedPageErrors)}`)
+        const unexpectedRejections = withoutDeliberateErrors(api.unhandled, expectedRejections(scenario), 'rejections')
         assert(unexpectedRejections.length === 0, `Unhandled rejections: ${JSON.stringify(unexpectedRejections)}`)
         assert(network.errors.length === 0, `Mock errors: ${JSON.stringify(network.errors)}`)
         for (const phase of ['before-init', 'loaded', 'init-return', 'pending', 'ready'])

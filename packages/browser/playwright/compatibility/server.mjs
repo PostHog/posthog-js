@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { createMockServer, buildConfigResponse } from '@posthog-tooling/sdk-mock-server'
 import { interactionScenarios } from './interaction-cases.mjs'
-import { replayLinkedFlag, replayMinimumDurationMs, replayTriggerConfig } from './replay-cases.mjs'
+import {
+    replayLifecycleScenarios,
+    replayLinkedFlag,
+    replayMinimumDurationMs,
+    replayTriggerConfig,
+} from './replay-cases.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
 import { toolbarScript, conversationsConfig, conversationsBackend } from './extension-cases.mjs'
 
@@ -146,14 +150,8 @@ export function compatibilityServer(settings) {
                 )
                 if (
                     path === '/' &&
-                    [
-                        'replay-idle',
-                        'replay-rotation',
-                        'replay-minimum-duration',
-                        'replay-event-trigger',
-                        'replay-url-trigger',
-                        'replay-linked-flag',
-                    ].includes(settings.scenario)
+                    replayLifecycleScenarios.includes(settings.scenario) &&
+                    settings.scenario !== 'replay-bounce'
                 ) {
                     body = body.replace(
                         '</head>',
@@ -176,7 +174,7 @@ export function compatibilityServer(settings) {
                 '/snippet.js': settings.snippet,
                 '/consumer.js': settings.fixture,
                 '/player.js': settings.player,
-                '/errors.js': fileURLToPath(new URL('./fixtures/errors.js', import.meta.url)),
+                '/errors.js': new URL('./fixtures/errors.js', import.meta.url),
             }
             if (fixed[path]) return { body: readFileSync(fixed[path]), headers: { 'Content-Type': 'text/javascript' } }
             if (path === '/favicon.ico') return { status: 204, body: '', headers: { 'Content-Type': 'image/x-icon' } }

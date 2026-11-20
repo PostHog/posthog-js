@@ -9,9 +9,19 @@ export const exceptionCases = [
 
 // The fixture throws these on purpose; any other page error or rejection still fails the cell.
 // Firefox also reports unhandled rejections as page errors.
-export const expectedPageErrors = (scenario) =>
-    scenario === 'exceptions' ? ['compat-uncaught', 'compat-rejection'] : []
+export const expectedPageErrors = (scenario, engine) => {
+    if (scenario !== 'exceptions') return []
+    return engine === 'firefox' ? ['compat-uncaught', 'compat-rejection'] : ['compat-uncaught']
+}
 export const expectedRejections = (scenario) => (scenario === 'exceptions' ? ['compat-rejection'] : [])
+
+// Requires each expected deliberate error exactly once, so a lost or repeated one fails the cell,
+// and returns the remaining errors.
+export function withoutDeliberateErrors(observed, expected, kind) {
+    const deliberate = observed.filter((error) => expected.includes(error.message)).map((error) => error.message)
+    assert.deepEqual(deliberate.sort(), [...expected].sort(), `Missing or duplicate deliberate ${kind}`)
+    return observed.filter((error) => !expected.includes(error.message))
+}
 
 const exceptionEvents = (network) => network.events.filter((event) => event.event === '$exception')
 
