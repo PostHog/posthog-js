@@ -145,6 +145,63 @@ describe('immediate capture with default delivery', () => {
         }
     })
 
+    it('waits the redrive cooldown before the extra drain resends the failed batch', async () => {
+        vi.useFakeTimers()
+        try {
+            const attempts: { at: number; events: string[] }[] = []
+            const fetch: BrowserFetch = async (_input, init) => {
+                const batch = (JSON.parse(String(init?.body)) as { batch: { event: string }[] }).batch
+                attempts.push({ at: Date.now(), events: batch.map((event) => event.event) })
+                return new Response('{}', { status: 503, headers: { 'Retry-After': '1' } })
+            }
+            const posthog = await createDefault({ ...recordingOptions(fetch), analytics: {} })
+
+            posthog.capture('earlier')
+            void posthog.flush()
+            await vi.advanceTimersByTimeAsync(0)
+            posthog.capture('instant', null, { delivery: 'immediate' })
+            await vi.advanceTimersByTimeAsync(60_000)
+
+            expect(attempts[4]?.events).toEqual(['earlier', 'instant'])
+            expect(attempts[4]!.at - attempts[3]!.at).toBeGreaterThanOrEqual(3_000)
+            const shutdown = posthog.shutdown(0)
+            await vi.runAllTimersAsync()
+            await shutdown
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('lets an explicit flush() skip the cooldown before the extra drain', async () => {
+        vi.useFakeTimers()
+        try {
+            const attempts: { at: number; events: string[] }[] = []
+            const fetch: BrowserFetch = async (_input, init) => {
+                const batch = (JSON.parse(String(init?.body)) as { batch: { event: string }[] }).batch
+                attempts.push({ at: Date.now(), events: batch.map((event) => event.event) })
+                return new Response('{}', { status: 503 })
+            }
+            const posthog = await createDefault({ ...recordingOptions(fetch), analytics: {} })
+
+            posthog.capture('earlier')
+            void posthog.flush()
+            await vi.advanceTimersByTimeAsync(0)
+            posthog.capture('instant', null, { delivery: 'immediate' })
+            while (attempts.length < 4) await vi.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
+            void posthog.flush()
+            await vi.advanceTimersByTimeAsync(0)
+
+            expect(attempts[4]?.events).toEqual(['earlier', 'instant'])
+            expect(attempts[4]!.at - attempts[3]!.at).toBeLessThanOrEqual(20)
+            const shutdown = posthog.shutdown(0)
+            await vi.runAllTimersAsync()
+            await shutdown
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('hands an in-flight immediate event to the keepalive request when the page hides', async () => {
         const target = stubWindowEvents()
         const requests: RecordedRequest[] = []

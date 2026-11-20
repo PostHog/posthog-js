@@ -76,6 +76,17 @@ describe('runtime configuration', () => {
         ])
     })
 
+    it('keeps person processing for an already-processed visitor after a downgrade to identified_only', async () => {
+        posthog.setConfig({ analytics: { personProfiles: 'always' } })
+        posthog.capture('before')
+        posthog.setConfig({ analytics: { personProfiles: 'identified_only' } })
+        posthog.capture('after')
+        await posthog.flush()
+
+        // Matches posthog-js: once a visitor's events are processed, later events stay processed.
+        expect(recordedEvents(requests).at(-1)?.options.process_person_profile).toBe(true)
+    })
+
     it('stops person processing after the policy changes to never', async () => {
         posthog.setConfig({ analytics: { personProfiles: 'never' } })
         posthog.identify('user-1')

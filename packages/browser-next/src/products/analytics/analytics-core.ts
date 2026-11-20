@@ -345,19 +345,15 @@ export class Analytics {
         const distinctId = state.distinctId
         const groups = state.groups
         const uuid = snapshot.uuid ?? createId()
-        // A pageview belongs to its session, so a new session starts without one.
-        const activePageviewId = this._pageview?.[1] === session.sessionId ? this._pageview[0] : undefined
+        const activePageviewId = this._pageviewIdFor(session.sessionId)
         const isPageview = event === '$pageview'
         const pageviewId = isPageview ? uuid : activePageviewId
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
         // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
-        const owned = (key: string): boolean => snapshot.overrides.has(key)
-        const defaults = {
-            ...(pageviewId && !owned('$pageview_id') ? { $pageview_id: pageviewId } : {}),
-            ...(activePageviewId && (isPageview || event === '$pageleave') && !owned('$prev_pageview_id')
-                ? { $prev_pageview_id: activePageviewId }
-                : {}),
-        }
+        const defaults: Record<string, string> = {}
+        if (pageviewId && !snapshot.overrides.has('$pageview_id')) defaults.$pageview_id = pageviewId
+        if (activePageviewId && (isPageview || event === '$pageleave') && !snapshot.overrides.has('$prev_pageview_id'))
+            defaults.$prev_pageview_id = activePageviewId
         const metadata = {
             token: this._core.projectToken,
             distinct_id: distinctId,
@@ -438,6 +434,12 @@ export class Analytics {
         if (preparedSession.reason) this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         this._eventPublisher.publish(deepFreeze({ event: message.event, properties: observedProperties }))
         return message
+    }
+
+    /** A pageview belongs to its session, so an expired or rotated session has none. */
+    _pageviewIdFor(sessionId: string | undefined): string | undefined {
+        const pageview = this._pageview
+        return pageview && pageview[1] === sessionId ? pageview[0] : undefined
     }
 
     _hasPersonProcessing(): boolean {

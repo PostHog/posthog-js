@@ -98,7 +98,10 @@ export interface PostHogOptions {
 export interface RuntimeOptions {
     /** Enable or disable SDK diagnostic logs, including loggers that extensions already created. */
     debug?: boolean
-    /** Analytics policy applied to subsequent captures. */
+    /**
+     * Analytics policy applied to subsequent captures. As in `posthog-js`, downgrading `personProfiles` from `'always'`
+     * to `'identified_only'` keeps person processing for a visitor whose events were already processed; `'never'` stops it.
+     */
     analytics?: Pick<AnalyticsOptions, 'personProfiles'>
 }
 
