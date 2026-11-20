@@ -2302,6 +2302,7 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
+        let retryQueueSize: number | undefined
         try {
             if (this.sessionRecording) {
                 const replayProperties = this.sessionRecording.sdkDebugProperties
@@ -2312,7 +2313,7 @@ export class PostHog implements PostHogInterface {
                     }
                 }
             }
-            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
+            retryQueueSize = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
@@ -2391,6 +2392,14 @@ export class PostHog implements PostHogInterface {
             ...dynamicProperties,
             ...properties,
         })
+
+        // SDK-owned and only sent while requests wait to be retried, so a registered or caller value
+        // can't make an empty retry queue look backed up.
+        if (retryQueueSize) {
+            properties['$sdk_debug_retry_queue_size'] = retryQueueSize
+        } else {
+            delete properties['$sdk_debug_retry_queue_size']
+        }
 
         properties['$is_identified'] = this._isIdentified()
 
