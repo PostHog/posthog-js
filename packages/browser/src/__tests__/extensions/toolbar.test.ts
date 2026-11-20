@@ -114,6 +114,15 @@ describe('Toolbar', () => {
             })
         })
 
+        it('returns true when toolbar params are found, even while the toolbar is already running', () => {
+            const running = document.createElement('div')
+            running.id = TOOLBAR_ID
+            document.body.appendChild(running)
+
+            expect(toolbar.maybeLoadToolbar(aLocation(), storage, history)).toBe(true)
+            expect(toolbar.loadToolbar).toHaveBeenCalledTimes(1)
+        })
+
         it('should initialize the toolbar when there are editor params in the session', () => {
             // if the hash state does not contain ph_authorize then look in storage
             localStorage.getItem.mockImplementation(() => JSON.stringify(toolbarParams))
@@ -199,6 +208,31 @@ describe('Toolbar', () => {
             document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
 
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+        })
+
+        it('reloads once for each Turbolinks body replacement', () => {
+            const addListener = vi.spyOn(window!, 'addEventListener')
+            const turbolinksListeners = () =>
+                addListener.mock.calls.filter(([type]) => type === 'turbolinks:load').map(([, listener]) => listener)
+            // Earlier tests leave their listeners on the window, so dispatch only to this toolbar's listeners.
+            const replaceBody = () => {
+                document.getElementById(TOOLBAR_ID)?.remove()
+                for (const listener of turbolinksListeners()) (listener as EventListener)(new Event('turbolinks:load'))
+            }
+            const loader = vi.mocked(assignableWindow.__PosthogExtensions__!.loadExternalDependency)
+            loader.mockImplementation(() => {})
+            const finishLoad = () => loader.mock.calls.at(-1)?.[2]()
+            try {
+                expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+                finishLoad()
+                for (let navigation = 1; navigation <= 3; navigation++) {
+                    replaceBody()
+                    expect(loader).toHaveBeenCalledTimes(navigation + 1)
+                    finishLoad()
+                }
+            } finally {
+                for (const listener of turbolinksListeners()) window!.removeEventListener('turbolinks:load', listener)
+            }
         })
     })
 

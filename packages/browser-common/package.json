@@ -81,6 +81,12 @@
             "surveys-renderer": [
                 "dist/surveys-renderer.d.ts"
             ],
+            "toolbar": [
+                "dist/toolbar.d.ts"
+            ],
+            "conversations-renderer": [
+                "dist/conversations-renderer.d.ts"
+            ],
             "surveys/surveys-extension-utils": [
                 "dist/surveys/surveys-extension-utils.d.ts"
             ],
@@ -215,6 +221,16 @@
             "types": "./dist/surveys-renderer.d.ts",
             "require": "./dist/surveys-renderer.js",
             "import": "./dist/surveys-renderer.mjs"
+        },
+        "./toolbar": {
+            "types": "./dist/toolbar.d.ts",
+            "require": "./dist/toolbar.js",
+            "import": "./dist/toolbar.mjs"
+        },
+        "./conversations-renderer": {
+            "types": "./dist/conversations-renderer.d.ts",
+            "require": "./dist/conversations-renderer.js",
+            "import": "./dist/conversations-renderer.mjs"
         },
         "./surveys/surveys-extension-utils": {
             "types": "./dist/surveys/surveys-extension-utils.d.ts",

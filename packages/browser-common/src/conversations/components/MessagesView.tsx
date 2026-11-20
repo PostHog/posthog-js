@@ -1,6 +1,6 @@
 // oxlint-disable-next-line typescript/no-unused-vars
 import { h, Fragment } from 'preact'
-import { Message } from '../../../../posthog-conversations-types'
+import type { Message } from '../../types/conversations'
 import { getStyles } from './styles'
 import { SendMessageButton } from './SendMessageButton'
 import { RichContent } from './RichContent'

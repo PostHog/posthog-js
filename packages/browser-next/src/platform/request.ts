@@ -27,7 +27,7 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
 }
 
 export type RequestRuntime = [
-    hosts: { api: string; flags: string; assets: string },
+    hosts: { api: string; flags: string; assets: string; ui: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,

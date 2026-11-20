@@ -3,8 +3,8 @@
 // The project color is a fallback too: a strict style-src CSP can block the theme stylesheet,
 // but not styles set through the DOM.
 
-import type { WidgetPosition } from '../../../../posthog-conversations-types'
-import { Z_INDEX_CONVERSATIONS } from '../../../../constants'
+import type { WidgetPosition } from '../../types/remote-config'
+import { Z_INDEX_CONVERSATIONS } from '../../constants'
 import { cssVar, DEFAULT_PRIMARY_COLOR, getContrastTextColor } from '../theme'
 
 const background = cssVar('bg', 'white')

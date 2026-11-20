@@ -1,5 +1,5 @@
 import { h } from 'preact'
-import { ConversationsRemoteConfig } from '../../../../posthog-conversations-types'
+import type { ConversationsRemoteConfig } from '../../types/remote-config'
 import { getStyles } from './styles'
 
 interface IdentificationFormViewProps {

@@ -1,5 +1,5 @@
-import type { ConversationsTheme, ConversationsThemeColors } from '../../../posthog-conversations-types'
-import { createLogger } from '@posthog/browser-common/utils/logger'
+import type { ConversationsTheme, ConversationsThemeColors } from '../types/conversations'
+import { createLogger } from '../utils/logger'
 import { isUndefined } from '@posthog/core'
 
 const logger = createLogger('[Conversations]')
@@ -24,7 +24,7 @@ export type ThemeToken =
     | 'launcher-shadow'
     | 'window-shadow'
 
-type ThemeValues = Partial<Record<ThemeToken, string>>
+type ThemeValues = Partial<Record<ThemeToken, string | undefined>>
 
 const DARK_COLORS: Required<Omit<ConversationsThemeColors, 'primary' | 'primaryText'>> = {
     background: '#18181b',
@@ -48,7 +48,7 @@ export const cssVar = (token: ThemeToken, fallback: string): string => `var(--ph
  */
 export function getContrastTextColor(hexColor: string): string {
     const hex = hexColor.replace(/^#/, '')
-    const fullHex = hex.length === 3 ? hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] : hex
+    const fullHex = hex.length === 3 ? hex[0]! + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] : hex
 
     const r = parseInt(fullHex.slice(0, 2), 16)
     const g = parseInt(fullHex.slice(2, 4), 16)
