@@ -224,6 +224,11 @@ class PostHog implements IPostHog {
         let analyticsOptions: AnalyticsOptions = {}
         try {
             analyticsOptions = options.analytics ?? {}
+            if ((analyticsOptions as unknown) === false) {
+                this.logger.warn(
+                    'The `analytics: false` option was removed in this version, so events are captured. Set `capturePageview: false` to skip the initial $pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture.'
+                )
+            }
         } catch {
             // Unreadable analytics options retain the defaults.
         }
