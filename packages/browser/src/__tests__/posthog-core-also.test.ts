@@ -185,6 +185,20 @@ describe('posthog core', () => {
             }
         })
 
+        it('reports a retry queue read failure without throwing', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            posthog._retryQueue = {
+                get length(): number {
+                    throw new Error('boom')
+                },
+            } as any
+
+            const properties = posthog.capture('x')!.properties
+
+            expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+            expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
+        })
+
         it('drops registered and caller retry queue sizes while the retry queue is empty', () => {
             const posthog = posthogWith({ capture_pageview: false, autocapture: false })
             posthog.register({ $sdk_debug_retry_queue_size: -1 })

@@ -443,6 +443,18 @@ describe('PostHog RN session replay debug properties', () => {
     }
   })
 
+  it('A build failure still reports a backed-up queue', async () => {
+    const client = await readyClient({ enableSessionReplay: true, flushAt: 1 })
+    client.capture('queued')
+    vi.spyOn(client, 'getKnownFeatureFlags').mockImplementation(() => {
+      throw new Error('boom')
+    })
+
+    const { properties } = captureOne(client)
+    expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+    expect(properties.$sdk_debug_pending_queue_size).toBe(1)
+  })
+
   it('A successful build never attaches the error key', async () => {
     const client = await readyClient()
     const { properties } = captureOne(client)
