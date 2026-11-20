@@ -310,7 +310,7 @@ describe('manual exception capture', () => {
         expect(await exceptions(posthog, sent)).toHaveLength(1)
     })
 
-    it('drops exceptions matching remote suppression rules and records why', async () => {
+    it('drops exceptions matching remote suppression rules without recording a step', async () => {
         const sent: CapturedEvent[] = []
         const storage = new MemoryStorage()
         const suppressionRules = [
@@ -330,7 +330,7 @@ describe('manual exception capture', () => {
 
         const [properties] = await exceptions(posthog, sent)
         expect(properties.$exception_list[0].value).toBe('kept')
-        expect(stepMessages(properties)).toEqual(['Exception dropped: matched a suppression rule'])
+        expect(stepMessages(properties)).toEqual([])
 
         // Saved rules apply before remote configuration resolves.
         const restored = await createWith(sent, {}, {}, { storage, remoteConfig: undefined, fetch: false })
@@ -438,6 +438,23 @@ describe('exception steps', () => {
 describe('exception autocapture', () => {
     const waitForWrapped = async (read: () => unknown, original: unknown) =>
         vi.waitFor(() => expect(read()).not.toBe(original))
+
+    it('keeps application steps when filtered exceptions recur', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog, tracking } = await createWith(sent, {
+            captureExceptions: true,
+            exceptionSteps: { maxBytes: 600 },
+        })
+        await waitForWrapped(() => window.onerror, originalOnError)
+
+        tracking.addExceptionStep('checkout started')
+        // Nine extension errors pass the per-type limiter and are each dropped by the extension filter.
+        for (let index = 0; index < 9; index++) window.onerror!('boom', undefined, 0, 0, extensionError())
+        tracking.captureException(new Error('real failure'))
+
+        const [properties] = await exceptions(posthog, sent)
+        expect(stepMessages(properties)).toEqual(['checkout started'])
+    })
 
     it('captures unhandled errors and rejections as unhandled exceptions when enabled', async () => {
         const sent: CapturedEvent[] = []
