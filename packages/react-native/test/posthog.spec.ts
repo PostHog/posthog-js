@@ -677,26 +677,26 @@ describe('PostHog React Native', () => {
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
       })
 
       // Sync-storage init: feature flags should be readable immediately without
       // awaiting any preload. Specific storage.getItem call count is an
       // implementation detail and not asserted — only that sync behavior holds.
       expect(posthog.getFeatureFlag('flag')).toEqual(undefined)
-      posthog.overrideFeatureFlag({
-        flag: true,
-      })
+      posthog.updateFlags({ flag: true })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // Shut down the first instance to persist the override and clear its
+      // Shut down the first instance to persist the flags and clear its
       // timers before replacing it.
       await posthog.shutdown()
 
-      // New instance but same sync storage — the override persisted via
-      // the first instance is visible to the second without preload.
+      // New instance but same sync storage — the flags persisted via
+      // the first instance are visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
       })
 
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
@@ -1538,15 +1538,15 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.PersonProperties, { plan: 'pro' })
         posthog.register({ customProp: 'value' })
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({ plan: 'pro' })
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
 
-        posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+        posthog.reset([PostHogPersistedProperty.PersonProperties])
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({ plan: 'pro' })
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 
@@ -2273,7 +2273,7 @@ describe('PostHog React Native', () => {
       expect(attrs['screen.name']).toEqual({ stringValue: 'checkout' })
     })
 
-    it('captureLog tags records with feature_flags from getFeatureFlags()', async () => {
+    it('captureLog tags records with feature_flags from the loaded flag values', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -2282,9 +2282,9 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      // Stub the flag store directly — `getFeatureFlags()` is the same
+      // Stub the flag store directly — `getFeatureFlagValues()` is the same
       // primitive logs reads at capture time.
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue({
         'new-checkout': true,
         'experiment-ab': 'variant-a',
       } as any)
@@ -2311,7 +2311,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue(undefined)
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue(undefined)
 
       posthog.captureLog({ body: 'no-flags' })
 
@@ -2335,7 +2335,7 @@ describe('PostHog React Native', () => {
       // events, which emit `$active_feature_flags: []` for back-compat (the
       // shared helper preserves the empty array; only the caller's gate
       // differs).
-      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({} as any)
+      vi.spyOn(posthog as any, 'getFeatureFlagValues').mockReturnValue({} as any)
 
       posthog.captureLog({ body: 'empty-flags' })
 
@@ -2676,9 +2676,13 @@ describe('Feature flag error tracking', () => {
   })
 
   it.each([
-    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendEvent: false })],
-    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendEvent: false })],
-  ] as const)('should not send $feature_flag_called from %s when sendEvent is false', async (_, callFn) => {
+    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendFeatureFlagEvent: false })],
+    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendFeatureFlagEvent: false })],
+    [
+      'getFeatureFlagResult',
+      (client: PostHog) => client.getFeatureFlagResult('my-flag', { sendFeatureFlagEvent: false })?.enabled,
+    ],
+  ] as const)('should not send $feature_flag_called from %s when sendFeatureFlagEvent is false', async (_, callFn) => {
     ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
