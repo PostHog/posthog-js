@@ -39,8 +39,9 @@ export interface FeatureFlags extends BrowserExtension {
     /** Clear one group's local evaluation properties, or all groups when omitted. Does not reload flags. */
     resetGroupPropertiesForFlags(groupType?: string): void
     /**
-     * List cached early-access features, or fetch them with optional stage query filters. The callback receives only
-     * a successfully loaded list; a failed fetch keeps the cached list and does not call it.
+     * List cached early-access features, or fetch them with optional stage query filters. As in posthog-js, any
+     * response with a JSON body replaces the cached list and reaches the callback, even when the request failed, so
+     * the callback can receive `undefined`.
      */
     getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,

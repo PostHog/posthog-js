@@ -189,6 +189,30 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             }
         })
     }
+    const subscribe = (callback: SurveyCallback, listen: (notify: SurveyCallback) => () => void): Disposable => {
+        let active = true
+        const notify = deliver((surveys, context) => {
+            if (active) callback(surveys, context)
+        })
+        const unsubscribe = listen(notify)
+        if (!client || typeof document === 'undefined') {
+            notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
+        } else if (!disposed) {
+            manual = true
+            try {
+                // Loading delivers the initial result; shared initialization owns load failures as well as success.
+                shared.loadIfEnabled()
+            } catch (error) {
+                client.logger.error('Survey renderer loading failed', error)
+            }
+        }
+        return {
+            dispose: () => {
+                active = false
+                unsubscribe()
+            },
+        }
+    }
     let teardownSubscription: AnalyticsTeardownSubscription | undefined
     const pagehide = () => {
         if (!teardownSubscription?.deliveryAvailable) shared.handlePageUnload()
@@ -268,54 +292,9 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     reject(error)
                 })
             }),
-        onSurveysLoaded: (callback) => {
-            let active = true
-            const notify = deliver((surveys, context) => {
-                if (active) callback(surveys, context)
-            })
-            const unsubscribe = shared.onSurveysLoaded(notify)
-            if (!client || typeof document === 'undefined') {
-                notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
-            } else if (!disposed) {
-                manual = true
-                try {
-                    // Shared initialization owns load failures as well as success notifications.
-                    shared.loadIfEnabled()
-                } catch (error) {
-                    client.logger.error('Survey renderer loading failed', error)
-                }
-            }
-            return {
-                dispose: () => {
-                    active = false
-                    unsubscribe()
-                },
-            }
-        },
-        onActiveMatchingSurveysChanged: (callback) => {
-            let active = true
-            const notify = deliver((surveys, context) => {
-                if (active) callback(surveys, context)
-            })
-            const unsubscribe = shared.onActiveMatchingSurveysChanged(notify)
-            if (!client || typeof document === 'undefined') {
-                notify([], { isLoaded: false, error: 'Survey renderer unavailable' })
-            } else if (!disposed) {
-                manual = true
-                try {
-                    // Loading delivers the initial matching set to this subscription.
-                    shared.loadIfEnabled()
-                } catch (error) {
-                    client.logger.error('Survey renderer loading failed', error)
-                }
-            }
-            return {
-                dispose: () => {
-                    active = false
-                    unsubscribe()
-                },
-            }
-        },
+        onSurveysLoaded: (callback) => subscribe(callback, (notify) => shared.onSurveysLoaded(notify)),
+        onActiveMatchingSurveysChanged: (callback) =>
+            subscribe(callback, (notify) => shared.onActiveMatchingSurveysChanged(notify)),
         getElementSelectors: () => new Set(elementSelectors),
         cancelPendingSurvey: (id) => {
             if (!disposed) shared.cancelPendingSurvey(id)
