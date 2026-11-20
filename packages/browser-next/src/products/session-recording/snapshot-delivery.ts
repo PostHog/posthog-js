@@ -40,6 +40,8 @@ const MAX_QUEUED_BYTES = 25 * 1024 * 1024
 const MAX_SNAPSHOT_AGE_MS = 10 * 60 * 1000
 const MAX_BATCH_SNAPSHOTS = 10
 const RETRY_INTERVAL_MS = 1000
+// posthog-js's default request timeout, so a stalled request cannot block later snapshots and flush()
+const REQUEST_TIMEOUT_MS = 60_000
 const MAX_RETRY_INTERVAL_MS = 30_000
 // network errors (0) and the transient statuses the other client SDKs and sdk-specs retry-queue retry
 const RETRYABLE_STATUSES = [0, 408, 429, 500, 502, 503, 504]
@@ -93,17 +95,27 @@ const post = async (
     const payload = JSON.stringify(withSentAt(messages))
     // gzip bodies are recognized by their magic bytes; posthog-js sends them the same way
     const compressed = host.gzipEnabled() ? await gzip(payload) : undefined
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    const timer = setTimeout(abort, REQUEST_TIMEOUT_MS)
+    // oxlint-disable-next-line posthog-js/no-add-event-listener
+    signal?.addEventListener('abort', abort)
+    if (signal?.aborted) abort()
     try {
         const response = await fetch(endpointUrl(host), {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': compressed ? 'text/plain' : 'application/json' },
             body: (compressed ?? payload) as BodyInit,
-            ...(signal ? { signal } : {}),
+            signal: controller.signal,
         })
         return [response.status, parseRetryAfter(response, Date.now)]
     } catch {
+        // network errors and timeouts are retried
         return [0]
+    } finally {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
     }
 }
 
