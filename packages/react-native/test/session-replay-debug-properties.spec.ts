@@ -313,7 +313,7 @@ describe('PostHog RN session replay debug properties', () => {
     const { properties } = captureOne(client, '$screen')
     expect(properties.$sdk_debug_session_start).toBeUndefined()
     expect(properties.$recording_status).toBe('disabled')
-    expect(properties.$sdk_debug_pending_queue_size).toEqual(expect.any(Number))
+    expect(properties.$sdk_debug_pending_queue_size).toBeUndefined()
   })
 
   it('Session keys follow a caller-supplied session id (mobile)', async () => {
@@ -1193,7 +1193,7 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
   describe('replay intentionally off', () => {
-    const OFF_KEYS = ['$recording_status', '$sdk_debug_pending_queue_size']
+    const OFF_KEYS = ['$recording_status']
     const FULL_BUNDLE_KEYS = [
       '$sdk_debug_session_start',
       '$sdk_debug_replay_capture_mode',
@@ -1224,13 +1224,22 @@ describe('PostHog RN session replay debug properties', () => {
       return client
     }
 
-    it('local off sends only the status and queue depth on a custom event and an eligible screen', async () => {
+    it('local off sends only the status on a custom event and an eligible screen', async () => {
       const client = await readyClient({ enableSessionReplay: false })
       expectOffShape(captureOne(client).properties)
       expectOffShape(captureOne(client, '$screen').properties)
     })
 
-    it('remote off (sessionRecording false) sends only the status and queue depth', async () => {
+    it('local off adds the queue depth once the queue reaches flushAt', async () => {
+      const client = await readyClient({ enableSessionReplay: false, flushAt: 1 })
+      client.capture('first')
+      const { properties } = captureOne(client, '$screen')
+      expect(debugKeysOf(properties).sort()).toEqual([...OFF_KEYS, '$sdk_debug_pending_queue_size'].sort())
+      expect(properties.$recording_status).toBe('disabled')
+      expect(properties.$sdk_debug_pending_queue_size).toBe(1)
+    })
+
+    it('remote off (sessionRecording false) sends only the status', async () => {
       const client = await readyWithRemoteConfig({ sessionRecording: false })
       expectOffShape(captureOne(client).properties)
       expectOffShape(captureOne(client, '$screen').properties)
