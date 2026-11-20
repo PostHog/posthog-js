@@ -224,7 +224,11 @@ export class SessionRecorder {
                 ? {
                       ...this._triggerHost.optionalDebugProperties(),
                       $sdk_debug_replay_internal_buffer_size: this._buffer.size,
-                      ...(this._sessionStartTimestamp ? { $sdk_debug_session_start: this._sessionStartTimestamp } : {}),
+                      // the recorder adopts a rotated session only after the event that rotates it, which must not carry the old start
+                      ...(this._sessionStartTimestamp &&
+                      this._sessionId === this._analytics?._core._state.activeSessionId
+                          ? { $sdk_debug_session_start: this._sessionStartTimestamp }
+                          : {}),
                       // as in posthog-js, conditions are only pending while they hold the recording in a buffer
                       $sdk_debug_replay_pending_trigger_conditions:
                           status === BUFFERING
