@@ -145,7 +145,6 @@ describe('web vitals', () => {
                         attribution: false,
                         allowedMetrics: ['LCP', 'CLS'],
                         delayedFlushMs: 2000,
-                        maxValue: 120_000,
                         previewSoftNavigations: true,
                     }),
                 ],
@@ -157,7 +156,8 @@ describe('web vitals', () => {
         expect(library.plain.onFCP).not.toHaveBeenCalled()
         expect(library.plain.onINP).not.toHaveBeenCalled()
 
-        reporter(library.plain.onCLS)({ name: 'CLS', value: 120_000 })
+        // Values at or above the 15-minute outlier limit are discarded.
+        reporter(library.plain.onCLS)({ name: 'CLS', value: 900_000 })
         reporter(library.plain.onLCP)({ name: 'LCP', value: 1500 })
         vi.advanceTimersByTime(1999)
         expect(events).toHaveLength(0)
