@@ -179,7 +179,7 @@ describe('portable consent persistence', () => {
         const extensionSetup = vi.fn(async (client: IPostHog) => {
             client.kv.set('private', true)
             client.capture('extension-blocked')
-            await client.sendRequest('/flags/')
+            await client.sendRequest('/i/v1/analytics/events')
         })
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
         const storage = new MemoryStorage()
@@ -194,7 +194,7 @@ describe('portable consent persistence', () => {
             extensions: [{ name: 'blocked-by-consent', setup: extensionSetup }],
         })
         posthog.capture('blocked')
-        await posthog.sendRequest('/flags/')
+        await posthog.sendRequest('/i/v1/analytics/events')
 
         expect(extensionSetup).toHaveBeenCalledTimes(1)
         expect(await posthog.resolveExtension('blocked-by-consent')).toBeDefined()
@@ -539,7 +539,7 @@ describe('portable consent persistence', () => {
         })
         nextGate.capture('plain-private')
         plain.values.set(DEFAULT_KEY, '0')
-        await expect(nextGate.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(nextGate.sendRequest('/i/v1/analytics/events')).resolves.toMatchObject({ statusCode: 0 })
         plain.values.set(DEFAULT_KEY, '1')
         await nextGate.flush()
         expect(plainRequests).toHaveLength(0)
@@ -823,7 +823,7 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 200 })
+        await expect(first.sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({ statusCode: 200 })
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ 'X-Test': 'value' })
     })
@@ -848,7 +848,7 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 0 })
+        await expect(first.sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({ statusCode: 0 })
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -870,7 +870,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/flags/')
+        const response = first.sendRequest('/i/v1/analytics/events')
         second.optOut()
         second.optIn()
         finishFetch?.(new Response('{}', { status: 200 }))
@@ -897,7 +897,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/flags/')
+        const response = first.sendRequest('/i/v1/analytics/events')
         second.optOut()
         second.optIn()
         failFetch?.(new Error('private transport failure'))
@@ -929,7 +929,7 @@ describe('portable consent persistence', () => {
         }
 
         await expect(
-            first.sendRequest('/flags/', { body: {}, method: 'POST', transport: 'sendBeacon' })
+            first.sendRequest('/i/v1/analytics/events', { body: {}, method: 'POST', transport: 'sendBeacon' })
         ).resolves.toMatchObject({ statusCode: 202 })
     })
 
@@ -951,6 +951,47 @@ describe('portable consent persistence', () => {
 
         expect(loader).toHaveBeenCalledTimes(1)
         expect(observed).toHaveBeenCalledWith({ ok: true, config })
+    })
+
+    const flagsEvaluation: SendRequestInit = { target: 'flags', method: 'POST', body: { distinct_id: 'person' } }
+    const createOptedOut = (fetch: BrowserFetch, navigator: { webdriver: boolean } | false = false) =>
+        createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage: new MemoryStorage(),
+            navigator,
+            fetch,
+            optOutByDefault: true,
+        })
+
+    it.each(['/flags/?v=2', '/flags/?v=2&only_evaluate_survey_feature_flags=true'])(
+        'sends the flags evaluation request %s while analytics consent is denied',
+        async (path) => {
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+            const posthog = await createOptedOut(fetch)
+            await expect(posthog.sendRequest(path, flagsEvaluation)).resolves.toMatchObject({ statusCode: 200 })
+            expect(fetch).toHaveBeenCalledOnce()
+        }
+    )
+
+    it.each([
+        ['a capture request', '/i/v1/analytics/events', { method: 'POST', body: {} }],
+        ['another path on the flags host', '/i/v1/analytics/events', flagsEvaluation],
+        ['the API host', '/flags/?v=2', { ...flagsEvaluation, target: 'api' }],
+        ['query options', '/flags/?v=2', { ...flagsEvaluation, query: { distinct_id: 'person' } }],
+        ['headers', '/flags/?v=2', { ...flagsEvaluation, headers: { 'X-Person': 'person' } }],
+    ] as const)('refuses %s while analytics consent is denied', async (_label, path, init) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+        const posthog = await createOptedOut(fetch)
+        await expect(posthog.sendRequest(path, init as SendRequestInit)).resolves.toMatchObject({ statusCode: 0 })
+        expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('refuses the flags evaluation request from a blocked client', async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+        const posthog = await createOptedOut(fetch, { webdriver: true })
+        await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 0 })
+        expect(fetch).not.toHaveBeenCalled()
     })
 
     it('publishes cached remote config once for each subscription regardless of consent', async () => {
