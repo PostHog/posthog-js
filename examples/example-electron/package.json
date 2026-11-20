@@ -15,7 +15,7 @@
         "test:platform": "pnpm build && node fixtures/run.mjs"
     },
     "dependencies": {
-        "@posthog/electron": "0.1.0-alpha.0"
+        "@posthog/electron": "0.1.0"
     },
     "devDependencies": {
         "@electron/asar": "3.4.1",

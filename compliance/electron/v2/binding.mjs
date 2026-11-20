@@ -1,4 +1,4 @@
-// Only public APIs present in the installed Electron 0.1.0-alpha.0 package.
+// Use only public APIs from the installed @posthog/electron package.
 export const routes = [
     '/setup',
     '/capture',
