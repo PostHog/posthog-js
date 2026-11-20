@@ -6,7 +6,10 @@ import type { StylesheetPreparationContext } from '../utils/stylesheet-loader'
 export interface ConversationsIdentity {
     /** The verified distinct ID. */
     readonly distinctId: string
-    /** HMAC-SHA256 of `distinctId`, signed with the Secret API key from Support settings. */
+    /**
+     * HMAC-SHA256 of `distinctId`, signed with the Identity verification secret from Support settings (not a project
+     * secret or personal API key).
+     */
     readonly hash: string
     /** Additional server-signed claims, forwarded only with `distinctId` and `hash`. */
     readonly claims?: Readonly<Record<string, { value: string; hash: string }>> | undefined

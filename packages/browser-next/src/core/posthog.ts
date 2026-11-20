@@ -508,7 +508,7 @@ class PostHog implements IPostHog {
         // catalogue carries no person data, so it stays available too. Capture consent gates every other request.
         const resolvedPath = resolveRequestPath(this._requestRuntime[0][options.target ?? 'api'], path)
         const allowedWhileOptedOut =
-            (options.target !== 'flags' && path.startsWith('/api/conversations/')) ||
+            (options.target !== 'flags' && resolvedPath?.startsWith('/api/conversations/')) ||
             ((options.target === 'flags'
                 ? resolvedPath === '/flags/'
                 : EARLY_ACCESS_CATALOGUE_PATH.test(path) &&

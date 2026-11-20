@@ -397,6 +397,42 @@ The manual core entrypoint never loads surveys automatically. Extension lookup r
 
 Definitions and event activation state use the client's shared `core` key-value store. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
+## Toolbar
+
+The root loads the toolbar when the URL hash carries a toolbar authorization for this project, or when a previous toolbar session saved its parameters. Client creation does not wait for it. Otherwise, `resolveExtension('toolbar')` acquires the extension without loading the toolbar; call `loadToolbar(params?)` to load it explicitly. It returns `false` when the toolbar is already running or unavailable. Use `toolbar: false` to disable automatic inclusion.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    apiHost: 'https://ingest.example.com',
+    uiHost: 'https://us.posthog.com',
+    toolbar: { disableMetrics: true },
+})
+const toolbar = await posthog.resolveExtension('toolbar')
+toolbar?.loadToolbar()
+```
+
+The options are `assetHost` (the origin that serves `/static/toolbar.js`, defaulting to the client's asset host), `disableMetrics` (turns off toolbar telemetry for a self-hosted or proxied `apiHost`), and `prepareScript` (for example, to apply a CSP nonce; return `null` to cancel loading). The client's `uiHost` sets the PostHog app origin the toolbar authenticates against. It defaults to the app origin for a PostHog Cloud `apiHost`, otherwise `apiHost`. For static inclusion, pass `toolbar()` from `@posthog/browser/toolbar` as an extension. The manual core entrypoint never loads the toolbar automatically.
+
+The toolbar saves its parameters in localStorage under `_postHogToolbarParams`, the key posthog-js and the toolbar application use, independently of configured SDK persistence, including `storage: false`. The toolbar clears the key when it closes. Loading does not depend on capture consent. On Turbolinks sites, the toolbar reloads after each body replacement until the client that loaded it is disposed. The toolbar runs without access to the client, so it does not preload this client's feature flags, and its flag overrides do not change them.
+
+## Conversations
+
+With no explicit conversations configuration, the extension loads when the project's remote configuration enables conversations, or through `resolveExtension('conversations')`. Supplying a conversations options object loads it during initialization. Either way, the widget and its API become available only once remote configuration enables conversations. The widget renderer is a separate dynamic chunk. Use `conversations: false` to omit automatic inclusion. For static inclusion, pass `conversations()` from `@posthog/browser/conversations` as an extension. The manual core entrypoint never loads conversations automatically.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    conversations: { identity: { distinctId: user.id, hash: user.conversationsHash } },
+})
+const support = await posthog.resolveExtension('conversations')
+support?.open()
+```
+
+The options are `theme` (change it later with `setTheme()`), `identity`, and `prepareStylesheet`. `identity` is a server-verified identity, like posthog-js `identity_distinct_id`, `identity_hash` and `identity_claims`: `hash` is the HMAC-SHA256 of `distinctId`, signed on your server with the Identity verification secret from Support settings (not a project secret or personal API key). An anonymous visitor takes `identity.distinctId` as their distinct ID, unless `bootstrap` supplies one. `setIdentity(distinctId, hash)` switches to a verified identity later, and `clearIdentity()` returns to the anonymous widget session.
+
+Like posthog-js, conversations keeps widget state in localStorage under `ph_conv_<project-token>`, the same key posthog-js uses. It does this independently of configured SDK persistence, including `storage: false`, and while the visitor is opted out. When conversations loads, the record gets a widget session ID, which grants this browser access to its tickets. Later it also holds the current ticket, the widget's open or closed state, and the name and email that the visitor enters. `reset()` removes the record and starts a new widget session without the verified identity. Widget requests to `/api/conversations/` are also sent while the visitor is opted out, as in posthog-js. The `$conversations_*` events that the widget captures still pass through capture consent, so they are dropped while opted out. The widget sends the page URL without its fragment. A page shows one widget: when several clients load conversations, only the client that created the widget controls it.
+
 ## Tracing headers
 
 Tracing headers link backend events and traces to the frontend user and session. List the backend hostnames to receive `X-POSTHOG-DISTINCT-ID`, `X-POSTHOG-SESSION-ID` and `X-POSTHOG-WINDOW-ID`, and the hosts to receive a W3C `traceparent` header:
