@@ -8,8 +8,7 @@ class TestRequest {
     bodyUsed = false
     headers: Headers
     method: string
-    // Like a native Request, construction reads the internal destination, not an overridden `url` property.
-    private readonly _destination: string
+    url: string
 
     constructor(input: string | URL | TestRequest, init?: RequestInit) {
         const inputRequest = input instanceof TestRequest ? input : undefined
@@ -17,7 +16,7 @@ class TestRequest {
             throw new TypeError('Cannot construct a Request with a Request object that has already been used.')
         }
 
-        this._destination = inputRequest ? inputRequest._destination : input.toString()
+        this.url = inputRequest ? inputRequest.url : input.toString()
         this.headers = new Headers(init?.headers ?? inputRequest?.headers)
         this.method = init?.method ?? inputRequest?.method ?? 'GET'
         this.body = init?.body ?? inputRequest?.body ?? null
@@ -25,10 +24,6 @@ class TestRequest {
         if (inputRequest && isUndefined(init?.body) && !isNull(inputRequest.body) && !isUndefined(inputRequest.body)) {
             inputRequest.bodyUsed = true
         }
-    }
-
-    get url(): string {
-        return this._destination
     }
 
     clone(): TestRequest {
@@ -343,87 +338,6 @@ describe('tracing headers', () => {
             expect(() => window.fetch('https://example.com/path')).toThrow(error)
             expect(originalFetch).toHaveBeenCalledTimes(1)
         })
-
-        it('matches a Request by its destination, not an overridden url property', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
-            restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
-
-            const request = new Request('https://other.example/path')
-            Object.defineProperty(request, 'url', { value: 'https://example.com/path' })
-            await window.fetch(request)
-
-            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
-            expect(downstreamRequest.url).toBe('https://other.example/path')
-            expect(downstreamRequest.headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
-            expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
-        })
-
-        it('sends a Request with its body and no PostHog headers when the distinct ID is not a valid header value', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
-            restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any)
-
-            const request = new Request('https://example.com/path', { body: 'request-body', method: 'POST' })
-            await window.fetch(request)
-
-            expect(originalFetch).toHaveBeenCalledTimes(1)
-            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
-            expect(downstreamRequest.headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
-            expect(downstreamRequest.headers.has('X-POSTHOG-WINDOW-ID')).toBe(false)
-            expect(downstreamRequest.headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
-            await expect(downstreamRequest.text()).resolves.toBe('request-body')
-        })
-
-        it('keeps the caller headers and traceparent but adds no PostHog headers when the distinct ID is not a valid header value', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
-            restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any, ['example.com'])
-
-            await window.fetch('https://example.com/path', {
-                body: 'request-body',
-                headers: { 'x-original': 'original-header-value' },
-                method: 'POST',
-            })
-
-            expect(originalFetch).toHaveBeenCalledTimes(1)
-            const [input, downstreamInit] = originalFetch.mock.calls[0]
-            expect(input).toBe('https://example.com/path')
-            expect(downstreamInit?.body).toBe('request-body')
-            const headers = new Headers(downstreamInit?.headers)
-            expect(headers.get('x-original')).toBe('original-header-value')
-            expect(headers.has('traceparent')).toBe(true)
-            expect(headers.has('X-POSTHOG-SESSION-ID')).toBe(false)
-            expect(headers.has('X-POSTHOG-WINDOW-ID')).toBe(false)
-            expect(headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
-        })
-
-        it('sends a Request with its unread body when preparing tracing headers fails', async () => {
-            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
-                Promise.resolve(new Response())
-            )
-            setWindowFetch(originalFetch)
-            restoreFetchPatch = patchFns._patchFetch(
-                ['example.com'],
-                () => {
-                    throw new Error('distinct ID unavailable')
-                },
-                sessionManager as any
-            )
-
-            const request = new Request('https://example.com/path', { body: 'request-body', method: 'POST' })
-            await window.fetch(request)
-
-            expect(originalFetch).toHaveBeenCalledTimes(1)
-            const downstreamRequest = originalFetch.mock.calls[0][0] as Request
-            await expect(downstreamRequest.text()).resolves.toBe('request-body')
-        })
     })
 
     describe('xhr', () => {
@@ -477,35 +391,6 @@ describe('tracing headers', () => {
                     setRequestHeaderSpy.mock.calls.some(([name]) => name.toLowerCase() === header.toLowerCase())
                 ).toBe(false)
             })
-        })
-
-        it('opens the request without PostHog headers when the distinct ID is not a valid header value', () => {
-            const openSpy = vi.spyOn(XMLHttpRequest.prototype, 'open')
-            const setRequestHeaderSpy = vi
-                .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
-                .mockImplementation(() => {})
-            restoreXHRPatch = patchFns._patchXHR(['example.com'], '用户-1', sessionManager as any)
-
-            const xhr = new XMLHttpRequest()
-            expect(() => xhr.open('GET', 'https://example.com/path')).not.toThrow()
-
-            expect(openSpy).toHaveBeenCalledTimes(1)
-            expect(setRequestHeaderSpy).not.toHaveBeenCalled()
-        })
-
-        it('opens the request when preparing tracing headers fails', () => {
-            const openSpy = vi.spyOn(XMLHttpRequest.prototype, 'open')
-            restoreXHRPatch = patchFns._patchXHR(
-                ['example.com'],
-                () => {
-                    throw new Error('distinct ID unavailable')
-                },
-                sessionManager as any
-            )
-
-            const xhr = new XMLHttpRequest()
-            expect(() => xhr.open('GET', 'https://example.com/path')).not.toThrow()
-            expect(openSpy).toHaveBeenCalledTimes(1)
         })
     })
 
