@@ -225,7 +225,6 @@ describe('flags', () => {
         const client = await create({ fetch, optOutByDefault: true })
         client.identify('person', { plan: 'pro' })
         client.group('organization', 'team', { size: 5 })
-        client.optIn()
         await vi.advanceTimersByTimeAsync(5)
         const init = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]
         expect(JSON.parse(String(init?.body))).toMatchObject({
@@ -236,8 +235,6 @@ describe('flags', () => {
         })
         requireInstalledExtension(client.featureFlags).updateFlags({ old: true })
         client.reset()
-        // Reset forgets the consent choice, returning to the opted-out default.
-        client.optIn()
         expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('old')).toBeUndefined()
         await vi.advanceTimersByTimeAsync(5)
         expect(fetch).toHaveBeenCalledTimes(2)

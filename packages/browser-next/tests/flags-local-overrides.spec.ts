@@ -168,23 +168,13 @@ describe('local flag evaluation overrides', () => {
         flags.setPersonPropertiesForFlags({ plan: 'pro' })
         flags.setGroupPropertiesForFlags({ company: { size: 5 } })
         await vi.advanceTimersByTimeAsync(5)
-        if (consent === 'denied') {
-            expect(requests).toEqual([])
-            client.optIn()
-            await reload(flags)
-        }
         expect(requests.at(-1)).toMatchObject({
             person_properties: { plan: 'pro' },
             group_properties: { company: { size: 5 } },
         })
-        if (consent === 'denied') client.optOut()
         flags.resetPersonPropertiesForFlags()
         flags.resetGroupPropertiesForFlags()
         await vi.advanceTimersByTimeAsync(5)
-        if (consent === 'denied') {
-            client.optIn()
-            await reload(flags)
-        }
         expect(requests.at(-1)?.person_properties).not.toHaveProperty('plan')
         expect(requests.at(-1)?.group_properties).toBeUndefined()
         expect(identity(client)).toEqual(before)
