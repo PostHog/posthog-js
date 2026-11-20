@@ -1,6 +1,6 @@
-import { EventBuffer } from '../src/event-buffer'
-import type { LaneDelivery } from '../src/lane'
-import { Lane } from '../src/lane'
+import { EventBuffer } from '../src/products/analytics/admission/event-buffer'
+import type { LaneDelivery } from '../src/products/analytics/delivery/lane'
+import { Lane } from '../src/products/analytics/delivery/lane'
 
 const createLane = <E>(capacity = 10): Lane<E> => new Lane(new EventBuffer(capacity, () => {}))
 

@@ -68,7 +68,7 @@ The plugin now requires `posthog-ios` 4.0, which needs Xcode 26 or later on ever
 
 **If ignored:** on older Xcode versions, Swift Package Manager can't resolve `posthog-ios` and the build fails.
 
-If native code in your app calls `posthog-ios` directly, it must also handle the 4.0 API removals. See the [posthog-ios migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+If native code in your app calls `posthog-ios` directly, it must also handle the 4.0 API removals. See the [posthog-ios migration guide](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md).
 
 #### `posthog-ios` installs through Swift Package Manager
 
@@ -105,7 +105,7 @@ Apps on React Native's full Swift Package Manager integration, with no CocoaPods
 
 #### `posthog-android` 4.0
 
-If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.0, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md).
+If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.0, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md).
 
 ### API changes
 
@@ -154,7 +154,7 @@ Plugin 2.x used `posthog-ios` 3.92 and `posthog-android` 3.74, so recordings als
 - On iOS and Android, touches inside a `ph-no-capture` view are no longer recorded.
 - On Android, dialog windows, which back React Native's `Modal`, are drawn into the same frame as the activity.
 
-See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md).
+See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md).
 
 #### iOS background replay capture is removed
 
@@ -176,7 +176,7 @@ A native crash that happens while the user is opted out is no longer sent after 
 
 #### iOS crash frames from dynamic frameworks aren't in-app
 
-In iOS native crash reports, a stack frame is in-app only when it comes from your app's executable. Your app's code and statically linked pods stay in-app. Frames from dynamic frameworks, such as Hermes and pods built with `use_frameworks! :linkage => :dynamic`, are no longer marked as your code. Some existing native crash issues may be grouped again once. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#check-in-app-frames).
+In iOS native crash reports, a stack frame is in-app only when it comes from your app's executable. Your app's code and statically linked pods stay in-app. Frames from dynamic frameworks, such as Hermes and pods built with `use_frameworks! :linkage => :dynamic`, are no longer marked as your code. Some existing native crash issues may be grouped again once. See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md#check-in-app-frames).
 
 #### Native events go to capture v1
 
@@ -191,7 +191,7 @@ In iOS native crash reports, a stack frame is in-app only when it comes from you
 - These events report `$locale` as the device's preferred language, as a full language tag such as `de-CH` or `zh-Hant-TW` instead of `de` or `zh-TW`, and can carry `$app_language` (see below). On iOS, 2.x reported the language your app bundle resolved, so an English-only app on a French device now sends `fr-FR` instead of `en`. A language picked for your app in iOS Settings still counts. On Android, 2.x reported `Locale.getDefault()`, so a per-app language or `Locale.setDefault()` no longer changes it.
 - On Android, `$locale` uses the current codes `he`, `id` and `yi` instead of the legacy `iw`, `in` and `ji`, so a value such as `in-ID` becomes `id-ID`. Update filters that match those.
 
-See [Prepare your proxy](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#prepare-your-proxy) and [Update locale filters](https://github.com/PostHog/posthog-ios/blob/main/MIGRATION.md#update-locale-filters) in the `posthog-ios` migration guide, and [Prepare your proxy](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#prepare-your-proxy) and [Check locale properties](https://github.com/PostHog/posthog-android/blob/main/MIGRATION.md#check-locale-properties) in the `posthog-android` one.
+See [Prepare your proxy](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md#prepare-your-proxy) and [Update locale filters](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md#update-locale-filters) in the `posthog-ios` migration guide, and [Prepare your proxy](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md#prepare-your-proxy) and [Check locale properties](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md#check-locale-properties) in the `posthog-android` one.
 
 **If ignored:** a proxy that answers `404` gets a retry about every 30 seconds from each running app, and the native events stay queued on the device only until a full queue evicts them (1000 events by default), oldest first. Other errors, such as `401`, `403` or `405`, drop them.
 

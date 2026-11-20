@@ -4,6 +4,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { assignableWindow } from './utils/globals'
 import type { RequestResponse } from '@posthog/types'
+import { getExtensionLoader } from './utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[RemoteConfig]')
 
@@ -15,8 +16,9 @@ export class RemoteConfigLoader {
     }
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
-        if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'remote-config', () => {
+        const loadExternalDependency = getExtensionLoader(this._instance)
+        if (loadExternalDependency) {
+            loadExternalDependency(this._instance, 'remote-config', () => {
                 return cb(this.remoteConfig)
             })
         } else {
@@ -25,11 +27,31 @@ export class RemoteConfigLoader {
     }
 
     private _loadRemoteConfigJSON(cb: (response: RequestResponse) => void): void {
-        this._instance._send_request({
-            method: 'GET',
-            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
-            callback: cb,
-        })
+        // Concurrent loads (e.g. replay refreshing stale config during init) share one JSON request, as they
+        // previously shared one config.js script tag. Stored unmangled on the instance so slim bundles share it.
+        const pending = this._instance.__pending_remote_config_callbacks
+        if (pending) {
+            pending.push(cb)
+            return
+        }
+        const callbacks = [cb]
+        this._instance.__pending_remote_config_callbacks = callbacks
+        try {
+            this._instance._send_request({
+                method: 'GET',
+                url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
+                // Without a batchKey the rate limiter treats this as `events` and drops it while events are quota limited.
+                batchKey: 'remote_config',
+                fireCallbackOnDrop: true,
+                callback: (response) => {
+                    this._instance.__pending_remote_config_callbacks = undefined
+                    callbacks.forEach((callback) => callback(response))
+                },
+            })
+        } catch (error) {
+            this._instance.__pending_remote_config_callbacks = undefined
+            throw error
+        }
     }
 
     load(): void {
@@ -44,6 +66,15 @@ export class RemoteConfigLoader {
             if (this._instance._shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
+                return
+            }
+
+            // config.js is executable and only adds site-app code over the JSON endpoint, so never load it unless site apps
+            // are enabled, not even as a fallback when the JSON request fails.
+            if (!this._instance.config.opt_in_site_apps) {
+                this._loadRemoteConfigJSON((response) => {
+                    this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
+                })
                 return
             }
 

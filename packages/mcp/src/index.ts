@@ -9,6 +9,7 @@ import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
 import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
+import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
@@ -115,11 +116,37 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
  * @param options - Optional configuration. See `MCPAnalyticsOptions`.
  * @returns A `(server) => server` mutator that instruments the server and returns it.
  */
-function instrumentMutator<TServer>(posthog: PostHog, options?: MCPAnalyticsOptions): (server: TServer) => TServer {
-  return (server: TServer): TServer => {
+// The returned function is generic so a direct `instrumentMutator(posthog)(server)` keeps
+// the server's type; `TServer` stays as an optional upper bound for existing callers.
+function instrumentMutator<TServer = unknown>(
+  posthog: PostHog,
+  options?: MCPAnalyticsOptions
+): <T extends TServer>(server: T) => T {
+  return <T extends TServer>(server: T): T => {
     instrument(server, posthog, options)
     return server
   }
+}
+
+/**
+ * Instruments every server a [FastMCP](https://github.com/punkpeye/fastmcp) app builds. FastMCP
+ * creates a low-level server per session (per request when stateless) behind a private
+ * factory, so this hooks the module's session class instead of one server. Call it before
+ * `server.start()`.
+ *
+ * @example
+ * ```ts
+ * import * as fastmcp from 'fastmcp'
+ * instrumentFastMCP(fastmcp, posthog)
+ * const server = new fastmcp.FastMCP({ name: 'my-server', version: '1.0.0' })
+ * ```
+ *
+ * @param fastmcp - The `fastmcp` module namespace.
+ * @param posthog - A `posthog-node` client you construct and own.
+ * @param options - Optional configuration, applied to every session. See `MCPAnalyticsOptions`.
+ */
+function instrumentFastMCP(fastmcp: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): void {
+  hookFastMCPSessions(fastmcp, (server) => instrument(server, posthog, options), createLogger(options.logger))
 }
 
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
@@ -207,6 +234,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     eventName: eventData.event,
     timestamp: new Date(),
     properties: eventData.properties,
+    eventOptions: eventData.eventOptions,
   }
 
   // Re-use the same per-server publish path so the event picks up session info,
@@ -225,6 +253,7 @@ export {
   encodeSessionId,
   type SessionTokenPayload,
 } from './extensions/session-token'
+export { withMcpSessionHeader } from './extensions/session-header'
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
   PostHogMCPAnalyticsEvent,
@@ -275,4 +304,4 @@ export type {
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { instrument, instrumentMutator }
+export { instrument, instrumentFastMCP, instrumentMutator }

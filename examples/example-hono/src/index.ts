@@ -10,12 +10,15 @@ const posthog = new PostHog(process.env.POSTHOG_PROJECT_API_KEY!, {
 })
 
 app.onError(async (err, c) => {
-    posthog.captureException(new Error(err.message, { cause: err }), 'user_distinct_id_with_err_rethrow', {
-        path: c.req.path,
-        method: c.req.method,
-        url: c.req.url,
-        headers: c.req.header(),
-        // ... other properties
+    posthog.captureException(new Error(err.message, { cause: err }), {
+        distinctId: 'user_distinct_id_with_err_rethrow',
+        properties: {
+            path: c.req.path,
+            method: c.req.method,
+            url: c.req.url,
+            headers: c.req.header(),
+            // ... other properties
+        },
     })
     // TIP: On program exit, call flush to stop pending pollers and flush any remaining events
     await posthog.flush()

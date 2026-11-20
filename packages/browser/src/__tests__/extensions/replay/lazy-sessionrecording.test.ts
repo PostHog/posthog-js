@@ -258,7 +258,7 @@ describe('Lazy SessionRecording', () => {
         }
     }
 
-    const addRRwebToWindow = () => {
+    const addRRwebToWindow = (selectMaskingSupport?: boolean) => {
         assignableWindow.__PosthogExtensions__.rrweb = {
             record: vi.fn(({ emit }) => {
                 _emit = emit
@@ -280,6 +280,7 @@ describe('Lazy SessionRecording', () => {
             getObserverInitFailures: vi.fn(() => undefined),
             resetSnapshotCostState: vi.fn(),
         }
+        assignableWindow.__PosthogExtensions__.rrweb.record.supportsSelectMasking = selectMaskingSupport
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
@@ -297,6 +298,7 @@ describe('Lazy SessionRecording', () => {
         assignableWindow.__PosthogExtensions__.initSessionRecording = (_ph, documentWasEverVisible) => {
             return new LazyLoadedSessionRecording(posthog, documentWasEverVisible)
         }
+        assignableWindow.__PosthogExtensions__.initSessionRecording.supportsSelectMasking = true
     }
 
     beforeEach(() => {
@@ -2383,6 +2385,54 @@ describe('Lazy SessionRecording', () => {
                     })
                 })
 
+                describe('select-policy inputs emitted without user interaction', () => {
+                    const selectInput = (timestamp: number) => ({
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: { source: 5, id: 1, text: 'redacted', isChecked: false },
+                        timestamp,
+                    })
+
+                    it.each([
+                        ['fresh start', () => startingTimestamp + 100],
+                        ['rotation-born', () => rotateExternallyWhileUnknown()],
+                    ])('retains the %s hold and stays idle-eligible', (_name, setup) => {
+                        const timestamp = setup()
+                        vi.useFakeTimers().setSystemTime(new Date(timestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        const lastActivity = lazyRecorder['_lastActivityTimestamp']
+
+                        const input = selectInput(timestamp + 100)
+                        _emit(input, false, true)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                        expect(lazyRecorder['_lastActivityTimestamp']).toEqual(lastActivity)
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                    })
+
+                    it('still releases the hold for an ordinary input', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const input = selectInput(startingTimestamp + 100)
+                        _emit(input, false)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({ $snapshot_data: expect.arrayContaining([input]) }),
+                            expect.any(Object)
+                        )
+                    })
+                })
+
                 it('does not hold a windowId-only restart (no session rotation)', () => {
                     const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                     expect(lazyRecorder['_isIdle']).toEqual('unknown')
@@ -3945,6 +3995,7 @@ describe('Lazy SessionRecording', () => {
                 maskTextFn: undefined,
                 maskInputOptions: { password: true },
                 maskInputFn: undefined,
+                selectMaskingFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
                 slimDOMOptions: {},
@@ -3955,6 +4006,69 @@ describe('Lazy SessionRecording', () => {
                 recordCrossOriginIframes: false,
                 recordAfter: 'DOMContentLoaded',
             })
+        })
+
+        it.each([undefined, false])(
+            'does not use an unsupported recorder with an explicit select policy (%s)',
+            (support) => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    addRRwebToWindow(support)
+                    callback()
+                })
+                posthog.config.session_recording.selectMaskingFn = () => 'masked'
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+            }
+        )
+
+        it('forwards the explicit select masking policy to rrweb', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            posthog.config.session_recording.selectMaskingFn = (element: HTMLSelectElement) =>
+                element.hasAttribute('data-public') ? 'unmasked' : 'masked'
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const installed = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                .selectMaskingFn!
+            const publicSelect = document.createElement('select')
+            publicSelect.setAttribute('data-public', '')
+            expect(installed(publicSelect)).toBe('unmasked')
+            expect(installed(document.createElement('select'))).toBe('masked')
+        })
+
+        it('warns once when the select masking policy throws and still fails closed', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            const policyError = new Error('policy failure')
+            posthog.config.session_recording.selectMaskingFn = () => {
+                throw policyError
+            }
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            try {
+                const recorderPolicy = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                    .selectMaskingFn!
+                const select = document.createElement('select')
+
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy.mock.calls[0][1]).toContain('selectMaskingFn threw')
+                expect(warnSpy.mock.calls[0][2]).toBe(policyError)
+            } finally {
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+                warnSpy.mockRestore()
+            }
         })
 
         it('removes scripts when JSON-LD capture is enabled', () => {
@@ -6122,7 +6236,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => '!' + sessionId,
+                expectedIsSampled: () => 'x' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -6134,7 +6248,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => '!' + sessionId,
+                expectedIsSampled: () => 'x' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -6231,7 +6345,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -6285,7 +6399,7 @@ describe('Lazy SessionRecording', () => {
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
             )
             // then check that a session is sampled out (stored tagged with its session id)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
             expect(sessionRecording.status).toBe('disabled')
 
             // then turn sample rate to null
@@ -6296,6 +6410,43 @@ describe('Lazy SessionRecording', () => {
             // then check that a session is no longer sampled out (i.e. storage is cleared not false)
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
+        })
+
+        describe('decision stored with the `!` prefix, which WAF rules flag in the cookie', () => {
+            // Single-character IDs hash to their ASCII codes: '0' is sampled in and '2' is sampled out at 0.50.
+            it.each([
+                { id: '2', expectedStatus: 'disabled', expectedIsSampled: 'x2' },
+                { id: '0', expectedStatus: 'sampled', expectedIsSampled: '0' },
+            ])('is decided again by the recorder for session $id', ({ id, expectedStatus, expectedIsSampled }) => {
+                sessionId = id
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: '!' + id,
+                    [SESSION_RECORDING_SAMPLE_RATE]: 0.5,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+
+                expect(sessionRecording.status).toBe(expectedStatus)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled)
+            })
+
+            it('is dropped when replay starts up, before the recorder loads', () => {
+                posthog.persistence?.register({ [SESSION_RECORDING_IS_SAMPLED]: '!' + sessionId })
+
+                new SessionRecording(posthog)
+
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBeUndefined()
+            })
+
+            it('leaves other stored decisions alone when replay starts up', () => {
+                posthog.persistence?.register({ [SESSION_RECORDING_IS_SAMPLED]: 'x' + sessionId })
+
+                new SessionRecording(posthog)
+
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
+            })
         })
 
         describe('legacy boolean true in persistence', () => {
@@ -6333,7 +6484,7 @@ describe('Lazy SessionRecording', () => {
 
                 // should be disabled despite legacy true, because 0% sample rate
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + sessionId)
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
@@ -6412,7 +6563,7 @@ describe('Lazy SessionRecording', () => {
 
                 // the new session must have a (negative) decision, not record unsampled
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + SAMPLED_OUT_SESSION_ID)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('x' + SAMPLED_OUT_SESSION_ID)
 
                 // and nothing is ever sent for the sampled-out session
                 expect(posthog.capture).not.toHaveBeenCalledWith(
@@ -7442,6 +7593,64 @@ describe('Lazy SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             return sessionStartTimestamp
         }
+
+        it('clears parked old-policy selections when a select policy is installed', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            _emit(
+                createIncrementalSnapshot({
+                    timestamp: timestamp + 200,
+                    data: { source: 5, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] },
+                })
+            )
+            unload()
+            expect(parkedBuffer().data).toContainEqual(
+                expect.objectContaining({ data: expect.objectContaining({ selectedOptionIds: [2] }) })
+            )
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+
+        it('does not park an opt-in buffer whose callback cannot be compared across pages', () => {
+            addRRwebToWindow(true)
+            config.session_recording.selectMaskingFn = () => 'unmasked'
+            startBelowMinimumDuration()
+            expect(sessionRecording.started).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            unload()
+
+            expect(parkedBuffer()).toBeNull()
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+
+        it('does not restore a previous page buffer under a newly configured select policy', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            unload()
+            expect(parkedBuffer().data).toHaveLength(1)
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
+            )
+            expect(sessionRecording.started).toBe(true)
+            expect(parkedBuffer()).toBeNull()
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: timestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            expect(shipped[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)).not.toContain(
+                timestamp + 100
+            )
+        })
 
         it('parks the buffer the minimum-duration gate is holding, instead of losing it with the page', () => {
             startBelowMinimumDuration()

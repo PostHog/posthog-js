@@ -6,6 +6,8 @@ import {
   isShadowRoot,
   needMaskingText,
   maskInputValue,
+  getInputMaskOptions,
+  isMaskedSelectedContent,
   maskAttributeValue,
   Mirror,
   isNativeShadowDom,
@@ -15,6 +17,7 @@ import {
   getSuspensionGeneration,
   recordMutationCost,
   isStylesheetLink,
+  type SelectMaskingCache,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -135,6 +138,7 @@ export default class MutationBuffer {
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
+  private selectMaskingFn: observerParam['selectMaskingFn'];
   private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
   private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
@@ -165,6 +169,7 @@ export default class MutationBuffer {
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
+        'selectMaskingFn',
         'maskAllElementAttributes',
         'maskAttributeFn',
         'keepIframeSrcFn',
@@ -275,11 +280,24 @@ export default class MutationBuffer {
 
   // Queued nodes can become blocked before emission. Check the current tree,
   // including each shadow host: closest()/parentElement do not cross that boundary.
-  private isBlockedAtEmission(node: Node | null): boolean {
-    return isBlockedIncludingShadowHosts(
-      node,
-      this.blockClass,
-      this.blockSelector,
+  private isBlockedAtEmission(
+    node: Node | null,
+    cache?: SelectMaskingCache,
+  ): boolean {
+    return (
+      isBlockedIncludingShadowHosts(
+        node,
+        this.blockClass,
+        this.blockSelector,
+      ) ||
+      (!!this.selectMaskingFn &&
+        !!node &&
+        isMaskedSelectedContent(
+          node,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          cache,
+        ))
     );
   }
 
@@ -289,6 +307,10 @@ export default class MutationBuffer {
 
     const adds: addedNodeMutation[] = [];
     const addedIds = new Set<number>();
+    const selectMaskingCache: SelectMaskingCache | undefined = this
+      .selectMaskingFn
+      ? { input: new WeakMap(), content: new WeakMap(), owner: new WeakMap() }
+      : undefined;
 
     const getNextId = (n: Node): number | null => {
       let ns: Node | null = n;
@@ -317,7 +339,17 @@ export default class MutationBuffer {
       }
       // A blocked node itself still needs a placeholder, but its descendants
       // must not be serialized from stale added/moved entries.
-      if (this.isBlockedAtEmission(parent)) return true;
+      if (this.isBlockedAtEmission(parent, selectMaskingCache)) return true;
+      if (
+        this.selectMaskingFn &&
+        isMaskedSelectedContent(
+          n,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          selectMaskingCache,
+        )
+      )
+        return true;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
@@ -326,7 +358,11 @@ export default class MutationBuffer {
         return false;
       }
       serializationOptions ??= this.buildSerializationOptions();
-      const sn = serializeNodeWithId(n, serializationOptions);
+      const sn = serializeNodeWithId(
+        n,
+        serializationOptions,
+        selectMaskingCache,
+      );
       if (sn) {
         adds.push({
           parentId,
@@ -500,7 +536,9 @@ export default class MutationBuffer {
 
     const payload = {
       texts: Array.from(this.texts, ([node, value]) => ({ node, value }))
-        .filter((text) => !this.isBlockedAtEmission(text.node))
+        .filter(
+          (text) => !this.isBlockedAtEmission(text.node, selectMaskingCache),
+        )
         .map((text) => {
           const n = text.node;
           const parent = dom.parentNode(n);
@@ -518,7 +556,10 @@ export default class MutationBuffer {
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
       attributes: Array.from(this.attributes.values())
-        .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
+        .filter(
+          (attribute) =>
+            !this.isBlockedAtEmission(attribute.node, selectMaskingCache),
+        )
         .map((attribute) => {
           const { attributes } = attribute;
           if (
@@ -672,6 +713,7 @@ export default class MutationBuffer {
       maskInputOptions: this.maskInputOptions,
       maskTextFn: this.maskTextFn,
       maskInputFn: this.maskInputFn,
+      selectMaskingFn: this.selectMaskingFn,
       maskAllElementAttributes: this.maskAllElementAttributes,
       maskAttributeFn: this.maskAttributeFn,
       slimDOMOptions: this.slimDOMOptions,
@@ -752,6 +794,10 @@ export default class MutationBuffer {
     if (isIgnored(m.target, this.mirror, this.slimDOMOptions)) {
       return;
     }
+    if (this.selectMaskingFn) {
+      const owner = closestElementOfNode(m.target)?.closest('select');
+      if (owner) this.selectedAttributeChanges.add(owner as HTMLSelectElement);
+    }
     switch (m.type) {
       case 'characterData': {
         const value = dom.textContent(m.target);
@@ -778,7 +824,12 @@ export default class MutationBuffer {
       }
       case 'attributes': {
         const target = m.target as Element;
-        const tagNameLower = toLowerCase(target.tagName);
+        const tagNameLower =
+          this.selectMaskingFn &&
+          target.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+          (target.localName === 'select' || target.localName === 'option')
+            ? target.localName
+            : toLowerCase(target.tagName);
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -793,13 +844,14 @@ export default class MutationBuffer {
         if (
           tagNameLower === 'option' &&
           attributeName === 'selected' &&
-          this.maskInputOptions.select
+          (this.selectMaskingFn || this.maskInputOptions.select)
         ) {
           let parent = dom.parentElement(target);
           if (parent?.tagName === 'OPTGROUP')
             parent = dom.parentElement(parent);
           // A scalar loses choices; custom multiselects keep their legacy attributes.
           const customMultiselect =
+            !this.selectMaskingFn &&
             this.maskInputFn &&
             parent?.tagName === 'SELECT' &&
             (parent as HTMLSelectElement).multiple;
@@ -817,8 +869,15 @@ export default class MutationBuffer {
 
           value = maskInputValue({
             element: htmlTarget,
-            maskInputOptions: this.maskInputOptions,
-            tagName: target.tagName,
+            maskInputOptions: getInputMaskOptions(
+              htmlTarget,
+              this.maskInputOptions,
+              this.selectMaskingFn,
+            ),
+            tagName:
+              this.selectMaskingFn && tagNameLower === 'select'
+                ? 'select'
+                : target.tagName,
             type,
             value,
             maskInputFn: this.maskInputFn,

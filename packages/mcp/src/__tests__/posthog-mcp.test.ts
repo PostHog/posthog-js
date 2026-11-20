@@ -5,9 +5,32 @@ import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
+import type { FeedbackReport, McpCaptureCommon } from '../types'
 import { deriveSessionIdFromConversation } from '../extensions/session'
 import { MCP_INSTRUCTIONS_KEY } from '../extensions/output-instructions'
+import type { ContextInjectableTool } from '../extensions/context-parameters'
 import { EventCapture } from './test-utils'
+
+interface JsonSchemaLike {
+  properties: Record<string, unknown>
+  required?: string[]
+  type?: string
+  additionalProperties?: boolean
+}
+
+interface SchemaTool extends ContextInjectableTool {
+  name: string
+  inputSchema: JsonSchemaLike
+}
+
+interface SchemaToolWithOutput extends SchemaTool {
+  outputSchema: JsonSchemaLike
+}
+
+interface StructuredToolResult {
+  content: { type: string; text: string }[]
+  structuredContent: Record<string, unknown>
+}
 
 // The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
 // so let the microtask/timer queue drain before asserting on what the sink saw.
@@ -85,7 +108,12 @@ describe('PostHogMCP', () => {
     const captureImmediate = vi.spyOn(PostHog.prototype, 'captureImmediate').mockResolvedValue(undefined)
     const client = newClient({ serverBuild: 'abc123' })
     try {
-      client.capture({ distinctId: 'user-123', event: 'custom event', properties: { existing: true } })
+      client.capture({
+        distinctId: 'user-123',
+        event: 'custom event',
+        properties: { existing: true },
+        options: { process_person_profile: false },
+      })
       client.capture({
         distinctId: 'user-123',
         event: 'undefined build event',
@@ -101,6 +129,7 @@ describe('PostHogMCP', () => {
         distinctId: 'user-123',
         event: 'custom event',
         properties: { existing: true, $mcp_server_build: 'abc123' },
+        options: { process_person_profile: false },
       })
       expect(captureEvent).toHaveBeenCalledWith({
         distinctId: 'user-123',
@@ -157,6 +186,20 @@ describe('PostHogMCP', () => {
       expect(JSON.stringify(p)).not.toContain('example-value')
       // A resolved identity keeps person processing on.
       expect(p.$process_person_profile).toBeUndefined()
+    })
+
+    it('keeps the $exception for a failure the host labels validation itself', async () => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: true,
+        errorType: 'validation',
+        error: new Error('query must not be empty'),
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_error_type).toBe('validation')
+      expect(onlyCapture('$exception')).toBeDefined()
     })
 
     it('maps category to $mcp_tool_category', async () => {
@@ -345,7 +388,7 @@ describe('PostHogMCP', () => {
   })
 
   describe('prepareToolList', () => {
-    const tools = [
+    const tools: SchemaTool[] = [
       { name: 'execute-sql', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
       { name: 'query-logs', inputSchema: { type: 'object', properties: {} } },
     ]
@@ -492,7 +535,7 @@ describe('PostHogMCP', () => {
 
     it('skips model injection for duplicate names when any descriptor owns llm_model', async () => {
       const client = newClient({ captureModel: true })
-      const duplicateTools = [
+      const duplicateTools: SchemaTool[] = [
         tools[0],
         {
           name: 'execute-sql',
@@ -608,7 +651,7 @@ describe('PostHogMCP', () => {
 
   describe('conversation correlation', () => {
     const conversationId = '0198ef20-1234-7abc-8def-123456789abc'
-    const tools = [
+    const tools: SchemaToolWithOutput[] = [
       {
         name: 'execute-sql',
         inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
@@ -649,7 +692,7 @@ describe('PostHogMCP', () => {
     })
 
     it('preserves application-owned fields and fails closed for duplicate names', () => {
-      const applicationOwned = {
+      const applicationOwned: SchemaToolWithOutput = {
         name: 'execute-sql',
         inputSchema: {
           type: 'object',
@@ -735,7 +778,10 @@ describe('PostHogMCP', () => {
     it('delivers a minted handle through text and structured content without mutation', () => {
       posthog.prepareToolList(tools)
       const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
-      const toolResult = { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } }
+      const toolResult: StructuredToolResult = {
+        content: [{ type: 'text', text: 'done' }],
+        structuredContent: { rows: [] },
+      }
       const prepared = posthog.prepareToolResult(toolResult, preparedCall)
 
       expect(prepared.result).not.toBe(toolResult)
@@ -754,7 +800,7 @@ describe('PostHogMCP', () => {
       posthog.prepareToolList(tools)
       const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
       const transportedCall = JSON.parse(JSON.stringify(preparedCall))
-      const prepared = posthog.prepareToolResult(
+      const prepared = posthog.prepareToolResult<StructuredToolResult>(
         { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } },
         transportedCall
       )
@@ -826,7 +872,7 @@ describe('PostHogMCP', () => {
     })
 
     it('adds conversation fields to virtual tools', () => {
-      const prepared = posthog.prepareToolList([], { reportMissing: true })
+      const prepared = posthog.prepareToolList<SchemaTool>([], { reportMissing: true })
       const virtualTool = prepared.find((tool) => tool.name === GET_MORE_TOOLS_NAME)
       const preparedCall = posthog.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'Find a tool' })
       const preparedResult = posthog.prepareToolResult(getMoreToolsResult(), preparedCall)
@@ -984,7 +1030,8 @@ describe('PostHogMCP', () => {
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.distinct_id).toBe('ses_abc')
-      expect(payload.properties.$process_person_profile).toBe(false)
+      expect(payload.options).toEqual({ process_person_profile: false })
+      expect(payload.properties).not.toHaveProperty('$process_person_profile')
     })
 
     it('gives each capture without a session a fresh $session_id, which anonymous calls use as their distinct id', async () => {
@@ -997,6 +1044,69 @@ describe('PostHogMCP', () => {
       expect(sessionIds).toEqual([expect.stringMatching(/^ses_/), expect.stringMatching(/^ses_/)])
       expect(sessionIds[0]).not.toBe(sessionIds[1])
       expect(payloads.map((payload) => payload.distinct_id)).toEqual(sessionIds)
+    })
+  })
+
+  describe('eventOptions', () => {
+    const report: FeedbackReport = { feedbackType: 'praise', summary: 'Clear tool names.', extras: {}, raw: {} }
+
+    it.each([
+      {
+        method: 'captureToolCall',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureToolCall({ ...common, toolName: 'execute-sql', isError: true, error: new Error('boom') }),
+        events: ['$mcp_tool_call', '$exception'],
+      },
+      {
+        method: 'captureInitialize',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) => client.captureInitialize(common),
+        events: ['$mcp_initialize'],
+      },
+      {
+        method: 'captureToolsList',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureToolsList({ ...common, isError: true, error: new Error('list failed') }),
+        events: ['$mcp_tools_list', '$exception'],
+      },
+      {
+        method: 'captureMissingCapability',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) =>
+          client.captureMissingCapability({ ...common, context: 'a bulk export tool' }),
+        events: ['$mcp_missing_capability'],
+      },
+      {
+        method: 'captureFeedback',
+        capture: (client: PostHogMCP, common: McpCaptureCommon) => client.captureFeedback({ ...common, report }),
+        events: ['$mcp_feedback'],
+      },
+    ])('$method sends eventOptions on every payload and an explicit choice beats the default', async (row) => {
+      row.capture(posthog, { eventOptions: { product_tour_id: 'tour-1' } })
+      row.capture(posthog, { eventOptions: { product_tour_id: 'tour-2', process_person_profile: true } })
+      await tick()
+
+      const payloads = capture.getCaptures()
+      expect(payloads.map((payload) => payload.event)).toEqual([...row.events, ...row.events])
+      for (const payload of payloads.slice(0, row.events.length)) {
+        expect(payload.options).toEqual({ product_tour_id: 'tour-1', process_person_profile: false })
+      }
+      for (const payload of payloads.slice(row.events.length)) {
+        expect(payload.options).toEqual({ product_tour_id: 'tour-2', process_person_profile: true })
+      }
+      for (const payload of payloads) {
+        expect(payload.properties).not.toHaveProperty('$process_person_profile')
+      }
+    })
+
+    it('sends eventOptions without the anonymous default for an identified call', async () => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: false,
+        eventOptions: { cookieless_mode: true },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).options).toEqual({ cookieless_mode: true })
     })
   })
 })

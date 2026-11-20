@@ -207,6 +207,20 @@ describe('featureFlagUtils', () => {
   })
 
   describe('normalizeFlagsResponse', () => {
+    it.each([false, 0, null, '', '"quoted"', { enabled: false }, [0, null]])(
+      'preserves the legacy payload %j when creating flag details',
+      (payload) => {
+        const result = normalizeFlagsResponse({
+          featureFlags: { checkout: 'control', absent: true },
+          featureFlagPayloads: { checkout: JSON.stringify(payload) },
+        })
+
+        expect(result.featureFlagPayloads.checkout).toEqual(payload)
+        expect(result.flags.checkout.metadata?.payload).toBe(JSON.stringify(payload))
+        expect(result.flags.absent.metadata?.payload).toBeUndefined()
+      }
+    )
+
     it('should convert v4 response to v1 format', () => {
       const v4Response: PostHogFlagsResponse = {
         flags: {

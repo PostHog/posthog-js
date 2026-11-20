@@ -3,6 +3,7 @@ import type {
   MaskInputOptions,
   SlimDOMOptions,
   MaskInputFn,
+  SelectMaskingFn,
   MaskTextFn,
   MaskAttributeFn,
 } from '@posthog/rrweb-snapshot';
@@ -44,7 +45,8 @@ import type {
 import type ProcessedNodeManager from './record/processed-node-manager';
 
 export type recordOptions<T> = {
-  emit?: (e: T, isCheckout?: boolean) => void;
+  // nonInteractive marks events that look like user activity but were not caused by it.
+  emit?: (e: T, isCheckout?: boolean, nonInteractive?: boolean) => void;
   checkoutEveryNth?: number;
   checkoutEveryNms?: number;
   blockClass?: blockClass;
@@ -56,6 +58,7 @@ export type recordOptions<T> = {
   maskAllInputs?: boolean;
   maskInputOptions?: MaskInputOptions;
   maskInputFn?: MaskInputFn;
+  selectMaskingFn?: SelectMaskingFn;
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes?: boolean;
   maskAttributeFn?: MaskAttributeFn;
@@ -136,6 +139,7 @@ export type observerParam = {
   maskTextSelector: string | null;
   maskInputOptions: MaskInputOptions;
   maskInputFn?: MaskInputFn;
+  selectMaskingFn?: SelectMaskingFn;
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes: boolean;
   maskAttributeFn?: MaskAttributeFn;
@@ -187,6 +191,7 @@ export type MutationBufferParam = Pick<
   | 'maskInputOptions'
   | 'maskTextFn'
   | 'maskInputFn'
+  | 'selectMaskingFn'
   | 'maskAllElementAttributes'
   | 'maskAttributeFn'
   | 'keepIframeSrcFn'
@@ -283,6 +288,7 @@ export type CrossOriginIframeMessageEventContent<T = eventWithTime> = {
   // The origin of the iframe which originally emits this message. It is used to check the integrity of message and to filter out the rrweb messages which are forwarded by some sites.
   origin: string;
   isCheckout?: boolean;
+  nonInteractive?: boolean;
 };
 export type CrossOriginIframeMessageEvent =
   MessageEvent<CrossOriginIframeMessageEventContent>;

@@ -19,6 +19,11 @@ import snapshot, {
 export * from './types';
 export * from './utils';
 export * from './snapshot-cost';
+export {
+  getInputMaskOptions,
+  isMaskedSelectedContent,
+  type SelectMaskingCache,
+} from './select-masking';
 
 export {
   snapshot,

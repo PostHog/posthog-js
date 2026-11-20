@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.70.0",
+  "version": "6.0.5",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -28,6 +28,7 @@
     "node": "^20.20.0 || >=22.22.0"
   },
   "files": [
+    "MIGRATION.md",
     "src",
     "dist",
     "!src/__tests__",
@@ -59,6 +60,7 @@
     "@types/react": "catalog:",
     "esbuild": "^0.25.0",
     "@vitest/coverage-v8": "catalog:",
+    "ajv": "^8.18.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "rxjs": "^7.8.0",

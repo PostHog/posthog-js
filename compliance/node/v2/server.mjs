@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { lookup } from 'node:dns/promises'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { routes, failure } from './binding.mjs'
@@ -47,7 +48,7 @@ function parseRequest(body) {
 }
 
 class Fixture {
-    constructor(consumer, mode, format) {
+    constructor(consumer, format) {
         const worker = new URL('./worker.mjs', import.meta.url).href
         const load =
             format === 'esm'
@@ -62,7 +63,6 @@ class Fixture {
             ],
             {
                 cwd: consumer,
-                env: { ...process.env, POSTHOG_CAPTURE_MODE: mode },
                 stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
             }
         )
@@ -128,20 +128,34 @@ class Fixture {
     }
 }
 
-export async function startServer({ consumer, mode = 'v0', format = 'cjs', host = '127.0.0.1', port = 8080 }) {
-    requireRequest(['v0', 'v1'].includes(mode), 'Invalid POSTHOG_CAPTURE_MODE')
+// The installed client's own /flags version decides the capability. Clients without the
+// response format method, and consumers that cannot load, send the default v=2.
+function requestsFlagsV4(consumer) {
+    try {
+        const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-node')
+        return PostHog.prototype.getFlagsResponseFormat?.().version === 4
+    } catch {
+        return false
+    }
+}
+
+export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1', port = 8080 }) {
     requireRequest(['cjs', 'esm'].includes(format), 'Invalid POSTHOG_NODE_MODULE')
     requireRequest(typeof consumer === 'string' && consumer.length > 0, 'POSTHOG_NODE_CONSUMER required')
     requireRequest(Number.isInteger(port) && port >= 0 && port <= 65535, 'Invalid PORT')
     const profile = {
-        id: mode === 'v0' ? 'node-legacy' : 'node-analytics-v1',
+        id: 'node-analytics-v1',
         sdk_type: 'server',
         sdk_capabilities: [
-            ...(mode === 'v0' ? ['capture_v0', 'capture_v0_batch'] : ['capture_v1']),
-            'capture_ai_v0',
+            'capture_v1',
             'encoding_gzip',
             'flags_v2',
+            ...(requestsFlagsV4(consumer) ? ['flags_response_v4'] : []),
             'flags_getter_remote_uncached',
+            // Metadata only: setup and getters preserve omitted disableGeoip options.
+            'flags_geoip_default_disabled',
+            // The legacy payload getter returns the decoded JSON payload.
+            'feature_flag_payloads',
             'flag_snapshot_value_scalar',
             'flag_snapshot_payload_decoded',
             'flag_snapshot_missing_undefined',
@@ -172,7 +186,7 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
             identifier(data.case_id)
             requireRequest(data.profile_id === profile.id, 'Unknown profile')
             requireRequest(!fixtures.has(id), 'Duplicate fixture_id')
-            const fixture = new Fixture(resolve(consumer), mode, format)
+            const fixture = new Fixture(resolve(consumer), format)
             fixtures.set(id, fixture)
             const ready = await fixture.exchange(null, milliseconds)
             requireRequest(ready.ready === true, 'SDK process not ready')
@@ -249,7 +263,6 @@ export async function startServer({ consumer, mode = 'v0', format = 'cjs', host 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
     const adapter = await startServer({
         consumer: process.env.POSTHOG_NODE_CONSUMER,
-        mode: process.env.POSTHOG_CAPTURE_MODE ?? 'v0',
         format: process.env.POSTHOG_NODE_MODULE ?? 'cjs',
         host: process.env.HOST ?? '127.0.0.1',
         port: Number(process.env.PORT ?? 8080),

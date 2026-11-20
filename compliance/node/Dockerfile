@@ -25,7 +25,7 @@ RUN pnpm --filter posthog-node build
 WORKDIR /app/adapter
 
 # Copy adapter code
-COPY compliance/node/adapter.js ./
+COPY compliance/node/adapter.mjs ./
 
 # Install adapter dependencies (express) in clean directory
 RUN npm init -y && npm install express
@@ -33,4 +33,4 @@ RUN npm init -y && npm install express
 EXPOSE 8080
 
 USER node
-CMD ["node", "adapter.js"]
+CMD ["node", "adapter.mjs"]
