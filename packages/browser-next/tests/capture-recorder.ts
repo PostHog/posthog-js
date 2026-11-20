@@ -1,17 +1,5 @@
-import type { BrowserFetch, CorePostHogOptions, StorageLike } from '../src/core/types'
-
-export class MemoryStorage implements StorageLike {
-    readonly values = new Map<string, string>()
-    getItem(key: string): string | null {
-        return this.values.get(key) ?? null
-    }
-    setItem(key: string, value: string): void {
-        this.values.set(key, value)
-    }
-    removeItem(key: string): void {
-        this.values.delete(key)
-    }
-}
+import type { BrowserFetch, CorePostHogOptions } from '../src/core/types'
+import { localRemoteConfig, MemoryStorage } from './helpers'
 
 export interface RecordedEvent {
     event: string
@@ -51,12 +39,6 @@ export const recordingOptions = (fetch: BrowserFetch): CorePostHogOptions => ({
     storage: new MemoryStorage(),
     navigator: false,
     fetch,
-    remoteConfig: {
-        supportedCompression: [],
-        toolbarParams: {},
-        toolbarVersion: 'toolbar',
-        isAuthenticated: false,
-        siteApps: [],
-    },
+    remoteConfig: localRemoteConfig,
     analytics: { flushAt: 100, flushInterval: 0 },
 })

@@ -1,13 +1,13 @@
 import { createPostHog as createDefault } from '../src/composition/npm/core'
 import type { IPostHog } from '../src/core/types'
 import {
-    MemoryStorage,
     recordCapture,
     recordedEvents,
     recordingOptions,
     type RecordedEvent,
     type RecordedRequest,
 } from './capture-recorder'
+import { MemoryStorage } from './helpers'
 
 describe('pageview ID', () => {
     let requests: RecordedRequest[]

@@ -86,7 +86,10 @@ export class Lane<E> {
         const attached = this._delivery
         const target = this._buffer._nextId
         // An immediate target outlasts unavailability, so the next drive (such as on reconnect) reaches it.
-        if (immediate) this._forceTarget = Math.max(this._forceTarget ?? 0, (this._immediateTarget = target))
+        if (immediate) {
+            this._immediateTarget = target
+            this._forceTarget = Math.max(this._forceTarget ?? 0, target)
+        }
         if (
             !attached ||
             (!this._buffer._activeEntries && this._buffer._queue.length === 0) ||
@@ -350,7 +353,12 @@ export class Lane<E> {
             this._clearTimer()
             return
         }
-        const forced = this._forceTarget !== undefined && this._buffer._queue[0]![0] <= this._forceTarget
+        const head = this._buffer._queue[0]!
+        // A forced target restored after a failed drain waits out the retained head's cooldown on the timer.
+        const forced =
+            this._forceTarget !== undefined &&
+            head[0] <= this._forceTarget &&
+            !(this._retryBlocked && head[5] > this._buffer._now())
         if (forced || (!this._retryBlocked && this._buffer._queue.length >= this._readFlushAt(attached))) {
             this._clearTimer()
             this._beginDrive(false)
