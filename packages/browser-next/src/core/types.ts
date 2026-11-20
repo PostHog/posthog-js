@@ -73,7 +73,11 @@ export interface ResetOptions {
     bootstrap?: BootstrapOptions & FlagsOptions['bootstrap']
 }
 
-/** Shares identity and session state through a cookie. Create one with `cookiePersistence()` from `@posthog/browser/persistence/cookie`. */
+/**
+ * Shares identity and session state through a cookie. Create one with `cookiePersistence()` from
+ * `@posthog/browser/persistence/cookie`; only instances it returns are supported. `wrap` and the state record it
+ * reads and writes are internal, so their shape can change in any release.
+ */
 export interface CookiePersistence {
     /** Wraps the state storage so the identity record also reads from and writes to the cookie. */
     wrap(storage: StorageLike, stateKey: string, projectToken: string): StorageLike
@@ -179,6 +183,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     /**
      * Starts a new anonymous identity and session, and forgets the stored consent choice. Pass `true`, as in
      * posthog-js, or `{ resetDeviceId: true }` to also replace the device ID.
+     *
+     * With `optOutByDefault`, capture returns to the default (opted out), so calling `reset()` after `optIn()` stops
+     * capture. Reset first, then opt in again if needed: `posthog.reset(); posthog.optIn()`. Events captured before
+     * the reset, in this or another tab, are still delivered.
      */
     reset(options?: boolean | ResetOptions): void
     register(properties: Record<string, unknown>): void
@@ -245,7 +253,10 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     hasOptedOut(): boolean
     /** The stored opt-in or opt-out choice, independently of `optOutByDefault`. */
     getExplicitConsentStatus(): ExplicitConsentStatus
-    /** Forgets the stored opt-in or opt-out choice, returning consent to the configured default. */
+    /**
+     * Forgets the stored opt-in or opt-out choice, returning consent to the configured default. Events captured before
+     * the call are still delivered.
+     */
     clearOptInOut(): void
     getRemoteConfig(): Promise<RemoteConfig | undefined>
     /** Change the options in `RuntimeOptions`. Other creation options are fixed for the client's lifetime. */

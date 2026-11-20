@@ -11,7 +11,7 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
 } from '@posthog/browser-common/constants'
 import { createId } from '../primitives/id'
-import { CLIENT_KV_NAMESPACE, incrementRevision } from '../core/state/state'
+import { CLIENT_KV_NAMESPACE, incrementRevision, isRecord, isTimestamp } from '../core/state/state'
 import { isValidDistinctId } from '../products/analytics/analytics-core'
 import { REGISTERED_PROPERTIES } from '../products/analytics/properties/analytics-properties'
 import type { CookiePersistence, StorageLike } from '../core/types'
@@ -52,24 +52,9 @@ const IDENTITY_BOUND_KEYS = [
 const SHARED_HOSTING_DOMAINS = ['herokuapp.com', 'vercel.app', 'netlify.app']
 const REVISION = /^(0|[1-9]\d*)$/
 
-const isRecord = (value: unknown): value is Values =>
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const isTimestamp = (value: unknown): value is number =>
-    // oxlint-disable-next-line posthog-js/no-direct-number-check
-    typeof value === 'number' && Number.isFinite(value) && value >= 0
-
 const getDocument = (): Document | undefined => {
     try {
         return globalThis.document
-    } catch {
-        return undefined
-    }
-}
-
-const getLocation = (): Location | undefined => {
-    try {
-        return globalThis.location
     } catch {
         return undefined
     }
@@ -272,10 +257,10 @@ export const cookiePersistence = (options: CookiePersistenceOptions = {}): Cooki
     }
     return {
         wrap(storage: StorageLike, stateKey: string, projectToken: string): StorageLike {
-            const location = getLocation()
             let hostname = ''
             let https = false
             try {
+                const location = globalThis.location
                 hostname = location?.hostname ?? ''
                 https = location?.protocol === 'https:'
             } catch {

@@ -1,6 +1,6 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
 
-import { createId } from '../../primitives/id'
+import { createId, createTimeId } from '../../primitives/id'
 import { createKeyValueStore, TabValues } from './key-value-store'
 import type { CookiePersistence, NewSessionReason, StorageLike } from '../types'
 
@@ -48,7 +48,7 @@ interface PreparedSession {
 
 const emptyRecord = <T>(): Record<string, T> => Object.create(null) as Record<string, T>
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const readGroups = (value: unknown): Record<string, string> => {
@@ -63,7 +63,7 @@ const readGroups = (value: unknown): Record<string, string> => {
     return groups
 }
 
-const isTimestamp = (value: unknown): value is number =>
+export const isTimestamp = (value: unknown): value is number =>
     // oxlint-disable-next-line posthog-js/no-direct-number-check
     typeof value === 'number' && Number.isFinite(value) && value >= 0
 
@@ -150,7 +150,7 @@ const readExtensionData = (value: unknown): Record<string, Record<string, unknow
 const createSession = (
     now: number,
     revision: string,
-    [sessionId, sessionStartTimestamp]: BootstrapSession = [createId(), now]
+    [sessionId, sessionStartTimestamp]: BootstrapSession = [createTimeId(now), now]
 ): PersistedSession => ({
     sessionId,
     sessionStartTimestamp,
@@ -336,7 +336,7 @@ export class BrowserState {
     private readonly _storage: StorageLike | undefined
     private readonly _windowStorageFactory: (() => StorageLike | undefined) | undefined
     private readonly _defaultConsent: ConsentState
-    private readonly _onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void
+    private readonly _onConsentChange: (consent: ConsentState, previousConsent: ConsentState, explicit: boolean) => void
     private readonly _beforeUnload = (): void => {
         this._flushSession()
         this._windowRemove(this._primaryWindowKey)
@@ -349,7 +349,7 @@ export class BrowserState {
         consentPersistenceName: string | undefined,
         optOutByDefault: boolean,
         windowStorageFactory: (() => StorageLike | undefined) | undefined,
-        onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void,
+        onConsentChange: (consent: ConsentState, previousConsent: ConsentState, explicit: boolean) => void,
         cookie?: CookiePersistence
     ) {
         this._stateKey = persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`
@@ -561,7 +561,7 @@ export class BrowserState {
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external), bootstrap)
             : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
-        const window = this._prepareWindow(rotated)
+        const window = this._prepareWindow(rotated, safeNow)
         return {
             context: {
                 sessionId: preparedSession.sessionId,
@@ -724,13 +724,20 @@ export class BrowserState {
         }
     }
 
-    private _prepareWindow(rotated: boolean): {
+    private _prepareWindow(
+        rotated: boolean,
+        now: number
+    ): {
         windowId: string
         storage: StorageLike | undefined
         storageResolved: boolean
     } {
         if (rotated || this._windowId) {
-            return { windowId: rotated ? createId() : this._windowId, storage: undefined, storageResolved: false }
+            return {
+                windowId: rotated ? createTimeId(now) : this._windowId,
+                storage: undefined,
+                storageResolved: false,
+            }
         }
 
         let storage: StorageLike | undefined
@@ -752,7 +759,7 @@ export class BrowserState {
             // A fresh in-memory window remains available.
         }
         const reusable = lastWindowId && (!primaryWindowExists || this._isReload()) ? lastWindowId : undefined
-        return { windowId: reusable ?? createId(), storage, storageResolved: true }
+        return { windowId: reusable ?? createTimeId(now), storage, storageResolved: true }
     }
 
     private _initializeWindowStorage(
@@ -898,7 +905,8 @@ export class BrowserState {
         const previousConsent = this._consent
         this._consent = consent
         try {
-            this._onConsentChange(consent, previousConsent)
+            // Every caller sets the choice first, so a cleared choice reports a non-explicit transition.
+            this._onConsentChange(consent, previousConsent, this._consentChoice !== undefined)
         } catch {
             // The consent transition remains authoritative when host reactions fail.
         }

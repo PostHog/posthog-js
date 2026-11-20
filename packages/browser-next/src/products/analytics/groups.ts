@@ -36,7 +36,7 @@ export const groupIdentify = (
     options: CaptureOptions = {}
 ): void => {
     const analytics = analyticsOf(posthog)
-    if (!analytics || analytics._disposed || !analytics._core._canMutate() || !analytics._core._canDeliver()) return
+    if (!analytics || analytics._disposed || !analytics._core._canMutate() || !analytics._core.canCapture) return
     if (!isNonEmptyString(type) || !isValidGroupKey(key)) {
         posthog.logger.warn('Group identify requires a non-empty type and a string or finite numeric key')
         return
