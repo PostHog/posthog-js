@@ -226,6 +226,34 @@ describe('known-absent property keys', () => {
     expect(flagsRequests()).toHaveLength(0)
   })
 
+  it.each([false, true])(
+    'still falls back for an unsupported not_between in a dynamic cohort leaf on a listed key (negation: %s)',
+    async (negation) => {
+      setup(
+        {
+          flags: [flag('cohort-flag', [{ key: 'id', type: 'cohort', value: 'c1', operator: 'in' }])],
+          cohorts: {
+            c1: { type: 'AND', values: [{ ...personFilter('not_between', [1, 2]), negation }] },
+          },
+        },
+        { 'cohort-flag': 'remote' }
+      )
+
+      const result = await posthog.evaluateFlags('user', {
+        flagKeys: ['cohort-flag'],
+        onlyEvaluateLocally: true,
+        personPropertyKeysKnownAbsent: ['plan'],
+      })
+      expect(result.getFlag('cohort-flag')).toBeUndefined()
+      expect(result.unresolvedFlags).toEqual({ 'cohort-flag': 'unsupported_definition' })
+      expect(await posthog.getFeatureFlag('cohort-flag', 'user', { personPropertyKeysKnownAbsent: ['plan'] })).toBe(
+        'remote'
+      )
+      expect(flagsRequests()).toHaveLength(1)
+      expect(flagsRequests()[0].person_property_keys_known_absent).toEqual(['plan'])
+    }
+  )
+
   it('applies to flag dependencies', async () => {
     setup({
       flags: [
