@@ -1,19 +1,7 @@
 import type { Extension } from '@posthog/browser-common'
 import { createPostHog as createDefault } from '../src/composition/npm/core'
-import type { BrowserFetch, CorePostHogOptions, IPostHog, StorageLike } from '../src/core/types'
-
-class MemoryStorage implements StorageLike {
-    readonly values = new Map<string, string>()
-    getItem(key: string): string | null {
-        return this.values.get(key) ?? null
-    }
-    setItem(key: string, value: string): void {
-        this.values.set(key, value)
-    }
-    removeItem(key: string): void {
-        this.values.delete(key)
-    }
-}
+import type { BrowserFetch, CorePostHogOptions, IPostHog } from '../src/core/types'
+import { localRemoteConfig, MemoryStorage } from './helpers'
 
 interface CapturedEvent {
     event: string
@@ -53,13 +41,7 @@ const options = (fetch: BrowserFetch): CorePostHogOptions => ({
     storage: new MemoryStorage(),
     navigator: false,
     fetch,
-    remoteConfig: {
-        supportedCompression: [],
-        toolbarParams: {},
-        toolbarVersion: 'toolbar',
-        isAuthenticated: false,
-        siteApps: [],
-    },
+    remoteConfig: localRemoteConfig,
     analytics: { flushAt: 100, flushInterval: 0 },
 })
 

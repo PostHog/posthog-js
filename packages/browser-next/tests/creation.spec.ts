@@ -132,6 +132,30 @@ describe('client creation', () => {
         await posthog.shutdown()
     })
 
+    it.each(modes)(
+        'warns once that the removed `analytics: false` option still captures: $name',
+        async ({ create }) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const requests: SentRequest[] = []
+            const posthog = await create({
+                ...baseOptions,
+                debug: true,
+                flags: false,
+                fetch: createFetch(requests),
+                analytics: false,
+            } as unknown as PostHogOptions)
+            posthog.capture('still-captured')
+            await posthog.flush()
+            expect(events(requests)).toEqual(['still-captured'])
+            const removed = warn.mock.calls.filter((args) =>
+                String(args[1]).includes('`analytics: false` option was removed')
+            )
+            expect(removed).toEqual([['[PostHog]', expect.stringContaining('`capturePageview: false`')]])
+            warn.mockRestore()
+            await posthog.shutdown()
+        }
+    )
+
     it.each(modes)('snapshots analytics options when the client is created: $name', async ({ create }) => {
         const requests: SentRequest[] = []
         const configuration = { flushAt: 1, flushInterval: 0 }
