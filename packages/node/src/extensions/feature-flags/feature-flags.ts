@@ -412,6 +412,13 @@ class FeatureFlagsPoller {
     }
 
     const flagFilters = flag.filters || {}
+
+    // Enrollment is a person property, so it is read from the person properties on
+    // group-aggregated flags too.
+    if (flagFilters.feature_enrollment === true) {
+      return matchFeatureEnrollment(flag, personProperties)
+    }
+
     const aggregation_group_type_index = flagFilters.aggregation_group_type_index
 
     if (aggregation_group_type_index != undefined) {
@@ -1385,6 +1392,10 @@ function getDefinitionUnresolvedReason(
     return 'experience_continuity'
   }
   const flagFilters = flag.filters || {}
+  // Enrollment decides the flag before the group aggregation and release conditions are read.
+  if (flagFilters.feature_enrollment === true) {
+    return undefined
+  }
   const aggregation = flagFilters.aggregation_group_type_index
   if (aggregation != undefined && !definitions.groupTypeMapping[String(aggregation)]) {
     return 'unsupported_definition'
@@ -1393,6 +1404,21 @@ function getDefinitionUnresolvedReason(
     (condition.properties || []).some((property) => isUnsupportedProperty(property, definitions, new Set()))
   )
   return usesUnsupportedProperty ? 'unsupported_definition' : undefined
+}
+
+// An early-access feature flag returns the person's enrollment at once: `true` or `"true"` means
+// enrolled, and any other value that was passed, `null` included, means opted out. Without the
+// enrollment property the flag can't be resolved locally.
+function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
+  const enrollmentKey = `$feature_enrollment/${flag.key}`
+  if (!personProperties || !Object.prototype.hasOwnProperty.call(personProperties, enrollmentKey)) {
+    throw new InconclusiveMatchError(
+      `Flag has feature enrollment and '${enrollmentKey}' was not passed`,
+      'missing_context'
+    )
+  }
+  const enrollment = personProperties[enrollmentKey]
+  return enrollment === true || enrollment === 'true'
 }
 
 function isUnsupportedProperty(
