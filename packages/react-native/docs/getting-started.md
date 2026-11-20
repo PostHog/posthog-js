@@ -43,6 +43,38 @@ posthog.capture('signed_up', { plan: 'pro' })
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
 
+## Offline behavior
+
+The SDK keeps capturing events while the device is offline. With the default `persistence: 'file'`, events stay queued in device file storage across app restarts and flush once the device is online.
+
+- `maxQueueSize` sets the maximum number of queued events.
+- When the queue is full, the oldest event is evicted first.
+
+## Disable for local development
+
+Pass `disabled: __DEV__` in `PostHogProvider` options to turn off tracking during development. Calls through `usePostHog()` still work as safe no-ops.
+
+```tsx
+import { PostHogProvider } from 'posthog-react-native'
+
+export function App() {
+  return (
+    <PostHogProvider
+      projectToken="<ph_project_token>"
+      options={{ host: 'https://us.i.posthog.com', disabled: __DEV__ }}
+    >
+      <YourApp />
+    </PostHogProvider>
+  )
+}
+```
+
+## Proxy, projects, and allowlists
+
+- Set up a [reverse proxy](https://posthog.com/docs/advanced/proxy) so tracking blockers don't drop events.
+- If you run a website and mobile app together, [group them in one project](https://posthog.com/docs/settings/projects) to track users across platforms.
+- If a firewall or WAF blocks PostHog requests, allowlist PostHog's public IPs listed in the [webhook IP allowlist](https://posthog.com/docs/data-pipelines/destinations/webhook).
+
 ## Choose an iOS dependency path for the native plugin
 
 The optional `@posthog/react-native-plugin` package needs `posthog-ios`. Choose one path to resolve it.
