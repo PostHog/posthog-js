@@ -1,8 +1,9 @@
-import { type PostHogEventProperties, type PostHogFetchResponse, isGzipSupported } from '@posthog/core'
+import { isGzipSupported } from '../gzip'
+import type { PostHogEventProperties, PostHogFetchResponse } from '../types'
 
-import { CaptureError } from '@posthog/core/capture-v1'
-import { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks } from '@posthog/core/capture-v1'
-import { type SerializedV1Event, serializeV1Event } from '@posthog/core/capture-v1'
+import { CaptureError } from './errors'
+import { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks } from './sender'
+import { type SerializedV1Event, serializeV1Event } from './serialize'
 
 const CLOCK_START = Date.parse('2024-01-01T00:00:00.000Z')
 
