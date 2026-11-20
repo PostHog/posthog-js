@@ -1,14 +1,14 @@
-# @posthog/electron (alpha)
+# @posthog/electron
 
 Coordinated PostHog analytics and client feature flags for Electron. One main-process client owns identity, consent, sessions, storage and networking; trusted renderer windows use a sandbox-compatible preload bridge and explicitly registered utility processes use `process.parentPort`.
 
-This alpha supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
+The SDK supports manual events/screens, alias/identify/reset, person properties, groups, registered properties, opt-in/out, cached feature flags/results/payloads with exposure events and local flag-evaluation context, application lifecycle events, handled JavaScript exceptions, opt-in DOM autocapture, opt-in automatic JavaScript error capture, flush and shutdown. **Session replay, surveys, product tours and native crashes are not supported.** No recorder or remotely loaded executable code is included.
 
-**Release status:** private and unpublished until the final alpha-release PR. Use local tarballs while developing; merging this PR does not enable npm publication.
+See the [release gates](https://github.com/PostHog/posthog-js/blob/main/RELEASING.md#electron-releases) and [migration guide](./MIGRATION.md). Local tarball tests with a core override do not prove compatibility with npm dependencies.
 
 ## Setup
 
-Install `@posthog/electron` alongside your application's Electron development dependency. Electron 41+ is the initial experimental runtime range; validate your packaged application on every OS/runtime you ship. Do not bundle Electron into your application JavaScript.
+Install with `pnpm add @posthog/electron` alongside your application's Electron development dependency. Pin the resolved version for reproducible builds. Electron 41+ is the initial experimental runtime range, not an assertion that every OS/runtime combination has passed. Validate your packaged application on every OS/runtime you ship. Do not bundle Electron into your application JavaScript.
 
 ### Main process
 
@@ -67,11 +67,11 @@ await posthog.captureException(new Error('Example handled error'))
 await posthog.flush()
 ```
 
-Main and renderer mutations return promises. Await identity/reset/consent changes before captures that depend on them. Renderer captures are asynchronous and acknowledge completed file writes in main, **not** server delivery. `flush()` waits for prior commands and main delivery; delivery errors reject it. Cache getters are synchronous after `await init()`.
+Main and renderer mutations return promises. Await identity/reset/consent changes before captures that depend on them. A resolved call is an asynchronous operation receipt, not proof that an event was sent: consent, filtering and queue limits can prevent admission. Accepted renderer captures acknowledge completed file writes in main, **not** server delivery or fsync/power-loss durability. `flush()` waits for prior commands and attempts main delivery; delivery errors reject it, and a successful response is not a guarantee of eventual ingestion/query visibility. Cache getters are synchronous after `await init()`.
 
 One identity/session is shared across the app, not one per window. Use `reset()` on logout before identifying a different account. Reset preserves opt-out state, project autocapture settings, install markers and accepted queued events with their original identities. Stale renderer commands around an account change are rejected rather than assigned to the new user; their promise rejects so the app can decide whether a fresh action is appropriate. Do not blindly replay a rejected capture under another user.
 
-`onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions and DOM autocapture observers.
+`onStateChange(callback)` returns an unsubscribe function. `getState()` returns a copy of the current identity/consent/flag snapshot. `dispose()` removes renderer subscriptions, DOM autocapture observers and automatic exception listeners.
 
 ## Main and renderer helpers
 
@@ -101,7 +101,7 @@ Alias and person-profile updates respect `personProfiles: 'never'`. Opt-out bloc
 
 Malformed JSON payloads from detailed flag responses return `null` and report through `onError`. Valid JSON retains its decoded value, including strings, `false`, `0` and `null`. Legacy flag responses and bootstrap payloads can preserve malformed input as a string; already-decoded strings are returned unchanged rather than parsed again.
 
-Electron sends anonymous and distinct IDs for flag evaluation, but the alpha does not send a separate `$device_id`. Device-ID bucketing is not supported.
+Electron sends anonymous and distinct IDs for flag evaluation, but the SDK does not send a separate `$device_id`. Device-ID bucketing is not supported.
 
 ## Opt-in DOM autocapture
 
@@ -249,6 +249,8 @@ This is **not** a sandbox or an untrusted-plugin interface: a registered utility
 - A failed startup write is reported through `onError` without permanently disabling the client. Mutations still reject if their write fails.
 - Corrupt/unreadable existing storage falls back to opted out and empty analytics, reporting via `onError`. Call `optIn()` explicitly after addressing the cause if appropriate.
 - Network errors, 407, 408, 429 and 5xx preserve batches after bounded immediate retries; background retries use backoff, jitter and Retry-After. Permanent failures may drop the batch. Retries retain event UUIDs, but duplicate delivery remains possible. `flushInterval: 0` disables scheduled background flushes; explicit flush and queue-size-triggered flush still work.
+- Back up and investigate the store before manual ownership recovery; never erase `state.json` or delete coordination files while a writer may still be active.
+- Networking uses an isolated Electron session with `credentials: 'omit'`. **Authenticated proxies are unsupported**; a 407 is retained for later recovery, not silently dropped, but retention does not make proxy authentication work. Validate your unauthenticated proxy/TLS/self-hosted deployment separately; do not promise all system proxy configurations are supported.
 
 Requests use an isolated Electron session with omitted cookies and HTTP credentials. Automatic redirects are rejected: configure the final ingestion URL, including any reverse-proxy path, rather than relying on redirects to move event or flag bodies.
 
@@ -256,11 +258,11 @@ Requests use an isolated Electron session with omitted cookies and HTTP credenti
 
 Lifecycle capture defaults on (`captureAppLifecycleEvents: false` disables its events). Installed means first observed SDK launch, not installer execution. Updates compare the saved app version and optional `appBuild`. Installed/Updated carry Electron/Node/Chromium versions; ordinary events carry app/OS context. Focus is aggregated across registered windows. Sessions start fresh on process restart, with core's default 30-minute inactivity and 24-hour maximum boundaries; periodic flag reloads alone do not extend them. Admitted analytics events currently count as activity; avoid periodic heartbeat captures if that is not the session behavior you want.
 
-The SDK makes only a **best-effort flush** on uncancelled `will-quit`; it never prevents/reissues quit or tears down a client whose host may cancel quit. For a bounded drain and teardown, the host must own its quit flow and call `await posthog.shutdown(2000)` before exiting. Shutdown is idempotent and bounded, including deferred initialization; a timeout reports through `onError` and resolves `ready()` without allowing late startup. Uncancellable filesystem cleanup may finish afterward and retains ownership until pending writes settle, so an immediate replacement instance can remain inactive. On normal process exit, unsaved local state — including an `optIn()`/`optOut()` that was called but not awaited — is written synchronously before ownership is released, so consent survives an immediate `app.quit()`. Network delivery is not part of that final write. Abrupt termination/OS shutdown relies on already written files, not a guaranteed final flush. Mutating calls after shutdown reject; cached getters remain readable. Closing all registered windows emits the aggregate background transition but does not shut down the SDK; tray apps can continue capturing until the host quits. `powerMonitor` suspend pauses delivery and aborts in-flight requests; resume attempts a flush respecting existing backoff. Neither power callback emits analytics nor refreshes session activity. The host owns tray/window quit policy and fatal-error behavior; the SDK does not intercept uncaught exceptions or native crashes. Desktop lifecycle semantics are a new mapping of the published lifecycle contract, not a claim of complete cross-SDK harness conformance.
+The SDK makes only a **best-effort flush** on uncancelled `will-quit`; it never prevents/reissues quit or tears down a client whose host may cancel quit. For a bounded drain and teardown, the host must own its quit flow and call `await posthog.shutdown(2000)` before exiting. Shutdown is idempotent and bounded, including deferred initialization; a timeout reports through `onError` and resolves `ready()` without allowing late startup. Uncancellable filesystem cleanup may finish afterward and retains ownership until pending writes settle, so an immediate replacement instance can remain inactive. On normal process exit, unsaved local state — including an `optIn()`/`optOut()` that was called but not awaited — is written synchronously before ownership is released, so consent survives an immediate `app.quit()`. Network delivery is not part of that final write. Abrupt termination/OS shutdown relies on already written files, not a guaranteed final flush. Mutating calls after shutdown reject; cached getters remain readable. Closing all registered windows emits the aggregate background transition but does not shut down the SDK; tray apps can continue capturing until the host quits. `powerMonitor` suspend pauses delivery and aborts in-flight requests; resume attempts a flush respecting existing backoff. Neither power callback emits analytics nor refreshes session activity. The host owns tray/window quit policy and fatal-error behavior; the SDK does not replace host fatal-error behavior or capture native crashes; optional JavaScript observation is described above. Desktop lifecycle semantics are a new mapping of the published lifecycle contract, not a claim of complete cross-SDK harness conformance.
 
 ## Networking limits
 
-Requests use Chromium's isolated in-memory `session.fromPartition('posthog-electron')`, not Node's fetch or the default browser session. A host can configure that session's proxy with Electron's `setProxy()` after app readiness and before capture/flush. SDK requests omit cookies and HTTP credentials. **Authenticated proxies are not currently supported**: a 407 is retained for retry/configuration recovery, not evidence of authenticated-proxy compatibility. Applications requiring authenticated enterprise proxies must treat this alpha limitation as a production-readiness gate.
+Requests use Chromium's isolated in-memory `session.fromPartition('posthog-electron')`, not Node's fetch or the default browser session. A host can configure that session's proxy with Electron's `setProxy()` after app readiness and before capture/flush. SDK requests omit cookies and HTTP credentials. **Authenticated proxies are not currently supported**: a 407 is retained for retry/configuration recovery, not evidence of authenticated-proxy compatibility. Applications requiring authenticated enterprise proxies must treat this limitation as a production-readiness gate.
 
 TLS certificate verification remains Chromium's default. The SDK does not disable verification, install certificate-error overrides, or trust arbitrary private CAs. Validate your actual enterprise trust/proxy deployment separately. There is no exactly-once guarantee: interrupted delivery may be retried with the same UUID and can duplicate events.
 
@@ -278,10 +280,12 @@ pnpm --filter @posthog/electron test:autocapture
 pnpm --filter @posthog/electron test:transport
 ```
 
-For the dedicated real utility-process test (after building), run `pnpm --filter @posthog/electron test:utility`. It packs and independently installs the SDK/core/types tarballs into a temporary app, starts the installed Electron binary normally, and forks actual utility processes. It needs a GUI-capable Electron environment (or Xvfb on Linux), but no credentials. The fixture checks coordinated identity/consent/session, handled exceptions, protected context, flag exposure deduplication, reset, a slow owner flush that times out without disconnecting, pending promise rejection on unregister, unexpected exit cleanup and replacement-child attribution. See [the fixture proof](test/utility-process/README.md).
+For the dedicated real utility-process test (after building), run `pnpm --filter @posthog/electron test:utility`. It packs and independently installs the SDK/browser-common/core/types tarballs into a temporary app, starts the installed Electron binary normally, and forks actual utility processes. It needs a GUI-capable Electron environment (or Xvfb on Linux), but no credentials. The fixture checks coordinated identity/consent/session, handled exceptions, protected context, flag exposure deduplication, reset, a slow owner flush that times out without disconnecting, pending promise rejection on unregister, unexpected exit cleanup and replacement-child attribution. See [the fixture proof](test/utility-process/README.md).
 
 After building, `pnpm --filter @posthog/electron test:errors` packs and installs local SDK tarballs into an isolated consumer and exercises actual main/renderer throws and rejections against a loopback mock receiver in sandboxed Electron. It compares application-handler behavior with autocapture disabled/enabled, tests consent/dispose/reinit, and separately compares native Node fatal exits and warning modes. It needs a runnable Electron binary/display; `ELECTRON_BINARY` can override the installed binary. Fatal Electron termination/delivery is not exercised or guaranteed.
 
 For loopback subprocess delivery/network tests and their real-versus-synthetic coverage limits, see [delivery tests](test/delivery/README.md).
 
 The example installs tarballs, not source symlinks. No PostHog credentials are needed for its smoke test. The isolated autocapture test uses only local mock endpoints and real sandboxed Electron windows. It checks click/change/submit delivery, delayed config/kill switches, consent/reset/disposal, masking, sensitive-canary exclusion from IPC/network/disk, and absence of recorder requests/artifacts.
+
+Local core tarball overrides are source-integration evidence **only**. The shared release workflow checks the packed manifest's registry dependency minimums and required core hooks without overrides before publishing Electron. Packaged runtime and published harness results must be recorded separately from unit and build checks.
