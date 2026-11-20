@@ -670,12 +670,12 @@ export class Analytics {
         return this._canUseProperties() ? this._registeredProperties.get(property) : undefined
     }
 
-    /** Registers a producer of properties for each event, given the event name as passed to capture. */
     /** Shapes a page URL with the client's `urlSanitization`, as events record `$current_url`. */
     recordUrl(href: string | undefined): string | undefined {
         return recordedUrl(href, this._urlSanitization)?.href
     }
 
+    /** Registers a producer of properties for each event, given the event name as passed to capture. */
     registerDynamicEventProperties(producer: (event: string) => Record<string, unknown>): Disposable {
         if (this._disposed || this._core._disposed) return { dispose() {} }
         this._dynamicEventProperties.push(producer)

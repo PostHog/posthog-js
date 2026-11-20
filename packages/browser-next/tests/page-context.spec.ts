@@ -35,7 +35,7 @@ describe('page context', () => {
 
         const [custom] = await sent(client)
         expect(custom).toMatchObject({
-            $current_url: 'https://example.com/products/42?token=abc#section',
+            $current_url: 'https://example.com/products/42?token=abc',
             $host: 'example.com',
             $pathname: '/products/42',
         })
@@ -48,7 +48,7 @@ describe('page context', () => {
 
         const [pageview] = await sent(client)
         expect(pageview).toMatchObject({
-            $current_url: 'https://example.com/products/42?token=abc#section',
+            $current_url: 'https://example.com/products/42?token=abc',
             title: 'Product 42',
         })
     })
@@ -79,7 +79,7 @@ describe('page context', () => {
         })
         expect(overridden).not.toHaveProperty('$pathname')
         expect(next).toMatchObject({
-            $current_url: 'https://example.com/products/42?token=abc#section',
+            $current_url: 'https://example.com/products/42?token=abc',
             $host: 'example.com',
             $pathname: '/products/42',
             title: 'Product 42',
@@ -94,12 +94,20 @@ describe('page context', () => {
         expect(custom?.$current_url).toBe('https://example.com/products/42')
     })
 
+    it('keeps the fragment when hash capture is enabled', async () => {
+        const client = await create({ urlSanitization: { hash: true } })
+        client.capture('custom')
+
+        const [custom] = await sent(client)
+        expect(custom?.$current_url).toBe('https://example.com/products/42?token=abc#section')
+    })
+
     it('replaces the path with / when path capture is disabled', async () => {
         const client = await create({ urlSanitization: { path: false } })
         client.capture('custom')
 
         const [custom] = await sent(client)
-        expect(custom).toMatchObject({ $current_url: 'https://example.com/?token=abc#section', $pathname: '/' })
+        expect(custom).toMatchObject({ $current_url: 'https://example.com/?token=abc', $pathname: '/' })
     })
 
     it('rewrites the URL before filtering its parts', async () => {
@@ -117,7 +125,7 @@ describe('page context', () => {
         const [custom] = await sent(client)
         expect(received).toEqual(['https://user:secret@example.com/products/42?token=abc#section'])
         expect(custom).toMatchObject({
-            $current_url: 'https://app.example.com/products/:id#section',
+            $current_url: 'https://app.example.com/products/:id',
             $host: 'app.example.com',
             $pathname: '/products/:id',
         })
@@ -166,7 +174,7 @@ describe('page context', () => {
         client.capture('custom')
 
         const [custom] = await sent(client)
-        expect(custom?.$current_url).toBe('https://example.com/products/42#section')
+        expect(custom?.$current_url).toBe('https://example.com/products/42')
     })
 
     it('omits an opaque URL when path capture is disabled', async () => {
@@ -179,7 +187,7 @@ describe('page context', () => {
         expect(custom).not.toHaveProperty('$current_url')
     })
 
-    it('captures the event when reading the document title throws', async () => {
+    it('keeps the page URL when reading the document title throws', async () => {
         vi.stubGlobal('document', {
             get title(): string {
                 throw new Error('title unavailable')
@@ -191,6 +199,7 @@ describe('page context', () => {
         const [pageview] = await sent(client)
         expect(pageview).toBeDefined()
         expect(pageview).not.toHaveProperty('title')
+        expect(pageview?.$current_url).toBe('https://example.com/products/42?token=abc')
     })
 
     it('adds no page URL in a worker, where location is the script URL', async () => {

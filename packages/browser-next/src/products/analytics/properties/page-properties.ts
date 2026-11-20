@@ -16,7 +16,7 @@ export const recordedUrl = (href: string | undefined, options: UrlSanitizationOp
             if (url.pathname !== '/') return undefined
         }
         if (options.query === false) url.search = ''
-        if (options.hash === false) url.hash = ''
+        if (options.hash !== true) url.hash = ''
         return url
     } catch {
         return undefined
@@ -27,16 +27,16 @@ export const recordedUrl = (href: string | undefined, options: UrlSanitizationOp
 export const pageProperties = (event: string, options: UrlSanitizationOptions): Record<string, unknown> => {
     const properties: Record<string, unknown> = {}
     try {
-        if (event === '$pageview') {
-            const title = globalThis.document?.title
-            if (typeof title === 'string') properties.title = title
-        }
         // A worker's `location` is its script URL, not a page.
         const url = recordedUrl(globalThis.window?.location?.href, options)
         if (url) {
             properties.$current_url = url.href
             properties.$host = url.host
             properties.$pathname = url.pathname
+        }
+        if (event === '$pageview') {
+            const title = globalThis.document?.title
+            if (typeof title === 'string') properties.title = title
         }
     } catch {
         // A page that can't be read leaves its properties off; the event is still captured.

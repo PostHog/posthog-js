@@ -85,7 +85,7 @@ export interface UrlSanitizationOptions {
     path?: boolean
     /** Include query parameters. Defaults to true. */
     query?: boolean
-    /** Include the fragment. Defaults to true. */
+    /** Include the fragment, which can carry tokens. Defaults to false, as in posthog-js's current `defaults`. */
     hash?: boolean
     /**
      * Rewrite a copy of the page URL before `path`, `query` and `hash` apply. Return an absolute URL or URL string.
