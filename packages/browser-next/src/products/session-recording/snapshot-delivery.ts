@@ -173,7 +173,8 @@ const sendOnUnload = (
         request(true)
         return
     }
-    if (messages.length > 1) {
+    // split only while a snapshot of average size still fits what is left, since every split encodes its half again
+    if (messages.length > 1 && encoded.bytes <= budget.remaining * messages.length) {
         const middle = Math.ceil(messages.length / 2)
         sendOnUnload(host, messages.slice(0, middle), budget, queue)
         sendOnUnload(host, messages.slice(middle), budget, queue)
