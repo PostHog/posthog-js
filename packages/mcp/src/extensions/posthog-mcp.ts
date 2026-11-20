@@ -186,13 +186,21 @@ export class PostHogMCP extends PostHog {
     return this.#feedbackOptions?.toolName ?? SEND_FEEDBACK_TOOL_NAME
   }
 
-  /** Add the configured build to SDK events and custom events captured through this client. */
+  /** Add the configured build to SDK events and custom events captured through this client, on both lanes. */
   override capture(event: EventMessage): void {
     super.capture(this.#withServerBuild(event))
   }
 
   override captureImmediate(event: EventMessage): Promise<void> {
     return super.captureImmediate(this.#withServerBuild(event))
+  }
+
+  override captureAi(event: EventMessage): string | undefined {
+    return super.captureAi(this.#withServerBuild(event))
+  }
+
+  override captureAiImmediate(event: EventMessage): Promise<string | undefined> {
+    return super.captureAiImmediate(this.#withServerBuild(event))
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
