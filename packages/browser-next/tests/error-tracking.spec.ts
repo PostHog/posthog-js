@@ -3,32 +3,12 @@ import { createPostHog as createCore } from '../src/composition/npm/core'
 import { createPostHog as createRoot } from '../src/composition/npm'
 import { errorTracking } from '../src/products/error-tracking/error-tracking'
 import type { ErrorTrackingExtension, ErrorTrackingOptions } from '../src/products/error-tracking/error-tracking'
-import type { BrowserFetch, IPostHog, PostHogOptions, RemoteConfig, StorageLike } from '../src/core/types'
-
-class MemoryStorage implements StorageLike {
-    readonly values = new Map<string, string>()
-    getItem(key: string): string | null {
-        return this.values.get(key) ?? null
-    }
-    setItem(key: string, value: string): void {
-        this.values.set(key, value)
-    }
-    removeItem(key: string): void {
-        this.values.delete(key)
-    }
-}
+import type { BrowserFetch, IPostHog, PostHogOptions, RemoteConfig } from '../src/core/types'
+import { MemoryStorage, createRemoteConfigFetch, localRemoteConfig } from './helpers'
 
 interface CapturedEvent {
     event: string
     properties: Record<string, any>
-}
-
-const baseRemoteConfig: RemoteConfig = {
-    supportedCompression: [],
-    toolbarParams: {},
-    toolbarVersion: 'toolbar',
-    isAuthenticated: false,
-    siteApps: [],
 }
 
 const collect = (sent: CapturedEvent[]): BrowserFetch => {
@@ -54,14 +34,7 @@ const deferredRemoteConfig = (sent: CapturedEvent[]) => {
     const config = new Promise<Partial<RemoteConfig>>((resolve) => {
         deliver = resolve
     })
-    const events = collect(sent)
-    const fetch: BrowserFetch = async (input, init) =>
-        new URL(String(input)).pathname.endsWith('/config')
-            ? new Response(JSON.stringify({ ...baseRemoteConfig, ...(await config) }), {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' },
-              })
-            : events(input, init)
+    const fetch = createRemoteConfigFetch(async () => ({ ...localRemoteConfig, ...(await config) }), collect(sent))
     return { fetch, deliver }
 }
 
@@ -77,7 +50,7 @@ const baseOptions = (sent: CapturedEvent[], remoteConfig: Partial<RemoteConfig> 
     navigator: false,
     storage: new MemoryStorage(),
     fetch: collect(sent),
-    remoteConfig: { ...baseRemoteConfig, ...remoteConfig },
+    remoteConfig: { ...localRemoteConfig, ...remoteConfig },
     analytics: { flushAt: 100, flushInterval: 0 },
     flags: false,
 })
@@ -497,6 +470,55 @@ describe('exception autocapture', () => {
         expect(consoleError).toHaveBeenCalledTimes(2)
         expect((pageConsole.error as unknown as { __rrweb_original__: unknown }).__rrweb_original__).toBe(consoleError)
         expect(window.onerror).toBe(originalOnError)
+    })
+
+    it('captures a console value without an Error when the SDK is served from the PostHog CDN', async () => {
+        const sent: CapturedEvent[] = []
+        const consoleError = vi.fn()
+        pageConsole.error = consoleError
+        const { posthog } = await createWith(sent, { captureExceptions: { captureConsoleErrors: true } })
+        await waitForWrapped(() => pageConsole.error, consoleError)
+        // The stack synthesized for a non-Error value ends in SDK frames, which come from the CDN script.
+        const sdkFrame = '    at wrapper (https://us-assets.i.posthog.com/static/browser/0/chunks/1.js:1:2)'
+        const prepareStackTrace = Error.prepareStackTrace
+        Error.prepareStackTrace = () => ['Error: PostHog syntheticException', sdkFrame, sdkFrame, sdkFrame].join('\n')
+        try {
+            pageConsole.error('payment failed')
+        } finally {
+            Error.prepareStackTrace = prepareStackTrace
+        }
+
+        const [properties] = await exceptions(posthog, sent)
+        expect(properties.$exception_list[0]).toMatchObject({
+            value: 'payment failed',
+            mechanism: { synthetic: true, type: 'onconsole' },
+        })
+    })
+
+    it('drops an unhandled error without an Error object located in a PostHog CDN script', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog } = await createWith(sent, { captureExceptions: true })
+        await waitForWrapped(() => window.onerror, originalOnError)
+        // What the browser passes for `throw undefined` in a CORS-loaded module chunk.
+        window.onerror!('Uncaught undefined', 'https://us-assets.i.posthog.com/static/browser/0/chunks/1.js', 10, 5)
+
+        expect(await exceptions(posthog, sent)).toEqual([])
+    })
+
+    it('drops a rejection with an error-like object whose stack is in a PostHog CDN script', async () => {
+        const sent: CapturedEvent[] = []
+        const { posthog } = await createWith(sent, { captureExceptions: true })
+        await waitForWrapped(() => window.onunhandledrejection, originalOnUnhandledRejection)
+        const reason = {
+            name: 'TypeError',
+            message: 'sdk failure',
+            stack: 'TypeError: sdk failure\n    at run (https://us-assets.i.posthog.com/static/browser/0/chunks/1.js:1:2)',
+        }
+        window.onunhandledrejection!(
+            new CustomEvent('unhandledrejection', { detail: { reason } }) as unknown as PromiseRejectionEvent
+        )
+
+        expect(await exceptions(posthog, sent)).toEqual([])
     })
 
     it('rate limits automatically captured exceptions per type', async () => {
