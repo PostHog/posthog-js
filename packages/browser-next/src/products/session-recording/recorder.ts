@@ -214,15 +214,22 @@ export class SessionRecorder {
 
     /** The replay debug properties for an event; only some SDK events also carry the optional ones. */
     debugProperties(optional: boolean): Record<string, unknown> {
+        // a stopped recorder reports itself disabled, though its last strategy still answers status reads
+        const status = this.isStarted || this._rrwebError ? this.status : DISABLED
         return {
-            // a stopped recorder reports itself disabled, though its last strategy still answers status reads
-            $recording_status: this.isStarted || this._rrwebError ? this.status : DISABLED,
+            $recording_status: status,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             ...(optional
                 ? {
                       ...this._triggerHost.optionalDebugProperties(),
                       $sdk_debug_replay_internal_buffer_size: this._buffer.size,
+                      ...(this._sessionStartTimestamp ? { $sdk_debug_session_start: this._sessionStartTimestamp } : {}),
+                      // as in posthog-js, conditions are only pending while they hold the recording in a buffer
+                      $sdk_debug_replay_pending_trigger_conditions:
+                          status === BUFFERING
+                              ? (this._strategy?.getPendingTriggerConditions(this._sessionId) ?? [])
+                              : [],
                       ...(this._holdFlushUntilInteraction
                           ? {
                                 $sdk_debug_replay_flush_hold_reason: this._heldEpochShipsOnUnload
