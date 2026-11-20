@@ -333,9 +333,10 @@ class PostHog implements IPostHog {
     reset(options?: boolean | ResetOptions): void {
         // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
         if (!this._canMutate()) return
-        const bootstrap = this._analytics.reset(options)
-        // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android.
+        // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
+        // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
         this.clearOptInOut()
+        const bootstrap = this._analytics.reset(options)
         if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 
