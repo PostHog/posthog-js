@@ -3223,7 +3223,7 @@ Per-call capture overrides, mirroring the client's public capture options.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-delivery"></a> `delivery?` | `"unload"` | Send immediately without batching, using best-effort unload-safe delivery. |
+| <a id="property-delivery"></a> `delivery?` | `"immediate"` \| `"unload"` | Start delivering this event now instead of waiting for a batch. `immediate` keeps the host's normal transport, retries and queue; `unload` uses best-effort unload-safe delivery. A host that cannot honor the mode delivers the event normally. |
 | <a id="property-set"></a> `set?` | `Record`\<`string`, `unknown`\> | Person properties to set, emitted as `$set`. |
 | <a id="property-setonce"></a> `setOnce?` | `Record`\<`string`, `unknown`\> | Person properties to set if unset, emitted as `$set_once`. |
 | <a id="property-timestamp"></a> `timestamp?` | `Date` | Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. |

@@ -86,9 +86,11 @@ export class Analytics {
     readonly _groupPublisher: Publisher<GroupInfo>
     readonly _groupsResetPublisher: Publisher<void>
     readonly _resetPublisher: Publisher<void>
-    readonly _personProfiles: PersonProfileMode
+    _personProfiles: PersonProfileMode
     _disposed = false
     _lastPersonProperties: string | undefined
+    /** The last admitted `$pageview` UUID and the session it belongs to. */
+    _pageview: [id: string, sessionId: string] | undefined
 
     private _driver: AnalyticsDriver | undefined
     private _isTearingDown = false
@@ -218,8 +220,10 @@ export class Analytics {
     }
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): boolean {
+        let delivery: CaptureOptions['delivery']
         try {
-            if (options.delivery === 'unload' && !this._isTearingDown) {
+            delivery = options.delivery
+            if (delivery === 'unload' && !this._isTearingDown) {
                 const authority = this._core._immediateAuthority
                 const message = this._admitCapture(event, properties, options, false, true)
                 if (message && !this._disposed && this._core._immediateAuthority === authority) {
@@ -231,7 +235,13 @@ export class Analytics {
             this._core.logger.error('Unload capture failed', error)
             return true
         }
-        return this._capture(event, properties, options) || !this._rateLimiter.limited
+        if (!this._capture(event, properties, options)) return !this._rateLimiter.limited
+        // Immediate events stay buffered, keeping retries and the teardown handoff, but start delivery now.
+        // During teardown, the handoff that is already running delivers them.
+        if (delivery === 'immediate' && !this._isTearingDown) {
+            this._driver?.flush(true).catch(this._deliveryHost.reportFailure)
+        }
+        return true
     }
 
     async captureImmediate(
@@ -334,6 +344,16 @@ export class Analytics {
         const session = preparedSession.context
         const distinctId = state.distinctId
         const groups = state.groups
+        const uuid = snapshot.uuid ?? createId()
+        const activePageviewId = this._pageviewIdFor(session.sessionId)
+        const isPageview = event === '$pageview'
+        const pageviewId = isPageview ? uuid : activePageviewId
+        // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
+        // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
+        const defaults: Record<string, string> = {}
+        if (pageviewId && !snapshot.overrides.has('$pageview_id')) defaults.$pageview_id = pageviewId
+        if (activePageviewId && (isPageview || event === '$pageleave') && !snapshot.overrides.has('$prev_pageview_id'))
+            defaults.$prev_pageview_id = activePageviewId
         const metadata = {
             token: this._core.projectToken,
             distinct_id: distinctId,
@@ -346,17 +366,20 @@ export class Analytics {
             $process_person_profile: processPersonProfile,
         }
         const message: AnalyticsMessage = {
-            uuid: snapshot.uuid ?? createId(),
+            uuid,
             event,
             distinct_id: distinctId,
-            properties: { ...snapshot.message, ...metadata },
+            properties: { ...defaults, ...snapshot.message, ...metadata },
             timestamp: eventTimestamp(snapshot.timestamp),
         }
         try {
             let bytes = utf8Bytes(JSON.stringify(message))
             if (bytes > MAX_ANALYTICS_BYTES) {
                 const minimum = utf8Bytes(
-                    JSON.stringify({ ...message, properties: unavoidableProperties(snapshot, metadata) })
+                    JSON.stringify({
+                        ...message,
+                        properties: { ...defaults, ...unavoidableProperties(snapshot, metadata) },
+                    })
                 )
                 if (minimum > MAX_ANALYTICS_BYTES) {
                     this._warnOversized(event, bytes)
@@ -364,13 +387,13 @@ export class Analytics {
                 }
             }
             const changed = applySessionProperties(snapshot, this._sessionProperties.values(session.sessionId))
-            message.properties = { ...snapshot.message, ...metadata }
+            message.properties = { ...defaults, ...snapshot.message, ...metadata }
             if (changed) bytes = utf8Bytes(JSON.stringify(message))
             return {
                 message,
                 bytes,
                 preparedSession,
-                observedProperties: { ...snapshot.observed, ...metadata, $groups: { ...groups } },
+                observedProperties: { ...defaults, ...snapshot.observed, ...metadata, $groups: { ...groups } },
             }
         } catch (error) {
             this._core.logger.error('The finalized event could not be measured', error)
@@ -405,10 +428,18 @@ export class Analytics {
         )
             this._lastPersonProperties = undefined
         const session = preparedSession.context
+        if (message.event === '$pageview') this._pageview = [message.uuid, session.sessionId]
+        else if (this._pageview?.[1] !== session.sessionId) this._pageview = undefined
         this._sessionProperties.admitted(session.sessionId)
         if (preparedSession.reason) this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         this._eventPublisher.publish(deepFreeze({ event: message.event, properties: observedProperties }))
         return message
+    }
+
+    /** A pageview belongs to its session, so an expired or rotated session has none. */
+    _pageviewIdFor(sessionId: string | undefined): string | undefined {
+        const pageview = this._pageview
+        return pageview && pageview[1] === sessionId ? pageview[0] : undefined
     }
 
     _hasPersonProcessing(): boolean {
@@ -497,6 +528,7 @@ export class Analytics {
         if (!this._canMutate()) return
         this._core._state.reset()
         this._lastPersonProperties = undefined
+        this._pageview = undefined
         this._sessionProperties.clear()
         this._resetPublisher.publish(undefined)
     }

@@ -50,7 +50,7 @@ export async function startSnippet(scriptUrl: string, target: SnippetWindow): Pr
         target.dispatchEvent(new CustomEvent('posthog:ready', { detail: client }))
     } catch {
         // Never expose the script URL, token, or customer-controlled error text.
-        createLogger('PostHog script', true).error('initialization failed')
+        createLogger('PostHog script', { enabled: true }).error('initialization failed')
     } finally {
         if (reserved) delete target[installation]
     }
