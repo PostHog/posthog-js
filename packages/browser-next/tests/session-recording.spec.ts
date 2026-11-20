@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { createPostHog as createRoot } from '../src/composition/npm/index'
-import { analyticsOf } from '../src/products/analytics/analytics-core'
 import { createSessionRecording } from '../src/products/session-recording/session-recording'
 import type { BrowserExtension } from '../src/core/context/browser-client'
 import type { IPostHog } from '../src/core/types'
@@ -373,8 +372,6 @@ describe('session recording attribution', () => {
         await recordMarker()
         // reset clears the opt-in, so consent returns to its default denial; core decides whether data recorded
         // before that denial may still be delivered (a cleared choice keeps it, an explicit opt-out does not)
-        vi.spyOn(analyticsOf(posthog)!._core, '_canDeliver').mockReturnValue(true)
-
         posthog.reset()
         await replay.flush?.()
 
