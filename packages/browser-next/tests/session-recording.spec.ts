@@ -4,6 +4,8 @@ import { createSessionRecording } from '../src/products/session-recording/sessio
 import type { BrowserExtension } from '../src/core/context/browser-client'
 import type { IPostHog } from '../src/core/types'
 import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
+import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/network-plugin'
+import { isLocalhost } from '@posthog/browser-common/utils/request-utils'
 import {
     clients,
     decompressEvent,
@@ -22,6 +24,16 @@ import {
     typeInto,
     type Transport,
 } from './session-recording-helpers'
+
+vi.mock('@posthog/browser-common/replay/network-plugin', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@posthog/browser-common/replay/network-plugin')>()
+    return { ...actual, getRecordNetworkPlugin: vi.fn(actual.getRecordNetworkPlugin) }
+})
+
+vi.mock('@posthog/browser-common/utils/request-utils', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@posthog/browser-common/utils/request-utils')>()
+    return { ...actual, isLocalhost: vi.fn(actual.isLocalhost) }
+})
 
 beforeEach(() => {
     resetDocument()
@@ -541,6 +553,26 @@ describe('session recording plugins', () => {
         await replay.flush?.()
 
         expect(JSON.stringify(recordedEvents(network))).not.toContain('not replayed console line')
+    })
+
+    it('passes the project network capture settings through to the network plugin', async () => {
+        vi.mocked(isLocalhost).mockReturnValue(false)
+        try {
+            const { replay } = await setup({
+                networkPayloadCapture: {
+                    recordHeaders: { request: false, response: true },
+                    recordBody: { request: false, response: ['application/json'] },
+                },
+            })
+            await started(replay)
+
+            expect(vi.mocked(getRecordNetworkPlugin).mock.calls.at(-1)?.[0]).toMatchObject({
+                recordHeaders: { request: false, response: true },
+                recordBody: { request: false, response: ['application/json'] },
+            })
+        } finally {
+            vi.mocked(isLocalhost).mockRestore()
+        }
     })
 })
 
