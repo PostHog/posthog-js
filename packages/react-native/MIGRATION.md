@@ -41,6 +41,7 @@ If you send events through your own reverse proxy, update it before you upgrade:
 - Pass `Authorization` through unchanged when it starts with `Bearer phc_`, or is `Bearer <your project token>` for a token older than the `phc_` prefix. The project token is no longer in the request body, and PostHog answers `401` without it.
 - Pass every `PostHog-*` header, `Content-Type`, `Content-Encoding` and `User-Agent` through unchanged. PostHog answers `400` without them.
 - Accept request bodies up to 20 MB. Analytics requests carry up to 5 MiB of events, and a single AI event can be over 8 MiB.
+- Answer capture requests directly instead of redirecting them. React Native's fetch follows every redirect, including one to another origin, so a redirect can send your `requestHeaders` to that origin. The native SDKs follow only same-origin `307` and `308` redirects.
 
 PostHog's managed reverse proxy already does all of this. See the [proxy guides](https://posthog.com/docs/advanced/proxy).
 
