@@ -25,7 +25,7 @@ export type AutocaptureConfig = Partial<Pick<SharedAutocaptureConfig, (typeof AU
 
 interface AutocaptureHost {
     getState(): Pick<State, 'generation' | 'distinctId' | 'optedOut' | 'autocapture'>
-    capture(event: string, properties?: Properties): Promise<void>
+    capture(event: string, properties?: Properties): void
     loadConfig(): Promise<void>
     onError(error: unknown): void
 }
@@ -108,7 +108,7 @@ export class RendererAutocapture {
                     }
                 },
                 capture: (event, properties) => {
-                    void host.capture(event, properties ?? undefined).catch((error) => host.onError(error))
+                    host.capture(event, properties ?? undefined)
                     return true
                 },
             }

@@ -22,7 +22,7 @@ async function main() {
     })
     try {
         await owner.ready()
-        await owner.capture('synthetic-redirect-event')
+        owner.capture('synthetic-redirect-event')
         let rejected = false
         try {
             await owner.flush()

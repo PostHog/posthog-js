@@ -97,10 +97,11 @@ try {
     }
 
     const reports = []
-    for (const [enabled, disabled] of [
+    for (const [enabled, disabled, rejections = false] of [
         [false, false],
         [true, false],
         [true, true],
+        [true, false, true],
     ]) {
         const events = [],
             paths = [],
@@ -124,8 +125,8 @@ try {
         })
         await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
         const host = `http://127.0.0.1:${server.address().port}`
-        const reportPath = join(directory, `report-${enabled}-${disabled}.json`)
-        const userData = join(directory, `user-data-${enabled}-${disabled}`)
+        const reportPath = join(directory, `report-${enabled}-${disabled}-${rejections}.json`)
+        const userData = join(directory, `user-data-${enabled}-${disabled}-${rejections}`)
         try {
             await new Promise((resolve, reject) => {
                 const child = spawn(electron, [directory], {
@@ -136,6 +137,7 @@ try {
                         FIXTURE_HOST: host,
                         FIXTURE_ENABLED: String(enabled),
                         FIXTURE_DISABLED: String(disabled),
+                        FIXTURE_REJECTIONS: String(rejections),
                         FIXTURE_REPORT: reportPath,
                         FIXTURE_USER_DATA: userData,
                     },
@@ -183,7 +185,7 @@ try {
                 disabled ? [] : ['$identify']
             )
             const exceptionEvents = events.filter((event) => event.event === '$exception')
-            assert.equal(exceptionEvents.length, disabled ? 0 : enabled ? 7 : 2)
+            assert.equal(exceptionEvents.length, disabled ? 0 : enabled ? 7 + Number(rejections) : 2)
             const expected = [
                 ['main manual', 'main', 'generic', undefined, 'SyntaxError'],
                 ['renderer manual', 'renderer', 'generic', undefined, 'SyntaxError'],
@@ -196,6 +198,17 @@ try {
                               'node.process_uncaught_exception',
                               'TypeError',
                           ],
+                          ...(rejections
+                              ? [
+                                    [
+                                        'main initial rejection',
+                                        'main',
+                                        'onunhandledrejection',
+                                        'node.process_unhandled_rejection',
+                                        'RangeError',
+                                    ],
+                                ]
+                              : []),
                           ['renderer initial throw', 'renderer', 'onerror', 'browser.window_onerror', 'TypeError'],
                           [
                               'renderer initial rejection',
@@ -250,13 +263,16 @@ try {
             }
             assert.equal(new Set(exceptionEvents.map((event) => event.properties.$session_id)).size, disabled ? 0 : 1)
             console.log(
-                `Installed Electron enabled=${enabled}, disabled=${disabled}: ${exceptionEvents.length} wire exceptions; real sandboxed JS throws/rejections, consent, disposal and reinit passed.`
+                `Installed Electron enabled=${enabled}, disabled=${disabled}, rejections=${rejections}: ${exceptionEvents.length} wire exceptions; real sandboxed JS throws/rejections, consent, disposal and reinit passed.`
             )
         } finally {
             await new Promise((resolve) => server.close(resolve))
         }
     }
-    const [baseline, observed, disabled] = reports
+    const [baseline, observed, disabled, rejectionListener] = reports
+    assert.deepEqual(rejectionListener.hostEvents, observed.hostEvents, 'rejection listener keeps main throw handling')
+    assert.deepEqual(rejectionListener.warnings, [], 'rejection listener handles main rejections')
+    assert.deepEqual(rejectionListener.renderer, observed.renderer, 'rejection listener leaves renderer unchanged')
     assert.deepEqual(disabled.hostEvents, observed.hostEvents, 'disabled main handlers see identical real events')
     assert.deepEqual(disabled.warnings, observed.warnings, 'disabled native warnings remain unchanged')
     assert.deepEqual(disabled.renderer, observed.renderer, 'disabled renderer handlers see identical real events')

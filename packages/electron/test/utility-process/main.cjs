@@ -125,7 +125,7 @@ async function run() {
 
     // A valid owner flush slower than the utility deadline rejects only that call; the
     // connection stays usable and the owner still completes the original delivery.
-    await owner.capture('slow-owner-work')
+    owner.capture('slow-owner-work')
     const slowStarted = new Promise((resolve) => {
         networkStarted = resolve
     })
@@ -148,7 +148,7 @@ async function run() {
     )
 
     // A real in-flight flush rejects in the child when main revokes its registration.
-    await owner.capture('pending-flush')
+    owner.capture('pending-flush')
     const started = new Promise((resolve) => {
         networkStarted = resolve
     })
