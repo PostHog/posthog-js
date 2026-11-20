@@ -2,6 +2,7 @@ import { gzipText } from '@posthog/browser-common/replay/event-compression'
 import { EventBuffer } from '../analytics/admission/event-buffer'
 import { nativeGzip } from '../../platform/gzip'
 import { Lane } from '../analytics/delivery/lane'
+import { parseRetryAfter, retryDelay } from '../analytics/delivery/retry-delay'
 import type { RequestRuntime } from '../../platform/request'
 
 /** One `$snapshot` event in the legacy replay envelope that the `/s/` endpoint accepts. */
@@ -38,11 +39,12 @@ const MAX_QUEUED_SNAPSHOTS = 100
 const MAX_QUEUED_BYTES = 25 * 1024 * 1024
 const MAX_SNAPSHOT_AGE_MS = 10 * 60 * 1000
 const MAX_BATCH_SNAPSHOTS = 10
-const RETRY_INTERVAL_MS = 3000
+const RETRY_INTERVAL_MS = 1000
+const MAX_RETRY_INTERVAL_MS = 30_000
+// network errors (0) and the transient statuses the other client SDKs and sdk-specs retry-queue retry
+const RETRYABLE_STATUSES = [0, 408, 429, 500, 502, 503, 504]
 // beacons and keepalive requests share ~64 KiB per page; analytics budgets 80% of it for its own teardown
 const UNLOAD_BUDGET_BYTES = Math.floor(64 * 1024 * 0.15)
-
-const isRetryable = (statusCode: number): boolean => statusCode === 0 || statusCode === 429 || statusCode >= 500
 
 const snapshotBytes = (message: SnapshotMessage): number => {
     const bytes = Number(message.properties.$snapshot_bytes)
@@ -87,9 +89,9 @@ const post = async (
     host: SnapshotDeliveryHost,
     messages: readonly SnapshotMessage[],
     signal: AbortSignal | undefined
-): Promise<number> => {
+): Promise<[statusCode: number, retryAfterMs?: number | undefined]> => {
     const fetch = host.runtime[2]
-    if (!fetch) return 0
+    if (!fetch) return [0]
     const payload = JSON.stringify(withSentAt(messages))
     // gzip bodies are recognized by their magic bytes; posthog-js sends them the same way
     const compressed = host.gzipEnabled() ? await gzip(payload) : undefined
@@ -101,9 +103,9 @@ const post = async (
             body: (compressed ?? payload) as BodyInit,
             ...(signal ? { signal } : {}),
         })
-        return response.status
+        return [response.status, parseRetryAfter(response, Date.now)]
     } catch {
-        return 0
+        return [0]
     }
 }
 
@@ -190,27 +192,51 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
         MAX_SNAPSHOT_AGE_MS
     )
     const lane = new Lane(buffer, (error) => host.reportFailure(error))
+    // consecutive failed deliveries; the retry interval backs off with them and resets on success
+    let failures = 0
+    let retryInterval = RETRY_INTERVAL_MS
     lane.attach({
         batchSize: MAX_BATCH_SNAPSHOTS,
         // each snapshot sends on arrival, except while a failed batch at the front of the queue waits to retry
         get flushAt() {
             return (buffer._queue[0]?.[5] ?? 0) > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : 1
         },
-        flushInterval: RETRY_INTERVAL_MS,
+        get flushInterval() {
+            return retryInterval
+        },
         canDeliver: () => !!host.runtime[2] && host.canDeliver(),
         async deliver(messages, context) {
             const retry: SnapshotMessage[] = []
+            let posted = false
+            let failed = false
+            let retryAfter = 0
             for (const group of groupBySessionWindow(messages)) {
-                if (!context.canContinue() || !host.canDeliver()) {
+                // offline snapshots wait for the next retry without counting as failures
+                if (!context.canContinue() || !host.canDeliver() || host.runtime[3]?.onLine === false) {
                     retry.push(...group)
                     continue
                 }
-                const statusCode = await post(host, group, context.signal)
-                if (isRetryable(statusCode)) {
+                posted = true
+                const [statusCode, groupRetryAfter] = await post(host, group, context.signal)
+                if (RETRYABLE_STATUSES.includes(statusCode)) {
+                    failed = true
                     retry.push(...group)
+                    retryAfter = Math.max(retryAfter, groupRetryAfter ?? 0)
                 } else if (statusCode >= 400) {
                     host.reportFailure(new Error(`Replay snapshot request failed with HTTP ${statusCode}`))
                 }
+            }
+            if (failed) {
+                retryInterval = retryDelay(
+                    ++failures,
+                    RETRY_INTERVAL_MS,
+                    MAX_RETRY_INTERVAL_MS,
+                    Math.random,
+                    retryAfter
+                )
+            } else if (posted) {
+                failures = 0
+                retryInterval = RETRY_INTERVAL_MS
             }
             return retry.length ? { retry } : undefined
         },
