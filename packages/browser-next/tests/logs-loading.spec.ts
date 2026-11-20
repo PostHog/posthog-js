@@ -1,4 +1,3 @@
-import { requireInstalledExtension, withBufferedAnalytics } from './helpers'
 import type { Extension } from '../src/core/types'
 
 const options = {
@@ -7,7 +6,6 @@ const options = {
     storage: false,
     fetch: false,
     capturePageview: false,
-    analytics: false,
     flags: false,
 } as const
 
@@ -78,17 +76,92 @@ describe('automatic logs module loading', () => {
         await client.dispose()
     })
 
+    it('disposes an acquired product whose setup is still pending when shutdown returns', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        let entered!: () => void
+        const setupEntered = new Promise<void>((resolve) => {
+            entered = resolve
+        })
+        let release!: () => void
+        const setupGate = new Promise<void>((resolve) => {
+            release = resolve
+        })
+        // Only cleanup releases setup, so shutdown cannot wait for setup to settle first.
+        const dispose = vi.fn(() => release())
+        vi.doMock('../src/products/logs/logs', () => ({
+            logs: () => ({
+                name: 'logs',
+                setup() {
+                    entered()
+                    return setupGate
+                },
+                dispose,
+            }),
+        }))
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog(options)
+        const acquiring = client.resolveExtension('logs')
+        await setupEntered
+        await client.shutdown(100)
+        expect(dispose).toHaveBeenCalledOnce()
+        expect(await acquiring).toBeUndefined()
+        expect(client.logs).toBeUndefined()
+        expect(dispose).toHaveBeenCalledOnce()
+    })
+
+    it('disposes an acquired product once when setup fails during shutdown', async () => {
+        let entered!: () => void
+        const setupEntered = new Promise<void>((resolve) => {
+            entered = resolve
+        })
+        let failSetup!: (error: Error) => void
+        const setupGate = new Promise<void>((_, reject) => {
+            failSetup = reject
+        })
+        const dispose = vi.fn()
+        vi.doMock('../src/products/logs/logs', () => ({
+            logs: () => ({
+                name: 'logs',
+                setup() {
+                    entered()
+                    return setupGate
+                },
+                dispose,
+            }),
+        }))
+        const { createPostHog } = await import('../src/composition/npm')
+        const client = await createPostHog({ ...options, surveys: false, autocapture: false })
+        const acquiring = client.resolveExtension('logs')
+        await setupEntered
+
+        vi.useFakeTimers()
+        try {
+            const closing = client.shutdown(5)
+            // Queue setup rejection after the timeout resolves but before shutdown resumes
+            // to dispose extensions. Setup failure claims cleanup first.
+            vi.advanceTimersByTime(5)
+            failSetup(new Error('setup failed'))
+            await closing
+            expect(dispose).toHaveBeenCalledOnce()
+        } finally {
+            vi.useRealTimers()
+        }
+        expect(await acquiring).toBeUndefined()
+        expect(client.logs).toBeUndefined()
+        expect(dispose).toHaveBeenCalledOnce()
+    })
+
     it('contains a rejected chunk load and returns a usable capture client', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
         vi.doMock('../src/products/logs/logs', () => {
             throw new Error('chunk unavailable')
         })
         const { createPostHog } = await import('../src/composition/npm')
-        const client = await createPostHog(withBufferedAnalytics({ ...options, logs: {} }))
+        const client = await createPostHog({ ...options, logs: {} })
         expect(client.logs).toBeUndefined()
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
-        requireInstalledExtension(client.analytics).capture('still usable')
+        client.onEvent(captured)
+        client.capture('still usable')
         expect(captured).toHaveBeenCalledOnce()
         await client.dispose()
     })

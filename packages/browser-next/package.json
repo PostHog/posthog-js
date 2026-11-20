@@ -33,11 +33,6 @@
             "require": "./dist/products/flags/flags.js",
             "import": "./dist/products/flags/flags.mjs"
         },
-        "./analytics": {
-            "types": "./dist/products/analytics/analytics.d.ts",
-            "require": "./dist/products/analytics/analytics.js",
-            "import": "./dist/products/analytics/analytics.mjs"
-        },
         "./logs": {
             "types": "./dist/products/logs/logs.d.ts",
             "import": "./dist/products/logs/logs.mjs",

@@ -1,5 +1,5 @@
-import { acquisitionHarness } from './acquisition-fixture'
-window.acquisitionHarness = acquisitionHarness
+import { rootHarness } from './root-fixture'
+window.rootHarness = rootHarness
 import { requireInstalledExtension } from '../tests/helpers'
 import { autocaptureHarness } from './autocapture-fixture'
 window.autocaptureHarness = autocaptureHarness
@@ -9,7 +9,6 @@ window.surveysHarness = surveysHarness
 import { logs } from '../src/products/logs/logs'
 import type { IPostHog } from '../src/core/types'
 import { flags } from '../src/products/flags/flags'
-import { analytics } from '../src/products/analytics/analytics'
 import { createPostHog, type CaptureSummary, type SessionContext } from '../src/composition/npm/core'
 
 interface ConsentHarness {
@@ -99,10 +98,8 @@ const client = createPostHog({
             headers: { 'Content-Type': 'application/json' },
         })
     },
-    extensions: [
-        analytics({ flushAt: 100, flushInterval: 0 }),
-        flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
-    ],
+    analytics: { flushAt: 100, flushInterval: 0 },
+    extensions: [flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 })],
     remoteConfig: {
         supportedCompression: ['gzip-js'],
         toolbarParams: {},
@@ -132,16 +129,16 @@ window.consentHarness = {
         return (await client).anonymousId
     },
     async capture(event) {
-        requireInstalledExtension((await client).analytics).capture(event)
+        ;(await client).capture(event)
     },
     async captureImmediate(event) {
-        return requireInstalledExtension((await client).analytics).captureImmediate(event)
+        return (await client).captureImmediate(event)
     },
     async compressionDelivery(value) {
         const posthog = await client
         lastDelivery = undefined
         const started = performance.now()
-        await requireInstalledExtension(posthog.analytics).capture('compression_test', { value })
+        posthog.capture('compression_test', { value })
         await posthog.flush()
         const delivery = currentDelivery()
         if (!delivery) {
@@ -174,13 +171,11 @@ window.consentHarness = {
             capturePageview: false,
             storage: false,
             navigator: false,
-            extensions: [
-                analytics({ flushAt: 100, flushInterval: 0 }),
-                flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
-            ],
+            analytics: { flushAt: 100, flushInterval: 0 },
+            extensions: [flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 })],
         })
         for (const event of events) {
-            await requireInstalledExtension(posthog.analytics).capture(event)
+            posthog.capture(event)
         }
     },
     requests() {
@@ -201,14 +196,14 @@ window.consentHarness = {
         return { config, canCapture }
     },
     async registerForSession(properties) {
-        requireInstalledExtension((await client).analytics).registerForSession(properties)
+        ;(await client).registerForSession(properties)
     },
     async unregisterForSession(property) {
-        requireInstalledExtension((await client).analytics).unregisterForSession(property)
+        ;(await client).unregisterForSession(property)
     },
     delivered: () => lastDelivery?.body,
     async reset() {
-        requireInstalledExtension((await client).analytics).reset()
+        ;(await client).reset()
     },
     async session() {
         return (await client).session

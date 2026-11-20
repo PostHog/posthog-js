@@ -1,5 +1,4 @@
-import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
-import type { Client, Disposable, KeyValueStore } from '@posthog/browser-common'
+import type { Client, Disposable } from '@posthog/browser-common'
 import { PostHogSurveys } from '@posthog/browser-common/surveys'
 import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
@@ -7,8 +6,10 @@ import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/su
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import type { AnalyticsTeardownSubscription } from '../analytics/analytics-internal'
+import { analyticsOf } from '../analytics/analytics-core'
+import type { FlagsExtension } from '../flags/flags-internal'
 import type { SurveysExtension } from './surveys-internal'
-import type { IPostHogInternal } from '../../core/context/browser-client'
+import type { IPostHog } from '../../core/types'
 import {
     snapshotSurveysOptions,
     type SurveysOptions,
@@ -24,7 +25,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let elementSelectors = new Set<string>()
     let eventReceiver: SurveyEventReceiver | undefined
     const replaceTriggers = (surveys: Survey[]) => eventReceiver?.replace(surveys)
-    let client: IPostHogInternal | undefined
+    let client: IPostHog | undefined
     let runtimeHost: SurveyRenderContext | undefined
     let remoteEnabled = false
     let manual = false
@@ -35,7 +36,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let loading: Promise<Renderer> | undefined
     let remoteSubscription: Disposable | undefined
     let resetSubscription: Disposable | undefined
-    const getFlagsContext = () => client?.featureFlags?.getSurveyContext?.()
+    const getFlagsContext = () => (client?.featureFlags as FlagsExtension | undefined)?.getSurveyContext?.()
     const reset = () => {
         shared.reset()
     }
@@ -139,27 +140,13 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     }
     return {
         name: 'surveys',
-        bindings: { surveys: shared },
-        setup: async (value: IPostHogInternal) => {
+        setup: async (value: IPostHog) => {
             client = value
-            await value.resolveExtension('analytics')
-            if (disposed) return
             await value.kv.initialize()
             if (disposed) return
             resetSubscription = value.onReset(reset)
-            const renderClient = Object.create(value.sharedClient) as Client
-            const read = (key: string) =>
-                key === STORED_PERSON_PROPERTIES_KEY ? getFlagsContext()?.personProperties : value.kv.get(key)
-            const renderKv: KeyValueStore = {
-                ...value.kv,
-                get: ((keys: string | readonly string[]) =>
-                    typeof keys === 'string'
-                        ? read(keys)
-                        : Object.fromEntries(keys.map((key) => [key, read(key)]))) as KeyValueStore['get'],
-            }
-            Object.defineProperty(renderClient, 'kv', { value: renderKv })
             runtimeHost = {
-                client: renderClient,
+                client: value,
                 get config() {
                     return source.get()
                 },
@@ -172,12 +159,12 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     if (remoteEnabled && !disposed) manager?.startAutomaticDisplay?.()
                 }
             })
-            await shared.setup(value.sharedClient)
+            await shared.setup(value)
             if (disposed) {
                 shared.dispose()
                 return
             }
-            teardownSubscription = client.analytics?.onBeforeTeardown?.(() => shared.handlePageUnload())
+            teardownSubscription = analyticsOf(value)?.onBeforeTeardown(() => shared.handlePageUnload())
             // A missing delivery driver can admit abandonment, but cannot send during unload.
             // oxlint-disable-next-line posthog-js/no-add-event-listener
             if (typeof window !== 'undefined') window.addEventListener('pagehide', pagehide)
