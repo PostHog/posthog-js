@@ -70,7 +70,10 @@ export class Toolbar implements Extension {
                 localStorage,
                 history
             )
-            return params ? this.loadToolbar(params) : false
+            if (!params) return false
+            // Found params mean true even when a toolbar is already running, as before.
+            this.loadToolbar(params)
+            return true
         } catch {
             return false
         }
