@@ -578,12 +578,18 @@ export class Analytics {
         }
     }
 
+    /** Runs the before-reset hooks while the previous identity, consent and extension state still apply. */
+    prepareReset(): void {
+        if (this._disposed || !this._core._canMutate()) return
+        this._core._state.prepare()
+        this._beforeResetPublisher.publish(undefined)
+    }
+
     /** Resets identity state and returns the bootstrap values for the new identity, if any. */
     reset(options?: boolean | ResetOptions): ResetOptions['bootstrap'] {
         // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
         if (this._disposed || !this._core._canMutate()) return undefined
         this._core._state.prepare()
-        this._beforeResetPublisher.publish(undefined)
         const { resetDeviceId, bootstrap } =
             options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
         const { distinctId, isIdentifiedId } = bootstrap ?? {}
