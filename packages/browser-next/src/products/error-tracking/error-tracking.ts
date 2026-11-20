@@ -36,8 +36,9 @@ interface ActiveErrorTracking {
     readonly rateLimiter: ReturnType<typeof createExceptionRateLimiter>
 }
 
-// The browser-next logger writes its prefix as a separate first console argument.
-const DIAGNOSTIC_PREFIX = /^\[PostHog\](?: |$)/
+// SDK loggers write their prefix as a separate first console argument: `[PostHog]` from the browser-next logger and
+// `[PostHog.js]` from the shared browser-common logger.
+const DIAGNOSTIC_PREFIX = /^\[PostHog(?:\.js)?\](?: |$)/
 
 // SDK- and processor-owned exception properties. A null value leaves the key out of the sent event, so neither
 // caller nor registered properties can supply it.
