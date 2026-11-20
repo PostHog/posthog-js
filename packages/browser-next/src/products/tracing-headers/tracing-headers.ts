@@ -34,7 +34,8 @@ export const tracingHeaders = (options: TracingHeadersOptions = {}): BrowserExte
                 throw error
             }
         }
-    const distinctId = whenCapturing((posthog) => posthog.distinctId)
+    // Adopt an identity another subdomain stored first, as capture does, so it pairs with the session read next.
+    const distinctId = whenCapturing((posthog) => (analyticsOf(posthog)?._canMutate(), posthog.distinctId))
     const session = whenCapturing(readSession)
 
     return {
