@@ -30,7 +30,7 @@ const decode = async (
 }
 
 const setup = (
-    respond: (request: Request) => number = () => 200,
+    respond: (request: Request) => number | Response = () => 200,
     options: { gzip?: boolean; canDeliver?: () => boolean; navigator?: BrowserNavigator } = {}
 ) => {
     const requests: Request[] = []
@@ -38,7 +38,8 @@ const setup = (
     const fetch: BrowserFetch = async (input, init = {}) => {
         const request = { url: String(input), init }
         requests.push(request)
-        return new Response('{}', { status: respond(request) })
+        const response = respond(request)
+        return response instanceof Response ? response : new Response('{}', { status: response })
     }
     const delivery = createSnapshotDelivery({
         runtime: [
@@ -54,6 +55,18 @@ const setup = (
         reportWarning: () => {},
     })
     return { delivery, requests, failures }
+}
+
+// fake timers with the retry jitter at its midpoint, so each retry waits exactly its base delay
+const withRetryClock = async (run: () => Promise<void>): Promise<void> => {
+    vi.useFakeTimers()
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    try {
+        await run()
+    } finally {
+        random.mockRestore()
+        vi.useRealTimers()
+    }
 }
 
 describe('snapshot delivery', () => {
@@ -115,29 +128,117 @@ describe('snapshot delivery', () => {
     })
 
     it('keeps a failed batch until its retry interval when another snapshot arrives', async () => {
-        let attempts = 0
-        const { delivery, requests } = setup(() => (++attempts === 1 ? 503 : 200))
-        const failed = message('s1')
-        const attemptsOf = async (uuid: string): Promise<number> =>
-            (await Promise.all(requests.map(decode))).filter((events) => events.some((event) => event.uuid === uuid))
-                .length
-        vi.useFakeTimers()
-        try {
+        await withRetryClock(async () => {
+            let attempts = 0
+            const { delivery, requests } = setup(() => (++attempts === 1 ? 503 : 200))
+            const failed = message('s1')
+            const attemptsOf = async (uuid: string): Promise<number> =>
+                (await Promise.all(requests.map(decode))).filter((events) =>
+                    events.some((event) => event.uuid === uuid)
+                ).length
+
             delivery.enqueue(failed, 10)
-            await vi.advanceTimersByTimeAsync(2_000)
+            await vi.advanceTimersByTimeAsync(500)
             delivery.enqueue(message('s1'), 10)
             await vi.advanceTimersByTimeAsync(0)
             expect(await attemptsOf(failed.uuid)).toBe(1)
 
-            await vi.advanceTimersByTimeAsync(1_000)
+            await vi.advanceTimersByTimeAsync(500)
             expect(await attemptsOf(failed.uuid)).toBe(2)
-        } finally {
-            vi.useRealTimers()
-        }
+        })
     })
 
-    it('drops client errors without retrying', async () => {
-        const { delivery, requests, failures } = setup(() => 400)
+    it('backs off exponentially while the server keeps failing', async () => {
+        await withRetryClock(async () => {
+            const sentAt: number[] = []
+            const start = Date.now()
+            const { delivery } = setup(() => {
+                sentAt.push(Date.now() - start)
+                return 503
+            })
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(60_000)
+
+            expect(sentAt).toEqual([0, 1_000, 3_000, 7_000, 15_000, 31_000])
+        })
+    })
+
+    it('waits at least as long as Retry-After asks', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup(() =>
+                requests.length === 1 ? new Response('{}', { status: 503, headers: { 'Retry-After': '20' } }) : 200
+            )
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(19_999)
+            expect(requests).toHaveLength(1)
+
+            await vi.advanceTimersByTimeAsync(1)
+            expect(requests).toHaveLength(2)
+        })
+    })
+
+    it('holds snapshots while offline and sends them once back online', async () => {
+        await withRetryClock(async () => {
+            const navigator = { onLine: false }
+            const { delivery, requests } = setup(() => 200, { navigator })
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(10_000)
+            expect(requests).toHaveLength(0)
+
+            navigator.onLine = true
+            await vi.advanceTimersByTimeAsync(1_000)
+            expect(requests).toHaveLength(1)
+        })
+    })
+
+    it('keeps retrying network errors on the same backoff', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup(() => {
+                throw new TypeError('Failed to fetch')
+            })
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(60_000)
+
+            expect(requests).toHaveLength(6)
+        })
+    })
+
+    it('returns to the base retry interval after a successful send', async () => {
+        await withRetryClock(async () => {
+            const statuses = [503, 503, 200, 503]
+            const { delivery, requests } = setup(() => statuses[requests.length - 1] ?? 200)
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(2_999)
+            expect(requests).toHaveLength(2)
+            await vi.advanceTimersByTimeAsync(1)
+            expect(requests).toHaveLength(3)
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(0)
+            expect(requests).toHaveLength(4)
+            await vi.advanceTimersByTimeAsync(1_000)
+            expect(requests).toHaveLength(5)
+        })
+    })
+
+    it('retries rate-limited batches', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup(() => (requests.length === 1 ? 429 : 200))
+
+            delivery.enqueue(message('s1'), 10)
+            await vi.advanceTimersByTimeAsync(1_000)
+
+            expect(requests).toHaveLength(2)
+        })
+    })
+
+    it.each([400, 501])('drops a batch without retrying on HTTP %i', async (status) => {
+        const { delivery, requests, failures } = setup(() => status)
 
         delivery.enqueue(message('s1'), 10)
         await delivery.flush()

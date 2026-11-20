@@ -6,6 +6,7 @@ import { createId } from '../../../primitives/id'
 import { defineErrorName } from '../../../primitives/named-error'
 import type { RequestRuntime } from '../../../platform/request'
 import { utf8Bytes } from '../../../primitives/utf8'
+import { parseRetryAfter, retryDelay, safeNow } from './retry-delay'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
@@ -298,15 +299,6 @@ export const buildCaptureV1Event = (message: CaptureV1Message): CaptureV1Event =
     }
 }
 
-const safeNow = (now: () => number): number => {
-    try {
-        const value = now()
-        return Number.isFinite(value) ? value : 0
-    } catch {
-        return 0
-    }
-}
-
 const isoNow = (now: () => number): string => {
     try {
         return new Date(safeNow(now)).toISOString()
@@ -315,46 +307,8 @@ const isoNow = (now: () => number): string => {
     }
 }
 
-const parseRetryAfter = (response: Response | undefined, now: () => number): number | undefined => {
-    try {
-        const raw = response?.headers.get('Retry-After')?.trim()
-        if (!raw) {
-            return undefined
-        }
-        if (/^\d+$/.test(raw)) {
-            const milliseconds = Number(raw) * 1_000
-            return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined
-        }
-        const delay = Date.parse(raw) - safeNow(now)
-        return delay > 0 ? delay : undefined
-    } catch {
-        return undefined
-    }
-}
-
 const numberOption = (value: number | undefined, fallback: number, minimum: number): number =>
     Math.max(minimum, Number.isFinite(value) ? value! : fallback)
-
-const retryDelay = (
-    attempt: number,
-    initialDelayMs: number,
-    maxBackoffMs: number,
-    random: () => number,
-    retryAfterMs?: number
-): number => {
-    const exponential = Math.min(initialDelayMs * 2 ** (attempt - 1), maxBackoffMs)
-    let randomValue = 0.5
-    try {
-        const candidate = random()
-        if (Number.isFinite(candidate)) {
-            randomValue = Math.max(0, Math.min(1, candidate))
-        }
-    } catch {
-        // The midpoint gives an unjittered delay when randomness is unavailable.
-    }
-    const jittered = Math.min(maxBackoffMs, Math.ceil(exponential * (0.5 + randomValue)))
-    return retryAfterMs === undefined ? jittered : Math.max(jittered, Math.min(retryAfterMs, maxBackoffMs))
-}
 
 const cancellationError = (): Error => new Error('Capture V1 retry was cancelled')
 const canContinue = (check: (() => boolean) | undefined): boolean => {
