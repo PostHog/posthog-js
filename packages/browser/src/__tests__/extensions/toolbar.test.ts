@@ -114,6 +114,15 @@ describe('Toolbar', () => {
             })
         })
 
+        it('returns true when toolbar params are found, even while the toolbar is already running', () => {
+            const running = document.createElement('div')
+            running.id = TOOLBAR_ID
+            document.body.appendChild(running)
+
+            expect(toolbar.maybeLoadToolbar(aLocation(), storage, history)).toBe(true)
+            expect(toolbar.loadToolbar).toHaveBeenCalledTimes(1)
+        })
+
         it('should initialize the toolbar when there are editor params in the session', () => {
             // if the hash state does not contain ph_authorize then look in storage
             localStorage.getItem.mockImplementation(() => JSON.stringify(toolbarParams))
