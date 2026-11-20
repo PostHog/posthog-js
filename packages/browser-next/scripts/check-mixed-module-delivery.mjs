@@ -67,6 +67,8 @@ let autocapture
 let commonJsAutocapture
 let webVitals
 let commonJsWebVitals
+let tracingHeaders
+let commonJsTracingHeaders
 let commonJsSurveys
 try {
     const require = createRequire(import.meta.url)
@@ -87,6 +89,8 @@ try {
     ;({ autocapture: commonJsAutocapture } = require('@posthog/browser/autocapture'))
     ;({ webVitals } = await import('@posthog/browser/web-vitals'))
     ;({ webVitals: commonJsWebVitals } = require('@posthog/browser/web-vitals'))
+    ;({ tracingHeaders } = await import('@posthog/browser/tracing-headers'))
+    ;({ tracingHeaders: commonJsTracingHeaders } = require('@posthog/browser/tracing-headers'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -637,3 +641,18 @@ for (const factory of [webVitals, commonJsWebVitals]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM web vitals entrypoints and SSR lifecycle passed\n')
+
+for (const factory of [tracingHeaders, commonJsTracingHeaders]) {
+    const extension = factory({ hostnames: ['api.example.com'] })
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [extension],
+    })
+    assert.equal(client.getExtension('tracingHeaders'), extension)
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM tracing headers entrypoints and SSR lifecycle passed\n')
