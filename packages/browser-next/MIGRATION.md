@@ -269,7 +269,7 @@ if (buttonColor?.variant === 'red') {
 }
 ```
 
-Do not test the result object's truthiness to determine enablement: a disabled flag has a result with `enabled: false`. `undefined` means no value is currently available. Reads emit deduplicated flag-called events. Replace `legacy.getFeatureFlag(key, { send_event: false })` with `featureFlags.getFeatureFlag(key, { sendFeatureFlagEvent: false })`. `{ fresh: true }` keeps its meaning: the read returns `undefined` until this instance has loaded flags from the server.
+Do not test the result object's truthiness to determine enablement: a disabled flag has a result with `enabled: false`. `undefined` means no value is currently available. Reads emit deduplicated flag-called events. Replace `legacy.getFeatureFlag(key, { send_event: false })` with `featureFlags.getFeatureFlag(key, { sendFeatureFlagEvent: false })`. `{ fresh: true }` returns `undefined` until this instance completes a flag evaluation without errors; unlike `posthog-js`, a quota-limited or `errorsWhileComputingFlags` response does not count, and a later failed refresh does not hide loaded values.
 
 ### Refresh, subscriptions, and injected values
 
