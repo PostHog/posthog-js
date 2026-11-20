@@ -256,6 +256,23 @@ describe('React Native captureAi', () => {
     expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1, 2])
   })
 
+  it('still persists smaller AI events when the newest is over 5 MiB', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { blob: 'x'.repeat(6 * 1024 * 1024), index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0])
+  })
+
   it('keeps AI events from an earlier launch when flush() runs before storage has loaded', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog()

@@ -14,7 +14,7 @@ export const CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES = 8 * 1024 * 1024 + 64 * 1024
 export const CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE = 100
 export const CAPTURE_AI_DEFAULT_TIMEOUT_MS = 60_000
 const CAPTURE_AI_MAX_QUEUE_BYTES = 50 * 1024 * 1024
-// Each change rewrites the stored queue, so only the newest events up to this size are kept across restarts.
+// Each change rewrites the stored queue, so only the newest events that fit in this size are kept across restarts.
 const CAPTURE_AI_MAX_PERSISTED_BYTES = 5 * 1024 * 1024
 const CAPTURE_AI_BATCH_BYTE_TARGET = 5 * 1024 * 1024
 const MAX_RESEND_WAIT_MS = 30_000
@@ -264,14 +264,17 @@ export class CaptureAiLane {
 
   private _setQueue(queue: SerializedV1Event[]): void {
     this._events = queue
-    let start = queue.length
+    // Newest first, skipping an event that doesn't fit so it never costs the smaller ones before it their place.
+    const persisted: SerializedV1Event[] = []
     let bytes = 0
-    while (start > 0 && bytes + queue[start - 1].bytes <= CAPTURE_AI_MAX_PERSISTED_BYTES) {
-      start--
-      bytes += queue[start].bytes
+    for (let index = queue.length - 1; index >= 0; index--) {
+      if (bytes + queue[index].bytes <= CAPTURE_AI_MAX_PERSISTED_BYTES) {
+        persisted.push(queue[index])
+        bytes += queue[index].bytes
+      }
     }
-    if (start < queue.length) {
-      this._storage.setItem(PostHogPersistedProperty.AiQueue, queue.slice(start))
+    if (persisted.length > 0) {
+      this._storage.setItem(PostHogPersistedProperty.AiQueue, persisted.reverse())
     } else {
       this._storage.removeItem(PostHogPersistedProperty.AiQueue)
     }

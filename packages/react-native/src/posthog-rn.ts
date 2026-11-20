@@ -334,6 +334,9 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
    * dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps
    * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
    *
+   * Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is
+   * killed, older events and an event over 5 MiB are lost.
+   *
    * @default 100
    */
   captureAiMaxQueueSize?: number
