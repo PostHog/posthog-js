@@ -1,5 +1,5 @@
 import type { Disposable } from '@posthog/browser-common'
-import type { IPostHog, StorageLike } from '../src/core/types'
+import type { BrowserFetch, IPostHog, StorageLike } from '../src/core/types'
 import { CONSENT_KEY, createClient, MemoryStorage, type SentEvent } from './identity-fixtures'
 
 /** Notifies subscribers of every write, as an adapter does for changes made by another context. */
@@ -172,6 +172,61 @@ describe('clearing the consent choice', () => {
         observer.capture('after_reset')
         await observer.flush()
         expect(sent.map((event) => event.event)).toEqual(['queued_before_reset'])
+    })
+
+    it('pauses kept events while another client explicitly opts out, until a later cleared choice', async () => {
+        const storage = new SubscribableStorage()
+        const other = await create(storage, [], { optOutByDefault: true })
+        const sent: SentEvent[] = []
+        const observer = await create(storage, sent, { optOutByDefault: true })
+        other.optIn()
+        observer.capture('kept')
+        other.reset()
+        other.optOut()
+        await observer.flush()
+        expect(sent).toEqual([])
+        other.clearOptInOut()
+        await observer.flush()
+        expect(sent.map((event) => event.event)).toEqual(['kept'])
+    })
+
+    it('delivers kept events when another client opts in again after a pause', async () => {
+        const storage = new SubscribableStorage()
+        const other = await create(storage, [], { optOutByDefault: true })
+        const sent: SentEvent[] = []
+        const observer = await create(storage, sent, { optOutByDefault: true })
+        other.optIn()
+        observer.capture('kept')
+        other.reset()
+        other.optOut()
+        other.optIn()
+        await vi.waitFor(() => expect(sent.map((event) => event.event)).toEqual(['kept']))
+    })
+
+    it('lets a pending captureImmediate retry proceed after reset when capture is opted out by default', async () => {
+        vi.useFakeTimers()
+        let attempts = 0
+        const fetch: BrowserFetch = async (input, init) => {
+            if (!String(input).includes('/i/v1/analytics/events')) return new Response('{}', { status: 404 })
+            attempts++
+            if (attempts === 1) return new Response('{}', { status: 503 })
+            const { batch } = JSON.parse(String(init?.body)) as { batch: Array<{ uuid: string }> }
+            const results = Object.fromEntries(batch.map((event) => [event.uuid, { result: 'ok' }]))
+            return new Response(JSON.stringify({ results }), { status: 200 })
+        }
+        try {
+            const posthog = await create(new MemoryStorage(), [], { optOutByDefault: true, fetch })
+            posthog.optIn()
+            const summary = posthog.captureImmediate('instant')
+            await vi.advanceTimersByTimeAsync(0)
+            expect(attempts).toBe(1)
+            posthog.reset()
+            await vi.advanceTimersByTimeAsync(120_000)
+            expect(attempts).toBe(2)
+            expect((await summary).allPersisted).toBe(true)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('keeps the cleared choice in memory when storage removal fails', async () => {
