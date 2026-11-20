@@ -1,6 +1,6 @@
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { createPostHog as createRoot } from '../src/composition/npm'
-import type { CorePostHogOptions, IPostHog, NewSessionInfo, StorageLike } from '../src/core/types'
+import type { CorePostHogOptions, IPostHog, StorageLike } from '../src/core/types'
 import { tracingHeaders, type TracingHeadersOptions } from '../src/products/tracing-headers/tracing-headers'
 
 const START = new Date('2026-01-01T00:00:00.000Z').getTime()
@@ -78,6 +78,7 @@ afterEach(async () => {
 describe('tracing headers', () => {
     it('adds session, window and distinct id headers to fetch requests for configured hostnames', async () => {
         const client = await create({ hostnames: [' API.Example.com '] })
+        client.capture('start')
         await browser.fetch('https://api.example.com/work', { method: 'POST', body: 'body' })
         await browser.fetch(new Request('https://api.example.com:8443/work'))
 
@@ -130,36 +131,25 @@ describe('tracing headers', () => {
         expect(events).not.toHaveBeenCalled()
     })
 
-    it('starts a session when none exists, as capture would', async () => {
-        const client = await create()
-        expect(client.session).toBeUndefined()
-        await browser.fetch('https://api.example.com/work')
-        const session = client.session!
-        expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(session.sessionId)
-
-        client.capture('after')
-        expect(client.session?.sessionId).toBe(session.sessionId)
-    })
-
-    it('notifies session ID listeners once when a request starts the session', async () => {
+    it('sends no session header and starts no session before the first capture', async () => {
         const client = await create()
         const sessions = vi.fn()
         client.onSessionId(sessions)
 
         await browser.fetch('https://api.example.com/work')
-        expect(sessions).toHaveBeenCalledTimes(1)
-        expect(sessions).toHaveBeenCalledWith(client.session)
 
+        expect(Object.fromEntries(sentHeaders())).toEqual({ 'x-posthog-distinct-id': client.distinctId })
+        expect(client.session).toBeUndefined()
+        expect(sessions).not.toHaveBeenCalled()
         client.capture('after')
         expect(sessions).toHaveBeenCalledTimes(1)
     })
 
-    it('starts a new session after reset and announces it', async () => {
+    it('sends no session header after reset and leaves the new session to the next capture', async () => {
         const client = await create()
         client.capture('before reset')
-        const previous = client.session!
-        const sessions: NewSessionInfo[] = []
-        client.onNewSession((session) => sessions.push(session))
+        const newSessions = vi.fn()
+        client.onNewSession(newSessions)
         const sessionIds = vi.fn()
         client.onSessionId(sessionIds)
         sessionIds.mockClear()
@@ -167,12 +157,33 @@ describe('tracing headers', () => {
         client.reset()
         await browser.fetch('https://api.example.com/work')
 
+        expect(Object.fromEntries(sentHeaders())).toEqual({ 'x-posthog-distinct-id': client.distinctId })
+        expect(client.session).toBeUndefined()
+        expect(newSessions).not.toHaveBeenCalled()
+        expect(sessionIds).not.toHaveBeenCalled()
+        client.capture('after reset')
+        expect(newSessions).toHaveBeenCalledWith(expect.objectContaining({ reason: 'reset' }))
+    })
+
+    it('neither sends nor rotates a session past its maximum length', async () => {
+        const client = await create()
+        client.capture('start')
         const session = client.session!
-        expect(session.sessionId).not.toBe(previous.sessionId)
-        expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(session.sessionId)
-        expect(sentHeaders().get('X-POSTHOG-DISTINCT-ID')).toBe(client.distinctId)
-        expect(sessions).toEqual([expect.objectContaining({ sessionId: session.sessionId, reason: 'reset' })])
-        expect(sessionIds.mock.calls).toEqual([[session]])
+        for (let elapsed = 20 * 60_000; elapsed <= 24 * 60 * 60_000; elapsed += 20 * 60_000) {
+            vi.setSystemTime(START + elapsed)
+            client.capture('activity')
+        }
+        vi.setSystemTime(START + 24 * 60 * 60_000 + 60_000)
+        const sessions = vi.fn()
+        client.onNewSession(sessions)
+
+        await browser.fetch('https://api.example.com/work')
+
+        expect(sentHeaders().has('X-POSTHOG-SESSION-ID')).toBe(false)
+        expect(client.session?.sessionId).toBe(session.sessionId)
+        expect(sessions).not.toHaveBeenCalled()
+        client.capture('next event')
+        expect(sessions).toHaveBeenCalledWith(expect.objectContaining({ reason: 'maxLength' }))
     })
 
     describe('with a persisted session', () => {
@@ -191,6 +202,15 @@ describe('tracing headers', () => {
             await previous.dispose()
             return session
         }
+        const sibling = async (shared: StorageLike): Promise<IPostHog> => {
+            const client = await createCore(options({ storage: shared }))
+            clients.push(client)
+            return client
+        }
+        const sessionIdAt = (ms: number, digit: string): string => {
+            const hex = ms.toString(16).padStart(12, '0')
+            return `${hex.slice(0, 8)}-${hex.slice(8)}-7123-8456-${digit.repeat(12)}`
+        }
 
         it('sends an active session without extending it', async () => {
             const shared = storage()
@@ -199,32 +219,31 @@ describe('tracing headers', () => {
             await create(undefined, { storage: shared })
             await browser.fetch('https://api.example.com/work')
             expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(previous.sessionId)
+            expect(sentHeaders().has('X-POSTHOG-WINDOW-ID')).toBe(false)
 
             vi.setSystemTime(START + 35 * 60_000)
-            const next = await createCore(options({ storage: shared }))
-            clients.push(next)
+            const next = await sibling(shared)
             next.capture('next page')
             expect(next.session?.sessionId).not.toBe(previous.sessionId)
         })
 
-        it('notifies session ID listeners once when a request reads the session on a new page', async () => {
+        it('does not notify session ID listeners when a request reads the session on a new page', async () => {
             const shared = storage()
-            const previous = await persistedSession(shared)
+            await persistedSession(shared)
             const client = await create(undefined, { storage: shared })
             const sessions = vi.fn()
             client.onSessionId(sessions)
 
             await browser.fetch('https://api.example.com/work')
-            expect(sessions).toHaveBeenCalledTimes(1)
-            expect(sessions).toHaveBeenCalledWith(expect.objectContaining({ sessionId: previous.sessionId }))
+            expect(sessions).not.toHaveBeenCalled()
 
             client.capture('next event')
             expect(sessions).toHaveBeenCalledTimes(1)
         })
 
-        it('sends an idle session without rotating it', async () => {
+        it('neither sends nor rotates an idle session', async () => {
             const shared = storage()
-            const previous = await persistedSession(shared)
+            await persistedSession(shared)
             vi.setSystemTime(START + 3 * 60 * 60_000)
             const client = await create(undefined, { storage: shared })
             const sessions = vi.fn()
@@ -232,35 +251,160 @@ describe('tracing headers', () => {
 
             await browser.fetch('https://api.example.com/work')
 
-            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(previous.sessionId)
+            expect(sentHeaders().has('X-POSTHOG-SESSION-ID')).toBe(false)
+            expect(client.session).toBeUndefined()
             expect(sessions).not.toHaveBeenCalled()
             client.capture('next event')
             expect(sessions).toHaveBeenCalledWith(expect.objectContaining({ reason: 'idleTimeout' }))
         })
 
-        it('starts a new session once the persisted one reaches its maximum length', async () => {
+        it('sends a pending bootstrap session instead of a different persisted one, without committing it', async () => {
             const shared = storage()
             const previous = await persistedSession(shared)
-            vi.setSystemTime(START + 25 * 60 * 60_000)
-            const client = await create(undefined, { storage: shared })
+            const bootstrapped = sessionIdAt(START, '3')
+            vi.setSystemTime(START + 10 * 60_000)
+            const client = await create(undefined, { storage: shared, bootstrap: { sessionId: bootstrapped } })
+            const sessions: string[] = []
+            client.onSessionId((session) => sessions.push(session.sessionId))
+
             await browser.fetch('https://api.example.com/work')
-            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).not.toBe(previous.sessionId)
-            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(client.session?.sessionId)
+
+            expect(bootstrapped).not.toBe(previous.sessionId)
+            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(bootstrapped)
+            expect(sentHeaders().has('X-POSTHOG-WINDOW-ID')).toBe(false)
+            expect(client.session).toBeUndefined()
+            client.capture('first event')
+            expect(sessions).toEqual([bootstrapped])
         })
 
         it('follows a session started in another tab without a capture in this one', async () => {
             const shared = storage()
             const client = await create(undefined, { storage: shared })
             client.capture('this tab')
-            const sibling = await createCore(options({ storage: shared }))
-            clients.push(sibling)
-            sibling.reset()
-            sibling.capture('other tab')
+            const other = await sibling(shared)
+            other.reset()
+            other.capture('other tab')
 
             await browser.fetch('https://api.example.com/work')
 
-            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(sibling.session?.sessionId)
+            expect(sentHeaders().get('X-POSTHOG-SESSION-ID')).toBe(other.session?.sessionId)
             expect(sentHeaders().get('X-POSTHOG-WINDOW-ID')).toBe(client.session?.windowId)
+        })
+
+        it.each([
+            ['fetch(url, init)', (headers: HeadersInit) => browser.fetch('https://api.example.com/work', { headers })],
+            [
+                'fetch(Request)',
+                (headers: HeadersInit) => browser.fetch(new Request('https://api.example.com/work', { headers })),
+            ],
+        ])('does not pair a caller window header with the SDK session through %s', async (_, send) => {
+            const shared = storage()
+            const previous = await persistedSession(shared)
+            await create(undefined, { storage: shared })
+
+            await send({ 'X-POSTHOG-WINDOW-ID': 'stale-window' })
+
+            expect({
+                session: sentHeaders().get('X-POSTHOG-SESSION-ID'),
+                window: sentHeaders().get('X-POSTHOG-WINDOW-ID'),
+            }).toEqual({ session: previous.sessionId, window: null })
+        })
+
+        describe('sends the session the next capture uses', () => {
+            const scenarios: { name: string; setup: () => Promise<IPostHog>; sendsSession: boolean }[] = [
+                { name: 'fresh visitor', setup: () => create(undefined, { storage: storage() }), sendsSession: false },
+                {
+                    name: 'persisted active session',
+                    setup: async () => {
+                        const shared = storage()
+                        await persistedSession(shared)
+                        vi.setSystemTime(START + 29 * 60_000)
+                        return create(undefined, { storage: shared })
+                    },
+                    sendsSession: true,
+                },
+                {
+                    name: 'persisted idle session',
+                    setup: async () => {
+                        const shared = storage()
+                        await persistedSession(shared)
+                        vi.setSystemTime(START + 30 * 60_000 + 1)
+                        return create(undefined, { storage: shared })
+                    },
+                    sendsSession: false,
+                },
+                {
+                    name: 'pending reset in this tab',
+                    setup: async () => {
+                        const client = await create(undefined, { storage: storage() })
+                        client.capture('start')
+                        client.reset()
+                        return client
+                    },
+                    sendsSession: false,
+                },
+                {
+                    name: 'fresh visitor with a bootstrap session',
+                    setup: () =>
+                        create(undefined, {
+                            storage: storage(),
+                            bootstrap: { sessionId: sessionIdAt(START - 1000, '1') },
+                        }),
+                    sendsSession: true,
+                },
+                {
+                    name: 'bootstrap session equal to the persisted session',
+                    setup: async () => {
+                        const shared = storage()
+                        const bootstrap = { sessionId: sessionIdAt(START, '2') }
+                        const first = await createCore(options({ storage: shared, bootstrap }))
+                        first.capture('first page')
+                        await first.dispose()
+                        vi.setSystemTime(START + 60_000)
+                        return create(undefined, { storage: shared, bootstrap })
+                    },
+                    sendsSession: true,
+                },
+                {
+                    name: 'reset in another tab without a capture',
+                    setup: async () => {
+                        const shared = storage()
+                        const client = await create(undefined, { storage: shared })
+                        client.capture('this tab')
+                        ;(await sibling(shared)).reset()
+                        return client
+                    },
+                    sendsSession: false,
+                },
+                {
+                    name: 'new session started in another tab',
+                    setup: async () => {
+                        const shared = storage()
+                        const client = await create(undefined, { storage: shared })
+                        client.capture('this tab')
+                        const other = await sibling(shared)
+                        other.reset()
+                        other.capture('other tab')
+                        return client
+                    },
+                    sendsSession: true,
+                },
+            ]
+
+            it.each(scenarios)('$name', async ({ setup, sendsSession }) => {
+                const client = await setup()
+                await browser.fetch('https://api.example.com/work')
+                const sessionHeader = sentHeaders().get('X-POSTHOG-SESSION-ID')
+                const windowHeader = sentHeaders().get('X-POSTHOG-WINDOW-ID')
+
+                client.capture('next event')
+
+                const next = client.session!
+                expect({ session: sessionHeader, window: windowHeader }).toEqual({
+                    session: sendsSession ? next.sessionId : null,
+                    window: windowHeader === null ? null : next.windowId,
+                })
+            })
         })
     })
 
@@ -296,6 +440,7 @@ describe('tracing headers', () => {
 
     it('adds headers to XMLHttpRequest after open and traceparent on send', async () => {
         const client = await create({ hostnames: ['api.example.com'], tracePropagationTargets: ['api.example.com'] })
+        client.capture('start')
         const matched = new browser.XMLHttpRequest() as unknown as FakeXHR
         matched.open('GET', 'https://api.example.com/work')
         expect(matched.header('X-POSTHOG-DISTINCT-ID')).toBe(client.distinctId)
@@ -310,16 +455,18 @@ describe('tracing headers', () => {
         expect(unmatched.headers).toEqual([])
     })
 
-    it('does not break XMLHttpRequest when identity cannot be read', async () => {
-        const client = await create()
+    it('sends XMLHttpRequest without PostHog headers when identity cannot be read', async () => {
+        const client = await create({ hostnames: ['api.example.com'], tracePropagationTargets: ['api.example.com'] })
+        client.capture('start')
         vi.spyOn(client, 'distinctId', 'get').mockImplementation(() => {
             throw new Error('unavailable')
         })
         vi.spyOn(client.logger, 'error').mockImplementation(() => {})
         const request = new browser.XMLHttpRequest() as unknown as FakeXHR
         expect(() => request.open('GET', 'https://api.example.com/work')).not.toThrow()
-        expect(request.header('X-POSTHOG-DISTINCT-ID')).toBeUndefined()
-        expect(request.header('X-POSTHOG-SESSION-ID')).toBeDefined()
+        expect(request.headers).toEqual([])
+        request.send()
+        expect(request.header('traceparent')).toMatch(TRACEPARENT)
     })
 
     it('restores fetch and XMLHttpRequest when the client is disposed', async () => {

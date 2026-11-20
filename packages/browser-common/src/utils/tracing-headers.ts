@@ -15,10 +15,10 @@ export type TracingHeadersHostnames = string[] | boolean | undefined
  */
 export type TracingHeadersDistinctIdProvider = () => string | undefined
 
-/** The session and window ids sent with tracing headers. */
+/** The session and window ids sent with tracing headers. Without a window id, only the session header is sent. */
 export interface TracingHeadersSession {
     readonly sessionId: string
-    readonly windowId: string
+    readonly windowId?: string
 }
 
 /** Reads the current session at request time; `undefined` omits the session and window headers. */
@@ -191,7 +191,12 @@ const addTracingHeaders = (
     const session = getSession?.()
     if (session) {
         headers.set(SESSION_ID_HEADER, session.sessionId)
-        headers.set(WINDOW_ID_HEADER, session.windowId)
+        if (session.windowId) {
+            headers.set(WINDOW_ID_HEADER, session.windowId)
+        } else {
+            // A caller's window id belongs to some other session, so it must not be paired with this one.
+            headers.delete(WINDOW_ID_HEADER)
+        }
         hasAddedHeaders = true
     }
     return hasAddedHeaders
@@ -374,6 +379,9 @@ export const patchFetch = (
                         try {
                             addTracingHeaders(hostnames, getDistinctId, getSession, req.url, tracingHeaders)
                             tracingHeaders.forEach((value, name) => req.headers.set(name, value))
+                            if (tracingHeaders.has(SESSION_ID_HEADER) && !tracingHeaders.has(WINDOW_ID_HEADER)) {
+                                req.headers.delete(WINDOW_ID_HEADER)
+                            }
                         } catch {
                             // Send the request without tracing headers.
                         }
