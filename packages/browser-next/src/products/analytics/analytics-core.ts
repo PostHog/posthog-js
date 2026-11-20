@@ -11,7 +11,7 @@ import {
     type CaptureHost,
 } from './analytics-internal'
 import type { ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { BootstrapOptions, NewSessionInfo, NewSessionReason, CaptureSummary, ResetOptions } from '../../core/types'
+import type { BootstrapOptions, NewSessionInfo, CaptureSummary, ResetOptions } from '../../core/types'
 import { readBootstrapSession } from '../../core/state/state'
 import type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './admission/event-buffer'
@@ -448,7 +448,9 @@ export class Analytics {
         if (message.event === '$pageview') this._pageview = [message.uuid, session.sessionId]
         else if (this._pageview?.[1] !== session.sessionId) this._pageview = undefined
         this._sessionProperties.admitted(session.sessionId)
-        this._publishSessionCommit(previous, session, preparedSession.reason)
+        if (previous?.sessionId !== session.sessionId || previous.windowId !== session.windowId)
+            this._sessionIdPublisher.publish({ ...session })
+        if (preparedSession.reason) this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         this._eventPublisher.publish(deepFreeze({ event: message.event, properties: observedProperties }))
         return message
     }
@@ -457,18 +459,6 @@ export class Analytics {
     _pageviewIdFor(sessionId: string | undefined): string | undefined {
         const pageview = this._pageview
         return pageview && pageview[1] === sessionId ? pageview[0] : undefined
-    }
-
-    /** Notifies session observers that `session` replaced `previous` as the committed session. */
-    _publishSessionCommit(
-        previous: SessionContext | undefined,
-        session: SessionContext | undefined,
-        reason: NewSessionReason | undefined
-    ): void {
-        if (!session) return
-        if (previous?.sessionId !== session.sessionId || previous.windowId !== session.windowId)
-            this._sessionIdPublisher.publish({ ...session })
-        if (reason) this._newSessionPublisher.publish({ ...session, reason })
     }
 
     _hasPersonProcessing(): boolean {
