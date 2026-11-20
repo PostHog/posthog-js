@@ -6,11 +6,11 @@ import { PostHog } from '../utility'
 import { envelope, UTILITY_TIMEOUT_MS } from '../utility/protocol'
 import type { Command, Properties, State } from '../shared/protocol'
 
-function utilityClient(port: EventEmitter): PostHog {
+function utilityClient(port: EventEmitter, onError?: (error: unknown) => void): PostHog {
     const descriptor = Object.getOwnPropertyDescriptor(process, 'parentPort')
     Object.defineProperty(process, 'parentPort', { configurable: true, value: port })
     try {
-        return new PostHog()
+        return new PostHog({ onError })
     } finally {
         if (descriptor) Object.defineProperty(process, 'parentPort', descriptor)
         else Reflect.deleteProperty(process, 'parentPort')
@@ -55,8 +55,18 @@ function harness(execute?: (command: Command, authorize: () => void) => Promise<
         () => state,
         removed
     )
-    const client = utilityClient(port)
+    const errors: unknown[] = []
+    const client = utilityClient(port, (error) => errors.push(error))
+    // capture() returns void; wait until main accepted the request or the child reported its failure.
+    const settled = () => contexts.length + errors.length
+    const capture = async (event: string, properties?: Properties) => {
+        const before = settled()
+        client.capture(event, properties)
+        await vi.waitFor(() => expect(settled()).toBeGreaterThan(before), { interval: 1 })
+    }
     return {
+        errors,
+        capture,
         child,
         port,
         registration,
@@ -76,7 +86,7 @@ describe('utilityProcess transport', () => {
         try {
             await Promise.all([h.client.ready(), h.client.ready()])
             await h.client.ready()
-            await h.client.capture('after-ready')
+            await h.capture('after-ready')
             await h.client.flush()
             expect(h.contexts).toHaveLength(3)
             expect(h.removed).not.toHaveBeenCalled()
@@ -94,15 +104,14 @@ describe('utilityProcess transport', () => {
         const h = harness()
         try {
             await h.client.ready()
-            const errors: string[] = []
-            for (let i = 0; i < 110; i++) {
-                await h.client.capture(`burst-${i}`).catch((error: Error) => errors.push(error.message))
-            }
-            expect(errors.length).toBeGreaterThan(0)
-            expect(new Set(errors)).toEqual(new Set(['PostHog utility rate limit exceeded']))
+            for (let i = 0; i < 110; i++) await h.capture(`burst-${i}`)
+            expect(h.errors.length).toBeGreaterThan(0)
+            expect(new Set(h.errors.map((error) => (error as Error).message))).toEqual(
+                new Set(['PostHog utility rate limit exceeded'])
+            )
             expect(h.removed).not.toHaveBeenCalled()
             now = 1000
-            await h.client.capture('after-window-reset')
+            await h.capture('after-window-reset')
             await h.client.flush()
             expect(h.contexts.length).toBeGreaterThan(2)
         } finally {
@@ -159,7 +168,7 @@ describe('utilityProcess transport', () => {
             await Promise.resolve()
             expect(h.removed).not.toHaveBeenCalled()
             expect(h.client.getFeatureFlagPayload('test')).toEqual(payload)
-            await h.client.capture('still-connected')
+            await h.capture('still-connected')
             const request = h.port.postMessage.mock.calls
                 .map(([value]) => value as Record<string, any>)
                 .find((value) => value.kind === 'request')!
@@ -199,7 +208,7 @@ describe('utilityProcess transport', () => {
     it('requires a new main registration rather than restarting a disposed facade in the same child', async () => {
         const h = harness()
         await h.client.ready()
-        await h.client.capture('before-dispose')
+        await h.capture('before-dispose')
         h.client.dispose()
         const replacement = utilityClient(h.port)
         await expect(replacement.ready()).rejects.toThrow('Out-of-order')
@@ -211,7 +220,7 @@ describe('utilityProcess transport', () => {
         const h = harness()
         await h.client.ready()
         await h.client.identify('alice')
-        await h.client.capture('work', { $utility_process_id: 'spoof', $electron_process: 'main' })
+        await h.capture('work', { $utility_process_id: 'spoof', $electron_process: 'main' })
         expect(h.client.getDistinctId()).toBe('alice')
         expect(h.contexts.every((context) => context.$electron_process === 'utility')).toBe(true)
         expect(new Set(h.contexts.map((context) => context.$utility_process_id)).size).toBe(1)
@@ -220,8 +229,10 @@ describe('utilityProcess transport', () => {
         await Promise.resolve()
         expect(h.client.hasOptedOutCapturing()).toBe(true)
         const count = h.contexts.length
-        await h.client.capture('blocked')
-        expect(h.contexts).toHaveLength(count)
+        h.client.capture('blocked')
+        // Commands run in order, so only the flush reaches main if the capture was gated.
+        await h.client.flush()
+        expect(h.contexts).toHaveLength(count + 1)
         h.client.dispose()
         h.registration.dispose()
         expect(h.removed).toHaveBeenCalledOnce()
@@ -239,15 +250,14 @@ describe('utilityProcess transport', () => {
             authorize()
         })
         await h.client.ready()
-        const pending = h.client.capture('pending')
-        const queued = h.client.flush()
-        const rejected = Promise.all([
-            expect(pending).rejects.toThrow('closed'),
-            expect(queued).rejects.toThrow('closed'),
-        ])
+        h.client.capture('pending')
+        const queued = expect(h.client.flush()).rejects.toThrow('closed')
         await vi.waitFor(() => expect(release).toBeTypeOf('function'))
         h.registration.dispose()
-        await rejected
+        await queued
+        await vi.waitFor(() =>
+            expect(h.errors).toEqual([expect.objectContaining({ message: expect.stringContaining('closed') })])
+        )
         release()
         h.client.dispose()
     })
@@ -354,7 +364,9 @@ describe('utilityProcess transport', () => {
             // The owner finishes the original delivery after the caller stopped waiting.
             finishFlush()
             await vi.advanceTimersByTimeAsync(0)
-            await expect(h.client.capture('after-slow-flush')).resolves.toBeUndefined()
+            h.client.capture('after-slow-flush')
+            await vi.advanceTimersByTimeAsync(0)
+            expect(h.errors).toEqual([])
             expect(h.removed).not.toHaveBeenCalled()
             expect(h.contexts).toHaveLength(3)
             h.client.dispose()
@@ -376,13 +388,15 @@ describe('utilityProcess transport', () => {
                 }
             })
             await h.client.ready()
-            const slow = expect(h.client.capture('slow')).rejects.toThrow('timed out')
+            h.client.capture('slow')
             await vi.advanceTimersByTimeAsync(UTILITY_TIMEOUT_MS)
-            await slow
-            const next = h.client.capture('next')
+            expect(h.errors).toEqual([expect.objectContaining({ message: expect.stringContaining('timed out') })])
+            h.client.capture('next')
             finishCapture()
             await vi.advanceTimersByTimeAsync(0)
-            await expect(next).resolves.toBeUndefined()
+            await h.client.flush()
+            expect(h.errors).toHaveLength(1)
+            expect(h.contexts).toHaveLength(4)
             expect(h.removed).not.toHaveBeenCalled()
             h.client.dispose()
             h.registration.dispose()

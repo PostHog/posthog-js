@@ -9,6 +9,9 @@ import { pathToFileURL } from 'node:url'
 export const registry = 'https://registry.npmjs.org'
 export const packageName = '@posthog/electron'
 const plainVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
+// First-party core packages released from this repo, including their transitive
+// @posthog/types, are exempt from the seven-day cooldown.
+export const cooldownExempt = new Set(['@posthog/core', '@posthog/browser-common', '@posthog/types'])
 
 export function validateManifest(manifest, version) {
     assert.match(version, plainVersion, 'Only exact x.y.z versions are permitted')
@@ -47,6 +50,7 @@ export async function checkRegistry(manifest, version, fetchMetadata = fetch, no
         const minimum = range.slice(1)
         const dependency = await metadata(name, fetchMetadata)
         assert.ok(dependency?.versions?.[minimum], `${name}@${minimum} must be published first`)
+        if (cooldownExempt.has(name)) continue
         const released = Date.parse(dependency.time?.[minimum])
         assert.ok(
             Number.isFinite(released) && now - released >= 10080 * 60_000,
@@ -100,7 +104,14 @@ export function registryConsumer(tarball, manifest) {
     )
     writeFileSync(
         join(directory, 'pnpm-workspace.yaml'),
-        'packages: []\nminimumReleaseAge: 10080\nautoInstallPeers: false\n'
+        [
+            'packages: []',
+            'minimumReleaseAge: 10080',
+            'minimumReleaseAgeExclude:',
+            ...[...cooldownExempt].map((name) => `  - '${name}'`),
+            'autoInstallPeers: false',
+            '',
+        ].join('\n')
     )
     const run = (...args) =>
         execFileSync('pnpm', args, {
