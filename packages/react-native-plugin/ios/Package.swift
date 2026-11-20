@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 
 import PackageDescription
 
@@ -29,9 +29,12 @@ let package = Package(
         ),
     ],
     dependencies: reactNativeDependencies + [
+        // Surveys render in JS, so leave out the `Surveys` trait. Another package that asks for the default
+        // traits still turns it on, and the plugin then turns native surveys off at runtime.
         .package(
             url: "https://github.com/PostHog/posthog-ios.git",
-            .upToNextMinor(from: "3.98.1")
+            .upToNextMinor(from: "4.0.2"),
+            traits: ["SessionReplay", "CrashReporting"]
         ),
     ],
     targets: [
