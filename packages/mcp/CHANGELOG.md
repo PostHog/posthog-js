@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.6.1
+
+### Patch Changes
+
+- [#5836](https://github.com/PostHog/posthog-js/pull/5836) [`02d707e`](https://github.com/PostHog/posthog-js/commit/02d707e4898bcf5921ee8b353bd08c07b3ce58df) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogMCP` adds the configured `serverBuild` to `captureAi()` and `captureAiImmediate()` events, as it already does for `capture()` and `captureImmediate()`. With `serverBuild` set, an event whose properties cannot be read is now dropped by the client, as without `serverBuild`, instead of throwing from any of the four methods.
+  (2026-11-21)
+
 ## 1.6.0
 
 ### Minor Changes
