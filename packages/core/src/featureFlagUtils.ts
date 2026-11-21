@@ -258,6 +258,9 @@ export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   '$lib_version',
   '$device_id',
   '$is_server',
+  // A release id is static and low-cardinality for the lifetime of a process, so a minimized
+  // event keeps the release the read happened on. Inert on SDKs that never stamp it.
+  '$release_id',
 ]
 
 /**
