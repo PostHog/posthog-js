@@ -246,11 +246,43 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   if (isUnknownTool && isToolResultError(result)) {
     publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
+    if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
+      // `result`, as the tool produced it, before the conversation handle was written into it.
+      applyResultProperties(preparedEvent.event, data, request.params?.name, result)
+    }
     // `result`, not `finalResult`: the error is read from what the tool produced,
     // before the conversation handle was written into it. See below.
     publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
   }
   return finalResult
+}
+
+/** Merges the host's `resultProperties` for a returned tool result into the event's properties. */
+function applyResultProperties(
+  event: McpEvent,
+  data: MCPAnalyticsData,
+  toolName: string | undefined,
+  result: unknown
+): void {
+  const callback = data.options.resultProperties
+  if (!callback) {
+    return
+  }
+  let properties: unknown
+  try {
+    properties = callback(toolName ?? event.resourceName ?? '', result)
+  } catch (e) {
+    data.logger(`resultProperties callback error: ${e}`)
+    return
+  }
+  if (properties == null) {
+    return
+  }
+  if (typeof properties !== 'object' || Array.isArray(properties) || typeof (properties as any).then === 'function') {
+    data.logger('resultProperties must return a plain object or null synchronously; ignoring its value')
+    return
+  }
+  event.properties = { ...event.properties, ...(properties as JsonRecord) }
 }
 
 function resolveToolConversation(

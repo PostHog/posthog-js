@@ -332,6 +332,34 @@ per-event options, so the SDK sends the known options the way that version reads
 other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's
 `options` field instead of `eventOptions`.
 
+### Properties from a tool's result (`resultProperties`)
+
+`resultProperties` adds properties derived from what a tool returned, such as a domain status in
+`structuredContent` or how many items the result held, without keeping `$mcp_response`. It runs
+once per tool call that returned a result, `isError` results included, and its return value is
+merged into that `$mcp_tool_call` event before `beforeSend`:
+
+```ts
+instrument(server, posthog, {
+  resultProperties: (toolName, result) => {
+    if (toolName !== 'search_slots') {
+      return null
+    }
+    const slots = (result as { structuredContent?: { status?: string; slots?: unknown[] } }).structuredContent
+    return { search_status: slots?.status ?? null, slot_count: slots?.slots?.length ?? 0 }
+  },
+  // Keep the derived facts, drop the payload itself
+  beforeSend: (event) => {
+    delete event.properties.$mcp_response
+    return event
+  },
+})
+```
+
+It runs synchronously on the tool path, so keep it cheap. It is not called for a tool that threw,
+for the SDK's virtual tools or for an unknown tool. A throw, or a value that is not a plain object,
+is logged and adds nothing.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
