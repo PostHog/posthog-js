@@ -529,6 +529,9 @@ importers:
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
+      fflate:
+        specifier: ^0.4.8
+        version: 0.4.8
       preact:
         specifier: ^10.29.3
         version: 10.29.3
@@ -585,6 +588,12 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/rrweb-plugin-console-record':
+        specifier: workspace:*
+        version: link:../rrweb/plugins/rrweb-plugin-console-record
+      '@posthog/rrweb-record':
+        specifier: workspace:*
+        version: link:../rrweb/record
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)

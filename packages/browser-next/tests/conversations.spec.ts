@@ -200,6 +200,30 @@ describe('conversations', () => {
         expect(resumed.getCurrentTicketId()).toBe('ticket-1')
     })
 
+    it('links the session replay to messages only while the recorder is started', async () => {
+        let recording = true
+        const getSessionReplayUrl = vi.fn(() => 'https://us.posthog.com/project/test-token/replay/session?t=5')
+        const replay = {
+            name: 'sessionRecording',
+            setup() {},
+            sessionRecordingStarted: () => recording,
+            getSessionReplayUrl,
+        }
+        const { client, requests } = await createClient({ conversations: widgetConfig() }, { extensions: [replay] })
+        const extension = await loaded(client)
+
+        await extension.sendMessage('Recording')
+        recording = false
+        await extension.sendMessage('Not recording')
+
+        const [recorded, notRecorded] = conversationRequests(requests, '/widget/message')
+        expect(recorded?.body?.session_context.session_replay_url).toBe(
+            'https://us.posthog.com/project/test-token/replay/session?t=5'
+        )
+        expect(getSessionReplayUrl).toHaveBeenCalledWith({ withTimestamp: true, timestampLookBack: 30 })
+        expect(notRecorded?.body?.session_context?.session_replay_url).toBeUndefined()
+    })
+
     it('keeps widget state under the posthog-js storage key, independently of client storage', async () => {
         // A visitor upgrading from posthog-js keeps the widget session that grants access to their tickets.
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ widgetSessionId: 'legacy-session', ticketId: 'ticket-7' }))

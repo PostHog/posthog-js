@@ -36,6 +36,9 @@ const assertInitialModules = (entries) => {
 }
 const forbiddenInitial = [
     /\/(?:flags|feature-flags|logs|console-logs|surveys|surveys-extension|surveys-renderer|autocapture|rageclick)\.(?:ts|mjs|js)$/,
+    /\/products\/(?:web-vitals|tracing-headers|error-tracking|toolbar|conversations|session-recording)\/(?!.*-options\.ts$)[^/]+\.tsx?$/,
+    /\/browser-common\/dist\/(?:toolbar|error-tracking|exception-autocapture|web-vitals|conversations|replay)/,
+    /(?:^|\/)\.\.\/rrweb\//,
     /\/(?:core|browser)\/dist\//,
     /node_modules\/(?:posthog-js|@posthog\/core|core-js|fflate|preact|dompurify|rrweb|web-vitals)\//,
 ]
@@ -53,6 +56,17 @@ assert.throws(
     /Forbidden initial module/,
     'The CDN guard must reject eager optional product code'
 )
+for (const name of [
+    './src/products/session-recording/session-recording.ts',
+    '../rrweb/record/dist/rrweb-record.js',
+    '../browser-common/dist/error-tracking.mjs',
+]) {
+    assert.throws(
+        () => assertInitialModules([...initialModules, { name }]),
+        /Forbidden initial module/,
+        `The CDN guard must reject ${name}`
+    )
+}
 const size = (buffers) => ({
     minified: buffers.reduce((sum, value) => sum + value.length, 0),
     gzip: buffers.reduce((sum, value) => sum + gzipSync(value, { level: 9 }).length, 0),

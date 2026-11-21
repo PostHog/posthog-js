@@ -1,4 +1,5 @@
 import { createPostHog } from '../src/composition/npm/index'
+import { analyticsOf } from '../src/products/analytics/analytics-core'
 import type { IPostHog, StorageLike } from '../src/core/types'
 import {
     clientOptions,
@@ -212,6 +213,21 @@ describe('reset options', () => {
         await posthog.flush()
         expect(posthog.hasOptedOut()).toBe(true)
         expect(sent).toEqual([])
+    })
+
+    it('runs before-reset hooks under the previous identity and consent, then onReset listeners after consent clears', async () => {
+        const posthog = await create(new MemoryStorage(), [], { optOutByDefault: true })
+        posthog.optIn()
+        const previousId = posthog.distinctId
+        const seen: string[] = []
+        const observe = (hook: string) => () =>
+            seen.push(
+                `${hook}:${posthog.getExplicitConsentStatus()}:${posthog.distinctId === previousId ? 'old' : 'new'}`
+            )
+        analyticsOf(posthog)!.onBeforeReset(observe('before'))
+        posthog.onReset(observe('onReset'))
+        posthog.reset()
+        expect(seen).toEqual(['before:granted:old', 'onReset:pending:new'])
     })
 
     it('keeps an opt-in that an onReset listener applies again when capture is opted out by default', async () => {

@@ -11,9 +11,9 @@ import {
     estimateCompressedEventSize,
     circularReferenceReplacer,
     UNSTRINGIFIABLE_EVENT_SIZE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
+} from '@posthog/browser-common/replay/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
-import type { eventWithTime } from '../../../extensions/replay/types/rrweb-types'
+import type { eventWithTime } from '@posthog/browser-common/replay/rrweb-types'
 
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {

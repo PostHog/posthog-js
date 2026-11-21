@@ -2,7 +2,7 @@
 
 import { expect } from 'vitest'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
-import { buildNetworkRequestOptions, defaultNetworkOptions } from '../../../../extensions/replay/external/config'
+import { buildNetworkRequestOptions, defaultNetworkOptions } from '@posthog/browser-common/replay/network-config'
 import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
 import { defaultConfig } from '../../../../posthog-core'
 import {
@@ -11,7 +11,7 @@ import {
     _tryReadBodyStreaming,
     getRecordNetworkPlugin,
     shouldRecordBody,
-} from '../../../../extensions/replay/external/network-plugin'
+} from '@posthog/browser-common/replay/network-plugin'
 
 // Mock Request class since jsdom might not provide it
 class MockRequest {

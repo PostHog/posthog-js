@@ -26,6 +26,7 @@ const runtime = (fetch: BrowserFetch | undefined): RequestRuntime => [
     'ph_test',
     fetch,
     undefined,
+    { remaining: 52_428 },
 ]
 
 describe('Capture Analytics V1', () => {

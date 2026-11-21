@@ -24,7 +24,7 @@ import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from
 import { deepFreeze } from '../primitives/immutable'
 import { createLogger, type LogState } from '../platform/logger'
 import { snapshotPersonProfileMode } from '../products/analytics/properties/person-processing'
-import { sendRequest, type RequestRuntime } from '../platform/request'
+import { KEEPALIVE_BUDGET_BYTES, sendRequest, type RequestRuntime } from '../platform/request'
 import { BrowserState, CLIENT_KV_NAMESPACE, getDefaultSessionStorage, getDefaultStorage } from './state/state'
 import type {
     BrowserFetch,
@@ -110,6 +110,7 @@ class PostHog implements IPostHog {
     declare readonly errorTracking?: BrowserProducts['errorTracking']
     declare readonly toolbar?: BrowserProducts['toolbar']
     declare readonly conversations?: BrowserProducts['conversations']
+    declare readonly sessionRecording?: BrowserProducts['sessionRecording']
     readonly logger: Client['logger']
     readonly kv: Client['kv']
     readonly library = Object.freeze({ name: 'web', version })
@@ -249,6 +250,7 @@ class PostHog implements IPostHog {
             projectToken,
             browserFetch,
             browserNavigator,
+            { remaining: KEEPALIVE_BUDGET_BYTES },
         ]
         this._remoteConfig = options.remoteConfig
         this._remoteConfigTimeoutMs =
@@ -369,6 +371,8 @@ class PostHog implements IPostHog {
     reset(options?: boolean | ResetOptions): void {
         // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
         if (!this._canMutate()) return
+        // Before-reset hooks, such as the replay flush, still see the previous identity and consent.
+        this._analytics.prepareReset()
         // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
         // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
         // Consent listeners hear of it afterwards, so what they capture belongs to the new identity.

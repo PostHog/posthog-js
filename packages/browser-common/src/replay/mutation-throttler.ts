@@ -1,12 +1,12 @@
-import type { eventWithTime, mutationCallbackParam } from '../types/rrweb-types'
+import type { eventWithTime, mutationCallbackParam } from './rrweb-types'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
     estimateCompressedEventSize,
 } from './sessionrecording-utils'
-import type { rrwebRecord } from '../types/rrweb'
+import type { rrwebRecord } from './rrweb'
 import { BucketedRateLimiter, isNumber } from '@posthog/core'
-import { logger } from '@posthog/browser-common/utils/logger'
+import { logger } from '../utils/logger'
 
 export const DEFAULT_MUTATION_BYTES_REFILL_RATE = 25 * 1024
 export const DEFAULT_MUTATION_RESYNC_INTERVAL_MS = 5 * 60 * 1000

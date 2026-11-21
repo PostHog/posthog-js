@@ -1,17 +1,14 @@
-import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
+import type { eventWithTime, pluginEvent } from './rrweb-types'
 
 import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
-import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
-export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
-
-export function getReplayPendingBufferKey(config: { persistence_name?: string; token: string }): string {
-    return (
-        'ph' +
-        PENDING_BUFFER_STORAGE_SUFFIX +
-        '_' +
-        JSON.stringify([config.persistence_name || config.token, config.token])
-    )
+/** Replay events buffered for one session and window, with their estimated sizes. */
+export interface SnapshotBuffer {
+    size: number
+    data: any[]
+    sizes: number[]
+    sessionId: string
+    windowId: string
 }
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -173,15 +170,15 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
             event.data.payload.payload = event.data.payload.payload.slice(0, MAX_STRINGS_PER_LOG)
             event.data.payload.payload.push('...[truncated]')
         }
-        const updatedPayload = []
+        const updatedPayload: string[] = []
         for (let i = 0; i < event.data.payload.payload.length; i++) {
             if (
                 event.data.payload.payload[i] && // Value can be null
-                event.data.payload.payload[i].length > MAX_STRING_SIZE
+                event.data.payload.payload[i]!.length > MAX_STRING_SIZE
             ) {
-                updatedPayload.push(event.data.payload.payload[i].slice(0, MAX_STRING_SIZE) + '...[truncated]')
+                updatedPayload.push(event.data.payload.payload[i]!.slice(0, MAX_STRING_SIZE) + '...[truncated]')
             } else {
-                updatedPayload.push(event.data.payload.payload[i])
+                updatedPayload.push(event.data.payload.payload[i]!)
             }
         }
         event.data.payload.payload = updatedPayload
