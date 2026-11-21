@@ -38,6 +38,8 @@ export function useSurveyStorage(client?: PostHog): SurveyStorage {
       const lastSeenSurveyDate = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate)
       if (typeof lastSeenSurveyDate === 'string') {
         setLastSeenSurveyDate(new Date(lastSeenSurveyDate))
+      } else {
+        setLastSeenSurveyDate(undefined)
       }
 
       const serialisedSeenSurveys = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)
