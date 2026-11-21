@@ -259,7 +259,7 @@ export class Heatmaps implements Extension {
         const properties = this._getProperties(e, type)
 
         if (
-            this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime()) &&
+            this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime(), getEventTarget(e)) &&
             shouldCaptureRageclick(getEventTarget(e), this.instance.config.rageclick)
         ) {
             this._capture({
