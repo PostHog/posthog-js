@@ -66,6 +66,23 @@ if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
 
 Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
 
+### Flushing on per-request runtimes
+
+Auto-captured events reach `posthog.capture()` asynchronously, after the handler's response is
+built. On a runtime that freezes or exits after each request (serverless and edge functions,
+Convex HTTP actions), await `analytics.flush()` before you return. It waits until every event the
+server has captured so far is handed to `posthog-node`, then flushes the `posthog-node` queue:
+
+```ts
+const analytics = instrument(server, posthog)
+
+const response = await handleRequest(request)
+await analytics.flush()
+return response
+```
+
+`flush()` never rejects. A failed flush is logged and the events stay in the `posthog-node` queue.
+
 ## MCP TypeScript SDK v2
 
 `instrument()` works on both SDK majors — `@modelcontextprotocol/sdk` v1 and
