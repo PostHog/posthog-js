@@ -531,6 +531,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Get persisted groups
       const existingGroups = this.props.$groups || {}
 
+      // Group properties for flags describe the previous group key, so drop them when the key changes
+      const groupProperties = this.getPersistedProperty<Record<string, Record<string, JsonType>>>(
+        PostHogPersistedProperty.GroupProperties
+      )
+      const changedTypes = Object.keys(groups).filter((type) => {
+        const existingKey = existingGroups[type as keyof typeof existingGroups]
+        return existingKey !== undefined && existingKey !== groups[type] && groupProperties?.[type] !== undefined
+      })
+      if (groupProperties && changedTypes.length > 0) {
+        const remainingProperties = { ...groupProperties }
+        changedTypes.forEach((type) => delete remainingProperties[type])
+        this.setPersistedProperty(PostHogPersistedProperty.GroupProperties, remainingProperties)
+      }
+
       this.register({
         $groups: {
           ...(existingGroups as PostHogGroupProperties),
