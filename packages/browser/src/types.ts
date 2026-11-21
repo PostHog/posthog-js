@@ -65,6 +65,17 @@ export type {
     OverrideFeatureFlagsOptions,
 } from '@posthog/types'
 
+export interface EarlyAccessFeature {
+    name: string
+    description: string
+    stage: EarlyAccessFeatureStage
+    documentationUrl: string | null
+    flagKey: string | null
+    imageUrl?: string | null
+    /** ISO 8601 timestamp indicating when the early access feature was created. */
+    createdAt?: string
+}
+
 // Request types
 export type { Headers, RequestResponse, RequestCallback } from '@posthog/types'
 
