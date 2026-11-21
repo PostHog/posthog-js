@@ -1,4 +1,4 @@
-import { CaptureError, PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import { CaptureError, PostHog, PostHogOptions, RemoteConfigPayloadError } from '@/entrypoints/index.node'
 import { _resetDeprecationWarningsForTests } from '@/client'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
@@ -3616,6 +3616,25 @@ describe('PostHog Node.js', () => {
   describe('getRemoteConfigPayload', () => {
     let requestRemoteConfigPayloadSpy: vi.SpyInstance
 
+    const remoteConfigResponse = (status: number, body: string): any => ({
+      status,
+      text: () => Promise.resolve(body),
+      json: () => Promise.resolve(JSON.parse(body)),
+    })
+
+    // Local evaluation off, so the definitions poller makes no fetch calls and emits no errors
+    const createRemoteConfigClient = (): PostHog => {
+      const client = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        enableLocalEvaluation: false,
+      })
+      mockedFetch.mockClear()
+      return client
+    }
+
     beforeEach(() => {
       // Reset the mock for each test
       mockedFetch.mockClear()
@@ -3659,7 +3678,8 @@ describe('PostHog Node.js', () => {
 
     it('should return empty object when no payload is available', async () => {
       requestRemoteConfigPayloadSpy.mockResolvedValue({
-        json: () => Promise.resolve({}),
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({})),
       })
 
       const payload = await posthog.getRemoteConfigPayload('test-flag')
@@ -3670,7 +3690,8 @@ describe('PostHog Node.js', () => {
     it('should handle double-encoded JSON payload', async () => {
       const doubleEncodedPayload = '{ "foo":["bar","baz"]}'
       requestRemoteConfigPayloadSpy.mockResolvedValue({
-        json: () => Promise.resolve(doubleEncodedPayload),
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify(doubleEncodedPayload)),
       })
 
       const payload = await posthog.getRemoteConfigPayload('test-flag')
@@ -3683,7 +3704,8 @@ describe('PostHog Node.js', () => {
     it('should handle simple JSON payload', async () => {
       const simplePayload = { foo: ['bar', 'baz'] }
       requestRemoteConfigPayloadSpy.mockResolvedValue({
-        json: () => Promise.resolve(simplePayload),
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify(simplePayload)),
       })
 
       const payload = await posthog.getRemoteConfigPayload('test-flag')
@@ -3704,7 +3726,8 @@ describe('PostHog Node.js', () => {
       // Spy on the method for this instance
       const spy = vi.spyOn(posthogWithoutLocalEval as any, '_requestRemoteConfigPayload')
       spy.mockResolvedValue({
-        json: () => Promise.resolve({ test: 'payload' }),
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ test: 'payload' })),
       })
 
       const payload = await posthogWithoutLocalEval.getRemoteConfigPayload('test-flag')
@@ -3716,10 +3739,7 @@ describe('PostHog Node.js', () => {
     })
 
     it('should include project API key in the remote config URL', async () => {
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        json: () => Promise.resolve({ test: 'payload' }),
-      } as any)
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, JSON.stringify({ test: 'payload' })))
 
       await posthog.getRemoteConfigPayload('test-flag')
 
@@ -3733,6 +3753,59 @@ describe('PostHog Node.js', () => {
           }),
         })
       )
+    })
+    it.each([
+      [401, '{"detail":"Authentication failed"}'],
+      [404, '{"detail":"Not found."}'],
+      [429, '{"detail":"Request was throttled."}'],
+      [500, '{"detail":"Server error"}'],
+    ])('should emit an error with the status and resolve undefined for a %s response', async (status, body) => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(status, body))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(RemoteConfigPayloadError)
+      expect(errors[0]).toMatchObject({ status, flagKey: 'test-flag' })
+    })
+
+    it('should resolve undefined without an error for an empty 200 body', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, ''))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toHaveLength(0)
+    })
+
+    it('should resolve null for a disabled flag', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, 'null'))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeNull()
+    })
+
+    it('should decode a JSON-encoded string payload from the response', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, JSON.stringify('{"max_items":25}')))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toEqual({ max_items: 25 })
+    })
+
+    it('should resolve undefined and emit the error when the request fails', async () => {
+      const networkError = new Error('connect ECONNREFUSED')
+      const client = createRemoteConfigClient()
+      mockedFetch.mockRejectedValue(networkError)
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toEqual([networkError])
     })
   })
 })
