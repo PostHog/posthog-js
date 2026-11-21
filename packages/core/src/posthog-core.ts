@@ -883,6 +883,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         const res = result.response
 
+        // reset() and identify() can change the identity while this request is in flight. Its
+        // flags and payloads were evaluated for the previous distinct id, so storing them would
+        // hand one user's flags to the next until the queued reload answers, or for as long as
+        // that reload keeps failing. Keep the project-level config and drop the flags.
+        if (this.getDistinctId() !== distinctId) {
+          this._logger.info('[FEATURE FLAGS] Discarding flags evaluated for a previous distinct id.')
+          this.cacheSessionReplay('flags', res)
+          this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
+          return undefined
+        }
+
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           if (!this.disableRemoteFeatureFlags) {
             this.setKnownFeatureFlagDetails({
