@@ -94,7 +94,7 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
   } catch (error) {
     logger(`Warning: Failed to instrument server - ${error}`)
     // Degrade gracefully: a no-op handle so the host app keeps working.
-    return { capture: async () => undefined }
+    return { capture: async () => undefined, flush: async () => undefined }
   }
 }
 
@@ -152,6 +152,9 @@ function instrumentFastMCP(fastmcp: unknown, posthog: PostHog, options: MCPAnaly
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
+    flush: async () => {
+      await getServerTrackingData(lowLevelServer)?.sink?.flush()
+    },
   }
 }
 
