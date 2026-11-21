@@ -1,6 +1,6 @@
 import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
+import { setupFetch, setupReplayV1ConfigFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
@@ -429,8 +429,32 @@ describe('push notifications', () => {
       // Push is off while opted out, but replay's setup() is the only one native will ever run,
       // so the provider must install there or every subscription after optIn() is unauthenticated.
       const provider = vi.fn(async () => 'token')
+      // A first launch waits for the remote config before replay brings native up, so cache one first.
+      const cache: { [key: string]: string } = {}
+      const customStorage = {
+        getItem: async (key: string) => cache[key] ?? null,
+        setItem: async (key: string, value: string) => {
+          cache[key] = value
+        },
+      }
+      setupReplayV1ConfigFetch()
+      const warmup = new PostHog('test-token', {
+        customStorage,
+        flushInterval: 0,
+        enableSessionReplay: true,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+      })
+      await warmup.ready()
+      await warmup.reloadFeatureFlagsAsync()
+      await waitForNativePluginEvaluation(warmup)
+      await warmup.optOut()
+      await warmup.shutdown()
+      vi.clearAllMocks()
+
       const posthog = await createPostHog({
-        defaultOptIn: false,
+        customStorage,
+        persistence: 'file',
         enableSessionReplay: true,
         pushIdentityProvider: provider,
       })

@@ -303,6 +303,33 @@ describe('PostHog RN manual session recording controls', () => {
     expect(await posthog.isSessionReplayActive()).toBe(false)
   })
 
+  it('keeps an explicit stop across linked flag reloads with replay enabled', async () => {
+    let flags: Record<string, boolean> = { 'replay-flag': true }
+    vi.mocked(window.fetch).mockImplementation(async (url: any) => {
+      const res: any = { status: 'ok', sessionRecording: { endpoint: '/s/', linkedFlag: 'replay-flag' } }
+      if (String(url).includes('flags')) {
+        res.featureFlags = flags
+      }
+      return { status: 200, json: () => Promise.resolve(res) } as any
+    })
+    const reloadFlags = async (next: Record<string, boolean>): Promise<void> => {
+      flags = next
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(50)
+    }
+    const starts = (): number => replay.start.mock.calls.length + replay.startRecording.mock.calls.length
+
+    posthog = new PostHog('test-token', { customStorage: mockStorage, enableSessionReplay: true, flushInterval: 0 })
+    await posthog.ready()
+    await reloadFlags({ 'replay-flag': true })
+    await waitForExpect(2000, () => expect(starts()).toBe(1))
+
+    await posthog.stopSessionRecording()
+    await reloadFlags({ 'replay-flag': false })
+    await reloadFlags({ 'replay-flag': true })
+    expect(starts()).toBe(1)
+  })
+
   describe('automatic manual-start retries', () => {
     beforeEach(async () => {
       nativeAccepts = false

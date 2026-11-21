@@ -1,7 +1,7 @@
 import { AppState, Linking } from 'react-native'
 import { PostHog, PostHogSessionReplayConfig } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { waitForExpect } from './test-utils'
+import { setupReplayV1ConfigFetch, waitForExpect } from './test-utils'
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: undefined,
@@ -28,6 +28,7 @@ describe.each(['setup', 'start'] as const)('screenshot configuration through nat
 
   beforeEach(() => {
     vi.clearAllMocks()
+    setupReplayV1ConfigFetch()
     if (method === 'setup') {
       replay.setup = vi.fn(async () => {})
     }
@@ -44,6 +45,9 @@ describe.each(['setup', 'start'] as const)('screenshot configuration through nat
       disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: false },
       sessionReplayConfig,
     })
     await posthog.ready()

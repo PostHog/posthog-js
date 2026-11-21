@@ -150,6 +150,10 @@ describe('PostHog RN session replay debug properties', () => {
   }
 
   const readyClient = async (options: Record<string, unknown> = {}): Promise<PostHog> => {
+    // A first launch waits for the remote config before it starts replay, so cache one first.
+    if (options.enableSessionReplay) {
+      await warmup()
+    }
     const client = newPostHog(options)
     await client.ready()
     await waitForNativePluginEvaluation(client)
@@ -176,7 +180,7 @@ describe('PostHog RN session replay debug properties', () => {
   }
 
   // Caches the remote replay config so the next launch evaluates its gates at startup instead
-  // of starting optimistically before /flags returns.
+  // of waiting for /flags to return.
   const warmup = async (): Promise<void> => {
     const w = newPostHog({ enableSessionReplay: true })
     await w.ready()
@@ -379,6 +383,53 @@ describe('PostHog RN session replay debug properties', () => {
     expect(activated.$recording_status).toBe('active')
   })
 
+  it('Under v2 pending trigger conditions name the pending group legs, never the v1 conditions', async () => {
+    currentSessionRecording = {
+      version: 2,
+      linkedFlag: 'v1-flag',
+      eventTriggers: ['$pageview'],
+      triggerGroups: [
+        {
+          id: 'g1',
+          name: 'Checkout',
+          sampleRate: 1,
+          conditions: {
+            matchType: 'all',
+            events: [{ name: 'purchase' }],
+            flag: { flag: 'replay-flag' },
+          },
+        },
+      ],
+      endpoint: '/s/',
+    }
+    currentFlags = { 'replay-flag': false, 'v1-flag': false }
+    await warmup()
+
+    const client = await readyClient({ enableSessionReplay: true })
+    const pending = captureOne(client, '$screen').properties
+    expect(pending.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
+    expect(pending.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+      'trigger group "Checkout": event condition not matched',
+      'trigger group "Checkout": linked flag condition not matched',
+    ])
+
+    client.capture('purchase')
+    await wait(50)
+    await waitForNativePluginEvaluation(client)
+    advanceClock(30_000)
+    expect(captureOne(client, '$screen').properties.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+      'trigger group "Checkout": linked flag condition not matched',
+    ])
+
+    currentFlags = { 'replay-flag': true, 'v1-flag': false }
+    await reloadAndSettle(client)
+    advanceClock(30_000)
+    const recording = captureOne(client, '$screen').properties
+    expect(recording.$sdk_debug_replay_capture_mode).toBe('screenshot')
+    expect(recording.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
+    expect(recording.$recording_status).toBe('active')
+  })
+
   it('Debug values win over same-named caller or registered properties', async () => {
     const client = await readyClient()
     client.register({ $recording_status: 'registered', $sdk_debug_session_start: 'registered' })
@@ -563,6 +614,93 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_disabled')
     expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
     expect(properties.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
+  })
+
+  describe('v2 trigger groups', () => {
+    const V2_KEYS = [
+      '$sdk_debug_replay_remote_trigger_matching_config',
+      '$sdk_debug_replay_trigger_groups_count',
+      '$sdk_debug_replay_matched_recording_trigger_groups',
+    ]
+    const everyoneGroup = { id: 'g1', name: 'Everyone', sampleRate: 1, conditions: { matchType: 'all' } }
+
+    it('reports the flat triggers a v2 config replaces as disabled, like the native SDKs', async () => {
+      currentSessionRecording = {
+        version: 2,
+        triggerGroups: [everyoneGroup],
+        linkedFlag: 'replay-flag',
+        eventTriggers: ['$pageview'],
+        endpoint: '/s/',
+      }
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      const client = await readyClient({ enableSessionReplay: true })
+      const { properties } = captureOne(client, '$screen')
+      expect(properties.$recording_status).toBe('active')
+      expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_disabled')
+      expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
+      expect(properties.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
+    })
+
+    it('names the pending trigger group legs until one records', async () => {
+      currentSessionRecording = {
+        version: 2,
+        triggerGroups: [
+          {
+            id: 'g1',
+            name: 'Purchases',
+            sampleRate: 1,
+            conditions: { matchType: 'all', events: [{ name: 'purchase' }] },
+          },
+        ],
+        endpoint: '/s/',
+      }
+      await warmup()
+
+      const client = await readyClient({ enableSessionReplay: true })
+      const waiting = captureOne(client, '$screen').properties
+      expect(waiting.$recording_status).toBe('disabled')
+      expect(waiting.$sdk_debug_replay_pending_trigger_conditions).toEqual([
+        'trigger group "Purchases": event condition not matched',
+      ])
+
+      client.capture('purchase')
+      await waitForNativePluginEvaluation(client)
+      await waitForNativeChain(client)
+
+      advanceClock(WINDOW_MS)
+      const recording = captureOne(client, '$screen').properties
+      expect(recording.$recording_status).toBe('active')
+      expect(recording.$sdk_debug_replay_matched_recording_trigger_groups).toEqual([
+        { id: 'g1', name: 'Purchases', matched: true, sampled: true },
+      ])
+      expect(recording.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
+    })
+
+    it('sends the trigger group keys with the throttled bundle, not on every event', async () => {
+      currentSessionRecording = { version: 2, triggerGroups: [everyoneGroup], endpoint: '/s/' }
+      await warmup()
+
+      const client = await readyClient({ enableSessionReplay: true })
+      const custom = captureOne(client).properties
+      expect(custom.$recording_status).toBe('active')
+      expect(V2_KEYS.filter((key) => custom[key] !== undefined)).toEqual([])
+
+      const carrier = captureOne(client, '$screen').properties
+      expect(carrier.$sdk_debug_replay_remote_trigger_matching_config).toBe('v2_trigger_groups')
+      expect(carrier.$sdk_debug_replay_trigger_groups_count).toBe(1)
+      expect(carrier.$sdk_debug_replay_matched_recording_trigger_groups).toEqual([
+        { id: 'g1', name: 'Everyone', matched: true, sampled: true },
+      ])
+
+      const withinWindow = captureOne(client, '$screen').properties
+      expect(V2_KEYS.filter((key) => withinWindow[key] !== undefined)).toEqual([])
+
+      advanceClock(WINDOW_MS)
+      const nextWindow = captureOne(client, '$screen').properties
+      expect(V2_KEYS.filter((key) => nextWindow[key] !== undefined)).toEqual(V2_KEYS)
+    })
   })
 
   // The flags-driven pause is the stop path that owns the JS recording flag; the manual

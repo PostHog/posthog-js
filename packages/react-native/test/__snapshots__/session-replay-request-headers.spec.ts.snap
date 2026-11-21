@@ -2,7 +2,9 @@
 
 exports[`PostHog RN session replay request headers > snapshots the complete legacy native start envelope 1`] = `
 {
-  "cachedConfig": {},
+  "cachedConfig": {
+    "endpoint": "/s/",
+  },
   "pluginConfig": {
     "androidDebouncerDelayMs": 1000,
     "captureLog": true,
@@ -54,7 +56,9 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
       "pushIdentityProviderEnabled": false,
     },
     "sessionReplay": {
-      "decideReplayConfig": {},
+      "decideReplayConfig": {
+        "endpoint": "/s/",
+      },
       "enabled": true,
       "sdkReplayConfig": {
         "androidDebouncerDelayMs": 1000,

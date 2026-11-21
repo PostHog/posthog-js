@@ -41,6 +41,17 @@ export const setupFetch = (): void => {
   })
 }
 
+// Serves a v1 session replay config on every response, so replay starts once the first remote config lands.
+export const setupReplayV1ConfigFetch = (): void => {
+  ;(globalThis as any).window = (globalThis as any).window ?? {}
+  ;(globalThis as any).window.fetch = vi.fn(async (url: unknown) => {
+    const res = String(url).includes('flags')
+      ? { featureFlags: {}, sessionRecording: { endpoint: '/s/' } }
+      : { status: 'ok', sessionRecording: { endpoint: '/s/' } }
+    return { status: 200, json: () => Promise.resolve(res) }
+  })
+}
+
 export const waitForExpect = async (timeout: number, fn: () => void): Promise<void> => {
   const start = Date.now()
   while (true) {
