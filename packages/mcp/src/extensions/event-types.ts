@@ -19,6 +19,7 @@ export const MCPAnalyticsEventType = {
   mcpPromptsList: 'mcp:prompts/list',
   mcpResourcesList: 'mcp:resources/list',
   mcpResourcesRead: 'mcp:resources/read',
+  mcpRequestRejected: 'mcp:request_rejected',
   mcpToolsCall: 'mcp:tools/call',
   mcpToolsList: 'mcp:tools/list',
   mcpUnknownTool: 'mcp:unknown_tool',

@@ -433,6 +433,11 @@ export interface Event {
    * (the `$exception_list` entry's `type`).
    */
   errorType?: string
+  /**
+   * Failure message → `$mcp_error_message` for an event with no `error`, such as a
+   * request rejected before the MCP server ran. An `error`'s own message wins.
+   */
+  errorMessage?: string
   eventId?: string
   /** posthog-node per-event options → the payload's `options`. */
   eventOptions?: Record<string, JsonType>
@@ -459,6 +464,8 @@ export interface Event {
   ipAddress?: string
   isError?: boolean
   listedToolNames?: string[]
+  /** JSON-RPC method of a rejected request → `$mcp_method`, e.g. `tools/call`. */
+  method?: string
   parameters?: unknown
   properties?: JsonRecord | null
   /**
@@ -774,6 +781,37 @@ export interface InitializeCaptureData extends McpCaptureCommon {
   response?: unknown
   /** Wall-clock duration → `$mcp_duration_ms`. */
   durationMs?: number
+}
+
+/**
+ * Payload for {@link PostHogMCP.captureRejectedRequest} and the standalone
+ * `captureRejectedRequest()`. Emits `$mcp_request_rejected` for a request your HTTP layer
+ * refused before the MCP server ran: a 401 for a missing or expired token, a 403 for a
+ * missing scope or a bad `Origin`, a 429 from a rate limiter, or a 400 for an unsupported
+ * `MCP-Protocol-Version` or mismatched headers.
+ */
+export interface RejectedRequestCaptureData extends McpCaptureCommon {
+  /** HTTP status the request was rejected with → `$mcp_error_status`. */
+  status: number
+  /**
+   * Coarse category → `$mcp_error_type`. Defaults from `status`: `auth` for 401 and 403,
+   * `rate_limited` for 429, `protocol` for any other 4xx, and none otherwise.
+   */
+  errorType?: string
+  /** Short, non-sensitive reason → `$mcp_error_message`, e.g. `token_expired`. */
+  reason?: string
+  /** JSON-RPC method, if the body was read far enough to know it → `$mcp_method`. */
+  method?: string
+  /** Tool name of a rejected `tools/call` → `$mcp_tool_name`. */
+  toolName?: string
+  /** → `$mcp_server_name`. */
+  serverName?: string
+  /** → `$mcp_server_version`. */
+  serverVersion?: string
+  /** → `$mcp_client_name`, when the request carried client info. */
+  clientName?: string
+  /** → `$mcp_client_version`. */
+  clientVersion?: string
 }
 
 /** Payload for {@link PostHogMCP.captureToolsList}. Emits `$mcp_tools_list`. */

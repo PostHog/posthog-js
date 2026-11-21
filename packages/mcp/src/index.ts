@@ -263,7 +263,7 @@ export {
 // majors carry HTTP headers in different places and shapes. This reads either.
 export { getRequestHeaders } from './extensions/request-headers'
 export { getToolInputProperties } from './extensions/tool-input'
-export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
+export { PostHogMCP, captureRejectedRequest, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
@@ -295,6 +295,7 @@ export type {
   PreparedToolResult,
   PrepareToolCallOptions,
   PrepareToolListOptions,
+  RejectedRequestCaptureData,
   RequestHeaderBag,
   ShouldRecordInputKeyFn,
   ToolCallCaptureData,
