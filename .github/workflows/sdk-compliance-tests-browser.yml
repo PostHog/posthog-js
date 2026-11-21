@@ -27,7 +27,7 @@ jobs:
       contents: read
       packages: read
       pull-requests: write
-    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@75fb00092c6045daef60c30acc10ac83afefbfe9
+    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@69e5b8809eaf310de9cb5917f1fd5db884a119f9
     with:
       adapter-dockerfile: compliance/browser/Dockerfile
       adapter-context: .
