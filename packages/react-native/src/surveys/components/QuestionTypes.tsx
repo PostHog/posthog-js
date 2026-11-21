@@ -15,6 +15,7 @@ import {
 import {
   defaultRatingLabelOpacity,
   getContrastingTextColor,
+  getFontFamily,
   getMaxFontSizeMultiplier,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -129,6 +130,7 @@ export function OpenTextQuestion({
               backgroundColor: appearance.inputBackground,
               color: appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground),
               borderColor: appearance.borderColor,
+              fontFamily: getFontFamily(appearance),
             },
           ]}
           multiline
@@ -149,7 +151,10 @@ export function OpenTextQuestion({
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'validationHint')}
             style={[
               styles.validationHint,
-              { color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor) },
+              {
+                color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
+                fontFamily: getFontFamily(appearance),
+              },
             ]}
           >
             {requirementsHint}
@@ -280,6 +285,7 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              fontFamily: getFontFamily(appearance),
               flexShrink: 1,
               maxWidth: question.upperBoundLabel ? '50%' : undefined,
               textAlign: 'left',
@@ -292,6 +298,7 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              fontFamily: getFontFamily(appearance),
               flexShrink: 1,
               maxWidth: question.lowerBoundLabel ? '50%' : undefined,
               textAlign: 'right',
@@ -338,7 +345,10 @@ export function RatingButton({
       ]}
       onPress={() => setActiveNumber(num)}
     >
-      <Text maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingNumber')} style={{ color: textColor }}>
+      <Text
+        maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingNumber')}
+        style={{ color: textColor, fontFamily: getFontFamily(appearance) }}
+      >
         {num}
       </Text>
     </TouchableOpacity>
@@ -440,7 +450,7 @@ export function MultipleChoiceQuestion({
               >
                 <Text
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'choice')}
-                  style={{ flexGrow: 1, color: choiceTextColor }}
+                  style={{ flexGrow: 1, color: choiceTextColor, fontFamily: getFontFamily(appearance) }}
                 >
                   {choice}
                   {isOpenChoice ? ':' : ''}
@@ -452,7 +462,7 @@ export function MultipleChoiceQuestion({
                   ref={openEndedInputRef}
                   accessibilityLabel={choice}
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
-                  style={styles.openEndedInput}
+                  style={[styles.openEndedInput, { fontFamily: getFontFamily(appearance) }]}
                   onFocus={selectOpenChoice}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)

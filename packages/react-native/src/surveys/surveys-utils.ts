@@ -125,11 +125,29 @@ export type SurveyAppearanceTheme = Omit<
   | 'inputTextColor'
   | 'placeholder'
   | 'maxFontSizeMultiplier'
+  | 'fontFamily'
 > & {
   textColor?: string
   inputTextColor?: string
   placeholder?: string
   maxFontSizeMultiplier?: SurveyAppearance['maxFontSizeMultiplier']
+  fontFamily?: string
+}
+
+/**
+ * The font family for survey text, or `undefined` for the system font.
+ *
+ * The survey editor offers web font names and defaults to `inherit`. `inherit`
+ * and `system-ui` are CSS keywords, not fonts an app can bundle, so both mean
+ * the system font here. Any other name must be a font bundled with the app; one
+ * that isn't falls back to the system font on its own.
+ */
+export function getFontFamily(appearance: Pick<SurveyAppearance, 'fontFamily'>): string | undefined {
+  const fontFamily = typeof appearance.fontFamily === 'string' ? appearance.fontFamily.trim() : ''
+  if (!fontFamily || fontFamily === 'inherit' || fontFamily === 'system-ui') {
+    return undefined
+  }
+  return fontFamily
 }
 
 /**

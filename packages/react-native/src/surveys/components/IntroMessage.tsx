@@ -6,6 +6,7 @@ import {
   closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getFontFamily,
   getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
@@ -27,6 +28,7 @@ export function IntroMessage({
   onStart: () => void
 }): JSX.Element {
   const textColor = getContrastingTextColor(appearance.backgroundColor)
+  const fontFamily = getFontFamily(appearance)
 
   return (
     <View>
@@ -34,7 +36,7 @@ export function IntroMessage({
         {header ? (
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
-            style={[styles.introMessageHeader, { color: textColor }]}
+            style={[styles.introMessageHeader, { color: textColor, fontFamily }]}
           >
             {header}
           </Text>
@@ -42,7 +44,7 @@ export function IntroMessage({
         {shouldRenderDescription(description, contentType) && (
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
-            style={{ color: textColor, opacity: defaultDescriptionOpacity }}
+            style={{ color: textColor, opacity: defaultDescriptionOpacity, fontFamily }}
           >
             {description}
           </Text>

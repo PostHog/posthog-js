@@ -295,10 +295,14 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         ...defaultSurveyAppearance,
       }
     }
+    const { fontFamily: surveyFontFamily, ...surveyAppearanceWithoutFont } =
+      translatedActiveSurvey.survey.appearance ?? {}
+    const surveyInheritsFont = typeof surveyFontFamily !== 'string' || ['', 'inherit'].includes(surveyFontFamily.trim())
     return {
       ...builtInSurveyAppearance,
       ...defaultSurveyAppearance,
-      ...(translatedActiveSurvey.survey.appearance ?? {}),
+      ...surveyAppearanceWithoutFont,
+      ...(surveyInheritsFont ? {} : { fontFamily: surveyFontFamily }),
       // If submitButtonColor is set by PostHog, ensure submitButtonTextColor is also set to contrast
       ...(translatedActiveSurvey.survey.appearance?.submitButtonColor
         ? {
