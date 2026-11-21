@@ -1178,12 +1178,14 @@ globally inactive flags, so the result depends on which evaluation path is avail
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
 | `distinctId` | `string` | The user's distinct ID |
-| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
+| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `personPropertyKeysKnownAbsent?`: `string`[]; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
 | `options.disableGeoip?` | `boolean` | - |
 | `options.groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.groups?` | `Record`\<`string`, `string`\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
 | `options.personProperties?` | `Properties` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 | `options.sendFeatureFlagEvents?` | `boolean` | - |
 
 #### Returns
@@ -1244,12 +1246,14 @@ Get the payload for a feature flag.
 | `key` | `string` | The feature flag key |
 | `distinctId` | `string` | The user's distinct ID |
 | `matchValue?` | `FeatureFlagValue` | Optional match value to get payload for |
-| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
+| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `personPropertyKeysKnownAbsent?`: `string`[]; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
 | `options.disableGeoip?` | `boolean` | - |
 | `options.groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.groups?` | `Record`\<`string`, `string`\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
 | `options.personProperties?` | `Properties` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 | `options.sendFeatureFlagEvents?` | `boolean` | **Deprecated** THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. |
 
 #### Returns
@@ -1860,12 +1864,14 @@ Check if a feature flag is enabled for a specific user.
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
 | `distinctId` | `string` | The user's distinct ID |
-| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
+| `options?` | \{ `disableGeoip?`: `boolean`; `groupProperties?`: `Record`\<`string`, `Properties`\>; `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `personPropertyKeysKnownAbsent?`: `string`[]; `sendFeatureFlagEvents?`: `boolean`; \} | Optional configuration for flag evaluation |
 | `options.disableGeoip?` | `boolean` | - |
 | `options.groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.groups?` | `Record`\<`string`, `string`\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
 | `options.personProperties?` | `Properties` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 | `options.sendFeatureFlagEvents?` | `boolean` | - |
 
 #### Returns
@@ -2773,9 +2779,11 @@ Sync with plugin-server/src/types.ts
 | ------ | ------ | ------ |
 | <a id="disablegeoip"></a> `disableGeoip?` | `boolean` | - |
 | <a id="groupproperties"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| <a id="grouppropertykeysknownabsent"></a> `groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | Group property keys you know each group doesn't have, by group type name. A key applies only to its own group type. Otherwise follows `personPropertyKeysKnownAbsent`, with the 1000-key limit applying to each group type's list. |
 | <a id="groups"></a> `groups?` | `Record`\<`string`, `string`\> | - |
 | <a id="onlyevaluatelocally"></a> `onlyEvaluateLocally?` | `boolean` | Skip remote fallback and omit flags that local definitions cannot resolve. |
 | <a id="personproperties"></a> `personProperties?` | `Properties` | - |
+| <a id="personpropertykeysknownabsent"></a> `personPropertyKeysKnownAbsent?` | `string`[] | Person property keys you know this person doesn't have. Local evaluation treats a listed key as absent even when `personProperties` has a value for it, so `is_not_set` and the negated operators match and every other operator doesn't, without a `/flags` request. The list is sent to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer list throws an error and no flags are evaluated. |
 
 ### `BasicSurveyQuestion`
 
@@ -4048,11 +4056,13 @@ Get the current context data.
 | ------ | ------ | ------ |
 | `key` | `string` | the unique key of your feature flag |
 | `distinctId` | `string` | the current unique id |
-| `options?` | \{ `groupProperties?`: `Record`\<`string`, `Properties`\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `sendFeatureFlagEvents?`: `boolean`; \} | - |
+| `options?` | \{ `groupProperties?`: `Record`\<`string`, `Properties`\>; `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `personPropertyKeysKnownAbsent?`: `string`[]; `sendFeatureFlagEvents?`: `boolean`; \} | - |
 | `options.groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.groups?` | `Record`\<`string`, `string`\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
 | `options.personProperties?` | `Properties` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 | `options.sendFeatureFlagEvents?` | `boolean` | - |
 
 ###### Returns
@@ -4258,11 +4268,13 @@ Useful for edge environments where the usual queue-based sending is not preferab
 | ------ | ------ | ------ |
 | `key` | `string` | the unique key of your feature flag |
 | `distinctId` | `string` | the current unique id |
-| `options?` | \{ `groupProperties?`: `Record`\<`string`, `Properties`\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `sendFeatureFlagEvents?`: `boolean`; \} | - |
+| `options?` | \{ `groupProperties?`: `Record`\<`string`, `Properties`\>; `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `groups?`: `Record`\<`string`, `string`\>; `onlyEvaluateLocally?`: `boolean`; `personProperties?`: `Properties`; `personPropertyKeysKnownAbsent?`: `string`[]; `sendFeatureFlagEvents?`: `boolean`; \} | - |
 | `options.groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.groups?` | `Record`\<`string`, `string`\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
 | `options.personProperties?` | `Properties` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 | `options.sendFeatureFlagEvents?` | `boolean` | - |
 
 ###### Returns
@@ -5233,12 +5245,14 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="flagkeys"></a> `flagKeys?` | `string`[] |
-| <a id="groupproperties-1"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> |
-| <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` |
-| <a id="personproperties-1"></a> `personProperties?` | `Properties` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="flagkeys"></a> `flagKeys?` | `string`[] | - |
+| <a id="groupproperties-1"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> | - |
+| <a id="grouppropertykeysknownabsent-1"></a> `groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | Group property keys you know each group doesn't have, by group type name. A key applies only to its own group type. Otherwise follows `personPropertyKeysKnownAbsent`, with the 1000-key limit applying to each group type's list. |
+| <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` | - |
+| <a id="personproperties-1"></a> `personProperties?` | `Properties` | - |
+| <a id="personpropertykeysknownabsent-1"></a> `personPropertyKeysKnownAbsent?` | `string`[] | Person property keys you know this person doesn't have. Local evaluation treats a listed key as absent even when `personProperties` has a value for it, so `is_not_set` and the negated operators match and every other operator doesn't, without a `/flags` request. The list is sent to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer list throws an error and no flags are evaluated. |
 
 ### `SendTemplateEmailOptions`
 

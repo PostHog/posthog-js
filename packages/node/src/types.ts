@@ -59,6 +59,20 @@ export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Properties
   groupProperties?: Record<string, Properties>
+  /**
+   * Person property keys you know this person doesn't have. Local evaluation treats a listed key as
+   * absent even when `personProperties` has a value for it, so `is_not_set` and the negated
+   * operators match and every other operator doesn't, without a `/flags` request. The list is sent
+   * to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer
+   * list throws an error and no flags are evaluated.
+   */
+  personPropertyKeysKnownAbsent?: string[]
+  /**
+   * Group property keys you know each group doesn't have, by group type name. A key applies only to
+   * its own group type. Otherwise follows `personPropertyKeysKnownAbsent`, with the 1000-key limit
+   * applying to each group type's list.
+   */
+  groupPropertyKeysKnownAbsent?: Record<string, string[]>
   flagKeys?: string[]
 }
 
@@ -183,6 +197,20 @@ export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
   personProperties?: Properties
   groupProperties?: Record<string, Properties>
+  /**
+   * Person property keys you know this person doesn't have. Local evaluation treats a listed key as
+   * absent even when `personProperties` has a value for it, so `is_not_set` and the negated
+   * operators match and every other operator doesn't, without a `/flags` request. The list is sent
+   * to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer
+   * list throws an error and no flags are evaluated.
+   */
+  personPropertyKeysKnownAbsent?: string[]
+  /**
+   * Group property keys you know each group doesn't have, by group type name. A key applies only to
+   * its own group type. Otherwise follows `personPropertyKeysKnownAbsent`, with the 1000-key limit
+   * applying to each group type's list.
+   */
+  groupPropertyKeysKnownAbsent?: Record<string, string[]>
   /** Skip remote fallback and omit flags that local definitions cannot resolve. */
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
@@ -897,6 +925,8 @@ export interface IPostHog {
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
    * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
    * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
+   * @param personPropertyKeysKnownAbsent optional - person property keys known to be absent. See {@link BaseFlagEvaluationOptions}.
+   * @param groupPropertyKeysKnownAbsent optional - group property keys known to be absent, by group type. See {@link BaseFlagEvaluationOptions}.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
@@ -912,6 +942,8 @@ export interface IPostHog {
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
@@ -928,6 +960,8 @@ export interface IPostHog {
    * @param groups optional - what groups are currently active (group analytics). Required if the flag depends on groups.
    * @param personProperties optional - what person properties are known. Used to compute flags locally when definitions are available.
    * @param groupProperties optional - what group properties are known. Used to compute flags locally when definitions are available.
+   * @param personPropertyKeysKnownAbsent optional - person property keys known to be absent. See {@link BaseFlagEvaluationOptions}.
+   * @param groupPropertyKeysKnownAbsent optional - group property keys known to be absent, by group type. See {@link BaseFlagEvaluationOptions}.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
@@ -943,6 +977,8 @@ export interface IPostHog {
       groups?: Record<string, string>
       personProperties?: Properties
       groupProperties?: Record<string, Properties>
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }

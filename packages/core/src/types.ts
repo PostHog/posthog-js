@@ -597,6 +597,16 @@ export type FeatureFlagRequestError = {
 }
 
 /**
+ * Property keys the caller knows are absent, sent to `/flags` as `person_property_keys_known_absent`
+ * and `group_property_keys_known_absent`. Empty lists are not sent.
+ */
+export type PostHogFlagsKnownAbsentPropertyKeys = {
+  personPropertyKeysKnownAbsent?: readonly string[]
+  /** Keyed by group type name. */
+  groupPropertyKeysKnownAbsent?: Readonly<Record<string, readonly string[]>>
+}
+
+/**
  * Result type for getFlags that includes either a successful response or error information.
  */
 export type GetFlagsResult =
