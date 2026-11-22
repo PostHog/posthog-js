@@ -6,6 +6,13 @@ import type { EmailFetchOptions } from '../../emails/emails'
 const APP_HOST = 'https://us.posthog.com'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const SEND_PATH = '/api/messaging/send/email/'
+const BATCH_PATH = '/api/messaging/send/email_batch/'
+const STATUS_BY_KEY_PATH = '/api/messaging/emails/status/?'
+const BATCH_MAX_RECIPIENTS = 100
+const BATCH_MAX_BODY_BYTES = 5 * 1024 * 1024
+const BATCH_REFUSED_FIELDS = new Set(['scheduled_at', 'cc', 'bcc', 'attachments', 'to', 'distinct_id'])
+const RECIPIENT_FIELDS = new Set(['to', 'distinct_id', 'message_data', 'idempotency_key'])
+const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,255}$/
 const STORAGE_ORIGIN = 'https://email-files.s3.example.com'
 const UPLOAD_ROUTE = 'POST /api/projects/{project_id}/messaging/attachments/uploads/'
 const MESSAGE_LIMIT_BYTES = 40_000_000
@@ -51,10 +58,11 @@ const MESSAGE_TOO_LARGE_WHY =
 const MESSAGE_TOO_LARGE_FIX =
   'Keep the email under 40 MB after Base64 encoding, about 29 MB of files: send fewer or smaller files, or link to large files from the email body.'
 
-export type Route = 'uploads' | 'storage' | 'send'
+export type Route = 'uploads' | 'storage' | 'send' | 'batch' | 'status'
 
 export type Fault =
   | { status: number; code?: string; message?: string; page?: string }
+  | 'none'
   | 'network error'
   | 'hang'
   | 'lost reply'
@@ -75,6 +83,12 @@ export interface FakePostHogOptions {
   answersSchedule?: boolean
   /** How far from the requested time a PostHog schedules the email, to model one that shifts it. */
   scheduleShiftMs?: number
+  /** False for a PostHog without the batch route. */
+  batchRoute?: boolean
+  /** True for a project that isn't on the intake batch sends need yet. */
+  batchUnavailable?: boolean
+  /** Addresses on the project's suppression list. */
+  suppressed?: string[]
 }
 
 export interface QueuedAttachment {
@@ -144,12 +158,17 @@ class Refused extends Error {
 export class FakePostHog {
   readonly emails: QueuedEmail[] = []
   readonly writes: Uint8Array[] = []
+  /** The recipients of each batch request PostHog read, and its body size in bytes. */
+  readonly batches: { recipients: number; bytes: number }[] = []
+  /** How many requests reached each route, answered or not. */
+  readonly requests: Record<Route, number> = { uploads: 0, storage: 0, send: 0, batch: 0, status: 0 }
 
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
   private readonly sends = new Map<string, { body: string; answer: Json }>()
-  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [] }
+  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], batch: [], status: [] }
+  private readonly keyedIds = new Map<string, string>()
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
 
@@ -167,6 +186,9 @@ export class FakePostHog {
       storageRedirectOrigin: '',
       answersSchedule: true,
       scheduleShiftMs: 0,
+      batchRoute: true,
+      batchUnavailable: false,
+      suppressed: [],
       ...options,
     }
   }
@@ -185,6 +207,9 @@ export class FakePostHog {
 
   readonly fetch = async (url: string, options: EmailFetchOptions): Promise<PostHogFetchResponse> => {
     const route = this.routeOf(url)
+    if (route) {
+      this.requests[route] += 1
+    }
     const fault = route ? this.faults[route].shift() : undefined
     if (fault === 'network error') {
       throw new TypeError('fetch failed', { cause: new Error('ECONNRESET') })
@@ -232,6 +257,10 @@ export class FakePostHog {
         return this.store(url, options)
       case 'send':
         return this.send(options)
+      case 'batch':
+        return this.batch(options)
+      case 'status':
+        return this.statusByKey(url, options)
       default:
         return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
@@ -243,6 +272,12 @@ export class FakePostHog {
     }
     if (url === this.options.appHost + SEND_PATH) {
       return 'send'
+    }
+    if (url === this.options.appHost + BATCH_PATH) {
+      return 'batch'
+    }
+    if (url.startsWith(this.options.appHost + STATUS_BY_KEY_PATH)) {
+      return 'status'
     }
     const { storageOrigin, storageRedirectOrigin } = this.options
     return url.startsWith(`${storageOrigin}/`) || (storageRedirectOrigin && url.startsWith(`${storageRedirectOrigin}/`))
@@ -412,6 +447,96 @@ export class FakePostHog {
       this.sends.set(key, { body: raw, answer })
     }
     return { status: 202, body: answer }
+  }
+
+  private batch(options: PostHogFetchOptions): Answer {
+    this.authenticate(options)
+    if (!this.options.batchRoute) {
+      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
+    }
+    const raw = typeof options.body === 'string' ? options.body : ''
+    const bytes = new TextEncoder().encode(raw).byteLength
+    if (bytes > BATCH_MAX_BODY_BYTES) {
+      throw refusal(413, 'invalid_request', 'content_too_large', null, { detail: 'The request body is over 5 MiB.' })
+    }
+    if (this.options.batchUnavailable) {
+      throw refusal(409, 'invalid_request', 'batch_unavailable', null, {
+        detail: "Batch sends aren't available for this project yet, so PostHog didn't send any email.",
+      })
+    }
+    const { recipients, ...shared } = jsonBody(options)
+    const refused = Object.keys(shared).find((field) => BATCH_REFUSED_FIELDS.has(field))
+    if (refused !== undefined) {
+      throw invalidField(refused, "A batch send doesn't take this field.")
+    }
+    if (!Array.isArray(recipients) || recipients.length === 0 || recipients.length > BATCH_MAX_RECIPIENTS) {
+      throw invalidField('recipients', `Send 1 to ${BATCH_MAX_RECIPIENTS} recipients.`)
+    }
+    const keys = new Set<string>()
+    recipients.forEach((recipient: unknown, index) => {
+      const attr = `recipients__${index}`
+      if (!isRecord(recipient)) {
+        throw invalidField(attr, 'Expected a dictionary of items.')
+      }
+      refuseUnknown(recipient, RECIPIENT_FIELDS, `${attr}__`)
+      const key = recipient.idempotency_key
+      if (typeof key !== 'string' || !IDEMPOTENCY_KEY.test(key) || keys.has(key)) {
+        throw invalidField(`${attr}__idempotency_key`, 'Give each recipient its own valid key.')
+      }
+      if ('template_key' in shared && recipient.message_data !== undefined) {
+        throw invalidField('recipients', "A batch with `template_key` can't carry per-recipient `message_data`.")
+      }
+      keys.add(key)
+    })
+    this.batches.push({ recipients: recipients.length, bytes })
+    return { status: 200, body: { results: recipients.map((recipient: Json) => this.batchSlot(shared, recipient)) } }
+  }
+
+  private batchSlot(shared: Json, recipient: Json): Json {
+    const key = recipient.idempotency_key as string
+    const messageId = this.keyedIds.get(key) ?? globalThis.crypto.randomUUID()
+    this.keyedIds.set(key, messageId)
+    const { to, distinct_id, message_data } = recipient
+    const slotError = (status: number, code: string, detail: string): Json => ({
+      message_id: messageId,
+      error: { code, detail, status, retryable: false },
+    })
+    if (typeof to !== 'string' || !/^[^@\s{}]+@[^@\s{}]+$/.test(to)) {
+      return slotError(400, 'invalid_recipient', 'Enter a valid email address.')
+    }
+    const email =
+      'template_id' in shared
+        ? templateEmail({
+            ...shared,
+            to,
+            ...(distinct_id !== undefined && { distinct_id }),
+            message_data: { ...(isRecord(shared.message_data) ? shared.message_data : {}), ...(message_data as Json) },
+          })
+        : this.codeEmail({ ...shared, to, ...(distinct_id !== undefined && { distinct_id }) })
+    const fingerprint = JSON.stringify(email)
+    const earlier = this.sends.get(key)
+    if (earlier) {
+      return earlier.body === fingerprint
+        ? { message_id: messageId, status: 'queued', replayed: true }
+        : slotError(422, 'idempotency_key_reused', 'This idempotency key was used for a different email.')
+    }
+    if (this.options.suppressed.includes(to)) {
+      return slotError(422, 'recipient_suppressed', 'This address is on the suppression list.')
+    }
+    this.emails.push({ id: messageId, ...email })
+    this.sends.set(key, { body: fingerprint, answer: { message_id: messageId } })
+    return { message_id: messageId, status: 'queued', replayed: false }
+  }
+
+  private statusByKey(url: string, options: PostHogFetchOptions): Answer {
+    this.authenticate(options)
+    const key = new URL(url).searchParams.get('idempotency_key') ?? ''
+    const email = this.emails.find(({ id }) => id === this.keyedIds.get(key))
+    if (!email) {
+      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
+    }
+    const now = new Date().toISOString()
+    return { status: 200, body: { id: email.id, status: 'queued', created_at: now, status_at: now, reason: null } }
   }
 
   private codeEmail(body: Json): Omit<QueuedEmail, 'id'> {

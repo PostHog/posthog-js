@@ -11,6 +11,14 @@ export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export type {
+  BatchCodeEmailOptions,
+  BatchEmailBase,
+  BatchEmailOptions,
+  BatchEmailRecipient,
+  BatchEmailRecipientResult,
+  BatchEmailResponse,
+  BatchEmailResult,
+  BatchTemplateEmailOptions,
   CodeEmailForm,
   EmailAttachment,
   EmailDeliveryStatus,

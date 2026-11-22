@@ -197,6 +197,79 @@ export interface SendEmailResult {
  */
 export type SendEmailResponse = { data: SendEmailResult; error: null } | { data: null; error: EmailError }
 
+/** What every batch takes, whatever its form. The recipients, and what is per recipient, go in `recipients`. */
+export interface BatchEmailBase {
+  /** Overrides the client's `emailRequestMaxRetries` for each request of this batch. `0` turns retries off. */
+  maxRetries?: number
+  to?: never
+  distinctId?: never
+  idempotencyKey?: never
+  scheduledAt?: never
+}
+
+export type BatchTemplateEmailOptions = BatchEmailBase &
+  TemplateEmailForm &
+  Without<CodeEmailFields & { html: string; text: string; react: EmailReactElement }>
+
+export type BatchCodeEmailOptions = BatchEmailBase &
+  CodeEmailForm & { cc?: never; bcc?: never; attachments?: never } & Without<TemplateEmailForm>
+
+/**
+ * The email every recipient of `posthog.emails.batch()` gets: a template made in PostHog, or content from your code.
+ * A batch takes no copies, files or schedule. Send those with `posthog.emails.send()`.
+ */
+export type BatchEmailOptions = BatchTemplateEmailOptions | BatchCodeEmailOptions
+
+/** One recipient of `posthog.emails.batch()`, who gets their own email. */
+export interface BatchEmailRecipient {
+  /** One recipient email address. */
+  to: string
+  /** The recipient's distinct ID in your product, as for `send()`. */
+  distinctId?: string
+  /** Only with `templateId`: values merged over the batch's `templateData` for this recipient. */
+  templateData?: Record<string, unknown>
+  /**
+   * As for `send()`, 1 to 255 visible ASCII characters, and unique within the batch. Without it, the client makes a
+   * UUID that covers its own retries. Pass a key derived from what the email is for, such as `digest:2026-11-23:user_1`,
+   * so sending the batch again queues no second email for a recipient PostHog already accepted.
+   */
+  idempotencyKey?: string
+}
+
+/**
+ * What happened to one recipient of a batch:
+ *
+ * - `queued`: PostHog queued the email.
+ * - `failed`: PostHog didn't queue the email, and `error` says why.
+ * - `unconfirmed`: the client can't tell whether PostHog queued the email, because a request for it went unanswered.
+ *   `error` holds the latest answer. Read the email with `emails.get(id)` when `id` is set, or send it again with the
+ *   same `idempotencyKey`, which queues no second email.
+ * - `not_attempted`: the batch stopped before it sent this recipient.
+ */
+export type BatchEmailRecipientResult = {
+  /** The recipient's position in the `recipients` you passed. */
+  index: number
+  to: string
+  /** The key the email went out with, yours or the one the client made. */
+  idempotencyKey: string
+} & (
+  | { status: 'queued'; id: string; replayed: boolean }
+  | { status: 'failed' | 'unconfirmed'; id: string | null; error: EmailError }
+  | { status: 'not_attempted' }
+)
+
+/** What happened to each recipient of a batch, in the order you passed them. */
+export interface BatchEmailResult {
+  results: BatchEmailRecipientResult[]
+  warnings: EmailWarning[]
+}
+
+/**
+ * What `posthog.emails.batch()` resolves to. Exactly one of `data` and `error` is set. The promise does not reject.
+ * An `error` after the first request carries `error.results`.
+ */
+export type BatchEmailResponse = { data: BatchEmailResult; error: null } | { data: null; error: EmailError }
+
 /**
  * What happened to an email. Later SDK versions can see values this list does not have yet.
  *
@@ -280,6 +353,19 @@ export interface Emails {
    * an unavailable service are retried with the same idempotency key.
    */
   send(options: SendEmailOptions): Promise<SendEmailResponse>
+
+  /**
+   * Queue one email per recipient, from one transactional email template or one piece of content from your code.
+   *
+   * The client sends the recipients 100 at a time, at most 4 MiB per request, one request after another, and retries
+   * each request with the same idempotency keys, so a retry queues no second email. Each attempt waits up to 45
+   * seconds for PostHog's answer, or longer when the client's `emailRequestTimeoutMs` is longer.
+   *
+   * Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused
+   * recipient doesn't fail the batch. When a request fails after its retries, the batch stops, and `error.results`
+   * says what happened to each recipient so far.
+   */
+  batch(email: BatchEmailOptions, recipients: BatchEmailRecipient[]): Promise<BatchEmailResponse>
 
   /**
    * Read the status of an email that `send()` queued, for 30 days after the send.

@@ -15,8 +15,21 @@ import {
   hashedFiles,
   refuseRenderedMessageOverLimit,
 } from './attachments'
+import {
+  BatchBody,
+  IDEMPOTENCY_KEY_PATTERN,
+  type Slot,
+  prepareRecipients,
+  recordAnswer,
+  recordFailure,
+  resultOf,
+} from './batch'
 import { EmailError } from './errors'
+import { type Reply, parseJson, replyError, replyFields, text, warningsOf } from './replies'
 import type {
+  BatchEmailOptions,
+  BatchEmailRecipient,
+  BatchEmailResponse,
   CodeEmailForm,
   EmailPreferences,
   EmailReactElement,
@@ -35,6 +48,8 @@ import type {
 } from './types'
 
 const SEND_PATH = '/api/messaging/send/email/'
+const BATCH_PATH = '/api/messaging/send/email_batch/'
+const STATUS_BY_KEY_PATH = '/api/messaging/emails/status/'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const STATUS_PATH = '/api/messaging/emails/{messageId}/'
 const PREFERENCES_PATH = '/api/messaging/preferences/'
@@ -48,8 +63,9 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
+/** How long each batch attempt waits for PostHog, which checks and queues up to 100 emails before it answers. */
+const BATCH_ATTEMPT_TIMEOUT_MS = 45_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const SCHEDULED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-](\d{2}):(\d{2}))$/
 const CLOUD_APP_HOST_SET: ReadonlySet<string> = new Set([US_APP_HOST, EU_APP_HOST])
@@ -63,9 +79,12 @@ type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
   name: 'templateId' | 'templateKey'
+  call: 'send' | 'batch'
   fields: ReadonlySet<string>
   why: string
   howToSend: string
+  /** How to fix a field neither form of the call takes, by field. */
+  fixes?: Record<string, string>
 }
 
 const SHARED_FIELDS: EveryField<SendEmailBase> = {
@@ -93,15 +112,43 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
+  call: 'send',
   fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
   why: "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
   howToSend: 'send a template made in PostHog with templateId',
 }
 const CODE_FORM: SendForm = {
   name: 'templateKey',
+  call: 'send',
   fields: fieldSet(SHARED_FIELDS, CODE_FIELDS),
   why: 'A send with templateKey takes its content from your code.',
   howToSend: 'send content from your code with templateKey',
+}
+const BATCH_ONLY_FIELDS = { maxRetries: true }
+const SEND_ONLY_FIX = 'Remove {field}, or send each email with emails.send().'
+const PER_RECIPIENT_FIX = 'Set {field} on each recipient in recipients.'
+const BATCH_FIXES: Record<string, string> = {
+  to: PER_RECIPIENT_FIX,
+  distinctId: PER_RECIPIENT_FIX,
+  idempotencyKey: PER_RECIPIENT_FIX,
+  scheduledAt: SEND_ONLY_FIX,
+  cc: SEND_ONLY_FIX,
+  bcc: SEND_ONLY_FIX,
+  attachments: SEND_ONLY_FIX,
+}
+const BATCH_TEMPLATE_FORM: SendForm = {
+  ...TEMPLATE_FORM,
+  call: 'batch',
+  fields: fieldSet(BATCH_ONLY_FIELDS, TEMPLATE_FIELDS),
+  howToSend: 'send a batch of a template made in PostHog with templateId',
+  fixes: BATCH_FIXES,
+}
+const BATCH_CODE_FORM: SendForm = {
+  ...CODE_FORM,
+  call: 'batch',
+  fields: new Set([...fieldSet(BATCH_ONLY_FIELDS, CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES))),
+  howToSend: 'send a batch of content from your code with templateKey',
+  fixes: BATCH_FIXES,
 }
 
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
@@ -147,12 +194,6 @@ interface Upload {
   field: string
 }
 
-interface Reply {
-  status: number
-  text: string
-  retryAfterMs?: number
-}
-
 /**
  * Sends one transactional email per call to the messaging send API on the app host, reads the
  * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
@@ -170,6 +211,10 @@ export class EmailSender implements Emails {
 
   send(options: SendEmailOptions, ...unexpected: unknown[]): Promise<SendEmailResponse> {
     return this.track(this.sendUntracked(options, unexpected))
+  }
+
+  batch(email: BatchEmailOptions, recipients: BatchEmailRecipient[]): Promise<BatchEmailResponse> {
+    return this.track(this.batchUntracked(email, recipients))
   }
 
   get(id: string): Promise<GetEmailResponse> {
@@ -231,6 +276,91 @@ export class EmailSender implements Emails {
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
+    }
+  }
+
+  private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
+    let slots: Slot[] = []
+    let connection: { appHost: string; secretKey: string } | undefined
+    try {
+      const prepared = prepareBatchEmail(email, this.config.maxRetries)
+      slots = prepareRecipients(recipients, prepared.templateForm)
+      const { appHost, secretKey } = this.connect(
+        'no email was sent',
+        'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
+      )
+      const content =
+        prepared.react === undefined
+          ? prepared.content
+          : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
+      connection = { appHost, secretKey }
+      const body = new BatchBody(content)
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const timeoutMs = Math.max(BATCH_ATTEMPT_TIMEOUT_MS, this.config.requestTimeoutMs)
+      const warnings: EmailWarning[] = []
+      for (const chunk of body.chunks(slots)) {
+        for (let attempt = 0; ; attempt++) {
+          const sent = chunk.filter(({ open }) => open)
+          let failure: EmailError | undefined
+          try {
+            const reply = await this.request(appHost + BATCH_PATH, 'POST', headers, body.of(sent), undefined, timeoutMs)
+            warnings.push(...recordAnswer(sent, reply))
+          } catch (caught) {
+            failure = asRequestError(caught)
+            recordFailure(sent, failure)
+          }
+          if (!chunk.some(({ open }) => open)) {
+            break
+          }
+          const delayMs = failure
+            ? retryDelayMs(failure, attempt, prepared.maxRetries)
+            : attempt < prepared.maxRetries
+              ? backoffMs(attempt)
+              : undefined
+          if (delayMs === undefined) {
+            if (failure) {
+              throw failure
+            }
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+      }
+      await this.recoverMessageIds(slots, appHost, secretKey)
+      for (const warning of warnings) {
+        this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
+      }
+      return { data: { results: slots.map(resultOf), warnings }, error: null }
+    } catch (caught) {
+      const error = asEmailError(caught, 'Sending the batch failed unexpectedly.')
+      if (!connection) {
+        return { data: null, error }
+      }
+      await this.recoverMessageIds(slots, connection.appHost, connection.secretKey)
+      return { data: null, error: withResults(error, slots) }
+    }
+  }
+
+  /**
+   * Reads, by idempotency key, the message ID of each unconfirmed recipient whose request went unanswered, so the
+   * caller can read what happened to the email. One try each; the first failure other than not found ends the reads.
+   */
+  private async recoverMessageIds(slots: Slot[], appHost: string, secretKey: string): Promise<void> {
+    const headers = this.headers(secretKey, {})
+    for (const slot of slots) {
+      if (slot.status !== 'unconfirmed' || slot.id !== null) {
+        continue
+      }
+      try {
+        const url = `${appHost}${STATUS_BY_KEY_PATH}?idempotency_key=${encodeURIComponent(slot.idempotencyKey)}`
+        const reply = await this.request(url, 'GET', headers)
+        if (reply.status === 404) {
+          continue
+        }
+        slot.id = parseStatusReply(reply).id
+      } catch {
+        return
+      }
     }
   }
 
@@ -414,14 +544,7 @@ export class EmailSender implements Emails {
       try {
         return await attemptOnce()
       } catch (caught) {
-        error =
-          caught instanceof EmailError
-            ? caught
-            : new EmailError({
-                code: 'network_error',
-                message: 'The request to PostHog failed.',
-                cause: caught,
-              })
+        error = asRequestError(caught)
       }
       const delayMs = retryDelayMs(error, attempt, maxRetries)
       if (delayMs === undefined) {
@@ -437,10 +560,10 @@ export class EmailSender implements Emails {
     method: 'GET' | 'POST' | 'PUT',
     headers: Record<string, string>,
     body?: string | Uint8Array<ArrayBuffer>,
-    redirect?: 'manual'
+    redirect?: 'manual',
+    timeoutMs = this.config.requestTimeoutMs
   ): Promise<Reply> {
     const controller = new AbortController()
-    const timeoutMs = this.config.requestTimeoutMs
     let timer: ReturnType<typeof setTimeout>
     // `fetch` is injectable and may ignore the abort signal, so both phases race the deadline.
     // A plain timer, not an unref'd one: an injected fetch may hold no handle, and the process must stay up until
@@ -625,6 +748,33 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
+function prepareBatchEmail(
+  options: BatchEmailOptions,
+  defaultMaxRetries: number
+): { content: Record<string, unknown>; react?: EmailReactElement; templateForm: boolean; maxRetries: number } {
+  const send: UncheckedSend = options ?? {}
+  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
+    })
+  }
+  const templateForm = send.templateKey === undefined
+  const content = templateForm
+    ? templateContent(send, undefined, BATCH_TEMPLATE_FORM, BATCH_CODE_FORM)
+    : codeContent(send, undefined, BATCH_CODE_FORM, BATCH_TEMPLATE_FORM).content
+  const { maxRetries } = send
+  if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
+    throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
+  }
+  return {
+    content: snapshotOf(content),
+    react: isReactElement(send.react) ? send.react : undefined,
+    templateForm,
+    maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+  }
+}
+
 function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
@@ -637,7 +787,12 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): SendCon
     : codeContent(send, distinctId)
 }
 
-function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+function templateContent(
+  send: UncheckedSend,
+  distinctId: string | undefined,
+  form = TEMPLATE_FORM,
+  otherForm = CODE_FORM
+): Record<string, unknown> {
   const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
@@ -648,7 +803,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(send, form, otherForm)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -656,7 +811,12 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   }
 }
 
-function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+function codeContent(
+  send: UncheckedSend,
+  distinctId: string | undefined,
+  form = CODE_FORM,
+  otherForm = TEMPLATE_FORM
+): SendContent {
   const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
@@ -665,7 +825,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       'templateKey'
     )
   }
-  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(send, form, otherForm)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -794,9 +954,10 @@ function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: Sen
   if (field === undefined) {
     return
   }
-  const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
+  const message = `A ${form.call} with ${form.name} doesn't take ${field}, so no email was sent.`
   if (!otherForm.fields.has(field)) {
-    throw new EmailError({ code: 'invalid_form', message, field, fix: `Remove ${field} and send again.` })
+    const fix = form.fixes?.[field]?.replace('{field}', field) ?? `Remove ${field} and send again.`
+    throw new EmailError({ code: 'invalid_form', message, field, fix })
   }
   throw new EmailError({
     code: 'invalid_form',
@@ -835,14 +996,6 @@ function resolveAppHost(host: string, appHost: string | undefined): string | und
   return CLOUD_APP_HOSTS[removeTrailingSlash(host)]
 }
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
-
 function readRetryAfter(response: PostHogFetchResponse): number | undefined {
   try {
     // The full wait, not the shared five minute cap: callers schedule their own retry from it, and the retry ceiling
@@ -851,17 +1004,6 @@ function readRetryAfter(response: PostHogFetchResponse): number | undefined {
   } catch {
     return undefined
   }
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined
-}
-
-function replyFields(payload: unknown): Record<string, unknown> {
-  return (payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) as Record<
-    string,
-    unknown
-  >
 }
 
 function parseSendReply(
@@ -879,19 +1021,7 @@ function parseSendReply(
         statusCode: status,
       })
     }
-    const warnings: EmailWarning[] = []
-    if (Array.isArray(fields.warnings)) {
-      for (const warning of fields.warnings) {
-        if (warning !== null && typeof warning === 'object') {
-          warnings.push({
-            code: text(warning.code) ?? 'warning',
-            message: text(warning.detail) ?? text(warning.message) ?? '',
-            fix: text(warning.fix),
-          })
-        }
-      }
-    }
-    const result = { id, replayed: fields.replayed === true, warnings }
+    const result = { id, replayed: fields.replayed === true, warnings: warningsOf(fields) }
     return scheduledAtMs === undefined
       ? result
       : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status, ownKey) }
@@ -1020,21 +1150,30 @@ function parsePreferencesReply({ status, text: body, retryAfterMs }: Reply): Ema
   return { to, allMarketing, topics: topics as Record<string, boolean> }
 }
 
-function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
-  return new EmailError({
-    code: text(fields.code) ?? 'api_error',
-    message: text(fields.detail) ?? `PostHog answered HTTP ${status}.`,
-    statusCode: status,
-    why: text(fields.why),
-    fix: text(fields.fix),
-    docsUrl: text(fields.docs_url),
-    field: text(fields.attr),
-    retryAfterMs,
-  })
-}
-
 function asEmailError(error: unknown, message: string): EmailError {
   return error instanceof EmailError ? error : new EmailError({ code: 'unexpected_error', message, cause: error })
+}
+
+function asRequestError(error: unknown): EmailError {
+  return error instanceof EmailError
+    ? error
+    : new EmailError({ code: 'network_error', message: 'The request to PostHog failed.', cause: error })
+}
+
+function withResults(error: EmailError, slots: Slot[]): EmailError {
+  return new EmailError({
+    code: error.code,
+    message: error.message,
+    statusCode: error.statusCode,
+    why: error.why,
+    fix: error.fix,
+    docsUrl: error.docsUrl,
+    field: error.field,
+    retryAfterMs: error.retryAfterMs,
+    messageId: error.messageId,
+    results: slots.map(resultOf),
+    cause: error.cause,
+  })
 }
 
 function isRetryable(error: EmailError): boolean {
@@ -1063,6 +1202,9 @@ function retryDelayMs(error: EmailError, attempt: number, maxRetries: number): n
   if (error.retryAfterMs !== undefined && error.retryAfterMs > MAX_RETRY_DELAY_MS) {
     return undefined
   }
-  const backoffMs = Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
-  return Math.max(backoffMs, error.retryAfterMs ?? 0)
+  return Math.max(backoffMs(attempt), error.retryAfterMs ?? 0)
+}
+
+function backoffMs(attempt: number): number {
+  return Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
 }
