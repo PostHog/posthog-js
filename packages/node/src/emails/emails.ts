@@ -136,6 +136,8 @@ interface PreparedSend {
   idempotencyKey: string
   maxRetries: number
   scheduledAtMs?: number
+  /** Whether the caller passed the idempotency key, so they can send again with it. */
+  ownKey: boolean
 }
 
 interface Upload {
@@ -217,7 +219,11 @@ export class EmailSender implements Emails {
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body), prepared.scheduledAtMs)
+        parseSendReply(
+          await this.request(appHost + SEND_PATH, 'POST', headers, body),
+          prepared.scheduledAtMs,
+          prepared.ownKey
+        )
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -534,6 +540,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
     scheduledAtMs,
+    ownKey: idempotencyKey !== undefined,
   }
 }
 
@@ -859,7 +866,8 @@ function replyFields(payload: unknown): Record<string, unknown> {
 
 function parseSendReply(
   { status, text: body, retryAfterMs }: Reply,
-  scheduledAtMs: number | undefined
+  scheduledAtMs: number | undefined,
+  ownKey: boolean
 ): SendEmailResult {
   const fields = replyFields(parseJson(body))
   if (status >= 200 && status < 300) {
@@ -886,7 +894,7 @@ function parseSendReply(
     const result = { id, replayed: fields.replayed === true, warnings }
     return scheduledAtMs === undefined
       ? result
-      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status) }
+      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status, ownKey) }
   }
   throw replyError(fields, status, retryAfterMs)
 }
@@ -895,7 +903,8 @@ function confirmedSchedule(
   fields: Record<string, unknown>,
   scheduledAtMs: number,
   messageId: string,
-  status: number
+  status: number,
+  ownKey: boolean
 ): string | null {
   if (fields.status === 'queued' && fields.scheduled_at === null) {
     return null
@@ -909,7 +918,9 @@ function confirmedSchedule(
     statusCode: status,
     messageId,
     field: 'scheduledAt',
-    fix: 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey returns the same answer.',
+    fix: ownKey
+      ? 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey returns the same answer.'
+      : "Read what happened to the email with emails.get(error.messageId). Don't send it again without your own idempotencyKey, or PostHog queues a second email.",
   })
 }
 

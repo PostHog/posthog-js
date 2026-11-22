@@ -1547,6 +1547,25 @@ describe('emails', () => {
 
     it.each([
       [
+        'with your idempotencyKey, to send it again with that key',
+        { idempotencyKey: 'trial-end:user_1' },
+        /again with the same idempotencyKey/,
+      ],
+      [
+        'without an idempotencyKey, not to send it again without one',
+        {},
+        /without your own idempotencyKey.*second email/,
+      ],
+    ])('tells a caller of an unconfirmed schedule %s', async (_name, key, fix) => {
+      againstPostHog({ answersSchedule: false })
+
+      const { error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z', ...key }))
+
+      expect(error?.fix).toMatch(fix)
+    })
+
+    it.each([
+      [
         'a PostHog that refuses scheduledAt',
         { fieldsNotTaken: ['scheduled_at'] },
         '2026-11-23T09:00:00Z',
