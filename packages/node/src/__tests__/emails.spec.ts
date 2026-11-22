@@ -1695,7 +1695,38 @@ describe('emails', () => {
         id: expect.stringMatching(UUID_V4),
         error: { code: 'recipient_suppressed', statusCode: 422 },
       })
+      expect(data?.results[0]).toMatchObject({ error: expect.not.objectContaining({ messageId: expect.anything() }) })
       expect(postHog.emails.map(({ to }) => to)).toEqual(['ada@example.com'])
+    })
+
+    it('sends a recipient again when PostHog could not tell whether it queued their email', async () => {
+      const postHog = againstPostHog({ unavailableFor: { 'ada@example.com': 1 } })
+
+      const { data } = await settle(
+        posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }, { to: 'bob@example.com' }])
+      )
+
+      expect(data?.results).toMatchObject([
+        { status: 'queued', replayed: false },
+        { status: 'queued', replayed: false },
+      ])
+      expect(postHog.batches.map(({ recipients }) => recipients)).toEqual([2, 1])
+      expect(postHog.emails.map(({ to }) => to)).toEqual(['bob@example.com', 'ada@example.com'])
+    })
+
+    it('keeps a recipient unconfirmed while PostHog still cannot tell after the retries', async () => {
+      const postHog = againstPostHog({ unavailableFor: { 'ada@example.com': 3 } })
+
+      const { data, error } = await settle(
+        posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }, { to: 'bob@example.com' }])
+      )
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([
+        { status: 'unconfirmed', id: expect.stringMatching(UUID_V4), error: { code: 'delivery_unavailable' } },
+        { status: 'queued' },
+      ])
+      expect(postHog.requests.batch).toBe(3)
     })
 
     it('sends the same keys again after a lost answer, so each recipient gets one email', async () => {
@@ -1788,9 +1819,11 @@ describe('emails', () => {
       void pending.finally(() => (settled = true))
       await vi.advanceTimersByTimeAsync(44_000)
       const settledBefore = settled
+      await vi.advanceTimersByTimeAsync(1_001)
+      const settledAfter = settled
       const { error } = await settle(pending)
 
-      expect(settledBefore).toBe(false)
+      expect([settledBefore, settledAfter]).toEqual([false, true])
       expect(error?.results).toMatchObject([{ status: 'unconfirmed' }])
     })
 
@@ -1814,7 +1847,17 @@ describe('emails', () => {
       expect(error?.message).toMatch(/^Batch sends are unavailable on this server/)
     })
 
-    it('logs and returns the warnings PostHog gave the batch', async () => {
+    it('says when a proxy without the batch route answers with a page', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 404, page: '<html>Not Found</html>' })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
+
+      expect(error).toMatchObject({ code: 'not_found', statusCode: 404 })
+      expect(error?.message).toMatch(/^Batch sends are unavailable on this server/)
+    })
+
+    it('returns the warnings PostHog gave the batch', async () => {
       makeClient()
       replies = [
         {

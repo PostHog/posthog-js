@@ -89,6 +89,8 @@ export interface FakePostHogOptions {
   batchUnavailable?: boolean
   /** Addresses on the project's suppression list. */
   suppressed?: string[]
+  /** How many batch requests answer `delivery_unavailable` for an address before PostHog queues its email. */
+  unavailableFor?: Record<string, number>
 }
 
 export interface QueuedAttachment {
@@ -189,6 +191,7 @@ export class FakePostHog {
       batchRoute: true,
       batchUnavailable: false,
       suppressed: [],
+      unavailableFor: {},
       ...options,
     }
   }
@@ -497,9 +500,9 @@ export class FakePostHog {
     const messageId = this.keyedIds.get(key) ?? globalThis.crypto.randomUUID()
     this.keyedIds.set(key, messageId)
     const { to, distinct_id, message_data } = recipient
-    const slotError = (status: number, code: string, detail: string): Json => ({
+    const slotError = (status: number, code: string, detail: string, retryable = false): Json => ({
       message_id: messageId,
-      error: { code, detail, status, retryable: false },
+      error: { code, detail, status, retryable },
     })
     if (typeof to !== 'string' || !/^[^@\s{}]+@[^@\s{}]+$/.test(to)) {
       return slotError(400, 'invalid_recipient', 'Enter a valid email address.')
@@ -522,6 +525,10 @@ export class FakePostHog {
     }
     if (this.options.suppressed.includes(to)) {
       return slotError(422, 'recipient_suppressed', 'This address is on the suppression list.')
+    }
+    if ((this.options.unavailableFor[to] ?? 0) > 0) {
+      this.options.unavailableFor[to] -= 1
+      return slotError(503, 'delivery_unavailable', "PostHog couldn't tell whether it queued this email.", true)
     }
     this.emails.push({ id: messageId, ...email })
     this.sends.set(key, { body: fingerprint, answer: { message_id: messageId } })

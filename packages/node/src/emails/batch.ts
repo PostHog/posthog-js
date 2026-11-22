@@ -204,7 +204,6 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
       statusCode: typeof error.status === 'number' ? error.status : undefined,
-      ...(id && { messageId: id }),
     })
     slot.id = id ?? slot.id
     slot.status = slot.unanswered || retryable ? 'unconfirmed' : 'failed'
@@ -275,9 +274,10 @@ function batchReplyError(
       fix: 'Send each email with emails.send() until batch sends are on for the project.',
     })
   }
-  if (status === 404 && error.code === 'not_found' && error.field === undefined) {
+  // A 404 that names no field and no other code, JSON or a proxy's page, means the route is missing.
+  if (status === 404 && error.field === undefined && (error.code === 'not_found' || error.code === 'api_error')) {
     return new EmailError({
-      code: error.code,
+      code: 'not_found',
       statusCode: status,
       message: 'Batch sends are unavailable on this server, so PostHog sent no email of this request.',
       fix: 'Send each email with emails.send(), or update your PostHog.',
@@ -290,26 +290,8 @@ function invalid(code: string, message: string, field: string): EmailError {
   return new EmailError({ code, message, field })
 }
 
-/** The UTF-8 size of a string, without encoding it. */
+const encoder = new TextEncoder()
+
 function utf8Bytes(value: string): number {
-  let bytes = 0
-  for (let i = 0; i < value.length; i++) {
-    const unit = value.charCodeAt(i)
-    if (unit < 0x80) {
-      bytes += 1
-    } else if (unit < 0x800) {
-      bytes += 2
-    } else if (unit >= 0xd800 && unit < 0xdc00 && i + 1 < value.length) {
-      const next = value.charCodeAt(i + 1)
-      if (next >= 0xdc00 && next < 0xe000) {
-        bytes += 4
-        i++
-      } else {
-        bytes += 3
-      }
-    } else {
-      bytes += 3
-    }
-  }
-  return bytes
+  return encoder.encode(value).byteLength
 }
