@@ -328,7 +328,9 @@ export class EmailSender implements Emails {
           await new Promise((resolve) => setTimeout(resolve, delayMs))
         }
       }
-      await this.recoverMessageIds(slots, appHost, secretKey)
+      if (!this.hooks.isClosed()) {
+        await this.recoverMessageIds(slots, appHost, secretKey)
+      }
       this.logWarnings(warnings)
       return { data: { results: slots.map(resultOf), warnings }, error: null }
     } catch (caught) {

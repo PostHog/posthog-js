@@ -1875,6 +1875,35 @@ describe('emails', () => {
       ])
     })
 
+    it('reads no statuses once the client shuts down during its last request', async () => {
+      const urls: string[] = []
+      let release!: () => void
+      const held = new Promise<void>((resolve) => (release = resolve))
+      makeClient({
+        fetch: async (url: string) => {
+          urls.push(url)
+          if (url.includes('/api/messaging/emails/status/')) {
+            return fakeReply(404, { code: 'not_found', detail: 'Not found.' })
+          }
+          if (urls.length === 1) {
+            return fakeReply(503, { code: 'delivery_unavailable', detail: 'Try again.' })
+          }
+          await held
+          return fakeReply(200, { results: [{}] })
+        },
+      })
+
+      const pending = posthog.emails.batch({ ...WELCOME, maxRetries: 1 }, recipientsTo(1))
+      await vi.advanceTimersByTimeAsync(1_000)
+      const shutdown = posthog.shutdown()
+      release()
+      const { data } = await settle(pending)
+      await shutdown
+
+      expect(urls.filter((url) => url.includes('/status/'))).toEqual([])
+      expect(data?.results).toMatchObject([{ status: 'unconfirmed', id: null }])
+    })
+
     const queuedWithWarning = (count: number): Reply => ({
       status: 200,
       body: {
