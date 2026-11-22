@@ -352,7 +352,7 @@ export class EmailSender implements Emails {
       throw new EmailError({
         code: 'client_closed',
         message: 'The PostHog client shut down during the batch, so it sent no more requests.',
-        fix: 'Send the recipients that are not_attempted or unconfirmed again with the same idempotencyKey.',
+        fix: "Send every recipient that isn't queued again with the same idempotencyKey: PostHog queues no second email for a key it has.",
       })
     }
   }

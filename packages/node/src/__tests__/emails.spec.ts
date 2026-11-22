@@ -1890,6 +1890,7 @@ describe('emails', () => {
       await shutdown
 
       expect(error).toMatchObject({ code: 'client_closed' })
+      expect(error?.fix).toMatch(/every recipient that isn't queued/)
       expect(postHog.requests).toMatchObject({ batch: 1, status: 0 })
       expect(error?.results?.map(({ status }) => status)).toEqual([
         ...Array<string>(100).fill('unconfirmed'),
