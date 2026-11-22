@@ -100,23 +100,27 @@ export class RetryQueue {
         }
     }
 
-    clearReplayHandoff(): void {
+    clearReplayRetries(): void {
         this._replayGeneration++
         this._queue = this._queue.filter(({ requestOptions }) => requestOptions.batchKey !== 'recordings')
+        this.clearStoredReplayHandoff()
+    }
+
+    clearStoredReplayHandoff(): void {
         sessionStore._remove(this._replayHandoffKey)
     }
 
     private _restoreReplayHandoff(options: RetriableRequestWithOptions): void {
         this._checkedReplayHandoff = true
         if (!this._canHandOffReplay()) {
-            sessionStore._remove(this._replayHandoffKey)
+            this.clearStoredReplayHandoff()
             return
         }
         const saved = sessionStore._parse(this._replayHandoffKey)
         if (!saved) {
             return
         }
-        sessionStore._remove(this._replayHandoffKey)
+        this.clearStoredReplayHandoff()
         if (
             !options.batchGroup ||
             saved.batchGroup !== options.batchGroup ||
@@ -166,7 +170,7 @@ export class RetryQueue {
         this._queue = []
         this._areWeOnline = true
         if (!this._canHandOffReplay()) {
-            sessionStore._remove(this._replayHandoffKey)
+            this.clearStoredReplayHandoff()
         }
         this.resume()
     }

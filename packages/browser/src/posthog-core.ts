@@ -3944,7 +3944,7 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
-        this._retryQueue?.clearReplayHandoff()
+        this._retryQueue?.clearReplayRetries()
         const bootstrapSessionID = bootstrap?.sessionID
         this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
         this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
@@ -4931,8 +4931,10 @@ export class PostHog implements PostHogInterface {
     private _sync_opt_out_with_persistence(): boolean {
         const persistenceDisabled = this._is_persistence_disabled()
 
-        if (persistenceDisabled || this.consent.isOptedOut()) {
-            this._retryQueue?.clearReplayHandoff()
+        if (this.consent.isOptedOut()) {
+            this._retryQueue?.clearReplayRetries()
+        } else if (persistenceDisabled) {
+            this._retryQueue?.clearStoredReplayHandoff()
         }
 
         // Release what console capture is holding as soon as capturing is off, rather

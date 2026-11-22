@@ -1,4 +1,5 @@
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
+import { createPosthogInstance } from './helpers/posthog-instance'
 import { sessionStore } from '../storage'
 import { assignableWindow } from '../utils/globals'
 import type { TransportCallback } from '../request'
@@ -138,10 +139,35 @@ describe('RetryQueue', () => {
 
         it('discards a handoff when consent or identity is reset', () => {
             failAndLeave('reload')
-            retryQueue.clearReplayHandoff()
+            retryQueue.clearReplayRetries()
             loadNextPage()
             expect(mockTransport).toHaveBeenCalledTimes(2)
         })
+
+        it.each(['queued batch', 'in-flight direct upload'])(
+            'preserves in-memory retries after a config update with persistence disabled (%s)',
+            async (scenario) => {
+                const posthog = await createPosthogInstance(undefined, { disable_persistence: true })
+                const snapshot = { event: '$snapshot', uuid: 'before-config-update' }
+                const isQueued = scenario === 'queued batch'
+                const data = isQueued ? [snapshot] : snapshot
+                try {
+                    posthog._send_retriable_request({ batchKey: 'recordings', url: '/s/', data })
+                    const respond = mockTransport.mock.lastCall![0].callback
+                    if (isQueued) respond({ statusCode: 503 })
+                    expect(posthog._retryQueue?.length).toBe(isQueued ? 1 : 0)
+
+                    posthog.set_config({ capture_pageview: false })
+                    if (!isQueued) respond({ statusCode: 503 })
+                    fastForwardTimeAndRunTimer(60_000)
+                    expect(mockTransport).toHaveBeenCalledWith(
+                        expect.objectContaining({ url: '/s/?retry_count=1', data })
+                    )
+                } finally {
+                    await posthog.shutdown()
+                }
+            }
+        )
 
         it('discards an expired handoff', () => {
             failAndLeave('reload')
