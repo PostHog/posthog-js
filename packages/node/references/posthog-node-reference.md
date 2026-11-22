@@ -1081,7 +1081,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="messageid"></a> `messageId?` | `readonly` | `string` | The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
-| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent a request: what happened to each recipient, in the order you passed them. Recipients after the failed request are `not_attempted`. | - |
+| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent a request: what happened to each recipient, in the order you passed them. Recipients after the failed request are `not_attempted`, except one too large for any request, which is `failed` with `content_too_large` from the start. | - |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |

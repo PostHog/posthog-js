@@ -52,7 +52,8 @@ export class EmailError extends Error {
   readonly messageId?: string
   /**
    * Only from `emails.batch()`, once it sent a request: what happened to each recipient, in the order you passed
-   * them. Recipients after the failed request are `not_attempted`.
+   * them. Recipients after the failed request are `not_attempted`, except one too large for any request, which is
+   * `failed` with `content_too_large` from the start.
    */
   readonly results?: BatchEmailRecipientResult[]
 

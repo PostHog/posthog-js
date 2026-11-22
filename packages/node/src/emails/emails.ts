@@ -282,6 +282,7 @@ export class EmailSender implements Emails {
   private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
     let slots: Slot[] = []
     let connection: { appHost: string; secretKey: string } | undefined
+    const warnings: EmailWarning[] = []
     try {
       const prepared = prepareBatchEmail(email, this.config.maxRetries)
       slots = prepareRecipients(recipients, prepared.templateForm)
@@ -297,14 +298,14 @@ export class EmailSender implements Emails {
       const body = new BatchBody(content)
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
       const timeoutMs = Math.max(BATCH_ATTEMPT_TIMEOUT_MS, this.config.requestTimeoutMs)
-      const warnings: EmailWarning[] = []
       for (const chunk of body.chunks(slots)) {
         for (let attempt = 0; ; attempt++) {
+          this.stopIfClosed()
           const sent = chunk.filter(({ open }) => open)
           let failure: EmailError | undefined
           try {
             const reply = await this.request(appHost + BATCH_PATH, 'POST', headers, body.of(sent), undefined, timeoutMs)
-            warnings.push(...recordAnswer(sent, reply))
+            addWarnings(warnings, recordAnswer(sent, reply))
           } catch (caught) {
             failure = asRequestError(caught)
             recordFailure(sent, failure)
@@ -323,21 +324,41 @@ export class EmailSender implements Emails {
             }
             break
           }
+          this.stopIfClosed()
           await new Promise((resolve) => setTimeout(resolve, delayMs))
         }
       }
       await this.recoverMessageIds(slots, appHost, secretKey)
-      for (const warning of warnings) {
-        this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
-      }
+      this.logWarnings(warnings)
       return { data: { results: slots.map(resultOf), warnings }, error: null }
     } catch (caught) {
       const error = asEmailError(caught, 'Sending the batch failed unexpectedly.')
       if (!connection) {
         return { data: null, error }
       }
-      await this.recoverMessageIds(slots, connection.appHost, connection.secretKey)
+      this.logWarnings(warnings)
+      // A client that shut down sends nothing more, the status reads included.
+      if (!this.hooks.isClosed()) {
+        await this.recoverMessageIds(slots, connection.appHost, connection.secretKey)
+      }
       return { data: null, error: withResults(error, slots) }
+    }
+  }
+
+  /** Ends a batch once the client shuts down, so it sends no more requests and returns what happened so far. */
+  private stopIfClosed(): void {
+    if (this.hooks.isClosed()) {
+      throw new EmailError({
+        code: 'client_closed',
+        message: 'The PostHog client shut down during the batch, so it sent no more requests.',
+        fix: 'Send the recipients that are not_attempted or unconfirmed again with the same idempotencyKey.',
+      })
+    }
+  }
+
+  private logWarnings(warnings: EmailWarning[]): void {
+    for (const warning of warnings) {
+      this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
     }
   }
 
@@ -1207,4 +1228,13 @@ function retryDelayMs(error: EmailError, attempt: number, maxRetries: number): n
 
 function backoffMs(attempt: number): number {
   return Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
+}
+
+/** Adds the warnings not yet in the list: PostHog repeats a warning about the whole batch on each request. */
+function addWarnings(warnings: EmailWarning[], more: EmailWarning[]): void {
+  for (const warning of more) {
+    if (!warnings.some(({ code, message }) => code === warning.code && message === warning.message)) {
+      warnings.push(warning)
+    }
+  }
 }
