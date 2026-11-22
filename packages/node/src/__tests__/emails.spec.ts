@@ -1552,9 +1552,9 @@ describe('emails', () => {
         /again with the same idempotencyKey/,
       ],
       [
-        'without an idempotencyKey, not to send it again without one',
+        'without an idempotencyKey, not to send it again',
         {},
-        /without your own idempotencyKey.*second email/,
+        /Don't send it again: the client chose this send's idempotencyKey/,
       ],
     ])('tells a caller of an unconfirmed schedule %s', async (_name, key, fix) => {
       againstPostHog({ answersSchedule: false })
