@@ -1079,6 +1079,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="docsurl"></a> `docsUrl?` | `readonly` | `string` | - | - |
 | <a id="field"></a> `field?` | `readonly` | `string` | The request field the error is about, when PostHog named one. | - |
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
+| <a id="messageid"></a> `messageId?` | `readonly` | `string` | The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
@@ -3068,10 +3069,11 @@ A file sent with the email.
 
 ### `EmailDeliveryStatus`
 
-> **EmailDeliveryStatus** = `"queued"` \| `"sent"` \| `"failed"` \| `"delivered"` \| `"bounced"` \| `"complained"`
+> **EmailDeliveryStatus** = `"scheduled"` \| `"queued"` \| `"sent"` \| `"failed"` \| `"delivered"` \| `"bounced"` \| `"complained"`
 
 What happened to an email. Later SDK versions can see values this list does not have yet.
 
+- `scheduled`: the email waits for the time `send()` scheduled it for.
 - `queued`: the email waits to go out.
 - `sent`: PostHog handed the email to the email provider.
 - `failed`: the email was not sent, and `reason` says why.
@@ -3094,6 +3096,7 @@ A coarse category of the failure, for code that branches on the kind of failure 
 | <a id="property-field"></a> `field?` | `string` |
 | <a id="property-fix"></a> `fix?` | `string` |
 | <a id="property-message"></a> `message` | `string` |
+| <a id="property-messageid"></a> `messageId?` | `string` |
 | <a id="property-retryafterms"></a> `retryAfterMs?` | `number` |
 | <a id="property-statuscode"></a> `statusCode?` | `number` |
 | <a id="property-why"></a> `why?` | `string` |
@@ -5200,6 +5203,7 @@ What every send takes, whatever its form.
 | <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
+| <a id="property-scheduledat"></a> `scheduledAt?` | `string` \| `Date` | When to send the email, at most 7 days ahead: a `Date`, or an ISO 8601 time with an offset, such as `2026-12-01T09:00:00Z` or `2026-12-01T10:00:00+01:00`. A time that has passed sends the email now. PostHog keeps the time to the millisecond, and the client rounds a finer time up to the next millisecond. Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends nothing and returns an error with code `scheduling_unsupported`. Work out a relative time, such as an hour from now, once, and send the same time when you send again with the same `idempotencyKey`. |
 | <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
@@ -5225,6 +5229,7 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | ------ | ------ | ------ |
 | <a id="property-id-1"></a> `id` | `string` | The queued email's message ID. |
 | <a id="property-replayed"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
+| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `null` | Only for a send with `scheduledAt`: the time the email waits for, as an ISO 8601 UTC timestamp, or `null` when the time had passed and the email goes out now. |
 | <a id="property-warnings"></a> `warnings` | `EmailWarning`[] | - |
 
 ### `SendFeatureFlagsOptions`
