@@ -364,7 +364,7 @@ export class EmailSender implements Emails {
   }
 
   /**
-   * Reads, by idempotency key, the message ID of each unconfirmed recipient whose request went unanswered, so the
+   * Reads, by idempotency key, the message ID of each unconfirmed recipient PostHog gave none, so the
    * caller can read what happened to the email. One try each; the first failure other than not found ends the reads.
    */
   private async recoverMessageIds(slots: Slot[], appHost: string, secretKey: string): Promise<void> {

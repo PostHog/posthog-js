@@ -1857,6 +1857,28 @@ describe('emails', () => {
       expect(error?.message).toMatch(/^Batch sends are unavailable on this server/)
     })
 
+    it('keeps a recipient PostHog could not confirm unconfirmed when a later request is refused', async () => {
+      const postHog = againstPostHog({ unavailableFor: { 'ada@example.com': 1 } })
+      postHog.failNext('batch', 'none', { status: 429, code: 'quota_limited' })
+
+      const { error } = await settle(
+        posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }, { to: 'bob@example.com' }])
+      )
+
+      expect(error).toMatchObject({ code: 'quota_limited' })
+      expect(error?.results).toMatchObject([{ status: 'unconfirmed' }, { status: 'queued' }])
+    })
+
+    it('keeps recipients unconfirmed while PostHog says their keys are still in flight', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', ...Array(3).fill({ status: 409, code: 'idempotency_key_in_flight' }))
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({ code: 'idempotency_key_in_flight' })
+      expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
+    })
+
     it('stops sending once the client shuts down, and returns what happened to every recipient', async () => {
       const postHog = againstPostHog()
       postHog.failNext('batch', { status: 503 })
@@ -1912,29 +1934,33 @@ describe('emails', () => {
       },
     })
 
-    const loggedWarnings = (): ReturnType<typeof vi.fn> =>
-      vi.spyOn((posthog as unknown as { _logger: { warn: (message: string) => void } })._logger, 'warn')
+    const clientWithLoggedWarnings = (): ReturnType<typeof vi.fn> => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      makeClient()
+      posthog.debug(true)
+      return warn
+    }
 
     it('logs and returns a warning PostHog repeats on each request once', async () => {
-      makeClient()
-      const warn = loggedWarnings()
+      const warn = clientWithLoggedWarnings()
       replies = [queuedWithWarning(100), queuedWithWarning(1)]
 
       const { data } = await settle(posthog.emails.batch(WELCOME, recipientsTo(101)))
 
       expect(data?.warnings).toEqual([{ code: 'sandbox_sender', message: 'From the test sender.', fix: undefined }])
-      expect(warn.mock.calls).toEqual([['PostHog email warning sandbox_sender: From the test sender.']])
+      expect(warn.mock.calls).toEqual([['[PostHog]', 'PostHog email warning sandbox_sender: From the test sender.']])
+      warn.mockRestore()
     })
 
     it('logs the warnings of the requests PostHog answered when a later one fails', async () => {
-      makeClient()
-      const warn = loggedWarnings()
+      const warn = clientWithLoggedWarnings()
       replies = [queuedWithWarning(100), { status: 400, body: { code: 'invalid_form', detail: 'Bad form.' } }]
 
       const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(101)))
 
       expect(error).toMatchObject({ code: 'invalid_form' })
-      expect(warn.mock.calls).toEqual([['PostHog email warning sandbox_sender: From the test sender.']])
+      expect(warn.mock.calls).toEqual([['[PostHog]', 'PostHog email warning sandbox_sender: From the test sender.']])
+      warn.mockRestore()
     })
 
     it('returns the warnings PostHog gave the batch', async () => {

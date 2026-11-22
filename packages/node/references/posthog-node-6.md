@@ -2843,9 +2843,10 @@ What happened to one recipient of a batch:
 
 - `queued`: PostHog queued the email.
 - `failed`: PostHog didn't queue the email, and `error` says why.
-- `unconfirmed`: the client can't tell whether PostHog queued the email, because a request for it went unanswered or
-  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, after the retries. `error` holds the
-  latest answer. Read the email with `emails.get(id)` when `id` is set, or send it again with the
+- `unconfirmed`: the client can't tell whether PostHog queued the email, because a request for it went unanswered,
+  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, or its key was still in flight
+  (`idempotency_key_in_flight`) after the retries. A later refusal doesn't change it, since the email may still be
+  queued. `error` holds the latest answer. Read the email with `emails.get(id)` when `id` is set, or send it again with the
   same `idempotencyKey`, which queues no second email.
 - `not_attempted`: the batch stopped before it sent this recipient.
 

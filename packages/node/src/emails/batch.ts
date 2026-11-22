@@ -10,9 +10,9 @@ const BATCH_MAX_BODY_BYTES = 4 * 1024 * 1024
 const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'templateData', 'idempotencyKey'])
 
 /**
- * One recipient of a batch, and what the client knows of their email so far. A recipient becomes `unconfirmed` once a
- * request for them goes unanswered, and stays so until PostHog answers `queued`: an unanswered request may have queued
- * the email, so a later refusal doesn't prove it wasn't sent.
+ * One recipient of a batch, and what the client knows of their email so far. A recipient becomes `unconfirmed` once
+ * PostHog may have queued their email: a request for them went unanswered, PostHog said it couldn't tell, or their key
+ * was still in flight. It stays so until PostHog answers `queued`, since a later refusal doesn't prove it wasn't sent.
  */
 export interface Slot {
   readonly index: number
@@ -25,7 +25,7 @@ export interface Slot {
   error?: EmailError
   /** Whether the next attempt sends this recipient again. */
   open: boolean
-  unanswered: boolean
+  maybeQueued: boolean
 }
 
 /** Checks every recipient before any request, and gives each the idempotency key its every attempt carries. */
@@ -108,7 +108,7 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
       id: null,
       replayed: false,
       open: true,
-      unanswered: false,
+      maybeQueued: false,
     }
   })
 }
@@ -206,7 +206,8 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
       statusCode: typeof error.status === 'number' ? error.status : undefined,
     })
     slot.id = id ?? slot.id
-    slot.status = slot.unanswered || retryable ? 'unconfirmed' : 'failed'
+    slot.maybeQueued ||= retryable
+    slot.status = slot.maybeQueued ? 'unconfirmed' : 'failed'
     slot.error = refusal
     slot.open = retryable
   })
@@ -215,12 +216,16 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
 
 /** Records a request for `sent` that failed as a whole, and whether PostHog may have queued its emails. */
 export function recordFailure(sent: Slot[], error: EmailError): void {
-  const unanswered = error.statusCode === undefined || error.statusCode >= 500 || error.statusCode < 300
+  const maybeQueued =
+    error.statusCode === undefined ||
+    error.statusCode >= 500 ||
+    error.statusCode < 300 ||
+    error.code === 'idempotency_key_in_flight'
   for (const slot of sent) {
-    if (unanswered) {
+    if (maybeQueued) {
       recordUnanswered(slot, error)
     } else {
-      slot.status = slot.unanswered ? 'unconfirmed' : 'failed'
+      slot.status = slot.maybeQueued ? 'unconfirmed' : 'failed'
       slot.error = error
     }
   }
@@ -242,7 +247,7 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
 function recordUnanswered(slot: Slot, error: EmailError): void {
   slot.status = 'unconfirmed'
   slot.error = error
-  slot.unanswered = true
+  slot.maybeQueued = true
 }
 
 function settle(
