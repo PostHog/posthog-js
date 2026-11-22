@@ -1426,6 +1426,143 @@ describe('emails', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  describe('scheduled sends', () => {
+    const NOW = new Date('2026-11-22T10:00:00Z')
+
+    beforeEach(() => {
+      vi.setSystemTime(NOW)
+    })
+
+    it('schedules an email for a later time, and returns the time PostHog confirmed', async () => {
+      const postHog = againstPostHog()
+
+      const { data, error } = await settle(
+        posthog.emails.send({ ...RECEIPT, scheduledAt: new Date('2026-11-23T09:00:00Z') })
+      )
+
+      expect(error).toBeNull()
+      expect(data).toEqual({
+        id: postHog.emails[0].id,
+        replayed: false,
+        warnings: [],
+        scheduledAt: '2026-11-23T09:00:00.000Z',
+      })
+      expect(postHog.emails).toMatchObject([{ to: RECEIPT.to, scheduledAt: '2026-11-23T09:00:00.000Z' }])
+    })
+
+    it('reads a time in any offset, and rounds a finer time up to the next millisecond', async () => {
+      const postHog = againstPostHog()
+
+      const { data } = await settle(send({ scheduledAt: '2026-11-23T11:00:00.123456+02:00' }))
+
+      expect(postHog.emails).toMatchObject([{ templateId: TEMPLATE_ID, scheduledAt: '2026-11-23T09:00:00.124Z' }])
+      expect(data?.scheduledAt).toBe('2026-11-23T09:00:00.124Z')
+    })
+
+    it('asks for the same time on every retry, so a lost answer replays the first send', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('send', 'lost reply')
+
+      const { data } = await settle(send({ scheduledAt: '2026-11-23T09:00:00.000000001Z' }))
+
+      expect(postHog.emails).toHaveLength(1)
+      expect(data).toMatchObject({ replayed: true, scheduledAt: '2026-11-23T09:00:00.001Z' })
+    })
+
+    it('accepts a time that had passed, which PostHog sends now', async () => {
+      const postHog = againstPostHog()
+
+      const { data, error } = await settle(send({ scheduledAt: '2026-11-22T09:59:59Z' }))
+
+      expect(error).toBeNull()
+      expect(data?.scheduledAt).toBeNull()
+      expect(postHog.emails).toHaveLength(1)
+      expect(postHog.emails[0].scheduledAt).toBeUndefined()
+    })
+
+    it('leaves scheduledAt out of the result of a send without it', async () => {
+      againstPostHog()
+
+      const { data } = await settle(send())
+
+      expect(data).not.toHaveProperty('scheduledAt')
+    })
+
+    it.each([
+      ['a time without an offset', '2026-11-23T09:00:00'],
+      ['a date without a time', '2026-11-23'],
+      ['a day the month does not have', '2026-02-30T09:00:00Z'],
+      ['hour 24', '2026-11-23T24:00:00Z'],
+      ['an offset past 59 minutes', '2026-11-23T09:00:00+01:60'],
+      ['words', 'tomorrow at 9'],
+      ['an invalid Date', new Date(Number.NaN)],
+      ['a number', 1795597200000],
+    ])('refuses %s before any request', async (_name, scheduledAt) => {
+      const postHog = againstPostHog()
+
+      const { error } = await settle(send({ scheduledAt }))
+
+      expect(error).toMatchObject({ code: 'invalid_scheduled_at', name: 'validation_error', field: 'scheduledAt' })
+      expect(postHog.emails).toEqual([])
+    })
+
+    it.each([
+      [
+        'a custom host',
+        { host: 'https://ph.example.com', appHost: 'https://ph.example.com' },
+        'https://ph.example.com',
+      ],
+      ['a custom host without an app host', { host: 'https://ph.example.com' }, 'https://ph.example.com'],
+    ])('schedules only on PostHog Cloud, so it sends nothing to %s and names it', async (_name, hosts, named) => {
+      makeClient(hosts)
+
+      const { error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
+
+      expect(error).toMatchObject({ code: 'scheduling_unsupported', field: 'scheduledAt' })
+      expect(error?.message).toContain(named)
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('schedules on PostHog Cloud EU', async () => {
+      const postHog = new FakePostHog({ secretKey: SECRET_KEY, appHost: 'https://eu.posthog.com' })
+      makeClient({ host: 'https://eu.i.posthog.com', fetch: postHog.fetch })
+
+      const { data } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
+
+      expect(data?.scheduledAt).toBe('2026-11-23T09:00:00.000Z')
+    })
+
+    it.each([
+      ['leaves the time out of its answer', { answersSchedule: false }],
+      ['schedules it for another time', { scheduleShiftMs: 1 }],
+    ])('reports an email PostHog accepted but %s, with its message ID', async (_name, server) => {
+      const postHog = againstPostHog(server)
+
+      const { data, error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'scheduling_unconfirmed', messageId: postHog.emails[0].id })
+      expect(postHog.emails).toHaveLength(1)
+    })
+
+    it.each([
+      [
+        'a PostHog that refuses scheduledAt',
+        { fieldsNotTaken: ['scheduled_at'] },
+        '2026-11-23T09:00:00Z',
+        'field_not_accepted',
+      ],
+      ['a time more than 7 days away', {}, '2026-11-29T10:00:00.001Z', 'scheduled_too_far'],
+    ])('returns the refusal from %s, and never sends now instead', async (_name, server, scheduledAt, code) => {
+      const postHog = againstPostHog(server)
+
+      const { error } = await settle(send({ scheduledAt }))
+
+      expect(error).toMatchObject({ code, statusCode: 400, field: 'scheduled_at' })
+      expect(postHog.emails).toEqual([])
+    })
+  })
+
   describe('the send form', () => {
     const CODE_SEND = { templateKey: 'welcome', subject: 'Hi', html: '<p>Hi</p>' }
 
@@ -1447,12 +1584,7 @@ describe('emails', () => {
       ['a code send without html or text', { templateKey: 'welcome', subject: 'Hi' }, 'html'],
       ['a code send with html that is not a string', { ...CODE_SEND, html: 1 }, 'html'],
       ['template data on a code send', { ...CODE_SEND, templateData: { name: 'Jane' } }, 'templateData'],
-      [
-        "Resend's scheduledAt on the template form",
-        { templateId: TEMPLATE_ID, scheduledAt: 'in 1 hour' },
-        'scheduledAt',
-      ],
-      ["Resend's scheduledAt on a code send", { ...CODE_SEND, scheduledAt: 'in 1 hour' }, 'scheduledAt'],
+      ["Resend's tags on a code send", { ...CODE_SEND, tags: [{ name: 'kind', value: 'welcome' }] }, 'tags'],
     ])('refuses %s before sending', async (_name, form, field) => {
       const { data, error } = await sendForm(form)
 
@@ -1548,9 +1680,9 @@ describe('emails', () => {
       ],
       [
         'a field no form takes',
-        { ...CODE_SEND, scheduledAt: 'in 1 hour' },
+        { ...CODE_SEND, tags: [{ name: 'kind', value: 'welcome' }] },
         undefined,
-        'Remove scheduledAt and send again.',
+        'Remove tags and send again.',
       ],
     ])('explains why it refuses %s and how to send it', async (_name, form, why, fix) => {
       const { error } = await sendForm(form)

@@ -23,7 +23,10 @@ const BLOCKED_EXTENSIONS = new Set(
     ' '
   )
 )
-const TEMPLATE_FORM_FIELDS = new Set(['template_id', 'message_data', 'to', 'distinct_id'])
+const SCHEDULED_SEND_MAX_LEAD_MS = 7 * 24 * 60 * 60_000
+const SCHEDULED_AT_SHAPE =
+  /^(?<minute>\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::(?<second>\d{2})(?:\.(?<fraction>\d+))?)?(?<offset>Z|[+-]\d{2}:\d{2})?$/
+const TEMPLATE_FORM_FIELDS = new Set(['template_id', 'message_data', 'to', 'distinct_id', 'scheduled_at'])
 const CODE_FORM_FIELDS = new Set([
   'template_key',
   'subject',
@@ -39,6 +42,7 @@ const CODE_FORM_FIELDS = new Set([
   'distinct_id',
   'to',
   'attachments',
+  'scheduled_at',
 ])
 const TRACKING_KINDS = new Set(['opens', 'clicks', 'engagement'])
 const ATTACHMENT_FIELDS = new Set(['sha256', 'filename', 'content_type', 'content_id'])
@@ -67,6 +71,10 @@ export interface FakePostHogOptions {
   appHost?: string
   storageOrigin?: string
   storageRedirectOrigin?: string
+  /** False for a PostHog that queues a send with `scheduled_at` now and leaves the time out of its answer. */
+  answersSchedule?: boolean
+  /** How far from the requested time a PostHog schedules the email, to model one that shifts it. */
+  scheduleShiftMs?: number
 }
 
 export interface QueuedAttachment {
@@ -93,6 +101,8 @@ export interface QueuedEmail {
   templateId?: string
   messageData?: Record<string, unknown>
   attachments: QueuedAttachment[]
+  /** The instant the email waits for, when PostHog scheduled it. */
+  scheduledAt?: string
 }
 
 export interface EmailTracking {
@@ -138,7 +148,7 @@ export class FakePostHog {
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
-  private readonly sends = new Map<string, { body: string; id: string }>()
+  private readonly sends = new Map<string, { body: string; answer: Json }>()
   private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [] }
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
@@ -155,6 +165,8 @@ export class FakePostHog {
       appHost: APP_HOST,
       storageOrigin: STORAGE_ORIGIN,
       storageRedirectOrigin: '',
+      answersSchedule: true,
+      scheduleShiftMs: 0,
       ...options,
     }
   }
@@ -367,6 +379,7 @@ export class FakePostHog {
       })
     }
     const email = 'template_id' in body ? templateEmail(body) : this.codeEmail(body)
+    const scheduledAtMs = scheduledInstantOf(body.scheduled_at)
     const key = new Headers(options.headers).get('idempotency-key')
     const earlier = key === null ? undefined : this.sends.get(key)
     if (earlier) {
@@ -375,14 +388,30 @@ export class FakePostHog {
           detail: 'This idempotency key was used for a different email.',
         })
       }
-      return { status: 200, body: { message_id: earlier.id, replayed: true, warnings: [] } }
+      return { status: 200, body: { ...earlier.answer, replayed: true } }
     }
-    const queued = { id: globalThis.crypto.randomUUID(), ...email }
+    const scheduling = scheduledAtMs !== undefined && this.options.answersSchedule
+    const waitsUntilMs =
+      scheduling && scheduledAtMs > Date.now() ? scheduledAtMs + this.options.scheduleShiftMs : undefined
+    const queued = {
+      id: globalThis.crypto.randomUUID(),
+      ...email,
+      ...(waitsUntilMs !== undefined && { scheduledAt: new Date(waitsUntilMs).toISOString() }),
+    }
     this.emails.push(queued)
-    if (key !== null) {
-      this.sends.set(key, { body: raw, id: queued.id })
+    const answer: Json = {
+      message_id: queued.id,
+      replayed: false,
+      warnings: [],
+      ...(scheduling && {
+        status: waitsUntilMs === undefined ? 'queued' : 'scheduled',
+        scheduled_at: waitsUntilMs === undefined ? null : asDjangoDateTime(waitsUntilMs),
+      }),
     }
-    return { status: 202, body: { message_id: queued.id, replayed: false, warnings: [] } }
+    if (key !== null) {
+      this.sends.set(key, { body: raw, answer })
+    }
+    return { status: 202, body: answer }
   }
 
   private codeEmail(body: Json): Omit<QueuedEmail, 'id'> {
@@ -598,6 +627,33 @@ function templateEmail(body: Json): Omit<QueuedEmail, 'id'> {
     ...(distinct_id !== undefined && { distinctId: distinct_id }),
     attachments: [],
   }
+}
+
+function scheduledInstantOf(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  const shape = typeof value === 'string' ? SCHEDULED_AT_SHAPE.exec(value) : null
+  if (!shape?.groups) {
+    throw invalidField('scheduled_at', 'Use a time like `YYYY-MM-DDThh:mm:ss.sss` followed by a UTC offset.')
+  }
+  if (shape.groups.offset === undefined) {
+    throw invalidField('scheduled_at', 'Add a UTC offset to the time, such as `Z` or `+01:00`.')
+  }
+  const { minute, second = '00', fraction = '', offset } = shape.groups
+  const milliseconds = Date.parse(`${minute}:${second}.${fraction.slice(0, 3).padEnd(3, '0')}${offset}`)
+  const roundedUp = milliseconds + (/[1-9]/.test(fraction.slice(3)) ? 1 : 0)
+  if (roundedUp - Date.now() > SCHEDULED_SEND_MAX_LEAD_MS) {
+    throw refusal(400, 'invalid_request', 'scheduled_too_far', 'scheduled_at', {
+      detail: "`scheduled_at` is more than 7 days away, so PostHog didn't send the email.",
+    })
+  }
+  return roundedUp
+}
+
+function asDjangoDateTime(milliseconds: number): string {
+  const iso = new Date(milliseconds).toISOString()
+  return iso.endsWith('.000Z') ? iso.replace('.000Z', 'Z') : iso.replace('Z', '000Z')
 }
 
 function attachmentReference(

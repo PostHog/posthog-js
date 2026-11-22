@@ -19,6 +19,16 @@ export interface SendEmailBase {
   idempotencyKey?: string
   /** Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. */
   maxRetries?: number
+  /**
+   * When to send the email, at most 7 days ahead: a `Date`, or an ISO 8601 time with an offset, such as
+   * `2026-12-01T09:00:00Z` or `2026-12-01T10:00:00+01:00`. A time that has passed sends the email now. PostHog keeps
+   * the time to the millisecond, and the client rounds a finer time up to the next millisecond.
+   *
+   * Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends
+   * nothing and returns an error with code `scheduling_unsupported`. Work out a relative time, such as an hour from
+   * now, once, and send the same time when you send again with the same `idempotencyKey`.
+   */
+  scheduledAt?: Date | string
 }
 
 /** A template made transactional in PostHog, sent by its ID. */
@@ -174,6 +184,11 @@ export interface SendEmailResult {
   /** True when PostHog had already accepted this idempotency key and returned the first send's result. */
   replayed: boolean
   warnings: EmailWarning[]
+  /**
+   * Only for a send with `scheduledAt`: the time the email waits for, as an ISO 8601 UTC timestamp, or `null` when
+   * the time had passed and the email goes out now.
+   */
+  scheduledAt?: string | null
 }
 
 /**
@@ -185,13 +200,14 @@ export type SendEmailResponse = { data: SendEmailResult; error: null } | { data:
 /**
  * What happened to an email. Later SDK versions can see values this list does not have yet.
  *
+ * - `scheduled`: the email waits for the time `send()` scheduled it for.
  * - `queued`: the email waits to go out.
  * - `sent`: PostHog handed the email to the email provider.
  * - `failed`: the email was not sent, and `reason` says why.
  * - `delivered`: the recipient's mail server accepted the email.
  * - `bounced` and `complained`: the recipient's mail provider reported them after delivery.
  */
-export type EmailDeliveryStatus = 'queued' | 'sent' | 'failed' | 'delivered' | 'bounced' | 'complained'
+export type EmailDeliveryStatus = 'scheduled' | 'queued' | 'sent' | 'failed' | 'delivered' | 'bounced' | 'complained'
 
 /** The status of an email that `posthog.emails.send()` queued. */
 export interface EmailStatus {

@@ -51,6 +51,8 @@ const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
+const SCHEDULED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-](\d{2}):(\d{2}))$/
+const CLOUD_APP_HOST_SET: ReadonlySet<string> = new Set([US_APP_HOST, EU_APP_HOST])
 
 type EveryField<Form> = Record<keyof Form, true>
 interface ReactRenderer {
@@ -71,6 +73,7 @@ const SHARED_FIELDS: EveryField<SendEmailBase> = {
   distinctId: true,
   idempotencyKey: true,
   maxRetries: true,
+  scheduledAt: true,
 }
 const TEMPLATE_FIELDS: EveryField<TemplateEmailForm> = { templateId: true, templateData: true }
 const CODE_FIELDS: EveryField<CodeEmailForm> = {
@@ -132,6 +135,7 @@ interface PreparedSend {
   react?: EmailReactElement
   idempotencyKey: string
   maxRetries: number
+  scheduledAtMs?: number
 }
 
 interface Upload {
@@ -196,7 +200,8 @@ export class EmailSender implements Emails {
       const prepared = prepareSend(options, this.config.maxRetries)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
-        'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
+        'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.',
+        prepared.scheduledAtMs !== undefined
       )
       const content =
         prepared.react === undefined
@@ -212,7 +217,7 @@ export class EmailSender implements Emails {
         'Idempotency-Key': prepared.idempotencyKey,
       })
       const result = await this.withRetries(prepared.maxRetries, async () =>
-        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body))
+        parseSendReply(await this.request(appHost + SEND_PATH, 'POST', headers, body), prepared.scheduledAtMs)
       )
       for (const warning of result.warnings) {
         this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
@@ -340,7 +345,11 @@ export class EmailSender implements Emails {
     }
   }
 
-  private connect(nothingDone: string, missingSecretKey: string): { appHost: string; secretKey: string } {
+  private connect(
+    nothingDone: string,
+    missingSecretKey: string,
+    scheduling = false
+  ): { appHost: string; secretKey: string } {
     if (this.hooks.isDisabled()) {
       throw new EmailError({
         code: 'client_disabled',
@@ -354,6 +363,15 @@ export class EmailSender implements Emails {
       })
     }
     const appHost = resolveAppHost(this.config.host, this.config.appHost)
+    if (scheduling && !(appHost && CLOUD_APP_HOST_SET.has(appHost))) {
+      throw new EmailError({
+        code: 'scheduling_unsupported',
+        message: `This client sends email to ${appHost ?? removeTrailingSlash(this.config.host)}, and only PostHog Cloud schedules emails, so ${nothingDone}.`,
+        field: 'scheduledAt',
+        why: 'A self-hosted PostHog, or a proxy in front of PostHog Cloud, may send the email at once instead of at scheduledAt.',
+        fix: 'Send through PostHog Cloud US or EU, or leave out scheduledAt to send the email now.',
+      })
+    }
     if (!appHost) {
       // A custom host is often an ingestion proxy, which must not receive the secret key.
       throw new EmailError({
@@ -490,6 +508,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
   const { content, files } = contentOf(send, distinctId)
+  const scheduledAtMs = send.scheduledAt === undefined ? undefined : scheduledInstantOf(send.scheduledAt)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -505,12 +524,56 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 
   return {
-    content: snapshotOf({ ...content, to }),
+    content: snapshotOf({
+      ...content,
+      to,
+      ...(scheduledAtMs !== undefined && { scheduled_at: new Date(scheduledAtMs).toISOString() }),
+    }),
     files,
     react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+    scheduledAtMs,
   }
+}
+
+function scheduledInstantOf(scheduledAt: unknown): number {
+  const instant = scheduledAt instanceof Date ? scheduledAt.getTime() : timeWithOffsetToTheMillisecond(scheduledAt)
+  if (instant === undefined || Number.isNaN(instant)) {
+    throw new EmailError({
+      code: 'invalid_scheduled_at',
+      message: 'scheduledAt must be a Date, or an ISO 8601 time with an offset, so no email was sent.',
+      field: 'scheduledAt',
+      fix: 'Pass a Date, or a time such as 2026-12-01T09:00:00Z or 2026-12-01T10:00:00+01:00.',
+    })
+  }
+  return instant
+}
+
+/** The instant of an ISO 8601 time with an offset, rounded up to the next millisecond, or undefined when it isn't one. */
+function timeWithOffsetToTheMillisecond(time: unknown): number | undefined {
+  const parts = typeof time === 'string' ? SCHEDULED_AT_PATTERN.exec(time) : null
+  if (!parts) {
+    return undefined
+  }
+  const [, year, month, day, hour, minute, second = '00', fraction = '', offset, offsetHours, offsetMinutes] = parts
+  const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate()
+  const inRange = (value: string | undefined, low: number, high: number): boolean =>
+    value === undefined || (Number(value) >= low && Number(value) <= high)
+  if (
+    !inRange(month, 1, 12) ||
+    !inRange(day, 1, daysInMonth) ||
+    !inRange(hour, 0, 23) ||
+    !inRange(minute, 0, 59) ||
+    !inRange(second, 0, 59) ||
+    !inRange(offsetHours, 0, 23) ||
+    !inRange(offsetMinutes, 0, 59)
+  ) {
+    return undefined
+  }
+  const toTheMillisecond = `${year}-${month}-${day}T${hour}:${minute}:${second}.${fraction.slice(0, 3).padEnd(3, '0')}`
+  const roundUp = /[1-9]/.test(fraction.slice(3)) ? 1 : 0
+  return Date.parse(toTheMillisecond + offset) + roundUp
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -794,7 +857,10 @@ function replyFields(payload: unknown): Record<string, unknown> {
   >
 }
 
-function parseSendReply({ status, text: body, retryAfterMs }: Reply): SendEmailResult {
+function parseSendReply(
+  { status, text: body, retryAfterMs }: Reply,
+  scheduledAtMs: number | undefined
+): SendEmailResult {
   const fields = replyFields(parseJson(body))
   if (status >= 200 && status < 300) {
     const id = text(fields.message_id)
@@ -817,9 +883,34 @@ function parseSendReply({ status, text: body, retryAfterMs }: Reply): SendEmailR
         }
       }
     }
-    return { id, replayed: fields.replayed === true, warnings }
+    const result = { id, replayed: fields.replayed === true, warnings }
+    return scheduledAtMs === undefined
+      ? result
+      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status) }
   }
   throw replyError(fields, status, retryAfterMs)
+}
+
+function confirmedSchedule(
+  fields: Record<string, unknown>,
+  scheduledAtMs: number,
+  messageId: string,
+  status: number
+): string | null {
+  if (fields.status === 'queued' && fields.scheduled_at === null) {
+    return null
+  }
+  if (fields.status === 'scheduled' && timeWithOffsetToTheMillisecond(fields.scheduled_at) === scheduledAtMs) {
+    return new Date(scheduledAtMs).toISOString()
+  }
+  throw new EmailError({
+    code: 'scheduling_unconfirmed',
+    message: `PostHog accepted the email ${messageId} without confirming it waits for scheduledAt, so it may go out now.`,
+    statusCode: status,
+    messageId,
+    field: 'scheduledAt',
+    fix: 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey returns the same answer.',
+  })
 }
 
 function parseStatusReply({ status, text: body, retryAfterMs }: Reply): EmailStatus {
