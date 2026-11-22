@@ -1,4 +1,5 @@
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
+import { sessionStore } from '../storage'
 import { assignableWindow } from '../utils/globals'
 import type { TransportCallback } from '../request'
 import type { PostHog } from '../posthog-core'
@@ -14,6 +15,9 @@ vi.mock('../request-dispatch', async (importOriginal) => ({
 describe('RetryQueue', () => {
     const mockPosthog = {
         _send_request: mockTransport,
+        config: { token: 'test-replay', persistence: 'sessionStorage' },
+        consent: { isOptedOut: () => false },
+        persistence: { _disabled: false },
     }
     let retryQueue: RetryQueue
     let now = Date.now()
@@ -69,6 +73,105 @@ describe('RetryQueue', () => {
         expect(mockTransport).toHaveBeenCalledTimes(4)
         mockTransport.mockClear()
     }
+
+    describe('replay retry across a reload', () => {
+        function sendSnapshot(uuid: string, windowId = 'tab') {
+            retryQueue.retriableRequest({
+                batchKey: 'recordings',
+                batchGroup: 'session-' + windowId,
+                url: '/s/',
+                data: [
+                    {
+                        event: '$snapshot',
+                        uuid,
+                        properties: {
+                            token: mockPosthog.config.token,
+                            distinct_id: 'user',
+                            $session_id: 'session',
+                            $window_id: windowId,
+                        },
+                    },
+                ],
+            })
+        }
+
+        function failAndLeave(navigationType: string) {
+            mockTransport.mockImplementationOnce(({ callback }) => callback({ statusCode: 503 }))
+            sendSnapshot('first')
+            window.dispatchEvent(Object.assign(new Event('pageswap'), { activation: { navigationType } }))
+            retryQueue.unload()
+        }
+
+        function loadNextPage(windowId = 'tab') {
+            retryQueue = new RetryQueue(mockPosthog as unknown as PostHog)
+            sendSnapshot('next', windowId)
+            fastForwardTimeAndRunTimer(60_000)
+        }
+
+        afterEach(() => window.sessionStorage.clear())
+
+        it('delivers the original UUID once from the next recording, respecting backoff', () => {
+            failAndLeave('reload')
+            expect(mockTransport).toHaveBeenCalledTimes(1)
+            retryQueue = new RetryQueue(mockPosthog as unknown as PostHog)
+            sendSnapshot('next')
+            expect(mockTransport).toHaveBeenCalledTimes(2)
+            fastForwardTimeAndRunTimer(60_000)
+            expect(mockTransport.mock.calls.map(([req]) => req.data[0].uuid)).toEqual(['first', 'next', 'first'])
+            expect(mockTransport.mock.lastCall?.[0].url).toBe('/s/?retry_count=1')
+            loadNextPage()
+            expect(mockTransport).toHaveBeenCalledTimes(4)
+        })
+
+        it('uses the beacon for other navigations', () => {
+            failAndLeave('push')
+            expect(mockTransport.mock.lastCall?.[0].transport).toBe('sendBeacon')
+            loadNextPage()
+            expect(mockTransport).toHaveBeenCalledTimes(3)
+        })
+
+        it('discards the batch in a different window', () => {
+            failAndLeave('reload')
+            loadNextPage('duplicate-tab')
+            expect(mockTransport).toHaveBeenCalledTimes(2)
+        })
+
+        it('discards a handoff when consent or identity is reset', () => {
+            failAndLeave('reload')
+            retryQueue.clearReplayHandoff()
+            loadNextPage()
+            expect(mockTransport).toHaveBeenCalledTimes(2)
+        })
+
+        it('discards an expired handoff', () => {
+            failAndLeave('reload')
+            fastForwardTimeAndRunTimer(31 * 60_000)
+            loadNextPage()
+            expect(mockTransport).toHaveBeenCalledTimes(2)
+        })
+
+        it('discards stored data when the next page opts out', () => {
+            failAndLeave('reload')
+            const consent = vi.spyOn(mockPosthog.consent, 'isOptedOut').mockReturnValue(true)
+            try {
+                loadNextPage()
+                expect(mockTransport).toHaveBeenCalledTimes(2)
+                expect(window.sessionStorage.length).toBe(0)
+            } finally {
+                consent.mockRestore()
+            }
+        })
+
+        it('falls back to the beacon when storage cannot accept the handoff', () => {
+            const write = vi.spyOn(sessionStore, '_set').mockReturnValue(false)
+            try {
+                failAndLeave('reload')
+                expect(mockTransport.mock.lastCall?.[0].transport).toBe('sendBeacon')
+            } finally {
+                write.mockRestore()
+            }
+        })
+    })
 
     it('processes retry requests', () => {
         enqueueRequests()
