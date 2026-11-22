@@ -183,8 +183,7 @@ interface PreparedSend {
   idempotencyKey: string
   maxRetries: number
   scheduledAtMs?: number
-  /** Whether the caller passed the idempotency key, so they can send again with it. */
-  ownKey: boolean
+  callerChoseKey: boolean
 }
 
 interface Upload {
@@ -267,7 +266,7 @@ export class EmailSender implements Emails {
         parseSendReply(
           await this.request(appHost + SEND_PATH, 'POST', headers, body),
           prepared.scheduledAtMs,
-          prepared.ownKey
+          prepared.callerChoseKey
         )
       )
       for (const warning of result.warnings) {
@@ -686,7 +685,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
     scheduledAtMs,
-    ownKey: idempotencyKey !== undefined,
+    callerChoseKey: idempotencyKey !== undefined,
   }
 }
 
@@ -1032,7 +1031,7 @@ function readRetryAfter(response: PostHogFetchResponse): number | undefined {
 function parseSendReply(
   { status, text: body, retryAfterMs }: Reply,
   scheduledAtMs: number | undefined,
-  ownKey: boolean
+  callerChoseKey: boolean
 ): SendEmailResult {
   const fields = replyFields(parseJson(body))
   if (status >= 200 && status < 300) {
@@ -1047,7 +1046,7 @@ function parseSendReply(
     const result = { id, replayed: fields.replayed === true, warnings: warningsOf(fields) }
     return scheduledAtMs === undefined
       ? result
-      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status, ownKey) }
+      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status, callerChoseKey) }
   }
   throw replyError(fields, status, retryAfterMs)
 }
@@ -1057,7 +1056,7 @@ function confirmedSchedule(
   scheduledAtMs: number,
   messageId: string,
   status: number,
-  ownKey: boolean
+  callerChoseKey: boolean
 ): string | null {
   if (fields.status === 'queued' && fields.scheduled_at === null) {
     return null
@@ -1071,9 +1070,9 @@ function confirmedSchedule(
     statusCode: status,
     messageId,
     field: 'scheduledAt',
-    fix: ownKey
+    fix: callerChoseKey
       ? 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey returns the same answer.'
-      : "Read what happened to the email with emails.get(error.messageId). Don't send it again without your own idempotencyKey, or PostHog queues a second email.",
+      : "Read what happened to the email with emails.get(error.messageId). Don't send it again: the client chose this send's idempotencyKey, so a new send with any key queues a second email.",
   })
 }
 
