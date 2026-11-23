@@ -294,6 +294,52 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
 
+  build-ios-cocoapods-rn-087:
+    permissions:
+      contents: read
+    name: Build example for iOS (CocoaPods, React Native 0.87)
+    # Runs the podspec's module map path fix for React Native 0.87 and 0.88,
+    # which the 0.79 CocoaPods lanes never reach.
+    runs-on: macos-26
+    env:
+      SPM_EXAMPLE_DIR: examples/example-rn-spm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build React Native package tarballs
+        run: |
+          export PACKAGE_DEST="$PWD/target"
+          pnpm turbo package \
+            --filter=posthog-react-native... \
+            --filter=@posthog/react-native-plugin
+
+      - name: Install React Native 0.87.1 example dependencies
+        run: pnpm install --lockfile=false --config.node-linker=hoisted
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        run: pod install
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Build Debug with CocoaPods
+        run: |
+          xcodebuild \
+            -workspace PosthogReactNativeSpmExample.xcworkspace \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
   build-macos:
     permissions:
       contents: read

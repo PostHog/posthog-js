@@ -75,10 +75,24 @@ Pod::Spec.new do |s|
   # (`posthog_react_native_plugin`), not the pod, so the flags keep the old
   # `<pod>/<module>.modulemap` path and the build fails with "module map file not
   # found". Rewrite the path with the module name too. React Native fixed this in
-  # 0.89 (https://github.com/facebook/react-native/pull/59182), where there's
-  # nothing left to rewrite.
-  if defined?(::SPMManager) && ::SPMManager.private_method_defined?(:rewrite_aggregate_modulemap_references) &&
-     !defined?(::PostHogReactNativePluginModuleMapFix)
+  # 0.89 (https://github.com/facebook/react-native/pull/59182), so the patch only
+  # applies to 0.87 and 0.88, read from the package.json of the react-native (or
+  # react-native-macos) package that defines `SPMManager`.
+  rn_version_needs_modulemap_fix = lambda do
+    return false unless defined?(::SPMManager) && ::SPMManager.private_method_defined?(:rewrite_aggregate_modulemap_references)
+    return false unless ::SPMManager.instance_method(:rewrite_aggregate_modulemap_references).arity == 2
+
+    spm_rb = ::SPMManager.instance_method(:rewrite_aggregate_modulemap_references).source_location&.first
+    return false unless spm_rb
+
+    rn_package = File.expand_path('../../package.json', File.dirname(spm_rb))
+    rn = JSON.parse(File.read(rn_package)) rescue nil
+    return false unless rn && %w[react-native react-native-macos].include?(rn['name'])
+
+    major, minor = rn['version'].to_s.split('.').map(&:to_i)
+    major == 0 && [87, 88].include?(minor)
+  end
+  if rn_version_needs_modulemap_fix.call && !defined?(::PostHogReactNativePluginModuleMapFix)
     module ::PostHogReactNativePluginModuleMapFix
       private
 
