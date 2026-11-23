@@ -420,28 +420,34 @@ export class FakePostHog {
     if (all_marketing !== undefined && typeof all_marketing !== 'boolean') {
       throw invalidField('all_marketing', 'Must be a valid boolean.')
     }
+    let topicEntries: [string, boolean][] = []
+    if (topics !== undefined) {
+      if (!isRecord(topics) || !Object.values(topics).every((value) => typeof value === 'boolean')) {
+        throw invalidField('topics', 'Expected topic preferences.')
+      }
+      topicEntries = Object.entries(topics) as [string, boolean][]
+      const unknownTopic = topicEntries.find(([topic]) => !this.categories.has(topic))?.[0]
+      if (unknownTopic !== undefined) {
+        throw refusal(404, 'invalid_request', 'unknown_topic', null, { detail: `Unknown topic: ${unknownTopic}` })
+      }
+    }
+    if (all_marketing === undefined && topicEntries.length === 0) {
+      throw invalidField('topics', 'Set all_marketing, topics, or both.')
+    }
     if (all_marketing === false) {
       this.allMarketingOptOut.add(identifier)
     } else if (all_marketing === true) {
       this.allMarketingOptOut.delete(identifier)
     }
     const topicRecord: Record<string, boolean> = {}
-    if (topics !== undefined) {
-      if (!isRecord(topics) || !Object.values(topics).every((value) => typeof value === 'boolean')) {
-        throw invalidField('topics', 'Expected topic preferences.')
+    for (const [topic, optedIn] of topicEntries) {
+      if (optedIn === false) {
+        this.optedOut.add(`${identifier}:${topic}`)
+      } else {
+        this.optedOut.delete(`${identifier}:${topic}`)
+        this.allMarketingOptOut.delete(identifier)
       }
-      for (const [topic, optedIn] of Object.entries(topics)) {
-        if (!this.categories.has(topic)) {
-          throw refusal(400, 'validation_error', 'unknown_topic', 'topics', { detail: `Unknown topic: ${topic}` })
-        }
-        if (optedIn === false) {
-          this.optedOut.add(`${identifier}:${topic}`)
-        } else {
-          this.optedOut.delete(`${identifier}:${topic}`)
-          this.allMarketingOptOut.delete(identifier)
-        }
-        topicRecord[topic] = optedIn as boolean
-      }
+      topicRecord[topic] = optedIn
     }
     return {
       status: 200,
@@ -504,23 +510,26 @@ export class FakePostHog {
   private resolveCategory(to: string, templateKey: string, category: QueuedEmail['category']): string | undefined {
     if (this.templates.has(templateKey)) {
       const templateCategory = this.templates.get(templateKey) ?? null
+      const templateCategoryDef = templateCategory === null ? undefined : this.categories.get(templateCategory)
+      if (templateCategoryDef?.type === 'marketing') {
+        throw refusal(400, 'validation_error', 'marketing_template', null, {
+          detail: 'Templates in a marketing category cannot be sent via code sends.',
+        })
+      }
       const followsTemplate =
         category === undefined ||
         (templateCategory === null
           ? category === 'transactional'
           : typeof category === 'object' &&
             category.key === templateCategory &&
-            category.type === this.categories.get(templateCategory)?.type)
+            category.type === templateCategoryDef?.type)
       if (!followsTemplate) {
         throw refusal(400, 'validation_error', 'category_mismatch', 'category', { detail: 'Category mismatch.' })
       }
-      return templateCategory ?? 'transactional'
+      return templateCategory ?? undefined
     }
-    if (category === undefined) {
+    if (category === undefined || category === 'transactional') {
       return undefined
-    }
-    if (category === 'transactional') {
-      return 'transactional'
     }
     const existing = this.categories.get(category.key)
     if (existing && existing.type !== category.type) {

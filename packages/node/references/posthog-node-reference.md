@@ -3147,9 +3147,9 @@ posthog-node needs no React types.
 
 ### `Emails`
 
-The `posthog.emails` API: sends transactional or marketing email from PostHog email templates or
-from content your code rendered, reads the status of each email it sent, and sets a recipient's
-topic preferences.
+The `posthog.emails` API: sends transactional email from PostHog email templates, or
+transactional and marketing email from content your code rendered, reads the status of each
+email it sent, and sets a recipient's topic preferences.
 
 #### Methods
 
@@ -3177,8 +3177,8 @@ seconds after the send. Network errors, rate limits and an unavailable service a
 
 > **send**(`options`): `Promise`\<`SendEmailResponse`\>
 
-Queue one transactional or marketing email, from a PostHog email template or from content your
-code rendered.
+Queue one email: a transactional email from a PostHog email template, or a transactional or
+marketing email from content your code rendered.
 
 Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
 not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
