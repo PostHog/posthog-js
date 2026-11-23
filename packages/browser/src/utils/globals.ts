@@ -226,6 +226,7 @@ export type PostHogExtensionKind =
     | ExternalExtensionKind
 
 export interface LazyLoadedSessionRecordingInterface {
+    readonly supportsSelectMasking?: boolean
     start: (startReason?: SessionStartReason) => void
     stop: () => void
     discard: (options?: { discardProducerEvents?: boolean }) => void
@@ -341,7 +342,9 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
-    initSessionRecording?: (ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface
+    initSessionRecording?: ((ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface) & {
+        supportsSelectMasking?: boolean
+    }
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 

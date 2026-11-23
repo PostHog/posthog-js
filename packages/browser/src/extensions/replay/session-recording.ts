@@ -25,11 +25,12 @@ import {
     RemoteConfig,
     RemoteConfigResult,
     SessionRecordingPersistedConfig,
+    SessionRecordingOptions,
     SessionStartReason,
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isNullish, isNumber, isString, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -43,6 +44,9 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { sessionStore } from '../../storage'
+import { getReplayPendingBufferKey } from './external/sessionrecording-utils'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = /* @__PURE__ */ createLogger(LOGGER_PREFIX)
@@ -85,6 +89,7 @@ export class SessionRecording implements Extension {
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
+    private _selectMaskingFn: SessionRecordingOptions['selectMaskingFn'] = undefined
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
@@ -99,6 +104,9 @@ export class SessionRecording implements Extension {
     }
 
     get status(): SessionRecordingStatus {
+        if (this.isReplayOff) {
+            return DISABLED
+        }
         if (this._recordingStatus === AWAITING_CONFIG || this._recordingStatus === MISSING_CONFIG) {
             return this._recordingStatus
         }
@@ -113,6 +121,14 @@ export class SessionRecording implements Extension {
 
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
+        }
+
+        // WAF rule sets such as OWASP CRS block requests whose cookie holds a sampled-out decision
+        // stored with the `!` prefix. Drop it here, where it runs even when the recorder never loads;
+        // the recorder decides again with the same outcome.
+        const storedIsSampled = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        if (isString(storedIsSampled) && storedIsSampled[0] === '!') {
+            this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
         }
 
         // Start before the recorder chunk loads so a visible -> hidden transition during
@@ -143,13 +159,32 @@ export class SessionRecording implements Extension {
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
+    // Not `!_isRecordingEnabled`: missing remote config means awaiting config, not off.
+    /** @internal */
+    get isReplayOff(): boolean {
+        return (
+            !!this._config.disable_session_recording ||
+            this._instance.consent.isOptedOut() ||
+            this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled === false
+        )
+    }
+
     startIfEnabledOrStop(startReason?: SessionStartReason) {
         if (this._sessionRecordingDisposed) {
             return
         }
 
-        if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
-            return
+        if (this._lazyLoadedSessionRecording) {
+            if (this._selectMaskingFn !== this._config.session_recording?.selectMaskingFn) {
+                sessionStore._remove(getReplayPendingBufferKey(this._config))
+                this._lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
+                this._selectMaskingFn = undefined
+            } else if (this._lazyLoadedSessionRecording.isStarted && this._isRecordingEnabled) {
+                if (!this._checkSelectMaskingSupport()) {
+                    this._discardRecording(true)
+                }
+                return
+            }
         }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -198,30 +233,26 @@ export class SessionRecording implements Extension {
             // Consent and session state can change while the recorder chunk is loading.
             // Only the recorder that initiated this load may finish starting with its manager.
             const sessionManager = this._instance.sessionManager
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (
-                        this._sessionRecordingDisposed ||
-                        !this._isRecordingEnabled ||
-                        this._instance.sessionManager !== sessionManager
-                    ) {
-                        this._recordingStatus = DISABLED
-                        return
-                    }
-                    if (err) {
-                        // most often this is an ad blocker matching the `/static/<script>.js` path.
-                        // flag it on the session so a blocked recorder is visible in analytics
-                        // instead of only in the browser console
-                        this._instance.register_for_session({
-                            [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
-                        })
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
+            getExtensionLoader(this._instance)?.(this._instance, this._scriptName, (err) => {
+                if (
+                    this._sessionRecordingDisposed ||
+                    !this._isRecordingEnabled ||
+                    this._instance.sessionManager !== sessionManager
+                ) {
+                    this._recordingStatus = DISABLED
+                    return
                 }
-            )
+                if (err) {
+                    // most often this is an ad blocker matching the `/static/<script>.js` path.
+                    // flag it on the session so a blocked recorder is visible in analytics
+                    // instead of only in the browser console
+                    this._instance.register_for_session({
+                        [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+                    })
+                    return logger.error('could not load recorder', err)
+                }
+                this._onScriptLoaded(startReason)
+            })
         } else {
             this._onScriptLoaded(startReason)
         }
@@ -234,9 +265,13 @@ export class SessionRecording implements Extension {
     }
 
     private _discardRecording(discardProducerEvents = false) {
+        if (discardProducerEvents && (this._selectMaskingFn || this._config.session_recording?.selectMaskingFn)) {
+            sessionStore._remove(getReplayPendingBufferKey(this._config))
+        }
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
+        this._selectMaskingFn = undefined
     }
 
     private _resetSampling() {
@@ -380,6 +415,20 @@ export class SessionRecording implements Extension {
         return Date.now() - config.cache_timestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
+    private _checkSelectMaskingSupport(): boolean {
+        if (
+            !this._config.session_recording?.selectMaskingFn ||
+            (assignableWindow.__PosthogExtensions__?.rrweb?.record?.supportsSelectMasking === true &&
+                assignableWindow.__PosthogExtensions__?.initSessionRecording?.supportsSelectMasking === true &&
+                (!this._lazyLoadedSessionRecording || this._lazyLoadedSessionRecording.supportsSelectMasking === true))
+        ) {
+            return true
+        }
+        this._recordingStatus = DISABLED
+        logger.error('Session recording has not started: the recorder does not support selectMaskingFn.')
+        return false
+    }
+
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
             this._recordingStatus = DISABLED
@@ -396,6 +445,11 @@ export class SessionRecording implements Extension {
             return
         }
 
+        // An older extension may discard the policy before its own start check.
+        if (!this._checkSelectMaskingSupport()) {
+            return
+        }
+
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
                 this._instance,
@@ -403,6 +457,11 @@ export class SessionRecording implements Extension {
             )
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
+        }
+
+        if (!this._checkSelectMaskingSupport()) {
+            this._discardRecording(true)
+            return
         }
 
         if (!this._isRemoteConfigFresh()) {
@@ -417,7 +476,15 @@ export class SessionRecording implements Extension {
 
         this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.setDocumentWasEverVisible?.(this._documentWasEverVisible)
+        const selectMaskingFn = this._config.session_recording?.selectMaskingFn
         this._lazyLoadedSessionRecording.start(startReason)
+        this._selectMaskingFn = selectMaskingFn
+        if (
+            this._lazyLoadedSessionRecording.isStarted &&
+            selectMaskingFn !== this._config.session_recording?.selectMaskingFn
+        ) {
+            this.startIfEnabledOrStop()
+        }
     }
 
     /**
@@ -485,6 +552,9 @@ export class SessionRecording implements Extension {
      * when looking at the event feed for a session
      */
     get sdkDebugProperties(): Properties {
+        if (this.isReplayOff) {
+            return { $recording_status: DISABLED }
+        }
         const properties: Properties = {}
         for (const key of SESSION_DEBUG_PROPERTY_KEYS) {
             const value = this._instance.sessionPersistence?.get_property(key)

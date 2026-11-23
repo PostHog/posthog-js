@@ -24,7 +24,8 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium-compat',
-            testIgnore: '**/error-tracking/legacy-autocapture.spec.ts',
+            // csp.spec.ts serves dist/ directly and does not test version skew.
+            testIgnore: ['**/error-tracking/legacy-autocapture.spec.ts', '**/csp.spec.ts'],
             use: {
                 ...devices['Desktop Chrome'],
                 staticOverrides: {

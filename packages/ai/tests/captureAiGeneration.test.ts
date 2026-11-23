@@ -2,6 +2,13 @@ import { PostHog } from 'posthog-node'
 import { captureAiGeneration } from '../src/captureAiGeneration'
 import { AIEvent } from '../src/utils'
 import { version } from '../package.json'
+import {
+  EVENT_OPTION_CASES,
+  USER_EVENT_OPTIONS,
+  asPostHogNodeMajor,
+  capturedEvents,
+  expectUserEventOptions,
+} from './test-utils'
 
 vi.mock('posthog-node')
 
@@ -79,6 +86,7 @@ describe('captureAiGeneration', () => {
     })
     expect(event.properties.$ai_tools).toEqual([{ type: 'function', function: { name: 'foo', parameters: {} } }])
     expect(event.properties.$process_person_profile).toBeUndefined()
+    expect(event.options).toBeUndefined()
   })
 
   it.each([
@@ -96,17 +104,67 @@ describe('captureAiGeneration', () => {
     }
   })
 
-  it('auto-generates a traceId and uses it as distinctId when missing', async () => {
-    const client = buildClient()
+  it.each([undefined, '', '  '])(
+    'auto-generates a traceId and uses it as a personless distinctId when the distinctId is %j',
+    async (distinctId) => {
+      const client = buildClient()
 
-    await captureAiGeneration(client, baseRequiredOptions)
+      await captureAiGeneration(client, { ...baseRequiredOptions, distinctId })
 
+      const event = (client.capture as vi.Mock).mock.calls[0][0]
+      expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
+      expect(event.properties).not.toHaveProperty('$ai_latency')
+      expect(event.distinctId).toBe(event.properties.$ai_trace_id)
+      expect(event.properties.$process_person_profile).toBe(false)
+      expect(event.options).toBeUndefined()
+    }
+  )
+
+  it.each(EVENT_OPTION_CASES)(
+    'sends the caller options on posthog-node $major (personless: $personless)',
+    async ({ major, personless }) => {
+      const client = asPostHogNodeMajor(buildClient(), major)
+
+      await captureAiGeneration(client, {
+        ...baseRequiredOptions,
+        distinctId: personless ? undefined : 'user-1',
+        options: USER_EVENT_OPTIONS,
+      })
+
+      const events = capturedEvents(client)
+      expect(events).toHaveLength(1)
+      expectUserEventOptions(events[0], major, personless)
+    }
+  )
+
+  it.each([
+    {
+      name: 'per-call options beat registered options',
+      registered: { process_person_profile: false, cookieless_mode: false },
+      distinctId: 'user-1',
+      options: { process_person_profile: true, cookieless_mode: true },
+      expected: { process_person_profile: true, cookieless_mode: true },
+    },
+    {
+      name: 'a personless event stays personless over registered and per-call options',
+      registered: { process_person_profile: true },
+      distinctId: undefined,
+      options: { process_person_profile: true },
+      expected: { process_person_profile: false },
+    },
+  ])('on a real posthog-node 6 client, $name', async ({ registered, distinctId, options, expected }) => {
+    const { PostHog: RealPostHog } = await vi.importActual<typeof import('posthog-node')>('posthog-node')
+    const posthog = new RealPostHog('TEST_API_KEY', { host: 'http://example.com' })
+    await posthog.registerOptions(registered)
+    const client = asPostHogNodeMajor(buildClient(), 6)
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, distinctId, options })
     const event = (client.capture as vi.Mock).mock.calls[0][0]
-    expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
-    expect(event.properties).not.toHaveProperty('$ai_latency')
-    expect(event.distinctId).toBe(event.properties.$ai_trace_id)
-    // Anonymous events disable person processing
-    expect(event.properties.$process_person_profile).toBe(false)
+    const message = await posthog.prepareEventMessage(event)
+    await posthog.shutdown()
+
+    expect(event.properties).not.toHaveProperty('$process_person_profile')
+    expect(message.options).toEqual(expected)
   })
 
   it('honours captureImmediate by awaiting captureImmediate instead of capture', async () => {
@@ -426,19 +484,37 @@ describe('captureAiGeneration', () => {
     expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 
-  it('runs exception autocapture and tags the trace when enabled', async () => {
+  it.each([
+    {
+      name: 'positional arguments for posthog-node 5',
+      registerOptions: undefined,
+      readCall: (args: unknown[]) => ({ error: args[0], properties: args[2], uuid: args[3], argCount: args.length }),
+    },
+    {
+      name: 'an options object for posthog-node 6',
+      registerOptions: vi.fn(),
+      readCall: (args: any[]) => ({
+        error: args[0],
+        properties: args[1].properties,
+        uuid: args[1].uuid,
+        argCount: args.length,
+      }),
+    },
+  ])('runs exception autocapture and tags the trace with $name', async ({ registerOptions, readCall }) => {
     const client = buildClient({ enableExceptionAutocapture: true })
+    ;(client as any).registerOptions = registerOptions
     const error = new Error('boom')
 
     await captureAiGeneration(client, { ...baseRequiredOptions, error })
 
     expect(client.captureException).toHaveBeenCalledTimes(1)
-    const [capturedError, , properties, exceptionId] = (client.captureException as vi.Mock).mock.calls[0]
-    expect(capturedError).toBe(error)
-    expect(properties).toEqual({ $ai_trace_id: expect.any(String) })
-    expect(typeof exceptionId).toBe('string')
+    const call = readCall((client.captureException as vi.Mock).mock.calls[0])
+    expect(call.error).toBe(error)
+    expect(call.properties).toEqual({ $ai_trace_id: expect.any(String) })
+    expect(typeof call.uuid).toBe('string')
+    expect(call.argCount).toBe(registerOptions ? 2 : 4)
 
-    expect(lastCaptureProperties(client).$exception_event_id).toBe(exceptionId)
+    expect(lastCaptureProperties(client).$exception_event_id).toBe(call.uuid)
     expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 

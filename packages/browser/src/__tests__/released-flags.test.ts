@@ -6,13 +6,13 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { typedFlagDetailOf } from '@posthog/browser-common/flags-response-v4'
 import { PARITY_FLAGS, quietReads, runAll, startClient, trackedReads, type Shape } from './released-flags-scenarios'
 
-// Flag results, events and stored state pinned to what posthog-js 1.448.0 returned, sent and
+// Flag results, events and stored state pinned to what posthog-js 1.453.3 returned, sent and
 // stored, from the v2 response it requests. `released-flags-scenarios.ts` says how the recording
 // was made.
 
 type Results = Record<string, Record<string, any>>
 
-const RELEASED_VERSION = '1.448.0'
+const RELEASED_VERSION = '1.453.3'
 const recordingOf = (version: string): string => path.resolve(__dirname, `fixtures/released-flags-${version}.json`)
 const RECORDING = recordingOf(RELEASED_VERSION)
 const recordVersion = process.env.RECORD_RELEASED_FLAGS
@@ -314,7 +314,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
         })
 
         // Every getter result and callback, and every stored property that a released version
-        // reads, is what 1.448.0 returned and stored. So is every flag event from the v2 response.
+        // reads, is what 1.453.3 returned and stored. So is every flag event from the v2 response.
         // From the v4 response, the flag events of config version 2 flags change as
         // `withConfigVersion2Events` says, and nothing else does.
         it.each(Object.keys(released))(`match ${RELEASED_VERSION}: %s`, (scenario) => {
@@ -336,7 +336,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
             )
         })
 
-        it('stores no property that 1.448.0 does not store', () => {
+        it('stores no property that 1.453.3 does not store', () => {
             // A released version adds every stored property it does not know to each event it sends.
             for (const scenario of Object.keys(released)) {
                 expect(Object.keys(results[scenario].stored)).toEqual(Object.keys(released[scenario].stored))
@@ -345,8 +345,8 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
 
         it(
             shape === 'v4'
-                ? 'stores the reported calls of config version 2 flags by their dedupe keys, in the property 1.448.0 uses'
-                : 'stores the reported calls as 1.448.0 does',
+                ? 'stores the reported calls of config version 2 flags by their dedupe keys, in the property 1.453.3 uses'
+                : 'stores the reported calls as 1.453.3 does',
             () => {
                 const reported = results.getters.stored.$flag_call_reported
                 const recorded = released.getters.stored.$flag_call_reported
@@ -411,7 +411,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING)).each<Shape>(['v2', 'v4'
     }
 )
 
-describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.0 stored', () => {
+describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.453.3 stored', () => {
     const released: Results = existsSync(RECORDING) ? JSON.parse(readFileSync(RECORDING, 'utf8')).results : {}
 
     beforeEach(() => {
@@ -427,9 +427,9 @@ describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.
         vi.useRealTimers()
     })
 
-    // The page that 1.448.0 loaded stored its flags and reported some reads. The next page loads
+    // The page that 1.453.3 loaded stored its flags and reported some reads. The next page loads
     // this source, which reads that state before its own response arrives.
-    it('is read as 1.448.0 read it, with no typed record and no request', async () => {
+    it('is read as 1.453.3 read it, with no typed record and no request', async () => {
         const recorded = released.getters
         const { $flag_call_reported: _reported, ...storedFlags } = recorded.stored
         const persistenceName = `released-flags-${uuidv7()}`
@@ -444,7 +444,7 @@ describe.skipIf(recordVersion || !existsSync(RECORDING))('flag state that 1.448.
             expect([name, reads[name]]).toEqual([name, recorded[name]])
         }
         expect(tracked).toEqual(recorded.tracked)
-        // The reads send the events that 1.448.0 sent for the same stored flags.
+        // The reads send the events that 1.453.3 sent for the same stored flags.
         expect(client.events).toEqual(
             recorded.events
                 .filter(([event]: [string]) => event === '$feature_flag_called')

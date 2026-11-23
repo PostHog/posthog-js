@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "1.2.1",
+  "version": "1.6.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -11,18 +11,20 @@
     "directory": "packages/mcp"
   },
   "scripts": {
-    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json",
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json && tsc --noEmit --project tsconfig.json",
     "clean": "rimraf dist coverage",
     "lint": "oxlint --report-unused-disable-directives-severity error src && oxfmt --check harness",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix && oxfmt --write harness",
     "generate-version": "node ../../tooling/write-version.mjs",
     "pretest:unit": "pnpm generate-version",
     "test:unit": "vitest run",
-    "test:integration": "pnpm test:integration:sdk-v1 && pnpm test:integration:sdk-v2 && pnpm test:integration:nest-v1 && pnpm test:integration:nest-v2",
+    "test:integration": "pnpm test:integration:sdk-v1 && pnpm test:integration:sdk-v2 && pnpm test:integration:nest-v1 && pnpm test:integration:nest-v2 && pnpm test:integration:mcp-handler && pnpm test:integration:fastmcp",
     "test:integration:sdk-v1": "node harness/dual-era/matrix.mjs --major v1 && node harness/dual-era/probe-late-handlers.mjs --major v1 && node harness/dual-era/probe-pagination.mjs --major v1 && node harness/dual-era/probe-feedback.mjs --major v1 && node harness/dual-era/probe-mcp-apps.mjs --major v1",
-    "test:integration:sdk-v2": "node harness/dual-era/matrix.mjs --major v2 && node harness/dual-era/probe-late-handlers.mjs --major v2 && node harness/dual-era/probe-first-call-error.mjs && node harness/dual-era/probe-pagination.mjs --major v2 && node harness/dual-era/probe-feedback.mjs --major v2 && node harness/dual-era/probe-mcp-apps.mjs --major v2",
+    "test:integration:sdk-v2": "node harness/dual-era/matrix.mjs --major v2 && node harness/dual-era/probe-late-handlers.mjs --major v2 && node harness/dual-era/probe-first-call-error.mjs && node harness/dual-era/probe-shared-stateless-transport.mjs && node harness/dual-era/probe-pagination.mjs --major v2 && node harness/dual-era/probe-feedback.mjs --major v2 && node harness/dual-era/probe-mcp-apps.mjs --major v2",
     "test:integration:nest-v1": "node harness/nest-v1/verify.mjs && LEVEL=low node harness/nest-v1/verify.mjs",
     "test:integration:nest-v2": "node harness/nest-v2/verify.mjs && LEVEL=low node harness/nest-v2/verify.mjs",
+    "test:integration:mcp-handler": "node harness/frameworks/verify.mjs mcp-handler",
+    "test:integration:fastmcp": "node harness/frameworks/verify.mjs fastmcp",
     "prebuild": "pnpm generate-version",
     "build": "rslib build",
     "dev": "rslib build -w",
@@ -63,6 +65,10 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "catalog:",
+    "fastmcp": "4.25.0",
+    "mcp-handler": "2.3.1",
+    "mcp-server-v2-0": "npm:@modelcontextprotocol/server@2.0.0",
     "posthog-node": "workspace:^",
     "reflect-metadata": "^0.2.2",
     "rekog-mcp-nest-v1": "npm:@rekog/mcp-nest@1.9.11",
@@ -71,15 +77,14 @@
     "ts-node": "^10.9.2",
     "typescript": "catalog:native",
     "typescript-legacy": "catalog:",
+    "vitest": "catalog:",
     "zod": "^3.25.0",
-    "zod4": "npm:zod@^4.4.3",
-    "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "zod4": "npm:zod@^4.4.3"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",
     "@modelcontextprotocol/server": ">=2.0.0",
-    "posthog-node": "^5.0.0"
+    "posthog-node": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {

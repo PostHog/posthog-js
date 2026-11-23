@@ -2,7 +2,7 @@
  * Feature flag scenarios, written against a real client and its public API, with only the
  * transport replaced.
  *
- * `fixtures/released-flags-1.448.0.json` holds what posthog-js 1.448.0 returned, sent and stored
+ * `fixtures/released-flags-1.453.3.json` holds what posthog-js 1.453.3 returned, sent and stored
  * for each scenario, from the `v2` response shape it requests. `released-flags.test.ts` runs the
  * scenarios on this source from the `v2` and the `v4` shape and compares them with that recording.
  *
@@ -384,6 +384,10 @@ export function quietReads(posthog: PostHog, keys: string[]): Record<string, unk
     for (const key of keys) {
         outputs[`getFeatureFlag:${key}`] = plain(posthog.getFeatureFlag(key, { send_event: false }))
         outputs[`isFeatureEnabled:${key}`] = plain(posthog.isFeatureEnabled(key, { send_event: false }))
+        // A flag without a value returns the caller's default. A flag that is off returns false.
+        outputs[`isFeatureEnabled:${key}:default`] = plain(
+            posthog.isFeatureEnabled(key, { send_event: false, defaultValue: true })
+        )
         outputs[`getFeatureFlagPayload:${key}`] = plain(posthog.getFeatureFlagPayload(key))
         outputs[`getFeatureFlagResult:${key}`] = plain(posthog.getFeatureFlagResult(key, { send_event: false }))
     }
@@ -453,8 +457,8 @@ async function errorsWhileComputingFlags(shape: Shape): Promise<Record<string, u
     const served: FlagSpec = { ...FAILED_FLAG, enabled: true, variant: 'compact', value: 'compact', failed: false }
     await client.load(responseFor(shape, [served, HEALTHY_FLAG, spec('bool-on')]))
     const before = trackedReads(client.posthog, ['failed', 'healthy', 'bool-on'])
-    // The failed flag keeps its cached value, the healthy flag changes, and the flag the
-    // response leaves out stays.
+    // The response reports errors, so it is merged into the stored flags: the failed flag keeps
+    // its cached value, the healthy flag changes, and the flag the response leaves out stays.
     const changed: FlagSpec = { ...HEALTHY_FLAG, variant: 'wide', value: 'wide', payload: '{"columns":4}' }
     await client.load(responseFor(shape, [FAILED_FLAG, changed], { errorsWhileComputingFlags: true }, 1))
     const result = results(client, {
@@ -462,6 +466,39 @@ async function errorsWhileComputingFlags(shape: Shape): Promise<Record<string, u
         ...quietReads(client.posthog, ['failed', 'healthy', 'bool-on']),
         tracked: trackedReads(client.posthog, ['failed', 'healthy', 'bool-on', 'missing']),
     })
+    await client.close()
+    return result
+}
+
+async function failedRecordWithNoCachedValue(shape: Shape): Promise<Record<string, unknown>> {
+    const client = await startClient()
+    // Nothing is stored for the failed flag, so the merge has no value to keep. The flag has no
+    // value, which is not the same as a flag that is off.
+    await client.load(
+        responseFor(shape, [FAILED_FLAG, HEALTHY_FLAG, spec('bool-off')], { errorsWhileComputingFlags: true })
+    )
+    const keys = ['failed', 'healthy', 'bool-off']
+    const outputs = { ...quietReads(client.posthog, keys), tracked: trackedReads(client.posthog, keys) }
+    // Every other event carries the flags that have a value.
+    client.posthog.capture('released-flags-event')
+    const result = results(client, outputs)
+    await client.close()
+    return result
+}
+
+async function failedRecordInASurveyOnlyResponse(shape: Shape): Promise<Record<string, unknown>> {
+    const persistenceName = `released-flags-${uuidv7()}`
+    const served: FlagSpec = { ...FAILED_FLAG, enabled: true, variant: 'compact', value: 'compact', failed: false }
+    const first = await startClient({}, persistenceName)
+    await first.load(responseFor(shape, [served, HEALTHY_FLAG]))
+    await first.close()
+
+    // The next page asks only for survey flags, so its response is merged into the stored flags
+    // although it reports no response-wide error. The failed flag keeps its cached value.
+    const client = await startClient({ advanced_only_evaluate_survey_feature_flags: true }, persistenceName)
+    await client.load(responseFor(shape, [FAILED_FLAG, SURVEY_FLAG], {}, 1))
+    const keys = ['failed', 'healthy', 'survey-targeting']
+    const result = results(client, { ...quietReads(client.posthog, keys), tracked: trackedReads(client.posthog, keys) })
     await client.close()
     return result
 }
@@ -725,6 +762,8 @@ export async function runAll(shape: Shape): Promise<Record<string, Record<string
         getters: await getters(shape),
         'a failed record in a complete response': await failedRecordInACompleteResponse(shape),
         'errors while computing flags': await errorsWhileComputingFlags(shape),
+        'a failed record with no cached value': await failedRecordWithNoCachedValue(shape),
+        'a failed record in a survey-only response': await failedRecordInASurveyOnlyResponse(shape),
         'quota limited': await quotaLimited(shape),
         'failed requests': await failedRequests(shape),
         bootstrap: await bootstrap(shape),

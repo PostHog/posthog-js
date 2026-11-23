@@ -467,6 +467,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"true\\",
     \\"\\\\\\"fallback\\\\\\"\\"
   ],
+  \\"require_subresource_integrity\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"asset_host\\": [
     \\"null\\",
     \\"string\\"
@@ -616,6 +621,10 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"undefined\\",
       \\"null\\",
       \\"(text: string, element?: HTMLElement | undefined) => string\\"
+    ],
+    \\"selectMaskingFn\\": [
+      \\"undefined\\",
+      \\"(element: HTMLSelectElement) => \\\\\\"masked\\\\\\" | \\\\\\"unmasked\\\\\\"\\"
     ],
     \\"maskAllElementAttributes\\": [
       \\"undefined\\",

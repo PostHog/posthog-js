@@ -170,9 +170,10 @@ describe('OpenTelemetry request context', () => {
               void (async () => {
                 await Promise.resolve()
                 const child = tracer.startSpan('child', { attributes })
-                client.enterContext({ distinctId: 'later-user', sessionId: 'later-session' })
-                child.end()
-                requestSpan.end()
+                client.withContext({ distinctId: 'later-user', sessionId: 'later-session' }, () => {
+                  child.end()
+                  requestSpan.end()
+                })
                 resolve()
               })().catch(reject)
             }
@@ -272,7 +273,7 @@ describe('OpenTelemetry request context', () => {
             await client.withContext({ distinctId: 'browser-user', sessionId: 'browser-session' }, async () => {
               enrichCurrentSpan(client)
               tracer.startSpan('child').end()
-              client.enterContext({ distinctId: 'later-user', sessionId: 'later-session' })
+              client.withContext({ distinctId: 'later-user', sessionId: 'later-session' }, () => {})
             })
             active.end()
           })
@@ -415,17 +416,12 @@ describe('OpenTelemetry request context', () => {
     expect(exporter.getFinishedSpans()[0].attributes).toEqual({ posthogDistinctId: 'explicit-user' })
   })
 
-  it.each(['withContext', 'enterContext'])('keeps absent IDs stable through %s', (setup) => {
+  it('keeps absent IDs stable through nested contexts', () => {
     const tracer = provider.getTracer('test')
     client.withContext({ distinctId: 'original-user' }, () => {
       const span = tracer.startSpan('snapshot')
       context.with(trace.setSpan(context.active(), span), () => {
-        if (setup === 'withContext') {
-          client.withContext({ sessionId: 'later-session' }, () => span.end())
-        } else {
-          client.enterContext({ sessionId: 'later-session' })
-          span.end()
-        }
+        client.withContext({ sessionId: 'later-session' }, () => span.end())
       })
     })
     expect(exporter.getFinishedSpans()[0].attributes).toEqual({ posthogDistinctId: 'original-user' })

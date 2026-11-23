@@ -24,6 +24,8 @@
                 "$TURBO_ROOT$/tooling/rrweb-build/package.json",
                 "scripts/loader-methods.mjs",
                 "scripts/generate-integrity-manifest.mjs",
+                "scripts/embed-extension-integrity.mjs",
+                "scripts/extension-integrity.mjs",
                 "$TURBO_ROOT$/tooling/release/src/integrity-manifest.ts",
                 "$TURBO_ROOT$/tooling/release/src/release-utils.ts",
                 "scripts/check-mangled-property-consistency.js",
@@ -109,7 +111,8 @@
             "cache": false
         },
         "test:rrweb": {
-            "dependsOn": ["build"]
+            "dependsOn": ["build"],
+            "env": ["RRWEB_SELECTED_CONTENT_BROWSER"]
         },
         "test:functional": {},
         "@posthog/rollup-plugin#test:functional": {

@@ -471,7 +471,7 @@ describe('the /flags?v=4 response', () => {
             expectOnlyThisRecordUnreadable(readFlagRecords(body).body.flags as Record<string, FeatureFlagDetail>)
         })
 
-        it('reads as a disabled flag with no payload, and leaves the other flags alone', async () => {
+        it('has no value and no payload, and leaves the other flags alone', async () => {
             const { flags, load: loadFlags } = await setup()
 
             await loadFlags(
@@ -481,14 +481,11 @@ describe('the /flags?v=4 response', () => {
                 })
             )
 
-            expect(flags.getFeatureFlag('garden-layout', { send_event: false })).toBe(false)
+            // The flag is unavailable, like a flag the server could not evaluate. It is not off.
+            expect(flags.getFeatureFlag('garden-layout', { send_event: false })).toBeUndefined()
             expect(flags.getFeatureFlagPayload('garden-layout')).toBeUndefined()
-            expect(flags.getFeatureFlagResult('garden-layout', { send_event: false })).toEqual({
-                key: 'garden-layout',
-                enabled: false,
-                variant: undefined,
-                payload: undefined,
-            })
+            expect(flags.getFeatureFlagResult('garden-layout', { send_event: false })).toBeUndefined()
+            expect(flags.isFeatureEnabled('garden-layout', { send_event: false, defaultValue: true })).toBe(true)
             expect(flags.getFeatureFlag('sibling', { send_event: false })).toBe('compact')
         })
 
@@ -525,8 +522,239 @@ describe('the /flags?v=4 response', () => {
                 metadata: { payload: null },
             })
             await loadFlags(envelope({ 'garden-layout': record }))
-            expect(flags.getFeatureFlag('garden-layout', { send_event: false })).toBe(false)
+            expect(flags.getFeatureFlag('garden-layout', { send_event: false })).toBeUndefined()
             expect(flags.getFeatureFlagPayload('garden-layout')).toBeUndefined()
+        })
+    })
+
+    describe('records without a value', () => {
+        // A record that the server marks failed has no evaluated value. Its flag is unavailable,
+        // which is not the same as off: the getters return no result and a caller's default
+        // applies. A typed record that cannot be read has no value either, so it is stored as a
+        // failed record with nothing else and reads the same way.
+        //
+        // Each case runs a failed v2 record, a failed v4 record and an unreadable v4 record
+        // through the same steps. What the shared code does for the v2 record is the reference:
+        // the v4 path must do the same.
+        const KEY = 'garden-layout'
+        const REASON = { code: 'dependency_error', condition_index: null, description: 'A dependency failed' }
+        const CACHED = { value: 'wide', 'metadata.payload': '{"columns":4}' }
+
+        const failedV2 = (): Record<string, any> =>
+            olderRecord({
+                enabled: false,
+                variant: null,
+                failed: true,
+                reason: REASON,
+                metadata: { id: 201, version: 7, description: null, payload: '{"remote":true}', has_experiment: false },
+            })
+        // A failed record can still carry a value and a payload. Neither is read.
+        const failedV4 = (): Record<string, any> =>
+            v4Record({ failed: true, reason: REASON, 'metadata.payload': '{"remote":true}' })
+        const unreadableV4 = (): Record<string, any> =>
+            v4Record({ 'metadata.id': '201', 'metadata.payload': '{"remote":true}' })
+
+        type Harness = Awaited<ReturnType<typeof setup>>
+
+        const flagEventsOf = (client: TestClient): Record<string, unknown>[] =>
+            client.capturedEvents
+                .filter((event) => event.event === '$feature_flag_called' && event.properties.$feature_flag === KEY)
+                .map((event) => event.properties)
+
+        /** What every public read returns for the flag and its sibling, and what the events carry. */
+        function observe({ flags, client }: Harness): Record<string, unknown> {
+            const quiet = { send_event: false }
+            const reads = {
+                result: flags.getFeatureFlagResult(KEY, quiet),
+                value: flags.getFeatureFlag(KEY, quiet),
+                enabled: flags.isFeatureEnabled(KEY, quiet),
+                enabledWithDefault: flags.isFeatureEnabled(KEY, { ...quiet, defaultValue: true }),
+                payload: flags.getFeatureFlagPayload(KEY),
+                flags: flags.getFlags(),
+                variants: flags.getFlagVariants(),
+                payloads: flags.getFlagPayloads(),
+                all: flags.getAllFeatureFlags(),
+                markedFailed: flags.getFeatureFlagDetails(KEY)?.failed === true,
+                sibling: flags.getFeatureFlagResult('sibling', quiet),
+            }
+            // A tracked read, twice: the call is reported once.
+            const tracked = [flags.getFeatureFlag(KEY), flags.getFeatureFlag(KEY)]
+            const [called, ...repeated] = flagEventsOf(client)
+            // Every other event carries the flags that have a value.
+            client.capture('garden-event')
+            const other = client.capturedEvents[client.capturedEvents.length - 1]!.properties
+            return {
+                ...reads,
+                tracked,
+                repeatedCalls: repeated.length,
+                response: called?.$feature_flag_response,
+                error: called?.$feature_flag_error,
+                eventPayload: called?.$feature_flag_payload,
+                onOtherEvents: {
+                    value: other[`$feature/${KEY}`],
+                    active: other.$active_feature_flags,
+                    payloads: other.$feature_flag_payloads,
+                },
+            }
+        }
+
+        const UNAVAILABLE = {
+            result: undefined,
+            value: undefined,
+            enabled: undefined,
+            enabledWithDefault: true,
+            payload: undefined,
+            flags: ['sibling'],
+            variants: { sibling: 'compact' },
+            payloads: { sibling: null },
+            markedFailed: true,
+            tracked: [undefined, undefined],
+            repeatedCalls: 0,
+            response: undefined,
+            eventPayload: null,
+            onOtherEvents: { value: undefined, active: ['sibling'], payloads: { sibling: null } },
+        }
+
+        const KINDS: [string, () => Record<string, any>, FlagsResponseFormat | null][] = [
+            // The reference: a client that does not opt in reads the v2 record as sent.
+            ['a failed v2 record', failedV2, null],
+            ['a failed v2 record that a v4 client reads', failedV2, flagsResponseV4],
+            ['a failed v4 record', failedV4, flagsResponseV4],
+            ['an unreadable v4 record', unreadableV4, flagsResponseV4],
+        ]
+        const CASES = KINDS.flatMap(([name, record, format]) =>
+            [true, false, undefined].map(
+                (errors): [string, () => Record<string, any>, FlagsResponseFormat | null, boolean | undefined] => [
+                    `${name}, errorsWhileComputingFlags ${errors}`,
+                    record,
+                    format,
+                    errors,
+                ]
+            )
+        )
+        const sibling = (format: FlagsResponseFormat | null): Record<string, any> =>
+            format ? v4Record({ key: 'sibling' }) : olderRecord({ key: 'sibling' })
+        const cached = (format: FlagsResponseFormat | null): Record<string, any> =>
+            format ? v4Record(CACHED) : olderRecord({ variant: 'wide', 'metadata.payload': '{"columns":4}' })
+
+        it.each(CASES)('%s: the flag has no value when none is stored', async (_name, record, format, errors) => {
+            const harness = await setup(format)
+            await harness.load(
+                envelope({ [KEY]: record(), sibling: sibling(format) }, { errorsWhileComputingFlags: errors })
+            )
+
+            expect(observe(harness)).toMatchObject({
+                ...UNAVAILABLE,
+                // The failure of the flag is reported, beside a response-wide error.
+                error: errors ? 'errors_while_computing_flags,evaluation_failed' : 'evaluation_failed',
+                sibling: { key: 'sibling', enabled: true, variant: 'compact' },
+            })
+            expect(harness.flags.getAllFeatureFlags().map((flag) => flag.key)).toEqual(['sibling'])
+        })
+
+        it.each(CASES)(
+            '%s: a complete response drops the stored value, and a response with errors keeps it',
+            async (_name, record, format, errors) => {
+                const harness = await setup(format)
+                await harness.load(envelope({ [KEY]: cached(format), sibling: sibling(format) }))
+                expect(harness.flags.getFeatureFlag(KEY, { send_event: false })).toBe('wide')
+
+                await harness.load(
+                    envelope({ [KEY]: record(), sibling: sibling(format) }, { errorsWhileComputingFlags: errors })
+                )
+
+                const observed = observe(harness)
+                if (errors) {
+                    // The response is merged into the stored flags, so the stored value stays.
+                    expect(observed).toMatchObject({
+                        result: { key: KEY, enabled: true, variant: 'wide', payload: { columns: 4 } },
+                        value: 'wide',
+                        enabled: true,
+                        enabledWithDefault: true,
+                        payload: { columns: 4 },
+                        flags: [KEY, 'sibling'],
+                        markedFailed: false,
+                        tracked: ['wide', 'wide'],
+                        response: 'wide',
+                        error: 'errors_while_computing_flags',
+                        onOtherEvents: { value: 'wide', active: [KEY, 'sibling'] },
+                    })
+                } else {
+                    // A failed flag alone does not keep a value that an earlier response supplied.
+                    expect(observed).toMatchObject({ ...UNAVAILABLE, error: 'evaluation_failed' })
+                }
+            }
+        )
+
+        it.each(KINDS)('%s: a survey-only response keeps the stored value', async (_name, record, format) => {
+            const harness = await setup(format, { onlyEvaluateSurveyFeatureFlags: true })
+            await harness.load(envelope({ [KEY]: cached(format), sibling: sibling(format) }))
+
+            await harness.load(envelope({ [KEY]: record() }))
+
+            expect(observe(harness)).toMatchObject({
+                value: 'wide',
+                payload: { columns: 4 },
+                markedFailed: false,
+                response: 'wide',
+                error: undefined,
+            })
+        })
+
+        it.each(KINDS.slice(1))(
+            '%s: reads exactly as the failed v2 record does in a client that does not opt in',
+            async (_name, record, format) => {
+                const reference = await setup(null)
+                await reference.load(envelope({ [KEY]: failedV2(), sibling: olderRecord({ key: 'sibling' }) }))
+                const harness = await setup(format)
+                await harness.load(envelope({ [KEY]: record(), sibling: sibling(format) }))
+
+                const { sibling: _referenceSibling, ...expected } = observe(reference)
+                const { sibling: _sibling, ...observed } = observe(harness)
+
+                expect(observed).toEqual(expected)
+            }
+        )
+
+        it('stores a failed v4 record with its reason and metadata, and an unreadable one with nothing else', async () => {
+            const { client, load: loadFlags } = await setup()
+
+            await loadFlags(envelope({ failed: failedV4(), unreadable: unreadableV4() }))
+
+            expect(storedDetails(client).failed).toMatchObject({
+                enabled: false,
+                variant: null,
+                value: null,
+                failed: true,
+                // A null member of the record is left out of the stored one.
+                reason: { code: REASON.code, description: REASON.description },
+                metadata: { id: 201, payload: null, config_version: 2 },
+            })
+            expect(storedDetails(client).unreadable).toEqual({ key: 'unreadable', enabled: false, failed: true })
+            expect(client.kv.get('$enabled_feature_flags')).toEqual({})
+            expect(client.kv.get('$feature_flag_payloads')).toEqual({})
+        })
+
+        it('reports what the server says about a failed flag, and nothing about an unreadable record', async () => {
+            const { flags, client, load: loadFlags } = await setup()
+            await loadFlags(envelope({ failed: { ...failedV4(), key: 'failed' }, unreadable: unreadableV4() }))
+
+            flags.getFeatureFlag('failed')
+            flags.getFeatureFlag('unreadable')
+
+            const [failed, unreadable] = client.capturedEvents.map((event) => event.properties)
+            expect(failed).toMatchObject({
+                $feature_flag: 'failed',
+                $feature_flag_error: 'evaluation_failed',
+                $feature_flag_reason: 'A dependency failed',
+                $feature_flag_id: 201,
+                $feature_flag_version: 7,
+            })
+            // The SDK read no field of the record, so it reports none.
+            expect(unreadable).toMatchObject({ $feature_flag: 'unreadable', $feature_flag_error: 'evaluation_failed' })
+            for (const name of ['$feature_flag_reason', '$feature_flag_id', '$feature_flag_version']) {
+                expect(unreadable).not.toHaveProperty(name)
+            }
         })
     })
 
@@ -870,7 +1098,7 @@ describe('the /flags?v=4 response', () => {
 
             await loadFlags(envelope({ split: split({ 'metadata.rule_id': 3 }) }))
 
-            expect(flags.getFeatureFlag('split', { send_event: false })).toBe(false)
+            expect(flags.getFeatureFlag('split', { send_event: false })).toBeUndefined()
             expect(storedDetails(client).split).toEqual({ key: 'split', enabled: false, failed: true })
         })
 

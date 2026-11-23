@@ -47,8 +47,6 @@ describe('flags v2', () => {
           $feature_flag_response: undefined,
           $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
           $feature_flag_evaluated_at: expect.any(Number),
-          $lib: posthog.getLibraryId(),
-          $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
         },
       })
@@ -163,8 +161,6 @@ describe('flags v2', () => {
             $feature_flag_reason: expectedReason,
             $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
             $feature_flag_evaluated_at: expect.any(Number),
-            $lib: posthog.getLibraryId(),
-            $lib_version: posthog.getLibraryVersion(),
             locally_evaluated: false,
           },
         })
@@ -428,8 +424,6 @@ describe('flags v1', () => {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
-          $lib: posthog.getLibraryId(),
-          $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
         },
       })
@@ -1458,10 +1452,10 @@ describe('minimal $feature_flag_called events', () => {
           '$feature_flag_evaluated_at',
           'locally_evaluated',
           '$groups',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(message.properties).toMatchObject({
@@ -1575,13 +1569,13 @@ describe('minimal $feature_flag_called events', () => {
       await posthog.shutdown()
     })
 
-    it('lets before_send re-add a property stripped by minimization', async () => {
+    it('lets beforeSend re-add a property stripped by minimization', async () => {
       mockedFetch.mockImplementation(
         apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
       )
       let beforeSendProperties: Record<string, any> | undefined
       const { posthog, captured } = createClient({
-        before_send: (event) => {
+        beforeSend: (event) => {
           if (event.event === '$feature_flag_called') {
             beforeSendProperties = event.properties
             return { ...event, properties: { ...event.properties, super_prop: 're-added' } }
@@ -1594,7 +1588,7 @@ describe('minimal $feature_flag_called events', () => {
       await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
       await waitForPromises()
 
-      // before_send sees the already-minimized properties, not the pre-filter merged set
+      // beforeSend sees the already-minimized properties, not the pre-filter merged set
       expect(beforeSendProperties).toBeDefined()
       expect(beforeSendProperties).not.toHaveProperty('super_prop')
 
@@ -1645,10 +1639,10 @@ describe('minimal $feature_flag_called events', () => {
           '$feature_flag_reason',
           '$feature_flag_evaluated_at',
           'locally_evaluated',
-          '$lib',
-          '$lib_version',
           '$is_server',
           '$geoip_disable',
+          '$lib',
+          '$lib_version',
         ].sort()
       )
       expect(message.properties).toMatchObject({
