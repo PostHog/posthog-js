@@ -8,7 +8,8 @@
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
-- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture` — pass `iOSCaptureMethod: 'background'` instead
+- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** `onFeatureFlags` callbacks receive one object, `{ flags, variants, errorsLoading }`, like posthog-ios, posthog-android and posthog_flutter: `flags` lists the enabled flag keys, `variants` maps them to `true` or their variant, and `errorsLoading` is `true` when the latest load failed (the values are then the last known ones). Disabled flags and flags whose variant is an empty string are left out. Replace `onFeatureFlags((flags) => …)` with `onFeatureFlags(({ flags, variants, errorsLoading }) => …)`
 - **Breaking:** a callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags` returns
@@ -21,6 +22,5 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default), `'background'` or experimental `'gpu'`
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request
