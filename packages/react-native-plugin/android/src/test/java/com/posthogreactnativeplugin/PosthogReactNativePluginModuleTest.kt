@@ -150,6 +150,29 @@ class PosthogReactNativePluginModuleTest {
   }
 
   @Test
+  fun `a JS minimum duration reaches the replay integration as a Long`() {
+    val received = mutableListOf<Long?>()
+
+    applySessionReplayMinimumDuration(5000.0) { received.add(it) }
+
+    assertEquals(listOf<Long?>(5000L), received)
+  }
+
+  @Test
+  fun `a null minimum duration reaches the replay integration as null`() {
+    val received = mutableListOf<Long?>()
+
+    applySessionReplayMinimumDuration(null) { received.add(it) }
+
+    assertEquals(listOf<Long?>(null), received)
+  }
+
+  @Test
+  fun `a minimum duration without a replay integration does not throw`() {
+    applySessionReplayMinimumDuration(5000.0, null)
+  }
+
+  @Test
   fun `iso 8601 timestamps from JS round-trip to the same instant`() {
     val parsed = parseIso8601("2026-09-22T10:11:12.134Z")
     assertNotNull(parsed)

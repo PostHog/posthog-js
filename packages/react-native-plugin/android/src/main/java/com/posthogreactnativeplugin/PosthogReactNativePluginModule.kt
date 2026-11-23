@@ -20,6 +20,7 @@ import com.posthog.PostHogConfig
 import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogInternalReplayApi
 import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
@@ -274,6 +275,26 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("getSessionReplayDebugProperties", e)
       promise.resolve(Arguments.createMap())
+    }
+  }
+
+  @OptIn(PostHogInternalReplayApi::class)
+  @ReactMethod
+  fun setSessionReplayMinimumDuration(
+    minimumDurationMs: Double?,
+    promise: Promise,
+  ) {
+    try {
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      applySessionReplayMinimumDuration(minimumDurationMs, integration?.let { it::setSessionReplayMinimumDuration })
+    } catch (e: Throwable) {
+      logError("setSessionReplayMinimumDuration", e)
+    } finally {
+      promise.resolve(null)
     }
   }
 
@@ -896,6 +917,14 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// JS numbers cross the bridge as doubles; null clears the override. With no replay integration there is nothing to set.
+internal fun applySessionReplayMinimumDuration(
+  minimumDurationMs: Double?,
+  setMinimumDuration: ((Long?) -> Unit)?,
+) {
+  setMinimumDuration?.invoke(minimumDurationMs?.toLong())
+}
 
 // Two separate native features: autoCapture covers JVM crashes, while captureNativeCrashes
 // installs the tombstone scanner that reports NDK crashes on the next launch.
