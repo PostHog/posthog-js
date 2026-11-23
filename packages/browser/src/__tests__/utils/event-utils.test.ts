@@ -4,6 +4,7 @@ import {
     getBrowserLanguage,
     getBrowserLanguagePrefix,
     getEventProperties,
+    getInitialPersonPropsFromInfo,
     getTimezone,
     getTimezoneOffset,
 } from '@posthog/browser-common/utils/event-utils'
@@ -45,6 +46,25 @@ describe(`event-utils`, () => {
             } as Location)
             const properties = getEventProperties(true)
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=true')
+        })
+
+        it('should mask Snapchat click ID spellings as personal data', () => {
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?ScCid=abc&SsCid=def&sscid=shareasale',
+            } as Location)
+            const properties = getEventProperties(true)
+            expect(properties['$current_url']).toEqual(
+                'https://www.example.com/path?ScCid=<masked>&SsCid=<masked>&sscid=shareasale'
+            )
+        })
+
+        it('should set $initial_sccid from a ScCid landing URL', () => {
+            const props = getInitialPersonPropsFromInfo({
+                r: '$direct',
+                u: 'https://www.example.com/path?utm_source=snapchat&ScCid=snap-click',
+            })
+            expect(props['$initial_sccid']).toBe('snap-click')
+            expect(props).not.toHaveProperty('$initial_ScCid')
         })
 
         it('should mask out custom personal data', () => {

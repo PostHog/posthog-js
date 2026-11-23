@@ -1,11 +1,11 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
+import { hasOwnProperty, isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './general-utils'
+import { each, eachArray, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
 import type { BrowserDetectionHints, BrowserDetectionOptions } from '@posthog/core'
 import {
@@ -46,6 +46,27 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'irclid', // impact
     '_kx', // klaviyo
 ]
+
+// Other spellings of a campaign param that ad platforms put in landing URLs.
+// Query params are case-sensitive, so each spelling is listed exactly.
+// A value found under an alias is stored under the canonical name.
+// Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is left out
+// because ShareASale uses it for its own affiliate click ID.
+export const CAMPAIGN_PARAM_ALIASES: Record<string, string[]> = {
+    sccid: ['ScCid', 'SsCid'],
+}
+
+// The URL params to mask when masking personal data: the personal data campaign
+// params and their aliases.
+export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => {
+    const params = PERSONAL_DATA_CAMPAIGN_PARAMS.slice()
+    each(CAMPAIGN_PARAM_ALIASES, function (aliases: string[], param: string) {
+        if (PERSONAL_DATA_CAMPAIGN_PARAMS.indexOf(param) !== -1) {
+            params.push(...aliases)
+        }
+    })
+    return params
+})()
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
@@ -99,7 +120,7 @@ export function getCampaignParams(
     }
 
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
 
     // Initially get campaign params from the URL
@@ -122,7 +143,12 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 
     const params: Record<string, any> = {}
     each(campaign_keywords, function (kwkey) {
-        const kw = getQueryParam(url, kwkey)
+        let kw = getQueryParam(url, kwkey)
+        if (!kw && hasOwnProperty.call(CAMPAIGN_PARAM_ALIASES, kwkey)) {
+            eachArray(CAMPAIGN_PARAM_ALIASES[kwkey], function (alias) {
+                kw = kw || getQueryParam(url, alias)
+            })
+        }
         params[kwkey] = kw ? kw : null
     })
 
@@ -220,7 +246,7 @@ export function getPersonInfo(
     disableCaptureUrlHashes: boolean = false
 ) {
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
     const url = href?.substring(0, 1000)
@@ -297,7 +323,7 @@ export function getEventProperties(
         return {}
     }
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
