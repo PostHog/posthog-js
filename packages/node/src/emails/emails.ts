@@ -598,7 +598,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       'templateKey'
     )
   }
-  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  const ownEntries = refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -620,15 +620,17 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       subject,
       ...(html !== undefined && { html }),
       ...(text !== undefined && { text }),
-      ...codeFormFields(send),
+      ...codeFormFields(send, ownEntries),
       ...(distinctId !== undefined && { distinct_id: distinctId }),
     },
     files,
   }
 }
 
-function codeFormFields(send: UncheckedSend): Record<string, unknown> {
-  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking, category } = send
+function codeFormFields(send: UncheckedSend, ownEntries: [string, unknown][]): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
+  const ownCategory = ownEntries.find(([name]) => name === 'category')
+  const category = ownCategory !== undefined ? ownCategory[1] : send.category
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -745,32 +747,11 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  let field: string | undefined
-  let checkedCategory = false
-  for (const name of Object.getOwnPropertyNames(send)) {
-    const descriptor = Object.getOwnPropertyDescriptor(send, name)
-    if (descriptor?.enumerable && !form.fields.has(name)) {
-      if (name === 'category') {
-        checkedCategory = true
-      }
-      if (send[name as keyof UncheckedSend] !== undefined) {
-        field = name
-        break
-      }
-    }
-  }
-  if (
-    field === undefined &&
-    !form.fields.has('category') &&
-    !checkedCategory &&
-    'category' in send &&
-    send.category !== undefined
-  ) {
-    field = 'category'
-  }
+function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): [string, unknown][] {
+  const entries = Object.entries(send)
+  const field = entries.find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
   if (field === undefined) {
-    return
+    return entries
   }
   const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
   if (!otherForm.fields.has(field)) {

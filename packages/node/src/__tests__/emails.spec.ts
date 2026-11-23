@@ -1608,6 +1608,9 @@ describe('emails', () => {
     const UPLOADS_URL = 'https://us.posthog.com/api/messaging/attachments/uploads/'
     const STORAGE_UPLOAD_URL = `https://storage.example.com/team/2/${HELLO_SHA256}?X-Amz-Expires=900&X-Amz-Signature=sig-1`
 
+    const sameBytes = (actual: Uint8Array, expected: Uint8Array): boolean =>
+      actual.byteLength === expected.byteLength && actual.every((byte, index) => byte === expected[index])
+
     const stubAttachmentSendRoutes = (
       sendReplies: Array<{ status: number; body: unknown }>
     ): { routes: string[]; uploadedBytes: Uint8Array[]; sentBodies: Record<string, unknown>[] } => {
@@ -1674,7 +1677,7 @@ describe('emails', () => {
               headers['content-length'] !== String(HELLO_BYTES.byteLength) ||
               headers['x-amz-checksum-sha256'] !== HELLO_CHECKSUM ||
               !(options.body instanceof Uint8Array) ||
-              textOf(options.body) !== 'hello'
+              !sameBytes(options.body, HELLO_BYTES)
             ) {
               return fakeReply(400, { code: 'BadDigest', message: 'Storage PUT bytes or headers mismatch.' })
             }
@@ -1793,7 +1796,7 @@ describe('emails', () => {
       expect(error).toBeNull()
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
-      expect(boundary.uploadedBytes.map(textOf)).toEqual(['hello'])
+      expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
       expect(boundary.sentBodies).toEqual([
         {
           to: CODE_SEND.to,
@@ -1858,24 +1861,6 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('refuses an inherited category getter on the template form and sends nothing', async () => {
-      const proto = {
-        get category(): typeof TRANSACTIONAL_EMAIL_CATEGORY {
-          return TRANSACTIONAL_EMAIL_CATEGORY
-        },
-      }
-      const options = Object.assign(Object.create(proto), {
-        to: 'reader@example.com',
-        templateId: TEMPLATE_ID,
-      })
-
-      const { data, error } = await sendUnchecked(options)
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'category' })
-      expect(fetch).not.toHaveBeenCalled()
     })
 
     it('ignores an inherited subject on a category-free template send as before', async () => {
@@ -1964,6 +1949,61 @@ describe('emails', () => {
               throw new Error('category should not be read when absent')
             }
             return Reflect.get(target, prop, receiver)
+          },
+        }
+      )
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: {},
+      })
+    })
+
+    it('refuses a code send whose enumerable from getter makes templateData enumerable', async () => {
+      replies = [accepted()]
+      const options: Record<string, unknown> = { ...CODE_SEND }
+      Object.defineProperty(options, 'from', {
+        enumerable: true,
+        get() {
+          Object.defineProperty(options, 'templateData', { enumerable: true })
+          return 'Sender <sender@example.com>'
+        },
+      })
+      Object.defineProperty(options, 'templateData', {
+        value: { name: 'Ada' },
+        enumerable: false,
+        configurable: true,
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'templateData' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('does not invoke the Proxy has trap for category on a valid template send', async () => {
+      replies = [accepted()]
+      const options = new Proxy<Record<string, unknown>>(
+        {
+          to: 'reader@example.com',
+          templateId: TEMPLATE_ID,
+        },
+        {
+          has(target, prop) {
+            if (prop === 'category') {
+              throw new Error('category membership should not be probed on templateId sends')
+            }
+            return Reflect.has(target, prop)
           },
         }
       )
@@ -2084,7 +2124,7 @@ describe('emails', () => {
         field: 'attachments',
       })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
-      expect(boundary.uploadedBytes.map(textOf)).toEqual(['hello'])
+      expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
       expect(boundary.sentBodies).toEqual([
         {
           to: CODE_SEND.to,
