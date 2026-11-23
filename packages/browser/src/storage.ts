@@ -617,6 +617,20 @@ export const resetSessionStorageSupported = () => {
     sessionStorageSupported = null
 }
 // Storage that only lasts the length of a tab/window. Survives page refreshes
+export function setSessionStorageItem(name: string, value: unknown, maxChars?: number): boolean {
+    try {
+        const serialized = JSON.stringify(value)
+        if (!window || (!isUndefined(maxChars) && serialized.length > maxChars)) {
+            return false
+        }
+        window.sessionStorage.setItem(name, serialized)
+        return true
+    } catch (err) {
+        sessionStore._error(err)
+        return false
+    }
+}
+
 export const sessionStore: PersistentStore = {
     _is_supported: function () {
         if (!isNull(sessionStorageSupported)) {
@@ -663,15 +677,7 @@ export const sessionStore: PersistentStore = {
         return null
     },
 
-    _set: function (name, value) {
-        try {
-            window?.sessionStorage.setItem(name, JSON.stringify(value))
-            return true
-        } catch (err) {
-            sessionStore._error(err)
-        }
-        return false
-    },
+    _set: (name, value) => setSessionStorageItem(name, value),
 
     _remove: function (name) {
         try {

@@ -6,7 +6,9 @@ import { window } from '@posthog/browser-common/utils/globals'
 import type { PostHog } from './posthog-core'
 import { sendRequest } from './request-dispatch'
 import { extendURLParams, removeURLParam } from './request'
-import { sessionStore } from './storage'
+import { COOKIELESS_ALWAYS } from './constants'
+import { isReloadPageSwap } from './sessionid'
+import { sessionStore, setSessionStorageItem } from './storage'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 const thirtyMinutes = 30 * 60 * 1000
@@ -72,8 +74,7 @@ export class RetryQueue {
     // pageswap precedes pagehide and distinguishes a confirmed reload from a tab close.
     // Only remove a batch from the beacon path once its same-tab handoff succeeds.
     private _onPageSwap = (event: Event): void => {
-        const activation = (event as Event & { activation?: { navigationType: string } }).activation
-        if (activation?.navigationType !== 'reload' || !this._queue.length || !this._canHandOffReplay()) {
+        if (!isReloadPageSwap(event) || !this._queue.length || !this._canHandOffReplay()) {
             return
         }
         for (let i = 0; i < this._queue.length; i++) {
@@ -82,17 +83,33 @@ export class RetryQueue {
             if (batchKey !== 'recordings' || !batchGroup || !isArray(data) || !data.length || callback) {
                 continue
             }
+            const session = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+            const distinctId = this._instance.get_distinct_id()
+            if (
+                !session ||
+                !data.every(
+                    (item) =>
+                        item.properties?.distinct_id === distinctId &&
+                        item.properties?.$session_id === session.sessionId &&
+                        item.properties?.$window_id === session.windowId
+                )
+            ) {
+                continue
+            }
             // Bound retained replay independently of the origin's storage quota.
             if (
-                JSON.stringify(data).length <= MAX_REPLAY_HANDOFF_CHARS &&
-                sessionStore._set(this._replayHandoffKey, {
-                    batchGroup,
-                    url: removeURLParam(url, 'retry_count'),
-                    data,
-                    retriesPerformedSoFar,
-                    retryAt,
-                    savedAt: Date.now(),
-                })
+                setSessionStorageItem(
+                    this._replayHandoffKey,
+                    {
+                        batchGroup,
+                        url: removeURLParam(url, 'retry_count'),
+                        data,
+                        retriesPerformedSoFar,
+                        retryAt,
+                        savedAt: Date.now(),
+                    },
+                    MAX_REPLAY_HANDOFF_CHARS
+                )
             ) {
                 this._queue.splice(i, 1)
                 return
@@ -107,7 +124,9 @@ export class RetryQueue {
     }
 
     clearStoredReplayHandoff(): void {
-        sessionStore._remove(this._replayHandoffKey)
+        if (this._instance.config.cookieless_mode !== COOKIELESS_ALWAYS) {
+            sessionStore._remove(this._replayHandoffKey)
+        }
     }
 
     private _restoreReplayHandoff(options: RetriableRequestWithOptions): void {
@@ -169,7 +188,13 @@ export class RetryQueue {
     constructor(private _instance: PostHog) {
         this._queue = []
         this._areWeOnline = true
-        if (!this._canHandOffReplay()) {
+        const { config, consent } = this._instance
+        if (
+            consent.isOptedOut() ||
+            config.disable_persistence ||
+            config.before_send ||
+            config.session_recording?.selectMaskingFn
+        ) {
             this.clearStoredReplayHandoff()
         }
         this.resume()

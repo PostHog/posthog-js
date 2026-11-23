@@ -3944,7 +3944,7 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
-        this._retryQueue?.clearReplayRetries()
+        this._retryQueue?.clearStoredReplayHandoff()
         const bootstrapSessionID = bootstrap?.sessionID
         this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
         this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
@@ -4434,6 +4434,14 @@ export class PostHog implements PostHogInterface {
             this.metrics?.onConfigChange()
             this.webMCP?.startIfEnabled()
 
+            if (
+                config.disable_session_recording ||
+                config.persistence === 'memory' ||
+                config.before_send ||
+                config.session_recording?.selectMaskingFn
+            ) {
+                this._retryQueue?.clearStoredReplayHandoff()
+            }
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()

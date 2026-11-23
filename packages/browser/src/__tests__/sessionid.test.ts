@@ -857,6 +857,29 @@ describe('Session ID manager', () => {
             expect(sessionStore._remove).toHaveBeenCalledTimes(0)
             expect(sessionStore._set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
+        it('retains the window id on a confirmed reload without beforeunload', () => {
+            const storage = new Map<string, unknown>()
+            vi.mocked(sessionStore._parse).mockImplementation((key) => storage.get(key))
+            vi.mocked(sessionStore._set).mockImplementation((key, value) => {
+                storage.set(key, value)
+                return true
+            })
+            vi.mocked(sessionStore._remove).mockImplementation((key) => {
+                storage.delete(key)
+            })
+            const first = sessionIdMgr(persistence)
+            const { windowId } = first.checkAndGetSessionAndWindowId()
+            window.dispatchEvent(Object.assign(new Event('pageswap'), { activation: { navigationType: 'reload' } }))
+            first.destroy()
+            vi.mocked(uuidv7).mockReturnValue('different-id')
+            const next = sessionIdMgr(persistence)
+            try {
+                expect(next.checkAndGetSessionAndWindowId().windowId).toBe(windowId)
+            } finally {
+                next.destroy()
+            }
+        })
+
         it('if primary_window_exists key exists, cycle window id', () => {
             // setup
             ;(sessionStore._parse as VitestMock).mockImplementation((storeKey: string) =>

@@ -44,6 +44,10 @@ export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
 // bounded so they do not synchronously scan document.cookie for every event.
 export const SESSION_COOKIE_SYNC_INTERVAL_MS = 1_000
 
+export function isReloadPageSwap(event: Event): boolean {
+    return (event as Event & { activation?: { navigationType: string } }).activation?.navigationType === 'reload'
+}
+
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
     private readonly _windowIdGenerator: () => string
@@ -65,7 +69,7 @@ export class SessionIdManager {
     // we track activity so we can end the session proactively when it has passed the idle timeout
     private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
 
-    private _beforeUnloadListener: (() => void) | undefined = undefined
+    private _beforeUnloadListener: ((event: Event) => void) | undefined = undefined
     // Flipped to true by `destroy()` so a setTimeout callback that is
     // already queued can't re-arm itself onto a torn-down instance.
     private _destroyed: boolean = false
@@ -355,6 +359,7 @@ export class SessionIdManager {
         // Remove the beforeunload event listener
         if (this._beforeUnloadListener && window) {
             window.removeEventListener(DOM_EVENT_BEFOREUNLOAD, this._beforeUnloadListener, { capture: false } as any)
+            window.removeEventListener('pageswap', this._beforeUnloadListener)
             this._beforeUnloadListener = undefined
         }
 
@@ -369,12 +374,16 @@ export class SessionIdManager {
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
     private _listenToReloadWindow(): void {
-        this._beforeUnloadListener = () => {
+        this._beforeUnloadListener = (event) => {
+            if (event.type === 'pageswap' && !isReloadPageSwap(event)) {
+                return
+            }
             this._flushPendingActivityTimestamp()
             if (this._canUseSessionStorage()) {
                 sessionStore._remove(this._primary_window_exists_storage_key)
             }
         }
+        addEventListener(window, 'pageswap', this._beforeUnloadListener)
         addEventListener(window, DOM_EVENT_BEFOREUNLOAD, this._beforeUnloadListener, { capture: false })
     }
 

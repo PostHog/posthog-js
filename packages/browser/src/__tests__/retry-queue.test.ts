@@ -1,6 +1,6 @@
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { sessionStore } from '../storage'
 import { assignableWindow } from '../utils/globals'
 import type { TransportCallback } from '../request'
 import type { PostHog } from '../posthog-core'
@@ -16,6 +16,8 @@ vi.mock('../request-dispatch', async (importOriginal) => ({
 describe('RetryQueue', () => {
     const mockPosthog = {
         _send_request: mockTransport,
+        get_distinct_id: () => 'user',
+        sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: 'session', windowId: 'tab' }) },
         config: { token: 'test-replay', persistence: 'sessionStorage' },
         consent: { isOptedOut: () => false },
         persistence: { _disabled: false },
@@ -137,7 +139,7 @@ describe('RetryQueue', () => {
             expect(mockTransport).toHaveBeenCalledTimes(2)
         })
 
-        it('discards a handoff when consent or identity is reset', () => {
+        it('discards a handoff when replay retries are cleared', () => {
             failAndLeave('reload')
             retryQueue.clearReplayRetries()
             loadNextPage()
@@ -169,6 +171,100 @@ describe('RetryQueue', () => {
             }
         )
 
+        it.each(['queued', 'in flight'])(
+            'preserves pre-reset %s snapshots with the original identity',
+            async (state) => {
+                const ph = await createPosthogInstance(undefined, { before_send: undefined })
+                try {
+                    const originalId = ph.get_distinct_id()
+                    const data = [{ event: '$snapshot', properties: { distinct_id: originalId } }]
+                    ph._send_retriable_request({ batchKey: 'recordings', url: '/s/', data })
+                    const respond = mockTransport.mock.lastCall![0].callback
+                    if (state === 'queued') respond({ statusCode: 503 })
+                    ph.reset()
+                    expect(ph.get_distinct_id()).not.toBe(originalId)
+                    if (state === 'in flight') respond({ statusCode: 503 })
+                    fastForwardTimeAndRunTimer(60_000)
+                    expect(mockTransport).toHaveBeenCalledWith(
+                        expect.objectContaining({ url: '/s/?retry_count=1', data })
+                    )
+                } finally {
+                    await ph.shutdown()
+                }
+            }
+        )
+
+        it('leaves a previous identity’s batch on the beacon path', () => {
+            const identity = vi.spyOn(mockPosthog, 'get_distinct_id').mockReturnValue('another-user')
+            try {
+                failAndLeave('reload')
+                expect(mockTransport.mock.lastCall?.[0].transport).toBe('sendBeacon')
+                expect(window.sessionStorage.length).toBe(0)
+            } finally {
+                identity.mockRestore()
+            }
+        })
+
+        it('keeps a batch with an unserializable payload on the beacon path', () => {
+            mockTransport.mockImplementationOnce(({ callback, data }) => {
+                data[0].properties.circular = data
+                callback({ statusCode: 503 })
+            })
+            sendSnapshot('cyclic')
+            window.dispatchEvent(Object.assign(new Event('pageswap'), { activation: { navigationType: 'reload' } }))
+            retryQueue.unload()
+            expect(mockTransport.mock.lastCall?.[0].transport).toBe('sendBeacon')
+        })
+
+        it.each([{ disable_session_recording: true }, { persistence: 'memory' as const }])(
+            'keeps a pending handoff during delayed startup (%j)',
+            async (config) => {
+                const token = uuidv7()
+                const key = 'ph_replay_retry_' + JSON.stringify([token, token])
+                window.sessionStorage.setItem(key, 'pending')
+                const ph = await createPosthogInstance(token, { before_send: undefined, ...config })
+                try {
+                    ph.set_config({ capture_pageview: false })
+                    expect(window.sessionStorage.getItem(key)).toBe('pending')
+                    ph.set_config({ persistence: 'sessionStorage' })
+                    ph.startSessionRecording()
+                    expect(window.sessionStorage.getItem(key)).toBe('pending')
+                    ph.stopSessionRecording()
+                    expect(window.sessionStorage.getItem(key)).toBeNull()
+                } finally {
+                    await ph.shutdown()
+                }
+            }
+        )
+
+        it.each([
+            { persistence: 'memory' as const },
+            { before_send: () => null },
+            { session_recording: { selectMaskingFn: () => 'masked' as const } },
+        ])('clears stored replay on an explicit privacy config change', async (config) => {
+            const token = uuidv7()
+            const key = 'ph_replay_retry_' + JSON.stringify([token, token])
+            const ph = await createPosthogInstance(token, { before_send: undefined })
+            try {
+                window.sessionStorage.setItem(key, 'pending')
+                ph.set_config(config)
+                expect(window.sessionStorage.getItem(key)).toBeNull()
+            } finally {
+                await ph.shutdown()
+            }
+        })
+
+        it('does not access the handoff key in always-cookieless mode', async () => {
+            const remove = vi.spyOn(Storage.prototype, 'removeItem')
+            try {
+                const ph = await createPosthogInstance(undefined, { cookieless_mode: 'always' })
+                await ph.shutdown()
+                expect(remove).not.toHaveBeenCalledWith(expect.stringContaining('ph_replay_retry_'))
+            } finally {
+                remove.mockRestore()
+            }
+        })
+
         it('discards an expired handoff', () => {
             failAndLeave('reload')
             fastForwardTimeAndRunTimer(31 * 60_000)
@@ -189,7 +285,9 @@ describe('RetryQueue', () => {
         })
 
         it('falls back to the beacon when storage cannot accept the handoff', () => {
-            const write = vi.spyOn(sessionStore, '_set').mockReturnValue(false)
+            const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+                throw new Error('Quota exceeded')
+            })
             try {
                 failAndLeave('reload')
                 expect(mockTransport.mock.lastCall?.[0].transport).toBe('sendBeacon')
