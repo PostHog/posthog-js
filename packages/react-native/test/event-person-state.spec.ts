@@ -177,7 +177,7 @@ describe('null event properties', () => {
     expect(queued(client, '$groupidentify').properties.$group_set).toEqual({ note: null })
   })
 
-  it('sends deeply nested properties without throwing', () => {
+  it('queues deeply nested properties without throwing', () => {
     const client = newPostHog()
     let nested: Record<string, unknown> = { leaf: null }
     for (let i = 0; i < 100_000; i++) {

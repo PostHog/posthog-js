@@ -60,7 +60,7 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
-// Captured events that update a person; PostHog drops them when person processing is off.
+// Events that identify, alias, merge or update a person or group.
 const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
 
 /**
