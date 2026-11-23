@@ -8,13 +8,18 @@ type MessageHandler = (e: {
   data: ImageBitmapDataURLWorkerMessage;
 }) => Promise<void>;
 
-const convertToBlob = vi.fn(
-  (options?: { type?: string; quality?: number }) =>
-    Promise.resolve({
-      type: options?.type ?? 'image/webp',
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
-    }),
-);
+// Safari answers a WebP request with lossless PNG
+let hasWebpEncoder = true;
+const encode = (options?: { type?: string; quality?: number }) =>
+  Promise.resolve({
+    type:
+      options?.type === 'image/webp' && !hasWebpEncoder
+        ? 'image/png'
+        : options?.type ?? 'image/webp',
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
+  });
+const convertToBlob = vi.fn(encode);
+const probeConvertToBlob = vi.fn(encode);
 const postMessage = vi.fn();
 
 type FakeBitmap = { pixels: Uint8ClampedArray; close: () => void };
@@ -32,7 +37,11 @@ class FakeOffscreenCanvas {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8ClampedArray(width * height * 4);
-    FakeOffscreenCanvas.latest = this;
+    if (!this.isProbe) FakeOffscreenCanvas.latest = this;
+  }
+
+  get isProbe(): boolean {
+    return this.width === 1 && this.height === 1;
   }
 
   getContext() {
@@ -56,7 +65,7 @@ class FakeOffscreenCanvas {
   }
 
   convertToBlob(options?: { type?: string; quality?: number }) {
-    return convertToBlob(options);
+    return (this.isProbe ? probeConvertToBlob : convertToBlob)(options);
   }
 }
 
@@ -67,6 +76,10 @@ const BYTES = WIDTH * HEIGHT * 4;
 const CONTENT_A = Uint8ClampedArray.from({ length: BYTES }, (_, i) => i + 1);
 const CONTENT_B = Uint8ClampedArray.from({ length: BYTES }, (_, i) => i + 101);
 const BLANK = new Uint8ClampedArray(BYTES);
+const opaque = (seed: number) =>
+  Uint8ClampedArray.from({ length: BYTES }, (_, i) =>
+    i % 4 === 3 ? 255 : seed + i,
+  );
 
 function frame(
   id: number,
@@ -101,7 +114,10 @@ async function loadWorker(): Promise<MessageHandler> {
 
 describe('image-bitmap-data-url-worker', () => {
   beforeEach(() => {
-    convertToBlob.mockClear();
+    hasWebpEncoder = true;
+    convertToBlob.mockReset();
+    convertToBlob.mockImplementation(encode);
+    probeConvertToBlob.mockClear();
     postMessage.mockClear();
   });
 
@@ -482,5 +498,63 @@ describe('image-bitmap-data-url-worker', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  describe('without a WebP encoder', () => {
+    beforeEach(() => {
+      hasWebpEncoder = false;
+    });
+
+    it('sends opaque frames as JPEG at the requested quality once the probe settles', async () => {
+      const onmessage = await loadWorker();
+
+      await onmessage(frame(1, opaque(1)));
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, type: 'image/png' }),
+      );
+
+      await onmessage(frame(1, opaque(2)));
+      await onmessage(frame(1, opaque(3)));
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, type: 'image/jpeg' }),
+      );
+      expect(convertToBlob.mock.calls.map(([o]) => o)).toEqual([
+        { type: 'image/webp', quality: 0.4 },
+        { type: 'image/jpeg', quality: 0.4 },
+        { type: 'image/jpeg', quality: 0.4 },
+      ]);
+      expect(probeConvertToBlob).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps frames with see-through pixels lossless, never JPEG', async () => {
+      const onmessage = await loadWorker();
+
+      await onmessage(frame(1, CONTENT_A));
+      await onmessage(frame(1, CONTENT_B));
+
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, type: 'image/png' }),
+      );
+      expect(convertToBlob.mock.calls.map(([o]) => o?.type)).not.toContain(
+        'image/jpeg',
+      );
+    });
+  });
+
+  it('keeps WebP when a real frame falls back but the probe encodes WebP', async () => {
+    convertToBlob.mockImplementation(() =>
+      Promise.resolve({
+        type: 'image/png',
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
+      }),
+    );
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, opaque(1)));
+    await onmessage(frame(1, opaque(2)));
+
+    expect(convertToBlob.mock.calls.map(([o]) => o?.type)).toEqual([
+      'image/webp',
+      'image/webp',
+    ]);
   });
 });

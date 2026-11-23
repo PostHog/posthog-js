@@ -1,4 +1,5 @@
 import { PostHog } from '../entrypoints/index.node'
+import { version } from '../version'
 
 describe('PostHog.prepareEventMessage', () => {
   let posthog: PostHog
@@ -11,6 +12,32 @@ describe('PostHog.prepareEventMessage', () => {
 
   afterEach(async () => {
     await posthog.shutdown()
+  })
+
+  it('returns the message shape, with the filled options and top-level uuid, timestamp and disableGeoip', async () => {
+    const timestamp = new Date('2026-01-02T03:04:05Z')
+    const uuid = '0191c0a2-6f3c-7a8e-9b1d-2c3e4f5a6b7c'
+    await posthog.registerOptions({ cookieless_mode: true })
+
+    const message = await posthog.prepareEventMessage({
+      distinctId: 'user_1',
+      event: 'test_event',
+      properties: { plan: 'pro' },
+      options: { product_tour_id: 'tour' },
+      uuid,
+      timestamp,
+      disableGeoip: false,
+    })
+
+    expect(message).toStrictEqual({
+      distinctId: 'user_1',
+      event: 'test_event',
+      properties: { plan: 'pro', $lib: 'posthog-node', $lib_version: version, $geoip_disable: false, $is_server: true },
+      options: { product_tour_id: 'tour', cookieless_mode: true },
+      uuid,
+      timestamp,
+      disableGeoip: false,
+    })
   })
 
   it('should NOT include $groups if groups is undefined', async () => {
@@ -77,6 +104,33 @@ describe('PostHog.prepareEventMessage', () => {
         metrics: { serviceName: 'ignored', resourceAttributes: { 'service.name': 'billing-worker' } },
       })
       expect(message.properties.service_name).toBe('billing-worker')
+    })
+
+    it('prefers the traces name when traces and metrics name different services', async () => {
+      const message = await prepare({
+        traces: { serviceName: 'checkout-api' },
+        metrics: { serviceName: 'billing-worker' },
+      })
+      expect(message.properties.service_name).toBe('checkout-api')
+    })
+
+    it('prefers traces resource attributes over a metrics resource attribute', async () => {
+      const message = await prepare({
+        traces: { resourceAttributes: { 'service.name': 'checkout-api' } },
+        metrics: { resourceAttributes: { 'service.name': 'billing-worker' } },
+      })
+      expect(message.properties.service_name).toBe('checkout-api')
+    })
+
+    it('falls back to metrics when traces is configured without a name', async () => {
+      const message = await prepare({ traces: {}, metrics: { serviceName: 'billing-worker' } })
+      expect(message.properties.service_name).toBe('billing-worker')
+    })
+
+    it('does not take a name from host resource attributes', async () => {
+      // The Node entrypoint adds host attributes (os.*) to spans; none of them is service.name.
+      const message = await prepare({ traces: {} })
+      expect(message.properties).not.toHaveProperty('service_name')
     })
 
     it('stamps events prepared without context properties (identify, alias, groupIdentify)', async () => {

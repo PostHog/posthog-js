@@ -10,7 +10,6 @@ const volatilePropertyFields = {
     $initialization_time: ['string', '<initialization-time>'],
     $insert_id: ['string', '<insert-id>'],
     $raw_user_agent: ['string', '<user-agent>'],
-    $sdk_debug_extensions_init_time_ms: ['number', '<extension-init-time>'],
     $time: ['number', '<event-time>'],
     $timezone: ['string', '<runtime-timezone>'],
     $timezone_offset: ['number', '<runtime-timezone-offset>'],
@@ -27,7 +26,6 @@ export const standardVolatileCaptureProperties: VolatileCaptureProperty[] = [
     '$initialization_time',
     '$insert_id',
     '$raw_user_agent',
-    '$sdk_debug_extensions_init_time_ms',
     '$time',
     '$timezone',
     '$timezone_offset',
@@ -41,6 +39,9 @@ export const normalizeCaptureResult = (
     expect(captureResult.timestamp).toEqual(expect.any(Date))
 
     const properties = { ...captureResult.properties }
+    // Only registered when extension init took measurable time, so presence depends on the machine.
+    delete properties.$sdk_debug_extensions_init_method
+    delete properties.$sdk_debug_extensions_init_time_ms
     for (const field of propertyFields) {
         const [expectedType, replacement] = volatilePropertyFields[field]
         expect(typeof properties[field]).toBe(expectedType)

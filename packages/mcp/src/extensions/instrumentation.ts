@@ -37,7 +37,7 @@ import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException, httpStatus } from './exceptions'
+import { captureException, clientErrorType, httpStatus } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
@@ -51,7 +51,13 @@ import {
   isModernEraRequest,
   newSessionId,
 } from './session'
-import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import {
+  canCarrySessionId,
+  decodeSessionId,
+  encodeSessionId,
+  readMcpSessionHeader,
+  sendSessionTokenWithResponse,
+} from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -200,7 +206,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
     const sessionSchemas =
       (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
-      data.toolInputSchemas.get(schemaSessionId)
+      data.toolInputSchemas.get(schemaSessionId) ??
+      data.toolInputSchemas.get(SEEDED_LISTING)
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
@@ -470,8 +477,10 @@ function publishSuccessfulToolEvent(
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
-      event.error = captureException(capturedError ?? resultBeforeInstructions ?? result)
+      const resultError = resultBeforeInstructions ?? result
+      event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
+      event.errorType = clientErrorType(capturedError ?? resultError)
     } else {
       event.isError = false
     }
@@ -498,6 +507,7 @@ function publishFailedToolEvent(
     event.isError = true
     event.error = captureException(error)
     event.errorStatus = httpStatus(error)
+    event.errorType = clientErrorType(error)
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
@@ -585,6 +595,7 @@ function publishResourceEvent(
     if ('error' in outcome) {
       event.isError = true
       event.error = captureException(outcome.error)
+      event.errorType = clientErrorType(outcome.error)
     } else {
       event.isError = false
       if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
@@ -877,6 +888,26 @@ export async function handleListToolsRequest(
   return response
 }
 
+/** Input schemas from a listing no client asked for, which belongs to no session. */
+const SEEDED_LISTING = ''
+
+/**
+ * Caches what a client's own `tools/list` on this server would: which analytics
+ * parameters each tool owns, its input schema, description and category. For a
+ * server built per session or per request, whose first call can arrive before
+ * any listing it served.
+ */
+export function cacheToolListing(server: MCPServerLike, tools: CompatibleToolsListLike['tools']): void {
+  const data = getServerTrackingData(server)
+  if (!data) {
+    return
+  }
+  cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+  data.toolInputSchemas.set(SEEDED_LISTING, new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema])))
+  cacheToolDescriptions(data.toolDescriptions, tools)
+  cacheToolCategories(data.toolCategories, tools)
+}
+
 function cacheToolAnalyticsParameterOwnership(
   cache: Map<string, AnalyticsParameterOwnership>,
   tools: CompatibleToolsListLike['tools']
@@ -1104,22 +1135,15 @@ function mintStatelessSessionOnInitialize(
       return undefined // stateful transports manage their own session id — leave it alone
     }
 
-    const sessionId = newSessionId()
-    const clientInfo = readInitializeClientInfo(request)
-    // Minted before the handler negotiates, so only the client's *requested*
-    // version is available here; `handleInitializeRequest` re-mints the token
-    // with the negotiated version once the handler has run.
-    const requestedProtocolVersion = readProtocolVersion(undefined, request)
-    const token = encodeSessionId({
-      sessionId,
-      clientName: clientInfo?.name,
-      clientVersion: clientInfo?.version,
-      protocolVersion: requestedProtocolVersion,
-    })
-    if (!writeSessionIdToTransport(transport, token)) {
+    if (!canCarrySessionId(transport)) {
       return undefined // transport can't carry a response session id — keep generated behavior
     }
 
+    const sessionId = newSessionId()
+    const clientInfo = readInitializeClientInfo(request)
+    // Only the client's *requested* version is known before the handler
+    // negotiates; `sendMintedToken` puts the negotiated one in the token.
+    const requestedProtocolVersion = readProtocolVersion(undefined, request)
     data.sessionId = sessionId
     data.sessionSource = 'token'
     data.sessionInfo.clientName = clientInfo?.name
@@ -1135,13 +1159,14 @@ function mintStatelessSessionOnInitialize(
 }
 
 /**
- * Rewrite the minted token to carry the *negotiated* protocol version now that
- * the handler has run. Without this, a server that downgrades the client's
- * requested version would replay the requested one on later requests (and to
- * other pods), reporting a version the session is not actually using.
+ * Hand the client its token on the `initialize` response, carrying the
+ * *negotiated* protocol version now that the handler has run. With the requested
+ * one, a server that downgrades the client's version would replay it on later
+ * requests (and to other pods), reporting a version the session is not using.
  */
-function upgradeMintedTokenToNegotiated(
+function sendMintedToken(
   server: MCPServerLike,
+  extra: CompatibleRequestHandlerExtra | undefined,
   mintedSessionId: string,
   sessionInfo: SessionInfo,
   negotiatedProtocolVersion: string | undefined,
@@ -1158,10 +1183,15 @@ function upgradeMintedTokenToNegotiated(
       clientVersion: sessionInfo.clientVersion,
       protocolVersion: negotiatedProtocolVersion,
     })
-    writeSessionIdToTransport(transport, token)
+    sendSessionTokenWithResponse(transport, readRequestId(extra), token)
   } catch (error) {
-    logger(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
+    logger(`Warning: PostHog MCP analytics failed to send the stateless session token - ${error}`)
   }
+}
+
+/** The JSON-RPC id of the request being handled: `requestId` on SDK v1, `mcpReq.id` on v2. */
+function readRequestId(extra: CompatibleRequestHandlerExtra | undefined): unknown {
+  return extra?.requestId ?? extra?.mcpReq?.id
 }
 
 /**
@@ -1257,7 +1287,7 @@ export async function handleInitializeRequest(
   event.response = result
   // The negotiated version (off the response) supersedes the requested one the
   // mint stored — persist it so every later event on this pod carries it, and
-  // re-mint the token so pods replaying it report the negotiated version too.
+  // put it in the token so pods replaying it report the negotiated version too.
   const negotiatedProtocolVersion = readProtocolVersion(result, request)
   event.protocolVersion = negotiatedProtocolVersion
   // Do not let a delayed initialize overwrite whichever session became current
@@ -1267,7 +1297,7 @@ export async function handleInitializeRequest(
     setServerTrackingData(server, data)
   }
   if (mintedSessionId) {
-    upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
+    sendMintedToken(server, extra, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
   }
   if (data.options.sendInitializeEvent !== false) {
     captureEvent(server, event, data.logger, {

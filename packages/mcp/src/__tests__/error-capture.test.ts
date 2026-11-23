@@ -7,7 +7,9 @@
  * errors onto the published event, plus a few integration-only behaviors
  * the unit tests can't reach.
  */
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { runInNewContext } from 'node:vm'
+
+import { CallToolResultSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -55,13 +57,15 @@ describe('error capture on the tool-call path', () => {
     expect(exception?.stacktrace?.frames?.length).toBeGreaterThan(0)
   })
 
-  it('redacts PostHog tokens from both emitted error-message properties', async () => {
+  it('redacts PostHog tokens from the emitted error message and type', async () => {
     instrument(server, fakePostHog())
     const projectToken = 'phc_123456789012345678901234567890'
     const personalToken = 'phx_abcdefghijklmnopqrstuvwxyz1234'
 
     server.tool!('secret_error', 'throws a sensitive error', {}, async () => {
-      throw new Error(`Project token ${projectToken} and personal token ${personalToken}`)
+      throw Object.assign(new Error(`Project token ${projectToken} and personal token ${personalToken}`), {
+        name: `UpstreamError ${projectToken}`,
+      })
     })
 
     const result = await client.request(
@@ -83,18 +87,48 @@ describe('error capture on the tool-call path', () => {
       .findCapturesByEvent('$exception')
       .find((event) => event.properties.$mcp_tool_name === 'secret_error')
     const expected = 'Project token [redacted] and personal token [redacted]'
-    const exceptionList = exception?.properties.$exception_list as Array<{ value: string }> | undefined
+    const exceptionList = exception?.properties.$exception_list as Array<{ type: string; value: string }> | undefined
 
     expect(toolCall?.properties.$mcp_error_message).toBe(expected)
     expect(exceptionList?.[0].value).toBe(expected)
+    expect(toolCall?.properties.$mcp_error_type).toBe('UpstreamError [redacted]')
+    expect(exceptionList?.[0].type).toBe('UpstreamError [redacted]')
   })
 
-  it('carries the HTTP status of the error a thrown tool error wraps', async () => {
+  it.each([
+    [
+      'an error wrapping a failed fetch',
+      () =>
+        new Error('invoice lookup failed', {
+          cause: Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) }),
+        }),
+      'Error',
+    ],
+    [
+      'an error from another realm',
+      () =>
+        runInNewContext(
+          'class UpstreamError extends Error { name = "UpstreamError" }; Object.assign(new UpstreamError("down"), { status: 503 })'
+        ),
+      'UpstreamError',
+    ],
+    ['a fetch Response', () => new Response(null, { status: 503 }), 'Error'],
+    ['a plain object', () => ({ name: 'UpstreamError', message: 'down', status: 503 }), 'UpstreamError'],
+    [
+      'an object whose message getter throws',
+      () => ({
+        status: 503,
+        get message() {
+          throw new Error('not loaded')
+        },
+      }),
+      'Error',
+    ],
+  ])('carries the HTTP status and type when the tool throws %s', async (_case, thrown, errorType) => {
     instrument(server, fakePostHog())
 
     server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
-      const upstream = Object.assign(new Error('503 from upstream'), { response: new Response(null, { status: 503 }) })
-      throw new Error('invoice lookup failed', { cause: upstream })
+      throw thrown()
     })
 
     await client.request(
@@ -106,8 +140,82 @@ describe('error capture on the tool-call path', () => {
     const toolCall = capture
       .findCapturesByEvent('$mcp_tool_call')
       .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
-    expect(toolCall?.properties.$mcp_error_message).toBe('invoice lookup failed')
     expect(toolCall?.properties.$mcp_error_status).toBe(503)
+    expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
+  })
+
+  it('still publishes the call when the thrown value has a throwing getter', async () => {
+    instrument(server, fakePostHog())
+    server.tool!('odd_failure', 'throws an odd value', {}, async () => {
+      throw Object.defineProperty({ isError: true }, 'content', {
+        enumerable: true,
+        get() {
+          throw new Error('not loaded')
+        },
+      })
+    })
+
+    await client
+      .request({ method: 'tools/call', params: { name: 'odd_failure', arguments: {} } }, CallToolResultSchema)
+      .catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const [toolCall] = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .filter((event) => event.properties.$mcp_tool_name === 'odd_failure')
+    expect(toolCall?.properties.$mcp_is_error).toBe(true)
+  })
+
+  it('keeps the message the tool result carries when reading the error name throws', async () => {
+    instrument(server, fakePostHog())
+
+    server.tool!('fetch_invoice', 'fetches an invoice', {}, async () => {
+      const error = Object.assign(new Error('invoice service down'), { status: 503 })
+      Object.defineProperty(error, 'name', {
+        get() {
+          throw new Error('not loaded')
+        },
+      })
+      throw error
+    })
+
+    await client.request(
+      { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+    expect(toolCall?.properties.$mcp_error_message).toBe('invoice service down')
+    expect(toolCall?.properties.$mcp_error_status).toBe(503)
+  })
+
+  it('carries the HTTP status on every server that registers the same tool function', async () => {
+    const failing = async () => {
+      throw Object.assign(new Error('down'), { status: 503 })
+    }
+    const second = await setupTestServerAndClient()
+    try {
+      for (const target of [server, second.server]) {
+        instrument(target, fakePostHog())
+        target.tool('fetch_invoice', 'fetches an invoice', {}, failing)
+      }
+
+      await second.client.request(
+        { method: 'tools/call', params: { name: 'fetch_invoice', arguments: {} } },
+        CallToolResultSchema
+      )
+      await new Promise((r) => setTimeout(r, 50))
+
+      const toolCall = capture
+        .findCapturesByEvent('$mcp_tool_call')
+        .find((event) => event.properties.$mcp_tool_name === 'fetch_invoice')
+      expect(toolCall?.properties.$mcp_error_status).toBe(503)
+    } finally {
+      await second.cleanup()
+    }
   })
 
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
@@ -141,42 +249,74 @@ describe('error capture on the tool-call path', () => {
     expect(events[0].duration).toEqual(expect.any(Number))
   })
 
-  it.each([
-    [
-      'invalid enum value',
-      () => {
-        server.tool!(
-          'calculate',
-          'calc',
-          { op: z.enum(['add', 'sub']), a: z.number(), b: z.number() },
-          async (args: any) => ({ content: [{ type: 'text', text: String(args.a) }] })
-        )
-      },
+  const registerCalculate = () =>
+    server.tool!(
       'calculate',
-      { op: 'modulo', a: 10, b: 3, context: 'test', private_identifier: true },
+      'calc',
+      { op: z.enum(['add', 'sub']), a: z.number(), b: z.number() },
+      async (args: any) => ({ content: [{ type: 'text', text: String(args.a) }] })
+    )
+
+  it.each([
+    ['invalid enum value', registerCalculate, 'calculate', { op: 'modulo', a: 10, b: 3 }, 'validation'],
+    ['missing required parameter', () => {}, 'add_todo', {}, 'validation'],
+    [
+      'an invalid value that quotes a server-side message',
+      registerCalculate,
+      'calculate',
+      { op: 'Output validation error', a: 1, b: 2 },
+      'validation',
     ],
     [
-      'missing required parameter',
-      () => {
-        // add_todo already requires `text`
-      },
-      'add_todo',
-      { context: 'test' },
+      'tool rejecting its own arguments',
+      () =>
+        server.tool!('lookup', 'lookup', {}, async () => {
+          throw new McpError(ErrorCode.InvalidParams, 'id must be a uuid')
+        }),
+      'lookup',
+      {},
+      'validation',
     ],
-  ])('captures Zod validation failures (%s) as $exception events', async (_, register, toolName, args) => {
+    [
+      'output failing its own schema',
+      () =>
+        server.registerTool!('report', { description: 'report', outputSchema: { total: z.number() } }, async () => ({
+          content: [{ type: 'text', text: 'no structured content' }],
+        })),
+      'report',
+      {},
+      'Error',
+    ],
+    [
+      'a call to a disabled tool',
+      () => server.registerTool!('retired', { description: 'retired' }, async () => ({ content: [] })).disable(),
+      'retired',
+      {},
+      'validation',
+    ],
+    [
+      'a result the server built in the wrong shape',
+      () => server.tool!('malformed', 'malformed', {}, async () => ({ content: [{ type: 'bogus' }] }) as any),
+      'malformed',
+      {},
+      'McpError',
+    ],
+    ['tool throwing', () => {}, 'complete_todo', { id: 'nonexistent-id' }, 'Error'],
+  ])('classifies %s, keeping its $exception', async (_case, register, toolName, args, errorType) => {
     register()
     instrument(server, fakePostHog())
 
-    // MCP SDK <1.21 throws; ≥1.21 returns CallToolResult with isError: true.
+    // A malformed result is rejected on the client side too.
     await client
       .request({ method: 'tools/call', params: { name: toolName, arguments: args } }, CallToolResultSchema)
       .catch(() => undefined)
-
     await new Promise((r) => setTimeout(r, 50))
-    const event = capture.findEventsByResourceName(toolName).find((e) => e.isError)
-    const exception = event?.error?.$exception_list?.[0]
-    expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['a', 'b', 'op', '[redacted]'] : [])
-    expect(exception?.value).toMatch(/Invalid|required/i)
-    expect(['McpError', 'Error', undefined]).toContain(exception?.type)
+
+    const ofTool = (event: string) =>
+      capture.findCapturesByEvent(event).filter((e) => e.properties.$mcp_tool_name === toolName)
+    const [toolCall] = ofTool('$mcp_tool_call')
+    expect(toolCall?.properties.$mcp_is_error).toBe(true)
+    expect(toolCall?.properties.$mcp_error_type).toBe(errorType)
+    expect(ofTool('$exception')).toHaveLength(1)
   })
 })

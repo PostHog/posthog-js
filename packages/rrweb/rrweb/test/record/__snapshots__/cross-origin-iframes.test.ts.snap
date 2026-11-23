@@ -1851,6 +1851,9 @@ exports[`cross origin iframes > form.html > should map input events correctly 1`
       \\"source\\": 5,
       \\"text\\": \\"1\\",
       \\"isChecked\\": false,
+      \\"selectedOptionIds\\": [
+        61
+      ],
       \\"id\\": 59
     }
   }

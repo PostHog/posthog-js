@@ -609,6 +609,7 @@ export type viewportResizeCallback = (d: viewportResizeDimension) => void;
 export type inputValue = {
   text: string;
   isChecked: boolean;
+  selectedOptionIds?: number[];
 
   // `userTriggered` indicates if this event was triggered directly by user (userTriggered: true)
   // or was triggered indirectly (userTriggered: false)
@@ -617,7 +618,11 @@ export type inputValue = {
   userTriggered?: boolean;
 };
 
-export type inputCallback = (v: inputValue & { id: number }) => void;
+export type inputCallback = (
+  v: inputValue & { id: number },
+  // Derived from a DOM mutation rather than from user input.
+  fromMutation?: boolean,
+) => void;
 
 export enum MediaInteractions {
   Play,

@@ -41,14 +41,53 @@ interface CallToolResult {
  * as exceptions from any other PostHog SDK.
  *
  * @param error - The thrown value (Error, string, object, CallToolResult, or anything).
+ * @param fallback - Captured instead when reading `error` throws.
  * @returns Core `ErrorProperties` ready to spread onto a `$exception` event.
  */
-export function captureException(error: unknown): CoreErrorTracking.ErrorProperties {
+export function captureException(error: unknown, fallback?: unknown): CoreErrorTracking.ErrorProperties {
   // MCP SDK 1.21.0+ converts tool errors to CallToolResult, which the core
   // coercers don't recognize. Extract the human-readable message first so the
   // exception still carries something useful.
-  const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
-  return errorPropertiesBuilder.buildFromUnknown(normalized)
+  try {
+    const normalized = isCallToolResult(error) ? extractCallToolResultMessage(error) : error
+    return errorPropertiesBuilder.buildFromUnknown(normalized)
+  } catch {
+    // A thrown value can carry getters that throw; the failure still gets recorded.
+    return fallback === undefined
+      ? errorPropertiesBuilder.buildFromUnknown('Unknown error')
+      : captureException(fallback)
+  }
+}
+
+/** JSON-RPC codes a server uses to reject what the client sent: bad params, an unknown resource. */
+const CLIENT_ERROR_CODES = new Set([-32602, -32002])
+// Same code as the input rejections above, but the server's own result broke a schema.
+const SERVER_RESULT_REJECTED =
+  /^(MCP error -32602: )?(Output validation error|Invalid (tools\/call|task creation) result)/
+// The high-level SDK flattens a rejected request into an `isError` result: SDK v1
+// prefixes the JSON-RPC code, SDK v2 keeps only the input-validation message.
+const FLATTENED_CLIENT_ERROR = /^(MCP error -32602: |Input validation error|Invalid arguments for tool)/
+
+/**
+ * `validation` when the request was rejected for what the client sent, which is
+ * the agent's failure rather than the server's. Never throws: a value whose
+ * getters throw is left unclassified.
+ */
+export function clientErrorType(error: unknown): 'validation' | undefined {
+  try {
+    const flattened = isCallToolResult(error)
+    const message = flattened ? extractCallToolResultMessage(error) : readField(error, 'message')
+    if (typeof message === 'string' && SERVER_RESULT_REJECTED.test(message)) {
+      return undefined
+    }
+    const code = readField(error, 'code')
+    if (typeof code === 'number' && CLIENT_ERROR_CODES.has(code)) {
+      return 'validation'
+    }
+    return flattened && FLATTENED_CLIENT_ERROR.test(message as string) ? 'validation' : undefined
+  } catch {
+    return undefined
+  }
 }
 
 const STATUS_FIELDS = ['status_code', 'statusCode', 'status']

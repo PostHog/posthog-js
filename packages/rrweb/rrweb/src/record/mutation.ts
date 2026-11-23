@@ -6,6 +6,8 @@ import {
   isShadowRoot,
   needMaskingText,
   maskInputValue,
+  getInputMaskOptions,
+  isMaskedSelectedContent,
   maskAttributeValue,
   Mirror,
   isNativeShadowDom,
@@ -15,6 +17,7 @@ import {
   getSuspensionGeneration,
   recordMutationCost,
   isStylesheetLink,
+  type SelectMaskingCache,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -37,6 +40,29 @@ import {
   closestElementOfNode,
 } from '../utils';
 import dom from '@posthog/rrweb-utils';
+
+type SelectMutationObserver = (select: HTMLSelectElement) => void;
+const selectMutationObservers = new WeakMap<
+  Document,
+  Set<SelectMutationObserver>
+>();
+
+// Shadow roots have separate mutation buffers but share their document's input observer.
+export function registerSelectMutationObserver(
+  doc: Document,
+  observer: SelectMutationObserver,
+): () => void {
+  const observers =
+    selectMutationObservers.get(doc) || new Set<SelectMutationObserver>();
+  selectMutationObservers.set(doc, observers);
+  observers.add(observer);
+  return () => {
+    observers.delete(observer);
+    if (!observers.size && selectMutationObservers.get(doc) === observers) {
+      selectMutationObservers.delete(doc);
+    }
+  };
+}
 
 const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 
@@ -73,6 +99,7 @@ export default class MutationBuffer {
   private texts = new Map<Node, string | null>();
   private attributes = new Map<Node, attributeCursor>();
   private generatedAttributes = new WeakMap<Node, Set<string>>();
+  private selectedAttributeChanges = new Set<HTMLSelectElement>();
   private removes: removedNodeMutation[] = [];
   // Repeated moves can queue the same root before any mirror cleanup runs.
   // Keep first-seen order without traversing an identical root again at emit.
@@ -111,6 +138,7 @@ export default class MutationBuffer {
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
+  private selectMaskingFn: observerParam['selectMaskingFn'];
   private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
   private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
@@ -141,6 +169,7 @@ export default class MutationBuffer {
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
+        'selectMaskingFn',
         'maskAllElementAttributes',
         'maskAttributeFn',
         'keepIframeSrcFn',
@@ -219,6 +248,7 @@ export default class MutationBuffer {
   }
 
   public destroy(): void {
+    this.selectedAttributeChanges.clear();
     for (const node of this.mapRemoves) {
       // Consume before traversal, as shift() did, including when it throws.
       this.mapRemoves.delete(node);
@@ -250,11 +280,24 @@ export default class MutationBuffer {
 
   // Queued nodes can become blocked before emission. Check the current tree,
   // including each shadow host: closest()/parentElement do not cross that boundary.
-  private isBlockedAtEmission(node: Node | null): boolean {
-    return isBlockedIncludingShadowHosts(
-      node,
-      this.blockClass,
-      this.blockSelector,
+  private isBlockedAtEmission(
+    node: Node | null,
+    cache?: SelectMaskingCache,
+  ): boolean {
+    return (
+      isBlockedIncludingShadowHosts(
+        node,
+        this.blockClass,
+        this.blockSelector,
+      ) ||
+      (!!this.selectMaskingFn &&
+        !!node &&
+        isMaskedSelectedContent(
+          node,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          cache,
+        ))
     );
   }
 
@@ -264,6 +307,10 @@ export default class MutationBuffer {
 
     const adds: addedNodeMutation[] = [];
     const addedIds = new Set<number>();
+    const selectMaskingCache: SelectMaskingCache | undefined = this
+      .selectMaskingFn
+      ? { input: new WeakMap(), content: new WeakMap(), owner: new WeakMap() }
+      : undefined;
 
     const getNextId = (n: Node): number | null => {
       let ns: Node | null = n;
@@ -292,7 +339,17 @@ export default class MutationBuffer {
       }
       // A blocked node itself still needs a placeholder, but its descendants
       // must not be serialized from stale added/moved entries.
-      if (this.isBlockedAtEmission(parent)) return true;
+      if (this.isBlockedAtEmission(parent, selectMaskingCache)) return true;
+      if (
+        this.selectMaskingFn &&
+        isMaskedSelectedContent(
+          n,
+          this.maskInputOptions,
+          this.selectMaskingFn,
+          selectMaskingCache,
+        )
+      )
+        return true;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
@@ -301,7 +358,11 @@ export default class MutationBuffer {
         return false;
       }
       serializationOptions ??= this.buildSerializationOptions();
-      const sn = serializeNodeWithId(n, serializationOptions);
+      const sn = serializeNodeWithId(
+        n,
+        serializationOptions,
+        selectMaskingCache,
+      );
       if (sn) {
         adds.push({
           parentId,
@@ -396,7 +457,6 @@ export default class MutationBuffer {
         // : getId(parent)`, so if the host is also in addedSet we must
         // serialize the host first — otherwise its shadow children land here
         // with an un-mirrored parent and get dropped.
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const parentNode = dom.parentNode(n);
           const logicalParent =
@@ -421,7 +481,6 @@ export default class MutationBuffer {
           // rrweb filtered out of the mirror) can still be reached from an
           // earlier new sibling. Matches getNextId's loop, which skips past
           // IGNORED_NODE siblings when computing nextId for the emitted add.
-          // eslint-disable-next-line no-constant-condition
           while (true) {
             let probe: Node | null = dom.nextSibling(n);
             while (probe && this.mirror.getId(probe) === IGNORED_NODE) {
@@ -477,7 +536,9 @@ export default class MutationBuffer {
 
     const payload = {
       texts: Array.from(this.texts, ([node, value]) => ({ node, value }))
-        .filter((text) => !this.isBlockedAtEmission(text.node))
+        .filter(
+          (text) => !this.isBlockedAtEmission(text.node, selectMaskingCache),
+        )
         .map((text) => {
           const n = text.node;
           const parent = dom.parentNode(n);
@@ -495,7 +556,10 @@ export default class MutationBuffer {
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
       attributes: Array.from(this.attributes.values())
-        .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
+        .filter(
+          (attribute) =>
+            !this.isBlockedAtEmission(attribute.node, selectMaskingCache),
+        )
         .map((attribute) => {
           const { attributes } = attribute;
           if (
@@ -578,17 +642,21 @@ export default class MutationBuffer {
     this.removesSubTreeCache = new Set<Node>();
     this.movedMap = {};
 
-    // payload may be empty if the mutations happened in some blocked elements
+    const selectedAttributeChanges = this.selectedAttributeChanges;
+    this.selectedAttributeChanges = new Set();
     if (
-      !payload.texts.length &&
-      !payload.attributes.length &&
-      !payload.removes.length &&
-      !payload.adds.length
+      payload.texts.length ||
+      payload.attributes.length ||
+      payload.removes.length ||
+      payload.adds.length
     ) {
-      return;
+      this.mutationCb(payload);
     }
-
-    this.mutationCb(payload);
+    for (const select of selectedAttributeChanges) {
+      selectMutationObservers
+        .get(select.ownerDocument)
+        ?.forEach((observer) => observer(select));
+    }
 
     // after the payload, so replay applies the new rel/href before the CSS that replaces the link
     for (const link of stylesheetLinksWithNewSource) {
@@ -645,6 +713,7 @@ export default class MutationBuffer {
       maskInputOptions: this.maskInputOptions,
       maskTextFn: this.maskTextFn,
       maskInputFn: this.maskInputFn,
+      selectMaskingFn: this.selectMaskingFn,
       maskAllElementAttributes: this.maskAllElementAttributes,
       maskAttributeFn: this.maskAttributeFn,
       slimDOMOptions: this.slimDOMOptions,
@@ -725,6 +794,10 @@ export default class MutationBuffer {
     if (isIgnored(m.target, this.mirror, this.slimDOMOptions)) {
       return;
     }
+    if (this.selectMaskingFn) {
+      const owner = closestElementOfNode(m.target)?.closest('select');
+      if (owner) this.selectedAttributeChanges.add(owner as HTMLSelectElement);
+    }
     switch (m.type) {
       case 'characterData': {
         const value = dom.textContent(m.target);
@@ -751,7 +824,12 @@ export default class MutationBuffer {
       }
       case 'attributes': {
         const target = m.target as Element;
-        const tagNameLower = toLowerCase(target.tagName);
+        const tagNameLower =
+          this.selectMaskingFn &&
+          target.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+          (target.localName === 'select' || target.localName === 'option')
+            ? target.localName
+            : toLowerCase(target.tagName);
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -763,14 +841,43 @@ export default class MutationBuffer {
           ? target.getAttributeNS(attributeNamespace, sourceAttributeName)
           : (m.target as Element).getAttribute(sourceAttributeName);
 
+        if (
+          tagNameLower === 'option' &&
+          attributeName === 'selected' &&
+          (this.selectMaskingFn || this.maskInputOptions.select)
+        ) {
+          let parent = dom.parentElement(target);
+          if (parent?.tagName === 'OPTGROUP')
+            parent = dom.parentElement(parent);
+          // A scalar loses choices; custom multiselects keep their legacy attributes.
+          const customMultiselect =
+            !this.selectMaskingFn &&
+            this.maskInputFn &&
+            parent?.tagName === 'SELECT' &&
+            (parent as HTMLSelectElement).multiple;
+          if (!customMultiselect) {
+            if (value !== m.oldValue && parent?.tagName === 'SELECT') {
+              this.selectedAttributeChanges.add(parent as HTMLSelectElement);
+            }
+            return;
+          }
+        }
+
         if (attributeName === 'value') {
           const htmlTarget = target as HTMLElement;
           const type = getInputType(htmlTarget);
 
           value = maskInputValue({
             element: htmlTarget,
-            maskInputOptions: this.maskInputOptions,
-            tagName: target.tagName,
+            maskInputOptions: getInputMaskOptions(
+              htmlTarget,
+              this.maskInputOptions,
+              this.selectMaskingFn,
+            ),
+            tagName:
+              this.selectMaskingFn && tagNameLower === 'select'
+                ? 'select'
+                : target.tagName,
             type,
             value,
             maskInputFn: this.maskInputFn,
@@ -1003,8 +1110,7 @@ export default class MutationBuffer {
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
-      // Text nodes cannot have children or a shadow root. Keep the blocking
-      // check above: skipping it can change stateful RegExp behavior.
+      // Text nodes cannot have children or a shadow root.
       if (n.nodeType === n.TEXT_NODE) return;
       // Avoid a callback per node on repeated subtree walks. Like forEach,
       // capture the initial length but read each child from the live list.

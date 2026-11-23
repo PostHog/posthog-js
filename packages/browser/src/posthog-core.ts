@@ -1,4 +1,5 @@
 import Config from './config'
+import { getBundledExtensionLoader, LoadExternalDependency } from './utils/extension-loader'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
@@ -84,7 +85,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type RequestResponse, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -532,11 +533,13 @@ export class PostHog implements PostHogInterface {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
+    __pending_remote_config_callbacks?: ((response: RequestResponse) => void)[]
     _pendingRemoteConfig?: RemoteConfigResult
     _lastRemoteConfig?: RemoteConfigResult
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
+    __loadExternalDependency?: LoadExternalDependency = getBundledExtensionLoader()
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     // Keys registered via register_for_session — cleared when the PostHog session rotates
     _sessionRegisteredPropKeys: Set<string> = new Set()
@@ -1283,11 +1286,6 @@ export class PostHog implements PostHogInterface {
         if (ext.sessionRecording && !startInCookielessMode) {
             this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
         }
-        if (!this.config.disable_scroll_properties) {
-            initTasks.push(() => {
-                this.scrollManager.startMeasuringScrollPosition()
-            })
-        }
         if (ext.autocapture) {
             this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
@@ -1330,6 +1328,13 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.webMCP = this.webMCP ?? new ext.webMCP(this)))
         }
 
+        const hasExtensions = this._extensions.length > 0 || initTasks.length > 0
+        if (!this.config.disable_scroll_properties) {
+            initTasks.unshift(() => {
+                this.scrollManager.startMeasuringScrollPosition()
+            })
+        }
+
         this._extensions.forEach((extension) => {
             if (!extension.initialize) return
             initTasks.push(() => {
@@ -1347,10 +1352,10 @@ export class PostHog implements PostHogInterface {
         })
 
         // Process tasks with time-slicing to avoid blocking
-        this._processInitTaskQueue(initTasks, initStartTime)
+        this._processInitTaskQueue(initTasks, initStartTime, hasExtensions)
     }
 
-    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
+    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number, hasExtensions: boolean): void {
         const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
 
         while (queue.length > 0) {
@@ -1364,7 +1369,7 @@ export class PostHog implements PostHogInterface {
                     // Yield to browser, then continue processing
                     this._extensionInitTimeout = setTimeout(() => {
                         this._extensionInitTimeout = undefined
-                        this._processInitTaskQueue(queue, initStartTime)
+                        this._processInitTaskQueue(queue, initStartTime, hasExtensions)
                     }, 0)
                     return
                 }
@@ -1385,12 +1390,21 @@ export class PostHog implements PostHogInterface {
         // we don't support IE11 anymore, so performance.now is safe
         // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
-        this.register_for_session({
-            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
-                ? 'deferred'
-                : 'synchronous',
-            [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
-        })
+        if (hasExtensions && taskInitTiming > 0) {
+            this.register_for_session({
+                [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
+                    ? 'deferred'
+                    : 'synchronous',
+                [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
+            })
+        } else if (
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_METHOD]) ||
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_TIME_MS])
+        ) {
+            // An earlier page load in this session may have registered them, possibly on an older SDK.
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
+        }
         if (this.config.__preview_deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
         }
@@ -1869,9 +1883,7 @@ export class PostHog implements PostHogInterface {
                 // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
                 // oxlint-disable-next-line no-console
                 console.warn(
-                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
-                        event_name +
-                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot. Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
                 )
             }
             logger.info(
@@ -2301,6 +2313,7 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
+        let retryQueueSize: number | undefined
         try {
             if (this.sessionRecording) {
                 const replayProperties = this.sessionRecording.sdkDebugProperties
@@ -2311,7 +2324,7 @@ export class PostHog implements PostHogInterface {
                     }
                 }
             }
-            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
+            retryQueueSize = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
@@ -2390,6 +2403,14 @@ export class PostHog implements PostHogInterface {
             ...dynamicProperties,
             ...properties,
         })
+
+        // SDK-owned and only sent while requests wait to be retried, so a registered or caller value
+        // can't make an empty retry queue look backed up.
+        if (retryQueueSize) {
+            properties['$sdk_debug_retry_queue_size'] = retryQueueSize
+        } else {
+            delete properties['$sdk_debug_retry_queue_size']
+        }
 
         properties['$is_identified'] = this._isIdentified()
 

@@ -1,5 +1,24 @@
 # posthog-react-native
 
+## 4.87.1
+
+### Patch Changes
+
+- [#5830](https://github.com/PostHog/posthog-js/pull/5830) [`895636b`](https://github.com/PostHog/posthog-js/commit/895636b1e013f0f1ac02c446452fccd6a6204f6a) Thanks [@marandaneto](https://github.com/marandaneto)! - Only attach the queue-size debug property while the queue is backed up: `$sdk_debug_retry_queue_size` on web when requests are waiting to be retried, and `$sdk_debug_pending_queue_size` on React Native once the queue reaches `flushAt`
+  (2026-11-20)
+
+## 4.87.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/core@1.68.0
+
 ## 4.86.0
 
 ### Minor Changes

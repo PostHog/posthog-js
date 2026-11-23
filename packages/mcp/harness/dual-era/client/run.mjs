@@ -194,7 +194,9 @@ const results = {
   errors:
     p(errCall, '$mcp_is_error') === true &&
     of('$exception').length >= 1 &&
-    p(errCall, '$mcp_error_message') === 'intentional failure',
+    p(errCall, '$mcp_error_message') === 'intentional failure' &&
+    p(errCall, '$mcp_error_type') === 'UpstreamError' &&
+    p(errCall, '$mcp_error_status') === 503,
   // The agent stated its intent via the injected `context` parameter: it must be
   // captured as $mcp_intent, and the tool must still have answered correctly with
   // the extra argument on the wire.

@@ -1,5 +1,93 @@
 # @posthog/mcp
 
+## 1.6.1
+
+### Patch Changes
+
+- [#5836](https://github.com/PostHog/posthog-js/pull/5836) [`02d707e`](https://github.com/PostHog/posthog-js/commit/02d707e4898bcf5921ee8b353bd08c07b3ce58df) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogMCP` adds the configured `serverBuild` to `captureAi()` and `captureAiImmediate()` events, as it already does for `capture()` and `captureImmediate()`. With `serverBuild` set, an event whose properties cannot be read is now dropped by the client, as without `serverBuild`, instead of throwing from any of the four methods.
+  (2026-11-21)
+
+## 1.6.0
+
+### Minor Changes
+
+- [#5779](https://github.com/PostHog/posthog-js/pull/5779) [`3069723`](https://github.com/PostHog/posthog-js/commit/306972322dd4cd416b16a8b734bee16e3af51a01) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support FastMCP with `instrumentFastMCP(fastmcp, posthog, options)`. FastMCP builds a server per session (per request when stateless) behind a private factory, so this hooks the module's session class and instruments each one before it connects. FastMCP's HTTP layer drops request headers, so the adapter puts them back on `extra.requestInfo.headers` for `identify` and other callbacks.
+  (2026-11-18)
+
+## 1.5.0
+
+### Minor Changes
+
+- [#5778](https://github.com/PostHog/posthog-js/pull/5778) [`7d1b1a7`](https://github.com/PostHog/posthog-js/commit/7d1b1a719fc6606fc65105a600907ef28199a320) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support Vercel's `mcp-handler`. Call `instrument(server, posthog)` inside the `createMcpHandler` callback, and wrap the exported route in the new `withMcpSessionHeader` to keep one `$session_id` and the client's name per conversation on the `2025-11-25` protocol. mcp-handler streams the `initialize` response, so the session token is minted at the fetch layer instead of inside the server.
+  (2026-11-18)
+
+## 1.4.0
+
+### Minor Changes
+
+- [#5781](https://github.com/PostHog/posthog-js/pull/5781) [`d07d87f`](https://github.com/PostHog/posthog-js/commit/d07d87f8b1376477b7c25187d19bec9841d9a6ad) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Classify client-caused failures as `$mcp_error_type: "validation"`. A tool call whose arguments failed the tool's input schema, a call to a disabled tool, a tool that rejected its arguments with JSON-RPC `-32602`, and a read of an unknown resource now carry `validation` instead of the thrown error's type, so dashboards can tell an agent's mistake from a server bug. Output-schema failures and malformed tool results, which also use `-32602`, keep the thrown type. Every failure still sends its `$exception`, as before.
+  (2026-11-18)
+
+## 1.3.0
+
+### Minor Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Add `eventOptions` to set posthog-node per-event options on MCP events, per call or from an `instrument()` callback. `beforeSend` sees and can change them, and an explicit `process_person_profile` wins over the anonymous default.
+  (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Genkit spans and `@posthog/mcp` events with no user distinct id set the `process_person_profile: false` event option on posthog-node 6.x.x, so a registered or context `process_person_profile: true` option no longer creates a person for each trace or session. Genkit also counts an empty or whitespace-only distinct id as missing.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Accepts posthog-node 6.x.x as a peer dependency.
+  (2026-11-17)
+- Updated dependencies [[`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff)]:
+  - @posthog/core@1.69.0
+  - posthog-node@6.0.0
+
+## 1.2.3
+
+### Patch Changes
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `instrumentMutator(posthog)(server)` now returns the server's own type instead of `unknown`, so no type argument or cast is needed. Explicit `instrumentMutator<McpServer>(posthog)` calls and typed `serverMutator` hooks keep working.
+  (2026-11-16)
+
+- [#5739](https://github.com/PostHog/posthog-js/pull/5739) [`0a70d23`](https://github.com/PostHog/posthog-js/commit/0a70d23aee243459ae095c6e3ad8132431a1179c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `getMoreToolsResult()` and `sendFeedbackResult()` are now typed so they can be returned from an MCP SDK tool handler (v1 and v2 `CallToolResult`) without a cast.
+  (2026-11-16)
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5732](https://github.com/PostHog/posthog-js/pull/5732) [`5e5cb86`](https://github.com/PostHog/posthog-js/commit/5e5cb861182edee8d101dda1794464fa0bd094dd) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix stateless servers on `@modelcontextprotocol/server` 2.0 to 2.2 that reuse one transport for every client: the session token minted at `initialize` now rides only that client's `initialize` response. Before, it stayed on the transport, so every later client's `initialize` failed with 400 "Server already initialized" and later responses handed the first client's token to other clients. Per-request and multi-pod stateless servers still get a stable session token.
+
+  The token is no longer left on `transport.sessionId` after the response. Host code that read it there should read the `Mcp-Session-Id` header the client replays instead. (2026-11-13)
+
+## 1.2.1
+
+### Patch Changes
+
+- [#5672](https://github.com/PostHog/posthog-js/pull/5672) [`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(mcp): keep the thrown value on high-level `McpServer` tool calls, so `$mcp_error_type` and `$mcp_error_status` reflect what the tool threw. This covers MCP SDK v2, a thrown value that is not an `Error`, and servers built per request that share tool functions. For a thrown non-`Error`, `$mcp_error_message` and error grouping now describe the thrown value (for example `'UpstreamError' captured as exception with message: 'bad'`) instead of `[object Object]`. `$mcp_error_type` is now redacted like the message, including an `errorType` passed to `captureToolCall`. An error whose getters throw while it is captured is still recorded: a tool call falls back to the tool result, and other events record `Unknown error` instead of being dropped.
+  (2026-11-12)
+- Updated dependencies [[`22f3f71`](https://github.com/PostHog/posthog-js/commit/22f3f7136f9f8296a86de248ad285a77fccaeadc)]:
+  - @posthog/core@1.67.2
+
+## 1.2.0
+
+### Minor Changes
+
+- [#5671](https://github.com/PostHog/posthog-js/pull/5671) [`4a30932`](https://github.com/PostHog/posthog-js/commit/4a309320e3c2c1fb643bfe8070975c2068db3918) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A failed tool call now sets `$mcp_error_status` to the HTTP status behind it, read from the thrown error or its `cause` chain (`status_code`, `statusCode` or `status`, on the error or its `response`, as a fetch `Response`, axios and got carry it). Failures from an upstream API now group by status in MCP Analytics instead of landing in "unknown".
+  (2026-11-12)
+
+### Patch Changes
+
+- [#5682](https://github.com/PostHog/posthog-js/pull/5682) [`8f5e876`](https://github.com/PostHog/posthog-js/commit/8f5e87698d2591f846403790d09fca0f194945b6) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Ignore non-string `name`/`version` values returned by the `clientInfo` option instead of recording them as the MCP client.
+  (2026-11-12)
+
 ## 1.1.1
 
 ### Patch Changes

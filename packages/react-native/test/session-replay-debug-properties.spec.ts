@@ -207,7 +207,7 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_disabled')
     expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
     expect(properties.$sdk_debug_replay_internal_buffer_length).toBe(2)
-    expect(properties.$sdk_debug_pending_queue_size).toBe(0)
+    expect(properties.$sdk_debug_pending_queue_size).toBeUndefined()
     expect(bundleKeysOf(properties)).toEqual([])
   })
 
@@ -288,7 +288,7 @@ describe('PostHog RN session replay debug properties', () => {
   })
 
   it('Session and queue keys are present when a session exists (mobile)', async () => {
-    const client = await readyClient()
+    const client = await readyClient({ flushAt: 1 })
     client.capture('first')
     const { properties } = captureOne(client, '$screen')
     const start = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
@@ -436,15 +436,23 @@ describe('PostHog RN session replay debug properties', () => {
     for (const event of ['custom event', '$screen']) {
       const { properties } = captureOne(client, event)
       expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
-      expect(debugKeysOf(properties).sort()).toEqual([
-        '$sdk_debug_error_capturing_properties',
-        '$sdk_debug_pending_queue_size',
-      ])
-      const survivingKeys = ['$sdk_debug_error_capturing_properties', '$sdk_debug_pending_queue_size']
-      for (const key of DEBUG_KEYS.filter((k) => !survivingKeys.includes(k))) {
+      expect(debugKeysOf(properties)).toEqual(['$sdk_debug_error_capturing_properties'])
+      for (const key of DEBUG_KEYS.filter((k) => k !== '$sdk_debug_error_capturing_properties')) {
         expect(properties[key]).toBeUndefined()
       }
     }
+  })
+
+  it('A build failure still reports a backed-up queue', async () => {
+    const client = await readyClient({ enableSessionReplay: true, flushAt: 1 })
+    client.capture('queued')
+    vi.spyOn(client, 'getKnownFeatureFlags').mockImplementation(() => {
+      throw new Error('boom')
+    })
+
+    const { properties } = captureOne(client)
+    expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+    expect(properties.$sdk_debug_pending_queue_size).toBe(1)
   })
 
   it('A successful build never attaches the error key', async () => {
@@ -452,7 +460,18 @@ describe('PostHog RN session replay debug properties', () => {
     const { properties } = captureOne(client)
     expect(properties.$sdk_debug_error_capturing_properties).toBeUndefined()
     expect(properties.$recording_status).toBe('disabled')
-    expect(properties.$sdk_debug_pending_queue_size).toBe(0)
+    expect(properties.$sdk_debug_pending_queue_size).toBeUndefined()
+  })
+
+  it('attaches the pending queue size only once the queue reaches flushAt', async () => {
+    const client = await readyClient({ flushAt: 2 })
+    client.register({ $sdk_debug_pending_queue_size: -1 })
+    expect(
+      captureOne(client, 'custom event', { $sdk_debug_pending_queue_size: -2 }).properties.$sdk_debug_pending_queue_size
+    ).toBeUndefined()
+
+    client.capture('second')
+    expect(captureOne(client).properties.$sdk_debug_pending_queue_size).toBe(2)
   })
 
   it('builds the debug map once per capture, after the caller properties', async () => {
@@ -474,7 +493,7 @@ describe('PostHog RN session replay debug properties', () => {
     expect(seen).toHaveLength(1)
     expect(seen[0].event).toBe('$autocapture')
     expect(seen[0].properties.$recording_status).toBe('disabled')
-    expect(seen[0].properties.$sdk_debug_pending_queue_size).toBe(0)
+    expect(seen[0].properties.$sdk_debug_pending_queue_size).toBeUndefined()
   })
 
   it('Exception event carries recording status', async () => {
@@ -1362,7 +1381,6 @@ describe('PostHog RN session replay debug properties', () => {
       }
       for (const event of seen) {
         expect(event.properties.$recording_status).toBe('disabled')
-        expect(event.properties.$sdk_debug_pending_queue_size).toEqual(expect.any(Number))
         expect(bundleKeysOf(event.properties)).toEqual([])
       }
     })

@@ -1,7 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { Datasets } from './datasets'
-import { EvaluationItem, EvaluationResult, itemJSON, resultJSON, type EvaluationResultOptions } from './declarations'
+import {
+  EvaluationItem,
+  EvaluationResult,
+  checkedPayload,
+  itemJSON,
+  resultJSON,
+  type EvaluationResultOptions,
+  type ItemPayload,
+  type ResultPayload,
+  type ResultStatus,
+} from './declarations'
 import { EvaluationAPIError, ExperimentCreationAbortedError, parseResponse } from './errors'
+import { itemChanges, resultChanges, type ItemUpdate, type ResultUpdate, type RevisionOptions } from './mutations'
 import { Scorers } from './scorers'
 import {
   boolean,
@@ -11,6 +22,7 @@ import {
   decode,
   encode,
   identifier,
+  integer,
   keys,
   nullable,
   object,
@@ -59,6 +71,9 @@ export interface ItemReceipt {
 export interface ResultReceipt extends ItemReceipt {
   itemId: string
   scorerVersionId: string
+  /** Stored outcome; null when an older backend omits it for a reported result. */
+  status: ResultStatus | null
+  errorCode: string | null
 }
 export interface UploadReceipt {
   items: ItemReceipt[]
@@ -136,7 +151,24 @@ function uploadReceipt(data: WireObject, submitted: readonly EvaluationResult[])
   const items = data.items.map(itemReceipt)
   const results = data.results.map((value) => {
     const row = object(value)
-    return { ...itemReceipt(row), itemId: uuid(row.item_id), scorerVersionId: uuid(row.scorer_version_id) }
+    const hasOutcome = Object.hasOwn(row, 'status') || Object.hasOwn(row, 'error_code')
+    if (
+      hasOutcome &&
+      (typeof row.status !== 'string' ||
+        !['ok', 'error', 'skipped', 'not_applicable'].includes(row.status) ||
+        !Object.hasOwn(row, 'error_code'))
+    )
+      throw new TypeError('Invalid stored result outcome.')
+    const errorCode = hasOutcome ? nullable(row.error_code, (value) => identifier(value, 128)) : null
+    if (errorCode !== null && row.status !== 'error')
+      throw new TypeError('Only an error outcome can contain an error code.')
+    return {
+      ...itemReceipt(row),
+      itemId: uuid(row.item_id),
+      scorerVersionId: uuid(row.scorer_version_id),
+      status: hasOutcome ? (row.status as ResultStatus) : null,
+      errorCode,
+    }
   })
   const expectedItems = new Set(submitted.map((r) => r.itemId)),
     actualItems = new Set(items.map((i) => i.id))
@@ -152,6 +184,8 @@ function uploadReceipt(data: WireObject, submitted: readonly EvaluationResult[])
     new Set(results.map((r) => r.id)).size !== results.length
   )
     throw new TypeError('Incomplete result acknowledgments.')
+  if (results.some((result, index) => submitted[index].calculate && result.status === null))
+    throw new TypeError('A composite acknowledgment must include its stored outcome.')
   return { items, results }
 }
 interface Chunk {
@@ -161,6 +195,30 @@ interface Chunk {
 }
 function uploadBody(items: string[], results: string[]): string {
   return `{"items":[${items.join(',')}],"results":[${results.join(',')}]}`
+}
+function groupEnds(results: readonly EvaluationResult[]): number[] {
+  // Ingestion-only clients cannot discover dependencies. Keep all supplied results
+  // for a composite-bearing item together, merging overlapping spans without reordering.
+  const first = new Map<string, number>(),
+    last = new Map<string, number>(),
+    compositeItems = new Set<string>()
+  results.forEach((result, index) => {
+    if (!first.has(result.itemId)) first.set(result.itemId, index)
+    last.set(result.itemId, index + 1)
+    if (result.calculate) compositeItems.add(result.itemId)
+  })
+  const spans = new Map([...compositeItems].map((id) => [first.get(id)!, last.get(id)!]))
+  const ends: number[] = []
+  let index = 0
+  while (index < results.length) {
+    let end = index + 1
+    while (index < end) {
+      end = Math.max(end, spans.get(index) ?? index + 1)
+      index++
+    }
+    ends.push(end)
+  }
+  return ends
 }
 function chunks(input: readonly EvaluationResult[]): { chunks: Chunk[]; prepared: EvaluationResult[] } {
   if (!Array.isArray(input))
@@ -192,41 +250,47 @@ function chunks(input: readonly EvaluationResult[]): { chunks: Chunk[]; prepared
     encodedItems: string[] = [],
     encodedResults: string[] = [],
     itemIds = new Set<string>()
-  for (let index = 0; index < prepared.length; index++) {
-    const result = prepared[index],
-      resultBody = resultJSON(result),
-      declaration = declarations.get(result.itemId)
-    let itemBody = declaration && !itemIds.has(result.itemId) ? itemJSON(declaration) : undefined
-    let extra =
-      bytes(resultBody) +
-      (encodedResults.length ? 1 : 0) +
-      (itemBody === undefined ? 0 : bytes(itemBody) + (encodedItems.length ? 1 : 0))
-    if (
-      encodedResults.length &&
-      (encodedResults.length >= 1000 ||
-        encodedItems.length + (itemBody === undefined ? 0 : 1) > 1000 ||
-        size + extra > 5 * 1024 * 1024)
-    ) {
+  let groupStart = 0
+  for (const end of groupEnds(prepared)) {
+    const group = prepared.slice(groupStart, end)
+    const groupResults = group.map(resultJSON)
+    const groupItems = new Map<string, string>()
+    for (const result of group) {
+      const declaration = declarations.get(result.itemId)
+      if (declaration) groupItems.set(result.itemId, itemJSON(declaration))
+    }
+    const resultBytes = groupResults.reduce((total, body) => total + bytes(body), 0)
+    let newItems: string[], extra: number
+    while (true) {
+      newItems = [...groupItems].filter(([id]) => !itemIds.has(id)).map(([, body]) => body)
+      extra = resultBytes + groupResults.length - (encodedResults.length ? 0 : 1)
+      if (newItems.length)
+        extra +=
+          newItems.reduce((total, body) => total + bytes(body), 0) + newItems.length - (encodedItems.length ? 0 : 1)
+      if (
+        encodedResults.length + groupResults.length <= 1000 &&
+        encodedItems.length + newItems.length <= 1000 &&
+        size + extra <= 5 * 1024 * 1024
+      )
+        break
+      if (!encodedResults.length)
+        throw new TypeError('One result or composite item group exceeds the upload request limit.')
       output.push({
         start,
-        results: prepared.slice(start, index),
+        results: prepared.slice(start, groupStart),
         body: uploadBody(encodedItems, encodedResults),
       })
-      start = index
+      start = groupStart
       size = bytes(uploadBody([], []))
       encodedItems = []
       encodedResults = []
       itemIds = new Set()
-      itemBody = declaration ? itemJSON(declaration) : undefined
-      extra = bytes(resultBody) + (itemBody === undefined ? 0 : bytes(itemBody))
     }
-    if (size + extra > 5 * 1024 * 1024) throw new TypeError('One item/result pair exceeds the request byte limit.')
-    if (itemBody !== undefined) {
-      itemIds.add(result.itemId)
-      encodedItems.push(itemBody)
-    }
-    encodedResults.push(resultBody)
+    for (const id of groupItems.keys()) itemIds.add(id)
+    encodedItems.push(...newItems)
+    encodedResults.push(...groupResults)
     size += extra
+    groupStart = end
   }
   if (encodedResults.length)
     output.push({ start, results: prepared.slice(start), body: uploadBody(encodedItems, encodedResults) })
@@ -298,6 +362,11 @@ export class Experiment {
       (data) => uploadReceipt(data, chunk.results)
     )
   }
+  /**
+   * Keeps composite items and their supplied inputs in one request, preserving order.
+   * Interleaved items may form an indivisible group; oversized groups fail before any I/O.
+   * Ingestion-only keys must supply every pinned input, including on retries.
+   */
   async uploadResults(results: readonly EvaluationResult[], request: RequestOptions = {}): Promise<BulkUploadReceipt> {
     const prepared = chunks(results)
     return this.#queue.run(async () => {
@@ -352,6 +421,114 @@ export class Experiment {
           return responseTags(data.tags)
         }),
       request.signal
+    )
+  }
+
+  /** Read the current revision shared by an item and its payload. */
+  async getItemRevision(itemId: string, request: RequestOptions = {}): Promise<number> {
+    const id = uuid(itemId)
+    return this.#readRevision(`items/${id}/`, id, request)
+  }
+
+  /** The result payload endpoint includes its owner's revision even when the payload is unavailable. */
+  async getResultRevision(resultId: string, request: RequestOptions = {}): Promise<number> {
+    const id = uuid(resultId)
+    return this.#readRevision(`results/${id}/payload/`, id, request)
+  }
+
+  async #readRevision(path: string, id: string, { signal }: RequestOptions): Promise<number> {
+    return this.#queue.run(async () => {
+      const data = await this.#transport.request('GET', this.#base + path, { signal })
+      return parseResponse(data, (resource) => {
+        if (uuid(resource.id) !== id) throw new TypeError('Mismatched resource ID.')
+        return integer(resource.revision, 0)
+      })
+    }, signal)
+  }
+
+  /** Update the supplied item identifiers and return the current item revision. */
+  async updateItem(
+    itemId: string,
+    options: RevisionOptions & ItemUpdate,
+    request: RequestOptions = {}
+  ): Promise<number> {
+    return this.#patch(`items/${uuid(itemId)}/`, itemChanges(options), options.revision, request)
+  }
+
+  /** Correct a reported outcome. The service recomputes dependent composite scores. */
+  async updateResult(
+    resultId: string,
+    options: RevisionOptions & ResultUpdate,
+    request: RequestOptions = {}
+  ): Promise<number> {
+    return this.#patch(`results/${uuid(resultId)}/`, resultChanges(options), options.revision, request)
+  }
+
+  /** Replace the supplied top-level payload fields and return the current item revision. */
+  async updateItemPayload(
+    itemId: string,
+    options: RevisionOptions & { payload: ItemPayload },
+    request: RequestOptions = {}
+  ): Promise<number> {
+    keys(object(options), ['revision', 'payload'])
+    return this.#patch(
+      `items/${uuid(itemId)}/payload/`,
+      { payload: checkedPayload(options.payload, 'item') },
+      options.revision,
+      request
+    )
+  }
+
+  /** Replace the supplied top-level payload fields and return the current result revision. */
+  async updateResultPayload(
+    resultId: string,
+    options: RevisionOptions & { payload: ResultPayload },
+    request: RequestOptions = {}
+  ): Promise<number> {
+    keys(object(options), ['revision', 'payload'])
+    return this.#patch(
+      `results/${uuid(resultId)}/payload/`,
+      { payload: checkedPayload(options.payload, 'result') },
+      options.revision,
+      request
+    )
+  }
+
+  async #patch(path: string, changes: WireObject, revision: number, { signal }: RequestOptions): Promise<number> {
+    if (!Object.keys(changes).length) throw new TypeError('Supply at least one field to update.')
+    const body = encode({ revision: integer(revision, 0), ...changes })
+    return this.#queue.run(async () => {
+      const data = await this.#transport.request('PATCH', this.#base + path, { signal, body })
+      return parseResponse(data, (ack) => integer(ack.revision, revision))
+    }, signal)
+  }
+
+  /** Permanently delete the item, its results, and their payloads. */
+  async deleteItem(itemId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`items/${uuid(itemId)}/`, options, request)
+  }
+
+  /** Permanently delete the result, its payload, and any dependent composites. */
+  async deleteResult(resultId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`results/${uuid(resultId)}/`, options, request)
+  }
+
+  /** Permanently remove the stored payload and retain the item and scores. */
+  async deleteItemPayload(itemId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`items/${uuid(itemId)}/payload/`, options, request)
+  }
+
+  /** Permanently remove the stored payload and retain the result. */
+  async deleteResultPayload(resultId: string, options: RevisionOptions, request: RequestOptions = {}): Promise<void> {
+    return this.#delete(`results/${uuid(resultId)}/payload/`, options, request)
+  }
+
+  async #delete(path: string, options: RevisionOptions, { signal }: RequestOptions): Promise<void> {
+    keys(object(options), ['revision'])
+    const revision = integer(options.revision, 0)
+    await this.#queue.run(
+      () => this.#transport.request('DELETE', this.#base + path, { signal, params: { revision } }),
+      signal
     )
   }
 }
