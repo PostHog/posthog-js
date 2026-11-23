@@ -155,7 +155,7 @@ export class FakePostHog {
   private readonly categories: Map<string, FakeCategory>
   private readonly templates: Map<string, string | null>
   private readonly topicPreferences = new Map<string, boolean>()
-  private readonly allMarketingOptOut = new Set<string>()
+  private readonly allMarketingState = new Map<string, boolean>()
   private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], preferences: [] }
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
@@ -392,7 +392,6 @@ export class FakePostHog {
         fix: 'Send the email without this field, or send it again once PostHog takes the field.',
       })
     }
-    const email = 'template_id' in body ? templateEmail(body) : this.codeEmail(body)
     const key = new Headers(options.headers).get('idempotency-key')
     const earlier = key === null ? undefined : this.sends.get(key)
     if (earlier) {
@@ -403,6 +402,7 @@ export class FakePostHog {
       }
       return { status: 200, body: { message_id: earlier.id, replayed: true, warnings: [] } }
     }
+    const email = 'template_id' in body ? templateEmail(body) : this.codeEmail(body)
     const queued = { id: globalThis.crypto.randomUUID(), ...email }
     this.emails.push(queued)
     if (key !== null) {
@@ -434,26 +434,44 @@ export class FakePostHog {
     if (all_marketing === undefined && topicEntries.length === 0) {
       throw invalidField('topics', 'Set all_marketing, topics, or both.')
     }
+    const recipient = identifier.toLowerCase()
     if (all_marketing === false) {
-      this.allMarketingOptOut.add(identifier)
+      this.allMarketingState.set(recipient, false)
       for (const [key, def] of this.categories.entries()) {
-        if (def.type === 'marketing' && this.topicPreferences.get(`${identifier}:${key}`) === true) {
-          this.topicPreferences.delete(`${identifier}:${key}`)
+        if (def.type === 'marketing' && this.topicPreferences.get(`${recipient}:${key}`) === true) {
+          this.topicPreferences.delete(`${recipient}:${key}`)
         }
       }
     } else if (all_marketing === true) {
-      this.allMarketingOptOut.delete(identifier)
+      this.allMarketingState.set(recipient, true)
+    }
+    const optedInMarketing = new Set(
+      topicEntries
+        .filter(([topic, optedIn]) => optedIn && this.categories.get(topic)?.type === 'marketing')
+        .map(([topic]) => topic)
+    )
+    if (optedInMarketing.size > 0 && this.allMarketingState.get(recipient) === false) {
+      this.allMarketingState.set(recipient, true)
+      for (const [key, def] of this.categories.entries()) {
+        if (def.type === 'marketing' && !optedInMarketing.has(key)) {
+          this.topicPreferences.set(`${recipient}:${key}`, false)
+        }
+      }
+    }
+    for (const [topic, optedIn] of topicEntries) {
+      this.topicPreferences.set(`${recipient}:${topic}`, optedIn)
     }
     const topicRecord: Record<string, boolean> = {}
-    for (const [topic, optedIn] of topicEntries) {
-      this.topicPreferences.set(`${identifier}:${topic}`, optedIn)
-      topicRecord[topic] = optedIn
+    for (const [prefKey, optedIn] of this.topicPreferences.entries()) {
+      if (prefKey.startsWith(`${recipient}:`)) {
+        topicRecord[prefKey.slice(recipient.length + 1)] = optedIn
+      }
     }
     return {
       status: 200,
       body: {
         identifier,
-        all_marketing: this.allMarketingOptOut.has(identifier) ? false : (all_marketing ?? null),
+        all_marketing: this.allMarketingState.get(recipient) ?? null,
         topics: topicRecord,
       },
     }
@@ -558,8 +576,9 @@ export class FakePostHog {
           detail: 'Marketing emails cannot have cc or bcc recipients.',
         })
       }
-      const topicChoice = this.topicPreferences.get(`${to}:${key}`)
-      if (topicChoice === false || (topicChoice !== true && this.allMarketingOptOut.has(to))) {
+      const recipient = to.toLowerCase()
+      const topicChoice = this.topicPreferences.get(`${recipient}:${key}`)
+      if (topicChoice === false || (topicChoice !== true && this.allMarketingState.get(recipient) === false)) {
         throw refusal(422, 'invalid_request', 'recipient_opted_out', null, { detail: 'Recipient opted out.' })
       }
     }
@@ -645,15 +664,90 @@ function faultAnswer(route: Route, { status, code, message, attr, page }: Exclud
   return { status, body: code ? { type, code, detail: message ?? code, attr: attr ?? null } : undefined }
 }
 
-const HTML_UNSUBSCRIBE_LINK =
-  /<[aA]\b[^>]*\s[hH][rR][eE][fF]\s*=\s*(?:"\s*\{\{\s*unsubscribe_url\s*\}\}(?:[?#][^"]*)?\s*"|'\s*\{\{\s*unsubscribe_url\s*\}\}(?:[?#][^']*)?\s*'|\{\{unsubscribe_url\}\}(?:[?#][^\s>"']*)?)(?:\s[^>]*)?>/
+const UNSUBSCRIBE_HREF = /^\s*\{\{\s*unsubscribe_url\s*\}\}(?:[?#].*)?\s*$/
 const TEXT_UNSUBSCRIBE_PLACEHOLDER = /\{\{\s*unsubscribe_url\s*\}\}/
 
 function hasUnsubscribeLink(html: string | undefined, text: string | undefined): boolean {
   if (html) {
-    return HTML_UNSUBSCRIBE_LINK.test(html.replace(/<!--[\s\S]*?-->/g, ''))
+    return hasHtmlUnsubscribeLink(html)
   }
   return TEXT_UNSUBSCRIBE_PLACEHOLDER.test(text ?? '')
+}
+
+function hasHtmlUnsubscribeLink(html: string): boolean {
+  const visible = html.replace(/<!--[\s\S]*?-->/g, '')
+  let i = 0
+  while (i < visible.length) {
+    const start = visible.indexOf('<', i)
+    if (start === -1) {
+      return false
+    }
+    i = start + 1
+    const nameStart = i
+    while (i < visible.length && /[A-Za-z0-9:-]/.test(visible[i])) {
+      i += 1
+    }
+    const tagName = visible.slice(nameStart, i).toLowerCase()
+    if (tagName === '') {
+      continue
+    }
+    let foundHref = false
+    while (i < visible.length) {
+      while (i < visible.length && /\s/.test(visible[i])) {
+        i += 1
+      }
+      if (i >= visible.length) {
+        return false
+      }
+      if (visible[i] === '>') {
+        i += 1
+        if (tagName === 'a' && foundHref) {
+          return true
+        }
+        break
+      }
+      if (visible[i] === '/') {
+        i += 1
+        continue
+      }
+      const attrStart = i
+      while (i < visible.length && !/[\s=/>]/.test(visible[i])) {
+        i += 1
+      }
+      const attrName = visible.slice(attrStart, i).toLowerCase()
+      while (i < visible.length && /\s/.test(visible[i])) {
+        i += 1
+      }
+      let attrValue = ''
+      if (visible[i] === '=') {
+        i += 1
+        while (i < visible.length && /\s/.test(visible[i])) {
+          i += 1
+        }
+        const quote = visible[i]
+        if (quote === '"' || quote === "'") {
+          i += 1
+          const valStart = i
+          const end = visible.indexOf(quote, i)
+          if (end === -1) {
+            return false
+          }
+          attrValue = visible.slice(valStart, end)
+          i = end + 1
+        } else {
+          const valStart = i
+          while (i < visible.length && !/[\s>]/.test(visible[i])) {
+            i += 1
+          }
+          attrValue = visible.slice(valStart, i)
+        }
+      }
+      if (tagName === 'a' && attrName === 'href' && UNSUBSCRIBE_HREF.test(attrValue)) {
+        foundHref = true
+      }
+    }
+  }
+  return false
 }
 
 function categoryOf(value: unknown): NonNullable<QueuedEmail['category']> {
@@ -672,6 +766,16 @@ function categoryOf(value: unknown): NonNullable<QueuedEmail['category']> {
     (description !== undefined && typeof description !== 'string')
   ) {
     throw invalidField('category', 'Invalid category.')
+  }
+  const trimmedKey = key.trim()
+  if (!trimmedKey || trimmedKey === '$all') {
+    throw invalidField('category__key', 'Invalid category key.')
+  }
+  if (!name.trim()) {
+    throw invalidField('category__name', 'Invalid category name.')
+  }
+  if (description !== undefined && description.length > 1000) {
+    throw invalidField('category__description', 'Ensure this field has no more than 1000 characters.')
   }
   return { key, type, name, ...(description !== undefined && { description }) }
 }
