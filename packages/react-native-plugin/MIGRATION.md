@@ -93,7 +93,7 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 
 **Changes with no install error:**
 
-- **Builds fetch `posthog-ios` from GitHub.** Xcode resolves it from `https://github.com/PostHog/posthog-ios.git`, so build machines need access to it. `Podfile.lock` no longer records its version.
+- **Builds fetch `posthog-ios` from GitHub.** Xcode resolves it from `https://github.com/PostHog/posthog-ios.git`, so build machines need access to it. `Podfile.lock` no longer records its version: Xcode records it in `ios/<App>.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Commit that file to keep every build on the same 4.0.x patch. Without it, each build resolves the newest 4.0.x release. Expo apps that regenerate `ios/` with `expo prebuild` don't keep the file, so their builds always resolve the newest 4.0.x.
 - **Your own native code may stop compiling.** React Native's helper adds the package only to the plugin's pod target, not your app target. We haven't tested this case, but if your app target has `import PostHog` and it no longer resolves, add `posthog-ios` to that target as a Swift package with a compatible version.
 - **Custom dSYM upload scripts can stop working.** `${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh` no longer exists. Use `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh`. The `uploadNativeSymbols` build phase from the Expo config plugin already checks both paths.
 
