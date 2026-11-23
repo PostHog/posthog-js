@@ -148,8 +148,10 @@ export const ruleAttribution = (record: FeatureFlagDetail | undefined): RuleAttr
  * Returns `undefined` when `record` has no config version 2 attribution (see
  * {@link ruleAttribution}), or when it did not supply `response`. The stored flag values and the
  * stored records are separate properties, and other code can write the one without the other, so
- * a record supplied a value only when the legacy rendering of its typed value is that value. The
- * caller then sends its `$feature_flag_called` as before.
+ * a record supplied a value only when the legacy rendering of its typed value is that value. A
+ * failed record has no value: it supplied the read only when the read returns none, and its call
+ * then reports the config version and the reason code beside the failure. The caller sends its
+ * `$feature_flag_called` as before for every other read.
  *
  * `$feature_flag_called` gets the record's attribution in place of the human-readable
  * `$feature_flag_reason`. Its dedupe key is the response, the groups, the config version and the
@@ -162,13 +164,19 @@ export const ruleAttribution = (record: FeatureFlagDetail | undefined): RuleAttr
  */
 export const configVersion2FlagEvents = (params: {
     key: string
-    response: string | boolean
+    response: string | boolean | undefined
     groups: Readonly<Record<string, string>>
     record: FeatureFlagDetail | undefined
 }): ConfigVersion2FlagEvents | undefined => {
     const { key, response, record } = params
     const attribution = ruleAttribution(record)
-    if (!attribution || legacyValueOf(typedFlagDetailOf(record)!.value) !== response) {
+    const typed = typedFlagDetailOf(record)
+    if (
+        !attribution ||
+        !typed ||
+        // A failed record has no value, so it belongs to a read that returns none.
+        (typed.failed ? !isUndefined(response) : legacyValueOf(typed.value) !== response)
+    ) {
         return undefined
     }
     const { reasonCode, ruleId, ruleType, variantKey } = attribution

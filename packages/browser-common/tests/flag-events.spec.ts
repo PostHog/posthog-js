@@ -53,8 +53,12 @@ const EXPOSURE_LEAVES_OUT = [
 const ajv = new Ajv2020({ strict: false, allErrors: true })
 ajv.addFormat('uuid', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
-function contractSchema(name: string): (properties: Record<string, any>) => void {
+function contractSchema(name: string, withoutResponse = false): (properties: Record<string, any>) => void {
     const schema = load(name)
+    if (withoutResponse) {
+        delete schema.$id
+        schema.required = schema.required.filter((key: string) => key !== '$feature_flag_response')
+    }
     const validate = ajv.compile(schema)
     const declared = new Set(Object.keys(schema.properties))
     return (properties) => {
@@ -68,6 +72,9 @@ function contractSchema(name: string): (properties: Record<string, any>) => void
 }
 
 const checkFlagCalled = contractSchema('feature_flag_called_context.schema.json')
+// The call of a failed record has no `$feature_flag_response`, because the flag has no value. The
+// schema of this contract release still requires one, so this check drops only that requirement.
+const checkFlagCalledWithoutValue = contractSchema('feature_flag_called_context.schema.json', true)
 const checkExposure = contractSchema('experiment_exposure_properties.schema.json')
 
 // --- Responses ------------------------------------------------------------------------------
@@ -342,13 +349,21 @@ describe('$experiment_exposure', () => {
                     const calls = named(harness.events, FLAG_CALLED, key)
                     expect(calls).toHaveLength(1)
                     const called = calls[0]!
-                    // A failed record of a response that reports errors is not stored: the read keeps
-                    // the cached flag, and here there is none.
-                    const isStored = !(body.errorsWhileComputingFlags && body.flags[key]?.failed)
-                    const configVersion =
-                        expected.error_code === 'PARSE_ERROR' || !isStored ? null : expected.config_version
+                    // A record that cannot be read is stored as a failed record with nothing else, so
+                    // its call has no config version.
+                    const configVersion = expected.error_code === 'PARSE_ERROR' ? null : expected.config_version
                     expect(called.properties.$feature_flag_config_version).toBe(configVersion === 2 ? 2 : undefined)
-                    if (!isUndefined(called.properties.$feature_flag_response)) {
+                    if (body.flags[key]?.failed === true || expected.error_code === 'PARSE_ERROR') {
+                        // A failed flag has no value. Nothing is stored for it here, so a response
+                        // that reports errors has no earlier value to keep either.
+                        expect(called.properties.$feature_flag_response).toBeUndefined()
+                        expect(called.properties.$feature_flag_error).toBe(
+                            body.errorsWhileComputingFlags
+                                ? 'errors_while_computing_flags,evaluation_failed'
+                                : 'evaluation_failed'
+                        )
+                        checkFlagCalledWithoutValue(called.properties)
+                    } else if (!isUndefined(called.properties.$feature_flag_response)) {
                         checkFlagCalled(called.properties)
                     }
                     for (const exposure of exposures) {
@@ -473,7 +488,14 @@ describe('$experiment_exposure', () => {
                     $feature_flag_reason_code: code,
                 })
                 expect(named(events, EXPOSURE)).toEqual([])
-                if (validOutcome) {
+                if (record.failed) {
+                    // The read has no value. Its call still names the config version and the reason.
+                    expect(called.properties.$feature_flag_response).toBeUndefined()
+                    expect(called.properties.$feature_flag_error).toBe('evaluation_failed')
+                    if (validOutcome) {
+                        checkFlagCalledWithoutValue(called.properties)
+                    }
+                } else if (validOutcome) {
                     checkFlagCalled(called.properties)
                 }
             }
@@ -536,7 +558,8 @@ describe('$experiment_exposure', () => {
             checkFlagCalled(called.properties)
         })
 
-        // A failed record of a response that reports errors is not stored, so it supplies no value.
+        // A response that reports errors is merged into the stored flags, so a failed record does
+        // not replace a flag that has a stored value.
         it.each(['dependency_error', 'error'])(
             'a failed %s record of a response that reports errors leaves the cached record in charge',
             async (template) => {
@@ -544,11 +567,18 @@ describe('$experiment_exposure', () => {
                 expect(failed.errorsWhileComputingFlags).toBe(true)
                 expect(failed.flags['garden-layout'].failed).toBe(true)
 
-                // Without a cached flag, the flag is missing.
-                const missing = await readEvents('getFeatureFlag', failed, { key: 'garden-layout' })
-                expect(eventNames(missing)).toEqual([FLAG_CALLED])
-                expect(attribution(missing[0]!.properties)).toEqual({})
-                expect(missing[0]!.properties.$feature_flag_error).toBe('errors_while_computing_flags,flag_missing')
+                // Without a stored value, the failed record is stored: the flag has no value, and
+                // its call says why.
+                const unavailable = await readEvents('getFeatureFlag', failed, { key: 'garden-layout' })
+                expect(eventNames(unavailable)).toEqual([FLAG_CALLED])
+                expect(attribution(unavailable[0]!.properties)).toEqual({
+                    $feature_flag_config_version: 2,
+                    $feature_flag_reason_code: template,
+                })
+                expect(unavailable[0]!.properties.$feature_flag_response).toBeUndefined()
+                expect(unavailable[0]!.properties.$feature_flag_error).toBe(
+                    'errors_while_computing_flags,evaluation_failed'
+                )
 
                 // With one, the read reports the record that still supplies its value.
                 const harness = await setup()

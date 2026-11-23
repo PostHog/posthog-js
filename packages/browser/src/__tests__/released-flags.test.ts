@@ -178,11 +178,11 @@ const ATTRIBUTION: Record<string, Record<string, unknown>> = {
 
 type RecordedEvent = [event: string, properties: Record<string, any>]
 
-/** Whether the stored record of the flag supplied the value that a recorded call reports. */
+/** Whether the stored record of the flag supplied what a recorded call reports. */
 const fromItsRecord = (scenario: string, properties: Record<string, any>): boolean =>
     properties.$feature_flag in ATTRIBUTION &&
-    // A missing flag has no record.
-    '$feature_flag_response' in properties &&
+    // A missing flag has no record. A failed flag has one: it supplies the read that has no value.
+    ('$feature_flag_response' in properties || String(properties.$feature_flag_error).includes('evaluation_failed')) &&
     // A value override replaces the record's value. A payload override does not.
     !('$feature_flag_original_response' in properties) &&
     // A bootstrapped value has no record.

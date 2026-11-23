@@ -326,7 +326,7 @@ export interface FlagsResponseFormat {
      */
     readonly flagEvents?: (params: {
         key: string
-        response: string | boolean
+        response: string | boolean | undefined
         groups: Readonly<Record<string, string>>
         record: FeatureFlagDetail | undefined
     }) => ConfigVersion2FlagEvents | undefined
@@ -1747,9 +1747,10 @@ export class PostHogFeatureFlags implements Extension {
 
     /**
      * The config version 2 flag events of a read of `key` that returns `flagValue`, when the stored
-     * record of the flag is a config version 2 record that supplied that value. A value override
-     * replaces the record's value, and a bootstrapped flag has no record, so neither has such
-     * events. A payload override leaves the value alone, so it keeps them.
+     * record of the flag is a config version 2 record that supplied that value. A failed record
+     * supplies no value, so `flagValue` is `undefined` for it. A value override replaces the
+     * record's value, and a bootstrapped flag has no record, so neither has such events. A payload
+     * override leaves the value alone, so it keeps them.
      */
     private _configVersion2FlagEvents(
         key: string,
@@ -1758,11 +1759,7 @@ export class PostHogFeatureFlags implements Extension {
         const flagEvents = this._responseFormat.flagEvents
         // The stored overrides can be anything a caller passed, and only an object overrides flags by key.
         const overriddenFlags: unknown = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        if (
-            !flagEvents ||
-            isUndefined(flagValue) ||
-            (isObject(overriddenFlags) && hasOwnProperty.call(overriddenFlags, key))
-        ) {
+        if (!flagEvents || (isObject(overriddenFlags) && hasOwnProperty.call(overriddenFlags, key))) {
             return undefined
         }
         return flagEvents({
