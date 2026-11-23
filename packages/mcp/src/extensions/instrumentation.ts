@@ -256,13 +256,20 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   if (isUnknownTool && isToolResultError(result)) {
     publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
-    if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-      // `result`, as the tool produced it, before the conversation handle was written into it.
-      applyResultProperties(preparedEvent.event, data, request.params?.name, result)
-    }
-    // `result`, not `finalResult`: the error is read from what the tool produced,
-    // before the conversation handle was written into it. See below.
-    publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
+    // `result`, not `finalResult`: the error and the result properties are read from what
+    // the tool produced, before the conversation handle was written into it. See below.
+    publishSuccessfulToolEvent(
+      server,
+      preparedEvent,
+      finalResult,
+      startTime,
+      data.logger,
+      takeCapturedError,
+      result,
+      resolvedEventType === MCPAnalyticsEventType.mcpToolsCall
+        ? (event) => applyResultProperties(event, data, request.params?.name, result)
+        : undefined
+    )
   }
   return finalResult
 }
@@ -278,21 +285,38 @@ function applyResultProperties(
   if (!callback) {
     return
   }
-  let properties: unknown
+  // Reading the returned value can run host code too: a getter, a proxy trap or a `then`.
   try {
-    properties = callback(toolName ?? event.resourceName ?? '', result)
+    const properties: unknown = callback(toolName ?? event.resourceName ?? '', result)
+    if (properties == null) {
+      return
+    }
+    if (!isPlainObject(properties) || typeof properties.then === 'function') {
+      ignoreRejection(properties)
+      data.logger('resultProperties must return a plain object or null synchronously; ignoring its value')
+      return
+    }
+    event.properties = { ...event.properties, ...properties }
   } catch (e) {
     data.logger(`resultProperties callback error: ${e}`)
-    return
   }
-  if (properties == null) {
-    return
+}
+
+/** True for an object literal or a null-prototype object, from any realm. */
+function isPlainObject(value: unknown): value is JsonRecord {
+  if (typeof value !== 'object' || value === null) {
+    return false
   }
-  if (typeof properties !== 'object' || Array.isArray(properties) || typeof (properties as any).then === 'function') {
-    data.logger('resultProperties must return a plain object or null synchronously; ignoring its value')
-    return
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === null || Object.getPrototypeOf(prototype) === null
+}
+
+/** Keeps a promise nobody awaits from raising an `unhandledRejection` in the host. */
+function ignoreRejection(value: unknown): void {
+  const promise = value as Partial<PromiseLike<unknown>>
+  if (typeof promise.then === 'function') {
+    promise.then(undefined, () => {})
   }
-  event.properties = { ...event.properties, ...(properties as JsonRecord) }
 }
 
 const NO_CONVERSATION: ConversationIdResolution = { minted: false, conversationId: undefined }
@@ -526,16 +550,19 @@ function publishSuccessfulToolEvent(
   startTime: Date,
   logger: LoggerFn,
   takeCapturedError?: () => unknown,
-  resultBeforeInstructions?: unknown
+  resultBeforeInstructions?: unknown,
+  addResultProperties?: (event: McpEvent) => void
 ): void {
   if (!preparedEvent) {
     return
   }
   const { event, requestAttribution } = preparedEvent
   try {
+    event.duration = Date.now() - startTime.getTime()
+    let capturedError: unknown
     if (isToolResultError(result)) {
       event.isError = true
-      const capturedError = takeCapturedError?.()
+      capturedError = takeCapturedError?.()
       const resultError = resultBeforeInstructions ?? result
       event.error = captureException(capturedError ?? resultError, resultError)
       event.errorStatus = httpStatus(capturedError)
@@ -543,8 +570,11 @@ function publishSuccessfulToolEvent(
     } else {
       event.isError = false
     }
+    // A high-level McpServer turns a throw into an `isError` result the tool never returned.
+    if (capturedError === undefined) {
+      addResultProperties?.(event)
+    }
     event.response = result
-    event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (error) {
     logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)

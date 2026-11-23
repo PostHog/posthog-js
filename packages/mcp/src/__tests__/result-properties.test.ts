@@ -1,5 +1,9 @@
+import { runInNewContext } from 'node:vm'
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer as V1McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { CallToolRequestSchema, CallToolResultSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { McpServer as V2McpServer } from '@modelcontextprotocol/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { instrument } from '../index'
@@ -24,9 +28,28 @@ function createServer(options: MCPAnalyticsOptions, handler: ToolHandler): MCPSe
   return server as unknown as MCPServerLike
 }
 
-function callTool(server: MCPServerLike, name = 'search'): Promise<unknown> {
+function callTool(server: MCPServerLike, name = 'search', args: Record<string, unknown> = {}): Promise<unknown> {
   const handler = server._requestHandlers.get('tools/call')!
-  return handler({ method: 'tools/call', params: { name, arguments: {} } }, undefined)
+  return handler({ method: 'tools/call', params: { name, arguments: args } }, undefined)
+}
+
+/** Dispatches through a McpServer's own `tools/call` handler, unknown tools included. */
+async function callHighLevelTool(
+  server: V1McpServer | V2McpServer,
+  name: string,
+  args: Record<string, unknown> = {}
+): Promise<unknown> {
+  const handler = (server.server as unknown as MCPServerLike)._requestHandlers.get('tools/call')!
+  const extra = { mcpReq: { requestState: () => undefined } } as any
+  try {
+    return await handler({ method: 'tools/call', params: { name, arguments: args } }, extra)
+  } catch (error) {
+    return error
+  }
+}
+
+function boom(): never {
+  throw new Error('getter failed')
 }
 
 const flushCaptures = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20))
@@ -119,6 +142,153 @@ describe('resultProperties', () => {
     expect(toolCallProperties()).not.toHaveProperty('search_status')
   })
 
+  it.each(
+    (['v1', 'v2'] as const).flatMap((major) => [[major, 'before', true] as const, [major, 'after', false] as const])
+  )('is not called when a tool registered on a %s McpServer %s instrument() throws', async (major, _when, early) => {
+    const resultProperties = vi.fn(() => ({ search_status: 'unexpected' }))
+    const server =
+      major === 'v1'
+        ? new V1McpServer({ name: 'throwing', version: '1.0.0' })
+        : new V2McpServer({ name: 'throwing', version: '1.0.0' })
+    const register = (): void => {
+      ;(server as V1McpServer).registerTool('search', { description: 'Searches bookings' }, async () => {
+        throw new TypeError('boom')
+      })
+    }
+    if (early) register()
+    instrument(server, fakePostHog(), { resultProperties })
+    if (!early) register()
+
+    const result = await callHighLevelTool(server, 'search')
+    await flushCaptures()
+
+    expect(result).toMatchObject({ isError: true })
+    expect(resultProperties).not.toHaveBeenCalled()
+    expect(toolCallProperties()).toMatchObject({ $mcp_is_error: true })
+    expect(toolCallProperties()).not.toHaveProperty('search_status')
+    // The original error still reaches `$exception`.
+    const [exception] = capture.findCapturesByEvent('$exception')
+    expect((exception.properties as any).$exception_list[0]).toMatchObject({ type: 'TypeError', value: 'boom' })
+  })
+
+  it.each(['v1', 'v2'] as const)('runs for an isError result a %s McpServer tool returned', async (major) => {
+    const resultProperties = vi.fn(() => ({ search_status: 'upstream_down' }))
+    const server =
+      major === 'v1'
+        ? new V1McpServer({ name: 'failing', version: '1.0.0' })
+        : new V2McpServer({ name: 'failing', version: '1.0.0' })
+    ;(server as V1McpServer).registerTool('search', { description: 'Searches bookings' }, async () => ({
+      content: [{ type: 'text' as const, text: 'Upstream unavailable' }],
+      isError: true,
+    }))
+    instrument(server, fakePostHog(), { resultProperties })
+
+    await callHighLevelTool(server, 'search')
+    await flushCaptures()
+
+    expect(resultProperties).toHaveBeenCalledTimes(1)
+    expect(toolCallProperties()).toMatchObject({ search_status: 'upstream_down', $mcp_is_error: true })
+    const [exception] = capture.findCapturesByEvent('$exception')
+    expect(exception.properties).toMatchObject({ search_status: 'upstream_down' })
+  })
+
+  it('gets the result before the conversation handle is written into it', async () => {
+    const seen: unknown[] = []
+    const server = createServer(
+      {
+        enableConversationId: true,
+        resultProperties: (_toolName, result) => {
+          seen.push(structuredClone(result))
+          return null
+        },
+      },
+      async () => structuredClone(searchResult)
+    )
+    // Listing first, so the SDK owns `conversation_id` on this tool.
+    await server._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, undefined)
+
+    const result = await callTool(server)
+    await flushCaptures()
+
+    expect(result).not.toEqual(searchResult)
+    expect(seen).toEqual([searchResult])
+  })
+
+  it.each([
+    ['get_more_tools', { context: 'Need a calendar tool' }],
+    ['send_feedback', { category: 'other', summary: 'Works', context: 'Testing' }],
+    ['not_a_tool', {}],
+  ])('is not called for %s', async (name, args) => {
+    const resultProperties = vi.fn(() => ({ search_status: 'unexpected' }))
+    const server = new V1McpServer({ name: 'virtual', version: '1.0.0' })
+    server.registerTool('search', { description: 'Searches bookings' }, async () => ({ content: [] }))
+    instrument(server, fakePostHog(), { reportMissing: true, collectFeedback: true, resultProperties })
+
+    await callHighLevelTool(server, name, args)
+    await flushCaptures()
+
+    expect(resultProperties).not.toHaveBeenCalled()
+    expect(capture.findCapturesByEvent('$mcp_tool_call')).toEqual([])
+    expect(capture.getEvents().length).toBeGreaterThan(0)
+  })
+
+  it('wins over eventProperties on the same key and keeps the others', async () => {
+    const server = createServer(
+      {
+        eventProperties: () => ({ search_status: 'from request', tenant: 'acme' }),
+        resultProperties: () => ({ search_status: 'from result' }),
+      },
+      async () => searchResult
+    )
+
+    await callTool(server, 'search', { query: 'tomorrow' })
+    await flushCaptures()
+
+    expect(toolCallProperties()).toMatchObject({ search_status: 'from result', tenant: 'acme' })
+    expect(toolCallProperties().$mcp_input_keys).toHaveLength(1)
+  })
+
+  it('does not raise unhandledRejection when an async callback rejects', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => void unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const messages: string[] = []
+      const server = createServer(
+        {
+          resultProperties: (async () => {
+            throw new Error('async failure')
+          }) as any,
+          logger: (message: string) => messages.push(message),
+        },
+        async () => searchResult
+      )
+
+      expect(await callTool(server)).toEqual(searchResult)
+      await flushCaptures()
+
+      expect(unhandled).toEqual([])
+      expect(messages.some((message) => message.includes('resultProperties'))).toBe(true)
+      expect(toolCallProperties()).not.toHaveProperty('search_status')
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('accepts a null-prototype object and one from another realm', async () => {
+    for (const properties of [
+      Object.assign(Object.create(null), { search_status: 'no_results' }),
+      runInNewContext('({ search_status: "no_results" })'),
+    ]) {
+      const server = createServer({ resultProperties: () => properties }, async () => searchResult)
+      await callTool(server)
+    }
+    await flushCaptures()
+
+    const statuses = capture.findCapturesByEvent('$mcp_tool_call').map((event) => event.properties?.search_status)
+    expect(statuses).toEqual(['no_results', 'no_results'])
+  })
+
   it.each([
     [
       'throws',
@@ -128,7 +298,16 @@ describe('resultProperties', () => {
     ],
     ['returns an array', () => ['no_results'] as any],
     ['returns a promise', async () => ({ search_status: 'no_results' }) as any],
+    ['returns a Map', () => new Map([['search_status', 'no_results']]) as any],
+    ['returns a Date', () => new Date() as any],
+    ['returns a Uint8Array', () => new Uint8Array([1, 2]) as any],
+    ['returns a Buffer', () => Buffer.from('ok') as any],
+    ['returns a string', () => 'no_results' as any],
+    ['returns a number', () => 42 as any],
+    ['returns a throwing getter', () => Object.defineProperty({}, 'search_status', { enumerable: true, get: boom })],
+    ['returns a throwing then', () => Object.defineProperty({}, 'then', { get: boom })],
     ['returns null', () => null],
+    ['returns undefined', () => undefined],
   ])('captures the event unchanged when the callback %s', async (behaviour, resultProperties) => {
     const messages: string[] = []
     const server = createServer(
@@ -143,7 +322,7 @@ describe('resultProperties', () => {
     expect(toolCallProperties()).not.toHaveProperty('search_status')
     expect(toolCallProperties()).not.toHaveProperty('0')
     const logged = messages.some((message) => message.includes('resultProperties'))
-    expect(logged).toBe(behaviour !== 'returns null')
+    expect(logged).toBe(!['returns null', 'returns undefined'].includes(behaviour))
   })
 
   it('works on a high-level McpServer', async () => {

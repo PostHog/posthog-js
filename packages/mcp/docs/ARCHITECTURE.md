@@ -52,6 +52,7 @@ client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captu
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ execute(request, extra)      ← run the wrapped tool handler
   ├─ attach result, duration, error
+  ├─ applyResultProperties        ← runs the resultProperties callback, unless the tool threw
   └─ captureEvent(server, event)  → McpEventSink.capture()
 ```
 
@@ -313,6 +314,8 @@ Callers never hand-write the `$groups` key.
 
 The `eventProperties` callback returns key/value pairs that are **spread flat at the top level of the PostHog event properties**, alongside the `$mcp_*` keys. They can therefore override built-in `$mcp_*` keys — intentional, so customers can backfill missing context. Values must be JSON-serializable; the SDK does not validate keys or values beyond truncation.
 
+`resultProperties` adds properties derived from a tool's result to that `$mcp_tool_call` event the same way, and to its `$exception` sibling for an `isError` result. They are merged after `eventProperties`, so they win on the same key, and are not redacted.
+
 ### Customer-defined options
 
 `eventOptions` sets posthog-node per-event options, such as `process_person_profile`. The `instrument()` path takes a per-request callback in `MCPAnalyticsOptions`. `analytics.capture()` and every `PostHogMCP` capture method take a per-call `eventOptions` field. The callback runs only on the request-handling paths, after any options the event already carries, which win. The options reach every payload of the event, including the `$exception` sibling. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's `options` field instead.
@@ -334,6 +337,7 @@ The `posthog-node` client is **not** an option — it is the required positional
 | `identify`                   | —                                                                                              | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`.                                                                                                                |
 | `beforeSend`                 | —                                                                                              | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event.                |
 | `eventProperties`            | —                                                                                              | Freeform JSON, spread flat.                                                                                                                                                                                                                                                  |
+| `resultProperties`           | —                                                                                              | `(toolName, result) => properties`, synchronous. Merged into that `$mcp_tool_call` event after `eventProperties`.                                                                                                                                                            |
 | `eventOptions`               | none                                                                                           | Per-request callback returning posthog-node per-event options                                                                                                                                                                                                                |
 
 `eventOptions` returns options for every auto-captured event, `$exception` included. `beforeSend` sees them as the payload's `options`. An explicit `process_person_profile` wins over the anonymous default.
