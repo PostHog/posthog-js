@@ -627,7 +627,7 @@ describe('$experiment_exposure', () => {
             expect(called.properties.$feature_flag_reason).toBe('Matched condition set 1')
         })
 
-        it.each([['future_reason'], [undefined], ['']])(
+        it.each([['future_reason'], [undefined]])(
             'the reason code %j is reported as sent, with no rule and no exposure',
             async (code) => {
                 const record = v4Record(code, 'annual', {
@@ -646,6 +646,29 @@ describe('$experiment_exposure', () => {
                 expect(named(events, EXPOSURE)).toEqual([])
             }
         )
+
+        // The contract's event schema gives `$feature_flag_reason_code` at least one character, so
+        // an empty code cannot be sent as it is. Its call is the call of a record without a reason
+        // code, and the two share one dedupe key.
+        it('an empty reason code is sent as no reason code, because the event schema allows no empty one', async () => {
+            const record = (code: string | undefined): Record<string, any> =>
+                v4Record(code, 'annual', { ruleType: 'experiment', ruleId: RULE, variantKey: 'annual-first' })
+            const harness = await setup()
+            await harness.load(response([record('')]))
+
+            harness.flags.getFeatureFlag(FLAG)
+            // The same flag without a reason code is the same call, so it is not sent again.
+            await harness.load(response([record(undefined)]))
+            harness.flags.getFeatureFlag(FLAG)
+
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED])
+            const called = harness.events[0]!
+            expect(attribution(called.properties)).toEqual({ $feature_flag_config_version: 2 })
+            checkFlagCalled(called.properties)
+            expect(() => checkFlagCalled({ ...called.properties, $feature_flag_reason_code: '' })).toThrow(
+                /must NOT have fewer than 1 characters/
+            )
+        })
 
         it.each([['rule-7'], [''], ['7f3c2a108d4e4b6a9c215e0f1a2b3c4d'], [`{${RULE}}`], [`${RULE} `]])(
             'the rule ID %j is not a UUID, so it counts as missing',
