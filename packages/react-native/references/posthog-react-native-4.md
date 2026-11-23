@@ -3148,6 +3148,7 @@ Props for the PostHogMaskView component.
 | <a id="enumeration-member-sessionlasttimestamp"></a> `SessionLastTimestamp` | `"session_timestamp"` |
 | <a id="enumeration-member-sessionreplay"></a> `SessionReplay` | `"session_replay"` |
 | <a id="enumeration-member-sessionreplayeventtriggeractivatedsession"></a> `SessionReplayEventTriggerActivatedSession` | `"session_replay_event_trigger_activated_session"` |
+| <a id="enumeration-member-sessionreplaytriggergroupsactivation"></a> `SessionReplayTriggerGroupsActivation` | `"session_replay_trigger_groups_activation"` |
 | <a id="enumeration-member-sessionstarttimestamp"></a> `SessionStartTimestamp` | `"session_start_timestamp"` |
 | <a id="enumeration-member-surveylastseendate"></a> `SurveyLastSeenDate` | `"survey_last_seen_date"` |
 | <a id="enumeration-member-surveys"></a> `Surveys` | `"surveys"` |
@@ -3321,7 +3322,7 @@ Common types shared across PostHog SDKs
 | Property | Type |
 | ------ | ------ |
 | <a id="index"></a> `index` | `number` |
-| <a id="type-4"></a> `type` | *typeof* `SurveyQuestionBranchingType.SpecificQuestion` |
+| <a id="type-5"></a> `type` | *typeof* `SurveyQuestionBranchingType.SpecificQuestion` |
 
 ### `Survey`
 
@@ -3370,8 +3371,8 @@ Common types shared across PostHog SDKs
 
 | Property | Type |
 | ------ | ------ |
-| <a id="id-1"></a> `id` | `number` |
-| <a id="name"></a> `name?` | `string` |
+| <a id="id-3"></a> `id` | `number` |
+| <a id="name-3"></a> `name?` | `string` |
 | <a id="steps"></a> `steps?` | `ActionStepType`[] |
 
 ### `SurveyAppearance`
@@ -3540,7 +3541,7 @@ React Native survey appearance, including native-only text scaling options.
 | <a id="buttontext"></a> `buttonText?` | `string` |
 | <a id="description-2"></a> `description?` | `string` \| `null` |
 | <a id="descriptioncontenttype"></a> `descriptionContentType?` | `SurveyQuestionDescriptionContentType` |
-| <a id="id-2"></a> `id` | `string` |
+| <a id="id-4"></a> `id` | `string` |
 | <a id="optional"></a> `optional?` | `boolean` |
 | <a id="originalquestionindex"></a> `originalQuestionIndex` | `number` |
 | <a id="question"></a> `question` | `string` |
