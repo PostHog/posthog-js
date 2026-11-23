@@ -12,8 +12,8 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | iOS deployment target                               | 13.0                                                            | 15.0                  |
 | macOS deployment target                             | 10.15                                                           | 12.0                  |
 | How `posthog-ios` is installed                      | CocoaPods trunk, or Swift Package Manager with `posthog.useSpm` | Swift Package Manager |
-| `posthog-ios` version                               | 3.x                                                             | 4.0.3 or later 4.0.x  |
-| `posthog-android` version                           | 3.x                                                             | 4.0.2 or later 4.x    |
+| `posthog-ios` version                               | 3.x                                                             | 4.0.5 or later 4.0.x  |
+| `posthog-android` version                           | 3.x                                                             | 4.0.3 or later 4.x    |
 | Xcode                                               | Set by `posthog-ios` 3.x                                        | 26 or later           |
 
 Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
@@ -64,7 +64,7 @@ On React Native 0.75, `min_ios_version_supported` is 13.4, so those apps must ra
 
 #### `posthog-ios` 4.0 and Xcode 26
 
-The plugin now requires `posthog-ios` 4.0.3 or a later 4.0.x version, which needs Xcode 26 or later on every iOS install path.
+The plugin now requires `posthog-ios` 4.0.5 or a later 4.0.x version, which needs Xcode 26 or later on every iOS install path.
 
 **If ignored:** on older Xcode versions, Swift Package Manager can't resolve `posthog-ios` and the build fails.
 
@@ -99,13 +99,13 @@ The plugin is still a CocoaPod, but it no longer depends on the `PostHog` pod. R
 
 #### Full Swift Package Manager apps
 
-Apps on React Native's full Swift Package Manager integration, with no CocoaPods, have no Podfile to change. The plugin's `ios/Package.swift` now uses Swift tools 6.2 and requires `posthog-ios` 4.0, so build with Xcode 26 or later and keep the app's deployment target at iOS 15 or later. If `Package.resolved` still pins `posthog-ios` 3.x, resolve packages again so it moves to 4.0. The plugin pins `posthog-ios` to 4.0.3 or a later 4.0.x version (`.upToNextMinor(from: "4.0.3")`), so if your app target also adds `posthog-ios` as a package, require a 4.0.x version from 4.0.3 there too. A requirement of 4.1 or later can't resolve until the plugin raises its own.
+Apps on React Native's full Swift Package Manager integration, with no CocoaPods, have no Podfile to change. The plugin's `ios/Package.swift` now uses Swift tools 6.2 and requires `posthog-ios` 4.0, so build with Xcode 26 or later and keep the app's deployment target at iOS 15 or later. If `Package.resolved` still pins `posthog-ios` 3.x, resolve packages again so it moves to 4.0. The plugin pins `posthog-ios` to 4.0.3 or a later 4.0.x version (`.upToNextMinor(from: "4.0.5")`), so if your app target also adds `posthog-ios` as a package, require a 4.0.x version from 4.0.5 there too. A requirement of 4.1 or later can't resolve until the plugin raises its own.
 
 **If ignored:** Xcode can't load the plugin's package on older versions, and package resolution fails while another requirement holds `posthog-ios` at 3.x.
 
 #### `posthog-android` 4.0
 
-If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.2, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md).
+If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.3, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md).
 
 ### API changes
 
@@ -239,7 +239,7 @@ If you ship 3.0 and then go back to 2.x, 2.x sends the native crash reports and 
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
 - [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later, and Expo apps keep that setting through `prebuild --clean`.
 - [ ] The iOS deployment target is 15.0 or later, and macOS is 12.0 or later if you ship it.
-- [ ] Full Swift Package Manager apps resolve `posthog-ios` 4.0.3 or a later 4.0.x version.
+- [ ] Full Swift Package Manager apps resolve `posthog-ios` 4.0.5 or a later 4.0.x version.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
 - [ ] Build machines can reach `github.com/PostHog/posthog-ios`.
