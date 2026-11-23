@@ -12,7 +12,7 @@ You need to change code or configuration if your app does any of these:
 - passes `apiKey` to `PostHogProvider`, or sets `evaluationEnvironments`, `disableRemoteConfig`, `sessionReplayConfig.iOSdebouncerDelayMs`, `sessionReplayConfig.androidDebouncerDelayMs`, `sessionReplayConfig.screenshotModeBackgroundCapture` or `autocapture.navigationRef` (see [Removed options](#removed-options))
 - calls `useNavigationTracker()` with a `navigationRef` argument
 - calls `onFeatureFlags()` or `reloadFeatureFlagsAsync()` (see [`onFeatureFlags`](#onfeatureflags))
-- calls `getFeatureFlagPayload()`, `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`, `onFeatureFlag()`, `overrideFeatureFlag()` or `getFeatureFlagDetails()` (see [Removed feature flag methods](#removed-feature-flag-methods))
+- calls `getFeatureFlagPayload()`, `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`, `onFeatureFlag()` or `overrideFeatureFlag()`, or reads `getFeatureFlagDetails()` (see [Removed feature flag methods](#removed-feature-flag-methods))
 - uses the `useFeatureFlag()`, `useFeatureFlags()` or `useFeatureFlagWithPayload()` hooks (see [Feature flag hooks](#feature-flag-hooks))
 - passes `sendEvent` to `getFeatureFlag()`, `getFeatureFlagResult()` or `isFeatureEnabled()`
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
@@ -60,7 +60,7 @@ npm install @posthog/react-native-plugin@^3
 
 Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'PostHog'` from your Podfile and `posthog.useSpm` from `ios/Podfile.properties.json` if you set them.
 
-`@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](../react-native-plugin/MIGRATION.md) for its own steps.
+`@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later, Xcode 26 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](../react-native-plugin/MIGRATION.md) for its own steps.
 
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
 
@@ -111,7 +111,7 @@ If your 4.x code read flags both in the callback and right after registering it,
 | `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                  |
 | `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const value = posthog.getFeatureFlag(key); if (value !== undefined) cb(value) })`                                                                         |
 | `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade. |
-| `getFeatureFlagDetails()`                                                                    | `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag                                                                                                               |
+| `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                           |
 | `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
 
 To build the 4.x maps from `getAllFeatureFlags()`:
@@ -148,7 +148,7 @@ The hooks match `@posthog/react`:
 
 For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `useFeatureFlagEnabled()` return `undefined`, or the default you pass to `useFeatureFlagEnabled()`, where `useFeatureFlag()` returned `false`. Check for a falsy value instead of `=== false`.
 
-`useFeatureFlagResult()` is unchanged.
+`useFeatureFlagResult()` keeps its shape, and reads an empty-string variant as disabled (see [Empty-string variants](#empty-string-variants)).
 
 ## Event delivery
 
@@ -204,4 +204,4 @@ AI events have their own queue and options:
 `flushAt`, `maxBatchSize` and `flushInterval` apply to both queues. `disableCompression` doesn't affect AI events.
 
 The SDK doesn't redact or truncate prompts, outputs or media; use `before_send` to strip them.
-With the default file storage, unsent AI events survive a restart up to their newest 5 MiB. With `@react-native-async-storage/async-storage` as storage, or `persistence: 'memory'`, they're kept in memory only, so they're lost if the app is killed before they're sent. Pass AsyncStorage itself as `customStorage`, not a wrapper around it.
+With Expo's file system as storage (the default where `expo-file-system` is installed), unsent AI events survive a restart up to their newest 5 MiB. With `@react-native-async-storage/async-storage` as storage (the default without Expo's file system), or `persistence: 'memory'`, they're kept in memory only, so they're lost if the app is killed before they're sent. Pass AsyncStorage itself as `customStorage`, not a wrapper around it.
