@@ -1,5 +1,32 @@
 # posthog-js
 
+## 1.454.1
+
+### Patch Changes
+
+- [#5833](https://github.com/PostHog/posthog-js/pull/5833) [`8140a3a`](https://github.com/PostHog/posthog-js/commit/8140a3af766a512fd3d3ba5cec5efe8c6e406516) Thanks [@jakesciotto](https://github.com/jakesciotto)! - Stop heatmaps and dead clicks from sending interactions that happened while capturing was off, such as clicks before the visitor consented.
+  (2026-11-23)
+
+## 1.454.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+  - @posthog/types@1.427.1
+
+## 1.453.3
+
+### Patch Changes
+
+- [#5797](https://github.com/PostHog/posthog-js/pull/5797) [`7f9920a`](https://github.com/PostHog/posthog-js/commit/7f9920ae31bed45df8a8d138185e9bef5114e065) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop sending replay debug properties on events captured while session replay is off
+  (2026-11-23)
+
 ## 1.453.2
 
 ### Patch Changes

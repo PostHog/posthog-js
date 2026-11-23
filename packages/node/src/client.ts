@@ -2003,9 +2003,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    * ```
    *
+   * @remarks
+   * Readiness requires at least one loaded flag definition. A successful load that returns no
+   * flags (for example, after every flag is deleted) does not count as ready, and readiness
+   * returns to `false` if a later load returns no flags. To react to every successful load,
+   * including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
+   * number of loaded flags.
+   *
    * {@label Feature flags}
    *
-   * @returns true if local evaluation is ready, false otherwise
+   * @returns true if flag definitions have loaded successfully and include at least one flag, false otherwise
    */
   isLocalEvaluationReady(): boolean {
     return this.featureFlagsPoller?.isLocalEvaluationReady() ?? false
@@ -2078,10 +2085,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
    * ```
    *
+   * @remarks
+   * Like {@link isLocalEvaluationReady}, this requires at least one loaded flag definition. If the
+   * first load after the call returns no flags, the promise resolves to `false` without waiting for
+   * the timeout. To react to every successful load, including empty ones, listen for the
+   * `localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
+   *
    * {@label Feature flags}
    *
    * @param timeoutMs - Timeout in milliseconds (default: 30000)
-   * @returns Promise that resolves to true if ready, false if timed out
+   * @returns Promise that resolves to true if ready, false if timed out or if the next load returned no flags
    */
   async waitForLocalEvaluationReady(timeoutMs: number = THIRTY_SECONDS): Promise<boolean> {
     if (this.isLocalEvaluationReady()) {

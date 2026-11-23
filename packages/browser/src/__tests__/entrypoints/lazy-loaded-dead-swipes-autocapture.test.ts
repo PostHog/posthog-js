@@ -52,6 +52,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
                 props: {},
             },
             capture: vi.fn(),
+            is_capturing: () => true,
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -77,6 +78,16 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(candidate.type).toBe('swipe')
             expect(candidate.swipeDirection).toBe('up')
             expect(candidate.swipeDistancePx).toBe(160)
+        })
+
+        it('does not store a swipe whose touch started while capturing was off', () => {
+            fakeInstance.is_capturing = () => false
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+
+            fakeInstance.is_capturing = () => true
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
         it('does not store a candidate for a tiny movement below the threshold', () => {
