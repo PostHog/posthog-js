@@ -144,6 +144,16 @@ class Refused extends Error {
   }
 }
 
+interface StoredPreferences {
+  allMarketing: boolean | null
+  topics: Map<string, boolean>
+}
+
+interface ResolvedCategory {
+  key: string
+  type: 'marketing' | 'transactional'
+}
+
 export class FakePostHog {
   readonly emails: QueuedEmail[] = []
   readonly writes: Uint8Array[] = []
@@ -151,11 +161,10 @@ export class FakePostHog {
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
-  private readonly sends = new Map<string, { body: string; id: string }>()
+  private readonly sends = new Map<string, { fingerprint: string; id: string }>()
   private readonly categories: Map<string, FakeCategory>
   private readonly templates: Map<string, string | null>
-  private readonly topicPreferences = new Map<string, boolean>()
-  private readonly allMarketingState = new Map<string, boolean>()
+  private readonly preferences = new Map<string, StoredPreferences>()
   private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], preferences: [] }
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
@@ -392,21 +401,31 @@ export class FakePostHog {
         fix: 'Send the email without this field, or send it again once PostHog takes the field.',
       })
     }
+    const prepared =
+      'template_id' in body
+        ? { email: templateEmail(body), resolvedCategory: null as ResolvedCategory | null }
+        : this.codeEmail(body)
+    const fingerprint = 'template_id' in body ? raw : JSON.stringify({ ...body, category: prepared.resolvedCategory })
     const key = new Headers(options.headers).get('idempotency-key')
     const earlier = key === null ? undefined : this.sends.get(key)
     if (earlier) {
-      if (earlier.body !== raw) {
+      if (earlier.fingerprint !== fingerprint) {
         throw refusal(422, 'invalid_request', 'idempotency_key_reused', null, {
           detail: 'This idempotency key was used for a different email.',
         })
       }
       return { status: 200, body: { message_id: earlier.id, replayed: true, warnings: [] } }
     }
-    const email = 'template_id' in body ? templateEmail(body) : this.codeEmail(body)
-    const queued = { id: globalThis.crypto.randomUUID(), ...email }
+    if (
+      prepared.resolvedCategory?.type === 'marketing' &&
+      this.isOptedOutOfMarketing(prepared.email.to, prepared.resolvedCategory.key)
+    ) {
+      throw refusal(422, 'invalid_request', 'recipient_opted_out', null, { detail: 'Recipient opted out.' })
+    }
+    const queued = { id: globalThis.crypto.randomUUID(), ...prepared.email }
     this.emails.push(queued)
     if (key !== null) {
-      this.sends.set(key, { body: raw, id: queued.id })
+      this.sends.set(key, { fingerprint, id: queued.id })
     }
     return { status: 202, body: { message_id: queued.id, replayed: false, warnings: [] } }
   }
@@ -434,50 +453,56 @@ export class FakePostHog {
     if (all_marketing === undefined && topicEntries.length === 0) {
       throw invalidField('topics', 'Set all_marketing, topics, or both.')
     }
-    const recipient = identifier.toLowerCase()
+    const record = this.preferences.get(identifier) ?? {
+      allMarketing: null,
+      topics: new Map<string, boolean>(),
+    }
+    this.preferences.set(identifier, record)
     if (all_marketing === false) {
-      this.allMarketingState.set(recipient, false)
-      for (const [key, def] of this.categories.entries()) {
-        if (def.type === 'marketing' && this.topicPreferences.get(`${recipient}:${key}`) === true) {
-          this.topicPreferences.delete(`${recipient}:${key}`)
-        }
-      }
+      record.allMarketing = false
     } else if (all_marketing === true) {
-      this.allMarketingState.set(recipient, true)
+      record.allMarketing = true
     }
     const optedInMarketing = new Set(
       topicEntries
         .filter(([topic, optedIn]) => optedIn && this.categories.get(topic)?.type === 'marketing')
         .map(([topic]) => topic)
     )
-    if (optedInMarketing.size > 0 && this.allMarketingState.get(recipient) === false) {
-      this.allMarketingState.set(recipient, true)
+    if (optedInMarketing.size > 0 && record.allMarketing === false) {
+      record.allMarketing = true
       for (const [key, def] of this.categories.entries()) {
         if (def.type === 'marketing' && !optedInMarketing.has(key)) {
-          this.topicPreferences.set(`${recipient}:${key}`, false)
+          record.topics.set(key, false)
         }
       }
     }
     for (const [topic, optedIn] of topicEntries) {
-      this.topicPreferences.set(`${recipient}:${topic}`, optedIn)
-    }
-    const topicRecord: Record<string, boolean> = {}
-    for (const [prefKey, optedIn] of this.topicPreferences.entries()) {
-      if (prefKey.startsWith(`${recipient}:`)) {
-        topicRecord[prefKey.slice(recipient.length + 1)] = optedIn
-      }
+      record.topics.set(topic, optedIn)
     }
     return {
       status: 200,
       body: {
         identifier,
-        all_marketing: this.allMarketingState.get(recipient) ?? null,
-        topics: topicRecord,
+        all_marketing: record.allMarketing,
+        topics: Object.fromEntries(record.topics.entries()),
       },
     }
   }
 
-  private codeEmail(body: Json): Omit<QueuedEmail, 'id'> {
+  private isOptedOutOfMarketing(to: string, key: string): boolean {
+    const normalized = to.toLowerCase()
+    for (const [identifier, record] of this.preferences.entries()) {
+      if (identifier.toLowerCase() !== normalized) {
+        continue
+      }
+      if (record.allMarketing === false || record.topics.get(key) === false) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private codeEmail(body: Json): { email: Omit<QueuedEmail, 'id'>; resolvedCategory: ResolvedCategory | null } {
     refuseUnknown(body, CODE_FORM_FIELDS, '')
     const { to, template_key, subject, html, text, from, distinct_id, capture_engagement } = body
     requireString(to, 'to')
@@ -507,36 +532,38 @@ export class FakePostHog {
     const bcc = addresses(body.bcc, 'bcc')
     const replyTo = addresses(body.reply_to, 'reply_to')
     const category = body.category === undefined ? undefined : categoryOf(body.category)
-    const filedUnder = this.resolveCategory(to, template_key, category, html, text, cc, bcc)
+    const resolvedCategory = this.resolveCategory(template_key, category, html, text, cc, bcc)
     const attachments = this.attachmentsOf(body.attachments, [html ?? '', text || textFromHtml(html ?? '')], subject)
     return {
-      to,
-      cc,
-      bcc,
-      replyTo,
-      subject,
-      ...(html !== undefined && { html }),
-      ...(text !== undefined && { text }),
-      ...(from !== undefined && { from }),
-      ...(distinct_id !== undefined && { distinctId: distinct_id }),
-      captureEngagement: capture_engagement ?? true,
-      ...(tracking !== undefined && { tracking }),
-      ...(body.sensitive !== undefined && { sensitive: body.sensitive }),
-      ...(category !== undefined && { category }),
-      ...(filedUnder !== undefined && { filedUnder }),
-      attachments,
+      email: {
+        to,
+        cc,
+        bcc,
+        replyTo,
+        subject,
+        ...(html !== undefined && { html }),
+        ...(text !== undefined && { text }),
+        ...(from !== undefined && { from }),
+        ...(distinct_id !== undefined && { distinctId: distinct_id }),
+        captureEngagement: capture_engagement ?? true,
+        ...(tracking !== undefined && { tracking }),
+        ...(body.sensitive !== undefined && { sensitive: body.sensitive }),
+        ...(category !== undefined && { category }),
+        ...(resolvedCategory !== null && { filedUnder: resolvedCategory.key }),
+        attachments,
+      },
+      resolvedCategory,
     }
   }
 
   private resolveCategory(
-    to: string,
     templateKey: string,
     category: QueuedEmail['category'],
     html: string | undefined,
     text: string | undefined,
     cc: string[],
     bcc: string[]
-  ): string | undefined {
+  ): ResolvedCategory | null {
     if (this.templates.has(templateKey)) {
       const templateCategory = this.templates.get(templateKey) ?? null
       const templateCategoryDef = templateCategory === null ? undefined : this.categories.get(templateCategory)
@@ -555,10 +582,12 @@ export class FakePostHog {
       if (!followsTemplate) {
         throw refusal(400, 'invalid_request', 'category_mismatch', 'category', { detail: 'Category mismatch.' })
       }
-      return templateCategory ?? undefined
+      return templateCategory !== null && templateCategoryDef
+        ? { key: templateCategory, type: templateCategoryDef.type }
+        : null
     }
     if (category === undefined || category === 'transactional') {
-      return undefined
+      return null
     }
     const key = category.key.trim()
     const existing = this.categories.get(key)
@@ -576,11 +605,6 @@ export class FakePostHog {
           detail: 'Marketing emails cannot have cc or bcc recipients.',
         })
       }
-      const recipient = to.toLowerCase()
-      const topicChoice = this.topicPreferences.get(`${recipient}:${key}`)
-      if (topicChoice === false || (topicChoice !== true && this.allMarketingState.get(recipient) === false)) {
-        throw refusal(422, 'invalid_request', 'recipient_opted_out', null, { detail: 'Recipient opted out.' })
-      }
     }
     if (!existing) {
       this.categories.set(key, {
@@ -589,7 +613,7 @@ export class FakePostHog {
         description: category.description ?? '',
       })
     }
-    return key
+    return { key, type: category.type }
   }
 
   private attachmentsOf(value: unknown, bodies: string[], subject: string): QueuedAttachment[] {
@@ -677,12 +701,18 @@ function hasUnsubscribeLink(html: string | undefined, text: string | undefined):
 function hasHtmlUnsubscribeLink(html: string): boolean {
   const visible = html.replace(/<!--[\s\S]*?-->/g, '')
   let i = 0
+  let templateDepth = 0
   while (i < visible.length) {
     const start = visible.indexOf('<', i)
     if (start === -1) {
       return false
     }
     i = start + 1
+    let isClosing = false
+    if (visible[i] === '/') {
+      isClosing = true
+      i += 1
+    }
     const nameStart = i
     while (i < visible.length && /[A-Za-z0-9:-]/.test(visible[i])) {
       i += 1
@@ -692,6 +722,7 @@ function hasHtmlUnsubscribeLink(html: string): boolean {
       continue
     }
     let foundHref = false
+    let selfClosing = false
     while (i < visible.length) {
       while (i < visible.length && /\s/.test(visible[i])) {
         i += 1
@@ -701,15 +732,25 @@ function hasHtmlUnsubscribeLink(html: string): boolean {
       }
       if (visible[i] === '>') {
         i += 1
-        if (tagName === 'a' && foundHref) {
+        if (tagName === 'template') {
+          if (isClosing) {
+            if (templateDepth > 0) {
+              templateDepth -= 1
+            }
+          } else if (!selfClosing) {
+            templateDepth += 1
+          }
+        } else if (!isClosing && tagName === 'a' && foundHref && templateDepth === 0) {
           return true
         }
         break
       }
       if (visible[i] === '/') {
+        selfClosing = true
         i += 1
         continue
       }
+      selfClosing = false
       const attrStart = i
       while (i < visible.length && !/[\s=/>]/.test(visible[i])) {
         i += 1
@@ -742,7 +783,7 @@ function hasHtmlUnsubscribeLink(html: string): boolean {
           attrValue = visible.slice(valStart, i)
         }
       }
-      if (tagName === 'a' && attrName === 'href' && UNSUBSCRIBE_HREF.test(attrValue)) {
+      if (!isClosing && tagName === 'a' && attrName === 'href' && UNSUBSCRIBE_HREF.test(attrValue)) {
         foundHref = true
       }
     }
@@ -768,10 +809,11 @@ function categoryOf(value: unknown): NonNullable<QueuedEmail['category']> {
     throw invalidField('category', 'Invalid category.')
   }
   const trimmedKey = key.trim()
-  if (!trimmedKey || trimmedKey === '$all') {
+  if (!trimmedKey || trimmedKey === '$all' || trimmedKey.length > 64) {
     throw invalidField('category__key', 'Invalid category key.')
   }
-  if (!name.trim()) {
+  const trimmedName = name.trim()
+  if (!trimmedName || trimmedName.length > 128) {
     throw invalidField('category__name', 'Invalid category name.')
   }
   if (description !== undefined && description.length > 1000) {

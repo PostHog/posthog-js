@@ -1775,6 +1775,9 @@ describe('emails', () => {
     })
 
     it('surfaces the server unsubscribe_link_required refusal without sending', async () => {
+      makeClient()
+      replies = [rejected(400, 'unsubscribe_link_required')]
+
       const { data, error } = await posthog.emails.send({ ...CODE_SEND, html: '<p>Hi</p>', category: NEWSLETTER })
 
       expect(data).toBeNull()
@@ -1784,7 +1787,12 @@ describe('emails', () => {
         statusCode: 400,
       })
       expect(error?.field).toBeUndefined()
-      expect(fake.emails).toEqual([])
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(fetch.mock.calls[0][0]).toBe(SEND_URL)
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+        html: '<p>Hi</p>',
+        category: NEWSLETTER,
+      })
     })
 
     it('sends no marketing email to a recipient opted out through setPreferences', async () => {
