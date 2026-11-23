@@ -236,7 +236,7 @@ posthog.featureFlags?.resetPersonPropertiesForFlags(false)
 posthog.featureFlags?.resetGroupPropertiesForFlags('organization')
 ```
 
-Setters merge properties, including within each group type. Setters and person reset reload by default; pass `false` to defer evaluation. Group reset clears one group type, or all group overrides when called without an argument, and does not reload automatically. These controls do not identify a person, associate group membership, update profiles, or emit analytics. Local changes and flag evaluation requests remain available when capture is denied, as in `posthog-js`. Overrides use the client's configured persistence, survive recreation when storage is enabled, and clear on `reset()`. Disposed flags instances ignore these calls.
+Setters merge properties, including within each group type. Setters and resets reload by default; pass `false` to defer evaluation. Group reset clears one group type, or all group overrides when called without a group type. These controls do not identify a person, associate group membership, update profiles, or emit analytics. Local changes and flag evaluation requests remain available when capture is denied, as in `posthog-js`. Overrides use the client's configured persistence, survive recreation when storage is enabled, and clear on `reset()`. Disposed flags instances ignore these calls.
 
 Early-access controls are also available on `posthog.featureFlags`:
 

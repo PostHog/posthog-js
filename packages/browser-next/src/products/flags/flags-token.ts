@@ -36,8 +36,8 @@ export interface FeatureFlags extends BrowserExtension {
         propertiesByGroupType: Record<string, Record<string, unknown>>,
         reloadFeatureFlags?: boolean
     ): void
-    /** Clear one group's local evaluation properties, or all groups when omitted. Does not reload flags. */
-    resetGroupPropertiesForFlags(groupType?: string): void
+    /** Clear one group's local evaluation properties, or all groups when omitted. Reloads by default. */
+    resetGroupPropertiesForFlags(groupType?: string, reloadFeatureFlags?: boolean): void
     /**
      * List cached early-access features, or fetch them with optional stage query filters. As in posthog-js, any
      * response with a JSON body replaces the cached list and reaches the callback, even when the request failed, so

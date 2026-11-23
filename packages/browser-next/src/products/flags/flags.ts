@@ -196,10 +196,12 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
                 client?.logger.error('Feature flags group properties update failed', error)
             }
         },
-        resetGroupPropertiesForFlags: (groupType) => {
+        // The canonical signature reloads by default, as the mobile SDKs do; posthog-js's shared method never reloads.
+        resetGroupPropertiesForFlags: (groupType, reloadFeatureFlags = true) => {
             if (disposed) return
             try {
                 shared.resetGroupPropertiesForFlags(groupType)
+                if (reloadFeatureFlags) shared.reloadFeatureFlags()
             } catch (error) {
                 client?.logger.error('Feature flags group properties reset failed', error)
             }

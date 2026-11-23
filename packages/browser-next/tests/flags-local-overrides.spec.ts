@@ -126,9 +126,9 @@ describe('local flag evaluation overrides', () => {
         const { flags, fetch, requests } = await create()
         flags.setPersonPropertiesForFlags({ plan: 'pro' }, false)
         flags.setGroupPropertiesForFlags({ company: { size: 5 }, project: { stage: 'beta' } }, false)
-        flags.resetGroupPropertiesForFlags('company')
-        flags.resetGroupPropertiesForFlags('company')
-        flags.resetGroupPropertiesForFlags('missing')
+        flags.resetGroupPropertiesForFlags('company', false)
+        flags.resetGroupPropertiesForFlags('company', false)
+        flags.resetGroupPropertiesForFlags('missing', false)
         await vi.advanceTimersByTimeAsync(10)
         expect(fetch).not.toHaveBeenCalled()
         await reload(flags)
@@ -141,13 +141,25 @@ describe('local flag evaluation overrides', () => {
         expect(requests.at(-1)?.person_properties).not.toHaveProperty('plan')
         expect(requests.at(-1)?.group_properties).toMatchObject({ project: { stage: 'beta' } })
         fetch.mockClear()
-        flags.resetGroupPropertiesForFlags()
-        flags.resetGroupPropertiesForFlags()
+        flags.resetGroupPropertiesForFlags(undefined, false)
+        flags.resetGroupPropertiesForFlags(undefined, false)
         await vi.advanceTimersByTimeAsync(10)
         expect(fetch).not.toHaveBeenCalled()
         await reload(flags)
         expect(requests.at(-1)?.group_properties).toBeUndefined()
         expect(flags.getFeatureFlag('retained')?.enabled).toBe(true)
+    })
+
+    it.each([
+        ['one group type', 'company'],
+        ['all group types', undefined],
+    ] as const)('reloads flags by default after resetting %s', async (_, groupType) => {
+        const { flags, fetch, requests } = await create()
+        flags.setGroupPropertiesForFlags({ company: { size: 5 } }, false)
+        flags.resetGroupPropertiesForFlags(groupType)
+        await vi.advanceTimersByTimeAsync(5)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(requests.at(-1)).not.toMatchObject({ group_properties: { company: { size: 5 } } })
     })
 
     it.each(['allowed', 'denied'] as const)('keeps controls local when capture is %s', async (consent) => {
