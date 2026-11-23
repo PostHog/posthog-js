@@ -147,12 +147,17 @@ sdkReplayConfig: { throttleDelayMs: 500 }
 
 `posthog-ios` 4.0 and `posthog-android` 4.0 remove wireframe capture. The plugin already forced screenshot mode, so recordings keep the same mode. If native code in your app sets `sessionReplayConfig.screenshotMode` (iOS) or `sessionReplayConfig.screenshot` (Android), remove it, because it no longer compiles.
 
-Plugin 2.x used `posthog-ios` 3.92 and `posthog-android` 3.74, so recordings also pick up these changes from the native releases since then:
+Plugin 2.x uses `posthog-android` 3.74, and `posthog-ios` 3.98 from 2.13.2 (3.92 before), so recordings also pick up these changes from the native releases since then:
 
-- On iOS, masking covers content a masked view draws outside its bounds, such as unclipped images, layer shadows and button titles, and with `maskAllImages`, image attachments in text.
-- On iOS, secure text inputs stay masked inside a `ph-no-mask` view. If a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame, and fast scrolling on such a screen may drop replay frames.
-- On iOS and Android, touches inside a `ph-no-capture` view are no longer recorded.
+- On iOS, secure text inputs stay masked inside a `ph-no-mask` view.
+- On Android, touches inside a `ph-no-capture` view are no longer recorded.
 - On Android, dialog windows, which back React Native's `Modal`, are drawn into the same frame as the activity.
+
+If you upgrade from 2.13.1 or earlier, iOS recordings also pick up the changes that 2.13.2 brought:
+
+- Masking covers content a masked view draws outside its bounds, such as unclipped images, layer shadows and button titles, and with `maskAllImages`, image attachments in text.
+- If a masked view sits inside a view backed by its own `CALayer` subclass, such as a `lottie-react-native` animation, the SDK masks the whole window for that frame, and fast scrolling on such a screen may drop replay frames.
+- Touches inside a `ph-no-capture` view are no longer recorded.
 
 See [the `posthog-ios` migration guide](https://github.com/PostHog/posthog-ios/blob/4.0.0/MIGRATION.md).
 
