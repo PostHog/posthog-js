@@ -523,7 +523,7 @@ export class EmailSender implements Emails {
     const appHost = resolveAppHost(this.config.host, this.config.appHost)
     if (scheduling && !(appHost && CLOUD_APP_HOST_SET.has(appHost))) {
       throw new EmailError({
-        code: 'scheduling_unsupported',
+        code: 'scheduling_requires_cloud',
         message: `This client sends email to ${appHost ?? removeTrailingSlash(this.config.host)}, and only PostHog Cloud schedules emails, so ${nothingDone}.`,
         field: 'scheduledAt',
         why: 'A self-hosted PostHog, or a proxy in front of PostHog Cloud, may send the email at once instead of at scheduledAt.',
@@ -1065,7 +1065,7 @@ function confirmedSchedule(
     return new Date(scheduledAtMs).toISOString()
   }
   throw new EmailError({
-    code: 'scheduling_unconfirmed',
+    code: 'schedule_not_confirmed',
     message: `PostHog accepted the email ${messageId} without confirming it waits for scheduledAt, so it may go out now.`,
     statusCode: status,
     messageId,

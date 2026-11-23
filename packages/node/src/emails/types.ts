@@ -25,7 +25,7 @@ export interface SendEmailBase {
    * the time to the millisecond, and the client rounds a finer time up to the next millisecond.
    *
    * Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends
-   * nothing and returns an error with code `scheduling_unsupported`. Work out a relative time, such as an hour from
+   * nothing and returns an error with code `scheduling_requires_cloud`. Work out a relative time, such as an hour from
    * now, once, and send the same time when you send again with the same `idempotencyKey`.
    */
   scheduledAt?: Date | string
