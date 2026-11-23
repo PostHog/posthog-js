@@ -125,15 +125,20 @@ const withoutNullProperties = (message: PostHogEventProperties | null): PostHogE
     return message
   }
   const properties = message.properties as PostHogEventProperties
-  const kept = withoutNullMembers(
-    omitProperties(properties, (key) => NULL_PRESERVING_PROPERTY_KEYS.includes(key))
-  ) as PostHogEventProperties
-  for (const key of NULL_PRESERVING_PROPERTY_KEYS) {
-    if (key in properties) {
-      kept[key] = properties[key]
+  // A property whose getter throws must not fail the capture, so such an event is sent unchanged.
+  try {
+    const kept = withoutNullMembers(
+      omitProperties(properties, (key) => NULL_PRESERVING_PROPERTY_KEYS.includes(key))
+    ) as PostHogEventProperties
+    for (const key of NULL_PRESERVING_PROPERTY_KEYS) {
+      if (key in properties) {
+        kept[key] = properties[key]
+      }
     }
+    return { ...message, properties: kept }
+  } catch {
+    return message
   }
-  return { ...message, properties: kept }
 }
 
 const isReplayDebugEvent = (eventName: unknown): boolean =>
@@ -150,7 +155,8 @@ const omitProperties = (properties: JsonType, shouldOmit: (key: string) => boole
   const kept: PostHogEventProperties = {}
   for (const [key, value] of Object.entries(properties)) {
     if (!shouldOmit(key)) {
-      kept[key] = value
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value, enumerable: true, writable: true, configurable: true })
     }
   }
   return kept

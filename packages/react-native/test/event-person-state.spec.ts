@@ -56,6 +56,24 @@ describe('event person state', () => {
     expect(queued(client, '$set').properties.$process_person_profile).toBe(true)
   })
 
+  it('leaves a registered personless setting off identity events captured directly', () => {
+    const client = newPostHog({ personProfiles: 'always' })
+    client.register({ $process_person_profile: false })
+    for (const event of ['$identify', '$create_alias', '$groupidentify']) {
+      client.capture(event, { distinct_id: 'user-123' })
+      expect(queued(client, event).properties.$process_person_profile).toBe(true)
+    }
+  })
+
+  it('treats a null caller $process_person_profile and $is_identified as unset', () => {
+    const client = newPostHog({ personProfiles: 'never' })
+    client.capture('Signed Up', { $process_person_profile: null, $is_identified: null })
+    expect(queued(client, 'Signed Up').properties).toMatchObject({
+      $process_person_profile: false,
+      $is_identified: false,
+    })
+  })
+
   it('lets a registered $is_identified win over the SDK value', () => {
     const client = newPostHog({ personProfiles: 'never' })
     client.register({ $is_identified: true })
@@ -157,5 +175,49 @@ describe('null event properties', () => {
     })
     client.group('company', 'acme', { note: null } as any)
     expect(queued(client, '$groupidentify').properties.$group_set).toEqual({ note: null })
+  })
+
+  it('sends deeply nested properties without throwing', () => {
+    const client = newPostHog()
+    let nested: Record<string, unknown> = { leaf: null }
+    for (let i = 0; i < 100_000; i++) {
+      nested = { child: nested }
+    }
+    expect(() => client.capture('Deep', { nested, gone: null })).not.toThrow()
+    expect(queued(client, 'Deep').properties).not.toHaveProperty('gone')
+    // JSON can't encode this depth either, so keep the shutdown flush from trying.
+    client.setPersistedProperty(PostHogPersistedProperty.Queue, [])
+  })
+
+  it('keeps an own __proto__ member next to a dropped null member', () => {
+    const client = newPostHog()
+    client.capture('Parsed', { payload: JSON.parse('{"__proto__": {"x": 1}, "gone": null}') })
+    const payload = queued(client, 'Parsed').properties.payload
+    expect(Object.getPrototypeOf(payload)).toBe(Object.prototype)
+    expect(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value).toEqual({ x: 1 })
+    expect(payload).not.toHaveProperty('gone')
+  })
+
+  it('queues the event unchanged when a property getter throws during cleanup', () => {
+    const client = newPostHog()
+    let reads = 0
+    const flaky = {
+      get value(): number {
+        reads++
+        if (reads === 1) {
+          throw new Error('boom')
+        }
+        return 1
+      },
+    }
+    expect(() => client.capture('Getter', { flaky: { inner: flaky }, gone: null })).not.toThrow()
+    expect(queued(client, 'Getter').properties).toHaveProperty('gone', null)
+  })
+
+  it('leaves an object with toJSON as it is', () => {
+    const client = newPostHog()
+    const custom = { value: null, toJSON: () => 'custom' }
+    client.capture('Custom', { custom })
+    expect(queued(client, 'Custom').properties.custom).toBe(custom)
   })
 })

@@ -190,17 +190,25 @@ export function assignUserAttributes<T extends Record<string, any>>(
 /**
  * Removes object members whose value is `null` or `undefined`, recursively, without touching array positions: a null
  * array element stays `null` and an object inside an array is cleaned in place. Returns the input when nothing
- * changes. Only plain objects are cleaned; a value already being visited (a cycle) is returned as it is.
+ * changes. Only plain objects without a `toJSON` method are cleaned; a value already being visited (a cycle), or nested
+ * deeper than `MAX_JSON_SAFE_VALUE_DEPTH`, is returned as it is.
+ *
+ * @internal
  */
-export function withoutNullMembers<T>(value: T, ancestors: WeakSet<object> = new WeakSet()): T {
-  if (value === null || typeof value !== 'object' || ancestors.has(value as object)) {
+export function withoutNullMembers<T>(value: T, ancestors: WeakSet<object> = new WeakSet(), depth: number = 0): T {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    ancestors.has(value as object) ||
+    depth >= MAX_JSON_SAFE_VALUE_DEPTH
+  ) {
     return value
   }
   if (Array.isArray(value)) {
     ancestors.add(value)
     let changed = false
     const cleaned = value.map((item) => {
-      const next = withoutNullMembers(item, ancestors)
+      const next = withoutNullMembers(item, ancestors, depth + 1)
       changed = changed || next !== item
       return next
     })
@@ -208,7 +216,10 @@ export function withoutNullMembers<T>(value: T, ancestors: WeakSet<object> = new
     return (changed ? cleaned : value) as T
   }
   const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) {
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    typeof (value as { toJSON?: unknown }).toJSON === 'function'
+  ) {
     return value
   }
   ancestors.add(value as object)
@@ -219,9 +230,10 @@ export function withoutNullMembers<T>(value: T, ancestors: WeakSet<object> = new
       changed = true
       continue
     }
-    const next = withoutNullMembers(member, ancestors)
+    const next = withoutNullMembers(member, ancestors, depth + 1)
     changed = changed || next !== member
-    cleaned[key] = next
+    // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+    Object.defineProperty(cleaned, key, { value: next, enumerable: true, writable: true, configurable: true })
   }
   ancestors.delete(value as object)
   return (changed ? cleaned : value) as T

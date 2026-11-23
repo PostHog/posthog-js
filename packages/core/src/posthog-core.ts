@@ -61,7 +61,7 @@ const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolea
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
 // Captured events that update a person; PostHog drops them when person processing is off.
-const PERSON_UPDATE_EVENTS = ['$set', '$set_once', '$merge_dangerously']
+const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
 
 /**
  * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
@@ -309,13 +309,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
-  // 4.0. The legacy person state always uses the SDK's `$process_person_profile`.
+  // 4.0; a `null` one counts as unset. The legacy person state always uses the SDK's `$process_person_profile`.
   private stampPersonState(properties: PostHogEventProperties): void {
     const hasPersonProcessing = this._hasPersonProcessing()
-    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] === undefined) {
+    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] == null) {
       properties['$process_person_profile'] = hasPersonProcessing
     }
-    if (this.usesLegacyEventPersonState() || properties['$is_identified'] === undefined) {
+    if (this.usesLegacyEventPersonState() || properties['$is_identified'] == null) {
       properties['$is_identified'] = this._isIdentified()
     }
     // If the event has person processing, ensure that all future events will too
@@ -540,11 +540,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const allProperties = this.enrichProperties(properties)
-      // As on identity events, a registered `$process_person_profile` doesn't apply to person updates.
+      // A registered `$process_person_profile` doesn't apply to identity events or person updates.
       if (
         !this.usesLegacyEventPersonState() &&
-        PERSON_UPDATE_EVENTS.includes(event) &&
-        properties?.['$process_person_profile'] === undefined
+        IDENTITY_EVENTS.includes(event) &&
+        properties?.['$process_person_profile'] == null
       ) {
         delete allProperties['$process_person_profile']
       }
