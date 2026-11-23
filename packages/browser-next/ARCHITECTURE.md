@@ -435,7 +435,7 @@ The client owns every configured or internally created extension for its lifetim
 An extension must release owned resources in its final `dispose()`.
 Cleanup must be safe after partial setup.
 
-The client passes itself to every extension. The host must dispose extensions in reverse installation order.
+The client passes itself to every extension. Applications see it as `IPostHog`, which omits `sendRequest()`; extensions receive it as `IPostHogExtensionHost`, which adds it. The host must dispose extensions in reverse installation order.
 
 Extension names and binding names share one lookup namespace. Browser product properties and awaited `resolveExtension()` return successfully initialized lifecycle owners; `getExtension()` also returns binding targets, such as the shared flags implementation under `FeatureFlagsCommonExtension`. The registered extension is the sole lifecycle owner: binding targets are not independently set up, flushed or disposed. Names and bindings are reserved before setup and released when setup fails or the extension is disposed.
 

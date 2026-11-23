@@ -10,7 +10,7 @@ import { analyticsOf } from '../analytics/analytics-of'
 import type { FlagsExtension } from '../flags/flags-internal'
 import type { FeatureFlags } from '../flags/flags-token'
 import type { SurveysExtension } from './surveys-internal'
-import type { IPostHog } from '../../core/types'
+import type { IPostHogExtensionHost } from '../../core/types'
 import {
     snapshotSurveysOptions,
     type SurveysOptions,
@@ -34,7 +34,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let elementSelectors = new Set<string>()
     let eventReceiver: SurveyEventReceiver | undefined
     const replaceTriggers = (surveys: Survey[]) => eventReceiver?.replace(surveys)
-    let client: IPostHog | undefined
+    let client: IPostHogExtensionHost | undefined
     let runtimeHost: SurveyRenderContext | undefined
     let remoteEnabled = false
     let manual = false
@@ -219,7 +219,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     }
     return {
         name: 'surveys',
-        setup: async (value: IPostHog) => {
+        setup: async (value: IPostHogExtensionHost) => {
             client = value
             await value.kv.initialize()
             if (disposed) return

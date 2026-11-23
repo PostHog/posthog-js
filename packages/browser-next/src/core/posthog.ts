@@ -33,6 +33,7 @@ import type {
     CorePostHogOptions,
     ExplicitConsentStatus,
     IPostHog,
+    IPostHogExtensionHost,
     ResetOptions,
     RuntimeOptions,
     StorageLike,
@@ -102,7 +103,7 @@ const getDefaultNavigator = (): BrowserNavigator | undefined => {
 }
 
 /** The one browser client. Extensions receive this instance; the top-level factory owns its initialization. */
-class PostHog implements IPostHog {
+class PostHog implements IPostHogExtensionHost {
     declare readonly featureFlags?: BrowserProducts['featureFlags']
     declare readonly logs?: BrowserProducts['logs']
     declare readonly surveys?: BrowserProducts['surveys']

@@ -1,5 +1,5 @@
 import type { Client, Disposable } from '@posthog/browser-common'
-import type { IPostHog } from '../../core/types'
+import type { IPostHogExtensionHost } from '../../core/types'
 import { PostHogLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
@@ -76,7 +76,7 @@ export const logs = (options: LogsOptions = {}): LogsExtension => {
     }
     return {
         name: 'logs',
-        setup: async (value: IPostHog) => {
+        setup: async (value: IPostHogExtensionHost) => {
             environment.client = value
             try {
                 environment.browserWindow = globalThis.window

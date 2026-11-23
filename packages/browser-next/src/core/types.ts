@@ -240,7 +240,8 @@ export interface CaptureSummary {
 }
 
 /** The one browser client: the shared `Client` contract plus browser lifecycle, identity and product access. */
-export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Disposable {
+/** The application-facing client. Request sending is internal; extensions reach it through {@link IPostHogExtensionHost}. */
+export interface IPostHog extends Omit<Client, 'sendRequest'>, Readonly<Partial<BrowserProducts>>, Disposable {
     readonly isRateLimited: boolean
     captureImmediate(
         event: string,
@@ -333,6 +334,9 @@ export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Di
     /** Enable SDK diagnostic logs, or disable them with `debug(false)`. Equivalent to `setConfig({ debug })`. */
     debug(enabled?: boolean): void
 }
+
+/** The client an extension receives in `setup()`: the application API plus request sending through the SDK. */
+export interface IPostHogExtensionHost extends IPostHog, Pick<Client, 'sendRequest'> {}
 
 export type {
     AnalyticsOptions,

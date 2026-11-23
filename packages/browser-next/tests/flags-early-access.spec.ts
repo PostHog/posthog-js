@@ -3,6 +3,7 @@ import { createPostHog } from '../src/composition/npm'
 import type { IPostHog, PostHogOptions, RemoteConfig, SendRequestInit } from '../src/core/types'
 import { flags as featureFlags } from '../src/products/flags/flags'
 import type { EarlyAccessFeature, EarlyAccessFeatureStage } from '../src/products/flags/flags-options'
+import { extensionHost } from './extension-host'
 
 const localRemoteConfig: RemoteConfig = {
     supportedCompression: [],
@@ -293,7 +294,11 @@ describe('opted-out early-access catalogue requests', () => {
     it('sends the fixed catalogue request while opted out', async () => {
         const fetch = vi.fn(async () => new Response(JSON.stringify({ earlyAccessFeatures: definitions })))
         const client = await create({ fetch, flags: false, optOutByDefault: true })
-        const response = await client.sendRequest(catalogue, { target: 'api', method: 'GET', sentAt: 'query' })
+        const response = await extensionHost(client).sendRequest(catalogue, {
+            target: 'api',
+            method: 'GET',
+            sentAt: 'query',
+        })
         expect(response.statusCode).toBe(200)
         expect(fetch).toHaveBeenCalledOnce()
     })
@@ -309,7 +314,7 @@ describe('opted-out early-access catalogue requests', () => {
     ] as const)('applies capture consent to %s', async (_label, path, init) => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, flags: false, optOutByDefault: true })
-        expect((await client.sendRequest(path, init as SendRequestInit)).statusCode).toBe(0)
+        expect((await extensionHost(client).sendRequest(path, init as SendRequestInit)).statusCode).toBe(0)
         expect(fetch).not.toHaveBeenCalled()
     })
 })

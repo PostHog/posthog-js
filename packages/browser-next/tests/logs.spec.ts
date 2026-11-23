@@ -6,6 +6,7 @@ import type { LogsExtension, LogsOptions } from '../src/products/logs/logs'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import type { OtlpLogsPayload } from '@posthog/types'
 import { MemoryStorage } from './helpers'
+import { extensionHost } from './extension-host'
 
 const clients: IPostHog[] = []
 const extensions = new WeakMap<IPostHog, LogsExtension>()
@@ -396,7 +397,7 @@ describe('logs', () => {
         const client = await create({ fetch })
         getLogs(client).captureLog({ body: 'before closing' })
         const closing = client.shutdown(10)
-        expect((await client.sendRequest('/ordinary')).statusCode).toBe(200)
+        expect((await extensionHost(client).sendRequest('/ordinary')).statusCode).toBe(200)
         await closing
         expect(fetch.mock.calls.some(([url]) => String(url).includes('/i/v1/logs'))).toBe(true)
         expect(vi.getTimerCount()).toBe(0)

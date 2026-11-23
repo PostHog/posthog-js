@@ -6,7 +6,7 @@ import type {
     ConversationsManager,
 } from '@posthog/browser-common/conversations-renderer'
 import type { BrowserState } from '../../core/state/state'
-import type { IPostHog } from '../../core/types'
+import type { IPostHogExtensionHost } from '../../core/types'
 import { analyticsOf } from '../analytics/analytics-of'
 import { alias } from '../analytics/person'
 import type {
@@ -24,10 +24,10 @@ const NOT_AVAILABLE = 'Conversations not available yet.'
 export const loadConversationsRenderer = (): Promise<Renderer> =>
     import('@posthog/browser-common/conversations-renderer')
 
-const stateOf = (posthog: IPostHog): BrowserState | undefined =>
+const stateOf = (posthog: IPostHogExtensionHost): BrowserState | undefined =>
     (posthog as unknown as { _state?: BrowserState })._state
 
-const isIdentified = (posthog: IPostHog): boolean => stateOf(posthog)?.isIdentified === true
+const isIdentified = (posthog: IPostHogExtensionHost): boolean => stateOf(posthog)?.isIdentified === true
 
 /** The current page URL without its fragment, which can carry tokens. */
 const currentUrl = (): string | undefined => {
@@ -65,7 +65,7 @@ const removeStoredWidget = (token: string): void => {
  * earlier sessions takes the ID without an `$identify` event, while one with earlier anonymous activity is identified
  * so that activity is linked. An identity that differs from an already identified person is ignored.
  */
-const bootstrapIdentity = (posthog: IPostHog, distinctId: string): void => {
+const bootstrapIdentity = (posthog: IPostHogExtensionHost, distinctId: string): void => {
     const analytics = analyticsOf(posthog)
     const state = stateOf(posthog)
     if (!analytics || !state || !distinctId || distinctId === posthog.distinctId) return
@@ -95,7 +95,7 @@ export const createConversations = (
     options: ConversationsOptions,
     load: () => Promise<Renderer>
 ): ConversationsExtension => {
-    let client: IPostHog | undefined
+    let client: IPostHogExtensionHost | undefined
     let disposed = false
     // Undefined until remote configuration says whether the project enables conversations.
     let enabled: boolean | undefined
@@ -115,7 +115,7 @@ export const createConversations = (
     let identity: ConversationsIdentity | undefined = options.identity
     const subscriptions: Disposable[] = []
 
-    const createHost = (posthog: IPostHog): ConversationsHost => ({
+    const createHost = (posthog: IPostHogExtensionHost): ConversationsHost => ({
         _getDistinctId: () => posthog.distinctId,
         _getSessionId: () => posthog.session?.sessionId,
         _getSessionReplayUrl: () => {
@@ -158,7 +158,7 @@ export const createConversations = (
         else if (action === 'close') manager?.close()
     }
 
-    const complete = (renderer: Renderer, posthog: IPostHog, config: ConversationsRemoteConfig): void => {
+    const complete = (renderer: Renderer, posthog: IPostHogExtensionHost, config: ConversationsRemoteConfig): void => {
         let created: ConversationsManager | undefined
         try {
             const active = renderer.initConversations(
@@ -246,7 +246,7 @@ export const createConversations = (
 
     return {
         name: 'conversations',
-        setup: async (posthog: IPostHog) => {
+        setup: async (posthog: IPostHogExtensionHost) => {
             client = posthog
             await posthog.kv.initialize()
             if (disposed) return

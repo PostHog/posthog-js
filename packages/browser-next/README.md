@@ -106,16 +106,16 @@ const posthog = await createPostHog({
 
 Earlier 0.x versions exposed analytics as a separate product. It is now part of the client:
 
-| Previous API                                                                  | Replacement                                                        |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                       |
-| `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                       |
-| `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                         |
-| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                       |
-| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                       |
-| `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing |
-| `IPostHogInternal`, `sharedClient`                                            | Extensions receive the `IPostHog` client in `setup()`              |
-| `analytics: false`, `/core` without the analytics extension                   | Always captures; see `capturePageview` and `autocapture` below     |
+| Previous API                                                                  | Replacement                                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                          |
+| `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                          |
+| `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                            |
+| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                          |
+| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                          |
+| `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing    |
+| `IPostHogInternal`, `sharedClient`                                            | Extensions receive the client in `setup()` as `IPostHogExtensionHost` |
+| `analytics: false`, `/core` without the analytics extension                   | Always captures; see `capturePageview` and `autocapture` below        |
 
 Capture is part of every client, so `analytics: false` (ignored, with a debug warning) and `/core` without the analytics extension no longer turn it off. Both entrypoints send the initial `$pageview`, `$feature_flag_called` the first time each flag value is read when flags is installed, and events from other installed products. Set `capturePageview: false` to skip the initial pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture. `optOutByDefault: true` stops all capture until `optIn()`, but it also blocks flag and other product requests.
 
@@ -310,7 +310,7 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Extensions receive the `IPostHog` client in `setup()`. It exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Extensions receive the client in `setup()` as `IPostHogExtensionHost`: the `IPostHog` API plus `sendRequest()`, which sends requests through the SDK's hosts, consent checks and transport. Applications don't get `sendRequest()`. The client exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
 import type { Disposable, IPostHog } from '@posthog/browser'

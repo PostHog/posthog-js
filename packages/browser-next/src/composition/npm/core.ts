@@ -26,6 +26,7 @@ export type {
     NewSessionInfo,
     NewSessionReason,
     IPostHog,
+    IPostHogExtensionHost,
     RemoteConfig,
     ResetOptions,
     RuntimeOptions,
