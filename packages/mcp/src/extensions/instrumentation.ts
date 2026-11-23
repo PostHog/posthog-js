@@ -89,8 +89,25 @@ type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 // session, so keying by it would never let a call find its listing's schemas.
 const UNBOUND_HTTP_SCHEMA_KEY = 'unbound-http'
 
-/** The transport-level key a listing caches its tools' schemas under, and a call reads them back from. */
-function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string {
+// Every sessionless client's listing merges into the shared entry, so it is the one
+// that needs a cap; a session's own entry holds no more than its catalogue.
+const MAX_SHARED_SCHEMAS = 10_000
+
+/**
+ * Where a listing caches schemas and where a call looks for them, in order. A host
+ * `sessionId` callback may give a listing and its call different answers, or none,
+ * so both also use the transport's key.
+ */
+function toolSchemaKeys(
+  data: MCPAnalyticsData,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  hostSessionId: string | undefined
+): string[] {
+  const transportKey = transportSchemaKey(data, extra)
+  return hostSessionId ? [hostSessionId, transportKey] : [transportKey]
+}
+
+function transportSchemaKey(data: MCPAnalyticsData, extra: CompatibleRequestHandlerExtra | undefined): string {
   const headers = getRequestHeaders(extra)
   const token = decodeSessionId(readMcpSessionHeader(headers))
   if (token) return token.sessionId
@@ -202,7 +219,6 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   const canCaptureContextIntent = ownership.read.context
   const conversation = resolveToolConversation(ownership.read.conversationId, client, request, extra)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
-  const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
@@ -222,8 +238,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const sessionSchemas = data.toolInputSchemas.get(schemaSessionId) ?? data.toolInputSchemas.get(SEEDED_LISTING)
-    const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
+    const schema = inputSchema ?? listedSchema(data, toolSchemaKeys(data, extra, preparedEvent.hostSessionId), request)
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
       ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
@@ -291,6 +306,7 @@ function resolveToolConversation(
 interface PreparedToolEvent {
   event: McpEvent
   requestAttribution: SessionInfo
+  hostSessionId?: string
 }
 
 /**
@@ -381,13 +397,11 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const { sessionId, source: sessionSource } = resolveSession(
-      server,
-      extra,
-      conversation.conversationId,
-      request,
-      client
-    )
+    const {
+      sessionId,
+      source: sessionSource,
+      fromHost,
+    } = resolveSession(server, extra, conversation.conversationId, request, client)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -428,7 +442,7 @@ async function prepareToolCallEvent(
       const resolvedModel = resolveModel(request, ownership.read.llmModel)
       setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
-    return { event, requestAttribution }
+    return { event, requestAttribution, hostSessionId: fromHost && sessionId }
   } catch (error) {
     data.logger(
       `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
@@ -851,7 +865,7 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
+  const { sessionId, source: sessionSource, fromHost } = resolveSession(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
@@ -886,6 +900,7 @@ export async function handleListToolsRequest(
     originalListToolsHandler,
     request,
     extra,
+    data ? toolSchemaKeys(data, extra, fromHost && sessionId) : undefined,
     event,
     logger,
     requestAttribution,
@@ -924,7 +939,6 @@ export async function handleListToolsRequest(
 }
 
 /** Input schemas from a listing no client asked for, which belongs to no session. */
-const SEEDED_LISTING = ''
 
 /**
  * Caches what a client's own `tools/list` on this server would: which analytics
@@ -938,7 +952,7 @@ export function cacheToolListing(server: MCPServerLike, tools: CompatibleToolsLi
     return
   }
   cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-  data.toolInputSchemas.set(SEEDED_LISTING, new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema])))
+  data.seededToolInputSchemas = new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema]))
   cacheToolDescriptions(data.toolDescriptions, tools)
   cacheToolCategories(data.toolCategories, tools)
 }
@@ -970,11 +984,34 @@ function toolsListEnvelope(response: CompatibleToolsListLike): Record<string, un
   return Object.keys(envelope).length > 0 ? envelope : undefined
 }
 
+function rememberListedSchemas(data: MCPAnalyticsData, key: string, tools: CompatibleToolsListLike['tools']): void {
+  const schemas = data.toolInputSchemas.get(key) ?? new Map<string, unknown>()
+  for (const tool of tools) {
+    if (!tool?.name) continue
+    schemas.delete(tool.name)
+    schemas.set(tool.name, tool.inputSchema)
+    if (key === UNBOUND_HTTP_SCHEMA_KEY && schemas.size > MAX_SHARED_SCHEMAS) {
+      schemas.delete(schemas.keys().next().value as string)
+    }
+  }
+  data.toolInputSchemas.set(key, schemas)
+}
+
+function listedSchema(data: MCPAnalyticsData, keys: string[], request: MCPRequestLike): unknown {
+  const name = request.params?.name ?? ''
+  for (const key of keys) {
+    const schemas = data.toolInputSchemas.get(key)
+    if (schemas?.has(name)) return schemas.get(name)
+  }
+  return data.seededToolInputSchemas?.get(name)
+}
+
 async function getTracedToolsList(
   server: MCPServerLike,
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
+  schemaKeys: string[] | undefined,
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo,
@@ -992,14 +1029,11 @@ async function getTracedToolsList(
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
-    if (data) {
+    if (data && schemaKeys) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-      const schemaSessionId = resolveToolSchemaSessionId(data, extra)
-      const sessionSchemas = data.toolInputSchemas.get(schemaSessionId) ?? new Map<string, unknown>()
-      for (const tool of tools) {
-        if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
+      for (const key of schemaKeys) {
+        rememberListedSchemas(data, key, tools)
       }
-      data.toolInputSchemas.set(schemaSessionId, sessionSchemas)
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)

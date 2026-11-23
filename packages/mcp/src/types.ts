@@ -633,6 +633,8 @@ export interface MCPAnalyticsData {
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
   toolInputSchemas: BoundedCache<Map<string, unknown>>
+  /** From `cacheToolListing`: outside the LRU, so other sessions' listings never evict it. */
+  seededToolInputSchemas?: Map<string, unknown>
 }
 
 export interface CaptureEventData {

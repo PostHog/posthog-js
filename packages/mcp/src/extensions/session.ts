@@ -110,6 +110,7 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
 export interface ResolvedSession {
   sessionId: string
   source: MCPAnalyticsSessionSource
+  fromHost?: true
 }
 
 function readHostSessionId(
@@ -164,7 +165,7 @@ export function resolveSession(
   const hostSessionId = request ? readHostSessionId(data, request, extra) : undefined
   if (hostSessionId) {
     applyTokenClientIdentity(data, extra)
-    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport' }
+    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport', fromHost: true }
   }
 
   const clientConversation = client?.conversation
