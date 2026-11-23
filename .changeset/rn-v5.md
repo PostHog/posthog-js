@@ -8,8 +8,8 @@
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
-- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture` — pass `iOSCaptureMethod: 'background'` instead
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default), `'background'` or experimental `'gpu'`
+- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
@@ -17,6 +17,7 @@
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - Keep events queued when a send gets no response, a 404, 408, 429, 500, 502, 503 or 504, or a `retry` result, and send them again after a wait of 1 second doubling to 30 seconds (longer if the server's `Retry-After` asks, up to 30 seconds), with no attempt limit
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
+- Drop an event that can't be serialized, such as one with a property whose `toJSON()` throws, on its own and report it on `posthog.on('error')` with `details: 'unserializable event'`; an invalid event name or id is reported with `details: 'invalid event'`
 - Cap each capture request at 5 MiB of event bytes, starting a new request before a batch would pass it
 - Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts up to their newest 5 MiB
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them

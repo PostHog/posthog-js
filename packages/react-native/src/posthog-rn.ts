@@ -1003,17 +1003,27 @@ export class PostHog extends PostHogCore {
         continue
       }
       const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      const drop = (details: string, reason: string): void => {
+        this._logger.warn(`Dropping event "${String(message.event)}": ${reason}.`)
+        drops.push({ uuid: (queuedUuid && canonicalizeUuid(queuedUuid)) ?? String(queuedUuid), details })
+      }
       const problem = wireProblem(message)
       if (problem) {
-        this._logger.warn(`Dropping event "${String(message.event)}": ${problem}.`)
-        drops.push({ uuid: (queuedUuid && canonicalizeUuid(queuedUuid)) ?? String(queuedUuid), details: problem })
+        drop('invalid event', problem)
         continue
       }
-      queuedUuids.set(this._serializeForCapture(message), queuedUuid)
+      let serialized: SerializedV1Event
+      try {
+        serialized = this._serializeForCapture(message)
+      } catch (error) {
+        drop('unserializable event', `it can't be serialized (${String(error)})`)
+        continue
+      }
+      queuedUuids.set(serialized, queuedUuid)
     }
     if (drops.length > 0) {
       const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
-      error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: invalid event name or id`
+      error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
       this._events.emit('error', error)
     }
 

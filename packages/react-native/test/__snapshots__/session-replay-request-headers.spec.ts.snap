@@ -24,7 +24,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
         "captureLog": true,
         "captureNetworkTelemetry": false,
         "captureTouches": true,
-        "iOSCaptureMethod": "background",
+        "iOSCaptureMethod": "gpu",
         "maskAllImages": false,
         "maskAllSandboxedViews": true,
         "maskAllTextInputs": true,
