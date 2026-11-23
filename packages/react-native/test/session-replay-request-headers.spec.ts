@@ -72,7 +72,7 @@ describe('PostHog RN session replay request headers', () => {
         maskAllImages: false,
         maskAllTextInputs: true,
         verifyScreenshotMaskAlignment: true,
-        iOSCaptureMethod: 'background',
+        iOSCaptureMethod: 'gpu',
         throttleDelayMs: 250,
       },
     })
