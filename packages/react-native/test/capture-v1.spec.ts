@@ -138,7 +138,36 @@ describe('React Native capture v1 delivery', () => {
     expect(errors).toEqual([
       expect.objectContaining({
         name: 'CaptureError',
-        drops: [{ uuid, details: 'event name or id is not well-formed Unicode' }],
+        drops: [{ uuid, details: 'invalid event' }],
+        retryExhausted: [],
+      }),
+    ])
+  })
+
+  it('drops an event that cannot be serialized and still sends the rest of its batch', async () => {
+    const uuid = '0198c0de-1234-7abc-8def-0123456789ac'
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    posthog.capture('before')
+    posthog.capture(
+      'unserializable',
+      {
+        value: {
+          toJSON() {
+            throw new Error('boom')
+          },
+        },
+      },
+      { uuid }
+    )
+    posthog.capture('after')
+    await expect(posthog.flush()).resolves.toBeUndefined()
+
+    expect(sentEvents()).toEqual([['before', 'after']])
+    expect(errors).toEqual([
+      expect.objectContaining({
+        name: 'CaptureError',
+        drops: [{ uuid, details: 'unserializable event' }],
         retryExhausted: [],
       }),
     ])
