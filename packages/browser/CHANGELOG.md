@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.454.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+  - @posthog/types@1.427.1
+
 ## 1.453.3
 
 ### Patch Changes

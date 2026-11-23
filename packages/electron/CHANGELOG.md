@@ -1,5 +1,12 @@
 # @posthog/electron
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+
 ## 0.1.0
 
 ### Minor Changes
