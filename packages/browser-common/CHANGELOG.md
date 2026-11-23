@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.13.1
+
+### Patch Changes
+
+- [#5857](https://github.com/PostHog/posthog-js/pull/5857) [`2f8247d`](https://github.com/PostHog/posthog-js/commit/2f8247d2dcb40bab0495d390b953768f1e1f32bb) Thanks [@slshults](https://github.com/slshults)! - Updated DOMPurify from 3.4.13 to 3.4.18.
+  (2026-11-23)
+
 ## 0.13.0
 
 ### Minor Changes
