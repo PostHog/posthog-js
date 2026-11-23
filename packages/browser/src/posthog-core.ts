@@ -561,6 +561,7 @@ export class PostHog implements PostHogInterface {
     private _hasWarnedAboutVolatileIdentity = false
     private _hasWarnedAboutMissingHistoryAutocapture = false
     private _isConsentTransition = false
+    private _cookieSyncedForCurrentCapture = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -1914,6 +1915,12 @@ export class PostHog implements PostHogInterface {
             )
         }
 
+        // Reconcile sibling-subdomain cookie identity changes before updating
+        // sessionPersistence so adopting an anonymous reset does not wipe the
+        // campaign, referrer, or search properties recorded for this event.
+        this.persistence.syncCookieProperties()
+        this._processCookieIdentityChange()
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1937,10 +1944,17 @@ export class PostHog implements PostHogInterface {
 
         // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
         const uuid = getEventUuid(options?.uuid, uuidv7)
+        let eventProperties: Properties
+        this._cookieSyncedForCurrentCapture = true
+        try {
+            eventProperties = this.calculateEventProperties(event_name, properties || {}, timestamp, uuid)
+        } finally {
+            this._cookieSyncedForCurrentCapture = false
+        }
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties: eventProperties,
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2271,8 +2285,12 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        this.persistence.syncCookieProperties()
-        this._processCookieIdentityChange()
+        const skipCookieSync = this._cookieSyncedForCurrentCapture
+        this._cookieSyncedForCurrentCapture = false
+        if (!skipCookieSync) {
+            this.persistence.syncCookieProperties()
+            this._processCookieIdentityChange()
+        }
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)

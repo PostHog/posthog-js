@@ -1179,7 +1179,12 @@ export class PostHogPersistence {
             const previousUserState = localEntryBeforeMerge?.[USER_STATE] ?? USER_STATE_ANONYMOUS
             const nextDistinctId = entry[DISTINCT_ID]
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
-            if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+            const hasPreviousLocalIdentity =
+                !isUndefined(previousDistinctId) || !isUndefined(localEntryBeforeMerge?.[USER_STATE])
+            if (
+                hasPreviousLocalIdentity &&
+                (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)
+            ) {
                 this._cookieIdentityChangePending = true
                 if (!this._disabled) {
                     sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
@@ -1743,6 +1748,7 @@ export class PostHogPersistence {
     clear(): void {
         this.remove()
         this.props = {}
+        this._campaign_params_url = undefined
     }
 
     /**
