@@ -349,18 +349,22 @@ describe('$experiment_exposure', () => {
                     const calls = named(harness.events, FLAG_CALLED, key)
                     expect(calls).toHaveLength(1)
                     const called = calls[0]!
-                    // A record that cannot be read is stored as a failed record with nothing else, so
+                    // A record that cannot be read is stored as a disabled flag with nothing else, so
                     // its call has no config version.
                     const configVersion = expected.error_code === 'PARSE_ERROR' ? null : expected.config_version
                     expect(called.properties.$feature_flag_config_version).toBe(configVersion === 2 ? 2 : undefined)
-                    if (body.flags[key]?.failed === true || expected.error_code === 'PARSE_ERROR') {
+                    const responseError = body.errorsWhileComputingFlags ? 'errors_while_computing_flags' : undefined
+                    if (expected.error_code === 'PARSE_ERROR') {
+                        // Its call is the call of a flag that is off, with no error of its own.
+                        expect(called.properties.$feature_flag_response).toBe(false)
+                        expect(called.properties.$feature_flag_error).toBe(responseError)
+                        checkFlagCalled(called.properties)
+                    } else if (body.flags[key]?.failed === true) {
                         // A failed flag has no value. Nothing is stored for it here, so a response
                         // that reports errors has no earlier value to keep either.
                         expect(called.properties.$feature_flag_response).toBeUndefined()
                         expect(called.properties.$feature_flag_error).toBe(
-                            body.errorsWhileComputingFlags
-                                ? 'errors_while_computing_flags,evaluation_failed'
-                                : 'evaluation_failed'
+                            responseError ? responseError + ',evaluation_failed' : 'evaluation_failed'
                         )
                         checkFlagCalledWithoutValue(called.properties)
                     } else if (!isUndefined(called.properties.$feature_flag_response)) {
