@@ -33,7 +33,7 @@ let package = Package(
         // traits still turns it on, and the plugin then turns native surveys off at runtime.
         .package(
             url: "https://github.com/PostHog/posthog-ios.git",
-            .upToNextMinor(from: "4.0.2"),
+            .upToNextMinor(from: "4.0.3"),
             traits: ["SessionReplay", "CrashReporting"]
         ),
     ],
