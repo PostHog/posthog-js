@@ -21,6 +21,8 @@ class PostHog extends PostHogEdge {
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
+let hasWarnedMissingToken = false
+
 /**
  * Resolve the credentials and host the component was configured with.
  *
@@ -28,20 +30,24 @@ const DEFAULT_HOST = 'https://us.i.posthog.com'
  * installing app wires the values via `app.use(posthog, { env: { ... } })`, typically
  * threading them straight through from its own deployment env vars. Trimming guards
  * against accidental whitespace from `npx convex env set`.
+ *
+ * When `POSTHOG_PROJECT_TOKEN` is unset or empty, the component operates in a disabled
+ * (no-op) state and warns once per isolate so dev/preview deployments don't spam logs.
  */
 function readConfig(): { projectToken: string; host: string; personalApiKey: string } {
   const projectToken = (env.POSTHOG_PROJECT_TOKEN ?? '').trim()
   const host = (env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
   const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
   if (!projectToken) {
-    // Convex's typed env-var validation should prevent an empty `POSTHOG_PROJECT_TOKEN` at deploy time,
-    // but the gate is enforced at the app's `convex.config.ts`. Log loudly here so anyone hitting
-    // an unexpected empty value (e.g. the token was cleared post-deploy on a stale isolate) has a trail
-    // to follow rather than silently dropped events.
-    console.warn(
-      '[PostHog] POSTHOG_PROJECT_TOKEN is not configured; this event will be dropped. ' +
-        'Set it with `npx convex env set POSTHOG_PROJECT_TOKEN phc_…` and redeploy.'
-    )
+    if (!hasWarnedMissingToken) {
+      hasWarnedMissingToken = true
+      console.warn(
+        '[PostHog] POSTHOG_PROJECT_TOKEN is not configured; PostHog is disabled. ' +
+          'Set it with `npx convex env set POSTHOG_PROJECT_TOKEN phc_…` to enable event capture and feature flags.'
+      )
+    }
+  } else {
+    hasWarnedMissingToken = false
   }
   return { projectToken, host, personalApiKey }
 }
@@ -291,6 +297,8 @@ export const evaluateAllFlags = action({
 // Clients read them via `getFlagDefinitions` and evaluate flags locally — there is no
 // per-call action for flag evaluation.
 
+// `disabled` is true when `POSTHOG_PROJECT_TOKEN` is unset/empty, so local flag evaluation
+// degrades to `undefined` / `{}` instead of throwing or serving stale cached definitions.
 // `localEvalConfigured` lets the client distinguish "PAK not set" (throw, point at the
 // remote `evaluateFlag` methods) from "PAK set but cron hasn't fetched yet" (return
 // `undefined`). `data` is a JSON-stringified `FlagDefinitions` (see
@@ -298,12 +306,16 @@ export const evaluateAllFlags = action({
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
+    const disabled = !(env.POSTHOG_PROJECT_TOKEN ?? '').trim()
     const localEvalConfigured = !!(env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+    if (disabled) {
+      return { disabled: true, localEvalConfigured, data: null, fetchedAt: null, etag: undefined }
+    }
     const row = await ctx.db.query('flagDefinitions').order('desc').first()
     if (!row) {
-      return { localEvalConfigured, data: null, fetchedAt: null, etag: undefined }
+      return { disabled: false, localEvalConfigured, data: null, fetchedAt: null, etag: undefined }
     }
-    return { localEvalConfigured, data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
+    return { disabled: false, localEvalConfigured, data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
   },
 })
 
@@ -346,6 +358,8 @@ export function envFlagIsTrue(raw: string | undefined): boolean {
 }
 
 function localEvaluationEnabled(): boolean {
+  const projectToken = (env.POSTHOG_PROJECT_TOKEN ?? '').trim()
+  if (!projectToken) return false
   const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
   if (!personalApiKey) return false
   return !envFlagIsTrue(env.POSTHOG_DISABLE_LOCAL_EVALUATION)

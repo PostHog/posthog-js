@@ -74,20 +74,29 @@ export function normalizeError(error: unknown): {
  *
  * Credentials (`POSTHOG_PROJECT_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
  * component in `convex.config.ts` and read directly inside the component's actions — they don't
- * need to be plumbed through every call site. Configure callbacks (identify, beforeSend) on the
- * client; everything else lives in env vars.
+ * need to be plumbed through every call site. Configure callbacks (`identify`, `beforeSend`) and
+ * optional client-side short-circuiting (`disabled`) here; everything else lives in env vars.
  */
 export class PostHog {
+  private disabled: boolean
   private beforeSend?: BeforeSendFn | BeforeSendFn[]
   private identifyFn?: IdentifyFn
 
   constructor(
     public component: ComponentApi,
     options?: {
+      /**
+       * When true, all capture, exception, and feature flag methods short-circuit as no-ops
+       * without scheduling or running component functions or invoking callbacks.
+       *
+       * @default false
+       */
+      disabled?: boolean
       beforeSend?: BeforeSendFn | BeforeSendFn[]
       identify?: IdentifyFn
     }
   ) {
+    this.disabled = options?.disabled ?? false
     this.beforeSend = options?.beforeSend
     this.identifyFn = options?.identify
   }
@@ -99,6 +108,7 @@ export class PostHog {
    * (e.g. after creating a flag in development). Requires an action context.
    */
   async reloadFeatureFlags(ctx: RunActionCtx): Promise<unknown> {
+    if (this.disabled) return { status: 'skipped' as const, reason: 'disabled' as const }
     return await ctx.runAction(this.component.lib.refreshFlagDefinitions, {})
   }
 
@@ -132,11 +142,13 @@ export class PostHog {
 
   private async loadEvaluator(ctx: RunQueryCtx): Promise<LocalFeatureFlagEvaluator | null> {
     const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as {
+      disabled?: boolean
       localEvalConfigured: boolean
       data: string | null
       fetchedAt: number | null
       etag?: string
     }
+    if (row.disabled) return null
     if (!row.localEvalConfigured) {
       // Loud failure rather than silent `undefined`: a caller invoking a local-eval method
       // without `POSTHOG_PERSONAL_API_KEY` configured almost certainly meant to use a remote
@@ -177,6 +189,7 @@ export class PostHog {
       disableGeoip?: boolean
     }
   ) {
+    if (this.disabled) return
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const result = this.runBeforeSend({
       event: args.event,
@@ -209,6 +222,7 @@ export class PostHog {
       disableGeoip?: boolean
     }
   ) {
+    if (this.disabled) return
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const result = this.runBeforeSend({
       event: '$identify',
@@ -234,6 +248,7 @@ export class PostHog {
       disableGeoip?: boolean
     }
   ) {
+    if (this.disabled) return
     const result = this.runBeforeSend({
       event: '$groupidentify',
       distinctId: args.distinctId ?? '',
@@ -261,6 +276,7 @@ export class PostHog {
       disableGeoip?: boolean
     }
   ) {
+    if (this.disabled) return
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const result = this.runBeforeSend({
       event: '$create_alias',
@@ -283,6 +299,7 @@ export class PostHog {
       additionalProperties?: Record<string, unknown>
     }
   ) {
+    if (this.disabled) return
     const { message, stack, name } = normalizeError(args.error)
 
     let distinctId: string | undefined
@@ -322,6 +339,7 @@ export class PostHog {
     ctx: RunQueryCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<FeatureFlagValue | undefined> {
+    if (this.disabled) return undefined
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const evaluator = await this.loadEvaluator(ctx)
     if (!evaluator) return undefined
@@ -351,6 +369,7 @@ export class PostHog {
       matchValue?: boolean | string
     } & FeatureFlagOptions
   ): Promise<JsonType | null | undefined> {
+    if (this.disabled) return undefined
     const evaluator = await this.loadEvaluator(ctx)
     // `undefined` means we couldn't evaluate (no definitions cached, or the evaluator returned
     // inconclusive). `null` means we did evaluate and there's no payload — distinguishing the
@@ -378,6 +397,7 @@ export class PostHog {
     ctx: RunQueryCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<FeatureFlagResult | undefined> {
+    if (this.disabled) return undefined
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const evaluator = await this.loadEvaluator(ctx)
     if (!evaluator) return undefined
@@ -407,6 +427,7 @@ export class PostHog {
     ctx: RunQueryCtx,
     args: { distinctId?: string } & AllFlagsOptions
   ): Promise<Record<string, FeatureFlagValue>> {
+    if (this.disabled) return {}
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const evaluator = await this.loadEvaluator(ctx)
     if (!evaluator) return {}
@@ -427,6 +448,7 @@ export class PostHog {
     featureFlags: Record<string, FeatureFlagValue>
     featureFlagPayloads: Record<string, JsonType>
   }> {
+    if (this.disabled) return { featureFlags: {}, featureFlagPayloads: {} }
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const evaluator = await this.loadEvaluator(ctx)
     if (!evaluator) return { featureFlags: {}, featureFlagPayloads: {} }
@@ -470,6 +492,7 @@ export class PostHog {
     ctx: RunActionCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<FeatureFlagValue | null> {
+    if (this.disabled) return null
     return this.evaluateRemoteFlag<FeatureFlagValue | null>(ctx, this.component.lib.evaluateFlag, args)
   }
 
@@ -481,6 +504,7 @@ export class PostHog {
     ctx: RunActionCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<JsonType | null> {
+    if (this.disabled) return null
     const action = this.component.lib.evaluateFlagPayload
     return this.evaluateRemoteFlag<JsonType | null>(ctx, action, args)
   }
@@ -497,6 +521,7 @@ export class PostHog {
     featureFlags: Record<string, FeatureFlagValue>
     featureFlagPayloads: Record<string, JsonType>
   }> {
+    if (this.disabled) return { featureFlags: {}, featureFlagPayloads: {} }
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     return (await ctx.runAction(this.component.lib.evaluateAllFlags, {
       distinctId,

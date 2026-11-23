@@ -1227,3 +1227,87 @@ describe('evaluateAllFlags (remote)', () => {
         expect(result.featureFlags).toEqual({ 'flag-a': true })
     })
 })
+
+describe('disabled component (missing POSTHOG_PROJECT_TOKEN)', () => {
+    beforeEach(() => {
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        delete process.env.POSTHOG_PERSONAL_API_KEY
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        global.fetch = originalFetch
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        delete process.env.POSTHOG_PERSONAL_API_KEY
+        delete process.env.POSTHOG_HOST
+        fetchCalls = []
+        vi.restoreAllMocks()
+    })
+
+    test('drops capture, identify, groupIdentify, alias, and captureException without HTTP requests and warns once', async () => {
+        // Seed a non-empty token first so the once-per-isolate warning gate starts reset.
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_reset'
+        global.fetch = mockFetch()
+        const t = initConvexTest()
+        await t.action(components.posthog.lib.capture, { distinctId: 'u0', event: 'warmup' })
+        fetchCalls = []
+
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        await t.mutation(api.example.testCapture, { distinctId: 'user-1', event: 'button_clicked' })
+        await t.mutation(api.example.testIdentify, { distinctId: 'user-1', properties: { name: 'Alice' } })
+        await t.mutation(api.example.testCaptureException, { errorMessage: 'boom', errorType: 'error' })
+        await finishScheduledFunctions(t)
+
+        await t.action(components.posthog.lib.groupIdentify, { groupType: 'company', groupKey: 'acme' })
+        await t.action(components.posthog.lib.alias, { distinctId: 'user-1', alias: 'alias-1' })
+
+        const missingTokenWarnings = () =>
+            warnSpy.mock.calls.filter(
+                ([msg]) => typeof msg === 'string' && msg.includes('POSTHOG_PROJECT_TOKEN is not configured')
+            )
+
+        expect(fetchCalls).toHaveLength(0)
+        expect(missingTokenWarnings()).toHaveLength(1)
+
+        // Configuring a token and clearing it again re-arms the once-per-isolate warning.
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_rearmed'
+        await t.action(components.posthog.lib.capture, { distinctId: 'u0', event: 'rearmed' })
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        await t.action(components.posthog.lib.capture, { distinctId: 'u0', event: 'dropped_again' })
+        await t.action(components.posthog.lib.capture, { distinctId: 'u0', event: 'dropped_again_2' })
+        expect(missingTokenWarnings()).toHaveLength(2)
+    })
+
+    test('local and remote flag methods degrade cleanly without throwing or hitting the network', async () => {
+        global.fetch = mockFetch()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const t = initConvexTest()
+
+        // Local eval without PAK or project token does not throw
+        expect(await t.query(api.example.testGetFeatureFlag, { distinctId: 'u1', flagKey: 'test-flag' })).toEqual({
+            flagKey: 'test-flag',
+            value: null,
+        })
+        expect(await t.query(api.example.testGetAllFlags, { distinctId: 'u1' })).toEqual({ flags: {} })
+
+        // Remote eval returns null / empty without network requests
+        expect(await t.action(components.posthog.lib.evaluateFlag, { key: 'test-flag', distinctId: 'u1' })).toBeNull()
+        expect(
+            await t.action(components.posthog.lib.evaluateFlagPayload, { key: 'test-flag', distinctId: 'u1' })
+        ).toBeNull()
+        expect(await t.action(components.posthog.lib.evaluateAllFlags, { distinctId: 'u1' })).toEqual({
+            featureFlags: {},
+            featureFlagPayloads: {},
+        })
+
+        // Refresh skips without hitting /flags/definitions
+        expect(await t.action(components.posthog.lib.refreshFlagDefinitions, {})).toEqual({
+            status: 'skipped',
+            reason: 'missing-keys',
+        })
+        expect(fetchCalls).toHaveLength(0)
+        warnSpy.mockRestore()
+    })
+})
