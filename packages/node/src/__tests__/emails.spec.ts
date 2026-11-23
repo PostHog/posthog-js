@@ -1518,7 +1518,7 @@ describe('emails', () => {
 
       const { error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
 
-      expect(error).toMatchObject({ code: 'scheduling_unsupported', field: 'scheduledAt' })
+      expect(error).toMatchObject({ code: 'scheduling_requires_cloud', field: 'scheduledAt' })
       expect(error?.message).toContain(named)
       expect(fetch).not.toHaveBeenCalled()
     })
@@ -1541,7 +1541,7 @@ describe('emails', () => {
       const { data, error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
 
       expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'scheduling_unconfirmed', messageId: postHog.emails[0].id })
+      expect(error).toMatchObject({ code: 'schedule_not_confirmed', messageId: postHog.emails[0].id })
       expect(postHog.emails).toHaveLength(1)
     })
 
