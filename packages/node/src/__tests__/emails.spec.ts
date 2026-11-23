@@ -1603,6 +1603,121 @@ describe('emails', () => {
     }
 
     const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+    const HELLO_BYTES = utf8('hello')
+    const HELLO_CHECKSUM = 'LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ='
+    const UPLOADS_URL = 'https://us.posthog.com/api/messaging/attachments/uploads/'
+    const STORAGE_UPLOAD_URL = `https://storage.example.com/team/2/${HELLO_SHA256}?X-Amz-Expires=900&X-Amz-Signature=sig-1`
+
+    const stubAttachmentSendRoutes = (
+      sendReplies: Array<{ status: number; body: unknown }>
+    ): { routes: string[]; uploadedBytes: Uint8Array[]; sentBodies: Record<string, unknown>[] } => {
+      const routes: string[] = []
+      const uploadedBytes: Uint8Array[] = []
+      const sentBodies: Record<string, unknown>[] = []
+      let uploaded = false
+      const remainingSendReplies = [...sendReplies]
+
+      fetch.mockImplementation(
+        async (
+          url: string,
+          options: { method: string; headers?: Record<string, string>; body?: string | Uint8Array }
+        ) => {
+          const headers = Object.fromEntries(
+            Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v])
+          )
+          const parsedUrl = new URL(url)
+
+          if (options.method === 'POST' && parsedUrl.pathname === '/api/messaging/attachments/uploads/') {
+            if (url !== UPLOADS_URL || headers.authorization !== `Bearer ${SECRET_KEY}`) {
+              return fakeReply(401, {
+                type: 'authentication_error',
+                code: 'authentication_failed',
+                detail: 'Bad auth.',
+              })
+            }
+            const payload = typeof options.body === 'string' ? JSON.parse(options.body) : null
+            const files = payload?.files
+            const validGrant =
+              Array.isArray(files) &&
+              files.length === 1 &&
+              files[0]?.sha256 === HELLO_SHA256 &&
+              files[0]?.size === HELLO_BYTES.byteLength
+            if (!validGrant) {
+              return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Bad upload grant.' })
+            }
+            routes.push('uploads')
+            return fakeReply(200, {
+              files: [
+                {
+                  sha256: HELLO_SHA256,
+                  status: 'upload',
+                  url: STORAGE_UPLOAD_URL,
+                  method: 'PUT',
+                  headers: {
+                    'Content-Length': String(HELLO_BYTES.byteLength),
+                    'x-amz-checksum-sha256': HELLO_CHECKSUM,
+                  },
+                  url_expires_at: '2026-11-30T00:00:00Z',
+                },
+              ],
+            })
+          }
+
+          if (options.method === 'PUT' && url === STORAGE_UPLOAD_URL) {
+            if ('authorization' in headers) {
+              return fakeReply(400, {
+                code: 'InvalidArgument',
+                message: 'Authorization header not allowed on storage PUT.',
+              })
+            }
+            if (
+              headers['content-length'] !== String(HELLO_BYTES.byteLength) ||
+              headers['x-amz-checksum-sha256'] !== HELLO_CHECKSUM ||
+              !(options.body instanceof Uint8Array) ||
+              textOf(options.body) !== 'hello'
+            ) {
+              return fakeReply(400, { code: 'BadDigest', message: 'Storage PUT bytes or headers mismatch.' })
+            }
+            routes.push('put')
+            uploadedBytes.push(options.body)
+            uploaded = true
+            return fakeReply(200, {})
+          }
+
+          if (options.method === 'POST' && parsedUrl.pathname === '/api/messaging/send/email/') {
+            if (url !== SEND_URL || headers.authorization !== `Bearer ${SECRET_KEY}`) {
+              return fakeReply(401, {
+                type: 'authentication_error',
+                code: 'authentication_failed',
+                detail: 'Bad auth.',
+              })
+            }
+            if (!uploaded || typeof options.body !== 'string') {
+              return fakeReply(400, {
+                type: 'invalid_request',
+                code: 'attachment_not_uploaded',
+                detail: 'Upload before send.',
+              })
+            }
+            routes.push('send')
+            sentBodies.push(JSON.parse(options.body))
+            const next = remainingSendReplies.shift()
+            if (!next) {
+              return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'No send reply left.' })
+            }
+            return fakeReply(next.status, next.body)
+          }
+
+          return fakeReply(404, {
+            type: 'invalid_request',
+            code: 'not_found',
+            detail: `Unexpected route ${options.method} ${url}`,
+          })
+        }
+      )
+
+      return { routes, uploadedBytes, sentBodies }
+    }
 
     const sendIn = (
       category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory,
@@ -1669,13 +1784,7 @@ describe('emails', () => {
     })
 
     it('sends a categorized email with attachments and preserves exact outbound fields', async () => {
-      replies = [
-        {
-          status: 200,
-          body: { files: [{ sha256: HELLO_SHA256, status: 'present', expires_at: '2026-11-30T00:00:00Z' }] },
-        },
-        accepted(),
-      ]
+      const boundary = stubAttachmentSendRoutes([{ status: 202, body: { message_id: 'msg_1', replayed: false } }])
 
       const { data, error } = await sendIn(NEWSLETTER, {
         attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
@@ -1683,18 +1792,18 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(2)
-      const request = postedSend(1)
-      expect(request.url).toBe(SEND_URL)
-      expect(request.method).toBe('POST')
-      expect(request.body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-        category: NEWSLETTER,
-        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
-      })
+      expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
+      expect(boundary.uploadedBytes.map(textOf)).toEqual(['hello'])
+      expect(boundary.sentBodies).toEqual([
+        {
+          to: CODE_SEND.to,
+          template_key: CODE_SEND.templateKey,
+          subject: CODE_SEND.subject,
+          html: CODE_SEND.html,
+          category: NEWSLETTER,
+          attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+        },
+      ])
     })
 
     it('copies category fields from getters and drops extra properties', async () => {
@@ -1816,6 +1925,64 @@ describe('emails', () => {
       })
     })
 
+    it('refuses a template send whose enumerable subject getter makes html enumerable', async () => {
+      replies = [accepted()]
+      const options: Record<string, unknown> = {
+        to: 'reader@example.com',
+        templateId: TEMPLATE_ID,
+      }
+      Object.defineProperty(options, 'subject', {
+        enumerable: true,
+        get() {
+          Object.defineProperty(options, 'html', { enumerable: true })
+          return undefined
+        },
+      })
+      Object.defineProperty(options, 'html', {
+        value: '<p>Sneaky</p>',
+        enumerable: false,
+        configurable: true,
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'html' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('does not read category on a valid template send wrapped in a Proxy when category is absent', async () => {
+      replies = [accepted()]
+      const options = new Proxy<Record<string, unknown>>(
+        {
+          to: 'reader@example.com',
+          templateId: TEMPLATE_ID,
+        },
+        {
+          get(target, prop, receiver) {
+            if (prop === 'category') {
+              throw new Error('category should not be read when absent')
+            }
+            return Reflect.get(target, prop, receiver)
+          },
+        }
+      )
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: {},
+      })
+    })
+
     it.each([
       ['a category key as a bare string', 'newsletter'],
       ['null', null],
@@ -1891,11 +2058,7 @@ describe('emails', () => {
     )
 
     it('surfaces server workflow_can_wait (400) refusal on categorized send with attachments without retrying', async () => {
-      replies = [
-        {
-          status: 200,
-          body: { files: [{ sha256: HELLO_SHA256, status: 'present', expires_at: '2026-11-30T00:00:00Z' }] },
-        },
+      const boundary = stubAttachmentSendRoutes([
         {
           status: 400,
           body: {
@@ -1905,7 +2068,8 @@ describe('emails', () => {
             attr: 'attachments',
           },
         },
-      ]
+        { status: 202, body: { message_id: 'msg_unexpected_retry', replayed: false } },
+      ])
 
       const { data, error } = await sendIn(NEWSLETTER, {
         attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
@@ -1919,13 +2083,18 @@ describe('emails', () => {
         statusCode: 400,
         field: 'attachments',
       })
-      expect(fetch).toHaveBeenCalledTimes(2)
-      const request = postedSend(1)
-      expect(request.url).toBe(SEND_URL)
-      expect(request.body).toMatchObject({
-        category: NEWSLETTER,
-        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
-      })
+      expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
+      expect(boundary.uploadedBytes.map(textOf)).toEqual(['hello'])
+      expect(boundary.sentBodies).toEqual([
+        {
+          to: CODE_SEND.to,
+          template_key: CODE_SEND.templateKey,
+          subject: CODE_SEND.subject,
+          html: CODE_SEND.html,
+          category: NEWSLETTER,
+          attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+        },
+      ])
     })
 
     it.each([

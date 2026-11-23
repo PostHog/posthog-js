@@ -746,12 +746,29 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  const ownKeys = Object.keys(send)
-  const field =
-    ownKeys.find((name) => !form.fields.has(name) && send[name as keyof UncheckedSend] !== undefined) ??
-    (!form.fields.has('category') && !ownKeys.includes('category') && send.category !== undefined
-      ? 'category'
-      : undefined)
+  let field: string | undefined
+  let checkedCategory = false
+  for (const name of Object.getOwnPropertyNames(send)) {
+    const descriptor = Object.getOwnPropertyDescriptor(send, name)
+    if (descriptor?.enumerable && !form.fields.has(name)) {
+      if (name === 'category') {
+        checkedCategory = true
+      }
+      if (send[name as keyof UncheckedSend] !== undefined) {
+        field = name
+        break
+      }
+    }
+  }
+  if (
+    field === undefined &&
+    !form.fields.has('category') &&
+    !checkedCategory &&
+    'category' in send &&
+    send.category !== undefined
+  ) {
+    field = 'category'
+  }
   if (field === undefined) {
     return
   }
