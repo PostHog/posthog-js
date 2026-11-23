@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.0.6
+
+### Patch Changes
+
+- [#5816](https://github.com/PostHog/posthog-js/pull/5816) [`ffdb355`](https://github.com/PostHog/posthog-js/commit/ffdb355c4534faec8e3b207a6b1efdd900f38e59) Thanks [@NikitaKurpas](https://github.com/NikitaKurpas)! - Document that `isLocalEvaluationReady()` and `waitForLocalEvaluationReady()` require at least one loaded flag; use the `localEvaluationFlagsLoaded` event to observe empty loads.
+  (2026-11-23)
+
 ## 6.0.5
 
 ### Patch Changes
