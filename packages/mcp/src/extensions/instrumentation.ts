@@ -44,7 +44,7 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
-import { runInToolSession } from './tool-session'
+import { runInRequestScope } from './request-scope'
 import {
   deriveSessionIdFromMCPSession,
   getSessionInfo,
@@ -244,7 +244,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 
   let result: unknown
   try {
-    result = await runInToolSession(data, preparedEvent, () => execute(downstreamRequest))
+    result = await runInRequestScope(data, preparedEvent, () => execute(downstreamRequest))
   } catch (error) {
     if (preparedEvent && conversation.minted) {
       preparedEvent.event.conversationId = undefined
@@ -683,7 +683,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
 
   let result: unknown
   try {
-    result = await originalHandler(request, extra)
+    result = await runInRequestScope(data, preparedEvent, async () => await originalHandler(request, extra))
   } catch (error) {
     publishResourceEvent(server, preparedEvent, startTime, params, { error })
     throw error
@@ -982,7 +982,13 @@ async function getTracedToolsList(
 ): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
-    const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
+    const originalResponse = (await (data
+      ? runInRequestScope(
+          data,
+          { event, requestAttribution },
+          async () => await originalListToolsHandler(request, extra)
+        )
+      : originalListToolsHandler(request, extra))) as CompatibleToolsListLike
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
