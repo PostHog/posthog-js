@@ -1549,7 +1549,7 @@ posthog.reloadFeatureFlags()
 
 ### `PostHog.reloadFeatureFlagsAsync`
 
-> **reloadFeatureFlagsAsync**(): `Promise`\<`Record`\<`string`, `string` \| `boolean`\> \| `undefined`\>
+> **reloadFeatureFlagsAsync**(): `Promise`\<`PostHogFeatureFlagsLoaded`\>
 
 Reloads feature flags from the server asynchronously.
 
@@ -1558,15 +1558,15 @@ If you want to manually trigger a refresh and get the result, you can call this 
 
 #### Returns
 
-`Promise`\<`Record`\<`string`, `string` \| `boolean`\> \| `undefined`\>
+`Promise`\<`PostHogFeatureFlagsLoaded`\>
 
-Promise that resolves with the refreshed flags
+Promise that resolves with the enabled flags, their values, and whether the reload failed, as
+`onFeatureFlags` callbacks receive them. After a failed reload the values are the last known ones.
 
 #### Example
 
 ```js
-// reload feature flags and get result
-posthog.reloadFeatureFlagsAsync().then((refreshedFlags) => console.log(refreshedFlags))
+const { flags, variants, errorsLoading } = await posthog.reloadFeatureFlagsAsync()
 ```
 
 #### Remarks
@@ -2185,14 +2185,6 @@ app install, manual cache clearing, or OS-initiated storage cleanup.
 
 The device ID, or an empty string if not yet initialized
 
-### `PostHog.getFeatureFlagDetails`
-
-> **getFeatureFlagDetails**(): `PostHogFeatureFlagDetails` \| `undefined`
-
-#### Returns
-
-`PostHogFeatureFlagDetails` \| `undefined`
-
 ### `PostHog.getSurveyDisplayLanguageOverride`
 
 > **getSurveyDisplayLanguageOverride**(): `string` \| `null`
@@ -2488,18 +2480,6 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="property-autocapture"></a> `autocapture?` | `boolean` \| `AutocaptureOptions` |
 | <a id="property-exceptionsteps"></a> `exceptionSteps?` | `ExceptionStepsOptions` |
 
-### `EvaluationReason`
-
-> **EvaluationReason** = `object`
-
-#### Properties
-
-| Property | Type |
-| ------ | ------ |
-| <a id="code"></a> `code` | `string` \| `undefined` |
-| <a id="condition_index"></a> `condition_index` | `number` \| `undefined` |
-| <a id="description"></a> `description` | `string` \| `undefined` |
-
 ### `EventHint`
 
 - `CoercingContext`
@@ -2523,35 +2503,6 @@ to captured exceptions as `$exception_steps`.
 | ------ | ------ | ------ |
 | <a id="property-enabled"></a> `enabled?` | `boolean` | Whether exception steps are recorded and attached. **Default** `true` |
 | <a id="property-maxbytes"></a> `maxBytes?` | `number` | Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded. **Default** `32768` |
-
-### `FeatureFlagDetail`
-
-> **FeatureFlagDetail** = `object`
-
-#### Properties
-
-| Property | Type |
-| ------ | ------ |
-| <a id="enabled-1"></a> `enabled` | `boolean` |
-| <a id="failed"></a> `failed?` | `boolean` |
-| <a id="key"></a> `key` | `string` |
-| <a id="metadata"></a> `metadata` | `FeatureFlagMetadata` \| `undefined` |
-| <a id="reason"></a> `reason` | `EvaluationReason` \| `undefined` |
-| <a id="variant"></a> `variant` | `string` \| `undefined` |
-
-### `FeatureFlagMetadata`
-
-> **FeatureFlagMetadata** = `object`
-
-#### Properties
-
-| Property | Type | Description |
-| ------ | ------ | ------ |
-| <a id="description-1"></a> `description` | `string` \| `undefined` | - |
-| <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
-| <a id="id"></a> `id` | `number` \| `undefined` | - |
-| <a id="payload"></a> `payload` | `string` \| `undefined` | - |
-| <a id="version"></a> `version` | `number` \| `undefined` | - |
 
 ### `FeatureFlagResult`
 
@@ -2757,39 +2708,6 @@ Log capture types
 | ------ | ------ |
 | <a id="type-2"></a> `type` | *typeof* `SurveyQuestionBranchingType.NextQuestion` |
 
-### `PartialWithRequired`
-
-> **PartialWithRequired**\<`T`, `K`\> = `{ [P in K]: T[P] }` & `{ [P in Exclude<keyof T, K>]?: T[P] }`
-
-Creates a type with all properties of T, but makes only K properties required while the rest remain optional.
-
-#### Type Parameters
-
-| Type Parameter | Description |
-| ------ | ------ |
-| <a id="type-parameter-t-8"></a> `T` | The base type containing all properties |
-| <a id="type-parameter-k"></a> `K` *extends* keyof `T` | Union type of keys from T that should be required |
-
-#### Example
-
-```ts
-interface User {
-  id: number;
-  name: string;
-  email?: string;
-  age?: number;
-}
-
-// Makes 'id' and 'name' required, but 'email' and 'age' optional
-type RequiredUser = PartialWithRequired<User, 'id' | 'name'>;
-
-const user: RequiredUser = {
-  id: 1,      // Must be provided
-  name: "John" // Must be provided
-  // email and age are optional
-};
-```
-
 ### `PostHogAutocaptureElement`
 
 > **PostHogAutocaptureElement** = `object` & `PostHogEventProperties`
@@ -2958,12 +2876,6 @@ const user: RequiredUser = {
 
 \[`key`: `string`\]: `JsonType`
 
-### `PostHogFeatureFlagDetails`
-
-> **PostHogFeatureFlagDetails** = `PartialWithRequired`\<`PostHogFlagsResponse`, `"flags"` \| `"featureFlags"` \| `"featureFlagPayloads"` \| `"requestId"`\>
-
-These are the fields we care about from PostHogFlagsResponse for feature flags.
-
 ### `PostHogFeatureFlagOptions`
 
 > **PostHogFeatureFlagOptions** = `object`
@@ -2989,24 +2901,6 @@ The feature flags passed to an `onFeatureFlags` callback. Disabled flags are lef
 | <a id="errorsloading"></a> `errorsLoading` | `boolean` | `true` if the latest attempt to load feature flags failed. `flags` and `variants` then hold the last known values, which can be empty. A quota-limited response is not a failure. |
 | <a id="flags"></a> `flags` | `string`[] | The keys of the enabled feature flags. |
 | <a id="variants"></a> `variants` | `Record`\<`string`, `string` \| `boolean`\> | The values of the enabled feature flags: `true` for a boolean flag, or the variant for a multivariate flag. |
-
-### `PostHogFlagsResponse`
-
-> **PostHogFlagsResponse** = `Omit`\<`PostHogRemoteConfig`, `"hasFeatureFlags"`\> & `object`
-
-#### Type Declaration
-
-| Name | Type | Description |
-| ------ | ------ | ------ |
-| `errorsWhileComputingFlags` | `boolean` | - |
-| `evaluatedAt?` | `number` | - |
-| `featureFlagPayloads` | `object` | - |
-| `featureFlags` | `object` | - |
-| `flags` | `object` | - |
-| `minimalFlagCalledEvents?` | `boolean` | Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the project opted in; omitted otherwise. Absence always means full events. |
-| `quotaLimited?` | `string`[] | - |
-| `requestId?` | `string` | - |
-| `sessionRecording?` | `boolean` \| \{\[`key`: `string`\]: `JsonType`; \} | - |
 
 ### `PostHogGroupProperties`
 

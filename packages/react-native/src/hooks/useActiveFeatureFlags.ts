@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isEnabledFlagValue } from '@posthog/core'
 import type { PostHog } from '../posthog-rn'
 import { useOverridablePostHog } from './utils'
 
@@ -23,5 +24,5 @@ export function useActiveFeatureFlags(client?: PostHog): string[] {
 
 const enabledFlagKeys = (posthog: PostHog | undefined): string[] =>
   Object.entries(posthog?.getFeatureFlagDetails()?.featureFlags ?? {})
-    .filter(([, value]) => value === true || (typeof value === 'string' && value !== ''))
+    .filter(([, value]) => isEnabledFlagValue(value))
     .map(([key]) => key)

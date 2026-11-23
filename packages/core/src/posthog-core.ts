@@ -27,6 +27,7 @@ import {
   createFlagsResponseFromFlagsAndPayloads,
   flagDetailsToResults,
   getEnabledFromValue,
+  isEnabledFlagValue,
   getFeatureFlagValue,
   getFlagValuesFromFlags,
   getPayloadsFromFlags,
@@ -134,9 +135,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     const bootstrapFeatureFlags = bootstrap.featureFlags
     const bootstrapFeatureFlagPayloads = bootstrap.featureFlagPayloads ?? {}
     if (bootstrapFeatureFlags && Object.keys(bootstrapFeatureFlags).length) {
+      // Bootstrapped payloads are already decoded values, so a string payload stays a string.
       const normalizedBootstrapFeatureFlagDetails = createFlagsResponseFromFlagsAndPayloads(
         bootstrapFeatureFlags,
-        bootstrapFeatureFlagPayloads
+        bootstrapFeatureFlagPayloads,
+        this.usesLegacyFlagValues() ? parsePayload : (payload) => payload
       )
 
       if (Object.keys(normalizedBootstrapFeatureFlagDetails.flags).length > 0) {
@@ -246,6 +249,19 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
+  /**
+   * Whether flag values keep the legacy semantics: a flag whose variant is an empty string reads as enabled,
+   * `$active_feature_flags` lists every loaded flag, and bootstrapped string payloads are parsed as JSON.
+   * {@link PostHogCore} keeps them for posthog-js-lite.
+   */
+  protected usesLegacyFlagValues(): boolean {
+    return false
+  }
+
+  private isFlagValueEnabled(value: FeatureFlagValue): boolean {
+    return this.usesLegacyFlagValues() ? getEnabledFromValue(value) : isEnabledFlagValue(value)
+  }
+
   protected getCommonEventProperties(): PostHogEventProperties {
     const featureFlags = this.getFeatureFlagValues()
 
@@ -256,7 +272,14 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
     }
     return {
-      ...maybeAdd('$active_feature_flags', featureFlags ? Object.keys(featureFlags) : undefined),
+      ...maybeAdd(
+        '$active_feature_flags',
+        featureFlags
+          ? Object.keys(featureFlags).filter(
+              (key) => this.usesLegacyFlagValues() || isEnabledFlagValue(featureFlags[key])
+            )
+          : undefined
+      ),
       ...featureVariantProperties,
       ...super.getCommonEventProperties(),
     }
@@ -1094,8 +1117,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
    */
   getAllFeatureFlags(): FeatureFlagResult[] {
-    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {}, (payload) =>
-      this.decodeFeatureFlagPayload(payload)
+    return flagDetailsToResults(
+      this.getFeatureFlagDetails()?.flags ?? {},
+      (payload) => this.decodeFeatureFlagPayload(payload),
+      (value) => this.isFlagValueEnabled(value)
     )
   }
 
@@ -1205,7 +1230,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     const payload = rawPayload !== undefined ? this.decodeFeatureFlagPayload(rawPayload) : null
     return {
       key,
-      enabled: getEnabledFromValue(flagValue),
+      enabled: this.isFlagValueEnabled(flagValue),
       variant: getVariantFromValue(flagValue),
       payload,
     }
@@ -1310,7 +1335,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return await this.remoteConfigAsync()
   }
 
-  async reloadFeatureFlagsAsync(
+  /** Reloads feature flags and resolves with every loaded flag's value. */
+  protected async loadFeatureFlagsAsync(
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
     if (this.disableRemoteFeatureFlags && !this.disabled) {
@@ -1816,6 +1842,16 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
 /** The PostHog client core, including the deprecated feature flag getters. */
 export abstract class PostHogCore extends PostHogCoreBase {
+  protected usesLegacyFlagValues(): boolean {
+    return true
+  }
+
+  async reloadFeatureFlagsAsync(
+    sendAnonDistinctId?: boolean
+  ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    return this.loadFeatureFlagsAsync(sendAnonDistinctId)
+  }
+
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
     return this.on('featureflags', async () => {
       const flags = this.getFeatureFlagValues()

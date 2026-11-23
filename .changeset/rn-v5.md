@@ -14,6 +14,12 @@
 - **Breaking:** `onFeatureFlags` callbacks receive one object, `{ flags, variants, errorsLoading }`, like posthog-ios, posthog-android and posthog_flutter: `flags` lists the enabled flag keys, `variants` maps them to `true` or their variant, and `errorsLoading` is `true` when the latest load failed (the values are then the last known ones). Disabled flags and flags whose variant is an empty string are left out. Replace `onFeatureFlags((flags) => …)` with `onFeatureFlags(({ flags, variants, errorsLoading }) => …)`
 - **Breaking:** a callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags` returns
 - **Breaking:** a feature flag payload that isn't valid JSON, including an empty one, reads as `null` instead of its raw string
+- **Breaking:** `reloadFeatureFlagsAsync()` resolves with `{ flags, variants, errorsLoading }`, the object `onFeatureFlags` callbacks receive, instead of a map of every loaded flag. After a failed reload it resolves with the last known flags and `errorsLoading: true` instead of `undefined`
+- **Breaking:** a flag whose variant is an empty string reads as disabled (`enabled: false`) in `getFeatureFlagResult()`, `getAllFeatureFlags()` and `useFeatureFlagResult()`, as it already did in `isFeatureEnabled()`, like posthog-ios and posthog-android 4.0
+- **Breaking:** leave disabled flags and flags whose variant is an empty string out of `$active_feature_flags`, like posthog-ios and posthog-android
+- **Breaking:** keep a string payload in `bootstrap.featureFlagPayloads` as a string instead of parsing it as JSON, like posthog-ios 4.0 — pass decoded values, such as `{ color: 'blue' }` instead of `'{"color":"blue"}'`
+- **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
+- **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
 - **Breaking:** remove `getFeatureFlagPayload()` — use `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`
 - **Breaking:** remove `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` — use `getAllFeatureFlags()`

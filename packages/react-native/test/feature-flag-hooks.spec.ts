@@ -35,7 +35,7 @@ describe('feature flag hooks', () => {
         const value = featureFlags[key]
         return {
           key,
-          enabled: typeof value === 'string' ? true : value,
+          enabled: value === true || (typeof value === 'string' && value !== ''),
           variant: typeof value === 'string' ? value : undefined,
           payload: { color: 'blue' },
         }

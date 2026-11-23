@@ -106,8 +106,11 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       })
 
       // reload is a no-op resolving with the locally supplied flags
-      const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(flags).toEqual({ 'local-flag': true, 'variant-flag': 'variant-a' })
+      await expect(posthog.reloadFeatureFlagsAsync()).resolves.toEqual({
+        flags: ['local-flag', 'variant-flag'],
+        variants: { 'local-flag': true, 'variant-flag': 'variant-a' },
+        errorsLoading: false,
+      })
 
       await posthog.shutdown()
       ;((globalThis as any).window.fetch as vi.Mock).mockClear()
