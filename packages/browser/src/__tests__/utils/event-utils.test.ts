@@ -54,7 +54,7 @@ describe(`event-utils`, () => {
             } as Location)
             const properties = getEventProperties(true)
             expect(properties['$current_url']).toEqual(
-                'https://www.example.com/path?ScCid=<masked>&SsCid=<masked>&sscid=shareasale'
+                'https://www.example.com/path?ScCid=<masked>&SsCid=<masked>&sscid=<masked>'
             )
         })
 
@@ -78,6 +78,9 @@ describe(`event-utils`, () => {
             )
             expect(props['$initial_sccid']).toBe('<masked>')
             expect(props['$initial_utm_source']).toBe('snapchat')
+            expect(props['$initial_current_url']).toBe(
+                'https://www.example.com/path?utm_source=snapchat&ScCid=<masked>'
+            )
         })
 
         it('should mask out custom personal data', () => {

@@ -49,8 +49,8 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
 
 // Other spellings of the Snapchat click ID that appear in landing URLs.
 // Query params are case-sensitive, so each spelling is listed exactly.
-// Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is left out
-// because ShareASale uses it for its own affiliate click ID.
+// Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is not read
+// as the Snapchat click ID because ShareASale uses it for its own affiliate click ID.
 const SNAPCHAT_CLICK_ID_ALIASES = ['ScCid', 'SsCid']
 
 // Other spellings of a campaign param. A value found under an alias is stored
@@ -64,6 +64,8 @@ export const CAMPAIGN_PARAM_ALIASES: Record<string, string[]> = {
 export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => [
     ...PERSONAL_DATA_CAMPAIGN_PARAMS,
     ...SNAPCHAT_CLICK_ID_ALIASES,
+    // Snapchat's lowercase spelling and ShareASale's affiliate click ID: masked, but never read as sccid
+    'sscid',
 ])()
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
@@ -262,7 +264,17 @@ export function getPersonPropsFromInfo(
     customPersonalDataProperties?: string[]
 ): Record<string, any> {
     const { r: referrer, u } = info
-    const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
+    const strippedUrl = disableCaptureUrlHashes ? stripUrlHash(u) : u
+    // The stored URL may come from an older SDK version that masked fewer params,
+    // so mask it again before deriving any property from it.
+    const url =
+        strippedUrl && maskPersonalDataProperties
+            ? maskQueryParams(
+                  strippedUrl,
+                  [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])],
+                  MASKED
+              )
+            : strippedUrl
     const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
@@ -274,14 +286,7 @@ export function getPersonPropsFromInfo(
         const location = convertToURL(url)
         props['$host'] = location?.host
         props['$pathname'] = location?.pathname
-        // The stored URL may come from an older SDK version that masked fewer params,
-        // so mask it again before reading campaign params from it.
-        const campaignParams = _getCampaignParamsFromUrl(
-            maskPersonalDataProperties
-                ? maskQueryParams(url, [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])], MASKED)
-                : url
-        )
-        extend(props, campaignParams)
+        extend(props, _getCampaignParamsFromUrl(url))
     }
     if (referrer) {
         const searchInfo = _getSearchInfoFromReferrer(referrer)
