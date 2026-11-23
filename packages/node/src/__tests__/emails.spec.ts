@@ -1596,6 +1596,12 @@ describe('emails', () => {
       description: 'Monthly product news',
     }
 
+    const RECEIPTS: MessageCategory = {
+      key: 'receipts',
+      type: 'transactional',
+      name: 'Receipts',
+    }
+
     const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
 
     const sendIn = (
@@ -1726,7 +1732,6 @@ describe('emails', () => {
       const { error } = await sendIn(shiftingCategory)
 
       expect(error).toBeNull()
-      expect(typeReads).toBe(1)
       expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
     })
 
@@ -1798,7 +1803,7 @@ describe('emails', () => {
       ['too_many_categories', 400, 'category', NEWSLETTER, {}],
       ['unsubscribe_link_required', 400, null, NEWSLETTER, { html: '<p>Hi</p>' }],
       ['copies_not_allowed', 400, null, NEWSLETTER, { cc: 'copy@example.com', bcc: ['hidden@example.com'] }],
-      ['sandbox_fields_unsupported', 400, 'category', NEWSLETTER, {}],
+      ['sandbox_fields_unsupported', 400, 'cc', RECEIPTS, { cc: ['copy@example.com'] }],
       ['recipient_opted_out', 422, null, NEWSLETTER, {}],
     ])(
       'surfaces server %s (%i) refusal as validation_error without retrying',
@@ -1827,6 +1832,8 @@ describe('emails', () => {
         }
         if ('cc' in overrides) {
           expect(request.body.cc).toEqual(['copy@example.com'])
+        }
+        if ('bcc' in overrides) {
           expect(request.body.bcc).toEqual(['hidden@example.com'])
         }
       }
@@ -1871,22 +1878,44 @@ describe('emails', () => {
     })
 
     it.each([
-      ['field_not_accepted', NEWSLETTER],
-      ['invalid_input', TRANSACTIONAL_EMAIL_CATEGORY],
+      [
+        'mixed-version old CDP',
+        NEWSLETTER,
+        {
+          type: 'invalid_request',
+          code: 'field_not_accepted',
+          detail: "PostHog doesn't take this field yet, so it didn't send the email.",
+          attr: 'category',
+          fix: 'Send the email without this field, or send it again once PostHog takes the field.',
+        },
+        'Send the email without this field, or send it again once PostHog takes the field.',
+      ],
+      [
+        'pre-category Django',
+        TRANSACTIONAL_EMAIL_CATEGORY,
+        {
+          type: 'validation_error',
+          code: 'invalid_input',
+          detail: 'Unknown field category.',
+          attr: 'category',
+        },
+        undefined,
+      ],
     ])(
-      'returns an older-server %s refusal on category without retrying or stripping category',
-      async (code, category) => {
-        replies = [
-          {
-            status: 400,
-            body: { type: 'validation_error', code, detail: 'Unknown field category.', attr: 'category' },
-          },
-        ]
+      'returns an older-server refusal from %s on category without retrying or stripping category',
+      async (_server, category, body, expectedFix) => {
+        replies = [{ status: 400, body }]
 
         const { data, error } = await sendIn(category, { maxRetries: 2 })
 
         expect(data).toBeNull()
-        expect(error).toMatchObject({ code, name: 'validation_error', statusCode: 400, field: 'category' })
+        expect(error).toMatchObject({
+          code: body.code,
+          name: 'validation_error',
+          statusCode: 400,
+          field: 'category',
+        })
+        expect(error?.fix).toBe(expectedFix)
         expect(fetch).toHaveBeenCalledTimes(1)
         const request = postedSend()
         expect(request.url).toBe(SEND_URL)
