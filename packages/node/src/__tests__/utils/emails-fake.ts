@@ -6,7 +6,6 @@ import type { EmailFetchOptions } from '../../emails/emails'
 const APP_HOST = 'https://us.posthog.com'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const SEND_PATH = '/api/messaging/send/email/'
-const PREFERENCES_PATH = '/api/messaging/preferences/'
 const STORAGE_ORIGIN = 'https://email-files.s3.example.com'
 const UPLOAD_ROUTE = 'POST /api/projects/{project_id}/messaging/attachments/uploads/'
 const MESSAGE_LIMIT_BYTES = 40_000_000
@@ -37,12 +36,10 @@ const CODE_FORM_FIELDS = new Set([
   'capture_engagement',
   'tracking',
   'sensitive',
-  'category',
   'distinct_id',
   'to',
   'attachments',
 ])
-const CATEGORY_FIELDS = new Set(['key', 'type', 'name', 'description'])
 const TRACKING_KINDS = new Set(['opens', 'clicks', 'engagement'])
 const ATTACHMENT_FIELDS = new Set(['sha256', 'filename', 'content_type', 'content_id'])
 const MESSAGE_TOO_LARGE_WHY =
@@ -50,19 +47,13 @@ const MESSAGE_TOO_LARGE_WHY =
 const MESSAGE_TOO_LARGE_FIX =
   'Keep the email under 40 MB after Base64 encoding, about 29 MB of files: send fewer or smaller files, or link to large files from the email body.'
 
-export type Route = 'uploads' | 'storage' | 'send' | 'preferences'
+export type Route = 'uploads' | 'storage' | 'send'
 
 export type Fault =
-  | { status: number; code?: string; message?: string; attr?: string | null; page?: string }
+  | { status: number; code?: string; message?: string; page?: string }
   | 'network error'
   | 'hang'
   | 'lost reply'
-
-export interface FakeCategory {
-  type: 'marketing' | 'transactional'
-  name: string
-  description?: string
-}
 
 export interface FakePostHogOptions {
   secretKey: string
@@ -76,8 +67,6 @@ export interface FakePostHogOptions {
   appHost?: string
   storageOrigin?: string
   storageRedirectOrigin?: string
-  categories?: Record<string, FakeCategory>
-  templates?: Record<string, string | null>
 }
 
 export interface QueuedAttachment {
@@ -100,8 +89,6 @@ export interface QueuedEmail {
   captureEngagement?: boolean
   tracking?: EmailTracking
   sensitive?: boolean
-  category?: 'transactional' | ({ key: string } & FakeCategory)
-  filedUnder?: string
   distinctId?: string
   templateId?: string
   messageData?: Record<string, unknown>
@@ -144,16 +131,6 @@ class Refused extends Error {
   }
 }
 
-interface StoredPreferences {
-  allMarketing: boolean | null
-  topics: Map<string, boolean>
-}
-
-interface ResolvedCategory {
-  key: string
-  type: 'marketing' | 'transactional'
-}
-
 export class FakePostHog {
   readonly emails: QueuedEmail[] = []
   readonly writes: Uint8Array[] = []
@@ -161,11 +138,8 @@ export class FakePostHog {
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
-  private readonly sends = new Map<string, { fingerprint: string; id: string }>()
-  private readonly categories: Map<string, FakeCategory>
-  private readonly templates: Map<string, string | null>
-  private readonly preferences = new Map<string, StoredPreferences>()
-  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], preferences: [] }
+  private readonly sends = new Map<string, { body: string; id: string }>()
+  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [] }
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
 
@@ -181,12 +155,8 @@ export class FakePostHog {
       appHost: APP_HOST,
       storageOrigin: STORAGE_ORIGIN,
       storageRedirectOrigin: '',
-      categories: {},
-      templates: {},
       ...options,
     }
-    this.categories = new Map(Object.entries(this.options.categories))
-    this.templates = new Map(Object.entries(this.options.templates))
   }
 
   failNext(route: Route, ...faults: Fault[]): void {
@@ -250,8 +220,6 @@ export class FakePostHog {
         return this.store(url, options)
       case 'send':
         return this.send(options)
-      case 'preferences':
-        return this.setPreferences(options)
       default:
         return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
@@ -263,9 +231,6 @@ export class FakePostHog {
     }
     if (url === this.options.appHost + SEND_PATH) {
       return 'send'
-    }
-    if (url === this.options.appHost + PREFERENCES_PATH) {
-      return 'preferences'
     }
     const { storageOrigin, storageRedirectOrigin } = this.options
     return url.startsWith(`${storageOrigin}/`) || (storageRedirectOrigin && url.startsWith(`${storageRedirectOrigin}/`))
@@ -401,108 +366,26 @@ export class FakePostHog {
         fix: 'Send the email without this field, or send it again once PostHog takes the field.',
       })
     }
-    const prepared =
-      'template_id' in body
-        ? { email: templateEmail(body), resolvedCategory: null as ResolvedCategory | null }
-        : this.codeEmail(body)
-    const fingerprint = 'template_id' in body ? raw : JSON.stringify({ ...body, category: prepared.resolvedCategory })
+    const email = 'template_id' in body ? templateEmail(body) : this.codeEmail(body)
     const key = new Headers(options.headers).get('idempotency-key')
     const earlier = key === null ? undefined : this.sends.get(key)
     if (earlier) {
-      if (earlier.fingerprint !== fingerprint) {
+      if (earlier.body !== raw) {
         throw refusal(422, 'invalid_request', 'idempotency_key_reused', null, {
           detail: 'This idempotency key was used for a different email.',
         })
       }
       return { status: 200, body: { message_id: earlier.id, replayed: true, warnings: [] } }
     }
-    if (
-      prepared.resolvedCategory?.type === 'marketing' &&
-      this.isOptedOutOfMarketing(prepared.email.to, prepared.resolvedCategory.key)
-    ) {
-      throw refusal(422, 'invalid_request', 'recipient_opted_out', null, { detail: 'Recipient opted out.' })
-    }
-    const queued = { id: globalThis.crypto.randomUUID(), ...prepared.email }
+    const queued = { id: globalThis.crypto.randomUUID(), ...email }
     this.emails.push(queued)
     if (key !== null) {
-      this.sends.set(key, { fingerprint, id: queued.id })
+      this.sends.set(key, { body: raw, id: queued.id })
     }
     return { status: 202, body: { message_id: queued.id, replayed: false, warnings: [] } }
   }
 
-  private setPreferences(options: PostHogFetchOptions): Answer {
-    this.authenticate(options)
-    const body = jsonBody(options)
-    refuseUnknown(body, new Set(['identifier', 'all_marketing', 'topics']), '')
-    const { identifier, all_marketing, topics } = body
-    requireString(identifier, 'identifier')
-    if (all_marketing !== undefined && typeof all_marketing !== 'boolean') {
-      throw invalidField('all_marketing', 'Must be a valid boolean.')
-    }
-    let topicEntries: [string, boolean][] = []
-    if (topics !== undefined) {
-      if (!isRecord(topics) || !Object.values(topics).every((value) => typeof value === 'boolean')) {
-        throw invalidField('topics', 'Expected topic preferences.')
-      }
-      topicEntries = Object.entries(topics) as [string, boolean][]
-      const unknownTopic = topicEntries.find(([topic]) => !this.categories.has(topic))?.[0]
-      if (unknownTopic !== undefined) {
-        throw refusal(404, 'invalid_request', 'unknown_topic', null, { detail: `Unknown topic: ${unknownTopic}` })
-      }
-    }
-    if (all_marketing === undefined && topicEntries.length === 0) {
-      throw invalidField('topics', 'Set all_marketing, topics, or both.')
-    }
-    const record = this.preferences.get(identifier) ?? {
-      allMarketing: null,
-      topics: new Map<string, boolean>(),
-    }
-    this.preferences.set(identifier, record)
-    if (all_marketing === false) {
-      record.allMarketing = false
-    } else if (all_marketing === true) {
-      record.allMarketing = true
-    }
-    const optedInMarketing = new Set(
-      topicEntries
-        .filter(([topic, optedIn]) => optedIn && this.categories.get(topic)?.type === 'marketing')
-        .map(([topic]) => topic)
-    )
-    if (optedInMarketing.size > 0 && record.allMarketing === false) {
-      record.allMarketing = true
-      for (const [key, def] of this.categories.entries()) {
-        if (def.type === 'marketing' && !optedInMarketing.has(key)) {
-          record.topics.set(key, false)
-        }
-      }
-    }
-    for (const [topic, optedIn] of topicEntries) {
-      record.topics.set(topic, optedIn)
-    }
-    return {
-      status: 200,
-      body: {
-        identifier,
-        all_marketing: record.allMarketing,
-        topics: Object.fromEntries(record.topics.entries()),
-      },
-    }
-  }
-
-  private isOptedOutOfMarketing(to: string, key: string): boolean {
-    const normalized = to.toLowerCase()
-    for (const [identifier, record] of this.preferences.entries()) {
-      if (identifier.toLowerCase() !== normalized) {
-        continue
-      }
-      if (record.allMarketing === false || record.topics.get(key) === false) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private codeEmail(body: Json): { email: Omit<QueuedEmail, 'id'>; resolvedCategory: ResolvedCategory | null } {
+  private codeEmail(body: Json): Omit<QueuedEmail, 'id'> {
     refuseUnknown(body, CODE_FORM_FIELDS, '')
     const { to, template_key, subject, html, text, from, distinct_id, capture_engagement } = body
     requireString(to, 'to')
@@ -528,92 +411,22 @@ export class FakePostHog {
         'Send either `tracking` or `capture_engagement`. `capture_engagement` is deprecated, so set `tracking.engagement` instead.'
       )
     }
-    const cc = addresses(body.cc, 'cc')
-    const bcc = addresses(body.bcc, 'bcc')
-    const replyTo = addresses(body.reply_to, 'reply_to')
-    const category = body.category === undefined ? undefined : categoryOf(body.category)
-    const resolvedCategory = this.resolveCategory(template_key, category, html, text, cc, bcc)
     const attachments = this.attachmentsOf(body.attachments, [html ?? '', text || textFromHtml(html ?? '')], subject)
     return {
-      email: {
-        to,
-        cc,
-        bcc,
-        replyTo,
-        subject,
-        ...(html !== undefined && { html }),
-        ...(text !== undefined && { text }),
-        ...(from !== undefined && { from }),
-        ...(distinct_id !== undefined && { distinctId: distinct_id }),
-        captureEngagement: capture_engagement ?? true,
-        ...(tracking !== undefined && { tracking }),
-        ...(body.sensitive !== undefined && { sensitive: body.sensitive }),
-        ...(category !== undefined && { category }),
-        ...(resolvedCategory !== null && { filedUnder: resolvedCategory.key }),
-        attachments,
-      },
-      resolvedCategory,
+      to,
+      cc: addresses(body.cc, 'cc'),
+      bcc: addresses(body.bcc, 'bcc'),
+      replyTo: addresses(body.reply_to, 'reply_to'),
+      subject,
+      ...(html !== undefined && { html }),
+      ...(text !== undefined && { text }),
+      ...(from !== undefined && { from }),
+      ...(distinct_id !== undefined && { distinctId: distinct_id }),
+      captureEngagement: capture_engagement ?? true,
+      ...(tracking !== undefined && { tracking }),
+      ...(body.sensitive !== undefined && { sensitive: body.sensitive }),
+      attachments,
     }
-  }
-
-  private resolveCategory(
-    templateKey: string,
-    category: QueuedEmail['category'],
-    html: string | undefined,
-    text: string | undefined,
-    cc: string[],
-    bcc: string[]
-  ): ResolvedCategory | null {
-    if (this.templates.has(templateKey)) {
-      const templateCategory = this.templates.get(templateKey) ?? null
-      const templateCategoryDef = templateCategory === null ? undefined : this.categories.get(templateCategory)
-      if (templateCategoryDef?.type === 'marketing') {
-        throw refusal(400, 'invalid_request', 'marketing_template', null, {
-          detail: 'Templates in a marketing category cannot be sent via code sends.',
-        })
-      }
-      const followsTemplate =
-        category === undefined ||
-        (templateCategory === null
-          ? category === 'transactional'
-          : typeof category === 'object' &&
-            category.key.trim() === templateCategory &&
-            category.type === templateCategoryDef?.type)
-      if (!followsTemplate) {
-        throw refusal(400, 'invalid_request', 'category_mismatch', 'category', { detail: 'Category mismatch.' })
-      }
-      return templateCategory !== null && templateCategoryDef
-        ? { key: templateCategory, type: templateCategoryDef.type }
-        : null
-    }
-    if (category === undefined || category === 'transactional') {
-      return null
-    }
-    const key = category.key.trim()
-    const existing = this.categories.get(key)
-    if (existing && existing.type !== category.type) {
-      throw refusal(400, 'invalid_request', 'category_mismatch', 'category', { detail: 'Category mismatch.' })
-    }
-    if (category.type === 'marketing') {
-      if (!hasUnsubscribeLink(html, text)) {
-        throw refusal(400, 'invalid_request', 'unsubscribe_link_required', null, {
-          detail: 'Marketing emails must include an unsubscribe link.',
-        })
-      }
-      if (cc.length > 0 || bcc.length > 0) {
-        throw refusal(400, 'invalid_request', 'copies_not_allowed', null, {
-          detail: 'Marketing emails cannot have cc or bcc recipients.',
-        })
-      }
-    }
-    if (!existing) {
-      this.categories.set(key, {
-        type: category.type,
-        name: category.name,
-        description: category.description ?? '',
-      })
-    }
-    return { key, type: category.type }
   }
 
   private attachmentsOf(value: unknown, bodies: string[], subject: string): QueuedAttachment[] {
@@ -677,149 +490,14 @@ export class FakePostHog {
   }
 }
 
-function faultAnswer(route: Route, { status, code, message, attr, page }: Exclude<Fault, string>): Answer {
+function faultAnswer(route: Route, { status, code, message, page }: Exclude<Fault, string>): Answer {
   if (page !== undefined) {
     return { status, text: page }
   }
   if (route === 'storage') {
     return code ? storageError(status, code, message ?? code) : { status, text: '' }
   }
-  const type = status >= 400 && status < 500 ? 'validation_error' : 'server_error'
-  return { status, body: code ? { type, code, detail: message ?? code, attr: attr ?? null } : undefined }
-}
-
-const UNSUBSCRIBE_HREF = /^\s*\{\{\s*unsubscribe_url\s*\}\}(?:[?#].*)?\s*$/
-const TEXT_UNSUBSCRIBE_PLACEHOLDER = /\{\{\s*unsubscribe_url\s*\}\}/
-
-function hasUnsubscribeLink(html: string | undefined, text: string | undefined): boolean {
-  if (html) {
-    return hasHtmlUnsubscribeLink(html)
-  }
-  return TEXT_UNSUBSCRIBE_PLACEHOLDER.test(text ?? '')
-}
-
-function hasHtmlUnsubscribeLink(html: string): boolean {
-  const visible = html.replace(/<!--[\s\S]*?-->/g, '')
-  let i = 0
-  let templateDepth = 0
-  while (i < visible.length) {
-    const start = visible.indexOf('<', i)
-    if (start === -1) {
-      return false
-    }
-    i = start + 1
-    let isClosing = false
-    if (visible[i] === '/') {
-      isClosing = true
-      i += 1
-    }
-    const nameStart = i
-    while (i < visible.length && /[A-Za-z0-9:-]/.test(visible[i])) {
-      i += 1
-    }
-    const tagName = visible.slice(nameStart, i).toLowerCase()
-    if (tagName === '') {
-      continue
-    }
-    let foundHref = false
-    let selfClosing = false
-    while (i < visible.length) {
-      while (i < visible.length && /\s/.test(visible[i])) {
-        i += 1
-      }
-      if (i >= visible.length) {
-        return false
-      }
-      if (visible[i] === '>') {
-        i += 1
-        if (tagName === 'template') {
-          if (isClosing) {
-            if (templateDepth > 0) {
-              templateDepth -= 1
-            }
-          } else if (!selfClosing) {
-            templateDepth += 1
-          }
-        } else if (!isClosing && tagName === 'a' && foundHref && templateDepth === 0) {
-          return true
-        }
-        break
-      }
-      if (visible[i] === '/') {
-        selfClosing = true
-        i += 1
-        continue
-      }
-      selfClosing = false
-      const attrStart = i
-      while (i < visible.length && !/[\s=/>]/.test(visible[i])) {
-        i += 1
-      }
-      const attrName = visible.slice(attrStart, i).toLowerCase()
-      while (i < visible.length && /\s/.test(visible[i])) {
-        i += 1
-      }
-      let attrValue = ''
-      if (visible[i] === '=') {
-        i += 1
-        while (i < visible.length && /\s/.test(visible[i])) {
-          i += 1
-        }
-        const quote = visible[i]
-        if (quote === '"' || quote === "'") {
-          i += 1
-          const valStart = i
-          const end = visible.indexOf(quote, i)
-          if (end === -1) {
-            return false
-          }
-          attrValue = visible.slice(valStart, end)
-          i = end + 1
-        } else {
-          const valStart = i
-          while (i < visible.length && !/[\s>]/.test(visible[i])) {
-            i += 1
-          }
-          attrValue = visible.slice(valStart, i)
-        }
-      }
-      if (!isClosing && tagName === 'a' && attrName === 'href' && UNSUBSCRIBE_HREF.test(attrValue)) {
-        foundHref = true
-      }
-    }
-  }
-  return false
-}
-
-function categoryOf(value: unknown): NonNullable<QueuedEmail['category']> {
-  if (value === 'transactional') {
-    return value
-  }
-  if (!isRecord(value)) {
-    throw invalidField('category', 'Invalid category.')
-  }
-  refuseUnknown(value, CATEGORY_FIELDS, 'category__')
-  const { key, type, name, description } = value
-  if (
-    typeof key !== 'string' ||
-    typeof name !== 'string' ||
-    (type !== 'marketing' && type !== 'transactional') ||
-    (description !== undefined && typeof description !== 'string')
-  ) {
-    throw invalidField('category', 'Invalid category.')
-  }
-  const trimmedKey = key.trim()
-  if (!trimmedKey || trimmedKey === '$all' || trimmedKey.length > 64) {
-    throw invalidField('category__key', 'Invalid category key.')
-  }
-  const trimmedName = name.trim()
-  if (!trimmedName || trimmedName.length > 128) {
-    throw invalidField('category__name', 'Invalid category name.')
-  }
-  if (description !== undefined && description.length > 1000) {
-    throw invalidField('category__description', 'Ensure this field has no more than 1000 characters.')
-  }
-  return { key, type, name, ...(description !== undefined && { description }) }
+  return { status, body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined }
 }
 
 function refusal(status: number, type: string, code: string, attr: string | null, explained: Json): Refused {

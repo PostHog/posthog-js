@@ -1596,59 +1596,106 @@ describe('emails', () => {
       description: 'Monthly product news',
     }
 
+    const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+
     const sendIn = (
-      category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
-    ): ReturnType<PostHog['emails']['send']> => posthog.emails.send({ ...CODE_SEND, category })
+      category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory,
+      overrides: Record<string, unknown> = {}
+    ): ReturnType<PostHog['emails']['send']> =>
+      posthog.emails.send({ ...CODE_SEND, ...overrides, category } as SendEmailOptions)
 
     const sendUnchecked = (send: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
       posthog.emails.send(send as unknown as SendEmailOptions)
 
-    let fake: FakePostHog
-
-    beforeEach(() => {
-      fake = againstPostHog()
-    })
-
-    it('files the email under a category it defines', async () => {
-      const { error } = await sendIn(NEWSLETTER)
-
-      expect(error).toBeNull()
-      expect(fake.emails).toEqual([
-        expect.objectContaining({
-          filedUnder: 'newsletter',
-          category: {
-            key: 'newsletter',
-            type: 'marketing',
-            name: 'Newsletter',
-            description: 'Monthly product news',
-          },
-        }),
-      ])
-    })
+    const postedSend = (
+      callIndex = 0
+    ): { url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> } => {
+      const [url, options] = fetch.mock.calls[callIndex]
+      return {
+        url,
+        method: options.method,
+        headers: options.headers,
+        body: JSON.parse(options.body),
+      }
+    }
 
     it.each([
+      ['omitted category', undefined, undefined],
+      ['the built-in transactional category', TRANSACTIONAL_EMAIL_CATEGORY, 'transactional'],
       [
-        'omits description when unset',
+        'a marketing category with description',
+        NEWSLETTER,
+        { key: 'newsletter', type: 'marketing', name: 'Newsletter', description: 'Monthly product news' },
+      ],
+      [
+        'a transactional category without description',
         { key: 'receipts', type: 'transactional' as const, name: 'Receipts' },
         { key: 'receipts', type: 'transactional', name: 'Receipts' },
       ],
       [
-        'sends an empty description as an empty string',
+        'a marketing category with an empty description',
         { key: 'newsletter', type: 'marketing' as const, name: 'Newsletter', description: '' },
         { key: 'newsletter', type: 'marketing', name: 'Newsletter', description: '' },
       ],
-    ])('%s', async (_label, category, expectedCategory) => {
-      const { error } = await sendIn(category)
+    ])('serializes %s on the send route', async (_label, category, expectedCategory) => {
+      replies = [accepted()]
+
+      const { data, error } = await sendIn(category)
 
       expect(error).toBeNull()
-      expect(fake.emails).toHaveLength(1)
-      expect(fake.emails[0].category).toEqual(expectedCategory)
-      expect('description' in (fake.emails[0].category as object)).toBe('description' in expectedCategory)
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.headers.Authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(request.body).toEqual({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+        ...(expectedCategory !== undefined && { category: expectedCategory }),
+      })
+      expect('category' in request.body).toBe(expectedCategory !== undefined)
+      if (typeof expectedCategory === 'object') {
+        expect('description' in (request.body.category as object)).toBe('description' in expectedCategory)
+      }
     })
 
-    it('files the email under a category whose fields are getters', async () => {
+    it('sends a categorized email with attachments and preserves exact outbound fields', async () => {
+      replies = [
+        {
+          status: 200,
+          body: { files: [{ sha256: HELLO_SHA256, status: 'present', expires_at: '2026-11-30T00:00:00Z' }] },
+        },
+        accepted(),
+      ]
+
+      const { data, error } = await sendIn(NEWSLETTER, {
+        attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      const request = postedSend(1)
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+        category: NEWSLETTER,
+        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+      })
+    })
+
+    it('copies category fields from getters and drops extra properties', async () => {
+      replies = [accepted()]
       class NewsletterCategory implements MessageCategory {
         readonly type = 'marketing'
+        readonly extra = 'ignored'
         get key(): string {
           return 'newsletter'
         }
@@ -1657,21 +1704,15 @@ describe('emails', () => {
         }
       }
 
-      const { error } = await sendIn(new NewsletterCategory())
+      const { data, error } = await sendIn(new NewsletterCategory())
 
       expect(error).toBeNull()
-      expect(fake.emails).toEqual([
-        expect.objectContaining({
-          filedUnder: 'newsletter',
-          category: { key: 'newsletter', type: 'marketing', name: 'Newsletter' },
-        }),
-      ])
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
     })
 
     it('sends the category type it checked when a getter changes its answer', async () => {
-      fake = againstPostHog({
-        categories: { newsletter: { type: 'marketing', name: 'Newsletter', description: 'Monthly product news' } },
-      })
+      replies = [accepted()]
       let typeReads = 0
       const shiftingCategory: MessageCategory = {
         key: 'newsletter',
@@ -1681,20 +1722,16 @@ describe('emails', () => {
           return typeReads === 1 ? 'marketing' : 'transactional'
         },
       }
-      const prefResult = await posthog.emails.setPreferences({
-        to: 'reader@example.com',
-        topics: { newsletter: false },
-      })
-      expect(prefResult.error).toBeNull()
 
-      const { data, error } = await sendIn(shiftingCategory)
+      const { error } = await sendIn(shiftingCategory)
 
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'recipient_opted_out', statusCode: 422 })
-      expect(fake.emails).toEqual([])
+      expect(error).toBeNull()
+      expect(typeReads).toBe(1)
+      expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
     })
 
     it('reads an enumerable category getter once on send options instead of dropping it on a second read', async () => {
+      replies = [accepted()]
       const queued: Array<MessageCategory | undefined> = [NEWSLETTER]
       const options: SendEmailOptions = {
         ...CODE_SEND,
@@ -1706,12 +1743,7 @@ describe('emails', () => {
       const { error } = await posthog.emails.send(options)
 
       expect(error).toBeNull()
-      expect(fake.emails).toEqual([
-        expect.objectContaining({
-          filedUnder: 'newsletter',
-          category: NEWSLETTER,
-        }),
-      ])
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
     })
 
     it('refuses an inherited category getter on the template form and sends nothing', async () => {
@@ -1729,7 +1761,7 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'category' })
-      expect(fake.emails).toEqual([])
+      expect(fetch).not.toHaveBeenCalled()
     })
 
     it.each([
@@ -1744,7 +1776,7 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
-      expect(fake.emails).toEqual([])
+      expect(fetch).not.toHaveBeenCalled()
     })
 
     it('refuses a category on the template form and sends nothing', async () => {
@@ -1756,108 +1788,111 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'category' })
-      expect(fake.emails).toEqual([])
-    })
-
-    it('refuses a category key that a send defined with another type', async () => {
-      await sendIn(NEWSLETTER)
-
-      const { data, error } = await sendIn({ ...NEWSLETTER, type: 'transactional' })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({
-        code: 'category_mismatch',
-        name: 'validation_error',
-        statusCode: 400,
-        field: 'category',
-      })
-      expect(fake.emails.map((email) => email.filedUnder)).toEqual(['newsletter'])
-    })
-
-    it('surfaces the server unsubscribe_link_required refusal without sending', async () => {
-      makeClient()
-      replies = [rejected(400, 'unsubscribe_link_required')]
-
-      const { data, error } = await posthog.emails.send({ ...CODE_SEND, html: '<p>Hi</p>', category: NEWSLETTER })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({
-        code: 'unsubscribe_link_required',
-        name: 'validation_error',
-        statusCode: 400,
-      })
-      expect(error?.field).toBeUndefined()
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(fetch.mock.calls[0][0]).toBe(SEND_URL)
-      expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
-        html: '<p>Hi</p>',
-        category: NEWSLETTER,
-      })
-    })
-
-    it('sends no marketing email to a recipient opted out through setPreferences', async () => {
-      const created = await posthog.emails.send({ ...CODE_SEND, to: 'other@example.com', category: NEWSLETTER })
-      expect(created.error).toBeNull()
-
-      const prefResult = await posthog.emails.setPreferences({
-        to: 'reader@example.com',
-        topics: { newsletter: false },
-      })
-      expect(prefResult.error).toBeNull()
-
-      const { data, error } = await sendIn(NEWSLETTER)
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'recipient_opted_out', name: 'validation_error', statusCode: 422 })
-      expect(fake.emails.map((email) => email.to)).toEqual(['other@example.com'])
+      expect(fetch).not.toHaveBeenCalled()
     })
 
     it.each([
-      ['the built-in category', TRANSACTIONAL_EMAIL_CATEGORY, 'transactional'],
-      ['no category', undefined, undefined],
-    ])('queues an uncategorized transactional email with %s', async (_name, category, expectedCategory) => {
-      const { error } = await sendIn(category)
+      ['category_mismatch', 400, 'category', NEWSLETTER, {}],
+      ['marketing_template', 400, null, undefined, { templateKey: 'marketing-tpl' }],
+      ['categories_not_enabled', 400, 'category', NEWSLETTER, {}],
+      ['too_many_categories', 400, 'category', NEWSLETTER, {}],
+      ['unsubscribe_link_required', 400, null, NEWSLETTER, { html: '<p>Hi</p>' }],
+      ['copies_not_allowed', 400, null, NEWSLETTER, { cc: 'copy@example.com', bcc: ['hidden@example.com'] }],
+      ['sandbox_fields_unsupported', 400, 'category', NEWSLETTER, {}],
+      ['recipient_opted_out', 422, null, NEWSLETTER, {}],
+    ])(
+      'surfaces server %s (%i) refusal as validation_error without retrying',
+      async (code, status, attr, category, overrides) => {
+        replies = [
+          {
+            status,
+            body: { type: 'invalid_request', code, detail: 'Refused.', attr },
+          },
+        ]
 
-      expect(error).toBeNull()
-      expect(fake.emails).toHaveLength(1)
-      expect(fake.emails[0].filedUnder).toBeUndefined()
-      expect(fake.emails[0].category).toBe(expectedCategory)
-      expect('category' in fake.emails[0]).toBe(expectedCategory !== undefined)
-    })
-
-    describe('with a templateKey that names a template in a transactional category', () => {
-      const sendForReceipt = (
-        category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
-      ): ReturnType<PostHog['emails']['send']> =>
-        posthog.emails.send({ ...CODE_SEND, templateKey: 'order-receipt', category })
-
-      beforeEach(() => {
-        fake = againstPostHog({
-          categories: { receipts: { type: 'transactional', name: 'Receipts', description: '' } },
-          templates: { 'order-receipt': 'receipts' },
-        })
-      })
-
-      it("files the email under the template's category when the send names none", async () => {
-        const { error } = await sendForReceipt()
-
-        expect(error).toBeNull()
-        expect(fake.emails.map((email) => email.filedUnder)).toEqual(['receipts'])
-      })
-
-      it('refuses the built-in category, which asks for transactional email with no category', async () => {
-        const { data, error } = await sendForReceipt(TRANSACTIONAL_EMAIL_CATEGORY)
+        const { data, error } = await sendIn(category, { ...overrides, maxRetries: 2 })
 
         expect(data).toBeNull()
-        expect(error).toMatchObject({
-          code: 'category_mismatch',
-          name: 'validation_error',
-          statusCode: 400,
-          field: 'category',
-        })
-        expect(fake.emails).toEqual([])
+        expect(error).toMatchObject({ code, name: 'validation_error', statusCode: status })
+        expect(error?.field).toBe(attr ?? undefined)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        const request = postedSend()
+        expect(request.url).toBe(SEND_URL)
+        expect(request.method).toBe('POST')
+        if (category !== undefined) {
+          expect(request.body.category).toEqual(category)
+        }
+        if ('html' in overrides) {
+          expect(request.body.html).toBe(overrides.html)
+        }
+        if ('cc' in overrides) {
+          expect(request.body.cc).toEqual(['copy@example.com'])
+          expect(request.body.bcc).toEqual(['hidden@example.com'])
+        }
+      }
+    )
+
+    it('surfaces server workflow_can_wait (400) refusal on categorized send with attachments without retrying', async () => {
+      replies = [
+        {
+          status: 200,
+          body: { files: [{ sha256: HELLO_SHA256, status: 'present', expires_at: '2026-11-30T00:00:00Z' }] },
+        },
+        {
+          status: 400,
+          body: {
+            type: 'invalid_request',
+            code: 'workflow_can_wait',
+            detail: 'Workflow can wait.',
+            attr: 'attachments',
+          },
+        },
+      ]
+
+      const { data, error } = await sendIn(NEWSLETTER, {
+        attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
+        maxRetries: 2,
+      })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'workflow_can_wait',
+        name: 'validation_error',
+        statusCode: 400,
+        field: 'attachments',
+      })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      const request = postedSend(1)
+      expect(request.url).toBe(SEND_URL)
+      expect(request.body).toMatchObject({
+        category: NEWSLETTER,
+        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
       })
     })
+
+    it.each([
+      ['field_not_accepted', NEWSLETTER],
+      ['invalid_input', TRANSACTIONAL_EMAIL_CATEGORY],
+    ])(
+      'returns an older-server %s refusal on category without retrying or stripping category',
+      async (code, category) => {
+        replies = [
+          {
+            status: 400,
+            body: { type: 'validation_error', code, detail: 'Unknown field category.', attr: 'category' },
+          },
+        ]
+
+        const { data, error } = await sendIn(category, { maxRetries: 2 })
+
+        expect(data).toBeNull()
+        expect(error).toMatchObject({ code, name: 'validation_error', statusCode: 400, field: 'category' })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        const request = postedSend()
+        expect(request.url).toBe(SEND_URL)
+        expect(request.body.category).toEqual(category)
+      }
+    )
   })
 
   describe('get', () => {
