@@ -63,6 +63,39 @@ CASES = {
         pod PLUGIN, path: '..'
       end
     end
+  }],
+  'generate_multiple_pod_projects is rejected' => ['`generate_multiple_pod_projects`', proc {
+    install! 'cocoapods', generate_multiple_pod_projects: true
+    platform :ios, '15.1'
+    target('App') { pod PLUGIN, path: '..' }
+  }],
+  'deduplicate_targets => false is rejected' => ['`deduplicate_targets => false`', proc {
+    install! 'cocoapods', deduplicate_targets: false
+    platform :ios, '15.1'
+    target('App') { pod PLUGIN, path: '..' }
+  }],
+  'plugin targets with different platforms are rejected' => ['different platforms', proc {
+    target 'App' do
+      platform :ios, '15.1'
+      pod PLUGIN, path: '..'
+    end
+    target 'MacApp' do
+      platform :osx, '12.0'
+      pod PLUGIN, path: '..'
+    end
+  }],
+  'plugin targets with different linkage are rejected' => ['different platforms', proc {
+    platform :ios, '15.1'
+    target 'App' do
+      use_frameworks! linkage: :dynamic
+      pod PLUGIN, path: '..'
+    end
+    target('Extension') { pod PLUGIN, path: '..' }
+  }],
+  'plugin targets with the same platform and linkage install' => [nil, proc {
+    platform :ios, '15.1'
+    target('App') { pod PLUGIN, path: '..' }
+    target('Extension') { pod PLUGIN, path: '..' }
   }]
 }.freeze
 
