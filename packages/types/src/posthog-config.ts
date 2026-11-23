@@ -2195,7 +2195,7 @@ export interface PostHogConfig {
      * This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add
      * custom properties to mask with `custom_personal_data_properties`.
      * @default false
-     * @see {PERSONAL_DATA_CAMPAIGN_PARAMS} - Default campaign parameters that are masked by default.
+     * @see {PERSONAL_DATA_URL_PARAMS} - Default URL parameters that are masked, including other spellings of them such as Snapchat's `ScCid`.
      * @see {PostHogConfig.custom_personal_data_properties} - Custom list of personal data properties to mask.
      */
     mask_personal_data_properties: boolean

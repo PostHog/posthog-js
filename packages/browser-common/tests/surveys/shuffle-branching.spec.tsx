@@ -75,7 +75,7 @@ describe('Surveys: shuffled questions', () => {
 
     const answerCurrentQuestion = () => {
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'an answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
     }
 
     test('walks the shuffled order when no question has branching', async () => {

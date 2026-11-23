@@ -1,5 +1,24 @@
 # @posthog/browser-common
 
+## 0.13.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/types@1.427.1
+
+## 0.12.2
+
+### Patch Changes
+
+- [#5829](https://github.com/PostHog/posthog-js/pull/5829) [`1c8b544`](https://github.com/PostHog/posthog-js/commit/1c8b544e9725a51497e0d2c74b9f021c31029a9e) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Name survey buttons by their visible text instead of a hard-coded English "Submit survey" label, so screen readers and voice control match the configured or translated button text. Tests that find the button by the name "Submit survey" need to use the visible button text or the `.form-submit` class instead.
+  (2026-11-20)
+
 ## 0.12.1
 
 ### Patch Changes
