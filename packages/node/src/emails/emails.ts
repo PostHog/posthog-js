@@ -16,23 +16,24 @@ import {
   refuseRenderedMessageOverLimit,
 } from './attachments'
 import { EmailError } from './errors'
-import type {
-  CodeEmailForm,
-  EmailPreferences,
-  EmailReactElement,
-  EmailStatus,
-  EmailWarning,
-  Emails,
-  GetEmailResponse,
-  MessageCategory,
-  SendEmailBase,
-  SendEmailOptions,
-  SendEmailResponse,
-  SendEmailResult,
-  SendTemplateEmailOptions,
-  SetEmailPreferencesOptions,
-  SetEmailPreferencesResponse,
-  TemplateEmailForm,
+import {
+  TRANSACTIONAL_EMAIL_CATEGORY,
+  type CodeEmailForm,
+  type EmailPreferences,
+  type EmailReactElement,
+  type EmailStatus,
+  type EmailWarning,
+  type Emails,
+  type GetEmailResponse,
+  type MessageCategory,
+  type SendEmailBase,
+  type SendEmailOptions,
+  type SendEmailResponse,
+  type SendEmailResult,
+  type SendTemplateEmailOptions,
+  type SetEmailPreferencesOptions,
+  type SetEmailPreferencesResponse,
+  type TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/messaging/send/email/'
@@ -52,7 +53,6 @@ const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
-const CATEGORY_TYPES: ReadonlySet<unknown> = new Set<MessageCategory['type']>(['marketing', 'transactional'])
 
 type EveryField<Form> = Record<keyof Form, true>
 interface ReactRenderer {
@@ -104,12 +104,6 @@ const CODE_FORM: SendForm = {
   howToSend: 'send content from your code with templateKey',
 }
 
-/**
- * The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
- * send without a category, it doesn't follow the category of the template that `templateKey` names.
- */
-export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
-
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
 export const DEFAULT_EMAIL_REQUEST_MAX_RETRIES = 2
 
@@ -157,9 +151,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, reads the
- * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
- * attempt of a send carries the same idempotency key.
+ * Sends one transactional or marketing email per call to the messaging send API on the app host,
+ * reads the status of a sent email, and sets a recipient's topic preferences. Owns the attempt
+ * loop, so every attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -635,7 +629,6 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
 
 function codeFormFields(send: UncheckedSend): Record<string, unknown> {
   const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking, category } = send
-  const checked = category === undefined ? undefined : checkedCategory(category)
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -644,12 +637,12 @@ function codeFormFields(send: UncheckedSend): Record<string, unknown> {
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
-    ...(checked !== undefined && { category: checked }),
+    category: checkedCategory(category),
   }
 }
 
-function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
-  if (value === TRANSACTIONAL_EMAIL_CATEGORY) {
+function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory | undefined {
+  if (value === undefined || value === TRANSACTIONAL_EMAIL_CATEGORY) {
     return value
   }
   if (value !== null && typeof value === 'object') {
@@ -657,15 +650,10 @@ function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | 
     if (
       typeof key === 'string' &&
       typeof name === 'string' &&
-      CATEGORY_TYPES.has(type) &&
+      (type === 'marketing' || type === 'transactional') &&
       (description === undefined || typeof description === 'string')
     ) {
-      return {
-        key,
-        type: type as MessageCategory['type'],
-        name,
-        ...(description !== undefined && { description }),
-      }
+      return { key, type, name, description }
     }
   }
   throw invalid(
@@ -758,7 +746,14 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+  const ownKeys = Object.keys(send)
+  const checked = new Set(ownKeys)
+  const field =
+    ownKeys.find((name) => !form.fields.has(name) && send[name as keyof UncheckedSend] !== undefined) ??
+    Array.from(otherForm.fields).find(
+      (name) =>
+        !form.fields.has(name) && !checked.has(name) && name in send && send[name as keyof UncheckedSend] !== undefined
+    )
   if (field === undefined) {
     return
   }

@@ -9,7 +9,7 @@ export { CaptureError } from './capture-v1/errors'
 export type { CaptureDroppedEvent, CaptureErrorParams } from './capture-v1/errors'
 export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
-export { TRANSACTIONAL_EMAIL_CATEGORY } from './emails/emails'
+export { TRANSACTIONAL_EMAIL_CATEGORY } from './emails/types'
 export type { EmailErrorName } from './emails/errors'
 export type {
   CodeEmailForm,

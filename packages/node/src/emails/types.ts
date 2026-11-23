@@ -1,4 +1,3 @@
-import type { TRANSACTIONAL_EMAIL_CATEGORY } from './emails'
 import type { EmailError } from './errors'
 
 /** What every send takes, whatever its form. */
@@ -23,12 +22,22 @@ export interface SendEmailBase {
 }
 
 /**
+ * The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
+ * send without a category, it doesn't follow the category of the template that `templateKey` names.
+ */
+export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
+
+/**
  * A message category that a send defines in code. PostHog creates the category when the project has
- * none with this key, and restores it when it was deleted. Otherwise the send leaves the category as it
- * is: a send never renames a category or changes its description. Change those in PostHog.
+ * none with this key, and restores it when it was deleted. Both creation and restoration need room
+ * under the project's active category limit. Otherwise the send leaves the category as it is: a send
+ * never renames a category or changes its description. Change those in PostHog.
  */
 export interface MessageCategory {
-  /** Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key. */
+  /**
+   * Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category
+   * by its key: pass this same key as a topic key in `posthog.emails.setPreferences({ topics })`.
+   */
   key: string
   /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
   type: 'marketing' | 'transactional'
@@ -101,20 +110,32 @@ interface CodeEmailFields {
   tracking?: boolean | EmailTracking
   /**
    * The email's message category. Without it, the email follows the category of the template that
-   * `templateKey` names, or is transactional with no category. A template made in PostHog is
-   * transactional: PostHog refuses a `templateKey` that names a template in a marketing category with
-   * `marketing_template`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no
-   * category, so PostHog refuses it with `category_mismatch` when `templateKey` names a template in
-   * a category. A `MessageCategory` files the email under that category. A marketing email honors
-   * the recipient's opt-outs and gets unsubscribe headers. Its `html`, or its `text` when it has no
-   * `html`, needs the `{{ unsubscribe_url }}` placeholder.
+   * `templateKey` names (when code-send categories are enabled), or is transactional with no
+   * category. A template made in PostHog must be enabled for transactional sends first: PostHog
+   * refuses a template that isn't enabled for transactional sends with `template_not_transactional`,
+   * and refuses an enabled template whose category is marketing with `marketing_template`.
+   *
+   * When `templateKey` names a sendable template, that template fixes the category: for an
+   * uncategorized template, leave `category` out or pass `TRANSACTIONAL_EMAIL_CATEGORY`; for a
+   * template in a transactional category, leave `category` out or pass a `MessageCategory` with the
+   * matching `key` and `type`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no
+   * category, so PostHog refuses it with `category_mismatch` when `templateKey` names a sendable
+   * template in a transactional category.
+   *
+   * A `MessageCategory` files the email under that category. A marketing email honors the
+   * recipient's opt-outs and gets unsubscribe headers. Its `html` needs a link with
+   * `<a href="{{ unsubscribe_url }}">`, or its `text` needs `{{ unsubscribe_url }}` when it has no
+   * `html`.
    *
    * The send returns an error with code `category_mismatch` when a category with this key has
-   * another type, or when `templateKey` names a template in another category; `too_many_categories`
-   * when the project can't take another category; `unsubscribe_link_required` when a marketing email
-   * has no unsubscribe placeholder; `copies_not_allowed` when a marketing email has copies;
-   * `recipient_opted_out` when the recipient opted out of the category or of all marketing email; and
-   * `marketing_template` when `templateKey` names a template in a marketing category.
+   * another type, or when `templateKey` names a sendable template in another category (including an
+   * uncategorized template given a `MessageCategory`); `too_many_categories` when creating or
+   * restoring a category would pass the project's active category limit;
+   * `unsubscribe_link_required` when a marketing email has no unsubscribe link placeholder;
+   * `copies_not_allowed` when a marketing email has `cc` or `bcc`; `recipient_opted_out` when the
+   * recipient opted out of the category or of all marketing email; `template_not_transactional` when
+   * `templateKey` names a template not enabled for transactional sends; and `marketing_template`
+   * when `templateKey` names an enabled template in a marketing category.
    */
   category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
 }
@@ -286,13 +307,14 @@ export interface EmailPreferences {
 export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null } | { data: null; error: EmailError }
 
 /**
- * The `posthog.emails` API: sends transactional email from PostHog email templates or from
- * content your code rendered, reads the status of each email it sent, and sets a recipient's
+ * The `posthog.emails` API: sends transactional or marketing email from PostHog email templates or
+ * from content your code rendered, reads the status of each email it sent, and sets a recipient's
  * topic preferences.
  */
 export interface Emails {
   /**
-   * Queue one email, from a transactional email template or from content your code rendered.
+   * Queue one transactional or marketing email, from a PostHog email template or from content your
+   * code rendered.
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
