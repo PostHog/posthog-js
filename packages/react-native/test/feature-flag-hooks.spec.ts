@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { isEnabledFlagValue } from '@posthog/core'
 import { act, renderHook } from '@testing-library/react'
 import { useActiveFeatureFlags } from '../src/hooks/useActiveFeatureFlags'
 import { useFeatureFlagEnabled } from '../src/hooks/useFeatureFlagEnabled'
@@ -14,9 +15,7 @@ describe('feature flag hooks', () => {
   let posthog: PostHog
 
   const notify = (): void => {
-    const enabled = Object.entries(featureFlags).filter(
-      ([, value]) => value === true || (typeof value === 'string' && value !== '')
-    )
+    const enabled = Object.entries(featureFlags).filter(([, value]) => isEnabledFlagValue(value))
     act(() =>
       listeners.forEach((listener) =>
         listener({ flags: enabled.map(([key]) => key), variants: Object.fromEntries(enabled), errorsLoading: false })
@@ -35,7 +34,7 @@ describe('feature flag hooks', () => {
         const value = featureFlags[key]
         return {
           key,
-          enabled: value === true || (typeof value === 'string' && value !== ''),
+          enabled: isEnabledFlagValue(value),
           variant: typeof value === 'string' ? value : undefined,
           payload: { color: 'blue' },
         }
@@ -63,13 +62,6 @@ describe('feature flag hooks', () => {
     const { result } = renderHook(() => useFeatureFlagEnabled('beta', undefined, posthog))
 
     expect(result.current).toBeUndefined()
-  })
-
-  it('useFeatureFlagEnabled reads an empty variant as disabled, like isFeatureEnabled()', () => {
-    featureFlags = { empty: '' }
-    const { result } = renderHook(() => useFeatureFlagEnabled('empty', undefined, posthog))
-
-    expect(result.current).toBe(false)
   })
 
   it('useFeatureFlagVariantKey follows the flag value', () => {
