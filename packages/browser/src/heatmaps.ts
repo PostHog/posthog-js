@@ -16,7 +16,7 @@ import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensi
 import { includes } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
+import { PERSONAL_DATA_URL_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -295,7 +295,7 @@ export class Heatmaps implements Extension {
         const customPersonalDataProperties = this._config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+            ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
         const url = maskQueryParams(href, paramsToMask, MASKED)
