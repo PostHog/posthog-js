@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.453.3
+
+### Patch Changes
+
+- [#5797](https://github.com/PostHog/posthog-js/pull/5797) [`7f9920a`](https://github.com/PostHog/posthog-js/commit/7f9920ae31bed45df8a8d138185e9bef5114e065) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop sending replay debug properties on events captured while session replay is off
+  (2026-11-23)
+
 ## 1.453.2
 
 ### Patch Changes
