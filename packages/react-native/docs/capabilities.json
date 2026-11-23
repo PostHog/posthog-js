@@ -68,7 +68,6 @@
   "utils": [
     "PostHog.capturePushNotificationOpened",
     "PostHog.getDeviceId",
-    "PostHog.getFeatureFlagDetails",
     "PostHog.getSurveyDisplayLanguageOverride",
     "PostHog.on",
     "PostHog.registerPushNotificationToken",

@@ -8,11 +8,18 @@
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
-- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture` — pass `iOSCaptureMethod: 'background'` instead
+- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** `onFeatureFlags` callbacks receive one object, `{ flags, variants, errorsLoading }`, like posthog-ios, posthog-android and posthog_flutter: `flags` lists the enabled flag keys, `variants` maps them to `true` or their variant, and `errorsLoading` is `true` when the latest load failed (the values are then the last known ones). Disabled flags and flags whose variant is an empty string are left out. Replace `onFeatureFlags((flags) => …)` with `onFeatureFlags(({ flags, variants, errorsLoading }) => …)`
 - **Breaking:** a callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags` returns
 - **Breaking:** a feature flag payload that isn't valid JSON, including an empty one, reads as `null` instead of its raw string
+- **Breaking:** `reloadFeatureFlagsAsync()` resolves with `{ flags, variants, errorsLoading }`, the object `onFeatureFlags` callbacks receive, instead of a map of every loaded flag. After a failed reload it resolves with the last known flags and `errorsLoading: true` instead of `undefined`
+- **Breaking:** a flag whose variant is an empty string reads as disabled (`enabled: false`) in `getFeatureFlagResult()`, `getAllFeatureFlags()` and `useFeatureFlagResult()`, as it already did in `isFeatureEnabled()`, like posthog-ios and posthog-android 4.0
+- **Breaking:** leave disabled flags and flags whose variant is an empty string out of `$active_feature_flags`, like posthog-ios and posthog-android
+- **Breaking:** keep a string payload in `bootstrap.featureFlagPayloads` as a string instead of parsing it as JSON, like posthog-ios 4.0 — pass decoded values, such as `{ color: 'blue' }` instead of `'{"color":"blue"}'`
+- **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
+- **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
 - **Breaking:** remove `getFeatureFlagPayload()` — use `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`
 - **Breaking:** remove `getFeatureFlags()`, `getFeatureFlagPayloads()` and `getFeatureFlagsAndPayloads()` — use `getAllFeatureFlags()`
@@ -25,6 +32,5 @@
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
 - **Breaking:** add `$process_person_profile` and `$is_identified` to `$autocapture` events, so anonymous autocapture follows `personProfiles: 'identified_only'` like other events
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default), `'background'` or experimental `'gpu'`
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request

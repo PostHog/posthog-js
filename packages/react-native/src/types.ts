@@ -267,9 +267,6 @@ export type PostHogSessionReplayConfig = {
    * How iOS captures each replay screenshot.
    *
    * - `'standard'`: draws the window on the main thread.
-   * - `'background'`: draws the window on a background queue, so the main thread only reads mask positions.
-   *   Triggers Main Thread Checker warnings in debug builds, and may briefly freeze the app the first time a
-   *   screenshot is captured. Consider disabling Main Thread Checker in your scheme's run diagnostics.
    * - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread
    *   steps. Content from another process, such as a web view's page, and Metal content are not captured.
    *   Falls back to `'standard'` when a capture can't be made this way.
@@ -278,7 +275,7 @@ export type PostHogSessionReplayConfig = {
    *
    * @default 'standard'
    */
-  iOSCaptureMethod?: 'standard' | 'background' | 'gpu'
+  iOSCaptureMethod?: 'standard' | 'gpu'
   /**
    * Session replay sample rate between 0 and 1
    * Local config has precedence over remote config when both are set.

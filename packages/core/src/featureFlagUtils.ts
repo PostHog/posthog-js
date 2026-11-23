@@ -133,7 +133,8 @@ export const parsePayload = (response: any): any => {
  */
 export const createFlagsResponseFromFlagsAndPayloads = (
   featureFlags: PostHogV1FlagsResponse['featureFlags'],
-  featureFlagPayloads: PostHogV1FlagsResponse['featureFlagPayloads']
+  featureFlagPayloads: PostHogV1FlagsResponse['featureFlagPayloads'],
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFeatureFlagsResponse => {
   // If a feature flag payload key is not in the feature flags, we treat it as true feature flag.
   const allKeys = [...new Set([...Object.keys(featureFlags ?? {}), ...Object.keys(featureFlagPayloads ?? {})])]
@@ -146,7 +147,7 @@ export const createFlagsResponseFromFlagsAndPayloads = (
     featureFlagPayloads: featureFlagPayloads ?? {},
   }
 
-  return normalizeFlagsResponse(flagDetails as PostHogV1FlagsResponse)
+  return normalizeFlagsResponse(flagDetails as PostHogV1FlagsResponse, decodePayload)
 }
 
 export const updateFlagValue = (flag: FeatureFlagDetail, value: FeatureFlagValue): FeatureFlagDetail => {
@@ -164,13 +165,19 @@ export function getEnabledFromValue(value: FeatureFlagValue): boolean {
   return typeof value === 'string' ? true : value
 }
 
+/** Whether a flag value is on: `true`, or a variant that isn't an empty string. */
+export function isEnabledFlagValue(value: FeatureFlagValue | undefined): boolean {
+  return value === true || (typeof value === 'string' && value !== '')
+}
+
 export function getVariantFromValue(value: FeatureFlagValue): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
 export const flagDetailsToResults = (
   flagDetails: Record<string, FeatureFlagDetail>,
-  decodePayload: (payload: any) => JsonType = parsePayload
+  decodePayload: (payload: any) => JsonType = parsePayload,
+  isEnabled: (value: FeatureFlagValue) => boolean = getEnabledFromValue
 ): FeatureFlagResult[] => {
   return Object.values(flagDetails)
     .filter((detail) => !detail.failed)
@@ -179,7 +186,7 @@ export const flagDetailsToResults = (
       const rawPayload = detail.metadata?.payload
       return {
         key: detail.key,
-        enabled: getEnabledFromValue(value),
+        enabled: isEnabled(value),
         variant: getVariantFromValue(value),
         payload: rawPayload !== undefined ? decodePayload(rawPayload) : null,
       }

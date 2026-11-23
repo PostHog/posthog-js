@@ -25,7 +25,9 @@ import {
   FeatureFlagResult,
   FeatureFlagValue,
   ErrorTracking as CoreErrorTracking,
+  isEnabledFlagValue,
   isObject,
+  PostHogFeatureFlagDetails,
   uuidv7,
   withoutNullMembers,
 } from '@posthog/core'
@@ -1736,8 +1738,7 @@ export class PostHog extends PostHogCoreBase {
    *
    * @example
    * ```js
-   * // reload feature flags and get result
-   * posthog.reloadFeatureFlagsAsync().then((refreshedFlags) => console.log(refreshedFlags))
+   * const { flags, variants, errorsLoading } = await posthog.reloadFeatureFlagsAsync()
    * ```
    *
    * @public
@@ -1746,10 +1747,22 @@ export class PostHog extends PostHogCoreBase {
    * When the `disableRemoteFeatureFlags` option is set, no request is made and the
    * promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).
    *
-   * @returns Promise that resolves with the refreshed flags
+   * @returns Promise that resolves with the enabled flags, their values, and whether the reload failed, as
+   * `onFeatureFlags` callbacks receive them. After a failed reload the values are the last known ones.
    */
-  reloadFeatureFlagsAsync(): Promise<Record<string, boolean | string> | undefined> {
-    return super.reloadFeatureFlagsAsync()
+  async reloadFeatureFlagsAsync(): Promise<PostHogFeatureFlagsLoaded> {
+    try {
+      await this.loadFeatureFlagsAsync()
+    } catch (error) {
+      this._logger.error('Error reloading feature flags', error)
+      return { ...this._currentFeatureFlagsLoaded(), errorsLoading: true }
+    }
+    return this._currentFeatureFlagsLoaded()
+  }
+
+  /** @internal The loaded flags, including disabled ones. Use `getAllFeatureFlags()` instead. */
+  getFeatureFlagDetails(): PostHogFeatureFlagDetails | undefined {
+    return super.getFeatureFlagDetails()
   }
 
   // A payload that isn't valid JSON reads as null rather than as its raw string.
@@ -1828,7 +1841,7 @@ export class PostHog extends PostHogCoreBase {
   private _currentFeatureFlagsLoaded(): PostHogFeatureFlagsLoaded {
     const variants: Record<string, string | boolean> = {}
     for (const [key, value] of Object.entries(this.getFeatureFlagDetails()?.featureFlags ?? {})) {
-      if (value === true || (typeof value === 'string' && value !== '')) {
+      if (isEnabledFlagValue(value)) {
         variants[key] = value
       }
     }

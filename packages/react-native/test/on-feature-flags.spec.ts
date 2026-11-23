@@ -223,4 +223,91 @@ describe('PostHog RN onFeatureFlags', () => {
 
     expect(posthog.getFeatureFlag('beta-ui')).toBe(true)
   })
+
+  describe('reloadFeatureFlagsAsync', () => {
+    it('resolves with the enabled flags of a successful reload', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+
+      await expect(posthog.reloadFeatureFlagsAsync()).resolves.toEqual(loaded(false))
+    })
+
+    it('resolves with the last known flags and errorsLoading true when the reload fails', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      flagsStatus = 500
+
+      await expect(posthog.reloadFeatureFlagsAsync()).resolves.toEqual(loaded(true))
+    })
+  })
+
+  describe('flags whose variant is an empty string', () => {
+    it('read as disabled in getFeatureFlagResult() and getAllFeatureFlags()', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getFeatureFlagResult('empty', { sendFeatureFlagEvent: false })).toMatchObject({
+        enabled: false,
+        variant: '',
+      })
+      expect(posthog.getAllFeatureFlags().find((result) => result.key === 'empty')).toMatchObject({
+        enabled: false,
+      })
+      expect(posthog.isFeatureEnabled('empty')).toBe(false)
+    })
+
+    it('are left out of $active_feature_flags, like disabled flags', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      const properties = (posthog as any).getCommonEventProperties()
+
+      expect(properties.$active_feature_flags).toEqual(['beta-ui', 'checkout'])
+      expect(properties['$feature/empty']).toBe('')
+    })
+  })
+
+  describe('bootstrap', () => {
+    const syncStorage = (): PostHogCustomStorage => {
+      const values: Record<string, string> = {}
+      return {
+        getItem: (key) => values[key] ?? null,
+        setItem: (key, value) => {
+          values[key] = value
+        },
+      }
+    }
+
+    it('keeps a bootstrapped string payload a string', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: syncStorage(),
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        bootstrap: { featureFlags: { numeric: true }, featureFlagPayloads: { numeric: '123' } },
+      })
+      await posthog.ready()
+
+      expect(posthog.getFeatureFlagResult('numeric', { sendFeatureFlagEvent: false })?.payload).toBe('123')
+    })
+
+    it('calls a listener added right after construction once with the bootstrapped flags', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: syncStorage(),
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        bootstrap: { featureFlags: { 'beta-ui': true, checkout: 'test', 'old-ui': false } },
+      })
+      const listener = vi.fn()
+
+      posthog.onFeatureFlags(listener)
+      await posthog.ready()
+
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(listener).toHaveBeenCalledWith(loaded(false))
+    })
+  })
 })

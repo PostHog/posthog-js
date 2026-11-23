@@ -87,7 +87,6 @@ describe('screenshot configuration through native setup', () => {
 
   it.each<[PostHogSessionReplayConfig | undefined, string]>([
     [undefined, 'standard'],
-    [{ iOSCaptureMethod: 'background' }, 'background'],
     [{ iOSCaptureMethod: 'gpu' }, 'gpu'],
   ])('forwards the iOS capture method from %j', async (options, method) => {
     const config = await initialize(options)
