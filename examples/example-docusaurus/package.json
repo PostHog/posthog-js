@@ -1,0 +1,26 @@
+{
+    "name": "posthog-docusaurus-example",
+    "version": "1.0.0",
+    "private": true,
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "start": "docusaurus start --host 127.0.0.1 --no-open",
+        "build": "docusaurus build",
+        "serve": "docusaurus serve --host 127.0.0.1 --no-open",
+        "test": "node --test test/compatibility.test.mjs",
+        "test:cloud": "node test/cloud-e2e.mjs"
+    },
+    "dependencies": {
+        "@docusaurus/core": "3.10.2",
+        "@docusaurus/preset-classic": "3.10.2",
+        "posthog-docusaurus": "^2.0.5",
+        "react": "19.3.1",
+        "react-dom": "19.3.1"
+    },
+    "devDependencies": {
+        "puppeteer-core": "23.11.1"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    }
+}

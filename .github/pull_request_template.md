@@ -16,6 +16,7 @@
 - [ ] posthog-js (web)
 - [ ] posthog-js-lite (web lite)
 - [ ] posthog-node
+- [ ] posthog-docusaurus
 - [ ] posthog-react-native
 - [ ] @posthog/react-native-plugin
 - [ ] @posthog/react

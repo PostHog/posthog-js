@@ -125,3 +125,23 @@ describe.each([
     }
   })
 })
+
+it('classifies a read of an unknown resource as a validation failure', async () => {
+  const eventCapture = new EventCapture()
+  await eventCapture.start()
+  const { client, cleanup } = await connect(setupHighLevelServer())
+  try {
+    await expect(
+      client.request({ method: 'resources/read', params: { uri: 'file:///missing.md' } }, PassthroughResultSchema)
+    ).rejects.toThrow()
+    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(1))
+
+    const props = eventCapture.findCapturesByEvent('$mcp_resource_read')[0].properties
+    expect(props.$mcp_is_error).toBe(true)
+    expect(props.$mcp_error_type).toBe('validation')
+    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
+  } finally {
+    await cleanup()
+    await eventCapture.stop()
+  }
+})

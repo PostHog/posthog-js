@@ -160,7 +160,7 @@ describe('SurveyPopup', () => {
             window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
         })
         expect(screen.getByText('Thank you!')).toBeVisible()
-        const closeButton = screen.getByRole('button', { name: /submit survey/i })
+        const closeButton = screen.getByRole('button', { name: /^close$/i })
         expect(closeButton).toBeEnabled()
         fireEvent.click(closeButton)
         expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
@@ -259,7 +259,7 @@ describe('SurveyPopup', () => {
         fireEvent.input(input1, { target: { value: 'Answer Q1' } })
 
         // Use consistent button text from appearance
-        const nextButton = screen.getByRole('button', { name: /submit survey/i })
+        const nextButton = screen.getByRole('button', { name: /^submit$/i })
         fireEvent.click(nextButton)
 
         expect(mockedSendSurveyEvent).toHaveBeenCalledWith({
@@ -304,7 +304,7 @@ describe('SurveyPopup', () => {
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'Answer Q1' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         expect(screen.getByText('Question 2')).toBeVisible()
 
         fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
@@ -339,14 +339,14 @@ describe('SurveyPopup', () => {
         expect(screen.getByRole('textbox')).toHaveValue('Answer Q1')
 
         // Click Next (using consistent button text)
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         const input2 = screen.getByRole('textbox')
         fireEvent.input(input2, { target: { value: 'Answer Q2' } })
 
         // Submit final question (using consistent button text)
-        const submitButton = screen.getByRole('button', { name: /submit survey/i })
+        const submitButton = screen.getByRole('button', { name: /^submit$/i })
         fireEvent.click(submitButton)
 
         // Verify final sendSurveyEvent call
@@ -535,6 +535,31 @@ describe('SurveyPopup', () => {
             expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
             expect(mockedDismissedSurveyEvent).not.toHaveBeenCalled()
             expect(host.capture).toHaveBeenCalledTimes(1)
+        })
+
+        test('names the intro and question buttons by their visible text', () => {
+            render(
+                <SurveyPopup
+                    survey={{
+                        ...introSurvey,
+                        appearance: { ...introSurvey.appearance, introScreenButtonText: 'Feedback starten' },
+                    }}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={host as any}
+                />
+            )
+
+            // The accessible name follows the configured (possibly translated) text, so a screen
+            // reader does not announce a submission when the button only opens the first question
+            const startButton = screen.getByRole('button', { name: 'Feedback starten' })
+            expect(screen.queryByRole('button', { name: /submit survey/i })).not.toBeInTheDocument()
+
+            fireEvent.click(startButton)
+
+            expect(screen.getByText('Question 1')).toBeVisible()
+            expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: /submit survey/i })).not.toBeInTheDocument()
         })
 
         test('does not advance the intro screen on a window-level Enter press', () => {

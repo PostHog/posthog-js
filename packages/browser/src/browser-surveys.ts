@@ -6,6 +6,7 @@ import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '@
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
 import { assignableWindow, window } from './utils/globals'
 import { BrowserClientAdapter } from './extensions/browser-client'
+import { getExtensionLoader } from './utils/extension-loader'
 
 class BrowserSurveysConfigSource implements SurveysConfigSource {
     constructor(private readonly _instance?: PostHog) {}
@@ -31,7 +32,8 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
         const extensions = assignableWindow?.__PosthogExtensions__
         if (!extensions || !this._instance) return
         const instance = this._instance
-        const { generateSurveys, loadExternalDependency } = extensions
+        const { generateSurveys } = extensions
+        const loadExternalDependency = getExtensionLoader(instance)
         return {
             generateSurveys: generateSurveys
                 ? (isSurveysEnabled) => generateSurveys(instance, isSurveysEnabled)

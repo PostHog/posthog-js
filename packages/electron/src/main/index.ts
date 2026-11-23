@@ -1,0 +1,997 @@
+import {
+    app,
+    powerMonitor,
+    ipcMain,
+    type BrowserWindow,
+    type IpcMainInvokeEvent,
+    type WebContents,
+    type UtilityProcess,
+} from 'electron'
+import { createHash } from 'node:crypto'
+import { join } from 'node:path'
+import {
+    PostHogPersistedProperty,
+    flagDetailsToResults,
+    type PostHogCoreOptions,
+    type PostHogFeatureFlagDetails,
+    type FeatureFlagValue,
+    type JsonType,
+} from '@posthog/core'
+import type { EventHint } from '@posthog/core/error-tracking'
+import { ElectronCore } from './client'
+import { startProcessExceptionAutocapture } from './exception-autocapture'
+import { ElectronStorage } from './storage'
+import { attachUtilityProcess, type UtilityRegistration } from '../utility/attach'
+import {
+    COMMAND_CHANNEL,
+    STATE_CHANNEL,
+    validateRequest,
+    trustedUrl,
+    normalizeFlagResult,
+    isFlagContextCommand,
+    type FeatureFlagReadOptions,
+    type IsFeatureEnabledOptions,
+    type FeatureFlagResult,
+    type Command,
+    type Properties,
+    type Response,
+    type State,
+} from '../shared/protocol'
+
+export type {
+    State,
+    Properties,
+    FeatureFlagValue,
+    FeatureFlagResult,
+    FeatureFlagReadOptions,
+    IsFeatureEnabledOptions,
+    JsonType,
+}
+
+export interface PostHogOptions extends Pick<
+    PostHogCoreOptions,
+    | 'host'
+    | 'flushAt'
+    | 'flushInterval'
+    | 'maxBatchSize'
+    | 'maxQueueSize'
+    | 'requestTimeout'
+    | 'fetchRetryCount'
+    | 'fetchRetryDelay'
+    | 'preloadFeatureFlags'
+    | 'disableRemoteFeatureFlags'
+    | 'disableRemoteConfig'
+    | 'remoteConfigRequestTimeoutMs'
+    | 'defaultOptIn'
+    | 'disabled'
+    | 'bootstrap'
+    | 'before_send'
+    | 'personProfiles'
+    | 'sessionExpirationTimeSeconds'
+    | 'disableGeoip'
+    | 'disableCompression'
+    | 'featureFlagsRequestTimeoutMs'
+    | 'featureFlagsRequestMaxRetries'
+> {
+    projectToken: string
+    storageDirectory?: string
+    maxStorageBytes?: number
+    maxQueueAgeMs?: number
+    captureAppLifecycleEvents?: boolean
+    enableExceptionAutocapture?: boolean
+    /**
+     * Also installs a `process.on('unhandledRejection')` listener to capture main-process rejections.
+     * Requires `enableExceptionAutocapture`. While the listener is installed, Node skips its default
+     * handling: an unhandled rejection no longer prints `UnhandledPromiseRejectionWarning` or sets
+     * `process.exitCode = 1`. This lasts until shutdown, even while the user is opted out. Off by default.
+     */
+    captureUnhandledRejections?: boolean
+    appBuild?: string
+    onError?: (error: unknown) => void
+}
+
+interface RegisteredWindow {
+    contents: WebContents
+    allowedUrls: readonly string[]
+    sequence: number
+    frame: number | undefined
+    requests: number
+    period: number
+    dispose: () => void
+}
+
+let singleton: PostHog | undefined
+let singletonOptions: Pick<PostHogOptions, 'projectToken' | 'host'> | undefined
+
+// Copy caller data with JSON semantics so a caller's toJSON() redaction applies, matching the renderer.
+// structuredClone still runs first so non-cloneable input keeps rejecting.
+function snapshot<T>(value: T): T {
+    structuredClone(value)
+    return JSON.parse(JSON.stringify(value)) as T
+}
+
+export class PostHog {
+    private _core: ElectronCore
+    private _ready: Promise<void>
+    private _windows = new Map<number, RegisteredWindow>()
+    private _utilities = new Map<UtilityProcess, UtilityRegistration>()
+    private _revision = 0
+    private _generation = 0
+    private _closed = false
+    private _closing = false
+    private _shutdownPromise?: Promise<void>
+    private _notifyPending = false
+    private _lastPublished = ''
+    private _flagRevision = 0
+    private _lastFlags = ''
+    private _reportedPayloadErrors = new Map<string, string>()
+    private _focusTimer?: ReturnType<typeof setTimeout>
+    private _timer?: ReturnType<typeof setInterval>
+    private _foreground = false
+    private _stopExceptionAutocapture?: () => void
+    private _cancelReady!: () => void
+    private _cleanups: (() => void)[] = []
+    private _tail: Promise<unknown> = Promise.resolve()
+    private _readyForSnapshots = false
+    private _pendingConsent = 0
+    // Latest consent change requested but not yet applied by the mutation queue.
+    private _requestedConsent?: { optedOut: boolean; token: number }
+    private _consentToken = 0
+
+    constructor(private _options: PostHogOptions) {
+        if (singleton) throw new Error('PostHog Electron is already initialized; use init()')
+        if (!this._options.projectToken?.trim()) throw new Error('PostHog projectToken is required')
+        const host = new URL(this._options.host ?? 'https://us.i.posthog.com')
+        if (
+            !['http:', 'https:'].includes(host.protocol) ||
+            host.username ||
+            host.password ||
+            host.search ||
+            host.hash
+        ) {
+            throw new Error('PostHog host must be an HTTP(S) URL without credentials, query or fragment')
+        }
+        const namespace = createHash('sha256')
+            .update(this._options.projectToken.trim() + host.href)
+            .digest('hex')
+            .slice(0, 24)
+        const directory = join(this._options.storageDirectory ?? join(app.getPath('userData'), 'posthog'), namespace)
+        const storage = new ElectronStorage(directory, {
+            maxStorageBytes: this._options.maxStorageBytes,
+            maxQueueAgeMs: this._options.maxQueueAgeMs,
+            onError: (error) => this._report(error),
+        })
+        this._core = new ElectronCore(
+            this._options.projectToken,
+            { ...this._options, host: host.href },
+            storage,
+            () => this._scheduleState(),
+            (error) => this._report(error)
+        )
+        const exit = (): void => {
+            // Quit is never delayed, so a queued consent change is applied before the final blocking write.
+            if (this._requestedConsent && storage.isLoaded) {
+                this._core.setPersistedProperty(PostHogPersistedProperty.OptedOut, this._requestedConsent.optedOut)
+            }
+            storage.releaseOnExit()
+        }
+        process.once('exit', exit)
+        this._cleanups.push(() => process.removeListener('exit', exit))
+        singleton = this
+        singletonOptions = { projectToken: this._options.projectToken, host: this._options.host }
+        ipcMain.handle(COMMAND_CHANNEL, (event, request: unknown) => this._handle(event, request))
+        this._ready = Promise.race([
+            this._initialize(),
+            new Promise<void>((resolve) => {
+                this._cancelReady = resolve
+            }),
+        ]).then(() => {
+            this._readyForSnapshots = true
+        })
+    }
+
+    private _report(error: unknown): void {
+        try {
+            this._options.onError?.(error)
+        } catch {}
+    }
+
+    private async _initialize(): Promise<void> {
+        await this._core.ready()
+        if (this._closing || this._core.isDisabled) return
+        await app.whenReady()
+        if (this._closing) return
+        if (!this._closing && this._options.enableExceptionAutocapture === true) {
+            this._stopExceptionAutocapture = startProcessExceptionAutocapture(
+                () => !this._closing && !this._core.isDisabled && !this._core.optedOut,
+                (error, properties, hint) => this._captureException(error, properties, hint),
+                this._options.captureUnhandledRejections === true
+            )
+        }
+        if (!this._core.isDisabled && this._options.captureAppLifecycleEvents !== false) {
+            const previous = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppVersion)
+            const previousBuild = this._core.getPersistedProperty<string>(PostHogPersistedProperty.InstalledAppBuild)
+            const version = app.getVersion()
+            const build = this._options.appBuild
+            const properties = {
+                $electron_version: process.versions.electron,
+                $node_version: process.versions.node,
+                $chromium_version: process.versions.chrome,
+                ...(build ? { $app_build: build } : {}),
+            }
+            if (!previous) this._core.capture('Application Installed', properties)
+            else if (previous !== version || previousBuild !== build)
+                this._core.capture('Application Updated', {
+                    ...properties,
+                    previous_version: previous,
+                    ...(previousBuild ? { previous_build: previousBuild } : {}),
+                })
+            this._core.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, version)
+            this._core.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, build ?? null)
+            this._core.capture('Application Opened', { from_background: false })
+            this._foreground = true
+        }
+        const interval = this._options.flushInterval ?? 10_000
+        if (interval > 0) {
+            this._timer = setInterval(() => {
+                if (!this._closing) void this._core.flush().catch((error) => this._report(error))
+            }, interval)
+            this._timer.unref()
+        }
+        const suspend = (): void => this._core.suspend()
+        const resume = (): void => {
+            this._core.resume()
+            if (!this._closing) void this.flush().catch((error) => this._report(error))
+        }
+        powerMonitor.on('suspend', suspend)
+        powerMonitor.on('resume', resume)
+        this._cleanups.push(() => {
+            powerMonitor.removeListener('suspend', suspend)
+            powerMonitor.removeListener('resume', resume)
+        })
+        const quit = (event: Electron.Event): void => {
+            if (this._closed || event.defaultPrevented) return
+            // Observe cancellation by other will-quit listeners too. Do not force a second quit.
+            queueMicrotask(() => {
+                if (event.defaultPrevented) return
+                void this.flush().catch((error) => this._report(error))
+            })
+        }
+        app.on('will-quit', quit)
+        this._cleanups.push(() => app.removeListener('will-quit', quit))
+        if (this._core.preloadFeatureFlags && !this._core.isDisabled) {
+            void this._core.reloadFeatureFlagsAsync().catch((error) => this._report(error))
+        }
+        // Storage already reports failed writes and retries on later mutations. Readiness is not a write receipt.
+        await this._core.persist().catch(() => {})
+        this._scheduleState()
+    }
+
+    ready(): Promise<void> {
+        return this._ready
+    }
+
+    private async _run(
+        operation: () => void | Promise<unknown>,
+        generation?: number,
+        authorize?: () => void,
+        changesConsent = false,
+        shouldRun?: () => boolean
+    ): Promise<void> {
+        if (this._closing) throw new Error('PostHog is shut down')
+        if (changesConsent) this._pendingConsent++
+        const pending = this._tail
+            .then(async () => {
+                await this._ready
+                if (this._closed) throw new Error('PostHog is shut down')
+                if (generation !== undefined && generation !== this._generation)
+                    throw new Error('Stale PostHog identity')
+                authorize?.()
+                if (shouldRun && !shouldRun()) return
+                await operation()
+                await this._core.persist()
+                this._scheduleState()
+            })
+            .finally(() => {
+                if (changesConsent) this._pendingConsent--
+            })
+        this._tail = pending.catch(() => {})
+        return pending
+    }
+
+    /**
+     * Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`; captures
+     * after shutdown are dropped. A capture after an unawaited `identify()` or `reset()` uses the new identity.
+     */
+    capture(event: string, properties?: Properties): void {
+        if (typeof event !== 'string' || !event.trim() || event === '$snapshot') return
+        this._captureEvent(event, properties)
+    }
+    private _captureEvent(event: string, properties: Properties | undefined, screenName?: string): void {
+        let copy: Properties | undefined
+        try {
+            // The caller can't await capture, so copy properties now rather than when the queued work runs.
+            copy = this._snapshotEventProperties(properties)
+        } catch (error) {
+            this._report(error)
+            return
+        }
+        void this._run(() => {
+            if (this._core.optedOut || this._core.isDisabled) return
+            let captured: Properties | undefined
+            try {
+                // copy may still be the caller's object when inspection was deferred; apply toJSON before capturing.
+                captured = copy === undefined ? undefined : snapshot(copy)
+            } catch (error) {
+                this._report(error)
+                return
+            }
+            // A screen name wins over a supplied $screen_name.
+            this._core.capture(event, screenName === undefined ? captured : { ...captured, $screen_name: screenName })
+        }).catch(() => {
+            // Storage reports its own write failures through onError; shutdown and identity changes drop the event.
+        })
+    }
+    /**
+     * Link the current distinct ID to an alias without switching identity or reloading flags.
+     * Ignored when opted out or personProfiles is 'never'. Resolves after local persistence, not delivery.
+     */
+    alias(alias: string): Promise<void> {
+        if (!alias?.trim()) return Promise.resolve()
+        return this._run(() => this._alias(alias))
+    }
+    private _alias(alias: string): void {
+        if (!this._core.optedOut) this._core.alias(alias)
+    }
+    private _snapshotEventProperties(properties?: Properties): Properties | undefined {
+        // Unknown persisted consent and queued consent changes must settle before inspecting caller data.
+        if (
+            this._closing ||
+            !this._readyForSnapshots ||
+            this._pendingConsent ||
+            this._core.optedOut ||
+            this._core.isDisabled
+        ) {
+            return properties
+        }
+        return properties === undefined ? undefined : snapshot(properties)
+    }
+    /**
+     * Capture an event-only $screen; name wins over properties.$screen_name without setting persistent screen context.
+     * Fire-and-forget: never throws or rejects; ignored when opted out.
+     */
+    screen(name: string, properties?: Properties): void {
+        if (typeof name !== 'string' || !name.trim()) return
+        this._captureEvent('$screen', properties, name)
+    }
+    /**
+     * Update the current person's $set/$set_once properties without changing identity; empty updates do nothing.
+     * Also updates flag context. Resolves after local persistence, not delivery or the background flag refresh.
+     * Ignored when opted out or personProfiles is 'never'.
+     */
+    async setPersonProperties(properties?: Properties, propertiesOnce?: Properties): Promise<void> {
+        const set = this._snapshotEventProperties(properties)
+        const once = this._snapshotEventProperties(propertiesOnce)
+        return this._run(() => this._setPersonProperties(set, once))
+    }
+    private _setPersonProperties(properties?: Properties, propertiesOnce?: Properties): void {
+        if (this._core.optedOut || this._core.isDisabled) return
+        const set = properties === undefined ? undefined : snapshot(properties)
+        const once = propertiesOnce === undefined ? undefined : snapshot(propertiesOnce)
+        this._core.setPersonProperties(set, once)
+    }
+    /**
+     * Merge a call-time copy of local person overrides for flag evaluation, without updating the person profile.
+     * Accepts nested $set/$set_once; empty input does nothing. Otherwise awaits persistence and, by default, a refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
+    async setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): Promise<void> {
+        const copy = snapshot(properties)
+        return this._runFlagContext(() => this._setPersonPropertiesForFlags(copy, reloadFeatureFlags))
+    }
+    private async _setPersonPropertiesForFlags(properties: Properties, reload: boolean): Promise<void> {
+        if (!Object.keys(properties).length) return
+        this._core.setPersonPropertiesForFlags(properties, false)
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    /**
+     * Merge a call-time copy of local overrides by group type, without changing profiles or group membership.
+     * Empty input does nothing. Otherwise awaits persistence and, by default, a flag refresh attempt.
+     * With false, only saves context; cached flag values stay unchanged until a reload.
+     */
+    async setGroupPropertiesForFlags(properties: Record<string, Properties>, reloadFeatureFlags = true): Promise<void> {
+        const copy = snapshot(properties)
+        return this._runFlagContext(() => this._setGroupPropertiesForFlags(copy, reloadFeatureFlags))
+    }
+    private async _setGroupPropertiesForFlags(properties: Record<string, Properties>, reload: boolean): Promise<void> {
+        if (!Object.keys(properties).length) return
+        this._core.setGroupPropertiesForFlags(properties)
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    /**
+     * Clear all local person flag overrides, not profile data or identity. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
+    resetPersonPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._runFlagContext(() => this._resetPersonPropertiesForFlags(reloadFeatureFlags))
+    }
+    private async _resetPersonPropertiesForFlags(reload: boolean): Promise<void> {
+        this._core.resetPersonPropertiesForFlags()
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    /**
+     * Clear local flag overrides for every group type, not profiles or membership. Resolves after persistence.
+     * Cached flag values stay unchanged unless true is passed to also await a refresh attempt.
+     */
+    resetGroupPropertiesForFlags(reloadFeatureFlags = false): Promise<void> {
+        return this._runFlagContext(() => this._resetGroupPropertiesForFlags(reloadFeatureFlags))
+    }
+    private async _resetGroupPropertiesForFlags(reload: boolean): Promise<void> {
+        this._core.resetGroupPropertiesForFlags()
+        if (reload) await this._core.reloadFeatureFlagsAsync()
+    }
+    private async _runFlagContext(
+        operation: () => void | Promise<unknown>,
+        generation?: number,
+        authorize?: () => void
+    ): Promise<void> {
+        let reloading: Promise<unknown> = Promise.resolve()
+        await this._run(
+            () => {
+                reloading = Promise.resolve(operation())
+                // Observe a rejection while persistence is pending, without holding the mutation tail on networking.
+                void reloading.catch(() => {})
+            },
+            generation,
+            authorize
+        )
+        await reloading
+        await this._core.persist()
+        this._scheduleState()
+    }
+    identify(distinctId: string, properties?: Properties): Promise<void> {
+        if (!distinctId?.trim()) return Promise.resolve()
+        return this._run(() => this._identify(distinctId, properties))
+    }
+    private _identify(distinctId: string, properties?: Properties): void {
+        if (!this._core.canIdentify()) {
+            this._core.identify(distinctId, properties)
+            return
+        }
+        if (distinctId !== this._core.getDistinctId()) {
+            this._generation++
+            this._core.invalidateIdentity()
+        }
+        this._core.identify(distinctId, properties)
+    }
+    reset(): Promise<void> {
+        return this._run(() => this._reset())
+    }
+    private _reset(): void {
+        this._generation++
+        this._core.invalidateIdentity()
+        const optedOut = this._core.optedOut
+        this._core.reset([
+            PostHogPersistedProperty.OptedOut,
+            PostHogPersistedProperty.RemoteConfig,
+            PostHogPersistedProperty.InstalledAppVersion,
+            PostHogPersistedProperty.InstalledAppBuild,
+        ])
+        this._core.setPersistedProperty(PostHogPersistedProperty.OptedOut, optedOut)
+        this._core.getDistinctId()
+        this._core.getSessionId()
+    }
+    group(type: string, key: string | number, properties?: Properties): Promise<void> {
+        return this._run(() => this._core.group(type, key, properties))
+    }
+    register(properties: Properties): Promise<void> {
+        return this._run(() => this._core.register(properties))
+    }
+    unregister(key: string): Promise<void> {
+        return this._run(() => this._core.unregister(key))
+    }
+    optIn(): Promise<void> {
+        return this._changeConsent(false)
+    }
+    optOut(): Promise<void> {
+        return this._changeConsent(true)
+    }
+    private _changeConsent(optedOut: boolean, generation?: number, authorize?: () => void): Promise<void> {
+        const requested = { optedOut, token: ++this._consentToken }
+        if (!this._closing) this._requestedConsent = requested
+        return this._run(() => (optedOut ? this._optOut() : this._core.optIn()), generation, authorize, true).finally(
+            () => {
+                if (this._requestedConsent === requested) this._requestedConsent = undefined
+            }
+        )
+    }
+    private async _optOut(): Promise<void> {
+        this._generation++
+        await this._core.optOut()
+    }
+    /**
+     * Fire-and-forget: never throws or rejects. Storage failures are reported through `onError`; reports after
+     * shutdown or across an identity change are dropped.
+     */
+    captureException(error: unknown, properties?: Properties): void {
+        void this._captureException(error, properties).catch(() => {})
+    }
+    protected _captureException(error: unknown, properties?: Properties, hint?: EventHint): Promise<void> {
+        const canCapture = (): boolean => !this._core.isDisabled && !this._core.optedOut
+        if (!canCapture()) return Promise.resolve()
+        return this._run(
+            () => {
+                if (this._core.optedOut || this._core.isDisabled) return
+                try {
+                    const exception = this._core.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+                    this._core.capture('$exception', { ...properties, ...exception } as unknown as Properties, {
+                        _originatedFromCaptureException: true,
+                    })
+                } catch (captureError) {
+                    this._report(captureError)
+                }
+            },
+            this._generation,
+            undefined,
+            false,
+            canCapture
+        )
+    }
+    getDistinctId(): string {
+        return this._core.getDistinctId()
+    }
+    /** Return the shared anonymous ID, stable across identify and rotated by reset; await ready() first. */
+    getAnonymousId(): string {
+        return this._core.getAnonymousId()
+    }
+    /** Read cached consent; await ready() before relying on persisted consent. */
+    hasOptedOutCapturing(): boolean {
+        return this._core.optedOut
+    }
+    getSessionId(): string {
+        return this._core.isDisabled ? '' : this._core.getSessionId()
+    }
+    /**
+     * Read the cached value without fetching. A missing key is false with a nonempty cache, otherwise undefined.
+     * Reports a deduplicated exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
+    getFeatureFlag(key: string, options?: FeatureFlagReadOptions): FeatureFlagValue | undefined {
+        return this._core.getFeatureFlag(key, { sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent })
+    }
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. defaultValue applies only to
+     * unknown/unavailable flags. Without it, missing-key behavior matches getFeatureFlag().
+     * Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    /**
+     * Read cached enabled state without fetching; empty variants are disabled. Missing keys follow getFeatureFlag()
+     * unless defaultValue is supplied. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+        return this._core.isFeatureEnabled(key, {
+            sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent,
+            defaultValue: options?.defaultValue,
+        })
+    }
+    /**
+     * Return a copied cached result, or undefined for unknown/unavailable flags; never fetches.
+     * Empty variants are disabled. Reports exposure by default; sendFeatureFlagEvent: false suppresses it.
+     */
+    getFeatureFlagResult(key: string, options?: FeatureFlagReadOptions): FeatureFlagResult | undefined {
+        const result = this._core.getFeatureFlagResult(key, {
+            sendEvent: options?.sendFeatureFlagEvent ?? options?.sendEvent,
+        })
+        return result === undefined ? undefined : this._copyFlagResult(result)
+    }
+    private _copyFlagResult(result: FeatureFlagResult): FeatureFlagResult {
+        return normalizeFlagResult({ ...result, payload: this.getFeatureFlagPayload(result.key) ?? null })
+    }
+    /** Return copied cached results (empty when unavailable), without fetching or reporting exposures. */
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        return flagDetailsToResults(details?.flags ?? {}).map((result) =>
+            normalizeFlagResult({ ...result, payload: this._decodeFlagPayload(result.key, details) ?? null })
+        )
+    }
+    /**
+     * Read a copied, decoded cached payload without fetching or reporting exposure.
+     * Missing payloads are null once flags are loaded, otherwise undefined; strings are not decoded again.
+     */
+    getFeatureFlagPayload(key: string): JsonType | undefined {
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        return this._decodeFlagPayload(key, details)
+    }
+    private _prunePayloadErrors(details: PostHogFeatureFlagDetails | undefined): void {
+        // Retain only the current malformed value per current flag, not a history of raw payloads.
+        for (const [reportedKey, reportedRaw] of this._reportedPayloadErrors) {
+            if (
+                !details ||
+                !Object.prototype.hasOwnProperty.call(details.flags, reportedKey) ||
+                details.flags[reportedKey].metadata?.payload !== reportedRaw
+            ) {
+                this._reportedPayloadErrors.delete(reportedKey)
+            }
+        }
+    }
+    private _decodeFlagPayload(key: string, details: PostHogFeatureFlagDetails | undefined): JsonType | undefined {
+        if (!details) return undefined
+        const raw = Object.prototype.hasOwnProperty.call(details.flags, key)
+            ? details.flags[key].metadata?.payload
+            : undefined
+        if (raw === undefined) return null
+        // Decode raw metadata once; never reparse a decoded string in the renderer or result adapters.
+        try {
+            return JSON.parse(raw) as JsonType
+        } catch (error) {
+            if (this._reportedPayloadErrors.get(key) !== raw) {
+                // Mark before invoking application code, which may capture this SDK error.
+                this._reportedPayloadErrors.set(key, raw)
+                this._report(new Error(`PostHog could not decode payload for flag "${key}"`, { cause: error }))
+            }
+            return null
+        }
+    }
+    get optedOut(): boolean {
+        return this._core.optedOut
+    }
+    /**
+     * Refresh flags using the shared identity/context after earlier mutations, then persist and synchronize the cache.
+     * A failed fetch normally retains cached flags and resolves; completion does not guarantee fresh values.
+     */
+    reloadFeatureFlags(): Promise<void> {
+        return this._reloadFeatureFlags()
+    }
+    /** Compatibility alias for reloadFeatureFlags(), with the same completion and failure semantics. */
+    reloadFeatureFlagsAsync(): Promise<void> {
+        return this.reloadFeatureFlags()
+    }
+    private async _reloadFeatureFlags(generation?: number, authorize?: () => void): Promise<void> {
+        await this._ready
+        await this._tail
+        if (this._closing) return
+        if (generation !== undefined && generation !== this._generation) throw new Error('Stale PostHog identity')
+        authorize?.()
+        await this._core.reloadFeatureFlagsAsync()
+        await this._core.persist()
+        this._scheduleState()
+    }
+    flush(): Promise<void> {
+        return this._flush()
+    }
+    private async _flush(authorize?: () => void): Promise<void> {
+        await this._ready
+        await this._tail
+        if (this._closed) return
+        authorize?.()
+        await this._core.flush()
+        await this._core.persist()
+    }
+
+    getState(): State {
+        const details = this._core.getFeatureFlagDetails()
+        this._prunePayloadErrors(details)
+        const flags = details?.featureFlags ?? {}
+        const payloads: Record<string, JsonType> = Object.create(null)
+        for (const key of Object.keys(flags)) {
+            const payload = this._decodeFlagPayload(key, details)
+            if (payload !== undefined) payloads[key] = payload
+        }
+        return structuredClone({
+            revision: this._revision,
+            generation: this._generation,
+            distinctId: this._core.getDistinctId(),
+            anonymousId: this._core.getAnonymousId(),
+            sessionId: this._core.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? '',
+            optedOut: this._core.optedOut,
+            disabled: this._core.isDisabled,
+            autocapture: this._core.getAutocaptureState(),
+            featureFlags: flags,
+            flagsLoaded: details !== undefined,
+            flagRevision: this._flagRevision,
+            featureFlagPayloads: payloads,
+        })
+    }
+
+    private _scheduleState(): void {
+        if (this._notifyPending || this._closed) return
+        this._notifyPending = true
+        queueMicrotask(() => {
+            this._notifyPending = false
+            if (this._closed) return
+            const flags = JSON.stringify([
+                this._core.getPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails),
+                this._core.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit),
+            ])
+            if (flags !== this._lastFlags) {
+                this._lastFlags = flags
+                this._flagRevision++
+            }
+            const state = this.getState()
+            const serialized = JSON.stringify({ ...state, revision: 0 })
+            if (serialized === this._lastPublished) return
+            this._lastPublished = serialized
+            state.revision = ++this._revision
+            for (const registered of this._utilities.values()) registered.publish(state)
+            for (const registered of this._windows.values()) {
+                if (
+                    !registered.contents.isDestroyed() &&
+                    registered.frame !== undefined &&
+                    trustedUrl(registered.contents.getURL(), registered.allowedUrls)
+                ) {
+                    registered.contents.mainFrame.send(STATE_CHANNEL, state)
+                }
+            }
+        })
+    }
+
+    registerWindow(window: BrowserWindow, options: { allowedUrls: readonly string[] }): () => void {
+        if (!options.allowedUrls.length || options.allowedUrls.some((url) => !trustedUrl(url, [url]))) {
+            throw new Error('PostHog requires explicit trusted window URLs')
+        }
+        const contents = window.webContents
+        this._windows.get(contents.id)?.dispose()
+        const registration: RegisteredWindow = {
+            contents,
+            allowedUrls: [...options.allowedUrls],
+            sequence: 0,
+            frame: undefined,
+            requests: 0,
+            period: performance.now(),
+            dispose: () => {},
+        }
+        const navigation = (): void => {
+            registration.sequence = 0
+            registration.frame = undefined
+        }
+        const focus = (): void => {
+            clearTimeout(this._focusTimer)
+            this._updateFocus()
+        }
+        const blur = (): void => {
+            clearTimeout(this._focusTimer)
+            this._focusTimer = setTimeout(() => this._updateFocus(), 50)
+            this._focusTimer.unref()
+        }
+        const dispose = (): void => {
+            contents.removeListener('did-navigate', navigation)
+            contents.removeListener('destroyed', dispose)
+            window.removeListener('focus', focus)
+            window.removeListener('blur', blur)
+            this._windows.delete(contents.id)
+            this._updateFocus()
+        }
+        registration.dispose = dispose
+        contents.on('did-navigate', navigation)
+        contents.once('destroyed', dispose)
+        window.on('focus', focus)
+        window.on('blur', blur)
+        this._windows.set(contents.id, registration)
+        return dispose
+    }
+
+    /** Register only a trusted utilityProcess.fork() result, immediately after forking. */
+    registerUtilityProcess(child: UtilityProcess): () => void {
+        if (this._closing) throw new Error('PostHog is shut down')
+        if (this._utilities.has(child)) throw new Error('PostHog utility process is already registered')
+        const registration = attachUtilityProcess(
+            child,
+            (command, context, generation, authorize) => this._execute(command, context, generation, authorize),
+            () => this.getState(),
+            () => this._utilities.delete(child)
+        )
+        this._utilities.set(child, registration)
+        return registration.dispose
+    }
+
+    private _updateFocus(): void {
+        if (this._closing || this._options.captureAppLifecycleEvents === false) return
+        const active = [...this._windows.values()].some(
+            ({ contents }) => !contents.isDestroyed() && contents.isFocused()
+        )
+        if (this._foreground === active) return
+        const previous = this._foreground
+        this._foreground = active
+        if (active) {
+            if (previous === false) this.capture('Application Opened', { from_background: true })
+        } else this.capture('Application Backgrounded')
+    }
+
+    private async _handle(event: IpcMainInvokeEvent, value: unknown): Promise<Response> {
+        try {
+            const registered = this._windows.get(event.sender.id)
+            if (
+                !registered ||
+                !event.senderFrame ||
+                event.senderFrame !== event.sender.mainFrame ||
+                !trustedUrl(event.senderFrame.url, registered.allowedUrls)
+            )
+                throw new Error('Unauthorized PostHog sender')
+            if (performance.now() - registered.period >= 1000) {
+                registered.period = performance.now()
+                registered.requests = 0
+            }
+            if (++registered.requests > 100) throw new Error('PostHog renderer rate limit exceeded')
+            validateRequest(value)
+            if (value.command.type === 'hello') {
+                if (registered.frame === event.senderFrame.routingId && value.sequence <= registered.sequence)
+                    throw new Error('Duplicate PostHog request')
+                registered.frame = event.senderFrame.routingId
+            } else if (registered.frame !== event.senderFrame.routingId) throw new Error('PostHog handshake required')
+            if (value.sequence <= registered.sequence) throw new Error('Out-of-order PostHog request')
+            registered.sequence = value.sequence
+            await this._ready
+            if (this._closing) throw new Error('PostHog is shut down')
+            const command = value.command
+            if (
+                command.type !== 'hello' &&
+                command.type !== 'flush' &&
+                command.type !== 'optOut' &&
+                value.generation !== this._generation
+            ) {
+                throw new Error('Stale PostHog identity; synchronize before capturing')
+            }
+            const context: Properties = { $electron_process: 'renderer', $window_id: String(event.sender.id) }
+            const authorize = (): void => {
+                if (
+                    this._windows.get(event.sender.id) !== registered ||
+                    registered.frame !== event.senderFrame?.routingId ||
+                    !trustedUrl(event.sender.getURL(), registered.allowedUrls)
+                )
+                    throw new Error('PostHog sender navigated or disconnected')
+            }
+            authorize()
+            await this._execute(command, context, value.generation, authorize)
+            return { ok: true, state: this.getState() }
+        } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : 'PostHog request failed' }
+        }
+    }
+
+    private async _execute(
+        command: Command,
+        context: Properties,
+        generation: number,
+        authorize: () => void
+    ): Promise<void> {
+        if (command.type === 'hello') return this._run(() => {}, undefined, authorize)
+        if (command.type === 'flush') return this._flush(authorize)
+        if (command.type === 'reloadFeatureFlags') return this._reloadFeatureFlags(generation, authorize)
+        // Withdrawal from any window must survive an immediate quit, like a main-process optOut().
+        if (command.type === 'optOut') return this._changeConsent(true, undefined, authorize)
+        if (command.type === 'loadAutocaptureConfig') {
+            await this._ready
+            await this._tail
+            if (this._closing) return
+            if (generation !== this._generation) throw new Error('Stale PostHog identity')
+            authorize()
+            await this._core.loadAutocaptureConfig()
+            if (!this._closing) await this._core.persist()
+            this._scheduleState()
+            return
+        }
+        const operation = () =>
+            this._core.withContext(context, () => {
+                switch (command.type) {
+                    case 'capture':
+                        return this._core.capture(command.event, { ...command.properties, ...context })
+                    case 'alias':
+                        return this._alias(command.alias)
+                    case 'screen':
+                        return this._core.capture('$screen', {
+                            ...command.properties,
+                            ...context,
+                            $screen_name: command.name,
+                        })
+                    case 'setPersonProperties':
+                        return this._setPersonProperties(command.properties, command.propertiesOnce)
+                    case 'setPersonPropertiesForFlags':
+                        return this._setPersonPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                    case 'setGroupPropertiesForFlags':
+                        return this._setGroupPropertiesForFlags(command.properties, command.reloadFeatureFlags)
+                    case 'resetPersonPropertiesForFlags':
+                        return this._resetPersonPropertiesForFlags(command.reloadFeatureFlags)
+                    case 'resetGroupPropertiesForFlags':
+                        return this._resetGroupPropertiesForFlags(command.reloadFeatureFlags)
+                    case 'identify':
+                        return this._identify(command.distinctId, command.properties)
+                    case 'reset':
+                        return this._reset()
+                    case 'group':
+                        return this._core.group(command.groupType, command.groupKey, command.properties)
+                    case 'register':
+                        return this._core.register(command.properties)
+                    case 'unregister':
+                        return this._core.unregister(command.key)
+                    case 'optIn':
+                        return this._core.optIn()
+                    case 'flag': {
+                        if (
+                            command.flagRevision === this._flagRevision &&
+                            this._core.getFeatureFlag(command.key, { sendEvent: false }) ===
+                                (command.value ?? undefined)
+                        ) {
+                            this._core.getFeatureFlag(command.key)
+                        }
+                        return
+                    }
+                    case 'exception':
+                        return this._core.capture(
+                            '$exception',
+                            { ...command.properties, ...context },
+                            { _originatedFromCaptureException: true }
+                        )
+                }
+            })
+        if (isFlagContextCommand(command)) {
+            return this._runFlagContext(operation, generation, authorize)
+        }
+        return this._run(operation, generation, authorize, command.type === 'optIn')
+    }
+
+    shutdown(timeoutMs = 2000): Promise<void> {
+        if (this._shutdownPromise) return this._shutdownPromise
+        this._closing = true
+        for (const registration of this._utilities.values()) registration.dispose()
+        this._stopExceptionAutocapture?.()
+        this._stopExceptionAutocapture = undefined
+        clearInterval(this._timer)
+        clearTimeout(this._focusTimer)
+        let timer: ReturnType<typeof setTimeout> | undefined
+        let cleanupPromise: Promise<void> | undefined
+        const cleanup = (): Promise<void> => {
+            if (cleanupPromise) return cleanupPromise
+            this._closed = true
+            this._cancelReady()
+            const stopped = this._core.stop()
+            ipcMain.removeHandler(COMMAND_CHANNEL)
+            for (const cleanup of this._cleanups) cleanup()
+            for (const registration of this._windows.values()) registration.dispose()
+            if (singleton === this) singleton = undefined
+            return (cleanupPromise = stopped)
+        }
+        const drain = async (): Promise<void> => {
+            await this._ready
+            if (this._closed) return
+            await this._tail
+            if (this._closed) return
+            await this._core.shutdown(timeoutMs)
+            if (!this._closed) await this._core.persist()
+            await cleanup()
+        }
+        this._shutdownPromise = Promise.race([
+            drain().catch(async (error) => {
+                this._report(error)
+                await cleanup()
+            }),
+            new Promise<void>((resolve) => {
+                timer = setTimeout(
+                    () => {
+                        this._report(new Error('PostHog shutdown timed out; unsent events remain in storage'))
+                        resolve()
+                    },
+                    Math.max(0, timeoutMs)
+                )
+            }),
+        ]).finally(() => {
+            clearTimeout(timer)
+            // Filesystem work cannot be cancelled safely. Keep ownership until it settles,
+            // without extending the caller's shutdown budget.
+            void cleanup().catch((error) => this._report(error))
+        })
+        return this._shutdownPromise
+    }
+}
+
+export function init(options: PostHogOptions): PostHog {
+    if (singleton) {
+        if (singletonOptions?.projectToken !== options.projectToken || singletonOptions?.host !== options.host) {
+            throw new Error('PostHog Electron is already initialized for a different project')
+        }
+        return singleton
+    }
+    return new PostHog(options)
+}

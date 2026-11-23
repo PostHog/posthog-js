@@ -1,0 +1,29 @@
+:root {
+    font-family: system-ui, sans-serif;
+    color-scheme: light dark;
+}
+body {
+    margin: 2rem;
+}
+main {
+    max-width: 900px;
+    margin: auto;
+}
+fieldset {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+button,
+input {
+    font: inherit;
+    padding: 0.4rem;
+}
+pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border: 1px solid gray;
+    border-radius: 0.25rem;
+    padding: 1rem;
+}

@@ -123,7 +123,7 @@ try {
             try {
                 await page.goto(`${origin}/?core=${version}&scenario=${scenario}`)
                 await page.getByRole('textbox', { name: 'Migration question' }).fill('Migration answer')
-                await page.getByRole('button', { name: 'Submit survey' }).click()
+                await page.getByRole('button', { name: /^submit( survey)?$/i }).click()
                 await page.getByRole('heading', { name: 'Thanks smoke' }).waitFor()
                 const { events, errors, scripts } = await page.evaluate(() => ({
                     events: window.events,

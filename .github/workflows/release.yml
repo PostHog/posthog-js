@@ -477,9 +477,62 @@ jobs:
                   message: '${{ steps.check-rejection.outputs.message }}'
                   emoji_reaction: 'no_entry_sign'
 
+    validate-electron-package:
+        name: Check Electron registry compatibility
+        needs: [release-context, version-bump]
+        if: needs.release-context.outputs.maintenance == 'false' && needs.version-bump.outputs.commit-hash != ''
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        outputs:
+            version: ${{ steps.validate.outputs.version }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  persist-credentials: false
+
+            - name: Check Electron version
+              id: check-version
+              uses: PostHog/check-package-version@abc438f5bf4810ab941c4919f570d7f7f4e89473 # v2.1.2
+              with:
+                  path: packages/electron
+
+            - uses: ./.github/actions/setup
+              if: steps.check-version.outputs.is-new-version == 'true'
+              with:
+                  install: false
+                  build: false
+
+            - name: Verify registry dependency minimums and installed declarations
+              if: steps.check-version.outputs.is-new-version == 'true'
+              id: validate
+              env:
+                  VERSION: ${{ steps.check-version.outputs.committed-version }}
+                  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+              run: |
+                  pnpm install --filter @posthog/electron... --frozen-lockfile --ignore-scripts
+                  pnpm turbo run build --filter=@posthog/electron
+                  tarball="$RUNNER_TEMP/electron.tgz"
+                  pnpm --filter=@posthog/electron pack --out "$tarball"
+                  node scripts/electron-release.mjs "$tarball" "$VERSION"
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
     publish:
         name: Publish packages
-        needs: [release-context, version-bump, notify-approval-needed, recover-posthog-js-s3, gate-posthog-js-publish]
+        needs:
+            [
+                release-context,
+                version-bump,
+                notify-approval-needed,
+                recover-posthog-js-s3,
+                gate-posthog-js-publish,
+                validate-electron-package,
+            ]
+        env:
+            VALIDATION_RESULT: ${{ needs.validate-electron-package.result }}
+            VALIDATED_VERSION: ${{ needs.validate-electron-package.outputs.version }}
+            VALIDATED_SOURCE: ${{ needs.version-bump.outputs.commit-hash }}
         runs-on: ubuntu-latest
         # Use `always()` to evaluate the S3 gate even if an earlier dependency failed.
         if: >-
@@ -497,9 +550,11 @@ jobs:
                     - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
+                    - name: posthog-docusaurus
                     - name: '@posthog/browser'
                     - name: '@posthog/browser-common'
                     - name: '@posthog/core'
+                    - name: '@posthog/electron'
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'
@@ -580,6 +635,17 @@ jobs:
                       exit 1
                   fi
 
+            - name: Require Electron registry compatibility
+              if: steps.check-package-version.outputs.is-new-version == 'true' && matrix.package.name == '@posthog/electron'
+              env:
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  if [ "$VALIDATION_RESULT" != 'success' ] || [ "$VALIDATED_VERSION" != "$PACKAGE_VERSION" ] ||
+                      [ "$VALIDATED_SOURCE" != "$(git rev-parse HEAD)" ]; then
+                      echo "::error::Electron registry compatibility must pass for the npm target before publishing."
+                      exit 1
+                  fi
+
             - name: Ensure modern npm (OIDC support)
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: npm install -g npm@11.6.4
@@ -587,6 +653,19 @@ jobs:
             - name: Install and build dependencies
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
+
+            # npm bundles load extensions from /static/<version>/, so the extension hashes they
+            # embed must match the bytes uploaded to S3, not this separate build's output.
+            - name: Download posthog-js S3 artifact
+              if: steps.check-package-version.outputs.is-new-version == 'true' && matrix.package.name == 'posthog-js'
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: ${{ needs.recover-posthog-js-s3.result == 'success' && 's3-recovery-posthog-js-dist' || 'posthog-js-dist' }}
+                  path: ${{ runner.temp }}/posthog-js-s3-dist
+
+            - name: Require npm extension hashes to match the S3 artifact
+              if: steps.check-package-version.outputs.is-new-version == 'true' && matrix.package.name == 'posthog-js'
+              run: node packages/browser/scripts/embed-extension-integrity.mjs verify "$RUNNER_TEMP/posthog-js-s3-dist"
 
             # Main passes no --tag and keeps the default `latest`. A maintenance
             # release must never move `latest`.
@@ -1299,7 +1378,7 @@ jobs:
                   path: |
                       packages/browser/dist/*.js
                       packages/browser/dist/*.js.map
-                  retention-days: 1
+                  retention-days: 30
                   if-no-files-found: error
 
             - name: Resolve release failure metadata

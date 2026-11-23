@@ -6,6 +6,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 import { Extension } from './extensions/types'
+import { getExtensionLoader } from './utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[Product Tours]')
 
@@ -91,7 +92,7 @@ export class PostHogProductTours implements Extension {
             cb()
             return
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'product-tours', (err) => {
+        getExtensionLoader(this._instance)?.(this._instance, 'product-tours', (err) => {
             if (err) {
                 logger.error('Could not load product tours script', err)
                 return

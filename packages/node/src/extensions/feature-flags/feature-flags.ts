@@ -335,7 +335,7 @@ class FeatureFlagsPoller {
             { skipLoadCheck: true }
           )
           response[flag.key] = matchValue
-          if (matchPayload) {
+          if (matchPayload !== undefined && matchPayload !== null) {
             payloads[flag.key] = matchPayload
           }
         } catch (e) {
@@ -1039,6 +1039,8 @@ class FeatureFlagsPoller {
   /**
    * Returns true if the feature flags poller has loaded successfully at least once and has more than 0 feature flags.
    * This is useful to check if local evaluation is ready before calling getFeatureFlag.
+   * A successful load with no flags does not count as ready; the `localEvaluationFlagsLoaded` event
+   * fires for every successful load and reports the flag count.
    */
   isLocalEvaluationReady(): boolean {
     return (this.loadedSuccessfullyOnce ?? false) && (this.featureFlags?.length ?? 0) > 0
