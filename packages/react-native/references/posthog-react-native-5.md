@@ -1,5 +1,5 @@
 ---
-title: "PostHog React Native SDK 5.x (experimental)"
+title: "PostHog React Native SDK 5.x"
 sidebar: Docs
 showTitle: true
 contentMaxWidthClass: max-w-full
@@ -150,7 +150,7 @@ tableOfContents:
 
 The React Native SDK runs in iOS and Android apps, including Expo apps.
 
-To send your first event, install `posthog-react-native` and the peer dependencies that the [install guide](https://posthog.com/docs/libraries/react-native#installation) lists for Expo or the React Native CLI.
+To send your first event, install `posthog-react-native` and the peer dependencies that the [install guide](https://posthog.com/docs/product-analytics/installation/react-native) lists for Expo or the React Native CLI.
 
 Then wrap your app in `PostHogProvider` with your project token and host from your [project settings](https://app.posthog.com/project/settings), and call `capture` on the client that `usePostHog` returns.
 
@@ -191,13 +191,74 @@ posthog.capture('signed_up', { plan: 'pro' })
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
 
+### Offline behavior
+
+The SDK keeps capturing events while the device is offline. With the default `persistence: 'file'`, events stay queued in device file storage across app restarts and flush once the device is online.
+
+- `maxQueueSize` sets the maximum number of queued events.
+- When the queue is full, the oldest event is evicted first.
+
+### Disable for local development
+
+Pass `disabled: __DEV__` in `PostHogProvider` options to turn off tracking during development. Calls through `usePostHog()` still work as safe no-ops.
+
+```tsx
+import { PostHogProvider } from 'posthog-react-native'
+
+export function App() {
+  return (
+    <PostHogProvider
+      projectToken="<ph_project_token>"
+      options={{ host: 'https://us.i.posthog.com', disabled: __DEV__ }}
+    >
+      <YourApp />
+    </PostHogProvider>
+  )
+}
+```
+
+### Proxy, projects, and allowlists
+
+- Set up a [reverse proxy](https://posthog.com/docs/advanced/proxy) so tracking blockers don't drop events.
+- If you run a website and mobile app together, [group them in one project](https://posthog.com/docs/settings/projects) to track users across platforms.
+- If a firewall or WAF blocks PostHog requests, allowlist PostHog's public IPs listed in the [webhook IP allowlist](https://posthog.com/docs/data-pipelines/destinations/webhook).
+
+### Choose an iOS dependency path for the native plugin
+
+The optional `@posthog/react-native-plugin` package needs `posthog-ios`. Choose one path to resolve it.
+
+| Path                       | Requirements                                                                                             | Setup                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| CocoaPods                  | React Native 0.75 or later                                                                               | Run `pod install` in `ios`. The plugin podspec resolves `posthog-ios` 4.0 through Swift Package Manager. This is the default. |
+| Full Swift Package Manager | `@posthog/react-native-plugin` 3.0 or later, Xcode 26 or later, and an iOS 15 or later deployment target | Run `npx react-native spm add --deintegrate --yes` in `ios`. Don't run `pod install`.                                         |
+
+The full path uses React Native's experimental integration without CocoaPods. Every native dependency in your app must support it. `--deintegrate` removes CocoaPods from the iOS project, so commit or back up the project first. PostHog verifies this path with an iOS-only React Native 0.87.1 app and React Native Community CLI 20.2.0. It is not verified with Expo.
+
+Both paths need an iOS 15 or later deployment target.
+
+### Minimum versions
+
+- `disableRemoteFeatureFlags` needs 4.49.0 or later.
+
+### Upgrade from an older major
+
+| From  | Change                                                                                                                                                                                                                                                                                                     |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.x.x | Replace `PostHog.setup(...)` with `new PostHog(token, options)` or `PostHogProvider`. `PostHogProvider` replaces `captureApplicationLifecycleEvents` and `recordScreenViews`. Remove `captureDeepLinks`, `android`, and `iOS`.                                                                             |
+| 2.x.x | Replace `await PostHog.initAsync(...)` with `new PostHog(token, options)`.                                                                                                                                                                                                                                 |
+| 3.x.x | Rename `captureNativeAppLifecycleEvents` and `autocapture={{ captureLifecycleEvents: true }}` to `captureAppLifecycleEvents`. Remove `captureMode` and `maskPhotoLibraryImages`. Call `setPersonPropertiesForFlags` and `setGroupPropertiesForFlags` in place of `personProperties` and `groupProperties`. |
+
+1.x.x wrapped the native iOS and Android SDKs. Later majors are written in JavaScript. On iOS, the SDK migrates the persisted distinct ID and anonymous ID. On Android, it can't load them, so call `identify` when the app loads. Anonymous Android users appear as new users.
+
+The SDK can't detect a real install. It stores a marker the first time it loads and sends `Application Installed` then. Expect more `Application Installed` events after you upgrade from 1.x.x.
+
 ## Setup
 
 ### `new PostHog(...)`
 
 > **new PostHog**(`projectToken`, `options?`): `PostHog`
 
-Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+Creates a new PostHog instance for React Native. See [`PostHogOptions`](#posthogoptions) for all configuration options.
 
 If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
 
@@ -239,9 +300,9 @@ export function MyApp1() {
 
 > **PostHogProvider**(`props`): `Element` \| `null`
 
-PostHogProvider is a React component that provides PostHog functionality to your React Native app. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+PostHogProvider is a React component that provides PostHog functionality to your React Native app. See [`PostHogOptions`](#posthogoptions) for all configuration options.
 
-Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
+Autocapturing navigation requires further configuration. See [`PostHogAutocaptureOptions`](#posthogautocaptureoptions)
 for more information about autocapturing navigation.
 
 This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.
@@ -545,7 +606,8 @@ posthog.captureAi('$ai_generation', {
 
 > **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
 
-Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+Capture written user feedback for a LLM trace, as an `$ai_feedback` event sent with
+PostHog.captureAi. Numeric values are converted to strings.
 
 #### Parameters
 
@@ -562,7 +624,8 @@ Capture written user feedback for a LLM trace. Numeric values are converted to s
 
 > **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
 
-Capture a metric for a LLM trace. Numeric values are converted to strings.
+Capture a metric for a LLM trace, as an `$ai_metric` event sent with PostHog.captureAi.
+Numeric values are converted to strings.
 
 #### Parameters
 
@@ -626,6 +689,13 @@ posthog.captureException(error, {
 ```
 
 ### `PostHogErrorBoundary`
+
+Captures errors thrown while rendering its children and shows `fallback` in their place.
+
+React also logs render errors to the console, so with console capture enabled each render error is captured twice.
+Set `errorTracking: { autocapture: { console: [] } }` to avoid this.
+
+#### Extends
 
 - `Component`\<`PostHogErrorBoundaryProps`, `PostHogErrorBoundaryState`\>
 
@@ -2037,6 +2107,11 @@ function SensitiveForm() {
 
 > **PostHogSurveyProvider**(`props`): `Element`
 
+Presents the surveys that match the current user.
+
+Surveys in React Native don't support URL or CSS selector targeting.
+Surveys that rely on these conditions don't appear.
+
 #### Parameters
 
 | Parameter | Type |
@@ -2154,6 +2229,9 @@ The device ID, or an empty string if not yet initialized
 
 > **on**(`event`, `cb`): () => `void`
 
+Listens for an SDK event and returns a function that removes the listener.
+The SDK does not throw for failures in background work, so listen for them on the `'error'` event.
+
 #### Parameters
 
 | Parameter | Type |
@@ -2164,6 +2242,14 @@ The device ID, or an empty string if not yet initialized
 #### Returns
 
 () => `void`
+
+#### Example
+
+```js
+posthog.on('error', (err) => {
+  console.error('PostHog had an error', err)
+})
+```
 
 ### `PostHog.registerPushNotificationToken`
 
@@ -2305,7 +2391,7 @@ Sync with plugin-server/src/types.ts
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-androidndkcrashes"></a> `androidNdkCrashes?` | `boolean` | Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the project's error tracking settings. An NDK crash kills the process immediately, so it is captured on the next app launch from the records the OS kept, which means properties such as `$app_version` and the identity describe that launch rather than the crash. The first launch after enabling this also captures the native crashes the OS still holds from before. For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols` on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer. |
+| <a id="property-androidndkcrashes"></a> `androidNdkCrashes?` | `boolean` | Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the project's error tracking settings. An NDK crash kills the process immediately, so it is captured on the next app launch from the records the OS kept, which means properties such as `$app_version` and the identity describe that launch rather than the crash. The first launch after enabling this also captures the native crashes the OS still holds from before. For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols` on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer and `posthog-react-native` 4.78.0 or newer. |
 | <a id="property-console"></a> `console?` | `boolean` \| `LogLevel`[] | - |
 | <a id="property-nativecrashes"></a> `nativeCrashes?` | `boolean` | Enables native iOS/Android/macOS crash autocapture through the optional native plugin. On Android this covers Java/Kotlin crashes; native C/C++ (NDK) crashes are enabled with `androidNdkCrashes`. On Apple platforms it covers signal crashes too. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS). |
 | <a id="property-uncaughtexceptions"></a> `uncaughtExceptions?` | `boolean` | - |
@@ -2729,7 +2815,7 @@ Creates a type with all properties of T, but makes only K properties required wh
 
 | Type Parameter | Description |
 | ------ | ------ |
-| <a id="type-parameter-t-8"></a> `T` | The base type containing all properties |
+| <a id="type-parameter-t-9"></a> `T` | The base type containing all properties |
 | <a id="type-parameter-k"></a> `K` *extends* keyof `T` | Union type of keys from T that should be required |
 
 #### Example
@@ -2816,7 +2902,7 @@ const user: RequiredUser = {
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). |
+| <a id="addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Hostnames match exactly, so pass hostnames only, without a protocol or path. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). |
 | <a id="before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. |
 | <a id="bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags |
 | `bootstrap.distinctId?` | `string` | - |
@@ -2842,7 +2928,7 @@ const user: RequiredUser = {
 | <a id="historicalmigration"></a> `historicalMigration?` | `boolean` | Special flag to indicate ingested data is for a historical migration **Default** `false` |
 | <a id="host-2"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` |
 | <a id="maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` |
-| <a id="maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` |
+| <a id="maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) When the queue is full, the SDK drops the oldest event first. **Default** `1000` |
 | <a id="personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` |
 | <a id="preloadfeatureflags-2"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` |
 | <a id="remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` |
@@ -2996,7 +3082,7 @@ Props for the PostHogMaskView component.
 
 | Property | Type | Description | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). | `Omit.addTracingHeaders` |
+| <a id="property-addtracingheaders"></a> `addTracingHeaders?` | `string`[] | A list of hostnames for which to inject PostHog tracing headers (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests. Use this to link requests made from your app to session replays and LLM traces in PostHog. When set, the global `fetch` is patched on initialization and the headers are added to requests whose hostname matches one of the entries. Hostnames match exactly, so pass hostnames only, without a protocol or path. Requires the SDK to wire up `patchFetchForTracingHeaders` against this option (currently supported in posthog-react-native). | `Omit.addTracingHeaders` |
 | <a id="property-before_send"></a> `before_send?` | `BeforeSendFn` \| `BeforeSendFn`[] | Allows modification or dropping of events before they're sent to PostHog. If an array is provided, the functions are run in order. If a function returns null, the event will be dropped. | `Omit.before_send` |
 | <a id="property-bootstrap"></a> `bootstrap?` | `object` | Option to bootstrap the library with given distinctId and feature flags | `Omit.bootstrap` |
 | `bootstrap.distinctId?` | `string` | - | - |
@@ -3005,9 +3091,9 @@ Props for the PostHogMaskView component.
 | `bootstrap.isIdentifiedId?` | `boolean` | - | - |
 | <a id="property-captureaicompression"></a> `captureAiCompression?` | `"gzip"` \| `"none"` | How PostHog.captureAi request bodies are compressed, separately from `disableCompression`. `'gzip'` is used only where the runtime provides `CompressionStream`; elsewhere bodies are sent uncompressed. **Default** `'gzip'` | - |
 | <a id="property-captureaimaxeventbytes"></a> `captureAiMaxEventBytes?` | `number` | Maximum size, in bytes, of a serialized PostHog.captureAi event. The SDK drops a larger event and `captureAi()` returns `undefined`. Use it to lower the limit: PostHog drops AI events whose properties are over 8 MiB, so a larger value, or a value of `0` or less, uses the default. **Default** `8454144 (8 MiB plus 64 KiB for the rest of the event)` | - |
-| <a id="property-captureaimaxqueuesize"></a> `captureAiMaxQueueSize?` | `number` | Maximum number of PostHog.captureAi events kept in their queue before the oldest are dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default. Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is killed, older events and an event over 5 MiB are lost. **Default** `100` | - |
+| <a id="property-captureaimaxqueuesize"></a> `captureAiMaxQueueSize?` | `number` | Maximum number of PostHog.captureAi events kept in their queue before the oldest are dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default. Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is killed, older events and an event over 5 MiB are lost. With `persistence: 'memory'`, or when events are stored in AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system isn't available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself rather than a wrapper around it: a wrapper is used like file storage and holds the AI queue. **Default** `100` | - |
 | <a id="property-captureairequesttimeoutms"></a> `captureAiRequestTimeoutMs?` | `number` | Timeout, in milliseconds, of a PostHog.captureAi request. AI requests can carry several MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default. **Default** `60000` | - |
-| <a id="property-captureapplifecycleevents"></a> `captureAppLifecycleEvents?` | `boolean` | Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded. Application Installed and Application Updated events are not supported with persistence set to 'memory'. **Default** `true` | - |
+| <a id="property-captureapplifecycleevents"></a> `captureAppLifecycleEvents?` | `boolean` | Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded. Application Installed and Application Updated events are not supported with persistence set to 'memory'. On by default from 4.39.0. **Default** `true` | - |
 | <a id="property-capturepushnotificationopened"></a> `capturePushNotificationOpened?` | `boolean` | Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`. Fires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call PostHog.capturePushNotificationOpened for the taps it misses. The native SDK builds and sends this event, so JS `before_send` never sees it. On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to catch a tap that cold-launches the app. Two switches gate automatic capture there, and `false` on either one means the SDK sends no `$push_notification_opened` of its own (an explicit PostHog.capturePushNotificationOpened call still captures): - This option set to `false` turns capture off when `setup()` runs and releases the launch hook, dropping the tap it was holding. The hook is still installed for the window between launch and `setup()`. - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist` (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your JS runs, and forces capture off at `setup()` even when this option is `true`. It is the same key posthog-flutter reads. Not supported on web. **Default** `true` | - |
 | <a id="property-capturepushnotificationsubscriptions"></a> `capturePushNotificationSubscriptions?` | `boolean` | Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`. Your app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to PostHog.registerPushNotificationToken yourself. Not supported on web or macOS. **Default** `true` | - |
 | <a id="property-customappproperties"></a> `customAppProperties?` | `PostHogCustomAppProperties` \| ((`properties`) => `PostHogCustomAppProperties`) | Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated | - |
@@ -3033,15 +3119,15 @@ Props for the PostHogMaskView component.
 | <a id="property-host"></a> `host?` | `string` | PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' **Default** `'https://us.i.posthog.com'` | `Omit.host` |
 | <a id="property-logs"></a> `logs?` | `PostHogLogsConfig` | Logs feature configuration. Enables structured log capture via `posthog.captureLog(...)` or `posthog.logger.info(...)`. Records ship to PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer, AppState change, buffer fill, or manual `flushLogs()`. Capture is **unconditional** — calling the API ships records as long as the SDK is initialized and the user hasn't opted out. The only blockers are `optedOut`, missing/empty `body`, and missing API key. All fields below are optional; per-SDK defaults apply (mobile defaults are tuned for cellular bandwidth and battery, ~50 logs/sec ceiling). **Examples** **Minimal — just service tagging, defaults for everything else** `new PostHog(key, { logs: { serviceName: 'my-app', environment: 'production' } })` **Tune for higher-volume logging** `new PostHog(key, { logs: { serviceName: 'my-app', rateCap: { maxLogs: 5000, windowMs: 60000 }, maxBufferSize: 500, beforeSend: (r) => r.body.includes('secret') ? null : r, } })` | - |
 | <a id="property-maxbatchsize"></a> `maxBatchSize?` | `number` | The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) **Default** `100` | `Omit.maxBatchSize` |
-| <a id="property-maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) **Default** `1000` | `Omit.maxQueueSize` |
+| <a id="property-maxqueuesize"></a> `maxQueueSize?` | `number` | The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`) When the queue is full, the SDK drops the oldest event first. **Default** `1000` | `Omit.maxQueueSize` |
 | <a id="property-overridedisplaylanguage"></a> `overrideDisplayLanguage?` | `string` \| `null` | Overrides the language used when rendering translated survey copy. When unset, the SDK falls back to the persisted person property `language` and then the device locale. | - |
-| <a id="property-persistence"></a> `persistence?` | `"memory"` \| `"file"` | Allows you to provide the storage type. 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage. **Default** `'file'` | - |
+| <a id="property-persistence"></a> `persistence?` | `"memory"` \| `"file"` | Allows you to provide the storage type. 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage. Events captured offline stay in the queue. A flush that fails with a network error keeps them and retries later. With 'file', the queue is stored on the device and survives an app restart. **Default** `'file'` | - |
 | <a id="property-personprofiles"></a> `personProfiles?` | `"always"` \| `"identified_only"` \| `"never"` | Determines when to create Person Profiles for users. - 'always': Always create a person profile for every user (anonymous and identified). - 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group(). Events captured before identification will NOT have person profiles and will be anonymous events. - 'never': Never create person profiles. identify(), alias(), and group() will be no-ops. **Default** `'identified_only'` **Examples** `// Only create profiles when users are identified (recommended for most apps) const posthog = new PostHog('<api_key>', { personProfiles: 'identified_only', }) // Later when user logs in: posthog.identify('user-123', { email: 'user@example.com' })` `// Always create profiles (for apps where you want to track all users) const posthog = new PostHog('<api_key>', { personProfiles: 'always', })` `// Never create profiles (anonymous analytics only) const posthog = new PostHog('<api_key>', { personProfiles: 'never', })` | `Omit.personProfiles` |
 | <a id="property-preloadfeatureflags"></a> `preloadFeatureFlags?` | `boolean` | Whether to load feature flags when initialized or not **Default** `true` | `Omit.preloadFeatureFlags` |
 | <a id="property-pushidentityprovider"></a> `pushIdentityProvider?` | `PostHogPushIdentityProvider` | Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`. Called with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds. | - |
 | <a id="property-rageclickconfig"></a> `rageClickConfig?` | `PostHogRageClickConfig` | Configure rage click (rage tap) detection on iOS. The native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them. Android is unaffected — posthog-android does not have native rage click detection. Requires `@posthog/react-native-plugin` version 2.7.0 or newer. | - |
 | <a id="property-remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` | `Omit.remoteConfigRequestTimeoutMs` |
-| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | A list of headers that should be sent with requests to the PostHog API. | - |
+| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets itself, such as `Authorization` and `User-Agent`, replace yours. | - |
 | <a id="property-requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` | `Omit.requestTimeout` |
 | <a id="property-sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` | `Omit.sendFeatureFlagEvent` |
 | <a id="property-sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` | `Omit.sessionExpirationTimeSeconds` |
@@ -3163,7 +3249,7 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="capturelog-1"></a> `captureLog?` | `boolean` | Enable capturing of logs as console events **Default** `true` |
 | <a id="capturenetworktelemetry"></a> `captureNetworkTelemetry?` | `boolean` | Enable capturing network telemetry iOS only **Default** `true` |
 | <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin`. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
-| <a id="ioscapturemethod"></a> `iOSCaptureMethod?` | `"standard"` \| `"background"` \| `"gpu"` | How iOS captures each replay screenshot. - `'standard'`: draws the window on the main thread. - `'background'`: draws the window on a background queue, so the main thread only reads mask positions. Triggers Main Thread Checker warnings in debug builds, and may briefly freeze the app the first time a screenshot is captured. Consider disabling Main Thread Checker in your scheme's run diagnostics. - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread steps. Content from another process, such as a web view's page, and Metal content are not captured. Falls back to `'standard'` when a capture can't be made this way. iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`. **Default** `'standard'` |
+| <a id="ioscapturemethod"></a> `iOSCaptureMethod?` | `"standard"` \| `"gpu"` | How iOS captures each replay screenshot. - `'standard'`: draws the window on the main thread. - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread steps. Content from another process, such as a web view's page, and Metal content are not captured. Falls back to `'standard'` when a capture can't be made this way. iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`. **Default** `'standard'` |
 | <a id="maskallimages"></a> `maskAllImages?` | `boolean` | Enable masking of all images to a placeholder **Default** `true` |
 | <a id="maskallsandboxedviews"></a> `maskAllSandboxedViews?` | `boolean` | Enable masking of all sandboxed system views These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController iOS only **Default** `true` |
 | <a id="maskalltextinputs"></a> `maskAllTextInputs?` | `boolean` | Enable masking of all text and text input fields **Default** `true` |
@@ -3300,7 +3386,7 @@ Common types shared across PostHog SDKs
 | Property | Type |
 | ------ | ------ |
 | <a id="id-1"></a> `id` | `number` |
-| <a id="name"></a> `name?` | `string` |
+| <a id="name-1"></a> `name?` | `string` |
 | <a id="steps"></a> `steps?` | `ActionStepType`[] |
 
 ### `SurveyAppearance`

@@ -92,6 +92,35 @@ describe('React Native captureAi', () => {
     expect(requests[0].headers.Authorization).toBe('Bearer test-token')
   })
 
+  it('sends trace feedback to the AI endpoint', async () => {
+    const client = await newPostHog()
+
+    client.captureTraceFeedback(42, 'great answer')
+    await client.flush()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_feedback']])
+    expect(sent(ANALYTICS_PATH)).toEqual([])
+    expect(requests[0].body.batch[0].properties).toMatchObject({
+      $ai_trace_id: '42',
+      $ai_feedback_text: 'great answer',
+    })
+  })
+
+  it('sends trace metrics to the AI endpoint', async () => {
+    const client = await newPostHog()
+
+    client.captureTraceMetric('trace-1', 'latency', 1.5)
+    await client.flush()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_metric']])
+    expect(sent(ANALYTICS_PATH)).toEqual([])
+    expect(requests[0].body.batch[0].properties).toMatchObject({
+      $ai_trace_id: 'trace-1',
+      $ai_metric_name: 'latency',
+      $ai_metric_value: '1.5',
+    })
+  })
+
   it('keeps $ai_ events captured with capture() on the analytics endpoint', async () => {
     const client = await newPostHog()
 
@@ -235,6 +264,27 @@ describe('React Native captureAi', () => {
     const next = await newPostHog()
     await next.flush()
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
+  it('sends AI events once the queue is full when captureAiMaxQueueSize is below flushAt', async () => {
+    const client = await newPostHog({ flushAt: 20, captureAiMaxQueueSize: 2 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+
+    await vi.waitFor(() => expect(sent(AI_PATH)).toEqual([['$ai_generation', '$ai_generation']]))
+  })
+
+  it('stores kept AI events with only their uuid, JSON and sizes', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog()
+    client.captureAi('$ai_generation')
+    await client.flush()
+    await client.shutdown()
+    posthog = undefined
+
+    const [stored] = JSON.parse(cache['.posthog-rn-ai.json']).content.ai_queue
+    expect(Object.keys(stored).sort()).toEqual(['bytes', 'json', 'propertiesBytes', 'uuid'])
   })
 
   it('persists only the newest 5 MiB of kept AI events for the next launch', async () => {

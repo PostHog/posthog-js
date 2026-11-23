@@ -335,7 +335,10 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
    * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
    *
    * Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is
-   * killed, older events and an event over 5 MiB are lost.
+   * killed, older events and an event over 5 MiB are lost. With `persistence: 'memory'`, or when events
+   * are stored in AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system
+   * isn't available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself
+   * rather than a wrapper around it: a wrapper is used like file storage and holds the AI queue.
    *
    * @default 100
    */
@@ -1174,16 +1177,18 @@ export class PostHog extends PostHogCore {
       )
       maxEventBytes = CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES
     }
+    const maxQueueSize = Math.max(
+      1,
+      Math.floor(positive(options?.captureAiMaxQueueSize) ?? CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE)
+    )
     return new CaptureAiLane(
       this._aiStorage,
       {
-        flushAt: this.flushAt,
+        // A queue smaller than flushAt would evict events before a count flush could send them.
+        flushAt: Math.min(this.flushAt, maxQueueSize),
         maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? 100),
         flushIntervalMs: options?.flushInterval ?? 10000,
-        maxQueueSize: Math.max(
-          1,
-          Math.floor(positive(options?.captureAiMaxQueueSize) ?? CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE)
-        ),
+        maxQueueSize,
         maxEventBytes: Math.floor(maxEventBytes),
       },
       () => this._getCaptureAiSender(),
@@ -1780,6 +1785,44 @@ export class PostHog extends PostHogCore {
     const aiOptions: CaptureAiOptions = { ...options, uuid, _captureAi: true, _admission: admission }
     this.capture(event, properties, aiOptions)
     return initialized ? admission.uuid : uuid
+  }
+
+  /**
+   * Capture written user feedback for a LLM trace, as an `$ai_feedback` event sent with
+   * {@link PostHog.captureAi}. Numeric values are converted to strings.
+   *
+   * {@label LLM analytics}
+   *
+   * @public
+   *
+   * @param traceId The trace ID to capture feedback for.
+   * @param userFeedback The feedback to capture.
+   */
+  captureTraceFeedback(traceId: string | number, userFeedback: string): void {
+    this.captureAi('$ai_feedback', {
+      $ai_feedback_text: userFeedback,
+      $ai_trace_id: String(traceId),
+    })
+  }
+
+  /**
+   * Capture a metric for a LLM trace, as an `$ai_metric` event sent with {@link PostHog.captureAi}.
+   * Numeric values are converted to strings.
+   *
+   * {@label LLM analytics}
+   *
+   * @public
+   *
+   * @param traceId The trace ID to capture the metric for.
+   * @param metricName The name of the metric to capture.
+   * @param metricValue The value of the metric to capture.
+   */
+  captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean): void {
+    this.captureAi('$ai_metric', {
+      $ai_metric_name: metricName,
+      $ai_metric_value: String(metricValue),
+      $ai_trace_id: String(traceId),
+    })
   }
 
   /**
