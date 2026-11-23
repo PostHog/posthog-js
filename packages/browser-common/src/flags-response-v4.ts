@@ -134,8 +134,9 @@ const readTypedRecord = (key: string, raw: unknown): TypedFlagDetail => {
 /**
  * Reads the flag records of a `/flags` response body. Each typed record in `flags` is replaced by
  * its stored rendering, and the rest of the body is returned unchanged. A record that cannot be
- * read is replaced by a failed flag with nothing else, and the other records are not affected.
- * A failed flag has no value: the getters return no result for it, which is not the same as off.
+ * read is replaced by a disabled flag with nothing else, and the other records are not affected.
+ * Such a flag reads as `false`. It is not marked failed: only a record that the server marks
+ * failed has no value.
  *
  * `withoutTypedValues` says whether the body has a record without a typed `value`, or is a v1
  * response with flags, which a server that does not serve v4 sends.
@@ -163,7 +164,7 @@ export const readFlagRecords = (
                 try {
                     return [key, readTypedRecord(key, raw) as unknown as FeatureFlagDetail]
                 } catch {
-                    return [key, { key, enabled: false, failed: true }]
+                    return [key, { key, enabled: false }]
                 }
             }
         )
