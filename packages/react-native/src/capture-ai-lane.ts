@@ -27,12 +27,36 @@ export interface CaptureAiLaneSettings {
   maxEventBytes: number
 }
 
-const isQueuedEvent = (item: unknown): item is SerializedV1Event =>
-  typeof item === 'object' &&
-  item !== null &&
-  typeof (item as SerializedV1Event).uuid === 'string' &&
-  typeof (item as SerializedV1Event).json === 'string' &&
-  typeof (item as SerializedV1Event).bytes === 'number'
+/**
+ * How a queued AI event is stored across launches. It is written field by field rather than as core's
+ * `SerializedV1Event`, so a change to that type can't silently drop events an earlier version queued.
+ */
+interface PersistedAiEvent {
+  uuid: string
+  json: string
+  bytes: number
+  propertiesBytes: number
+}
+
+const toPersisted = ({ uuid, json, bytes, propertiesBytes }: SerializedV1Event): PersistedAiEvent => ({
+  uuid,
+  json,
+  bytes,
+  propertiesBytes,
+})
+
+const isPersistedEvent = (item: unknown): item is PersistedAiEvent => {
+  if (typeof item !== 'object' || item === null) {
+    return false
+  }
+  const { uuid, json, bytes, propertiesBytes } = item as PersistedAiEvent
+  return (
+    typeof uuid === 'string' &&
+    typeof json === 'string' &&
+    typeof bytes === 'number' &&
+    typeof propertiesBytes === 'number'
+  )
+}
 
 /**
  * The `captureAi()` delivery lane: its own durable queue, flush cycle, resend wait and sender, so a
@@ -254,7 +278,7 @@ export class CaptureAiLane {
       return this._events
     }
     const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
-    const events = Array.isArray(stored) ? stored.filter(isQueuedEvent) : []
+    const events = Array.isArray(stored) ? stored.filter(isPersistedEvent).map(this._fromPersisted) : []
     // Until storage has loaded, a read sees nothing yet; caching it would lose an earlier launch's events.
     if (this._storageLoaded) {
       this._events = events
@@ -262,14 +286,26 @@ export class CaptureAiLane {
     return events
   }
 
+  // Reads before storage has loaded aren't cached, so the same stored item must map to the same event each time.
+  private _restored = new WeakMap<PersistedAiEvent, SerializedV1Event>()
+
+  private _fromPersisted = (item: PersistedAiEvent): SerializedV1Event => {
+    let event = this._restored.get(item)
+    if (!event) {
+      event = toPersisted(item)
+      this._restored.set(item, event)
+    }
+    return event
+  }
+
   private _setQueue(queue: SerializedV1Event[]): void {
     this._events = queue
     // Newest first, skipping an event that doesn't fit so it never costs the smaller ones before it their place.
-    const persisted: SerializedV1Event[] = []
+    const persisted: PersistedAiEvent[] = []
     let bytes = 0
     for (let index = queue.length - 1; index >= 0; index--) {
       if (bytes + queue[index].bytes <= CAPTURE_AI_MAX_PERSISTED_BYTES) {
-        persisted.push(queue[index])
+        persisted.push(toPersisted(queue[index]))
         bytes += queue[index].bytes
       }
     }
