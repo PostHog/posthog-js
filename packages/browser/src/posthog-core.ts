@@ -4939,6 +4939,7 @@ export class PostHog implements PostHogInterface {
         // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
+            this.heatmaps?.discardPending()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {
@@ -5033,6 +5034,8 @@ export class PostHog implements PostHogInterface {
             // Consent granted in another tab leaves this tab holding the cookieless sentinel, and no $opt_in capture
             // will heal it below. Adopt the shared identity before re-enabling persistence saves the stale one over it.
             this._syncCookielessIdentity()
+        } else {
+            this.heatmaps?.discardPending()
         }
 
         this.consent.optInOut(true)
@@ -5105,6 +5108,7 @@ export class PostHog implements PostHogInterface {
         const sessionRecording = this.sessionRecording
         // Identity changes must not let queued recorder work flush under the cookieless identity.
         sessionRecording?.dispose({ discardBufferedEvents: true })
+        this.heatmaps?.discardPending()
 
         if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
             this._reset(true, true)
