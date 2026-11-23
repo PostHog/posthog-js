@@ -2,4 +2,7 @@
 'posthog-node': minor
 ---
 
-`posthog.emails.send()` with `templateKey` takes a `category` that defines the email's message category in code, so marketing email honors opt-outs. A send creates its category when the project has none with that key and restores it when it was deleted, as long as the project has room under its active category limit; the category's name and description apply only on creation, and you change them later in PostHog. Without a category, the email follows the category of the template that `templateKey` names (when code-send categories are enabled), or is transactional with no category. A template made in PostHog must be enabled for transactional sends first (`template_not_transactional`), and PostHog refuses an enabled template in a marketing category with `marketing_template`. A matching sendable template fixes the category; `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no category, so PostHog refuses it with `category_mismatch` on a sendable template in a transactional category.
+Added an optional `category` option to `posthog.emails.send()` code sends (`templateKey`), along with the exported `MessageCategory` type and `TRANSACTIONAL_EMAIL_CATEGORY` (`'transactional'`) constant.
+
+- Pass a `MessageCategory` (`{ key, type, name, description? }`) to send marketing or categorized transactional emails from code, honoring recipient opt-outs and unsubscribe requirements for marketing sends.
+- Pass `TRANSACTIONAL_EMAIL_CATEGORY` for uncategorized transactional sends, or omit `category` to keep today's default behavior (following any matching PostHog template's category when code-send categories are enabled).

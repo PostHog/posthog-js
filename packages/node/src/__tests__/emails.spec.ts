@@ -1769,6 +1769,53 @@ describe('emails', () => {
       expect(fetch).not.toHaveBeenCalled()
     })
 
+    it('ignores an inherited subject on a category-free template send as before', async () => {
+      replies = [accepted()]
+      const proto = { subject: 'Inherited subject' }
+      const options = Object.assign(Object.create(proto), {
+        to: 'reader@example.com',
+        templateId: TEMPLATE_ID,
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: {},
+      })
+    })
+
+    it('ignores a non-enumerable templateData on a category-free code send as before', async () => {
+      replies = [accepted()]
+      const options: Record<string, unknown> = { ...CODE_SEND }
+      Object.defineProperty(options, 'templateData', {
+        value: { name: 'Ada' },
+        enumerable: false,
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+      })
+    })
+
     it.each([
       ['a category key as a bare string', 'newsletter'],
       ['null', null],
@@ -1824,11 +1871,15 @@ describe('emails', () => {
         const request = postedSend()
         expect(request.url).toBe(SEND_URL)
         expect(request.method).toBe('POST')
+        expect(request.body).toMatchObject({
+          to: CODE_SEND.to,
+          template_key: 'templateKey' in overrides ? overrides.templateKey : CODE_SEND.templateKey,
+          subject: CODE_SEND.subject,
+          html: 'html' in overrides ? overrides.html : CODE_SEND.html,
+        })
+        expect('category' in request.body).toBe(category !== undefined)
         if (category !== undefined) {
           expect(request.body.category).toEqual(category)
-        }
-        if ('html' in overrides) {
-          expect(request.body.html).toBe(overrides.html)
         }
         if ('cc' in overrides) {
           expect(request.body.cc).toEqual(['copy@example.com'])
@@ -1886,9 +1937,9 @@ describe('emails', () => {
           code: 'field_not_accepted',
           detail: "PostHog doesn't take this field yet, so it didn't send the email.",
           attr: 'category',
-          fix: 'Send the email without this field, or send it again once PostHog takes the field.',
+          fix: 'Wait until PostHog accepts `category`, then send the email again.',
         },
-        'Send the email without this field, or send it again once PostHog takes the field.',
+        'Wait until PostHog accepts `category`, then send the email again.',
       ],
       [
         'pre-category Django',

@@ -637,12 +637,12 @@ function codeFormFields(send: UncheckedSend): Record<string, unknown> {
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
-    category: checkedCategory(category),
+    ...(category !== undefined && { category: checkedCategory(category) }),
   }
 }
 
-function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory | undefined {
-  if (value === undefined || value === TRANSACTIONAL_EMAIL_CATEGORY) {
+function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
+  if (value === TRANSACTIONAL_EMAIL_CATEGORY) {
     return value
   }
   if (value !== null && typeof value === 'object') {
@@ -653,7 +653,7 @@ function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | 
       (type === 'marketing' || type === 'transactional') &&
       (description === undefined || typeof description === 'string')
     ) {
-      return { key, type, name, description }
+      return description === undefined ? { key, type, name } : { key, type, name, description }
     }
   }
   throw invalid(
@@ -747,13 +747,11 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
   const ownKeys = Object.keys(send)
-  const checked = new Set(ownKeys)
   const field =
     ownKeys.find((name) => !form.fields.has(name) && send[name as keyof UncheckedSend] !== undefined) ??
-    Array.from(otherForm.fields).find(
-      (name) =>
-        !form.fields.has(name) && !checked.has(name) && name in send && send[name as keyof UncheckedSend] !== undefined
-    )
+    (!form.fields.has('category') && !ownKeys.includes('category') && send.category !== undefined
+      ? 'category'
+      : undefined)
   if (field === undefined) {
     return
   }
