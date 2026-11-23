@@ -8,8 +8,8 @@
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
-- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture` — pass `iOSCaptureMethod: 'background'` instead
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default), `'background'` or experimental `'gpu'`
+- **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do

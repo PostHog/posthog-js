@@ -79,17 +79,14 @@ export function App() {
 
 The optional `@posthog/react-native-plugin` package needs `posthog-ios`. Choose one path to resolve it.
 
-| Path                                                       | Requirements                                                                                                 | Setup                                                                                                                                                 |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CocoaPods                                                  | A project that uses CocoaPods                                                                                | Run `pod install` in `ios`. The plugin podspec adds `posthog-ios` for you. This is the default.                                                       |
-| CocoaPods with `posthog-ios` through Swift Package Manager | React Native 0.75 or later and dynamic frameworks                                                            | Set `"posthog.useSpm": "true"` in `ios/Podfile.properties.json`. Add `use_frameworks! :linkage => :dynamic` to `ios/Podfile`. Then run `pod install`. |
-| Full Swift Package Manager                                 | `@posthog/react-native-plugin` 2.4.0 or later, Xcode 16 or later, and an iOS 15.1 or later deployment target | Run `npx react-native spm add --deintegrate --yes` in `ios`. Don't run `pod install`.                                                                 |
-
-The hybrid path changes only how the plugin resolves `posthog-ios`. The plugin and your other dependencies still use CocoaPods.
+| Path                       | Requirements                                                                                             | Setup                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| CocoaPods                  | React Native 0.75 or later                                                                               | Run `pod install` in `ios`. The plugin podspec resolves `posthog-ios` 4.0 through Swift Package Manager. This is the default. |
+| Full Swift Package Manager | `@posthog/react-native-plugin` 3.0 or later, Xcode 26 or later, and an iOS 15 or later deployment target | Run `npx react-native spm add --deintegrate --yes` in `ios`. Don't run `pod install`.                                         |
 
 The full path uses React Native's experimental integration without CocoaPods. Every native dependency in your app must support it. `--deintegrate` removes CocoaPods from the iOS project, so commit or back up the project first. PostHog verifies this path with an iOS-only React Native 0.87.1 app and React Native Community CLI 20.2.0. It is not verified with Expo.
 
-The CocoaPods and hybrid paths keep the plugin's iOS 13 minimum.
+Both paths need an iOS 15 or later deployment target.
 
 ## Minimum versions
 
