@@ -317,4 +317,21 @@ describe('opted-out early-access catalogue requests', () => {
         expect((await extensionHost(client).sendRequest(path, init as SendRequestInit)).statusCode).toBe(0)
         expect(fetch).not.toHaveBeenCalled()
     })
+
+    it('refuses the catalogue request for a blocked user agent', async () => {
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ earlyAccessFeatures: definitions })))
+        const client = await create({
+            fetch,
+            flags: false,
+            optOutByDefault: true,
+            navigator: { userAgent: 'Googlebot/2.1' },
+        })
+        const response = await extensionHost(client).sendRequest(catalogue, {
+            target: 'api',
+            method: 'GET',
+            sentAt: 'query',
+        })
+        expect(response.statusCode).toBe(0)
+        expect(fetch).not.toHaveBeenCalled()
+    })
 })
