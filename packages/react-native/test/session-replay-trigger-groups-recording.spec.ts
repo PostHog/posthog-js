@@ -864,6 +864,7 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       nativeRecording = pluginConfig.sessionReplay.enabled && nativeAccepts
     })
     const replayEnabledAtSetup = (): boolean[] => setup.mock.calls.map(([, , config]) => config.sessionReplay.enabled)
+    const setMinimumDuration = vi.fn(async (_minimumDurationMs: number | null) => {})
 
     beforeEach(() => {
       nativeAccepts = true
@@ -871,6 +872,8 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       setup.mockClear()
       ;(replay as any).setup = setup
       ;(replay as any).setOptOut = vi.fn(async () => {})
+      setMinimumDuration.mockReset()
+      ;(replay as any).setSessionReplayMinimumDuration = setMinimumDuration
       replay.isEnabled.mockImplementation(async () => nativeRecording)
       replay.startRecording.mockImplementation(async () => {
         nativeRecording = nativeAccepts
@@ -884,6 +887,7 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       vi.useRealTimers()
       delete (replay as any).setup
       delete (replay as any).setOptOut
+      delete (replay as any).setSessionReplayMinimumDuration
       replay.startRecording.mockImplementation(async () => {})
       replay.stopRecording.mockImplementation(async () => {})
     })
@@ -1186,6 +1190,139 @@ describe('PostHog RN session replay v2 trigger groups', () => {
         await launchWithCachedConfig({ endpoint: '/s/', sampleRate: 0.5 }, { sessionReplayConfig: { sampleRate: 0.3 } })
 
         expect(sampleRateAtSetup()).toBe(0.3)
+      })
+    })
+
+    describe('the minimum duration sent to native', () => {
+      const minimumDurations = (): (number | null)[] => setMinimumDuration.mock.calls.map(([ms]) => ms)
+
+      const launch = async (sessionRecording: any): Promise<void> => {
+        currentSessionRecording = sessionRecording
+        await warmup()
+        setup.mockClear()
+        setMinimumDuration.mockClear()
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+      }
+
+      const slowGroup = { ...flagGroup, minDurationMs: 5000 }
+      const fastGroup = {
+        id: 'g2',
+        name: 'Other flag',
+        sampleRate: 1,
+        minDurationMs: 2000,
+        conditions: { matchType: 'any', flag: { flag: 'other-flag' } },
+      }
+
+      it('is the activated group minimum', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        expect(minimumDurations()).toEqual([5000])
+      })
+
+      it('lowers to the minimum of a second activated group', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup, fastGroup]))
+        expect(minimumDurations()).toEqual([5000])
+
+        currentFlags = { 'replay-flag': true, 'other-flag': true }
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(minimumDurations()).toEqual([5000, 2000])
+      })
+
+      it('is 0 when the activated group sets none', async () => {
+        await launch(v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }]))
+
+        expect(minimumDurations()).toEqual([0])
+      })
+
+      it('is cleared when the config drops the groups', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        currentSessionRecording = { endpoint: '/s/' }
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(minimumDurations()).toEqual([5000, null])
+      })
+
+      it('reaches native after setup and before the first start', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        const [sentAt] = setMinimumDuration.mock.invocationCallOrder
+        expect(sentAt).toBeGreaterThan(setup.mock.invocationCallOrder[0])
+        expect(sentAt).toBeLessThan(replay.startRecording.mock.invocationCallOrder[0])
+      })
+
+      it('is not sent again for an unchanged value', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(minimumDurations()).toEqual([5000])
+      })
+
+      it('is sent again to a new native instance', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+        await posthog.shutdown()
+
+        setup.mockClear()
+        posthog = newPostHog(replayOnlyOptions)
+        await posthog.ready()
+        await settle()
+
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(minimumDurations()).toEqual([5000, 5000])
+      })
+
+      it('is cleared on opt-out', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        await posthog.optOut()
+        await settle()
+
+        expect(minimumDurations()).toEqual([5000, null])
+      })
+
+      it('is cleared on reset()', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+
+        posthog.reset()
+
+        expect(minimumDurations()).toEqual([5000, null])
+      })
+
+      it('is skipped with one warning when the plugin lacks the method', async () => {
+        delete (replay as any).setSessionReplayMinimumDuration
+        currentFlags = { 'replay-flag': true }
+        currentSessionRecording = v2Config([slowGroup])
+        await warmup()
+
+        posthog = newPostHog(replayOnlyOptions)
+        const warn = vi.spyOn((posthog as any)._logger, 'warn')
+        const minimumDurationWarnings = (): number =>
+          warn.mock.calls.filter(([message]) => String(message).includes('minimum duration')).length
+        await posthog.ready()
+        await settle()
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(replay.startRecording).toHaveBeenCalled()
+        expect(setMinimumDuration).not.toHaveBeenCalled()
+        expect(minimumDurationWarnings()).toBe(1)
       })
     })
 

@@ -439,6 +439,12 @@ export class PostHog extends PostHogCore {
   private _sessionReplayTriggerGroups: SessionReplayTriggerGroup[] | null = null
   private _triggerGroupsEvaluator = new SessionReplayTriggerGroupsEvaluator()
   private _triggerGroupsDebugRegistered = false
+  // Minimum duration native holds a recording for: the lowest among activated groups (0 when none
+  // sets one) under v2, null to leave native on the project's flat minimum.
+  private _nativeMinimumDurationMs: number | null = null
+  // undefined until sent to the current native instance.
+  private _lastSentMinimumDurationMs: number | null | undefined
+  private _minimumDurationUnsupportedWarned = false
   private _eventsStoragePreloadSucceeded = true
   private _fatalCaptureObservation?: {
     eventUuid: string
@@ -1303,6 +1309,7 @@ export class PostHog extends PostHogCore {
     // The persisted activation is wiped below; the in-memory evaluator must drop its copy too,
     // or a session id kept via propertiesToKeep would carry one user's activated groups forward.
     this._triggerGroupsEvaluator.clearActivation()
+    void this._syncNativeMinimumDuration(null)
     const wasOptedOut = this.optedOut
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
@@ -2353,11 +2360,13 @@ export class PostHog extends PostHogCore {
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
       )
     )
-    return this._triggerGroupsEvaluator.evaluate(
+    const decision = this._triggerGroupsEvaluator.evaluate(
       sessionId,
       this.getKnownFeatureFlags(),
       this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
     )
+    await this._syncNativeMinimumDuration(decision)
+    return decision
   }
 
   private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
@@ -3655,6 +3664,9 @@ export class PostHog extends PostHogCore {
         // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
         // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
         await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
+        // A fresh native instance has no minimum override; give it one before it records.
+        this._lastSentMinimumDurationMs = undefined
+        await this._sendNativeMinimumDuration()
         if (wasSessionReplayEnabled) {
           // if somehow the SDK is already enabled with a different sessionId, we reset it
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
@@ -3811,6 +3823,7 @@ export class PostHog extends PostHogCore {
           : []
       this._sessionReplayTriggerGroups = null
       this._unregisterTriggerGroupsDebugProperties()
+      await this._syncNativeMinimumDuration(null)
       if (restoreAppRecording) {
         await this._restoreAppRecording()
       } else if (
@@ -3837,6 +3850,7 @@ export class PostHog extends PostHogCore {
     }
 
     let recordingActive: boolean
+    let triggerGroupsDecision: SessionReplayTriggerGroupsDecision | null = null
     const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig, this._logger)
     this._replayEvaluatedSessionId = super.getSessionId()
     // Core drops the cached replay config both before the first fetch and for an explicit project
@@ -3887,6 +3901,7 @@ export class PostHog extends PostHogCore {
           `minDurationMs=${decision.minDurationMs ?? 'none'}, matched=${JSON.stringify(decision.matchedGroups)}.`
       )
       recordingActive = decision.shouldRecord
+      triggerGroupsDecision = decision
     } else {
       this._sessionReplayTriggerGroups = null
       this._unregisterTriggerGroupsDebugProperties()
@@ -3909,6 +3924,8 @@ export class PostHog extends PostHogCore {
         )
       }
     }
+
+    await this._syncNativeMinimumDuration(this.optedOut ? null : triggerGroupsDecision)
 
     // Consent overrides every other gate (linked flag, event triggers). It gates recording, not native
     // setup: native still comes up armed (it carries the push identity provider and its own opt-out
@@ -3999,6 +4016,41 @@ export class PostHog extends PostHogCore {
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
+    }
+  }
+
+  // Calls the plugin directly: _enqueueNative waits on the evaluation chain this runs in.
+  private async _syncNativeMinimumDuration(decision: SessionReplayTriggerGroupsDecision | null): Promise<void> {
+    // Under v2 a missing minimum is 0, not null: null would let native apply the project's flat minimum.
+    this._nativeMinimumDurationMs = decision ? (decision.minDurationMs ?? 0) : null
+    if (!OptionalReactNativePlugin?.setSessionReplayMinimumDuration) {
+      if (decision?.minDurationMs && !this._minimumDurationUnsupportedWarned) {
+        this._minimumDurationUnsupportedWarned = true
+        this._logger.warn(
+          'Session replay trigger group minimum duration requires a newer @posthog/react-native-plugin and is ignored.'
+        )
+      }
+      return
+    }
+    if (this._isNativePluginInitialized()) {
+      await this._sendNativeMinimumDuration()
+    }
+  }
+
+  private async _sendNativeMinimumDuration(): Promise<void> {
+    const minimumDurationMs = this._nativeMinimumDurationMs
+    if (
+      !OptionalReactNativePlugin?.setSessionReplayMinimumDuration ||
+      !this._isNativeSessionOwner() ||
+      minimumDurationMs === this._lastSentMinimumDurationMs
+    ) {
+      return
+    }
+    try {
+      await OptionalReactNativePlugin.setSessionReplayMinimumDuration(minimumDurationMs)
+      this._lastSentMinimumDurationMs = minimumDurationMs
+    } catch (e) {
+      this._logger.error(`Failed to set the session replay minimum duration: ${e}`)
     }
   }
 
