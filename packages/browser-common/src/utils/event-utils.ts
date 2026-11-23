@@ -47,26 +47,24 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     '_kx', // klaviyo
 ]
 
-// Other spellings of a campaign param that ad platforms put in landing URLs.
+// Other spellings of the Snapchat click ID that appear in landing URLs.
 // Query params are case-sensitive, so each spelling is listed exactly.
-// A value found under an alias is stored under the canonical name.
 // Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is left out
 // because ShareASale uses it for its own affiliate click ID.
+const SNAPCHAT_CLICK_ID_ALIASES = ['ScCid', 'SsCid']
+
+// Other spellings of a campaign param. A value found under an alias is stored
+// under the canonical name.
 export const CAMPAIGN_PARAM_ALIASES: Record<string, string[]> = {
-    sccid: ['ScCid', 'SsCid'],
+    sccid: SNAPCHAT_CLICK_ID_ALIASES,
 }
 
 // The URL params to mask when masking personal data: the personal data campaign
-// params and their aliases.
-export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => {
-    const params = PERSONAL_DATA_CAMPAIGN_PARAMS.slice()
-    each(CAMPAIGN_PARAM_ALIASES, function (aliases: string[], param: string) {
-        if (PERSONAL_DATA_CAMPAIGN_PARAMS.indexOf(param) !== -1) {
-            params.push(...aliases)
-        }
-    })
-    return params
-})()
+// params and the aliases of those params.
+export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => [
+    ...PERSONAL_DATA_CAMPAIGN_PARAMS,
+    ...SNAPCHAT_CLICK_ID_ALIASES,
+])()
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
@@ -259,7 +257,9 @@ export function getPersonInfo(
 
 export function getPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[]
 ): Record<string, any> {
     const { r: referrer, u } = info
     const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
@@ -274,7 +274,13 @@ export function getPersonPropsFromInfo(
         const location = convertToURL(url)
         props['$host'] = location?.host
         props['$pathname'] = location?.pathname
-        const campaignParams = _getCampaignParamsFromUrl(url)
+        // The stored URL may come from an older SDK version that masked fewer params,
+        // so mask it again before reading campaign params from it.
+        const campaignParams = _getCampaignParamsFromUrl(
+            maskPersonalDataProperties
+                ? maskQueryParams(url, [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])], MASKED)
+                : url
+        )
         extend(props, campaignParams)
     }
     if (referrer) {
@@ -286,9 +292,16 @@ export function getPersonPropsFromInfo(
 
 export function getInitialPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[]
 ): Record<string, any> {
-    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
+    const personProps = getPersonPropsFromInfo(
+        info,
+        disableCaptureUrlHashes,
+        maskPersonalDataProperties,
+        customPersonalDataProperties
+    )
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val

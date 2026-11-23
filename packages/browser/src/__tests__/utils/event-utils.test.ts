@@ -67,6 +67,19 @@ describe(`event-utils`, () => {
             expect(props).not.toHaveProperty('$initial_ScCid')
         })
 
+        it('should mask $initial_sccid from a stored URL that an older SDK left unmasked', () => {
+            const props = getInitialPersonPropsFromInfo(
+                {
+                    r: '$direct',
+                    u: 'https://www.example.com/path?utm_source=snapchat&ScCid=snap-click',
+                },
+                false,
+                true
+            )
+            expect(props['$initial_sccid']).toBe('<masked>')
+            expect(props['$initial_utm_source']).toBe('snapchat')
+        })
+
         it('should mask out custom personal data', () => {
             vi.spyOn(globals, 'location', 'get').mockReturnValue({
                 href: 'https://www.example.com/path?gclid=12345&other=true',
