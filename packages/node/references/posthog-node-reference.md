@@ -4711,7 +4711,7 @@ never renames a category or changes its description. Change those in PostHog.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-description"></a> `description?` | `string` | Notes about which emails belong to the category. Used only when the send creates the category. |
-| <a id="property-key"></a> `key` | `string` | Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category by its key: pass this same key as a topic key in `posthog.emails.setPreferences({ topics })`. |
+| <a id="property-key"></a> `key` | `string` | Identifies the category in the project, such as `'newsletter'`. PostHog trims surrounding whitespace when storing the key. Recipients opt out of a category by its key: pass the trimmed key as a topic key in `posthog.emails.setPreferences({ topics })`. |
 | <a id="property-name"></a> `name` | `string` | The category's name, shown in PostHog. Used only when the send creates the category. |
 | <a id="property-type-1"></a> `type` | `"transactional"` \| `"marketing"` | A marketing category honors the recipient's opt-outs. A transactional one only files the email. |
 

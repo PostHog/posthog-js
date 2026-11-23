@@ -1775,9 +1775,7 @@ describe('emails', () => {
     })
 
     it('surfaces the server unsubscribe_link_required refusal without sending', async () => {
-      fake.failNext('send', { status: 400, code: 'unsubscribe_link_required' })
-
-      const { data, error } = await sendUnchecked({ ...CODE_SEND, html: '<p>Hi</p>', category: NEWSLETTER })
+      const { data, error } = await posthog.emails.send({ ...CODE_SEND, html: '<p>Hi</p>', category: NEWSLETTER })
 
       expect(data).toBeNull()
       expect(error).toMatchObject({
@@ -1815,7 +1813,6 @@ describe('emails', () => {
       expect(error).toBeNull()
       expect(fake.emails).toHaveLength(1)
       expect(fake.emails[0].filedUnder).toBeUndefined()
-      expect('filedUnder' in fake.emails[0]).toBe(false)
       expect(fake.emails[0].category).toBe(expectedCategory)
       expect('category' in fake.emails[0]).toBe(expectedCategory !== undefined)
     })

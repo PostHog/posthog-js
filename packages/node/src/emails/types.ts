@@ -35,8 +35,9 @@ export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
  */
 export interface MessageCategory {
   /**
-   * Identifies the category in the project, such as `'newsletter'`. Recipients opt out of a category
-   * by its key: pass this same key as a topic key in `posthog.emails.setPreferences({ topics })`.
+   * Identifies the category in the project, such as `'newsletter'`. PostHog trims surrounding
+   * whitespace when storing the key. Recipients opt out of a category by its key: pass the trimmed
+   * key as a topic key in `posthog.emails.setPreferences({ topics })`.
    */
   key: string
   /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
