@@ -13,7 +13,7 @@ If you only use the plugin through `posthog-react-native`, you don't need any Ja
 | macOS deployment target                             | 10.15                                                           | 12.0                  |
 | How `posthog-ios` is installed                      | CocoaPods trunk, or Swift Package Manager with `posthog.useSpm` | Swift Package Manager |
 | `posthog-ios` version                               | 3.x                                                             | 4.0.5 or later 4.0.x  |
-| `posthog-android` version                           | 3.x                                                             | 4.0.3 or later 4.x    |
+| `posthog-android` version                           | 3.x                                                             | 4.0.3 or later 4.0.x  |
 | Xcode                                               | Set by `posthog-ios` 3.x                                        | 26 or later           |
 
 Android `minSdk` stays at 23. `posthog-react-native` still accepts this plugin through its optional `>= 2.12.7` peer range, and 4.47.0 is the first version that loads the plugin.
@@ -105,7 +105,7 @@ Apps on React Native's full Swift Package Manager integration, with no CocoaPods
 
 #### `posthog-android` 4.0
 
-If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.3, 5.0.0)` strictly, so Gradle resolves 4.x even when your build declares 3.x, and the build fails if another dependency requires 5.0 or later. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md).
+If native code in your app, or a native library it uses, calls `posthog-android` directly, update it for 4.0. Code compiled against 3.x fails at runtime with errors such as `NoSuchMethodError`. The plugin requires `posthog-android` `[4.0.3, 4.1.0)` strictly, so Gradle resolves 4.0.x even when your build declares 3.x, and the build fails if another dependency requires 4.1 or later. A later plugin release raises the range once it supports 4.1. See the [posthog-android migration guide](https://github.com/PostHog/posthog-android/blob/android-v4.0.0/MIGRATION.md).
 
 ### API changes
 
