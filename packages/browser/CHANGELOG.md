@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.454.1
+
+### Patch Changes
+
+- [#5833](https://github.com/PostHog/posthog-js/pull/5833) [`8140a3a`](https://github.com/PostHog/posthog-js/commit/8140a3af766a512fd3d3ba5cec5efe8c6e406516) Thanks [@jakesciotto](https://github.com/jakesciotto)! - Stop heatmaps and dead clicks from sending interactions that happened while capturing was off, such as clicks before the visitor consented.
+  (2026-11-23)
+
 ## 1.454.0
 
 ### Minor Changes
