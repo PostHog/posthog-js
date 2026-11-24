@@ -45,7 +45,24 @@ describe('parseSessionRecordingTriggerGroups', () => {
     expect(parseSessionRecordingTriggerGroups({ version: '2', triggerGroups: [] })).toBeNull()
     expect(parseSessionRecordingTriggerGroups({ version: 2 })).toBeNull()
     expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: {} })).toBeNull()
-    expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: [{ no: 'id' }] })).toBeNull()
+    expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: [] })).toBeNull()
+  })
+
+  it('stays v2 with no group when every group is unusable, and logs it', () => {
+    const logger = { error: vi.fn() }
+
+    expect(parseSessionRecordingTriggerGroups({ version: 2, triggerGroups: [{ id: '' }, null] }, logger)).toEqual([])
+    expect(logger.error).toHaveBeenCalledWith(
+      'Session recording has no usable trigger group, so no session is recorded.'
+    )
+
+    const evaluator = new SessionReplayTriggerGroupsEvaluator()
+    evaluator.onConfig([])
+    expect(evaluator.evaluate('s1', null, undefined)).toMatchObject({
+      shouldRecord: false,
+      hasPendingGroups: false,
+      groupsCount: 0,
+    })
   })
 
   it('parses a string sample rate: unparseable samples in, blank samples out', () => {

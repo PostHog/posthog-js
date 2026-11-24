@@ -54,7 +54,8 @@ function parseTriggerGroupSampleRate(value: JsonType | undefined): number | null
   return getFiniteNumber(value)
 }
 
-// null means v1: the web SDK keeps the v1 strategy unless version is 2 and a group parses.
+// null means v1: the web SDK keeps the v1 strategy unless version is 2 and the config has a group.
+// A config whose groups are all unusable stays v2 with no group, so the v1 fields don't record instead.
 export function parseSessionRecordingTriggerGroups(
   sessionRecording: boolean | { [key: string]: JsonType } | undefined | null,
   logger?: Pick<Logger, 'error'>
@@ -67,7 +68,7 @@ export function parseSessionRecordingTriggerGroups(
   }
 
   const rawGroups = sessionRecording['triggerGroups']
-  if (!Array.isArray(rawGroups)) {
+  if (!Array.isArray(rawGroups) || rawGroups.length === 0) {
     return null
   }
 
@@ -91,7 +92,10 @@ export function parseSessionRecordingTriggerGroups(
     })
   }
 
-  return groups.length > 0 ? groups : null
+  if (groups.length === 0) {
+    logger?.error('Session recording has no usable trigger group, so no session is recorded.')
+  }
+  return groups
 }
 
 function parseTriggerConditions(

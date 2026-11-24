@@ -523,6 +523,31 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     expect((posthog as any).sessionProps.$sdk_debug_replay_remote_trigger_matching_config).toBeUndefined()
   })
 
+  it('records nothing under a v2 config whose every group is unusable, whatever the v1 fields say', async () => {
+    currentSessionRecording = {
+      ...v2Config([{ id: '', name: 'No id', sampleRate: 0, conditions: { matchType: 'all' } }]),
+      sampleRate: '1.0',
+      linkedFlag: null,
+      eventTriggers: [],
+    }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(50)
+    await waitForNativePluginEvaluation(posthog)
+
+    expect(replay.start).not.toHaveBeenCalled()
+    expect((posthog as any)._sessionReplayTriggerGroups).toEqual([])
+    expect((posthog as any).sessionProps.$sdk_debug_replay_remote_trigger_matching_config).toEqual('v2_trigger_groups')
+    expect((posthog as any).sessionProps.$sdk_debug_replay_trigger_groups_count).toEqual(0)
+
+    await posthog.startSessionRecording()
+    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.startRecording).not.toHaveBeenCalled()
+  })
+
   it('restores a recording the app started on opt-in without waiting on a legacy eventTriggers key in a v2 config', async () => {
     // v2 replaces the v1 event triggers even when the config still carries them, so with replay
     // not enabled the restore must not hold the app's recording until a v1 trigger fires.

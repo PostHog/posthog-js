@@ -3819,7 +3819,7 @@ export class PostHog extends PostHogCore {
       // Trigger groups replace event triggers and only gate automatic replay, so both stay disarmed
       // under a v2 config.
       this._sessionReplayEventTriggers =
-        this._sessionReplayWanted && !parseSessionRecordingTriggerGroups(cachedReplayConfig, this._logger)
+        this._sessionReplayWanted && parseSessionRecordingTriggerGroups(cachedReplayConfig, this._logger) === null
           ? this._parseEventTriggers(cachedReplayConfig['eventTriggers'])
           : []
       this._sessionReplayTriggerGroups = null
