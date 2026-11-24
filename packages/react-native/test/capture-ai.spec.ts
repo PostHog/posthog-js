@@ -170,6 +170,34 @@ describe('React Native captureAi', () => {
     }
   })
 
+  it('reports AI events dropped before sending on posthog.on("error")', async () => {
+    const client = await newPostHog({ captureAiMaxEventBytes: 2000, captureAiMaxQueueSize: 1, flushAt: 10 })
+    vi.spyOn((client as any)._logger, 'warn').mockImplementation(() => {})
+    const errors: any[] = []
+    client.on('error', (error) => errors.push(error))
+
+    expect(client.captureAi('$ai_generation', { blob: 'x'.repeat(5000) })).toBeUndefined()
+    const first = client.captureAi('$ai_span', { name: 'first' })
+    client.captureAi('$ai_span', { name: 'second' })
+
+    expect(errors.map((error) => error.drops)).toEqual([
+      [{ uuid: expect.any(String), details: 'event too large' }],
+      [{ uuid: first, details: 'queue full' }],
+    ])
+    expect(errors[0].endpoint).toBe('/i/v1/ai/events')
+  })
+
+  it('keeps captureAi() from throwing when an error listener throws', async () => {
+    const client = await newPostHog({ captureAiMaxEventBytes: 2000 })
+    vi.spyOn((client as any)._logger, 'warn').mockImplementation(() => {})
+    vi.spyOn((client as any)._logger, 'error').mockImplementation(() => {})
+    client.on('error', () => {
+      throw new Error('listener failed')
+    })
+
+    expect(() => client.captureAi('$ai_generation', { blob: 'x'.repeat(5000) })).not.toThrow()
+  })
+
   it('uses the default limit when captureAiMaxEventBytes is above it', async () => {
     const client = await newPostHog({ captureAiMaxEventBytes: 1024 * 1024 * 1024 })
 

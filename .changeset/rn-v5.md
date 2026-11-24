@@ -21,4 +21,5 @@
 - Cap each capture request at 5 MiB of event bytes, starting a new request before a batch would pass it
 - Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts up to their newest 5 MiB, except with `persistence: 'memory'` or AsyncStorage, where they're kept only in memory
 - **Breaking:** `captureTraceFeedback()` and `captureTraceMetric()` send `$ai_feedback` and `$ai_metric` through `captureAi()` to the AI endpoint instead of the analytics endpoint
+- Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them

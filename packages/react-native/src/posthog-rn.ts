@@ -1202,7 +1202,16 @@ export class PostHog extends PostHogCore {
         maxEventBytes: Math.floor(maxEventBytes),
       },
       () => this._getCaptureAiSender(),
-      this._logger
+      this._logger,
+      (drops) => {
+        const error = new CaptureError({ endpoint: AI_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+        error.message = `Dropped ${drops.length} event(s) for ${AI_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
+        try {
+          this._events.emit('error', error)
+        } catch (e) {
+          this._logger.error('An error listener threw:', e)
+        }
+      }
     )
   }
 

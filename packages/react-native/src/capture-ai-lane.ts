@@ -3,6 +3,7 @@ import {
   canonicalizeUuid,
   serializeV1Event,
   wireProblem,
+  type CaptureDroppedEvent,
   type SerializedV1Event,
   type V1CaptureSender,
   type V1SendDeferral,
@@ -79,7 +80,8 @@ export class CaptureAiLane {
     private readonly _storage: PostHogRNStorage,
     private readonly _settings: CaptureAiLaneSettings,
     private readonly _sender: () => V1CaptureSender,
-    private readonly _logger: Logger
+    private readonly _logger: Logger,
+    private readonly _onLocalDrops: (drops: CaptureDroppedEvent[]) => void
   ) {
     this._batchSize = _settings.maxBatchSize
     // Events left from an earlier launch are sent on the first timer flush.
@@ -102,36 +104,44 @@ export class CaptureAiLane {
       return undefined
     }
     const name = String(message.event)
+    const uuid = typeof message.uuid === 'string' ? canonicalizeUuid(message.uuid) : undefined
+    const drop = (details: string): undefined => {
+      this._onLocalDrops([{ uuid: uuid ?? String(message.uuid), details }])
+      return undefined
+    }
     const problem = wireProblem(message)
     if (problem) {
       this._logger.warn(`Dropping AI event "${name}": ${problem}.`)
-      return undefined
+      return drop('invalid event')
     }
     let event: SerializedV1Event
     try {
-      const uuid = typeof message.uuid === 'string' ? canonicalizeUuid(message.uuid) : undefined
       event = serializeV1Event(uuid ? { ...message, uuid } : message)
     } catch (e) {
       this._logger.error(`Dropping AI event "${name}": it could not be serialized.`, e)
-      return undefined
+      return drop('unserializable event')
     }
     const { maxEventBytes, maxQueueSize, flushAt } = this._settings
     if (event.bytes > maxEventBytes) {
       this._logger.warn(`Dropping AI event "${name}": ${event.bytes} bytes is over the ${maxEventBytes}-byte limit.`)
-      return undefined
+      return drop('event too large')
     }
 
     const queue = [...this._queue(), event]
     let queuedBytes = queue.reduce((total, item) => total + item.bytes, 0)
-    let droppedCount = 0
+    const evicted: CaptureDroppedEvent[] = []
     while (queue.length > maxQueueSize || (queuedBytes > CAPTURE_AI_MAX_QUEUE_BYTES && queue.length > 1)) {
-      queuedBytes -= queue.shift()!.bytes
-      droppedCount++
+      const oldest = queue.shift()!
+      queuedBytes -= oldest.bytes
+      evicted.push({ uuid: oldest.uuid, details: 'queue full' })
     }
-    if (droppedCount > 0) {
-      this._logger.warn(`AI event queue is full; dropped the oldest ${droppedCount} event(s).`)
+    if (evicted.length > 0) {
+      this._logger.warn(`AI event queue is full; dropped the oldest ${evicted.length} event(s).`)
     }
     this._setQueue(queue)
+    if (evicted.length > 0) {
+      this._onLocalDrops(evicted)
+    }
 
     if (queue.length >= flushAt || queuedBytes >= CAPTURE_AI_BATCH_BYTE_TARGET) {
       this._flushInBackground()
