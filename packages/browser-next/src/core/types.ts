@@ -1,20 +1,23 @@
 import type { FlagsConfiguration } from '../products/flags/flags-options'
-import type { ICoreCapabilities, BrowserExtensionAccess, BrowserExtension as Extension } from './context/browser-client'
+import type {
+    BrowserExtension as Extension,
+    BrowserProducts,
+    ChangePropertiesInfo,
+    ConsentChangeInfo,
+    GroupInfo,
+    IdentifyInfo,
+} from './context/browser-client'
 import type { LogsConfiguration } from '../products/logs/logs-options'
 import type { SurveysConfiguration } from '../products/surveys/surveys-options'
 import type { AutocaptureConfiguration } from '../products/autocapture/autocapture-options'
-import type {
-    AnalyticsConfiguration,
-    AnalyticsOptions,
-    AutomaticAnalyticsOptions,
-    LoadStrategy,
-    PersonProfileMode,
-} from '../products/analytics/analytics-options'
+import type { AnalyticsOptions, PersonProfileMode } from '../products/analytics/analytics-options'
 
 import type {
     ApiResponse,
     CaptureOptions,
+    Client,
     Disposable,
+    ExtensionToken,
     Listener,
     RemoteConfig,
     SendRequestInit,
@@ -77,11 +80,8 @@ export interface PostHogOptions {
     remoteConfig?: RemoteConfig
     /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
-    /**
-     * First-party analytics acquisition. Defaults to on-demand loading through resolution, product dependencies,
-     * or the initial pageview. Pass `false` to omit implicit analytics; explicit instances take precedence.
-     */
-    analytics?: AnalyticsConfiguration
+    /** Capture scheduling and person-processing policy. */
+    analytics?: AnalyticsOptions
     /** Acquire DOM autocapture from saved/fresh signals, or during initialization when configured explicitly. */
     autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
@@ -95,7 +95,7 @@ export interface PostHogOptions {
 }
 
 /** Options for the manually composed `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'
@@ -120,9 +120,59 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-/** Consumer-facing SDK contract; product controls use their public interfaces. */
-export interface IPostHog extends ICoreCapabilities, BrowserExtensionAccess, Disposable {
+/** The one browser client: the shared `Client` contract plus browser lifecycle, identity and product access. */
+export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Disposable {
+    readonly isRateLimited: boolean
+    captureImmediate(
+        event: string,
+        properties?: Record<string, unknown> | null,
+        options?: CaptureOptions
+    ): Promise<CaptureSummary>
+    identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    reset(): void
+    register(properties: Record<string, unknown>): void
+    registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void
+    unregister(property: string): void
+    getProperty(property: string): unknown
+    registerForSession(properties: Record<string, unknown>): void
+    unregisterForSession(property: string): void
+    /** Links another distinct ID to the current person without changing the current identity. */
+    alias(aliasId: string): void
+    /** Associates future events with a group and, when person processing is enabled, records its properties. */
+    group(type: string, key: string, properties?: Record<string, unknown>): void
+    /** Sends a group-profile update without changing group membership. */
+    groupIdentify(
+        type: string,
+        key: string | number,
+        properties?: Record<string, unknown>,
+        options?: CaptureOptions
+    ): void
+    /** Clears group memberships, retaining identity, sessions and registered properties. */
+    resetGroups(): void
+    /** Enables person processing for the current identity without identifying it. */
+    createPersonProfile(): void
+    /** Sets person properties for the current identity. */
+    setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    /** Removes person properties from the current identity. */
+    unsetPersonProperties(names: string | readonly string[]): void
+    /** Marks the current person as an internal or test user. */
+    setInternalOrTestUser(): void
     readonly onNewSession: Listener<NewSessionInfo>
+    /** Fires when consent changes, including changes observed from another tab. Does not replay. */
+    readonly onConsentChange: Listener<ConsentChangeInfo>
+    /** Fires after identification, independently of capture consent. Does not replay. */
+    readonly onIdentify: Listener<IdentifyInfo>
+    /** Local person-property changes, independently of capture consent. Does not replay. */
+    readonly onChangeProperties: Listener<ChangePropertiesInfo>
+    /** Fires after group membership or property updates, independently of capture consent. Does not replay. */
+    readonly onGroup: Listener<GroupInfo>
+    /** Fires after group-only reset clears local membership. Does not replay. */
+    readonly onGroupsReset: Listener<void>
+    /** Fires after local identity and persisted extension state are reset. Does not replay. */
+    readonly onReset: Listener<void>
+    resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
+    resolveExtension<Name extends keyof BrowserProducts>(name: Name): Promise<BrowserProducts[Name] | undefined>
+    resolveExtension<T extends Extension = Extension>(name: string): Promise<T | undefined>
     flush(): Promise<void>
     shutdown(shutdownTimeoutMs?: number): Promise<void>
     dispose(): Promise<void>
@@ -133,10 +183,7 @@ export interface IPostHog extends ICoreCapabilities, BrowserExtensionAccess, Dis
 }
 
 export type {
-    AnalyticsConfiguration,
     AnalyticsOptions,
-    AutomaticAnalyticsOptions,
-    LoadStrategy,
     PersonProfileMode,
     ApiResponse,
     CaptureOptions,

@@ -1,9 +1,10 @@
 import type { Disposable, ExtensionToken } from '@posthog/browser-common'
 import type { FeatureFlagResult, FeatureFlagsReloadResult, FlagsCallback, JsonType } from './flags-options'
-import type { IPostHogInternal, BrowserExtension } from '../../core/context/browser-client'
+import type { BrowserExtension } from '../../core/context/browser-client'
+import type { IPostHog } from '../../core/types'
 
 export interface FeatureFlags extends BrowserExtension {
-    setup(client: IPostHogInternal): void | Promise<void>
+    setup(client: IPostHog): void | Promise<void>
     getFeatureFlag(key: string): FeatureFlagResult | undefined
     /** Refresh remotely and await its outcome. Calls during an active evaluation wait for a follow-up request. */
     reloadFeatureFlags(): Promise<FeatureFlagsReloadResult>

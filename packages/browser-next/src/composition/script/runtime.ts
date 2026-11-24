@@ -1,9 +1,9 @@
 import { createPostHog } from '../npm/index'
-import { analytics } from '../../products/analytics/analytics'
 import { createLogger } from '../../platform/logger'
 import type { PostHogOptions } from '../../core/types'
 
 const installation = Symbol.for('posthog.browser.snippet')
+
 type SnippetWindow = Window & { posthog?: unknown; [installation]?: boolean }
 
 /** Query options are deliberately limited to primitives; omitted options retain factory defaults. */
@@ -40,7 +40,7 @@ export async function startSnippet(scriptUrl: string, target: SnippetWindow): Pr
     try {
         const options = parseSnippetOptions(scriptUrl)
         target[installation] = reserved = true
-        const client = await createPostHog({ ...options, extensions: [analytics()] })
+        const client = await createPostHog(options)
         // Another installer may claim the global while optional modules initialize.
         if ('posthog' in target) {
             await client.dispose()

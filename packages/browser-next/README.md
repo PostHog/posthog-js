@@ -12,62 +12,56 @@ npm install @posthog/browser
 import { createPostHog } from '@posthog/browser'
 
 const posthog = await createPostHog({ projectToken: '<project-token>' })
-await posthog.resolveExtension('analytics')
-posthog.analytics?.capture('signed_up')
+posthog.capture('signed_up')
 await posthog.flush()
 ```
 
-Configure scheduling or acquire analytics and start delivery while the client initializes:
+The client is the single `Client` implementation that shared and browser extensions receive in `setup()`. Capture, identity, registration and their listeners are client members. Configure scheduling and person processing through the `analytics` option:
 
 ```ts
 const posthog = await createPostHog({
     projectToken: '<project-token>',
-    analytics: { load: 'eager', flushAt: 20, flushInterval: 3_000 },
+    analytics: { flushAt: 20, flushInterval: 3_000, personProfiles: 'identified_only' },
 })
 ```
 
-Importing `@posthog/browser/analytics` statically includes both buffering and delivery. Supplying its extension selects that instance and its constructor options instead of automatic product acquisition:
+Both entrypoints deliver through Capture V1 with retries, compression and payload splitting. They differ in how products load:
+
+| Entrypoint              | Products                                                           |
+| ----------------------- | ------------------------------------------------------------------ |
+| `@posthog/browser`      | Loaded on demand from options, saved state or remote configuration |
+| `@posthog/browser/core` | Only explicitly supplied extensions                                |
+
+Both entrypoints share identity, session, consent and persistence behavior. Installed products are synchronous client properties, such as `posthog.featureFlags`; reading one never starts loading. `await posthog.resolveExtension(token)` waits for a product that is loading, and `posthog.getExtension(name)` returns an installed extension or one of its bindings.
+
+`personProfiles: 'always' | 'never' | 'identified_only'` defaults to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. SDK-computed processing metadata takes precedence over caller properties; `$process_person_profile` does not change the SDK's underlying processing state.
+
+Person and group operations are client methods:
 
 ```ts
-import { analytics } from '@posthog/browser/analytics'
-
-const posthog = await createPostHog({
-    projectToken: '<project-token>',
-    extensions: [analytics({ flushAt: 5, flushInterval: 0 })],
-})
+posthog.alias('account-123')
+posthog.setPersonProperties({ plan: 'pro' })
+posthog.group('organization', 'current-group')
+posthog.groupIdentify('organization', 'another-group', { plan: 'enterprise' })
+posthog.resetGroups()
 ```
 
-Use `analytics: false` to block implicit analytics acquisition, including requests from other products. An explicitly supplied analytics instance takes precedence. The manual `@posthog/browser/core` entrypoint installs only supplied products and has no automatic product imports. Installed namespaces are synchronous lookups; `await posthog.resolveExtension('analytics')` acquires an eligible unloaded product and returns its installed instance, or undefined if disabled or unavailable. Concurrent requests share loading and setup. Supplied analytics initializes before other configured extensions; extensions needing a capture dependency resolve it before exposing synchronous operations.
+Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
 
-Product namespaces expose owners only after successful setup. Reading a namespace never initiates loading. Use `await posthog.resolveExtension(token)` for typed custom-extension access; resolution waits for readiness and returns `undefined` when the extension is unavailable. Shared implementations receive a separate `Client` adapter with shared binding lookup.
+`posthog.alias(targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `posthog.identify()` to switch the ambient identity.
 
-Analytics owns person-profile policy through `personProfiles: 'always' | 'never' | 'identified_only'`, defaulting to `identified_only`. Anonymous events carry `process_person_profile: false` in Capture V1 options until identification, group registration or explicit profile enablement. Configure it through `analytics: { personProfiles: 'always' }` or an explicit `analytics({ personProfiles: 'always' })` instance. SDK-computed processing metadata takes precedence over caller properties; `$process_person_profile` does not change the SDK's underlying processing state.
-
-Use the analytics product's `createPersonProfile()`, `setPersonProperties(set?, setOnce?)`, `unsetPersonProperties(names)` and `setInternalOrTestUser()` controls for explicit person updates. Profile creation and property updates preserve the current anonymous identity; they do not identify the user. Set, set-once and unset also update local feature-flag person context. Exact repeated property updates are deduplicated only after local event admission. Reset clears explicit profile enablement and deduplication, without rewriting queued events. In `never` mode, person helpers, identify and group registration are no-ops; ordinary capture continues without person processing.
-
-Resolve or explicitly compose analytics before using its identity controls. `alias(targetId)` links the current ID without changing the current identity or marking it identified; it enables person processing unless disabled by policy. Use `identify()` to switch the ambient identity.
-
-`group(type, key, properties?)` persists ambient membership. `groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number, and its options use the ordinary capture pipeline. Alias and group-profile events require capture consent and are suppressed in `never` mode. `resetGroups()` clears memberships, retaining identity, sessions, person properties and other stored state. When flags is installed it also clears group properties used for evaluation and requests a reload. Persisted group flag properties can remain when flags is absent ([tracked in #5673](https://github.com/PostHog/posthog-js/issues/5673)). It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
-
-```ts
-const analytics = await posthog.resolveExtension('analytics')
-analytics?.alias('account-123')
-await analytics?.group('organization', 'current-group')
-analytics?.groupIdentify('organization', 'another-group', { plan: 'enterprise' })
-analytics?.resetGroups()
-```
+`posthog.group(type, key, properties?)` persists ambient membership. `posthog.groupIdentify(type, key, properties?, options?)` sends a group-profile update without changing membership or local flag-evaluation context; its key can be a string or finite number. Alias and group-profile events require capture consent and are suppressed in `never` mode. `posthog.resetGroups()` clears memberships, retaining identity, sessions, person properties and other stored state. When flags is installed it also clears group properties used for evaluation and requests a reload. It remains available for cleanup when capture is denied or person processing is disabled. Previously queued events retain their captured group context.
 
 ## Persistent event properties
 
-Use the installed analytics product to register context for future events:
+Register context for future events:
 
 ```ts
-const analytics = await posthog.resolveExtension('analytics')
-analytics?.register({ plan: 'pro', region: 'eu' })
-analytics?.registerOnce({ acquisitionSource: 'website' })
-analytics?.capture('dashboard', { plan: 'enterprise' })
-const region = analytics?.getProperty('region')
-analytics?.unregister('region')
+posthog.register({ plan: 'pro', region: 'eu' })
+posthog.registerOnce({ acquisitionSource: 'website' })
+posthog.capture('dashboard', { plan: 'enterprise' })
+const region = posthog.getProperty('region')
+posthog.unregister('region')
 ```
 
 `register(properties)` merges JSON-serializable properties into analytics' Core-owned persistent storage. `registerOnce(properties, defaultValue = 'None')` adds missing keys or replaces existing values strictly equal to the sentinel; other existing values, including `false`, `0`, `''` and `null`, are retained. `getProperty(key)` returns an isolated stored value, or `undefined` for a missing key. Registration inputs and captured events are snapshotted, so later input or stored-property changes do not rewrite queued events.
@@ -77,30 +71,32 @@ Persistent properties are overridden by session properties, then dynamic event-p
 ## Session event properties
 
 ```ts
-const analytics = await posthog.resolveExtension('analytics')
-analytics?.registerForSession({ checkoutFlow: 'express' })
-analytics?.unregisterForSession('checkoutFlow')
+posthog.registerForSession({ checkoutFlow: 'express' })
+posthog.unregisterForSession('checkoutFlow')
 ```
 
 With default browser storage, session properties use Core-owned per-tab storage, surviving reloads in the same SDK session. Independent tabs are isolated; copied tabs inherit a snapshot and then diverge. With a custom `storage` adapter, `storage: false` or unavailable native session storage, properties remain in per-instance memory. They override persistent defaults, but dynamic producers, caller properties, capture options and protected SDK metadata take precedence.
 
 Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event or after the current session expires remain pending for the next admitted session. Registration does not extend session activity. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
 
-## Migrating to analytics-owned operations
+## Migrating from the analytics extension
 
-Analytics operations now belong to `posthog.analytics`, not the Core client:
+Earlier 0.x versions exposed analytics as a separate product. It is now part of the client:
 
-| Previous client API                | Replacement                                                             |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| `capture()`, `captureImmediate()`  | `posthog.analytics?.capture()`, `posthog.analytics?.captureImmediate()` |
-| `identify()`, `group()`, `reset()` | The corresponding method on `posthog.analytics`                         |
-| `onEvent`, `isRateLimited`         | The corresponding member on `posthog.analytics`                         |
-| `registerDynamicEventProperties()` | `posthog.analytics?.registerDynamicEventProperties()`                   |
-| Synchronous `getExtension(token)`  | `await posthog.resolveExtension(token)`                                 |
+| Previous API                                                                  | Replacement                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                       |
+| `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                       |
+| `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                         |
+| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                       |
+| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                       |
+| `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing |
+| `IPostHogInternal`, `sharedClient`                                            | Extensions receive the `IPostHog` client in `setup()`              |
+| `analytics: false`, `/core` without the analytics extension                   | Always captures; see `capturePageview` and `autocapture` below     |
 
-Product namespaces are optional: they expose successfully initialized owners, not availability of network delivery. Resolve a product before using it when initialization may still be pending, and handle `undefined` when it is unavailable. `flush()` and `dispose()` remain on the client, alongside consent, identity/session getters, remote configuration and scoped key-value storage.
+Capture is part of every client, so `analytics: false` (ignored, with a debug warning) and `/core` without the analytics extension no longer turn it off. Both entrypoints send the initial `$pageview`, `$feature_flag_called` the first time each flag value is read when flags is installed, and events from other installed products. Set `capturePageview: false` to skip the initial pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture. `optOutByDefault: true` stops all capture until `optIn()`, but it also blocks flag and other product requests.
 
-Replace the removed application type export `PostHog` with `IPostHog`. For extension authors, replace the removed `BrowserClient` type export with `IPostHogInternal`. `BrowserExtension` (also exported as `Extension`) is the browser-next extension contract; shared implementations continue using `Client` from `@posthog/browser-common`. The setup host exposes browser product owners directly. Its `sharedClient` adapter supplies shared implementations with their binding lookup and capture surface; it is not the application client.
+Extensions share the client's key-value store, as posthog-js extensions share its persistence. Data saved by earlier 0.x versions under per-extension namespaces is not migrated.
 
 ## Classic script installation (draft CDN distribution)
 
@@ -127,7 +123,7 @@ After the existing `createPostHog()` factory resolves, the script assigns `windo
 
 ```js
 function onPostHogReady(client) {
-    client.analytics?.capture('signed_up')
+    client.capture('signed_up')
 }
 if (window.posthog) {
     onPostHogReady(window.posthog)
@@ -236,15 +232,15 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Browser-next supplies an `IPostHogInternal` scoped host to extension setup. It exposes browser namespaces, asynchronous dependency resolution, and `onIdentify`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use the separate product-host `onChangeProperties` notification with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Extensions receive the `IPostHog` client in `setup()`. It exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
-import type { IPostHogInternal, Disposable } from '@posthog/browser'
+import type { Disposable, IPostHog } from '@posthog/browser'
 
 let subscription: Disposable | undefined
 const extension = {
     name: 'identity-observer',
-    setup(client: IPostHogInternal) {
+    setup(client: IPostHog) {
         subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
             console.log(previousDistinctId, distinctId)
         })
@@ -286,7 +282,7 @@ An explicit logs extension takes precedence over the top-level option, including
 
 Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { path: true, search: false, hash: false } }` or pass the same `urlCapture` option to `logs()` to select which URL components are retained. These are the defaults, including for omitted fields: the origin and pathname are retained, while query parameters and fragments are removed. With `path: false`, the pathname becomes `/`. Invalid URLs are omitted. Component selection does not redact sensitive values within retained components.
 
-The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits all installed extensions' flush methods, including analytics and logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
+The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits the client's capture queue and all installed extensions' flush methods, including logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 
 ## Surveys
 
@@ -321,26 +317,23 @@ feedback.displaySurvey('feedback')
 
 Await client creation before using extension controls.
 
-The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
+The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses the client's pagehide keepalive handoff, which delivery attaches when the client is constructed.
 
-Definitions and event activation state use the host-provided surveys KV namespace in the core persistence record. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
+Definitions and event activation state use the client's shared `core` key-value store. Survey interaction state—seen markers, partial answers, and abandonment markers—uses dedicated browser localStorage, independently of configured SDK persistence, including `storage: false`. Partial answers fall back to memory when localStorage writes fail; abandonment is skipped when its marker cannot be read. Client reset clears persisted extension data, runtime state, and localStorage seen markers, partial answers, and the last-seen date. Abandonment markers are retained, matching legacy survey reset behavior. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
 ## Capture and delivery
 
-Capture, immediate capture, identity and group controls, reset and event-property registration live on the analytics extension. Core owns shared identity, sessions, groups, consent, persistence and lifecycle. The npm root acquires the complete analytics API through asynchronous resolution; delivery remains a separate lazy chunk until an admitted capture or an operation needs it. An enabled initial pageview or capture-producing product also acquires it. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
+Capture, immediate capture, identity, reset and event-property registration are client methods, backed by the client's capture pipeline and the delivery its entrypoint selects. Feature flags initialize during startup. When their options are omitted, logs, surveys orchestration and autocapture load on existing saved-state or remote-config signals, or explicit asynchronous acquisition. Their collection and display retain their own consent and remote-configuration gates; survey rendering is a further deferred chunk.
 
-`analytics.capture()` runs synchronously. Its `false` result is a rate-limit backpressure signal, not a general rejection signal. `true` is neither an admission nor a delivery acknowledgement: consent, lifecycle, filtering, invalid properties or queue limits can suppress an event while it still returns `true`. Use `captureImmediate()` and check its summary when persistence matters. Capture never waits for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+`posthog.capture()` runs synchronously. Its `false` result is a rate-limit backpressure signal, not a general rejection signal. `true` is neither an admission nor a delivery acknowledgement: consent, lifecycle, filtering, invalid properties or queue limits can suppress an event while it still returns `true`. Use `captureImmediate()` and check its summary when persistence matters. Capture never waits for network delivery. `flush()` delivers queued work and resolves without discarding unexpired queued events when delivery is unavailable. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.
 
 Use `captureImmediate()` only when the caller needs a terminal delivery outcome before continuing:
 
 ```ts
-const analytics = await posthog.resolveExtension('analytics')
-const summary = await analytics?.captureImmediate('import_completed', { source: 'warehouse' })
-if (!summary) {
-    console.warn('Analytics is unavailable')
-} else if (summary.error) {
+const summary = await posthog.captureImmediate('import_completed', { source: 'warehouse' })
+if (summary.error) {
     console.warn('Immediate capture failed', summary.error)
 } else if (summary.submitted !== 1 || !summary.allPersisted) {
     // Capture V1 did not confirm persistence of this event.
@@ -349,9 +342,9 @@ if (!summary) {
 
 Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery resolve with `summary.error` and `allPersisted: false`, retaining any known partial outcomes. These failures do not reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`. An observed consent denial permanently cancels pending immediate dispatch and retries, even if the user opts in again; already-dispatched requests may finish.
 
-Acquire analytics before making an immediate call. The manual core exposes analytics only when explicitly supplied through `extensions`. Analytics admission and its bounded buffer remain independent of the inner delivery loader; delayed delivery retains finalized event snapshots, cancellation and retries, not raw calls to replay.
+`captureImmediate()` is available on both entrypoints because delivery is part of the client. The manual core captures even without supplied extensions: it sends the initial `$pageview` unless `capturePageview: false`, and an installed flags extension sends `$feature_flag_called` the first time each flag value is read.
 
-The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
+Capture V1 delivery sends FIFO batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
 
 Both factories start one JSON remote-config request during initialization, without waiting for it before capture or factory completion. `remoteConfig` supplies an inline result instead of making a request. The default loader uses Fetch and `GET /array/{projectToken}/config`. Recognized PostHog US/EU hosts resolve to the corresponding assets host; custom hosts retain their configured base, including path prefixes. Loading is independent of capture consent. `fetch: false` disables built-in loading. Failure or the default 10-second `remoteConfigTimeoutMs` publishes `{ ok: false }` once, with no automatic retry; shutdown cancels the wait and suppresses late publication.
 

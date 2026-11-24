@@ -1,5 +1,4 @@
 import { createPostHog } from '../src/composition/npm/index'
-import { analytics } from '../src/products/analytics/analytics'
 import type { IPostHog } from '../src/core/types'
 import { localRemoteConfig } from './helpers'
 
@@ -27,8 +26,8 @@ afterEach(async () => {
     vi.unstubAllGlobals()
 })
 
-describe('whole-product initial pageview acquisition', () => {
-    it('acquires analytics and admits the initial pageview before the root factory resolves', async () => {
+describe('root initial pageview', () => {
+    it('admits the initial pageview before the root factory resolves', async () => {
         vi.stubGlobal('document', new TestDocument('visible'))
         const observed: string[] = []
         const client = await createPostHog({
@@ -43,12 +42,11 @@ describe('whole-product initial pageview acquisition', () => {
             ],
         })
         clients.push(client)
-        expect(client.analytics).toBeDefined()
         expect(observed).toEqual(['$pageview'])
         expect(client.session?.sessionId).toEqual(expect.any(String))
     })
 
-    it('keeps one hidden listener, then acquires once after visible capture becomes permitted', async () => {
+    it('keeps one hidden listener, then captures once after visible capture becomes permitted', async () => {
         const document = new TestDocument('hidden')
         vi.stubGlobal('document', document)
         const add = vi.spyOn(document, 'addEventListener')
@@ -70,27 +68,22 @@ describe('whole-product initial pageview acquisition', () => {
             ],
         })
         clients.push(client)
-        expect(client.analytics).toBeUndefined()
         client.optIn()
         client.optOut()
         document.visibilityState = 'visible'
         document.dispatchEvent(new Event('visibilitychange'))
-        expect(client.analytics).toBeUndefined()
         expect(observed).toEqual([])
         client.optIn()
         client.optIn()
-        await client.resolveExtension('analytics')
-        expect(client.analytics).toBeDefined()
         expect(observed).toEqual(['$pageview'])
         expect(add.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
     })
 
-    it('does not acquire analytics for a bot-blocked initial pageview', async () => {
+    it('does not start a session for a bot-blocked initial pageview', async () => {
         vi.stubGlobal('document', new TestDocument('visible'))
         const client = await createPostHog({ ...options, navigator: { webdriver: true } })
         clients.push(client)
-        expect(client.analytics).toBeUndefined()
         expect(client.session).toBeUndefined()
     })
 
@@ -102,7 +95,7 @@ describe('whole-product initial pageview acquisition', () => {
         const client = await createPostHog({
             ...options,
             navigator: { webdriver: true },
-            extensions: [analytics({ flushInterval: 0 })],
+            analytics: { flushInterval: 0 },
         })
         clients.push(client)
         expect(read).toHaveBeenCalledOnce()
@@ -138,8 +131,8 @@ describe('whole-product initial pageview acquisition', () => {
             const observed: string[] = []
             const client = await createPostHog({
                 ...options,
+                analytics: { flushInterval: 0 },
                 extensions: [
-                    analytics({ flushInterval: 0 }),
                     {
                         name: 'observer',
                         setup(host) {
@@ -158,14 +151,4 @@ describe('whole-product initial pageview acquisition', () => {
             expect(client.session).toBeUndefined()
         }
     )
-
-    it('finishes readiness when initial pageview analytics is explicitly disabled', async () => {
-        vi.stubGlobal('document', new TestDocument('visible'))
-        const client = await createPostHog({ ...options, analytics: false })
-        clients.push(client)
-        client.optIn()
-        expect(await client.resolveExtension('analytics')).toBeUndefined()
-        expect(client.analytics).toBeUndefined()
-        expect(client.session).toBeUndefined()
-    })
 })

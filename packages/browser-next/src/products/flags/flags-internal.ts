@@ -1,9 +1,6 @@
 import type { FeatureFlags } from './flags-token'
 
-/** SDK-specific flags configuration and persisted survey targeting context. */
+/** SDK-specific flags configuration read by surveys. Person properties are read from the shared client store. */
 export interface FlagsExtension extends FeatureFlags {
-    getSurveyContext(): {
-        remoteEvaluation: boolean
-        personProperties: Record<string, unknown> | undefined
-    }
+    getSurveyContext(): { remoteEvaluation: boolean }
 }
