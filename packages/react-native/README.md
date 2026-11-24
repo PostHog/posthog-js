@@ -2,7 +2,7 @@
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 
-Upgrading from 4.x? See [MIGRATION.md](./MIGRATION.md).
+Upgrading from 4.x? See [MIGRATION.md](https://github.com/PostHog/posthog-js/blob/main/packages/react-native/MIGRATION.md).
 
 SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
