@@ -214,6 +214,40 @@ describe('known-absent property keys', () => {
     })
   })
 
+  it.each([
+    ['is_not', 'omitted'],
+    ['is_not', 'null'],
+    ['exact', 'null'],
+    ['gt', 'null'],
+  ])('leaves %s with a condition value that is %s on a listed key inconclusive', async (operator, valueCase) => {
+    const filter: Record<string, unknown> = { key: 'plan', type: 'person', operator }
+    if (valueCase === 'null') {
+      filter.value = null
+    }
+    setup({ flags: [flag('flag', [filter])] }, { flag: 'remote' })
+
+    const result = await posthog.evaluateFlags('user', {
+      flagKeys: ['flag'],
+      onlyEvaluateLocally: true,
+      personPropertyKeysKnownAbsent: ['plan'],
+    })
+    expect(result.getFlag('flag')).toBeUndefined()
+    expect(result.unresolvedFlags).toEqual({ flag: 'unsupported_definition' })
+    expect(await posthog.getFeatureFlag('flag', 'user', { personPropertyKeysKnownAbsent: ['plan'] })).toBe('remote')
+    expect(flagsRequests()).toHaveLength(1)
+    expect(flagsRequests()[0].person_property_keys_known_absent).toEqual(['plan'])
+  })
+
+  it.each([
+    ['is_not_set', true],
+    ['is_set', false],
+  ])('resolves %s with a null condition value on a listed key locally to %s', async (operator, expected) => {
+    setup({ flags: [flag('flag', [personFilter(operator, null)])] })
+
+    expect(await posthog.getFeatureFlag('flag', 'user', { personPropertyKeysKnownAbsent: ['plan'] })).toBe(expected)
+    expect(flagsRequests()).toHaveLength(0)
+  })
+
   it('applies to dynamic cohort leaves before negation', async () => {
     setup({
       flags: [flag('cohort-flag', [{ key: 'id', type: 'cohort', value: 'c1', operator: 'in' }])],

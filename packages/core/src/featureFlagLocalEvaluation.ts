@@ -589,9 +589,15 @@ export function matchFeatureFlagProperty(
   options: MatchFeatureFlagPropertyOptions = {}
 ): boolean {
   if (options.knownAbsentKeys?.has(property.key)) {
+    const operator = property.operator || 'exact'
+    // The flags service reads a JSON null condition value as omitted, which it never resolves
+    // for a value-requiring operator, so neither may the known-absent table.
+    if (property.value == null && operator !== 'is_set' && operator !== 'is_not_set') {
+      throw new InconclusiveMatchError(`Operator ${operator} requires a condition value`)
+    }
     // An unusable filter stays inconclusive even for a known-absent key.
     assertFeatureFlagFilterSupported(property, options)
-    return KNOWN_ABSENT_MATCHING_OPERATORS.includes(property.operator || 'exact')
+    return KNOWN_ABSENT_MATCHING_OPERATORS.includes(operator)
   }
   try {
     return matchPropertyValue(property, propertyValues, options)
