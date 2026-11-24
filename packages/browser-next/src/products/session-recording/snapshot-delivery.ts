@@ -40,6 +40,8 @@ const MAX_QUEUED_SNAPSHOTS = 100
 const MAX_QUEUED_BYTES = 25 * 1024 * 1024
 const MAX_SNAPSHOT_AGE_MS = 10 * 60 * 1000
 const MAX_BATCH_SNAPSHOTS = 10
+// posthog-js's request queue batches snapshots flushed within 3 s into one `/s/` request
+const FLUSH_INTERVAL_MS = 3000
 const RETRY_INTERVAL_MS = 1000
 // posthog-js's default request timeout, so a stalled request cannot block later snapshots and flush()
 const REQUEST_TIMEOUT_MS = 60_000
@@ -234,12 +236,13 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
     let retryAt = 0
     lane.attach({
         batchSize: MAX_BATCH_SNAPSHOTS,
-        // each snapshot sends on arrival, except while a failed delivery waits to retry
+        // batch snapshots arriving within FLUSH_INTERVAL_MS (3 s, as in posthog-js) up to MAX_BATCH_SNAPSHOTS;
+        // while a failed delivery waits to retry, hold the queue until retryAt
         get flushAt() {
-            return retryAt > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : 1
+            return retryAt > buffer._now() ? MAX_QUEUED_SNAPSHOTS + 1 : MAX_BATCH_SNAPSHOTS
         },
         get flushInterval() {
-            return retryInterval
+            return retryAt > buffer._now() ? retryInterval : FLUSH_INTERVAL_MS
         },
         canDeliver: () => !!host.runtime[2] && host.canDeliver(),
         async deliver(messages, context) {

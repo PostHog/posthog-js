@@ -134,6 +134,26 @@ describe('snapshot delivery', () => {
         expect(requests.length).toBe(2)
     })
 
+    it('batches snapshots enqueued within the 3-second flush window into one request', async () => {
+        await withRetryClock(async () => {
+            const { delivery, requests } = setup()
+            const first = message('s1')
+            const second = message('s1')
+
+            delivery.enqueue(first, 10)
+            await vi.advanceTimersByTimeAsync(2_000)
+            expect(requests).toHaveLength(0)
+
+            delivery.enqueue(second, 10)
+            await vi.advanceTimersByTimeAsync(999)
+            expect(requests).toHaveLength(0)
+
+            await vi.advanceTimersByTimeAsync(1)
+            expect(requests).toHaveLength(1)
+            expect((await decode(requests[0]!)).map((event) => event.uuid)).toEqual([first.uuid, second.uuid])
+        })
+    })
+
     it('keeps a failed batch until its retry interval when another snapshot arrives', async () => {
         await withRetryClock(async () => {
             let attempts = 0
@@ -145,6 +165,7 @@ describe('snapshot delivery', () => {
                 ).length
 
             delivery.enqueue(failed, 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(500)
             delivery.enqueue(message('s1'), 10)
             await vi.advanceTimersByTimeAsync(0)
@@ -165,6 +186,7 @@ describe('snapshot delivery', () => {
             })
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(60_000)
 
             expect(sentAt).toEqual([0, 1_000, 3_000, 7_000, 15_000, 31_000])
@@ -176,6 +198,7 @@ describe('snapshot delivery', () => {
             const { delivery, requests } = setup(() => 503)
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(40_000)
             expect(requests).toHaveLength(6)
 
@@ -195,6 +218,7 @@ describe('snapshot delivery', () => {
             )
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(19_999)
             expect(requests).toHaveLength(1)
 
@@ -209,6 +233,7 @@ describe('snapshot delivery', () => {
             const { delivery, requests } = setup(() => 200, { navigator })
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(10_000)
             expect(requests).toHaveLength(0)
 
@@ -225,6 +250,7 @@ describe('snapshot delivery', () => {
             })
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(60_000)
 
             expect(requests).toHaveLength(6)
@@ -242,6 +268,7 @@ describe('snapshot delivery', () => {
             )
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(60_000)
             const flushed = delivery.flush()
             await vi.advanceTimersByTimeAsync(1_000)
@@ -258,12 +285,14 @@ describe('snapshot delivery', () => {
             const { delivery, requests } = setup(() => statuses[requests.length - 1] ?? 200)
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(2_999)
             expect(requests).toHaveLength(2)
             await vi.advanceTimersByTimeAsync(1)
             expect(requests).toHaveLength(3)
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(0)
             expect(requests).toHaveLength(4)
             await vi.advanceTimersByTimeAsync(1_000)
@@ -276,6 +305,7 @@ describe('snapshot delivery', () => {
             const { delivery, requests } = setup(() => (requests.length === 1 ? 429 : 200))
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.advanceTimersByTimeAsync(1_000)
 
             expect(requests).toHaveLength(2)
@@ -305,6 +335,7 @@ describe('snapshot delivery', () => {
         )
 
         delivery.enqueue(message('s1'), 10)
+        void delivery.flush()
         await vi.waitFor(() => expect(requests).toHaveLength(1))
 
         expect(requests[0]!.init.keepalive).toBe(true)
@@ -526,6 +557,7 @@ describe('snapshot delivery', () => {
             })
 
             delivery.enqueue(message('s1'), 10)
+            void delivery.flush()
             await vi.waitFor(() => expect(requests).toHaveLength(1))
             delivery.teardown()
             release?.()
