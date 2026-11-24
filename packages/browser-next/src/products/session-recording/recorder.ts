@@ -167,6 +167,7 @@ export class SessionRecorder {
     private _config: SessionRecordingPersistedConfig | undefined
     private _stopRrweb: listenerHandler | undefined
     private _recording = false
+    private _discardGeneration = 0
     private _mutationThrottler: MutationThrottler | undefined
     private _rrwebError = false
     private _maskRegionsFnFailed = false
@@ -370,6 +371,7 @@ export class SessionRecorder {
 
     /** Stops recording and drops buffered and queued data, for example after an opt-out. */
     discard(): void {
+        this._discardGeneration += 1
         this._holdFlushUntilInteraction = true
         this._stopProducers()
         this._buffer = this._emptyBuffer()
@@ -591,11 +593,14 @@ export class SessionRecorder {
         })
         const plugins = this._plugins()
         const sessionRecordingOptions = this._recordOptions()
+        const discardGeneration = this._discardGeneration
         this._recording = true
         try {
             this._stopRrweb = recordFunction({
                 ...sessionRecordingOptions,
-                emit: (event) => this._onEmit(event),
+                emit: (event) => {
+                    if (discardGeneration === this._discardGeneration) this._onEmit(event)
+                },
                 plugins,
                 errorHandler: (_error, context) => context === 'rrweb',
                 recordAfter: 'DOMContentLoaded',
@@ -713,7 +718,7 @@ export class SessionRecorder {
             this._restartForSessionChange(holdNextEpoch)
         }
 
-        if (shouldLinkSessions) {
+        if (shouldLinkSessions && this.isStarted) {
             this._addCustomEvent('$session_starting', {
                 previousSessionId: oldSessionId,
                 previousWindowId: oldWindowId,
