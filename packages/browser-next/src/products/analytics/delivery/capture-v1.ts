@@ -228,7 +228,8 @@ const compressWithDeadline = async (
     }
 }
 
-const cancelResponseBody = async (response: Response | undefined): Promise<void> => {
+/** Releases a response the caller does not read. Chromium counts unread keepalive responses against its quota. */
+export const cancelResponseBody = async (response: Response | undefined): Promise<void> => {
     try {
         await response?.body?.cancel()
     } catch {
