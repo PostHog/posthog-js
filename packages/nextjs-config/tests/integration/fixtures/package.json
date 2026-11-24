@@ -6,7 +6,7 @@
     "@posthog/cli": "0.19.1",
     "core-js": "3.49.0",
     "cross-spawn": "7.0.6",
-    "dompurify": "3.4.17",
+    "dompurify": "3.4.18",
     "fflate": "0.4.9",
     "preact": "10.29.3",
     "query-selector-shadow-dom": "1.0.1",
