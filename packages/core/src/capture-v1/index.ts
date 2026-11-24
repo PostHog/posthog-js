@@ -24,6 +24,7 @@ export {
   V1CaptureSender,
   type V1CaptureSenderConfig,
   type V1CaptureSenderHooks,
+  type V1RequestIdentity,
   type V1SendDeferral,
   type V1SendOptions,
 } from './sender'

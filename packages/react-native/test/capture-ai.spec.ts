@@ -354,6 +354,7 @@ describe('React Native captureAi', () => {
     client.captureAi('$ai_generation', { index: 0 })
     client.captureAi('$ai_generation', { index: 1 })
     await client.flush()
+    endResendWait(client)
     await client.flush()
     const slotWrites = (): [string, string][] =>
       expoFiles.write.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
@@ -361,6 +362,7 @@ describe('React Native captureAi', () => {
     expect(slotWrites().map(([key]) => key)).toEqual([aiSlot(0), aiSlot(1)])
 
     respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait(client)
     await client.flush()
 
     expect(slotWrites().slice(2)).toEqual([
@@ -412,6 +414,7 @@ describe('React Native captureAi', () => {
     const earlier = await newPostHog({ flushAt: 10 })
     earlier.captureAi('$ai_generation', { index: 0 })
     await earlier.flush()
+    endResendWait(earlier)
     await earlier.flush()
     expect(expoFiles.read.mock.calls.filter(([path]) => path === aiSlot(0))).toHaveLength(1)
     await earlier.shutdown()
@@ -768,11 +771,15 @@ describe('React Native captureAi', () => {
       before_send: (event) => (event ? { ...event, uuid: '0198C0DE-1234-7ABC-8DEF-0123456789AB' } : event),
     })
 
+    const captured: { uuid?: string }[] = []
+    client.on('capture', (event) => captured.push(event))
+
     const uuid = client.captureAi('$ai_generation')
     await client.flush()
 
     expect(uuid).toBe('0198c0de-1234-7abc-8def-0123456789ab')
     expect(requests[0].body.batch[0].uuid).toBe(uuid)
+    expect(captured.map((event) => event.uuid)).toEqual([uuid])
   })
 
   it('does not rewrite the stored AI queue when a send sends nothing', async () => {
@@ -782,9 +789,12 @@ describe('React Native captureAi', () => {
     await client.flush()
     const writes = expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length
 
+    ;(client as any)._aiLane._resendAt = 0
     await client.flush()
+    ;(client as any)._aiLane._resendAt = 0
     await client.flush()
 
+    expect(sent(AI_PATH)).toHaveLength(3)
     expect(writes).toBeGreaterThan(0)
     expect(expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length).toBe(writes)
   })
@@ -825,6 +835,124 @@ describe('React Native captureAi', () => {
     await new Promise((resolve) => setTimeout(resolve, 1800))
 
     expect(sent(AI_PATH)).toEqual([['$ai_generation'], ['$ai_generation']])
+  })
+
+  const identity = (request: CaptureRequest): unknown => ({
+    requestId: request.headers['PostHog-Request-Id'],
+    createdAt: (request.body as any).created_at,
+  })
+  const endResendWait = (client: PostHog): void => {
+    ;(client as any)._aiLane._resendAt = 0
+  }
+
+  it('resends only the deferred AI events as a retry of their request', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation', { index: 0 })
+    await client.flush()
+    client.captureAi('$ai_generation', { index: 1 })
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait(client)
+    await client.flush()
+
+    const ai = requests.filter((request) => request.path === AI_PATH)
+    expect(ai.map((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([[0], [0], [1]])
+    expect(identity(ai[1])).toEqual(identity(ai[0]))
+    expect(ai[1].headers['PostHog-Attempt']).toBe('2')
+    expect(identity(ai[2])).not.toEqual(identity(ai[0]))
+    expect(ai[2].headers['PostHog-Attempt']).toBe('1')
+  })
+
+  it('resends AI events the server asked to retry as a retry of their request', async () => {
+    let attempt = 0
+    respond = (request) =>
+      request.path === AI_PATH && ++attempt === 1
+        ? {
+            status: 200,
+            body: {
+              results: {
+                [request.body.batch[0].uuid]: { result: 'ok' },
+                [request.body.batch[1].uuid]: { result: 'retry', details: 'not_persisted' },
+              },
+            },
+          }
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    client.captureAi('$ai_generation', { index: 2 })
+
+    endResendWait(client)
+    await client.flush()
+
+    const ai = requests.filter((request) => request.path === AI_PATH)
+    expect(ai.map((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([[0, 1], [1], [2]])
+    expect(identity(ai[1])).toEqual(identity(ai[0]))
+    expect(ai[1].headers['PostHog-Attempt']).toBe('2')
+  })
+
+  it('holds flush() and a short shutdown() during the AI resend wait', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation')
+    await client.flush()
+
+    await client.flush()
+    await client.shutdown(100)
+    posthog = undefined
+    randomSpy.mockRestore()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
+  it('waits out the AI resend wait in shutdown() when it fits', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let failures = 1
+    respond = (request) =>
+      request.path === AI_PATH && failures-- > 0 ? { status: 503 } : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation')
+    await client.flush()
+
+    await client.shutdown(5000)
+    posthog = undefined
+    randomSpy.mockRestore()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation'], ['$ai_generation']])
+  })
+
+  it('does not flush newer AI events on a stale resend timer after a send succeeds', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let failures = 1
+    respond = (request) =>
+      request.path === AI_PATH && failures-- > 0 ? { status: 503 } : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation', { index: 0 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    client.captureAi('$ai_generation', { index: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    randomSpy.mockRestore()
+
+    expect(requests.map((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([[0], [0]])
+  })
+
+  it('reports an AI request still running when shutdown times out', async () => {
+    respond = (request) => (request.path === AI_PATH ? new Promise(() => {}) : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+    const critical = vi.spyOn((client as any)._logger, 'critical').mockImplementation(() => {})
+
+    client.captureAi('$ai_generation')
+    await client.shutdown(100)
+    posthog = undefined
+
+    expect(critical).toHaveBeenCalledTimes(1)
+    expect(critical).toHaveBeenCalledWith(expect.stringContaining('AI events'), { shutdownTimeoutMs: 100 })
   })
 
   it('returns undefined for an AI event whose properties cannot be serialized', async () => {

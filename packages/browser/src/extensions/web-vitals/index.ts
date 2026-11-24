@@ -12,7 +12,7 @@ import {
 } from '../../utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
+import { PERSONAL_DATA_URL_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import { getExtensionLoader } from '../../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[Web Vitals]')
@@ -238,7 +238,7 @@ export class WebVitalsAutocapture {
         const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+            ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
         return maskQueryParams(urlWithoutHash, paramsToMask, MASKED)

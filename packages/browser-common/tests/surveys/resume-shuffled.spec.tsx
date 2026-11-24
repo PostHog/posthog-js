@@ -67,7 +67,7 @@ describe('Surveys: resuming a shuffled survey', () => {
         shuffleWith(0)
         const { unmount } = show()
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'an answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         const leftOffOn = currentQuestion()
         unmount()
         cleanup()
@@ -85,7 +85,7 @@ describe('Surveys: resuming a shuffled survey', () => {
         const { unmount } = show()
         const startingOrder = [currentQuestion()]
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'an answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         startingOrder.push(currentQuestion())
         unmount()
         cleanup()
@@ -94,7 +94,7 @@ describe('Surveys: resuming a shuffled survey', () => {
         shuffleWith(0.999999)
         show()
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'another answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         expect(startingOrder).toEqual(['Question 2', 'Question 3'])
         expect(currentQuestion()).toBe('Question 1')

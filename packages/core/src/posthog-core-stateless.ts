@@ -352,8 +352,6 @@ export abstract class PostHogCoreStateless {
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
   private pendingFlushPromise: Promise<void> | null = null
-  // Whether the pending flush was started only by flushAutomatic(), so a hold can still skip it.
-  private pendingFlushIsAutomatic = false
   private flushPromises: Set<Promise<any>> = new Set()
   private _dequeuedMessagesCount: number = 0
   private shutdownPromise: Promise<void> | null = null
@@ -1408,6 +1406,14 @@ export abstract class PostHogCoreStateless {
     return 0
   }
 
+  /**
+   * When the leading `messages` are a resend that has to go out on its own, how many of them;
+   * otherwise undefined.
+   */
+  protected resendBatchSize(_messages: (PostHogEventProperties | undefined)[]): number | undefined {
+    return undefined
+  }
+
   /** How many leading messages fit the byte target; the first always does, so an oversize event goes alone. */
   private countWithinBatchByteTarget(messages: (PostHogEventProperties | undefined)[]): number {
     const target = this.batchByteTarget()
@@ -1511,22 +1517,20 @@ export abstract class PostHogCoreStateless {
 
   /**
    * The flush the SDK runs on its own, from the interval timer or the `flushAt`
-   * threshold. Separate from `flush()` so a host can hold back work that an
-   * endpoint has asked it to wait on, which an explicit flush overrides.
+   * threshold. Hosts override it when an automatic flush covers less than
+   * `flush()` does.
    */
   protected flushAutomatic(): Promise<void> {
-    if (this.holdsAutomaticFlush()) {
-      return Promise.resolve()
-    }
-    return this.flushInternal(false, true)
+    return this.flush()
   }
 
   /**
-   * Whether automatic flushes wait for now. Checked when one is requested and again right before it
-   * sends, so a flush queued behind one that got told to wait also waits.
+   * How long flushes wait before sending, in milliseconds, or 0 when they can send. Checked right
+   * before a flush sends, so a flush queued behind one that got told to wait also waits. A held
+   * flush resolves without sending; `shutdown()` waits the hold out when it fits in its timeout.
    */
-  protected holdsAutomaticFlush(): boolean {
-    return false
+  protected flushHoldMs(): number {
+    return 0
   }
 
   private async waitForPendingPromises(
@@ -1587,15 +1591,12 @@ export abstract class PostHogCoreStateless {
     return this.flushInternal(false)
   }
 
-  private flushInternal(waitForPendingPromises: boolean, automatic = false): Promise<void> {
+  private flushInternal(waitForPendingPromises: boolean): Promise<void> {
     if (this.disabled) {
       return Promise.resolve()
     }
 
     if (!waitForPendingPromises && this.pendingFlushPromise) {
-      if (!automatic) {
-        this.pendingFlushIsAutomatic = false
-      }
       return this.pendingFlushPromise
     }
 
@@ -1615,19 +1616,16 @@ export abstract class PostHogCoreStateless {
       // Use a custom allSettled implementation to avoid issues with patching Promise on RN
       .then(() => allSettled([previousFlushPromise]))
       .then(() => {
-        let heldAutomatic = automatic
         if (this.pendingFlushPromise === nextFlushPromise) {
-          heldAutomatic = this.pendingFlushIsAutomatic
           this.pendingFlushPromise = null
         }
-        if (heldAutomatic && this.holdsAutomaticFlush()) {
+        if (this.flushHoldMs() > 0) {
           return
         }
         return this._flush()
       })
 
     this.pendingFlushPromise = nextFlushPromise
-    this.pendingFlushIsAutomatic = automatic
     this.flushPromise = nextFlushPromise
     this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
@@ -1784,7 +1782,10 @@ export abstract class PostHogCoreStateless {
       const countMessages = countItems.map((item) =>
         item.message === undefined ? item.message : this.normalizeMessage(item.message)
       )
-      const batchSize = this.countWithinBatchByteTarget(countMessages)
+      const batchSize = Math.min(
+        this.countWithinBatchByteTarget(countMessages),
+        this.resendBatchSize(countMessages) ?? countMessages.length
+      )
       const batchItems = countItems.slice(0, batchSize)
       const batchMessages = countMessages.slice(0, batchSize)
 
@@ -2145,6 +2146,7 @@ export abstract class PostHogCoreStateless {
 
     await this._initPromise
     let hasTimedOut = false
+    const deadline = Date.now() + shutdownTimeoutMs
     this.clearFlushTimer()
 
     if (this.disabled) {
@@ -2160,6 +2162,19 @@ export abstract class PostHogCoreStateless {
 
           if (!hasQueuedEvents) {
             break
+          }
+
+          const holdMs = this.flushHoldMs()
+          if (holdMs > 0) {
+            if (Date.now() + holdMs >= deadline) {
+              this._logger.warn('Shutdown stopped draining: the endpoint asked to wait past the shutdown timeout.')
+              break
+            }
+            await new Promise<void>((resolve) => safeSetTimeout(resolve, holdMs))
+            if (hasTimedOut) {
+              break
+            }
+            continue
           }
 
           const dequeuedBeforeFlush = this._dequeuedMessagesCount

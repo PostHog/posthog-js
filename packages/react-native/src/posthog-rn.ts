@@ -40,6 +40,7 @@ import {
   serializeV1Event,
   wireProblem,
   type SerializedV1Event,
+  type V1RequestIdentity,
   type V1SendDeferral,
 } from '@posthog/core/capture-v1'
 import { Properties } from '@posthog/types'
@@ -521,10 +522,14 @@ export class PostHog extends PostHogCore {
   private _captureResendCount = 0
   private _captureResendAt = 0
   private _captureResendTimer?: ReturnType<typeof setTimeout>
+  // The events capture left to send again, by queued uuid in queue order, and the request they came from.
+  private _captureResend?: { uuids: string[]; request: V1RequestIdentity }
   // Set once shutdown() returns, so a capture response that lands later schedules no resend.
   private _captureShutDown = false
   // AI events emitted to listeners; debug mode logs only their name and uuid, since they carry prompts and outputs.
   private _emittedAiEvents = new WeakSet<object>()
+  // While shutdown drains, its own hold waits out resends; a background timer would send outside that drain.
+  private _captureShuttingDown = false
 
   /**
    * The project token the client was created with.
@@ -939,6 +944,7 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    this._captureShuttingDown = true
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
       this._captureResendTimer = undefined
@@ -958,8 +964,14 @@ export class PostHog extends PostHogCore {
           ? Promise.resolve()
           : // Events captured before initialization reach the lane once it completes.
             raceWithTimeout(
-              this._initPromise.then(() => this._aiLane.shutdown()),
-              remainingMs
+              this._initPromise.then(() => this._aiLane.shutdown(Math.max(0, remainingMs - (Date.now() - start)))),
+              remainingMs,
+              () => {
+                this._logger.critical(
+                  'PostHog AI events were still sending when shutdown timed out. Some may not have been sent.',
+                  { shutdownTimeoutMs }
+                )
+              }
             ),
       ])
     } finally {
@@ -1019,9 +1031,15 @@ export class PostHog extends PostHogCore {
   /**
    * Sends queued events to capture v1 (`/i/v1/analytics/events`), one attempt per flush. Events
    * capture asks to send again, or that got no response, stay queued and are resent after a wait of
-   * 1 second doubling to 30 seconds, with jitter.
+   * 1 second doubling to 30 seconds, with jitter. The resend carries only those events, as the next
+   * attempt of the same request.
    */
   protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
+    const resend = this._captureResend
+    this._captureResend = undefined
+    const exactResend =
+      resend && batchMessages.length === resend.uuids.length && this._leadsWithResend(batchMessages, resend.uuids)
+    const retryOf = exactResend ? resend.request : undefined
     const batchIndices = new Map<SerializedV1Event, number>()
     const drops: CaptureDroppedEvent[] = []
     for (const [index, message] of batchMessages.entries()) {
@@ -1048,7 +1066,12 @@ export class PostHog extends PostHogCore {
       batchIndices.set(serialized, index)
     }
     if (drops.length > 0) {
-      const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+      const error = new CaptureError({
+        endpoint: ANALYTICS_CAPTURE_ENDPOINT,
+        requestId: '',
+        drops,
+        retryExhausted: [],
+      })
       error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
       this._emitCaptureError(error)
     }
@@ -1059,6 +1082,7 @@ export class PostHog extends PostHogCore {
       onDeferred: (reason) => {
         deferral = reason
       },
+      retryOf,
     })
     if (!deferral) {
       this._captureResendCount = 0
@@ -1076,7 +1100,24 @@ export class PostHog extends PostHogCore {
     const keepIndices = kept
       .map((event) => batchIndices.get(event))
       .filter((index): index is number => index !== undefined)
+    // A halved batch starts over as new requests.
+    if (!deferral.tooLarge) {
+      const uuids = keepIndices.map((index) => batchMessages[index]?.uuid)
+      if (uuids.every((uuid): uuid is string => typeof uuid === 'string')) {
+        this._captureResend = { uuids, request: deferral.request }
+      }
+    }
     return { keepIndices, tooLarge: deferral.tooLarge }
+  }
+
+  protected resendBatchSize(messages: (PostHogEventProperties | undefined)[]): number | undefined {
+    const resend = this._captureResend
+    return resend && this._leadsWithResend(messages, resend.uuids) ? resend.uuids.length : undefined
+  }
+
+  // Whether `messages` starts with the events left to resend, in order. Eviction or a clear breaks the match.
+  private _leadsWithResend(messages: (PostHogEventProperties | undefined)[], uuids: string[]): boolean {
+    return messages.length >= uuids.length && uuids.every((uuid, index) => messages[index]?.uuid === uuid)
   }
 
   protected batchByteTarget(): number {
@@ -1108,9 +1149,9 @@ export class PostHog extends PostHogCore {
     return serialized
   }
 
-  // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
-  protected holdsAutomaticFlush(): boolean {
-    return Date.now() < this._captureResendAt
+  // Holds every flush while capture waits; shutdown() waits it out when it fits in its timeout.
+  protected flushHoldMs(): number {
+    return Math.max(0, this._captureResendAt - Date.now())
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
@@ -1127,6 +1168,10 @@ export class PostHog extends PostHogCore {
     this._captureResendAt = Date.now() + waitMs
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
+    if (this._captureShuttingDown) {
+      return
     }
     this._captureResendTimer = safeSetTimeout(() => {
       this._captureResendTimer = undefined
@@ -1231,7 +1276,12 @@ export class PostHog extends PostHogCore {
       () => this._getCaptureAiSender(),
       this._logger,
       (drops) => {
-        const error = new CaptureError({ endpoint: AI_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+        const error = new CaptureError({
+          endpoint: AI_CAPTURE_ENDPOINT,
+          requestId: '',
+          drops,
+          retryExhausted: [],
+        })
         error.message = `Dropped ${drops.length} event(s) for ${AI_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
         this._emitCaptureError(error)
       }
@@ -1258,6 +1308,7 @@ export class PostHog extends PostHogCore {
       const normalized = this.normalizeMessage(processed)
       const queuedUuid = this._aiLane.enqueue(normalized)
       if (queuedUuid !== undefined) {
+        normalized.uuid = queuedUuid
         const admission = (options as CaptureAiOptions | undefined)?._admission
         if (admission) {
           admission.uuid = queuedUuid
@@ -1313,6 +1364,13 @@ export class PostHog extends PostHogCore {
   // `undefined` when absent.
   private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
     try {
+      if (this._isSessionReplayOff()) {
+        return {
+          ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES,
+          $recording_status: 'disabled',
+          $sdk_debug_pending_queue_size: this._pendingQueueSize(),
+        }
+      }
       const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
       const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
       const platformOS = getPlatformOS()
@@ -1763,9 +1821,9 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
-   * such as after a network error or a `503`, stay queued and are sent again later. Events PostHog
-   * dropped, such as after a `400` or `401`, are reported on `posthog.on('error')`. The promise
-   * resolves in both cases.
+   * such as after a network error or a `503`, stay queued and are sent again after a wait; a flush
+   * during that wait resolves without sending. Events PostHog dropped, such as after a `400` or `401`,
+   * are reported on `posthog.on('error')`. The promise resolves in all these cases.
    */
   flush(): Promise<void> {
     // Signal both lanes before waiting on either.
@@ -1773,6 +1831,11 @@ export class PostHog extends PostHogCore {
     const aiFlush =
       this.isDisabled || this._shuttingDown ? Promise.resolve() : this._initPromise.then(() => this._aiLane.flush())
     return Promise.all([super.flush(), aiFlush]).then(() => undefined)
+  }
+
+  // Analytics timer and flushAt flushes; the AI lane runs its own, which respect its resend wait.
+  protected flushAutomatic(): Promise<void> {
+    return super.flush()
   }
 
   /**
@@ -2544,6 +2607,33 @@ export class PostHog extends PostHogCore {
   _isEnableSessionReplay(): boolean {
     // Session replay has no macOS backend, so it is never enabled there (crash tracking still is).
     return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
+  }
+
+  // Replay is intentionally off: remotely (project setting or quota) or locally (opted out, or the
+  // app does not want it). A start/stop made by the app flips `_sessionReplayWanted`; internal
+  // stops (linked flag, sampling) leave it alone, so a recording that is merely held stays on.
+  // A running recorder is never off, so `disabled` never contradicts native: native may still be
+  // stopping after a remote off, or an automatic start may have resumed it after an app stop.
+  private _isSessionReplayOff(): boolean {
+    if (this._isNativeRecorderRunning()) {
+      return false
+    }
+    const remoteConfig = this.getPersistedProperty<{ sessionRecording?: unknown; quotaLimited?: unknown }>(
+      PostHogPersistedProperty.RemoteConfig
+    )
+    const quotaLimited = remoteConfig?.quotaLimited
+    if (
+      remoteConfig?.sessionRecording === false ||
+      (Array.isArray(quotaLimited) && quotaLimited.includes('mobile_recordings'))
+    ) {
+      return true
+    }
+    return this.optedOut || !this._sessionReplayWanted
+  }
+
+  private _isNativeRecorderRunning(): boolean {
+    const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
+    return status === 'active' || status === 'buffering'
   }
 
   private _isNativeSessionOwner(): boolean {
@@ -4041,9 +4131,11 @@ export class PostHog extends PostHogCore {
       // retries its pending start below. Otherwise disarm them so the capture hook stays inert.
       this._sessionReplayEventTriggers = this._sessionReplayWanted
         ? this._parseEventTriggers(
-            ((this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType })[
-              'eventTriggers'
-            ]
+            (
+              (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+                [key: string]: JsonType
+              }
+            )['eventTriggers']
           )
         : []
       if (restoreAppRecording) {
@@ -4248,6 +4340,7 @@ export class PostHog extends PostHogCore {
   private _claimReplayDebugBundle(message: PostHogEventProperties): boolean {
     const claimed =
       isReplayDebugEvent(message.event) &&
+      !this._isSessionReplayOff() &&
       !this._replayDebugBundleClaimed &&
       (this._replayDebugBundleAcceptedAt === undefined ||
         Date.now() - this._replayDebugBundleAcceptedAt >= REPLAY_DEBUG_PROPERTIES_INTERVAL_MS) &&
@@ -4380,7 +4473,10 @@ export class PostHog extends PostHogCore {
         )
       }
       if (appBuild) {
-        const installProperties = { ...properties, ...maybeAdd('$react_native_version', getReactNativeVersion()) }
+        const installProperties = {
+          ...properties,
+          ...maybeAdd('$react_native_version', getReactNativeVersion()),
+        }
         if (!prevAppBuild) {
           // new app install
           this.capture('Application Installed', installProperties)

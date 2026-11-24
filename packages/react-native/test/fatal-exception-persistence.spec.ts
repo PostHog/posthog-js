@@ -38,6 +38,10 @@ describe('fatal exception persistence', () => {
   afterEach(async () => {
     holdWrites = false
     pending.splice(0).forEach((finish) => finish())
+    // The offline fetch leaves a resend wait, which shutdown() would wait out on fake timers.
+    if (posthog) {
+      vi.spyOn(posthog as any, 'flushHoldMs').mockReturnValue(0)
+    }
     await posthog?.shutdown().catch(() => {})
     vi.clearAllTimers()
     vi.unstubAllGlobals()

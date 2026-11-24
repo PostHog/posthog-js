@@ -127,6 +127,20 @@ export interface V1SendOptions {
    * wait or halve the batch before sending them again. Unsent events (`keepUnsent`) also call it.
    */
   onDeferred?: (deferral: V1SendDeferral) => void
+  /**
+   * The request these events were kept from, when they are exactly the events it left to send again.
+   * The send reuses its request ID and `created_at` and continues its attempt numbers.
+   */
+  retryOf?: V1RequestIdentity
+}
+
+/** A capture request's identity, which a resend of the same events keeps. */
+export interface V1RequestIdentity {
+  requestId: string
+  /** The batch's `created_at`. */
+  createdAt: string
+  /** The `PostHog-Attempt` of the request's last attempt. */
+  attempt: number
 }
 
 export interface V1SendDeferral {
@@ -136,6 +150,8 @@ export interface V1SendDeferral {
   retryAfterMs?: number
   /** The batch got a `413` and should be resent in smaller batches. */
   tooLarge: boolean
+  /** The request the events were kept from, for a resend of exactly those events to pass as `retryOf`. */
+  request: V1RequestIdentity
 }
 
 interface RedirectOutcome {
@@ -191,10 +207,12 @@ export class V1CaptureSender {
       return []
     }
 
-    const { signal, keepUnsent = false, onDeferred } = options
-    const requestId = this.generateRequestId()
+    const { signal, keepUnsent = false, onDeferred, retryOf } = options
+    const requestId = retryOf?.requestId ?? this.generateRequestId()
     // created_at is generated once and stays stable across every retry.
-    const createdAt = new Date(this.now()).toISOString()
+    const createdAt = retryOf?.createdAt ?? new Date(this.now()).toISOString()
+    const attemptsBefore = retryOf?.attempt ?? 0
+    let lastAttempt = attemptsBefore
     const url = `${this.config.host}${this.config.path}`
     const drops: CaptureDroppedEvent[] = []
     const loss = new CaptureLossTally()
@@ -203,15 +221,15 @@ export class V1CaptureSender {
     const unsent = (cause: unknown, failure: string): T[] => {
       if (keepUnsent) {
         this.surfacePartialDrops(requestId, drops, loss)
-        onDeferred?.({ reason: failure, tooLarge: false })
+        onDeferred?.({ reason: failure, tooLarge: false, request: { requestId, createdAt, attempt: lastAttempt } })
         return pending
       }
       this.surfaceBatchFailure(requestId, drops, pending, cause, loss, failure)
       return []
     }
-    const deferred = (kept: T[], deferral: V1SendDeferral): T[] => {
+    const deferred = (kept: T[], deferral: Omit<V1SendDeferral, 'request'>): T[] => {
       this.surfacePartialDrops(requestId, drops, loss)
-      onDeferred?.(deferral)
+      onDeferred?.({ ...deferral, request: { requestId, createdAt, attempt: lastAttempt } })
       return kept
     }
 
@@ -228,7 +246,8 @@ export class V1CaptureSender {
       let captureAttempt: V1CaptureAttempt | undefined
       let retryDelayMs: number | undefined
       try {
-        captureAttempt = await this.sendOnce(url, payload, attempt, requestId, signal)
+        lastAttempt = attemptsBefore + attempt
+        captureAttempt = await this.sendOnce(url, payload, lastAttempt, requestId, signal)
         const { response, signal: attemptSignal, redirectFailure } = captureAttempt
         const { status } = response
         if (redirectFailure !== undefined) {
