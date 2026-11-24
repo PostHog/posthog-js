@@ -88,7 +88,8 @@ describe('session recording controls', () => {
         typeInto(document.getElementById('name') as HTMLInputElement, 'abc')
 
         replay.stopSessionRecording()
-        await vi.waitFor(() => expect(network.snapshots.length).toBeGreaterThan(0))
+        await replay.flush?.()
+        expect(network.snapshots.length).toBeGreaterThan(0)
 
         expect(replay.sessionRecordingStarted()).toBe(false)
         expect(status(posthog)).toBe('disabled')
