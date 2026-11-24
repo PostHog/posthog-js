@@ -1795,7 +1795,29 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
-    it('returns a batch too large for PostHog as the error, with its fix to split the recipients', async () => {
+    it("returns shared content too large for a batch as the 400 error, with PostHog's advice to send it one at a time", async () => {
+      const postHog = againstPostHog()
+
+      const { data, error } = await settle(
+        posthog.emails.batch(
+          { templateId: TEMPLATE_ID, templateData: { note: 'x'.repeat(300 * 1024) } },
+          recipientsTo(2)
+        )
+      )
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'content_too_large',
+        statusCode: 400,
+        message: expect.stringMatching(/Send larger emails one at a time/),
+      })
+      expect(error?.fix).toBeUndefined()
+      expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
+      expect(postHog.requests.batch).toBe(1)
+      expect(postHog.emails).toEqual([])
+    })
+
+    it('returns a request too large for PostHog as the 413 error, with its fix to split the recipients', async () => {
       const postHog = againstPostHog()
       const large = { note: 'x'.repeat(3 * 1024 * 1024) }
 

@@ -9,6 +9,7 @@ const SEND_PATH = '/api/messaging/send/email/'
 const BATCH_PATH = '/api/messaging/send/email_batch/'
 const BATCH_MAX_RECIPIENTS = 100
 const BATCH_MAX_BODY_BYTES = 5 * 1024 * 1024
+const BATCH_SHARED_MAX_BYTES = 256 * 1024
 const BATCH_REFUSED_FIELDS = new Set(['scheduled_at', 'cc', 'bcc', 'attachments', 'to', 'distinct_id'])
 const RECIPIENT_FIELDS = new Set(['to', 'distinct_id', 'message_data', 'idempotency_key'])
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,255}$/
@@ -484,6 +485,15 @@ export class FakePostHog {
     }
     if (!Array.isArray(recipients) || recipients.length === 0 || recipients.length > BATCH_MAX_RECIPIENTS) {
       throw invalidField('recipients', `Send 1 to ${BATCH_MAX_RECIPIENTS} recipients.`)
+    }
+    const sharedContent = 'template_id' in shared ? (shared.message_data ?? {}) : shared
+    if (new TextEncoder().encode(JSON.stringify(sharedContent)).byteLength > BATCH_SHARED_MAX_BYTES) {
+      // As PostHog's check_email_batch answers it: a 400 with a detail and no fix, since splitting the recipients
+      // doesn't help.
+      throw refusal(400, 'invalid_request', 'content_too_large', null, {
+        detail:
+          'The content or `message_data` that a batch sends to every recipient can be at most 256 KiB. Send larger emails one at a time.',
+      })
     }
     const keys = new Set<string>()
     recipients.forEach((recipient: unknown, index) => {
