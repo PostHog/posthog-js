@@ -430,6 +430,51 @@ describe('React Native captureAi', () => {
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
 
+  it('writes only the newest event to a slot when a burst of captures evicts older ones', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 100, captureAiMaxQueueSize: 2 })
+    for (let index = 0; index < 20; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await (client as any)._aiLane.waitForPersist()
+    const slotWrites = expoFiles.write.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
+
+    expect(slotWrites.length).toBeLessThanOrEqual(4)
+    expect(slotWrites.filter(([, content]) => content === '')).toEqual([])
+    expect(
+      [cache[aiSlot(0)], cache[aiSlot(1)]].map((content) => JSON.parse(content.split('\n')[1]).properties.index).sort()
+    ).toEqual([18, 19])
+  })
+
+  it('leaves AI events stored by an earlier launch untouched when the SDK is disabled', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    expoFiles.read.mockClear()
+    expoFiles.write.mockClear()
+
+    const errors: unknown[] = []
+    const disabled = await newPostHog({ disabled: true, captureAiMaxQueueSize: 1 })
+    disabled.on('error', (error) => errors.push(error))
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    await disabled.shutdown()
+    posthog = undefined
+
+    expect(expoFiles.read.mock.calls.filter(([path]) => path.includes('-ai-'))).toEqual([])
+    expect(expoFiles.write.mock.calls.filter(([path]) => path.includes('-ai-'))).toEqual([])
+    expect(errors).toEqual([])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1])
+  })
+
   it('never sends AI events stored for one project with another project token', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog()

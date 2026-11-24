@@ -81,9 +81,12 @@ export class CaptureAiLane {
   private _stopped = false
   private _events: QueuedAiEvent[] = []
   private _loaded = false
+  private readonly _loadPromise: Promise<void>
   private _slots = new Map<QueuedAiEvent, number>()
   // The last write to each slot, so writes to one slot land in order.
   private _slotWrites = new Map<number, Promise<boolean>>()
+  // Content for a slot whose write hasn't started yet; a newer write replaces it, so an evicted event's JSON isn't kept.
+  private _pendingSlotContent = new Map<number, string>()
 
   constructor(
     private readonly _storage: PostHogRNStorage,
@@ -95,11 +98,16 @@ export class CaptureAiLane {
   ) {
     this._batchSize = _settings.maxBatchSize
     // Every drain runs after the load, so a flush before storage has loaded still sends an earlier launch's events.
-    this._chain = this._load().catch((e) => this._logger.error('Loading stored AI events failed:', e))
+    this._loadPromise = this._load().catch((e) => this._logger.error('Loading stored AI events failed:', e))
+    this._chain = this._loadPromise
   }
 
-  /** Resolves once the stored index and every started event write have landed. Never rejects. */
+  /** Resolves once storage has loaded and the stored index and every started event write have landed. Never rejects. */
   async waitForPersist(): Promise<void> {
+    // Events captured while storage loads get their slots only once it has.
+    if (!this._loaded) {
+      await this._loadPromise
+    }
     await Promise.all([this._storage.waitForPersist(), ...this._slotWrites.values()])
   }
 
@@ -310,6 +318,10 @@ export class CaptureAiLane {
     try {
       if (this._files) {
         await this._storage.preloadPromise?.catch(() => {})
+        // Stopped before storage loaded: leave the stored queue as it is for a later launch.
+        if (this._stopped) {
+          return
+        }
         const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
         const entries = Array.isArray(stored) ? stored.filter(isStoredEvent) : []
         for (const { uuid, bytes, propertiesBytes, slot } of entries) {
@@ -321,7 +333,7 @@ export class CaptureAiLane {
     } finally {
       this._loaded = true
       // Events captured while storage loaded go after the earlier launch's, and get their slots now.
-      if (restored.length > 0 || this._events.length > 0) {
+      if (!this._stopped && (restored.length > 0 || this._events.length > 0)) {
         this._events = [...restored, ...this._events]
         this._setTrimmedQueue([...this._events])
       }
@@ -384,11 +396,12 @@ export class CaptureAiLane {
       return
     }
     const kept = new Set(queue)
+    const freed = new Set<number>()
     for (const event of previous) {
       const slot = this._slots.get(event)
       if (slot !== undefined && !kept.has(event)) {
         this._slots.delete(event)
-        void this._writeSlot(slot, '')
+        freed.add(slot)
       }
     }
     const used = new Set(this._slots.values())
@@ -399,6 +412,7 @@ export class CaptureAiLane {
           free++
         }
         used.add(free)
+        freed.delete(free)
         this._slots.set(event, free)
         // Only events captured this launch are without a slot, and they still hold their JSON.
         void this._writeSlot(free, `${event.uuid}\n${event.json!}`).then((stored) => {
@@ -407,6 +421,10 @@ export class CaptureAiLane {
           }
         })
       }
+    }
+    // A freed slot that a new event took is overwritten by it, so only the rest are cleared.
+    for (const slot of freed) {
+      void this._writeSlot(slot, '')
     }
     if (queue.length > 0) {
       const index: StoredAiEvent[] = queue.map(({ uuid, bytes, propertiesBytes }, i) => ({
@@ -421,11 +439,23 @@ export class CaptureAiLane {
     }
   }
 
-  /** Resolves true once `content` is in the slot, or false when the write failed. */
+  /**
+   * Resolves true once `content`, or newer content for the slot, is in the slot, or false when the write
+   * failed. Writes queued behind a running one are merged, so only the newest content is written.
+   */
   private _writeSlot(slot: number, content: string): Promise<boolean> {
     const files = this._files!
+    const queued = this._pendingSlotContent.has(slot)
+    this._pendingSlotContent.set(slot, content)
+    if (queued) {
+      return this._slotWrites.get(slot)!
+    }
     const write = (this._slotWrites.get(slot) ?? Promise.resolve(true))
-      .then(() => files.storage.setItem(files.key(slot), content))
+      .then(() => {
+        const latest = this._pendingSlotContent.get(slot)!
+        this._pendingSlotContent.delete(slot)
+        return files.storage.setItem(files.key(slot), latest)
+      })
       .then(
         () => true,
         (e) => {

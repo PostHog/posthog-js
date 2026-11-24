@@ -70,6 +70,16 @@ describe('PostHog React Native', () => {
       expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledWith('/mock-cache-dir/ai-key', 'ai-value')
     })
 
+    it('has no AI event storage when the legacy cache directory is null', () => {
+      const filesystem = mockedOptionalFileSystem as any
+      filesystem.cacheDirectory = null
+      try {
+        expect(buildAiEventStorage()).toBeUndefined()
+      } finally {
+        filesystem.cacheDirectory = '/mock-cache-dir/'
+      }
+    })
+
     it('should save storage to the file system', async () => {
       storage.setItem('foo', 'bar2')
       // Coalesced: the in-memory cache updates synchronously, but the disk

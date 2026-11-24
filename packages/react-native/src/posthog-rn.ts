@@ -640,8 +640,8 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsStorage(theStorage)
       // AI events can be megabytes, so they are stored only in Expo's cache directory, outside the
       // app's backups. Custom storage and AsyncStorage (whose Android rows and database are
-      // size-limited) keep them in memory.
-      const aiEventStorage = options?.customStorage ? undefined : buildAiEventStorage()
+      // size-limited) keep them in memory. A disabled client leaves stored AI events for a later enabled launch.
+      const aiEventStorage = this.isDisabled || options?.customStorage ? undefined : buildAiEventStorage()
       if (aiEventStorage) {
         const projectToken = this.projectToken
         this._aiStorage = createAiStorage(aiEventStorage, projectToken)

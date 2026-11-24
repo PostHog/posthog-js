@@ -89,6 +89,21 @@ describe('Expo SDK 55 - prefers new File API over working legacy subpath', () =>
     expect(mockLegacyWriteAsStringAsync).not.toHaveBeenCalled()
   })
 
+  it('has no AI event storage, and does not throw, when reading the cache directory throws', () => {
+    const paths = (OptionalExpoFileSystem as any).Paths
+    Object.defineProperty(paths, 'cache', {
+      configurable: true,
+      get: () => {
+        throw new Error('native module missing')
+      },
+    })
+    try {
+      expect(buildAiEventStorage()).toBeUndefined()
+    } finally {
+      Object.defineProperty(paths, 'cache', { configurable: true, writable: true, value: mockCache })
+    }
+  })
+
   it('should read using new File API, not legacy', async () => {
     const storage = buildOptimisticAsyncStorage()!
 

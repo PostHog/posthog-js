@@ -165,8 +165,11 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
 
 type ExpoDirectory = 'document' | 'cache'
 
-const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): PostHogCustomStorage => {
+const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): PostHogCustomStorage | undefined => {
   const directoryUri = directory === 'document' ? filesystem.documentDirectory : filesystem.cacheDirectory
+  if (directory === 'cache' && !directoryUri) {
+    return undefined
+  }
   return {
     async getItem(key: string) {
       try {
@@ -204,7 +207,12 @@ const buildExpoFileStorage = (directory: ExpoDirectory): PostHogCustomStorage | 
       const filesystem = OptionalExpoFileSystem as any
 
       if (filesystem.Paths && filesystem.File) {
-        const directoryPath = filesystem.Paths[directory]
+        let directoryPath: unknown
+        try {
+          directoryPath = filesystem.Paths[directory]
+        } catch {
+          return undefined
+        }
         if (!directoryPath) {
           return undefined
         }
