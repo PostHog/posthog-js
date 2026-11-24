@@ -1743,10 +1743,16 @@ describe('emails', () => {
       callIndex = 0
     ): { url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> } => {
       const [url, options] = fetch.mock.calls[callIndex]
+      const headers = Object.fromEntries(
+        Object.entries((options.headers ?? {}) as Record<string, string>).map(([key, value]) => [
+          key.toLowerCase(),
+          value,
+        ])
+      )
       return {
         url,
         method: options.method,
-        headers: options.headers,
+        headers,
         body: JSON.parse(options.body),
       }
     }
@@ -1780,7 +1786,7 @@ describe('emails', () => {
       const request = postedSend()
       expect(request.url).toBe(SEND_URL)
       expect(request.method).toBe('POST')
-      expect(request.headers.Authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(request.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
       expect(request.body).toEqual({
         to: CODE_SEND.to,
         template_key: CODE_SEND.templateKey,
@@ -2031,30 +2037,62 @@ describe('emails', () => {
       })
     })
 
-    it('picks up a category populated by an enumerable from getter after Object.entries saw undefined', async () => {
+    it('snapshots own enumerable send options once in property order when category and from use getters', async () => {
       replies = [accepted()]
-      let currentCategory: MessageCategory | undefined
+      let resolvedCategory: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory = TRANSACTIONAL_EMAIL_CATEGORY
+      const fromAnswers = ['Sender <sender@example.com>', 'Other <other@example.com>']
       const options: Record<string, unknown> = { ...CODE_SEND }
       Object.defineProperty(options, 'category', {
         enumerable: true,
         get() {
-          return currentCategory
+          return resolvedCategory
         },
       })
       Object.defineProperty(options, 'from', {
         enumerable: true,
         get() {
-          currentCategory = NEWSLETTER
-          return 'Sender <sender@example.com>'
+          resolvedCategory = NEWSLETTER
+          return fromAnswers.shift()
         },
       })
 
-      const { data, error } = await sendUnchecked(options)
+      const first = await sendUnchecked(options)
 
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body).toMatchObject({
+      expect(first.error).toBeNull()
+      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(postedSend(0).body).toMatchObject({
+        from: 'Sender <sender@example.com>',
+        category: TRANSACTIONAL_EMAIL_CATEGORY,
+      })
+
+      replies = [accepted()]
+      let categoryAfterFrom: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory = TRANSACTIONAL_EMAIL_CATEGORY
+      let categoryRead = false
+      const reversed: Record<string, unknown> = { ...CODE_SEND }
+      Object.defineProperty(reversed, 'from', {
+        enumerable: true,
+        get() {
+          categoryAfterFrom = NEWSLETTER
+          return 'Sender <sender@example.com>'
+        },
+      })
+      Object.defineProperty(reversed, 'category', {
+        enumerable: true,
+        get() {
+          if (categoryRead) {
+            return TRANSACTIONAL_EMAIL_CATEGORY
+          }
+          categoryRead = true
+          return categoryAfterFrom
+        },
+      })
+
+      const second = await sendUnchecked(reversed)
+
+      expect(second.error).toBeNull()
+      expect(second.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(1).body).toMatchObject({
         from: 'Sender <sender@example.com>',
         category: NEWSLETTER,
       })

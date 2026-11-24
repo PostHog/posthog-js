@@ -484,7 +484,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send: UncheckedSend = options ?? {}
+  const send = snapshotOptions(options)
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
@@ -514,6 +514,11 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
+}
+
+function snapshotOptions(options: unknown): UncheckedSend {
+  const entries = options !== null && typeof options === 'object' ? Object.entries(options) : []
+  return Object.assign(Object.create(null), Object.fromEntries(entries)) as UncheckedSend
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -598,7 +603,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       'templateKey'
     )
   }
-  const ownEntries = refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -613,6 +618,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
   } else if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
+  const fields = codeFormFields(send)
   const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
   return {
     content: {
@@ -620,18 +626,16 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       subject,
       ...(html !== undefined && { html }),
       ...(text !== undefined && { text }),
-      ...codeFormFields(send, ownEntries),
+      ...fields,
       ...(distinctId !== undefined && { distinct_id: distinctId }),
     },
     files,
   }
 }
 
-function codeFormFields(send: UncheckedSend, ownEntries: [string, unknown][]): Record<string, unknown> {
-  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
-  const ownCategory = ownEntries.find(([name]) => name === 'category')?.[1]
-  const rawCategory = ownCategory !== undefined ? ownCategory : send.category
-  const category = rawCategory !== undefined ? checkedCategory(rawCategory) : undefined
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking, category } = send
+  const validatedCategory = category !== undefined ? checkedCategory(category) : undefined
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -640,7 +644,7 @@ function codeFormFields(send: UncheckedSend, ownEntries: [string, unknown][]): R
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
-    ...(category !== undefined && { category }),
+    ...(validatedCategory !== undefined && { category: validatedCategory }),
   }
 }
 
@@ -748,11 +752,10 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): [string, unknown][] {
-  const entries = Object.entries(send)
-  const field = entries.find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
+  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
   if (field === undefined) {
-    return entries
+    return
   }
   const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
   if (!otherForm.fields.has(field)) {
