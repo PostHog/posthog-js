@@ -583,4 +583,59 @@ describe('React Native captureAi', () => {
     expect(writes).toBeGreaterThan(0)
     expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai.json').length).toBe(writes)
   })
+
+  it('halves the AI batch on 413 and sends every event', async () => {
+    respond = (request) =>
+      request.path === AI_PATH && request.body.batch.length > 1
+        ? { status: 413 }
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
+  })
+
+  it('drops a single AI event the server rejects with 413', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) => (request.path === AI_PATH ? { status: 413 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+
+    client.captureAi('$ai_generation')
+    await client.flush()
+    await client.flush()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
+  it('resends AI events after the resend wait', async () => {
+    let failures = 1
+    respond = (request) =>
+      request.path === AI_PATH && failures-- > 0 ? { status: 503, body: {} } : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 1 })
+
+    client.captureAi('$ai_generation')
+    await new Promise((resolve) => setTimeout(resolve, 1800))
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation'], ['$ai_generation']])
+  })
+
+  it('returns undefined for an AI event whose properties cannot be serialized', async () => {
+    const client = await newPostHog({ flushAt: 10 })
+    vi.spyOn((client as any)._logger, 'error').mockImplementation(() => {})
+
+    const uuid = client.captureAi('$ai_generation', {
+      bad: {
+        toJSON: () => {
+          throw new Error('boom')
+        },
+      },
+    })
+    await client.flush()
+
+    expect(uuid).toBeUndefined()
+    expect(sent(AI_PATH)).toEqual([])
+  })
 })
