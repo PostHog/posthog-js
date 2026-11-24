@@ -1006,6 +1006,8 @@ export interface IPostHog {
    * @param matchValue The flag value previously obtained from calling `getFeatureFlag()`. Can be a string or boolean.
    *                   To avoid extra network calls, pass this parameter when you can.
    * @param options: dict with optional parameters below
+   * @param personPropertyKeysKnownAbsent optional - person property keys known to be absent. See {@link BaseFlagEvaluationOptions}.
+   * @param groupPropertyKeysKnownAbsent optional - group property keys known to be absent, by group type. See {@link BaseFlagEvaluationOptions}.
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    *
    * @returns payload of a json type object
@@ -1018,6 +1020,8 @@ export interface IPostHog {
     distinctId: string,
     matchValue?: FeatureFlagValue,
     options?: {
+      personPropertyKeysKnownAbsent?: string[]
+      groupPropertyKeysKnownAbsent?: Record<string, string[]>
       onlyEvaluateLocally?: boolean
     }
   ): Promise<JsonType | undefined>

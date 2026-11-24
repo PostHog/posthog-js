@@ -4109,8 +4109,10 @@ Use IPostHog.evaluateFlags and call `flags.getFlag(key)` on the
 | `key` | `string` | the unique key of your feature flag |
 | `distinctId` | `string` | the current unique id |
 | `matchValue?` | `FeatureFlagValue` | The flag value previously obtained from calling `getFeatureFlag()`. Can be a string or boolean. To avoid extra network calls, pass this parameter when you can. |
-| `options?` | \{ `onlyEvaluateLocally?`: `boolean`; \} | - |
+| `options?` | \{ `groupPropertyKeysKnownAbsent?`: `Record`\<`string`, `string`[]\>; `onlyEvaluateLocally?`: `boolean`; `personPropertyKeysKnownAbsent?`: `string`[]; \} | - |
+| `options.groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | - |
 | `options.onlyEvaluateLocally?` | `boolean` | - |
+| `options.personPropertyKeysKnownAbsent?` | `string`[] | - |
 
 ###### Returns
 

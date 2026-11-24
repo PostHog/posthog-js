@@ -10,6 +10,10 @@ export function checkPublicInterface(posthog: PostHog): Promise<void> {
   client.captureException(new Error('queued exception'), 'user')
   client.alias({ distinctId: 'user', alias: 'anonymous', options: { cookieless_mode: true } })
   void client.aliasImmediate({ distinctId: 'user', alias: 'anonymous', options: { cookieless_mode: true } })
+  void client.getFeatureFlagPayload('flag', 'user', undefined, {
+    personPropertyKeysKnownAbsent: ['plan'],
+    groupPropertyKeysKnownAbsent: { organization: ['tier'] },
+  })
   return client.captureExceptionImmediate(new Error('immediate exception'), { distinctId: 'user' })
 }
 
