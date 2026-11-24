@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.454.3
+
+### Patch Changes
+
+- [#5744](https://github.com/PostHog/posthog-js/pull/5744) [`962bf43`](https://github.com/PostHog/posthog-js/commit/962bf436da05f0382ed69d7cc380e9f92d39ede9) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording play, pause and other media events that a page dispatches on elements that are not audio or video.
+  (2026-11-24)
+
 ## 1.454.2
 
 ### Patch Changes
