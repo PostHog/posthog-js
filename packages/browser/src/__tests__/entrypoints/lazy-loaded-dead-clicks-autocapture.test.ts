@@ -43,6 +43,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 props: {},
             },
             capture: vi.fn(),
+            is_capturing: () => true,
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -74,6 +75,31 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
+        })
+
+        it.each([
+            [
+                'is_capturing()',
+                (instance: PostHog) => {
+                    instance.is_capturing = () => false
+                },
+            ],
+            [
+                'has_opted_out_capturing() on a core without is_capturing()',
+                (instance: PostHog) => {
+                    delete (instance as Partial<PostHog>).is_capturing
+                    instance.has_opted_out_capturing = () => true
+                },
+            ],
+        ])('does not report a click made while %s says capturing is off', (_, turnCapturingOff) => {
+            turnCapturingOff(fakeInstance)
+            triggerMouseEvent(document.body, 'click')
+
+            fakeInstance.is_capturing = () => true
+            vi.setSystemTime(4000)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
         it('does not store clicks after stop', () => {

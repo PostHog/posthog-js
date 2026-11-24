@@ -1,11 +1,11 @@
 import { getTimezone } from './timezone'
 export { getTimezone } from './timezone'
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
+import { hasOwnProperty, isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './general-utils'
+import { each, eachArray, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
 import type { BrowserDetectionHints, BrowserDetectionOptions } from '@posthog/core'
 import {
@@ -46,6 +46,27 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'irclid', // impact
     '_kx', // klaviyo
 ]
+
+// Other spellings of the Snapchat click ID that appear in landing URLs.
+// Query params are case-sensitive, so each spelling is listed exactly.
+// Snapchat documents ScCid, SsCid and sscid. The lowercase `sscid` is not read
+// as the Snapchat click ID because ShareASale uses it for its own affiliate click ID.
+const SNAPCHAT_CLICK_ID_ALIASES = ['ScCid', 'SsCid']
+
+// Other spellings of a campaign param. A value found under an alias is stored
+// under the canonical name.
+export const CAMPAIGN_PARAM_ALIASES: Record<string, string[]> = {
+    sccid: SNAPCHAT_CLICK_ID_ALIASES,
+}
+
+// The URL params to mask when masking personal data: the personal data campaign
+// params and the aliases of those params.
+export const PERSONAL_DATA_URL_PARAMS = /* @__PURE__ */ (() => [
+    ...PERSONAL_DATA_CAMPAIGN_PARAMS,
+    ...SNAPCHAT_CLICK_ID_ALIASES,
+    // Snapchat's lowercase spelling and ShareASale's affiliate click ID: masked, but never read as sccid
+    'sscid',
+])()
 
 export const CAMPAIGN_PARAMS = /* @__PURE__ */ (() => [
     'utm_source',
@@ -99,7 +120,7 @@ export function getCampaignParams(
     }
 
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
 
     // Initially get campaign params from the URL
@@ -122,7 +143,12 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 
     const params: Record<string, any> = {}
     each(campaign_keywords, function (kwkey) {
-        const kw = getQueryParam(url, kwkey)
+        let kw = getQueryParam(url, kwkey)
+        if (!kw && hasOwnProperty.call(CAMPAIGN_PARAM_ALIASES, kwkey)) {
+            eachArray(CAMPAIGN_PARAM_ALIASES[kwkey], function (alias) {
+                kw = kw || getQueryParam(url, alias)
+            })
+        }
         params[kwkey] = kw ? kw : null
     })
 
@@ -220,7 +246,7 @@ export function getPersonInfo(
     disableCaptureUrlHashes: boolean = false
 ) {
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
     const url = href?.substring(0, 1000)
@@ -233,10 +259,22 @@ export function getPersonInfo(
 
 export function getPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[]
 ): Record<string, any> {
     const { r: referrer, u } = info
-    const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
+    const strippedUrl = disableCaptureUrlHashes ? stripUrlHash(u) : u
+    // The stored URL may come from an older SDK version that masked fewer params,
+    // so mask it again before deriving any property from it.
+    const url =
+        strippedUrl && maskPersonalDataProperties
+            ? maskQueryParams(
+                  strippedUrl,
+                  [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])],
+                  MASKED
+              )
+            : strippedUrl
     const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
@@ -248,8 +286,7 @@ export function getPersonPropsFromInfo(
         const location = convertToURL(url)
         props['$host'] = location?.host
         props['$pathname'] = location?.pathname
-        const campaignParams = _getCampaignParamsFromUrl(url)
-        extend(props, campaignParams)
+        extend(props, _getCampaignParamsFromUrl(url))
     }
     if (referrer) {
         const searchInfo = _getSearchInfoFromReferrer(referrer)
@@ -260,9 +297,16 @@ export function getPersonPropsFromInfo(
 
 export function getInitialPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[]
 ): Record<string, any> {
-    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
+    const personProps = getPersonPropsFromInfo(
+        info,
+        disableCaptureUrlHashes,
+        maskPersonalDataProperties,
+        customPersonalDataProperties
+    )
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val
@@ -297,7 +341,7 @@ export function getEventProperties(
         return {}
     }
     const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)

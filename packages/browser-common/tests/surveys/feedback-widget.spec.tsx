@@ -164,7 +164,7 @@ describe('FeedbackWidget', () => {
         expect(screen.queryByRole('form')).not.toBeInTheDocument()
 
         // Close the thank you message
-        const closeButton = screen.getByRole('button', { name: /close/i })
+        const closeButton = screen.getByRole('button', { name: /^close survey$/i })
         fireEvent.click(closeButton)
 
         // Thank you message should disappear
