@@ -58,7 +58,7 @@ import { compressEventSync } from '@posthog/browser-common/replay/event-compress
 
 import { createId } from '../../primitives/id'
 import { version } from '../../primitives/version'
-import type { IPostHog } from '../../core/types'
+import type { IPostHog, NewSessionInfo, NewSessionReason } from '../../core/types'
 import type { BrowserState } from '../../core/state/state'
 import { analyticsOf, type Analytics } from '../analytics/analytics-core'
 import { createReplayTriggerHost, type ReplayDebugHost } from './replay-trigger-host'
@@ -91,6 +91,13 @@ const USER_INTERACTION_SOURCES: readonly number[] = [
 
 const isCustomEvent = (event: eventWithTime, tag: string): boolean =>
     event.type === EventType.Custom && (event.data as { tag?: unknown }).tag === tag
+
+const toChangeReason = (reason: NewSessionReason) => ({
+    noSessionId: reason === 'reset',
+    activityTimeout: reason === 'idleTimeout',
+    sessionPastMaximumLength: reason === 'maxLength',
+    crossTabAdoption: false,
+})
 
 type BufferedSnapshot = SnapshotBuffer & { distinctId: string }
 
@@ -176,7 +183,6 @@ export class SessionRecorder {
     private _fullSnapshotTimer: ReturnType<typeof setInterval> | undefined
     private _subscriptions: Disposable[] = []
     private _removeEventTriggerListener: (() => void) | undefined
-    private _touchingSession = false
     private _lastTouchTimestamp = 0
     private _restarting = false
     private _activatingTrigger = false
@@ -412,13 +418,7 @@ export class SessionRecorder {
 
     private _touchSession(timestamp?: number): SessionContext | undefined {
         const analytics = this._analytics
-        if (!analytics) return undefined
-        this._touchingSession = true
-        try {
-            return touchSession(analytics, timestamp)
-        } finally {
-            this._touchingSession = false
-        }
+        return analytics ? touchSession(analytics, timestamp) : undefined
     }
 
     private _adoptSession(session: SessionContext | undefined): void {
@@ -621,7 +621,7 @@ export class SessionRecorder {
                 },
             },
             this._client.onNewSession((session) => {
-                if (this._touchingSession || session.sessionId === this._sessionId) return
+                if (session.sessionId === this._sessionId) return
                 this._onSessionRotated(session)
             }),
             this._client.onEvent(({ event, properties }) => {
@@ -657,9 +657,14 @@ export class SessionRecorder {
         this._queuedCustomEvents = []
     }
 
-    private _onSessionRotated(session: SessionContext): void {
+    private _onSessionRotated(session: NewSessionInfo): void {
         const holdNextEpoch = this._isIdle !== false
-        this._addCustomEvent('$session_id_change', { sessionId: session.sessionId, windowId: session.windowId })
+        const changeReason = toChangeReason(session.reason)
+        this._addCustomEvent('$session_id_change', {
+            sessionId: session.sessionId,
+            windowId: session.windowId,
+            changeReason,
+        })
         // rrweb emits the marker synchronously, and processing it may already have restarted on the new session
         if (this._sessionId === session.sessionId) return
         this._isIdle = 'unknown'

@@ -266,8 +266,21 @@ describe('session recording timing', () => {
         const next = snapshotEvents(network).filter((event) => event.properties.$session_id !== firstSession)
         expect(next.length).toBeGreaterThan(0)
         // the first interaction that starts the new session is recorded in the new session, not dropped
-        const nextEvents = next.flatMap((event) => event.properties.$snapshot_data as Array<{ type: number }>)
+        const nextEvents = next.flatMap(
+            (event) => event.properties.$snapshot_data as Array<{ type: number; data?: any }>
+        )
         expect(nextEvents.some((event) => event.type === 3)).toBe(true)
+        const changeMarker = nextEvents.find((event) => event.type === 5 && event.data?.tag === '$session_id_change')
+        expect(changeMarker?.data?.payload).toEqual({
+            sessionId: posthog.session!.sessionId,
+            windowId: posthog.session!.windowId,
+            changeReason: {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            },
+        })
         expect(next.every((event) => event.properties.distinct_id !== firstDistinctId)).toBe(true)
         expect(
             snapshotEvents(network)
