@@ -578,6 +578,11 @@ export class SessionRecorder {
         this._lastActivityTimestamp = Date.now()
         this._addCustomEvent('$remote_config_received', this._config)
         this._addCustomEvent('$session_options', { activePlugins: plugins.map((plugin) => plugin.name) })
+        // posthog-js records its whole configuration; replay knows the API host and its own options, whose callbacks
+        // the snapshot's JSON leaves out
+        this._addCustomEvent('$posthog_config', {
+            config: { apiHost: this._analytics!._core._requestRuntime[0].api, sessionRecording: this._host.options },
+        })
     }
 
     private _listen(): void {
