@@ -300,9 +300,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   /**
-   * Whether events use the posthog-js-lite / React Native 4.x person state: the SDK's `$is_identified` replaces a
-   * registered or caller value, identity events carry a registered `$process_person_profile`, and `$autocapture`
-   * events get neither. {@link PostHogCore} keeps it for posthog-js-lite.
+   * Whether events use the posthog-js-lite / React Native 4.x person state: the SDK's `$process_person_profile` and
+   * `$is_identified` replace a registered or caller value, identity events carry a registered
+   * `$process_person_profile`, and `$autocapture` events get neither. {@link PostHogCore} keeps it for
+   * posthog-js-lite and `@posthog/electron`.
    */
   protected usesLegacyEventPersonState(): boolean {
     return false

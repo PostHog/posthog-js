@@ -59,10 +59,16 @@ describe('event person state', () => {
   it('leaves a registered personless setting off identity events captured directly', () => {
     const client = newPostHog({ personProfiles: 'always' })
     client.register({ $process_person_profile: false })
-    for (const event of ['$identify', '$create_alias', '$groupidentify']) {
+    for (const event of ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']) {
       client.capture(event, { distinct_id: 'user-123' })
       expect(queued(client, event).properties.$process_person_profile).toBe(true)
     }
+  })
+
+  it('lets a caller $process_person_profile win on identity events captured directly', () => {
+    const client = newPostHog({ personProfiles: 'always' })
+    client.capture('$identify', { distinct_id: 'user-123', $process_person_profile: false })
+    expect(queued(client, '$identify').properties.$process_person_profile).toBe(false)
   })
 
   it('treats a null caller $process_person_profile and $is_identified as unset', () => {
