@@ -81,28 +81,39 @@ const RESULT_FIELDS: Record<string, string> = {
   errorMessage: 'error_message',
   metadata: 'metadata',
 }
-const ITEM_IDS: Record<string, string> = {
+export const EDITABLE_ITEM_IDS = {
   modelVersion: 'model_version',
   caseKey: 'case_key',
   trial: 'trial',
+  applicationTraceId: 'application_trace_id',
+} as const
+const ITEM_IDS: Record<string, string> = {
+  ...EDITABLE_ITEM_IDS,
   datasetItemIdentifier: 'dataset_item_identifier',
   datasetItemVersionIdentifier: 'dataset_item_version_identifier',
-  applicationTraceId: 'application_trace_id',
 }
 const items = new WeakMap<EvaluationItem, string>()
 const results = new WeakMap<EvaluationResult, string>()
 
-function payload(options: WireObject, fields: Record<string, string>, limit: number): WireObject | undefined {
+const PAYLOADS = {
+  item: { fields: ITEM_FIELDS, limit: 1024 * 1024 },
+  result: { fields: RESULT_FIELDS, limit: 256 * 1024 },
+}
+function payload(options: WireObject, kind: keyof typeof PAYLOADS): WireObject | undefined {
+  const { fields } = PAYLOADS[kind]
   const supplied = Object.keys(fields).filter((key) => options[key] !== undefined)
   if (options.payload !== undefined && supplied.length)
     throw new TypeError('Supply payload or individual fields, not both.')
   if (options.payload === undefined && !supplied.length) return undefined
   const source =
-    options.payload === undefined
-      ? Object.fromEntries(supplied.map((key) => [key, options[key]]))
-      : object(options.payload)
+    options.payload === undefined ? Object.fromEntries(supplied.map((key) => [key, options[key]])) : options.payload
+  return checkedPayload(source, kind)
+}
+export function checkedPayload(value: unknown, kind: keyof typeof PAYLOADS): WireObject {
+  const { fields, limit } = PAYLOADS[kind]
+  const source = object(value)
   keys(source, Object.keys(fields))
-  const value = Object.fromEntries(
+  const mapped = Object.fromEntries(
     Object.entries(source).map(([key, v]) => {
       if (key === 'metadata' && v !== null) metadata(v)
       if ((key === 'reasoning' || key === 'errorMessage') && v !== null && typeof v !== 'string')
@@ -110,7 +121,7 @@ function payload(options: WireObject, fields: Record<string, string>, limit: num
       return [fields[key], v]
     })
   )
-  const snapshot = json(value) as WireObject
+  const snapshot = json(mapped) as WireObject
   if (bytes(encode(snapshot)) > limit) throw new TypeError('Evaluation payload exceeds its UTF-8 byte limit.')
   return snapshot
 }
@@ -123,7 +134,7 @@ function restoredPayload(value: unknown, fields: Record<string, string>): WireOb
       .map(([key, wire]) => [key, source[wire]])
   )
 }
-function score(value: unknown): boolean | number | string[] {
+export function score(value: unknown): boolean | number | string[] {
   if (typeof value === 'boolean') return value
   if (typeof value === 'bigint') {
     const result = Number(value)
@@ -165,7 +176,7 @@ export class EvaluationItem {
       if (value !== undefined && value !== null) body[wire] = identifier(value)
     }
     if (options.datasetItemVersionId != null) body.dataset_item_version_id = uuid(options.datasetItemVersionId)
-    const data = payload(options as WireObject, ITEM_FIELDS, 1024 * 1024)
+    const data = payload(options as WireObject, 'item')
     if (data !== undefined) body.payload = data
     items.set(this, encode(body))
     Object.freeze(this)
@@ -213,6 +224,12 @@ export class EvaluationItem {
   }
 }
 
+export function validateResultStatus(status: ResultStatus, value: unknown, errorCode: unknown): void {
+  if (!['ok', 'error', 'skipped', 'not_applicable'].includes(status)) throw new TypeError('Unsupported result status.')
+  if (status !== 'ok' && value != null) throw new TypeError('Only ok results can contain a score.')
+  if (status !== 'error' && errorCode != null) throw new TypeError('Only error results can contain an error code.')
+}
+
 /** An evaluator outcome pinned to an exact scorer version. `ok` does not imply passing. */
 export class EvaluationResult {
   /** Request a server-calculated composite instead of reporting a value. */
@@ -251,12 +268,7 @@ export class EvaluationResult {
     )
       throw new TypeError('A calculation accepts only item, scorerVersionId, and calculate: true.')
     const status = options.status ?? 'ok'
-    if (!['ok', 'error', 'skipped', 'not_applicable'].includes(status))
-      throw new TypeError('Unsupported result status.')
-    if (status !== 'ok' && options.value !== undefined && options.value !== null)
-      throw new TypeError('Only ok results can contain a score.')
-    if (status !== 'error' && options.errorCode != null)
-      throw new TypeError('Only error results can contain an error code.')
+    validateResultStatus(status, options.value, options.errorCode)
     const body: WireObject = { item_id: this.itemId, scorer_version_id: this.scorerVersionId }
     if (this.calculate) body.calculate = true
     else {
@@ -266,7 +278,7 @@ export class EvaluationResult {
     if (options.errorCode != null) body.error_code = identifier(options.errorCode, 128)
     if (options.evaluatorTraceId != null) body.evaluator_trace_id = identifier(options.evaluatorTraceId)
     if (options.evaluatedAt != null) body.evaluated_at = timestamp(options.evaluatedAt)
-    const data = payload(options as WireObject, RESULT_FIELDS, 256 * 1024)
+    const data = payload(options as WireObject, 'result')
     if (data !== undefined) {
       if (status !== 'error' && data.error_message != null)
         throw new TypeError('Only error results can contain an error message.')
