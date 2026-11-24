@@ -96,9 +96,13 @@ function pickUnresolvedReason(
   return UNRESOLVED_REASON_PRECEDENCE.indexOf(next) < UNRESOLVED_REASON_PRECEDENCE.indexOf(current) ? next : current
 }
 
+// Marks an inconclusive error that only the server can resolve, whatever the caller passes.
+// @posthog/core sets it on a regex it can't run the way the server does.
+const REQUIRES_SERVER = Symbol.for('posthog.requiresServerRegexEvaluation')
+
 function preserveServerOnlyUncertainty(error: InconclusiveMatchError, original: unknown): InconclusiveMatchError {
-  if (original instanceof InconclusiveMatchError && Symbol.for('posthog.requiresServerRegexEvaluation') in original) {
-    Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
+  if (original instanceof InconclusiveMatchError && REQUIRES_SERVER in original) {
+    Object.defineProperty(error, REQUIRES_SERVER, { value: true })
   }
   return error
 }
@@ -708,7 +712,7 @@ class FeatureFlagsPoller {
           // Evaluation error (bad regex, invalid date, missing property, etc.)
           // Track that we had an inconclusive match, but try other conditions
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
-          if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) {
+          if (REQUIRES_SERVER in e) {
             serverOnlyError = e
             if (
               earlyExitEnabled &&
@@ -807,7 +811,7 @@ class FeatureFlagsPoller {
             continue
           }
           if (e instanceof InconclusiveMatchError) {
-            if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) serverOnlyError = e
+            if (REQUIRES_SERVER in e) serverOnlyError = e
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
             continue
           }
@@ -979,7 +983,7 @@ class FeatureFlagsPoller {
         : `Evaluating these flags falls back to a server request when evaluation reaches that part.`
       console.warn(
         `[PostHog] You are using local evaluation but ${unsupportedDefinitionFlags.length} flag(s) use something ` +
-          `local evaluation does not support, such as a static cohort, an unknown operator, ` +
+          `local evaluation does not support, such as a static cohort, an unknown operator or filter type, ` +
           `or a missing or circular flag dependency ` +
           `(reason: unsupported_definition): ${unsupportedDefinitionFlags.join(', ')}. ` +
           `${consequence} To evaluate them locally, change these flags in PostHog or upgrade posthog-node.`
@@ -1457,9 +1461,8 @@ function assertPropertyFilterTypeSupported(property: FlagProperty): void {
       `Can't evaluate a '${property.type}' filter on '${property.key}' locally`,
       'unsupported_definition'
     )
-    // No caller can supply the value, so as with a regex only the server can run, a later
-    // condition must not choose a different value for the flag.
-    Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
+    // No caller can supply the value, so a later condition must not choose a different one.
+    Object.defineProperty(error, REQUIRES_SERVER, { value: true })
     throw error
   }
 }
@@ -1568,7 +1571,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
-          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) serverOnlyError = err
+          if (REQUIRES_SERVER in err) serverOnlyError = err
         } else {
           throw err
         }
@@ -1635,7 +1638,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
-          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) serverOnlyError = err
+          if (REQUIRES_SERVER in err) serverOnlyError = err
         } else {
           throw err
         }

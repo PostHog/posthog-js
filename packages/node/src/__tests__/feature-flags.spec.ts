@@ -3109,6 +3109,26 @@ describe('local evaluation', () => {
         expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
       })
 
+      it.each([
+        ['before', [{ key: 'plan', type: 'person', operator: 'exact', value: 'paid' }, firstSeenFilter]],
+        ['after', [firstSeenFilter, { key: 'plan', type: 'person', operator: 'exact', value: 'paid' }]],
+      ])('falls back to /flags with a missing property %s the filter', async (_, properties) => {
+        const [target] = definitions['another variant']
+        const [, existingUser] = target.filters.groups
+        posthog = createTargetClient(
+          [
+            flag('target', {
+              groups: [{ properties, rollout_percentage: 100, variant: 'new-user' }, existingUser],
+              multivariate,
+            }),
+          ],
+          'new-user'
+        )
+
+        expect(await posthog.getFeatureFlag('target', 'test-distinct-id')).toBe('new-user')
+        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+      })
+
       it('stays local when the later condition chooses the same value', async () => {
         posthog = createTargetClient(
           [flag('target', { groups: [{ properties: [firstSeenFilter], rollout_percentage: 100 }, catchAll()] })],
@@ -3120,13 +3140,24 @@ describe('local evaluation', () => {
       })
 
       it.each([
-        ['OR', 'paid', 'new-user'],
-        ['AND', 'free', 'existing-user'],
-      ])('stays local when another filter decides the %s cohort', async (type, value, expected) => {
+        ['OR', 'in', 'paid', 'new-user'],
+        ['OR', 'not_in', 'paid', 'existing-user'],
+        ['AND', 'in', 'free', 'existing-user'],
+        ['AND', 'not_in', 'free', 'new-user'],
+      ])('stays local when another filter decides the %s cohort (%s)', async (type, operator, value, expected) => {
         const planFilter = { key: 'plan', type: 'person', operator: 'exact', value }
-        posthog = createTargetClient(definitions['another variant'], 'from-server', {
-          '7': { type, values: [firstSeenFilter, planFilter] },
-        })
+        const [target] = definitions['another variant']
+        const [newUser, existingUser] = target.filters.groups
+        posthog = createTargetClient(
+          [
+            flag('target', {
+              groups: [{ ...newUser, properties: [{ ...firstSeenCohort, operator }] }, existingUser],
+              multivariate,
+            }),
+          ],
+          'from-server',
+          { '7': { type, values: [firstSeenFilter, planFilter] } }
+        )
 
         const result = await posthog.getFeatureFlag('target', 'test-distinct-id', {
           personProperties: { plan: 'paid' },
@@ -3143,6 +3174,18 @@ describe('local evaluation', () => {
         flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], { '7': { type: 'AND', values: [firstSeenFilter] } }),
       ],
       ['in a flag condition', flagTargeting([firstSeenFilter])],
+      [
+        'in a not_in cohort',
+        flagTargeting([{ key: 'id', value: 7, type: 'cohort', operator: 'not_in' }], {
+          '7': { type: 'AND', values: [firstSeenFilter] },
+        }),
+      ],
+      [
+        'negated in a cohort',
+        flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], {
+          '7': { type: 'AND', values: [{ ...firstSeenFilter, negation: true }] },
+        }),
+      ],
     ]
 
     it.each(locations)('is unsupported_definition in evaluateFlags without created_at (%s)', async (_, localFlags) => {
