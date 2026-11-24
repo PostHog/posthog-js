@@ -1605,6 +1605,7 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
     this._sessionReplayStartedByApp = false
+    this._triggerGroupsEvaluator.forgetScreen()
     // Stop recording when consent is withdrawn, not just drop what it captures afterwards.
     const replayStop = this._isInitialized
       ? coreOptOut.then(() => this._evaluateAndStartSessionReplay()).catch(() => {})

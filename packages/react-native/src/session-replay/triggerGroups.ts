@@ -371,6 +371,14 @@ export class SessionReplayTriggerGroupsEvaluator {
     return true
   }
 
+  // Screens are not captured while opted out, so the remembered one may be a screen the app has left.
+  forgetScreen(): void {
+    this.lastScreenName = null
+    this.lastScreenSessionId = null
+    this.screenCheckedSessionId = null
+    this.lastScreenEvaluated = false
+  }
+
   // A session that started after the last $screen event gets none for the screen the app is already
   // on, so the screen leg is checked against that screen, once per session. Returns whether a group
   // newly activated. Moves activation to sessionId, so it takes the current session id only.

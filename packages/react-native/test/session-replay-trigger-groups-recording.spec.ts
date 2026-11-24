@@ -312,6 +312,32 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
     })
 
+    it('forgets the screen on opt-out, so opt-in waits for the next $screen event', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      replay.isEnabled.mockImplementation(async () => true)
+      const firstSessionId = posthog.getSessionId()
+
+      await posthog.optOut()
+      await posthog.screen('Home')
+      await posthog.optIn()
+      await waitForNativePluginEvaluation(posthog)
+      await wait(50)
+      expect(posthog.getSessionId()).not.toEqual(firstSessionId)
+      expect(activation()?.sessionId).toEqual(firstSessionId)
+
+      await posthog.screen('checkout-step-2')
+      await waitForExpect(2000, () =>
+        expect(activation()).toEqual({ sessionId: posthog.getSessionId(), eventGroupIds: [], screenGroupIds: ['g1'] })
+      )
+    })
+
     it('re-arms after a rotation on a screen the app has left', async () => {
       currentSessionRecording = v2Config([checkoutGroup])
       await warmup()
