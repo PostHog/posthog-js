@@ -954,19 +954,7 @@ export class PostHog extends PostHogCore {
       await Promise.all([
         this._logs.shutdown(logsBudgetMs),
         super._shutdown(remainingMs),
-        this.isDisabled
-          ? Promise.resolve()
-          : // Events captured before initialization reach the lane once it completes.
-            raceWithTimeout(
-              this._initPromise.then(() => this._aiLane.shutdown(Math.max(0, remainingMs - (Date.now() - start)))),
-              remainingMs,
-              () => {
-                this._logger.critical(
-                  'PostHog AI events were still sending when shutdown timed out. Some may not have been sent.',
-                  { shutdownTimeoutMs }
-                )
-              }
-            ),
+        this.isDisabled ? Promise.resolve() : this._shutdownAiLane(start, shutdownTimeoutMs),
       ])
     } finally {
       this._aiLane.stop()
@@ -990,6 +978,20 @@ export class PostHog extends PostHogCore {
       ])
       await raceWithTimeout(drain, remainingMs)
     }
+  }
+
+  // Like the analytics shutdown, the time limit starts once initialization completes, which hands the lane any
+  // events captured before it.
+  private async _shutdownAiLane(start: number, shutdownTimeoutMs: number): Promise<void> {
+    await this._initPromise
+    const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+    await raceWithTimeout(this._aiLane.shutdown(remainingMs), remainingMs, () => {
+      this._aiLane.stop()
+      this._logger.critical(
+        'PostHog AI events were still sending when shutdown timed out. Some may not have been sent.',
+        { shutdownTimeoutMs }
+      )
+    })
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {

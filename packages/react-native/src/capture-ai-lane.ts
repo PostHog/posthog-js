@@ -77,6 +77,8 @@ export class CaptureAiLane {
   private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
   private _stopped = false
+  // Once shutdown starts it sends every resend itself, so no timer may send on its own.
+  private _shuttingDown = false
   private _events?: SerializedV1Event[]
   private _storageLoaded = false
 
@@ -166,23 +168,38 @@ export class CaptureAiLane {
   }
 
   /**
-   * Flushes once more, waiting out a resend wait that ends within `timeoutMs`, then stops the lane's
-   * timers so nothing sends after shutdown.
+   * Joins a flush already in flight, then sends what is left, waiting out each resend wait that ends within
+   * `timeoutMs`. It stops once a flush sends nothing, then stops the lane's timers so nothing sends after shutdown.
    */
   async shutdown(timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    this._shuttingDown = true
+    this._clearFlushTimer()
+    this._clearResendTimer()
     try {
-      const holdMs = Math.max(0, this._resendAt - Date.now())
-      if (holdMs > 0 && this._queue().length > 0) {
-        if (holdMs >= timeoutMs) {
+      await this._chain
+      while (!this._stopped && this._queue().length > 0 && Date.now() < deadline) {
+        const holdMs = Math.max(0, this._resendAt - Date.now())
+        if (holdMs > 0) {
+          if (Date.now() + holdMs >= deadline) {
+            return
+          }
+          await new Promise<void>((resolve) => {
+            this._shutdownWait = { timer: safeSetTimeout(resolve, holdMs), resolve }
+          })
+          this._shutdownWait = undefined
+          if (this._stopped) {
+            return
+          }
+          this._resendAt = 0
+          continue
+        }
+        const queued = this._queue().length
+        await this.flush()
+        if (this._queue().length >= queued) {
           return
         }
-        await new Promise<void>((resolve) => {
-          this._shutdownWait = { timer: safeSetTimeout(resolve, holdMs), resolve }
-        })
-        this._shutdownWait = undefined
-        this._resendAt = 0
       }
-      await this.flush()
     } finally {
       this.stop()
     }
@@ -290,7 +307,7 @@ export class CaptureAiLane {
   }
 
   private _scheduleFlush(): void {
-    if (this._stopped || this._flushTimer || this._settings.flushIntervalMs <= 0) {
+    if (this._stopped || this._shuttingDown || this._flushTimer || this._settings.flushIntervalMs <= 0) {
       return
     }
     this._flushTimer = safeSetTimeout(() => {
@@ -325,8 +342,9 @@ export class CaptureAiLane {
       retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, MAX_RESEND_WAIT_MS))
     this._resendCount++
     this._resendAt = Date.now() + waitMs
-    if (this._resendTimer) {
-      clearTimeout(this._resendTimer)
+    this._clearResendTimer()
+    if (this._shuttingDown) {
+      return
     }
     this._resendTimer = safeSetTimeout(() => {
       this._resendTimer = undefined
