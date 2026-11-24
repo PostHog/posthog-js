@@ -1799,6 +1799,11 @@ export class PostHog extends PostHogCore {
     return Promise.all([super.flush(), aiFlush]).then(() => undefined)
   }
 
+  // Analytics timer and flushAt flushes; the AI lane runs its own, which respect its resend wait.
+  protected flushAutomatic(): Promise<void> {
+    return super.flush()
+  }
+
   /**
    * Captures an AI observability event, such as `$ai_generation`, `$ai_span`, `$ai_trace` or
    * `$ai_embedding`, and sends it to PostHog's AI endpoint (`/i/v1/ai/events`), which accepts much
