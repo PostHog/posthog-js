@@ -1739,6 +1739,8 @@ describe('emails', () => {
         error: { code: 'recipient_suppressed', statusCode: 422 },
       })
       expect(data?.results[0]).toMatchObject({ error: expect.not.objectContaining({ messageId: expect.anything() }) })
+      expect(data?.results[0]).not.toMatchObject({ error: { fix: expect.stringMatching(/same idempotencyKey/) } })
+      expect(data?.results[1]).not.toHaveProperty('error')
       expect(postHog.emails.map(({ to }) => to)).toEqual(['ada@example.com'])
     })
 
@@ -1769,7 +1771,10 @@ describe('emails', () => {
         {
           status: 'unconfirmed',
           id: expect.stringMatching(UUID_V4),
-          error: { code: 'delivery_unavailable', fix: expect.stringMatching(/again with the same idempotencyKey/) },
+          error: {
+            code: 'delivery_unavailable',
+            fix: expect.stringMatching(/unchanged and with the same idempotencyKey/),
+          },
         },
         { status: 'queued' },
       ])
@@ -1836,7 +1841,7 @@ describe('emails', () => {
           status: 'unconfirmed',
           id: null,
           idempotencyKey,
-          error: { code: 'network_error', fix: expect.stringMatching(/again with the same idempotencyKey/) },
+          error: { code: 'network_error', fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) },
         }))
       )
       expect(postHog.requests).toEqual({ uploads: 0, storage: 0, send: 0, batch: 3 })
@@ -1932,33 +1937,21 @@ describe('emails', () => {
       ])
     })
 
-    it('reads no statuses once the client shuts down during its last request', async () => {
+    it('keeps a recipient PostHog answered without a result unconfirmed, and reads nothing back by its key', async () => {
       const urls: string[] = []
-      let release!: () => void
-      const held = new Promise<void>((resolve) => (release = resolve))
       makeClient({
         fetch: async (url: string) => {
           urls.push(url)
-          if (url.includes('/api/messaging/emails/status/')) {
-            return fakeReply(404, { code: 'not_found', detail: 'Not found.' })
-          }
-          if (urls.length === 1) {
-            return fakeReply(503, { code: 'delivery_unavailable', detail: 'Try again.' })
-          }
-          await held
           return fakeReply(200, { results: [{}] })
         },
       })
 
-      const pending = posthog.emails.batch({ ...WELCOME, maxRetries: 1 }, recipientsTo(1))
-      await vi.advanceTimersByTimeAsync(1_000)
-      const shutdown = posthog.shutdown()
-      release()
-      const { data } = await settle(pending)
-      await shutdown
+      const { data } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(1)))
 
-      expect(urls.filter((url) => url.includes('/status/'))).toEqual([])
-      expect(data?.results).toMatchObject([{ status: 'unconfirmed', id: null }])
+      expect(data?.results).toMatchObject([
+        { status: 'unconfirmed', id: null, error: { fix: expect.stringMatching(/same idempotencyKey/) } },
+      ])
+      expect(urls).toEqual([expect.stringMatching(/\/api\/messaging\/send\/email_batch\/$/)])
     })
 
     const queuedWithWarning = (count: number): Reply => ({
