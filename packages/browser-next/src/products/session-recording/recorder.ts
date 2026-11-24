@@ -539,13 +539,15 @@ export class SessionRecorder {
                 ...(options.capturePerformance === false ? { capture_performance: false } : {}),
             }
             plugins.push(
-                getRecordNetworkPlugin(
-                    buildNetworkRequestOptions(networkConfig, {
+                getRecordNetworkPlugin({
+                    ...buildNetworkRequestOptions(networkConfig, {
                         recordHeaders: headers,
                         recordBody: body,
                         recordPerformance: timing,
-                    })
-                )
+                    }),
+                    // match posthog-js's default so a rejected fetch keeps the caller's synchronous stack
+                    captureFetchSynchronously: true,
+                })
             )
         }
         return plugins
