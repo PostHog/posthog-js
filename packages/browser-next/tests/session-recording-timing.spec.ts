@@ -208,6 +208,27 @@ describe('session recording timing', () => {
         expect(sessions).toEqual(new Set([firstSession, posthog.session!.sessionId]))
     })
 
+    it('takes only one full snapshot when an interaction after idle rotates the session', async () => {
+        const { replay, posthog, transport: network } = await setup()
+        await started(replay)
+        interact()
+        await replay.flush?.()
+        const firstSession = posthog.session!.sessionId
+
+        await goIdle()
+        advance(31 * 60_000)
+        interact()
+        await replay.flush?.()
+
+        const nextSession = posthog.session!.sessionId
+        expect(nextSession).not.toBe(firstSession)
+        const fullSnapshots = snapshotEvents(network)
+            .filter((event) => event.properties.$session_id === nextSession)
+            .flatMap((event) => event.properties.$snapshot_data as Array<{ type: number }>)
+            .filter((event) => event.type === 2)
+        expect(fullSnapshots).toHaveLength(1)
+    })
+
     it('stays stopped when a new-session listener stops recording during rotation', async () => {
         const { replay, posthog, transport: network } = await setup()
         await started(replay)
@@ -241,6 +262,9 @@ describe('session recording timing', () => {
         expect(replay.sessionRecordingStarted()).toBe(true)
         const next = snapshotEvents(network).filter((event) => event.properties.$session_id !== firstSession)
         expect(next.length).toBeGreaterThan(0)
+        // the first interaction that starts the new session is recorded in the new session, not dropped
+        const nextEvents = next.flatMap((event) => event.properties.$snapshot_data as Array<{ type: number }>)
+        expect(nextEvents.some((event) => event.type === 3)).toBe(true)
         expect(next.every((event) => event.properties.distinct_id !== firstDistinctId)).toBe(true)
         expect(
             snapshotEvents(network)
