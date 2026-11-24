@@ -2933,7 +2933,8 @@ describe('PostHogTraces', () => {
       }
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
-    })
+      // 500 fake-timer drains can outlast the 5s default on a loaded CI runner.
+    }, 30_000)
 
     it('still charges the retry budget for failures outside any window', async () => {
       // The budget must keep working when the endpoint names no wait, or a
