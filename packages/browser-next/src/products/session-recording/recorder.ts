@@ -883,6 +883,8 @@ export class SessionRecorder {
     }
 
     private _trackUrlChange(): void {
+        // as in posthog-js _pageViewFallBack, only synthesize `$url_changed` when pageview capture is disabled
+        if (this._analytics?._core._capturePageview) return
         try {
             const location = globalThis.window?.location
             if (!location) return

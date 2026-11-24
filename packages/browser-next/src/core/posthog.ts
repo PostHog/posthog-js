@@ -139,7 +139,7 @@ class PostHog implements IPostHog {
     readonly _sessionKv: KeyValueStore
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
-    private readonly _capturePageview: boolean
+    readonly _capturePageview: boolean
     private readonly _remoteConfigTimeoutMs: number
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
