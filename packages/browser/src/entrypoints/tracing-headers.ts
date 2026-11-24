@@ -463,7 +463,12 @@ const patchXHR = (
     )
 
     // patch() hands the wrapper a delegate, so read what sits beneath it from the installed layer.
-    const sendLayer = (xhrPrototype.send as unknown as PatchedFunction).__posthog_layer__
+    let sendLayer: PatchedFunction['__posthog_layer__']
+    try {
+        sendLayer = (xhrPrototype.send as PatchedFunction | undefined)?.__posthog_layer__
+    } catch {
+        // A browser shim may expose send through a getter that throws.
+    }
 
     return () => {
         restoreSend()

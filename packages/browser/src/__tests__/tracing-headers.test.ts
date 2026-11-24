@@ -685,6 +685,35 @@ describe('tracing headers', () => {
                 expect(XMLHttpRequest.prototype.setRequestHeader).toBe(originalSetRequestHeader)
             })
 
+            it.each([
+                { name: 'missing', getSend: () => undefined },
+                {
+                    name: 'throwing',
+                    getSend: () => {
+                        throw new TypeError('send getter blocked')
+                    },
+                },
+            ])('does not throw when the XHR send accessor is $name', ({ getSend }) => {
+                class RestrictedXHR extends XMLHttpRequest {}
+                Object.defineProperty(RestrictedXHR.prototype, 'send', {
+                    configurable: false,
+                    get: getSend,
+                })
+                vi.stubGlobal('XMLHttpRequest', RestrictedXHR)
+
+                try {
+                    expect(() => {
+                        restoreXHRPatch = patchFns._patchXHR(['example.com'], 'distinct-id', sessionManager as any, [
+                            'api.example.com',
+                        ])
+                    }).not.toThrow()
+                } finally {
+                    restoreXHRPatch?.()
+                    restoreXHRPatch = undefined
+                    vi.unstubAllGlobals()
+                }
+            })
+
             it('does not patch send when no traceparent targets are passed (older core)', () => {
                 const originalSend = XMLHttpRequest.prototype.send
                 restoreXHRPatch = patchFns._patchXHR(['example.com'], 'distinct-id', sessionManager as any)
