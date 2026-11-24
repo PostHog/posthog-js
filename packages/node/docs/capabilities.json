@@ -47,6 +47,8 @@
   "PostHog.waitForLocalEvaluationReady": "flag-definition-loader",
   "PostHog.withSpan": "traces",
   "PostHogSentryIntegration": "capture-exception",
+  "captureRequestException": "capture-exception",
+  "createReactRouterErrorHandler": "capture-exception",
   "enrichCurrentSpan": "traces",
   "instrumentRequest": "traces",
   "new PostHog(...)": "setup",

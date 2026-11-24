@@ -917,6 +917,115 @@ https://posthog.com/docs/error-tracking/installation/node
 | <a id="setuponce"></a> ~~`setupOnce`~~ | `public` | (`addGlobalEventProcessor`, `getCurrentHub`) => `void` | `undefined` |
 | <a id="posthog_id_tag"></a> ~~`POSTHOG_ID_TAG`~~ | `public static readonly` | `"posthog_distinct_id"` | `'posthog_distinct_id'` |
 
+### `captureRequestException`
+
+> **captureRequestException**(`posthog`, `error`, `request`, `options?`): `Promise`\<`void`\>
+
+**`Experimental`**
+
+Captures an exception a framework caught while handling a fetch API `Request`, for frameworks whose error hook
+receives the request (SvelteKit, Astro or TanStack Start, for example). The event carries the request's person,
+session and request properties, and is marked unhandled with the `middleware` mechanism unless `options` say
+otherwise. The query string is never sent.
+
+Identity, first match wins: the `distinctId` option, the `x-posthog-*` tracing headers, the active context, then the
+posthog-js cookie. Linking page loads, which carry only the cookie, needs the client's `readPostHogCookie: true`.
+When the visitor's consent cookie opts out, the event keeps no person, session or user agent.
+
+An error object is captured once: after capture it is marked, and later calls (and other PostHog integrations that
+check the mark) skip it. `posthog.captureException` does not mark errors, so capturing one there and then rethrowing
+it into the framework captures it twice.
+
+The returned promise resolves once the event is queued. When the client has a `waitUntil` option, the capture is
+handed to it, so a serverless runtime stays alive until it is queued and flushed.
+
+ Subject to change in a minor release.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `posthog` | `PostHogBackendClient` |
+| `error` | `unknown` |
+| `request` | `Request` |
+| `options?` | `CaptureRequestExceptionOptions` |
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Example
+
+```ts
+// SvelteKit hooks.server.ts: SvelteKit also calls handleError for 404s, which `status` tells apart.
+export const handleError: HandleServerError = async ({ error, event, status }) => {
+  if (status >= 500) {
+    await captureRequestException(posthog, error, event.request, { source: 'sveltekit.handle_error' })
+  }
+}
+```
+
+### `createReactRouterErrorHandler`
+
+> **createReactRouterErrorHandler**\<`A`\>(`posthog`, `options?`): (`error`, `args`) => `Promise`\<`void`\>
+
+**`Experimental`**
+
+Returns a React Router `handleError` that captures server errors (loaders, actions, middleware, resource routes,
+server rendering) with the request's person, session and request properties. It reports the page URL even for the
+`.data` requests of client navigations, never the query string. It skips aborted requests, thrown responses and the
+404 and 405 responses the router produces itself. The event is marked unhandled, with the `middleware` mechanism and
+`$exception_source: 'react_router.handle_error'`.
+
+Linking page loads to the browser's person and session reads the posthog-js cookie, which needs the client's
+`readPostHogCookie: true`. Requests with `x-posthog-*` tracing headers link without it. An anonymous visitor's
+exceptions carry their anonymous distinct ID and stay personless. When the visitor's consent cookie opts out, the
+event keeps no person, session or user agent.
+
+Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
+stream in `entry.server.tsx`; call the same handler there. An error object is captured once, however many hooks or
+handlers see it.
+
+The returned handler resolves once the event is queued. On a serverless host, pass the platform's `waitUntil` as the
+client's `waitUntil` option. On Cloudflare Workers, create the client and the handler per request, with the request's
+`ctx.waitUntil`: a client kept across requests in a Workers isolate delivers only the first request's events.
+
+ Subject to change in a minor release.
+
+#### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-a-1"></a> `A` *extends* `ReactRouterErrorArgs` | `ReactRouterErrorArgs` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `posthog` | `PostHogBackendClient` |
+| `options?` | `ReactRouterErrorHandlerOptions`\<`A`\> |
+
+#### Returns
+
+(`error`, `args`) => `Promise`\<`void`\>
+
+#### Example
+
+```ts
+// app/entry.server.tsx
+const posthog = new PostHog('<ph_project_token>', { host: '<ph_client_api_host>', readPostHogCookie: true })
+
+export const handleError = createReactRouterErrorHandler(posthog)
+
+// In handleRequest, in the renderToPipeableStream options:
+onError(error: unknown) {
+  responseStatusCode = 500
+  if (shellRendered && !request.signal.aborted) {
+    void handleError(error, { request })
+  }
+},
+```
+
 ### `sentryIntegration`
 
 > **sentryIntegration**(`_posthog`, `options?`): `_SentryIntegration`
@@ -3000,6 +3109,18 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 | <a id="property-attributes"></a> `attributes?` | `MetricAttributes` | Low-cardinality dimensions to filter and group by (e.g. route, plan, region). Each distinct combination is its own series. |
 | <a id="property-unit"></a> `unit?` | `string` | Unit of the value (e.g. 'ms', 'byte'). Displayed in the Metrics UI and part of the series identity — the same name with two units is two series. |
 
+### `CaptureRequestExceptionOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-distinctid"></a> `distinctId?` | `string` | The person to link. Used even when the visitor opted out, because the app chose it. |
+| <a id="property-mechanism"></a> `mechanism?` | `object` | How the error reached the framework. Defaults to `{ type: 'middleware', handled: false }`. |
+| `mechanism.handled?` | `boolean` | - |
+| `mechanism.type?` | `string` | - |
+| <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Extra event properties. They cannot override the `$exception_*` properties. |
+| <a id="property-source"></a> `source?` | `string` | `$exception_source`, as lowercase `<technology>.<hook>`, for example `sveltekit.handle_error`. |
+| <a id="property-url"></a> `url?` | `string` | The page URL to report instead of `request.url`, for frameworks whose error hook receives an internal request (a data endpoint, for example). Only its origin and path are sent. |
+
 ### `CodeEmailFields`
 
 | Property | Type | Description |
@@ -4874,7 +4995,7 @@ Supports multiple formats:
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-deviceid"></a> `deviceId?` | `string` | - |
-| <a id="property-distinctid"></a> `distinctId` | `string` | - |
+| <a id="property-distinctid-1"></a> `distinctId` | `string` | - |
 | <a id="property-isidentified"></a> `isIdentified` | `boolean` | - |
 | <a id="property-sessionid"></a> `sessionId?` | `string` | - |
 | <a id="property-sessionlastactivitytimestamp"></a> `sessionLastActivityTimestamp?` | `number` | When the session last had activity (`$sesid[0]`), in milliseconds since the Unix epoch. |
@@ -5097,7 +5218,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `persistence?` | `"memory"` | - |
 | `personalApiKey?` | `string` | **Deprecated** Use `secretKey` instead. |
 | `privacyMode?` | `boolean` | Redact prompts, outputs and error details from every event that the PostHog AI integrations (`@posthog/ai`) capture with this client. Per-call privacy settings can only add redaction. Defaults to false. |
-| `readPostHogCookie?` | `boolean` \| \{ `optOutCapturingByDefault?`: `boolean`; `sessionIdleTimeoutSeconds?`: `number`; \} | Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has neither tracing header. Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage (its default). It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie counts as opted out. A request sent right after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls back to the cookie. To stop all request linking, also leave this option off. **Default** `false` |
+| `readPostHogCookie?` | `boolean` \| \{ `optOutCapturingByDefault?`: `boolean`; `sessionIdleTimeoutSeconds?`: `number`; \} | Lets the Express, NestJS, Hono and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has neither tracing header. `captureRequestException` and `createReactRouterErrorHandler` also read an anonymous visitor's distinct ID, and send their exceptions with `$process_person_profile: false`. Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage (its default). It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie counts as opted out. A request sent right after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls back to the cookie. To stop all request linking, also leave this option off. **Default** `false` |
 | `requestTimeout?` | `number` | Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`. **Default** `10000` |
 | `secretKey?` | `string` | Credential for fetching local feature flag definitions, decrypting remote config and sending email. Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`). Local evaluation can also use definitions from `flagDefinitionCacheProvider` without this credential. Remote config payload decryption via `getRemoteConfigPayload` still requires it. `emails.send` needs a Project Secret API Key with the `transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email. Prefer this over the deprecated `personalApiKey` option; when both are set, `secretKey` takes precedence. **Example** `const client = new PostHog('phc_...', { secretKey: 'phs_...' })` |
 | `strictLocalEvaluation?` | `boolean` | When enabled, all feature flag evaluations will use local evaluation only, never falling back to server-side evaluation. This prevents unexpected server requests and associated costs when using local evaluation. Flags that cannot be evaluated locally (e.g., those with experience continuity) will return `undefined` instead of making a server request. **Default** `false` |
@@ -5189,6 +5310,29 @@ Common types shared across PostHog SDKs
 | `type` | *typeof* `SurveyQuestionType.Rating` |
 | `upperBoundLabel` | `string` |
 
+### `ReactRouterErrorArgs`
+
+The part of React Router's `handleError` arguments the handler reads, so `react-router` is not a dependency.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-request"></a> `request` | `Request` |
+
+### `ReactRouterErrorHandlerOptions`
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-a"></a> `A` *extends* `ReactRouterErrorArgs` | `ReactRouterErrorArgs` |
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-handleerror"></a> `handleError?` | (`error`, `args`) => `void` | Your own `handleError`, called for every error after the capture decision, captured or not. Exporting `handleError` replaces React Router's own logging; without this option the handler logs the way React Router does (`console.error`, skipping aborted requests). |
+| <a id="property-shouldcapture"></a> `shouldCapture?` | (`error`, `args`) => `boolean` | Return `false` to skip capturing an error the handler would otherwise capture. |
+
 ### `ResponseBasedBranching`
 
 > **ResponseBasedBranching** = `object`
@@ -5212,7 +5356,7 @@ What every send takes, whatever its form.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
+| <a id="property-distinctid-2"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
 | <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
 | <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
