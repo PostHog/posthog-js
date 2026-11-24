@@ -18,10 +18,19 @@ const safely = <T>(fn: () => T, fallback: T): T => {
     }
 }
 
-const safelyBuildAndCapture = (
-    captureFn: (props: ErrorTracking.ErrorProperties) => void,
-    buildProperties: () => ErrorTracking.ErrorProperties
-): void => safely(() => captureFn(buildProperties()), undefined)
+type CaptureFn = (props: ErrorTracking.ErrorProperties) => void
+
+// The same mutable layer that `patch` in browser-common and rrweb-utils attaches to its wrappers,
+// so each of them can splice its own wrapper out from under the others.
+interface WrapperLayer {
+    next: unknown
+}
+
+const layerOf = (method: unknown): WrapperLayer | undefined =>
+    isFunction(method) ? ((method as any).__posthog_layer__ ?? (method as any).__rrweb_layer__) : undefined
+
+const safelyBuildAndCapture = (captureFn: CaptureFn, buildProperties: () => ErrorTracking.ErrorProperties): void =>
+    safely(() => captureFn(buildProperties()), undefined)
 
 // Firefox throws on every read, write and call that touches an object from another compartment or
 // from a destroyed document, such as a handler left behind by a removed or cross-origin iframe.
@@ -30,25 +39,39 @@ const safelyBuildAndCapture = (
 const isReachableFunction = (handler: unknown): handler is (...args: any[]) => any =>
     safely(() => isFunction(handler) && isFunction(handler.call), false)
 
-const markInstrumented = (wrapper: any): void =>
+const markInstrumented = (wrapper: any, layer: WrapperLayer): void =>
     safely(() => {
         wrapper.__POSTHOG_INSTRUMENTED__ = true
+        Object.defineProperty(wrapper, '__posthog_layer__', { enumerable: false, value: layer })
     }, undefined)
 
 // Other code (another error tool, the app, logs capture) can install its own handler on top of
 // PostHog's. Writing the original back would then remove that handler for the rest of the page.
-// So the original is restored only while PostHog's wrapper is still the installed handler.
-// Otherwise the wrapper stays in the chain: the caller has stopped it capturing, so it only
-// forwards to the original, and the handler installed on top keeps working.
-const restore = (owner: any, key: string, wrapper: unknown, original: unknown): void => {
+// So the original is restored only while PostHog's wrapper is still the installed handler, and the
+// wrapper is spliced out from under other PostHog and rrweb layers. Under any other handler the
+// wrapper stays in the chain: the caller has stopped it capturing, so it only forwards to the
+// original, and the handler installed on top keeps working.
+const restore = (owner: any, key: string, wrapper: unknown, layer: WrapperLayer): void => {
     // Deleting the marker can throw on a frozen or unreachable wrapper. It is guarded on its own
     // so that failure cannot skip the restore, which is the functional half.
     safely(() => {
         delete (wrapper as any).__POSTHOG_INSTRUMENTED__
     }, undefined)
     safely(() => {
-        if (owner[key] === wrapper) {
-            owner[key] = original
+        const installed = owner[key]
+        if (installed === wrapper) {
+            owner[key] = layer.next
+            return
+        }
+        const visited: WrapperLayer[] = []
+        let current = layerOf(installed)
+        while (current && visited.indexOf(current) === -1) {
+            if (current.next === wrapper) {
+                current.next = layer.next
+                return
+            }
+            visited.push(current)
+            current = layerOf(current.next)
         }
     }, undefined)
 }
@@ -68,91 +91,91 @@ const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventAr
     return event
 }
 
-const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapOnError = (captureFn: CaptureFn) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
     }
-    const originalOnError = safely(() => win.onerror, undefined)
-    let capturing = true
+    const layer: WrapperLayer = { next: safely(() => win.onerror, undefined) }
+    let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (...args: ErrorEventArgs): boolean {
-        if (capturing) {
-            safelyBuildAndCapture(captureFn, () =>
+        if (activeCaptureFn) {
+            safelyBuildAndCapture(activeCaptureFn, () =>
                 errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
                     mechanism: { handled: false },
                 })
             )
         }
-        if (!isReachableFunction(originalOnError)) {
+        const { next } = layer
+        if (!isReachableFunction(next)) {
             return false
         }
-        return originalOnError(...args) ?? false
+        return next(...args) ?? false
     }
     win.onerror = wrapper
-    markInstrumented(wrapper)
+    markInstrumented(wrapper, layer)
 
     return () => {
-        capturing = false
-        restore(win, 'onerror', wrapper, originalOnError)
+        activeCaptureFn = undefined
+        restore(win, 'onerror', wrapper, layer)
     }
 }
 
-const wrapUnhandledRejection = (
-    captureFn: (props: ErrorTracking.ErrorProperties) => void,
-    defaultReturnValue = false
-) => {
+const wrapUnhandledRejection = (captureFn: CaptureFn, defaultReturnValue = false) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
     }
 
-    const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
-    let capturing = true
+    const layer: WrapperLayer = { next: safely(() => win.onunhandledrejection, undefined) }
+    let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (ev: PromiseRejectionEvent): boolean {
-        if (capturing) {
-            safelyBuildAndCapture(captureFn, () =>
+        if (activeCaptureFn) {
+            safelyBuildAndCapture(activeCaptureFn, () =>
                 errorPropertiesBuilder.buildFromUnknown(ev, {
                     mechanism: { handled: false },
                 })
             )
         }
-        if (!isReachableFunction(originalOnUnhandledRejection)) {
+        const { next } = layer
+        if (!isReachableFunction(next)) {
             return defaultReturnValue
         }
-        return originalOnUnhandledRejection(ev) ?? false
+        return next(ev) ?? false
     }
     win.onunhandledrejection = wrapper
-    markInstrumented(wrapper)
+    markInstrumented(wrapper, layer)
 
     return () => {
-        capturing = false
-        restore(win, 'onunhandledrejection', wrapper, originalOnUnhandledRejection)
+        activeCaptureFn = undefined
+        restore(win, 'onunhandledrejection', wrapper, layer)
     }
 }
 
-const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapConsoleError = (captureFn: CaptureFn) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')
     }
 
-    const originalConsoleError = safely(() => con.error, undefined)
-    let capturing = true
+    const layer: WrapperLayer = { next: safely(() => con.error, undefined) }
+    let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (...args: any[]): void {
         // Check before selecting an Error argument, which loses the diagnostic prefix.
         // SDK loggers pass the prefix and diagnostic separately, including in older bundles.
-        const isInternalDiagnostic = safely(
-            () =>
-                args.length > 1 &&
-                isString(args[0]) &&
-                (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
-            false
-        )
-        if (capturing && !isInternalDiagnostic) {
-            safelyBuildAndCapture(captureFn, () => {
+        const isInternalDiagnostic = () =>
+            safely(
+                () =>
+                    args.length > 1 &&
+                    isString(args[0]) &&
+                    (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
+                false
+            )
+        if (activeCaptureFn && !isInternalDiagnostic()) {
+            safelyBuildAndCapture(activeCaptureFn, () => {
                 let event
                 if (args.length == 1) {
                     event = args[0]
@@ -167,16 +190,17 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
                 })
             })
         }
-        if (isReachableFunction(originalConsoleError)) {
-            originalConsoleError(...args)
+        const { next } = layer
+        if (isReachableFunction(next)) {
+            next(...args)
         }
     }
     con.error = wrapper
-    markInstrumented(wrapper)
+    markInstrumented(wrapper, layer)
 
     return () => {
-        capturing = false
-        restore(con, 'error', wrapper, originalConsoleError)
+        activeCaptureFn = undefined
+        restore(con, 'error', wrapper, layer)
     }
 }
 

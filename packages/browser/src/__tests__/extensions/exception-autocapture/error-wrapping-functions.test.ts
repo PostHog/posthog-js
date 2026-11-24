@@ -1,4 +1,7 @@
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
+import { initializeLogs } from '@posthog/browser-common/console-logs'
+import { patch as posthogPatch } from '@posthog/browser-common/utils/patch'
+import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 import { ErrorTracking } from '@posthog/core'
 
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
@@ -326,6 +329,7 @@ describe('error wrapping functions', () => {
     })
 
     describe('stopping', () => {
+        const con = console as any
         const targets = [
             {
                 name: 'window.onerror',
@@ -418,6 +422,140 @@ describe('error wrapping functions', () => {
             unwrapSecond()
 
             expect(owner[target.key]).toBe(laterHandler)
+        })
+
+        it.each(targets)('$name: is spliced out from under another PostHog wrapper', (target) => {
+            const owner = target.owner()
+            const original = setUp(owner, target.key)
+            const unwrapFirst = target.wrap()
+            const unwrapSecond = target.wrap()
+            const unwrapThird = target.wrap()
+
+            unwrapFirst()
+            unwrapSecond()
+            unwrapSecond()
+            target.fire(owner[target.key])
+
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledTimes(1)
+
+            unwrapThird()
+
+            expect(owner[target.key]).toBe(original)
+        })
+
+        it.each(targets)('$name: calls the original without a receiver of its own', (target) => {
+            const owner = target.owner()
+            const original = setUp(owner, target.key)
+            const unwrap = target.wrap()
+
+            target.fire(owner[target.key])
+            unwrap()
+
+            expect(original.mock.instances).toEqual([undefined])
+        })
+
+        it.each(targets)('$name: gives up on a cycle of layers', (target) => {
+            const owner = target.owner()
+            setUp(owner, target.key)
+            const unwrap = target.wrap()
+            const layer: { next: any } = { next: undefined }
+            const cyclic: any = Object.assign(() => {}, { __posthog_layer__: layer })
+            layer.next = cyclic
+            owner[target.key] = cyclic
+
+            unwrap()
+
+            expect(owner[target.key]).toBe(cyclic)
+        })
+
+        const passThrough = (spy: (...args: any[]) => void) => (next: any) =>
+            function (this: unknown, ...args: unknown[]) {
+                spy(...args)
+                return next.apply(this, args)
+            }
+
+        it.each([
+            ['browser-common', posthogPatch],
+            ['rrweb', rrwebPatch],
+        ])('console.error: is spliced out from under a %s patch', (_, patch) => {
+            const original = setUp(console, 'error')
+            const unwrap = wrapConsoleError(captureFn)
+            const overlay = vi.fn()
+            const unpatch = patch(console as any, 'error', passThrough(overlay) as any)
+
+            unwrap()
+            con.error('while the overlay is active')
+
+            expect(overlay).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(captureFn).not.toHaveBeenCalled()
+
+            unpatch()
+
+            expect(con.error).toBe(original)
+        })
+
+        it.each([
+            ['browser-common', posthogPatch],
+            ['rrweb', rrwebPatch],
+        ])('console.error: a %s patch is spliced out from under a restarted wrapper', (_, patch) => {
+            const original = setUp(console, 'error')
+            const unwrapFirst = wrapConsoleError(captureFn)
+            const overlay = vi.fn()
+            const unpatch = patch(console as any, 'error', passThrough(overlay) as any)
+            unwrapFirst()
+            const unwrapSecond = wrapConsoleError(captureFn)
+
+            unpatch()
+            con.error('after the overlay stopped')
+
+            expect(overlay).not.toHaveBeenCalled()
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledTimes(1)
+
+            unwrapSecond()
+
+            expect(con.error).toBe(original)
+        })
+
+        it('console.error: is spliced out from under logs capture', () => {
+            const original = setUp(console, 'error')
+            const captureConsoleLog = vi.fn()
+            const unwrap = wrapConsoleError(captureFn)
+            const disposeLogs = initializeLogs({
+                console,
+                hostname: 'example.com',
+                getCapturingLogs: () => ({ captureConsoleLog }),
+            } as any)
+
+            unwrap()
+            con.error('after stop')
+
+            expect(captureConsoleLog).toHaveBeenCalledTimes(1)
+            expect(captureFn).not.toHaveBeenCalled()
+            expect(original).toHaveBeenCalledTimes(1)
+
+            disposeLogs()
+
+            expect(con.error).toBe(original)
+        })
+
+        it('console.error: a stopped wrapper does not inspect the message', () => {
+            const original = setUp(console, 'error')
+            const unwrap = wrapConsoleError(captureFn)
+            const posthogHandler = con.error
+            con.error = (...args: any[]) => posthogHandler(...args)
+            unwrap()
+            const test = vi.spyOn(RegExp.prototype, 'test')
+
+            try {
+                con.error('prefix', 'message')
+                expect(test).not.toHaveBeenCalled()
+            } finally {
+                test.mockRestore()
+            }
+            expect(original).toHaveBeenCalledWith('prefix', 'message')
         })
     })
 })
