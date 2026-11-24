@@ -6,7 +6,6 @@ import { PostHogCustomStorage } from './types'
 // instance bound to one of these files.
 const EVENTS_STORAGE_FILE = '.posthog-rn.json'
 const LOGS_STORAGE_FILE = '.posthog-rn-logs.json'
-const AI_STORAGE_FILE = '.posthog-rn-ai.json'
 const POSTHOG_STORAGE_VERSION = 'v1'
 
 // Window over which storage mutations coalesce into one disk write. The
@@ -239,8 +238,11 @@ export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogR
   return new PostHogRNStorage(customStorage, LOGS_STORAGE_FILE)
 }
 
-export function createAiStorage(customStorage: PostHogCustomStorage): PostHogRNStorage {
-  return new PostHogRNStorage(customStorage, AI_STORAGE_FILE)
+/** Named per project, so AI events queued for one project are never sent with another's token. */
+export const aiStorageKey = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.json`
+
+export function createAiStorage(customStorage: PostHogCustomStorage, projectToken: string): PostHogRNStorage {
+  return new PostHogRNStorage(customStorage, aiStorageKey(projectToken))
 }
 
 export function createEventsMemoryStorage(): PostHogRNStorage {
@@ -252,5 +254,5 @@ export function createLogsMemoryStorage(): PostHogRNStorage {
 }
 
 export function createAiMemoryStorage(): PostHogRNStorage {
-  return new PostHogRNSyncMemoryStorage(AI_STORAGE_FILE)
+  return new PostHogRNSyncMemoryStorage('.posthog-rn-ai.json')
 }

@@ -638,7 +638,8 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsStorage(theStorage)
       // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
       // database at 6 MB by default, so an AI queue there could break every other key's writes.
-      this._aiStorage = theStorage === OptionalAsyncStorage ? createAiMemoryStorage() : createAiStorage(theStorage)
+      this._aiStorage =
+        theStorage === OptionalAsyncStorage ? createAiMemoryStorage() : createAiStorage(theStorage, this.projectToken)
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []

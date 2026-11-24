@@ -55,7 +55,7 @@ describe('captureAi with AsyncStorage', () => {
       await posthog.shutdown()
 
       expect(asyncStorage.setItem).toHaveBeenCalled()
-      expect(asyncStorage.setItem.mock.calls.map(([key]) => key)).not.toContain('.posthog-rn-ai.json')
+      expect(asyncStorage.setItem.mock.calls.map(([key]) => key)).not.toContain('.posthog-rn-ai-test-token.json')
     }
   )
 })

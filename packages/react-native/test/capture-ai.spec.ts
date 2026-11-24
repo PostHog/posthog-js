@@ -311,8 +311,32 @@ describe('React Native captureAi', () => {
     await client.shutdown()
     posthog = undefined
 
-    const [stored] = JSON.parse(cache['.posthog-rn-ai.json']).content.ai_queue
+    const [stored] = JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue
     expect(Object.keys(stored).sort()).toEqual(['bytes', 'json', 'propertiesBytes', 'uuid'])
+  })
+
+  it('never sends AI events stored for one project with another project token', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog()
+    earlier.captureAi('$ai_generation')
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    posthog = new PostHog('other-token', {
+      customStorage: storage,
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      captureAiCompression: 'none',
+    })
+    await posthog.ready()
+    await posthog.flush()
+
+    expect(sent(AI_PATH)).toEqual([])
+    expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toHaveLength(1)
   })
 
   it('persists only the newest 5 MiB of kept AI events for the next launch', async () => {
@@ -581,7 +605,7 @@ describe('React Native captureAi', () => {
     await new Promise((resolve) => setTimeout(resolve, 150))
 
     expect(captured).toEqual([])
-    expect(cache['.posthog-rn-ai.json']).toBeUndefined()
+    expect(cache['.posthog-rn-ai-test-token.json']).toBeUndefined()
   })
 
   it('returns the uuid sent on the wire when before_send sets an uppercase uuid', async () => {
@@ -603,13 +627,13 @@ describe('React Native captureAi', () => {
     const client = await newPostHog({ flushAt: 10 })
     client.captureAi('$ai_generation')
     await client.flush()
-    const writes = setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai.json').length
+    const writes = setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length
 
     await client.flush()
     await client.flush()
 
     expect(writes).toBeGreaterThan(0)
-    expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai.json').length).toBe(writes)
+    expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length).toBe(writes)
   })
 
   it('halves the AI batch on 413 and sends every event', async () => {
