@@ -109,6 +109,8 @@ export interface RecorderHost {
     documentWasEverVisible(): boolean
     /** Events admitted before the recorder first started. Later calls return none. */
     takeEarlyEvents(): readonly CapturedEventInfo[]
+    /** Whether `stopSessionRecording()` turned recording off, which a new session must not undo. */
+    stoppedLocally(): boolean
 }
 
 const recordFunction = record as unknown as RrwebRecord
@@ -642,7 +644,8 @@ export class SessionRecorder {
             // a held epoch is discarded by this stop: its flush is suppressed and the buffer cleared
             this.stop()
             this._strategy?.clearConditionalRecordingPersistence()
-            if (this._client.canCapture) this.start('session_id_changed')
+            // as posthog-js checks disable_session_recording, a stop from a new-session listener cancels the restart
+            if (this._client.canCapture && !this._host.stoppedLocally()) this.start('session_id_changed')
         } finally {
             this._restarting = false
         }

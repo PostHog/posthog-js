@@ -372,6 +372,7 @@ class SessionRecordingProduct implements SessionRecordingExtension {
                         this._earlyEvents = undefined
                         return events
                     },
+                    stoppedLocally: () => this._disabledLocally,
                 })
                 return this._recorder
             })
