@@ -152,6 +152,32 @@ const parseStorageValue = (value: string | null): Properties => {
     return isObject(parsed) ? parsed : {}
 }
 
+// V1 flags need only their legacy rendering across page loads. Keep the v4 details in memory,
+// but do not grow cookie-only persistence with another copy of the value and variant. V2
+// records retain their typed value and attribution so cached reads can still report exposures.
+const compactV1FlagDetailsForCookie = (props: Properties): Properties => {
+    const details = props[PERSISTENCE_FEATURE_FLAG_DETAILS]
+    if (!isObject(details)) {
+        return props
+    }
+    return {
+        ...props,
+        [PERSISTENCE_FEATURE_FLAG_DETAILS]: Object.fromEntries(
+            Object.entries(details).map(([key, detail]) => {
+                if (!isObject(detail) || !('value' in detail) || detail.metadata?.config_version !== 1) {
+                    return [key, detail]
+                }
+                const legacy: Properties = { ...detail, metadata: { ...detail.metadata } }
+                delete legacy.value
+                for (const member of ['config_version', 'rule_type', 'rule_id', 'variant_key', 'forced_variant']) {
+                    delete legacy.metadata[member]
+                }
+                return [key, legacy]
+            })
+        ),
+    }
+}
+
 type StorageSlot = PersistenceStorageGroup | typeof MAIN_STORAGE_SLOT
 type StorageWriteResult = 'written' | 'skipped' | 'failed'
 
@@ -1640,9 +1666,13 @@ export class PostHogPersistence {
             return 'skipped'
         }
 
+        // Use the actual backend, including cookie fallback when web storage is unavailable.
+        // Fingerprint the same projection we write; the live props and other stores stay intact.
+        let storedProps = props
         let fingerprint: string | undefined
         try {
-            fingerprint = this._entryFingerprint(props, slot)
+            storedProps = storage === cookieStore ? compactV1FlagDetailsForCookie(props) : props
+            fingerprint = this._entryFingerprint(storedProps, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
                 return 'skipped'
@@ -1658,7 +1688,9 @@ export class PostHogPersistence {
         // after a confirmed-successful durable write: localStorage / sessionStorage
         // swallow quota errors, so caching ahead of a failed write would skip
         // every future retry and silently lose the entry.
-        if (storage._set(name, props, this._expire_days, this._cross_subdomain, this._secure, this._config.debug)) {
+        if (
+            storage._set(name, storedProps, this._expire_days, this._cross_subdomain, this._secure, this._config.debug)
+        ) {
             state.dirty = false
             if (slot !== MAIN_STORAGE_SLOT) {
                 // The group entry has now actually landed on disk — only here is
