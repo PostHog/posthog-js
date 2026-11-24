@@ -361,20 +361,6 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(replay.startRecording).toHaveBeenCalledTimes(1)
       expect(activation()).toEqual({ sessionId: posthog.getSessionId(), eventGroupIds: [], screenGroupIds: ['g1'] })
     })
-
-    it('does not activate on a config load in the session of the $screen event', async () => {
-      currentSessionRecording = v2Config([checkoutGroup])
-
-      posthog = newPostHog()
-      await posthog.ready()
-      await posthog.screen('checkout-step-2')
-      await posthog.reloadFeatureFlagsAsync()
-      await wait(50)
-      await waitForNativePluginEvaluation(posthog)
-
-      expect(activation()).toBeFalsy()
-      expect(replay.start).not.toHaveBeenCalled()
-    })
   })
 
   const purchaseGroup = {
@@ -383,6 +369,118 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     sampleRate: 1,
     conditions: { matchType: 'any', events: [{ name: 'purchase' }] },
   }
+
+  describe('a trigger groups load on a screen that matches a group', () => {
+    const checkoutGroup = (properties: any[] = []): any => ({
+      id: 'g2',
+      name: 'Checkout screens',
+      sampleRate: 1,
+      conditions: { matchType: 'any', urls: [{ url: '^checkout', matching: 'regex' }], properties },
+    })
+    const activation = (): any =>
+      posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)
+    const loadConfig = async (sessionRecording: any): Promise<void> => {
+      currentSessionRecording = sessionRecording
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+    }
+
+    it('records for a $screen event captured before the first v2 config, with no new event', async () => {
+      currentSessionRecording = v2Config([checkoutGroup()])
+      const respond = (globalThis as any).window.fetch
+      let deliverConfig = (): void => {}
+      const configHeld = new Promise<void>((resolve) => (deliverConfig = resolve))
+      ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+        await configHeld
+        return respond(url)
+      })
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.screen('checkout-step-2')
+      await wait(50)
+      expect((posthog as any)._sessionReplayTriggerGroups).toBeNull()
+      expect(replay.start).not.toHaveBeenCalled()
+
+      deliverConfig()
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      expect(activation()).toEqual({ sessionId: posthog.getSessionId(), eventGroupIds: [], screenGroupIds: ['g2'] })
+    })
+
+    it('activates a matching group a reload adds, and keeps it over a later reload', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await wait(50)
+      expect(activation()).toBeFalsy()
+
+      await loadConfig(v2Config([purchaseGroup, checkoutGroup()]))
+      expect(activation()?.screenGroupIds).toEqual(['g2'])
+      expect(replay.start).toHaveBeenCalledTimes(1)
+      replay.isEnabled.mockImplementation(async () => true)
+
+      await posthog.screen('Home')
+      await loadConfig(v2Config([purchaseGroup, checkoutGroup()]))
+      expect(activation()?.screenGroupIds).toEqual(['g2'])
+      expect(replay.stopRecording).not.toHaveBeenCalled()
+    })
+
+    it('leaves the group pending on a screen that does not match', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('Home')
+
+      await loadConfig(v2Config([purchaseGroup, checkoutGroup()]))
+      expect(activation()).toBeFalsy()
+      expect(replay.start).not.toHaveBeenCalled()
+    })
+
+    it('activates nothing while the app has stopped replay, until the next start', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await posthog.stopSessionRecording()
+
+      await loadConfig(v2Config([purchaseGroup, checkoutGroup()]))
+      expect(activation()).toBeFalsy()
+      expect(replay.start).not.toHaveBeenCalled()
+
+      await posthog.startSessionRecording()
+      expect(activation()?.screenGroupIds).toEqual(['g2'])
+      expect(replay.start).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not check on a flags reload that carries no replay config', async () => {
+      currentSessionRecording = v2Config([
+        checkoutGroup([{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }]),
+      ])
+      await warmup()
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+      await posthog.screen('checkout-step-2')
+      await wait(50)
+      expect(activation()).toBeFalsy()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.PersonProperties, { plan: 'pro' })
+      await loadConfig(undefined)
+      expect(activation()).toBeFalsy()
+
+      await loadConfig(v2Config([checkoutGroup([{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }])]))
+      expect(activation()?.screenGroupIds).toEqual(['g2'])
+    })
+  })
 
   it('retries the native start on a later matching event when the first start failed', async () => {
     currentSessionRecording = v2Config([purchaseGroup])

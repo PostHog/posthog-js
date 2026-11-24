@@ -437,6 +437,7 @@ export class PostHog extends PostHogCore {
   private _sessionReplayEventTriggers: string[] = []
   // Non-null while v2 is in effect; this JS layer owns the event and screen legs.
   private _sessionReplayTriggerGroups: SessionReplayTriggerGroup[] | null = null
+  private _triggerGroupsScreenCheckedConfig: unknown
   private _triggerGroupsEvaluator = new SessionReplayTriggerGroupsEvaluator()
   private _triggerGroupsDebugRegistered = false
   // Minimum duration native holds a recording for: the lowest among activated groups (0 when none
@@ -4347,9 +4348,17 @@ export class PostHog extends PostHogCore {
     const personProperties = this.getPersistedProperty<Record<string, unknown>>(
       PostHogPersistedProperty.PersonProperties
     )
-    const newlyActivated = explicitStart
-      ? this._triggerGroupsEvaluator.checkScreenOnStart(sessionId, personProperties)
-      : this._triggerGroupsEvaluator.checkScreenOnNewSession(sessionId, personProperties)
+    // Core stores a new object for each replay config it receives, so a different one is a groups
+    // load. One that arrives while replay is stopped stays unseen here, for the next start.
+    const replayConfig = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)
+    const groupsLoaded = replayConfig !== this._triggerGroupsScreenCheckedConfig
+    this._triggerGroupsScreenCheckedConfig = replayConfig
+    const evaluator = this._triggerGroupsEvaluator
+    const newlyActivated = groupsLoaded
+      ? evaluator.checkScreenOnGroupsLoad(sessionId, personProperties)
+      : explicitStart
+        ? evaluator.checkScreenOnStart(sessionId, personProperties)
+        : evaluator.checkScreenOnNewSession(sessionId, personProperties)
     if (newlyActivated) {
       this.setPersistedProperty(
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation,

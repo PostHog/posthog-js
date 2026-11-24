@@ -856,6 +856,37 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
     })
   })
 
+  describe('screen check on a groups load', () => {
+    const proCheckout = group({
+      conditions: conditions({
+        urls: [/^checkout/],
+        properties: [{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }],
+      }),
+    })
+
+    it('checks the screen of the session again, also after a live check that did not match', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([proCheckout])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, { plan: 'free' })
+
+      expect(evaluator.checkScreenOnGroupsLoad('s1', { plan: 'free' })).toBe(false)
+      expect(evaluator.checkScreenOnGroupsLoad('s1', { plan: 'pro' })).toBe(true)
+      expect(evaluator.getActivation()).toEqual({ sessionId: 's1', eventGroupIds: [], screenGroupIds: ['g1'] })
+      // Already activated: stays so, and is not reported again.
+      expect(evaluator.checkScreenOnGroupsLoad('s1', { plan: 'free' })).toBe(false)
+      expect(evaluator.evaluate('s1', null, { plan: 'free' }).shouldRecord).toBe(true)
+    })
+
+    it('counts as the check of the screen for a later explicit start', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([proCheckout])
+      evaluator.rememberScreen('s1', '$screen', { $screen_name: 'checkout-step-1' })
+
+      expect(evaluator.checkScreenOnGroupsLoad('s1', { plan: 'free' })).toBe(false)
+      expect(evaluator.checkScreenOnStart('s1', { plan: 'pro' })).toBe(false)
+    })
+  })
+
   it('restores persisted activation only for its own session and tolerates malformed storage', () => {
     const purchase = group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })
     const evaluator = new SessionReplayTriggerGroupsEvaluator()
