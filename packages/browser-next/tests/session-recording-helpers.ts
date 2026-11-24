@@ -91,9 +91,10 @@ export const setup = async (
         optOutByDefault?: boolean
         capturePageview?: boolean
         uiHost?: string
+        transport?: Transport
     } = {}
 ): Promise<Setup> => {
-    const network = transport()
+    const network = overrides.transport ?? transport()
     const storage = new MemoryStorage()
     const replay = overrides.replay ?? sessionRecording(options)
     const posthog = await createCore({
