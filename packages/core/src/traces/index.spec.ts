@@ -2919,6 +2919,8 @@ describe('PostHogTraces', () => {
       // deadline, up to five minutes from where the window was installed; the
       // in-window sends are uncharged, so each window costs one charge and eight
       // of them retire the head batch rather than letting it hold the queue.
+      // 25s steps still land inside the 30s window; 100 of them cover the ~35
+      // minutes the eight charges take.
       mockInstance._sendTracesBatch.mockResolvedValue({
         kind: 'retry-later',
         error: new Error('429'),
@@ -2926,15 +2928,14 @@ describe('PostHogTraces', () => {
       })
       const traces = createTraces({ flushIntervalMs: 10_000, maxQueueSize: 5, maxExportBatchSize: 2 })
 
-      for (let i = 0; i < 500; i++) {
+      for (let i = 0; i < 100; i++) {
         traces.startSpan(`span-${i}`).end()
         await traces.flush()
-        await vi.advanceTimersByTimeAsync(5_000)
+        await vi.advanceTimersByTimeAsync(25_000)
       }
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
-      // 500 fake-timer drains can outlast the 5s default on a loaded CI runner.
-    }, 30_000)
+    })
 
     it('still charges the retry budget for failures outside any window', async () => {
       // The budget must keep working when the endpoint names no wait, or a
