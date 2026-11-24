@@ -904,9 +904,9 @@ export class PostHog extends PostHogCore {
    * 1 second doubling to 30 seconds, with jitter.
    */
   protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
-    const queuedUuids = new Map<SerializedV1Event, string | undefined>()
+    const batchIndices = new Map<SerializedV1Event, number>()
     const drops: CaptureDroppedEvent[] = []
-    for (const message of batchMessages) {
+    for (const [index, message] of batchMessages.entries()) {
       if (!message) {
         continue
       }
@@ -927,7 +927,7 @@ export class PostHog extends PostHogCore {
         drop('unserializable event', `it can't be serialized (${String(error)})`)
         continue
       }
-      queuedUuids.set(serialized, queuedUuid)
+      batchIndices.set(serialized, index)
     }
     if (drops.length > 0) {
       const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
@@ -936,7 +936,7 @@ export class PostHog extends PostHogCore {
     }
 
     let deferral: V1SendDeferral | undefined
-    const kept = await this._getCaptureV1Sender().send([...queuedUuids.keys()], {
+    const kept = await this._getCaptureV1Sender().send([...batchIndices.keys()], {
       keepUnsent: true,
       onDeferred: (reason) => {
         deferral = reason
@@ -945,14 +945,20 @@ export class PostHog extends PostHogCore {
     if (!deferral) {
       this._captureResendCount = 0
       this._captureResendAt = 0
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
       return
     }
     if (!deferral.tooLarge) {
       this._scheduleCaptureResend(deferral.retryAfterMs)
     }
     this._logger.info(`Keeping ${kept.length} events to send again: ${deferral.reason}.`)
-    const keepUuids = kept.map((event) => queuedUuids.get(event)).filter((uuid): uuid is string => uuid !== undefined)
-    return { keepUuids, tooLarge: deferral.tooLarge }
+    const keepIndices = kept
+      .map((event) => batchIndices.get(event))
+      .filter((index): index is number => index !== undefined)
+    return { keepIndices, tooLarge: deferral.tooLarge }
   }
 
   protected batchByteTarget(): number {
@@ -984,12 +990,9 @@ export class PostHog extends PostHogCore {
     return serialized
   }
 
-  protected flushAutomatic(): Promise<void> {
-    // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
-    if (Date.now() < this._captureResendAt) {
-      return Promise.resolve()
-    }
-    return super.flushAutomatic()
+  // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
+  protected holdsAutomaticFlush(): boolean {
+    return Date.now() < this._captureResendAt
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
@@ -998,7 +1001,9 @@ export class PostHog extends PostHogCore {
     }
     const maxWaitMs = 30_000
     const jitter = 0.75 + 0.5 * Math.random()
-    const backoffMs = Math.min(1000 * 2 ** this._captureResendCount * jitter, maxWaitMs)
+    // Cap before jitter so waits at the ceiling stay spread out.
+    const baseMs = Math.min(1000 * 2 ** Math.min(this._captureResendCount, 5), maxWaitMs)
+    const backoffMs = Math.min(baseMs * jitter, maxWaitMs)
     const waitMs = retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, maxWaitMs))
     this._captureResendCount++
     this._captureResendAt = Date.now() + waitMs
