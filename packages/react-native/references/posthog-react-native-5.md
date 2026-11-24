@@ -588,8 +588,8 @@ queued. Up to 50 MiB of AI events are kept; beyond that, the oldest are dropped.
 
 `string` \| `undefined`
 
-The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled or opted out,
-the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
+The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled, opted out or
+shut down, the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
 finishes initializing it returns the UUID, and those checks run once initialization completes.
 
 #### Example

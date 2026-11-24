@@ -1770,8 +1770,8 @@ export class PostHog extends PostHogCore {
    * @param event The AI event name, such as `$ai_generation`
    * @param properties Properties attached only to this event
    * @param options Same options as `capture()`
-   * @returns The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled or opted out,
-   * the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
+   * @returns The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled, opted out or
+   * shut down, the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
    * finishes initializing it returns the UUID, and those checks run once initialization completes.
    */
   captureAi(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): string | undefined {
