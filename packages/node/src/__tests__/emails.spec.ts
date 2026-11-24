@@ -1621,10 +1621,7 @@ describe('emails', () => {
       const remainingSendReplies = [...sendReplies]
 
       fetch.mockImplementation(
-        async (
-          url: string,
-          options: { method: string; headers?: Record<string, string>; body?: string | Uint8Array }
-        ) => {
+        async (url: string, options: { method: string; headers?: Record<string, string>; body?: BodyInit | null }) => {
           const headers = Object.fromEntries(
             Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v])
           )
@@ -1640,11 +1637,18 @@ describe('emails', () => {
             }
             const payload = typeof options.body === 'string' ? JSON.parse(options.body) : null
             const files = payload?.files
+            const grantItem = Array.isArray(files) && files.length === 1 ? files[0] : null
             const validGrant =
-              Array.isArray(files) &&
-              files.length === 1 &&
-              files[0]?.sha256 === HELLO_SHA256 &&
-              files[0]?.size === HELLO_BYTES.byteLength
+              payload !== null &&
+              typeof payload === 'object' &&
+              !Array.isArray(payload) &&
+              Object.keys(payload).length === 1 &&
+              grantItem !== null &&
+              typeof grantItem === 'object' &&
+              !Array.isArray(grantItem) &&
+              Object.keys(grantItem).sort().join(',') === 'sha256,size' &&
+              grantItem.sha256 === HELLO_SHA256 &&
+              grantItem.size === HELLO_BYTES.byteLength
             if (!validGrant) {
               return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Bad upload grant.' })
             }
@@ -1673,16 +1677,20 @@ describe('emails', () => {
                 message: 'Authorization header not allowed on storage PUT.',
               })
             }
+            const putBytes =
+              options.body !== undefined && options.body !== null
+                ? new Uint8Array(await new Response(options.body).arrayBuffer())
+                : null
             if (
               headers['content-length'] !== String(HELLO_BYTES.byteLength) ||
               headers['x-amz-checksum-sha256'] !== HELLO_CHECKSUM ||
-              !(options.body instanceof Uint8Array) ||
-              !sameBytes(options.body, HELLO_BYTES)
+              putBytes === null ||
+              !sameBytes(putBytes, HELLO_BYTES)
             ) {
               return fakeReply(400, { code: 'BadDigest', message: 'Storage PUT bytes or headers mismatch.' })
             }
             routes.push('put')
-            uploadedBytes.push(options.body)
+            uploadedBytes.push(putBytes)
             uploaded = true
             return fakeReply(200, {})
           }
@@ -2023,6 +2031,67 @@ describe('emails', () => {
       })
     })
 
+    it('picks up a category populated by an enumerable from getter after Object.entries saw undefined', async () => {
+      replies = [accepted()]
+      let currentCategory: MessageCategory | undefined
+      const options: Record<string, unknown> = { ...CODE_SEND }
+      Object.defineProperty(options, 'category', {
+        enumerable: true,
+        get() {
+          return currentCategory
+        },
+      })
+      Object.defineProperty(options, 'from', {
+        enumerable: true,
+        get() {
+          currentCategory = NEWSLETTER
+          return 'Sender <sender@example.com>'
+        },
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body).toMatchObject({
+        from: 'Sender <sender@example.com>',
+        category: NEWSLETTER,
+      })
+    })
+
+    it('copies category before normalizing cc so a mutating cc proxy cannot downgrade marketing to transactional', async () => {
+      replies = [accepted()]
+      const mutableCategory: { key: string; type: 'marketing' | 'transactional'; name: string } = {
+        key: 'newsletter',
+        type: 'marketing',
+        name: 'Newsletter',
+      }
+      const mutatingCc = new Proxy<string[]>([], {
+        get(target, prop, receiver) {
+          if (prop === 'length') {
+            mutableCategory.type = 'transactional'
+          }
+          return Reflect.get(target, prop, receiver)
+        },
+      })
+
+      const { data, error } = await sendUnchecked({
+        ...CODE_SEND,
+        cc: mutatingCc,
+        category: mutableCategory,
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body.category).toEqual({
+        key: 'newsletter',
+        type: 'marketing',
+        name: 'Newsletter',
+      })
+    })
+
     it.each([
       ['a category key as a bare string', 'newsletter'],
       ['null', null],
@@ -2067,9 +2136,10 @@ describe('emails', () => {
             status,
             body: { type: 'invalid_request', code, detail: 'Refused.', attr },
           },
+          accepted(),
         ]
 
-        const { data, error } = await sendIn(category, { ...overrides, maxRetries: 2 })
+        const { data, error } = await settle(sendIn(category, { ...overrides, maxRetries: 2 }))
 
         expect(data).toBeNull()
         expect(error).toMatchObject({ code, name: 'validation_error', statusCode: status })
@@ -2111,10 +2181,12 @@ describe('emails', () => {
         { status: 202, body: { message_id: 'msg_unexpected_retry', replayed: false } },
       ])
 
-      const { data, error } = await sendIn(NEWSLETTER, {
-        attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
-        maxRetries: 2,
-      })
+      const { data, error } = await settle(
+        sendIn(NEWSLETTER, {
+          attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
+          maxRetries: 2,
+        })
+      )
 
       expect(data).toBeNull()
       expect(error).toMatchObject({
@@ -2155,7 +2227,7 @@ describe('emails', () => {
         TRANSACTIONAL_EMAIL_CATEGORY,
         {
           type: 'validation_error',
-          code: 'invalid_input',
+          code: 'invalid',
           detail: 'Unknown field category.',
           attr: 'category',
         },
@@ -2164,9 +2236,9 @@ describe('emails', () => {
     ])(
       'returns an older-server refusal from %s on category without retrying or stripping category',
       async (_server, category, body, expectedFix) => {
-        replies = [{ status: 400, body }]
+        replies = [{ status: 400, body }, accepted()]
 
-        const { data, error } = await sendIn(category, { maxRetries: 2 })
+        const { data, error } = await settle(sendIn(category, { maxRetries: 2 }))
 
         expect(data).toBeNull()
         expect(error).toMatchObject({

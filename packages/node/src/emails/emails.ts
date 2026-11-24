@@ -629,8 +629,9 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
 
 function codeFormFields(send: UncheckedSend, ownEntries: [string, unknown][]): Record<string, unknown> {
   const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
-  const ownCategory = ownEntries.find(([name]) => name === 'category')
-  const category = ownCategory !== undefined ? ownCategory[1] : send.category
+  const ownCategory = ownEntries.find(([name]) => name === 'category')?.[1]
+  const rawCategory = ownCategory !== undefined ? ownCategory : send.category
+  const category = rawCategory !== undefined ? checkedCategory(rawCategory) : undefined
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -639,7 +640,7 @@ function codeFormFields(send: UncheckedSend, ownEntries: [string, unknown][]): R
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
-    ...(category !== undefined && { category: checkedCategory(category) }),
+    ...(category !== undefined && { category }),
   }
 }
 
