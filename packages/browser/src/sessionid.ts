@@ -318,6 +318,24 @@ export class SessionIdManager {
         return sessionIdInfo || [0, null, 0]
     }
 
+    // An unloading page must never start a session or notify recording listeners.
+    peekSessionAndWindowId(): { sessionId: string; windowId: string } | undefined {
+        const session = this._persistence.props[SESSION_ID]
+        if (
+            this._config.cookieless_mode === COOKIELESS_ALWAYS ||
+            this._pendingBootstrapSession ||
+            !this._windowId ||
+            !this._sessionId ||
+            !isArray(session) ||
+            session[1] !== this._sessionId ||
+            !isPositiveNumber(this._sessionStartTimestamp) ||
+            Math.abs(Date.now() - this._sessionStartTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+        ) {
+            return undefined
+        }
+        return { sessionId: this._sessionId, windowId: this._windowId }
+    }
+
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated. Also clears the idle timer so a stale fire
     // cannot rotate the freshly-cleared session.

@@ -60,6 +60,8 @@ describe('Session ID manager', () => {
         vi.useRealTimers()
         vi.useFakeTimers()
         config = { ...defaultConfig(), persistence_name: 'persistance-name' }
+        vi.mocked(sessionStore._set).mockReset()
+        vi.mocked(sessionStore._remove).mockReset()
         vi.mocked(sessionStore._parse).mockReset().mockReturnValue(null)
         vi.mocked(uuidv7).mockReset()
         timestamp = 1603107479471
@@ -857,6 +859,17 @@ describe('Session ID manager', () => {
             expect(sessionStore._remove).toHaveBeenCalledTimes(0)
             expect(sessionStore._set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
+        it.each([undefined, { navigationType: 'push' }])('ignores pageswap without a reload (%j)', (activation) => {
+            const manager = sessionIdMgr(persistence)
+            try {
+                vi.mocked(sessionStore._remove).mockClear()
+                window.dispatchEvent(Object.assign(new Event('pageswap'), { activation }))
+                expect(sessionStore._remove).not.toHaveBeenCalled()
+            } finally {
+                manager.destroy()
+            }
+        })
+
         it('retains the window id on a confirmed reload without beforeunload', () => {
             const storage = new Map<string, unknown>()
             vi.mocked(sessionStore._parse).mockImplementation((key) => storage.get(key))
@@ -1472,6 +1485,7 @@ describe('Session ID manager', () => {
                 expect.any(Function),
                 expect.objectContaining({ capture: false })
             )
+            expect(removeEventListenerSpy).toHaveBeenCalledWith('pageswap', expect.any(Function))
             expect(sessionIdManager['_beforeUnloadListener']).toBeUndefined()
 
             removeEventListenerSpy.mockRestore()

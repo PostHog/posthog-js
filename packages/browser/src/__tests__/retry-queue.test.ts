@@ -17,7 +17,7 @@ describe('RetryQueue', () => {
     const mockPosthog = {
         _send_request: mockTransport,
         get_distinct_id: () => 'user',
-        sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: 'session', windowId: 'tab' }) },
+        sessionManager: { peekSessionAndWindowId: () => ({ sessionId: 'session', windowId: 'tab' }) },
         config: { token: 'test-replay', persistence: 'sessionStorage' },
         consent: { isOptedOut: () => false },
         persistence: { _disabled: false },
@@ -188,6 +188,48 @@ describe('RetryQueue', () => {
                     expect(mockTransport).toHaveBeenCalledWith(
                         expect.objectContaining({ url: '/s/?retry_count=1', data })
                     )
+                } finally {
+                    await ph.shutdown()
+                }
+            }
+        )
+
+        it.each(['reset', 'deferred bootstrap', 'expired session'])(
+            'does not rotate a session on reload after %s',
+            async (scenario) => {
+                const ph = await createPosthogInstance(undefined, { before_send: undefined })
+                try {
+                    const { sessionId, windowId } = ph.sessionManager!.checkAndGetSessionAndWindowId()
+                    const properties = {
+                        token: ph.config.token,
+                        distinct_id: ph.get_distinct_id(),
+                        $session_id: sessionId,
+                        $window_id: windowId,
+                    }
+                    mockTransport.mockImplementationOnce(({ callback }) => callback({ statusCode: 503 }))
+                    ph._send_retriable_request({
+                        batchKey: 'recordings',
+                        batchGroup: sessionId + '-' + windowId,
+                        url: '/s/',
+                        data: [{ event: '$snapshot', uuid: 'old-page', properties }],
+                    })
+                    expect(ph._retryQueue?.length).toBe(1)
+                    const changed = vi.fn()
+                    ph.onSessionId(changed)
+                    const bootstrapId = uuidv7()
+                    if (scenario === 'expired session') vi.setSystemTime(Date.now() + 25 * 3600_000)
+                    else if (scenario === 'deferred bootstrap') ph.reset({ bootstrap: { sessionID: bootstrapId } })
+                    else ph.reset()
+                    changed.mockClear()
+                    const previous = [...ph.persistence!.props.$sesid]
+                    window.dispatchEvent(
+                        Object.assign(new Event('pageswap'), { activation: { navigationType: 'reload' } })
+                    )
+                    expect(changed).not.toHaveBeenCalled()
+                    expect(ph.persistence!.props.$sesid).toEqual(previous)
+                    expect(ph._retryQueue?.length).toBe(1)
+                    if (scenario === 'deferred bootstrap')
+                        expect(ph.sessionManager!.checkAndGetSessionAndWindowId().sessionId).toBe(bootstrapId)
                 } finally {
                     await ph.shutdown()
                 }

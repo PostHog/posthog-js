@@ -77,16 +77,16 @@ export class RetryQueue {
         if (!isReloadPageSwap(event) || !this._queue.length || !this._canHandOffReplay()) {
             return
         }
+        const session = this._instance.sessionManager?.peekSessionAndWindowId()
+        if (!session) return
+        const distinctId = this._instance.get_distinct_id()
         for (let i = 0; i < this._queue.length; i++) {
             const { retryAt, requestOptions } = this._queue[i]
             const { batchKey, batchGroup, url, data, retriesPerformedSoFar, callback } = requestOptions
             if (batchKey !== 'recordings' || !batchGroup || !isArray(data) || !data.length || callback) {
                 continue
             }
-            const session = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
-            const distinctId = this._instance.get_distinct_id()
             if (
-                !session ||
                 !data.every(
                     (item) =>
                         item.properties?.distinct_id === distinctId &&

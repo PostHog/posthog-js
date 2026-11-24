@@ -2700,6 +2700,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (document.visibilityState === 'visible') {
                 this._documentWasEverVisible = true
             }
+            // A hidden-page marker must not restart recording after logout. Older SDK cores
+            // can load this recorder without exposing the non-mutating session lookup.
+            const manager = this._instance.sessionManager
+            if (
+                document.visibilityState === 'hidden' &&
+                manager?.peekSessionAndWindowId &&
+                !manager.peekSessionAndWindowId()
+            ) {
+                return
+            }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})
         }
