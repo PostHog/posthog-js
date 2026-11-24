@@ -31,10 +31,11 @@ posthog-react-native 5.0 sends events to new paths:
 | ------------------------------------------------------------------------------------------------- | --------- | ------------------------ |
 | `capture`, `identify`, `alias`, `group`, `screen`, `captureException` and the other event methods | `/batch/` | `/i/v1/analytics/events` |
 | `captureAi` (new)                                                                                 | —         | `/i/v1/ai/events`        |
+| `captureTraceFeedback`, `captureTraceMetric`                                                      | `/batch/` | `/i/v1/ai/events`        |
 
 Feature flag, remote config, survey and session replay requests are unchanged.
 
-If you send events to a self-hosted PostHog, check that it serves `/i/v1/analytics/events`, and `/i/v1/ai/events` if you use `captureAi()`, before you upgrade.
+If you send events to a self-hosted PostHog, check that it serves `/i/v1/analytics/events`, and `/i/v1/ai/events` if you use `captureAi()`, `captureTraceFeedback()` or `captureTraceMetric()`, before you upgrade.
 A `404` keeps events queued: the SDK resends them with backoff until the queue is full, then drops the oldest. A `400`, `401`, `403` or `405` drops them. With `debug: true`, the SDK logs why, such as `HTTP 404`.
 
 If you send events through your own reverse proxy, update it before you upgrade:
@@ -148,21 +149,23 @@ The hooks match `@posthog/react`:
 
 For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `useFeatureFlagEnabled()` return `undefined`, or the default you pass to `useFeatureFlagEnabled()`, where `useFeatureFlag()` returned `false`. Check for a falsy value instead of `=== false`.
 
+`useFeatureFlagEnabled(key, defaultValue?, client?)` takes the client third. In JavaScript, `useFeatureFlagEnabled(key, client)` reads the client as the default, so call `useFeatureFlagEnabled(key, undefined, client)`.
+
 `useFeatureFlagResult()` keeps its shape, and reads an empty-string variant as disabled (see [Empty-string variants](#empty-string-variants)).
 
 ## Event delivery
 
 - `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; the SDK sets its own. Other `requestHeaders` still do, and feature flag requests still get all of them.
 - Events stay queued when a send gets no response, a `404`, `408`, `429`, `500`, `502`, `503` or `504`, or a `retry` result. They're sent again after a wait of about 1 second doubling to 30 seconds, longer if the server's `Retry-After` asks (up to 30 seconds), with no attempt limit. `fetchRetryCount` and `fetchRetryDelay` no longer apply to events.
-- `flush()` and `shutdown()` no longer reject when events stay queued for a later send.
-- `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued. It still fires for dropped events, with a different error: it carries `drops` (each dropped event's `uuid` and reason), `requestId`, `retryExhausted` and `cause`, and has no `response`.
+- `flush()` and `shutdown()` no longer reject when delivery fails. Events either stay queued for a later send or are dropped and reported through `posthog.on('error')`.
+- `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued. It still fires for dropped events, with a different error that has no `response`. It carries `endpoint`, `requestId`, `drops` (events rejected one by one, each with its `uuid` and `details`), `retryExhausted` (the uuids of events lost when a whole batch failed, such as on a `400` or `401`) and `cause` (the error behind a whole-batch failure).
 
   ```ts
   // 4.x
   posthog.on('error', (err) => report(err.response?.status))
 
   // 5.0
-  posthog.on('error', (err) => report(err.message, err.drops?.length))
+  posthog.on('error', (err) => report(err.message, (err.drops?.length ?? 0) + (err.retryExhausted?.length ?? 0)))
   ```
 
 - Event uuids are sent in lowercase.
