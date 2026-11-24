@@ -246,7 +246,7 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
 }
 
 const RESEND_FIX =
-  'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours: PostHog queues no second email for a key it has, and its answer says whether it queued this one, unless that send goes unanswered too.'
+  'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours: PostHog queues no second email for a key it has.'
 
 function withResendFix(error: EmailError): EmailError {
   return new EmailError({
