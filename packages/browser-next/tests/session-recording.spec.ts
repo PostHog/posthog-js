@@ -307,6 +307,22 @@ describe('session recording delivery', () => {
     })
 })
 
+describe('session recording markers', () => {
+    /** Each recorded event's type, or the tag of a custom event. */
+    const eventSequence = (network: Transport): unknown[] =>
+        recordedEvents(network).map((event) => (event.type === 5 ? (event.data as { tag: string }).tag : event.type))
+
+    it('records the sampling decision made before rrweb records, after the opening full snapshot', async () => {
+        const { replay, transport: network } = await setup({ sampleRate: '1.0' })
+        await started(replay)
+
+        interact()
+        await replay.flush?.()
+
+        expect(eventSequence(network).slice(0, 4)).toEqual([4, 2, '$recording_started', '$remote_config_received'])
+    })
+})
+
 describe('session recording attribution', () => {
     const MARKER = 'recorded-before-reset'
     const recordMarker = async (): Promise<void> => {
