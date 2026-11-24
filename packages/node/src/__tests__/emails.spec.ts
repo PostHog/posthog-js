@@ -1608,230 +1608,24 @@ describe('emails', () => {
     const UPLOADS_URL = 'https://us.posthog.com/api/messaging/attachments/uploads/'
     const STORAGE_UPLOAD_URL = `https://storage.example.com/team/2/${HELLO_SHA256}?X-Amz-Expires=900&X-Amz-Signature=sig-1`
 
-    const sameBytes = (actual: Uint8Array, expected: Uint8Array): boolean =>
-      actual.byteLength === expected.byteLength && actual.every((byte, index) => byte === expected[index])
-
-    const isJsonContentType = (value: string | undefined): boolean =>
-      typeof value === 'string' && value.split(';')[0].trim().toLowerCase() === 'application/json'
-
-    const parseJsonObject = (body: BodyInit | null | undefined): Record<string, unknown> | null => {
-      if (typeof body !== 'string') {
-        return null
-      }
-      try {
-        const parsed: unknown = JSON.parse(body)
-        return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? (parsed as Record<string, unknown>)
-          : null
-      } catch {
-        return null
-      }
-    }
-
-    const isValidWireCategory = (value: unknown): boolean => {
-      if (value === undefined || value === TRANSACTIONAL_EMAIL_CATEGORY) {
-        return true
-      }
-      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        return false
-      }
-      const category = value as Record<string, unknown>
-      const keys = Object.keys(category)
-      const allowed = keys.every((k) => k === 'key' || k === 'type' || k === 'name' || k === 'description')
-      return (
-        allowed &&
-        typeof category.key === 'string' &&
-        category.key.trim().length > 0 &&
-        typeof category.name === 'string' &&
-        category.name.trim().length > 0 &&
-        (category.type === 'marketing' || category.type === 'transactional') &&
-        (category.description === undefined || typeof category.description === 'string')
-      )
-    }
-
-    const stubAttachmentSendRoutes = (): {
-      routes: string[]
-      uploadedBytes: Uint8Array[]
-      sendRequests: Array<{
-        url: string
-        method: string
-        headers: Record<string, string>
-        body: Record<string, unknown>
-      }>
-      queued: Record<string, unknown>[]
-    } => {
-      const state = {
-        routes: [] as string[],
-        uploadedBytes: [] as Uint8Array[],
-        sendRequests: [] as Array<{
-          url: string
-          method: string
-          headers: Record<string, string>
-          body: Record<string, unknown>
-        }>,
-        queued: [] as Record<string, unknown>[],
-      }
-      const uploadedHashes = new Set<string>()
-
-      fetch.mockImplementation(
-        async (url: string, options: { method: string; headers?: Record<string, string>; body?: BodyInit | null }) => {
-          const headers = Object.fromEntries(
-            Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v])
-          )
-          const parsedUrl = new URL(url)
-
-          if (options.method === 'POST' && parsedUrl.pathname === '/api/messaging/attachments/uploads/') {
-            if (url !== UPLOADS_URL || headers.authorization !== `Bearer ${SECRET_KEY}`) {
-              return fakeReply(401, {
-                type: 'authentication_error',
-                code: 'authentication_failed',
-                detail: 'Bad auth.',
-              })
-            }
-            if (!isJsonContentType(headers['content-type'])) {
-              return fakeReply(415, {
-                type: 'invalid_request',
-                code: 'unsupported_media_type',
-                detail: 'Expected application/json Content-Type.',
-              })
-            }
-            const payload = parseJsonObject(options.body)
-            const files = payload?.files
-            const grantItem = Array.isArray(files) && files.length === 1 ? files[0] : null
-            const validGrant =
-              payload !== null &&
-              Object.keys(payload).length === 1 &&
-              grantItem !== null &&
-              typeof grantItem === 'object' &&
-              !Array.isArray(grantItem) &&
-              Object.keys(grantItem).sort().join(',') === 'sha256,size' &&
-              grantItem.sha256 === HELLO_SHA256 &&
-              grantItem.size === HELLO_BYTES.byteLength
-            if (!validGrant) {
-              return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Bad upload grant.' })
-            }
-            state.routes.push('uploads')
-            return fakeReply(200, {
-              files: [
-                {
-                  sha256: HELLO_SHA256,
-                  status: 'upload',
-                  url: STORAGE_UPLOAD_URL,
-                  method: 'PUT',
-                  headers: {
-                    'Content-Length': String(HELLO_BYTES.byteLength),
-                    'x-amz-checksum-sha256': HELLO_CHECKSUM,
-                  },
-                  url_expires_at: '2026-11-30T00:00:00Z',
-                },
-              ],
-            })
-          }
-
-          if (options.method === 'PUT' && url === STORAGE_UPLOAD_URL) {
-            if ('authorization' in headers) {
-              return fakeReply(400, {
-                code: 'InvalidArgument',
-                message: 'Authorization header not allowed on storage PUT.',
-              })
-            }
-            const putBytes =
-              options.body !== undefined && options.body !== null
-                ? new Uint8Array(await new Response(options.body).arrayBuffer())
-                : null
-            if (
-              headers['content-length'] !== String(HELLO_BYTES.byteLength) ||
-              headers['x-amz-checksum-sha256'] !== HELLO_CHECKSUM ||
-              putBytes === null ||
-              !sameBytes(putBytes, HELLO_BYTES)
-            ) {
-              return fakeReply(400, { code: 'BadDigest', message: 'Storage PUT bytes or headers mismatch.' })
-            }
-            state.routes.push('put')
-            state.uploadedBytes.push(putBytes)
-            uploadedHashes.add(HELLO_SHA256)
-            return fakeReply(200, {})
-          }
-
-          if (options.method === 'POST' && parsedUrl.pathname === '/api/messaging/send/email/') {
-            if (url !== SEND_URL || headers.authorization !== `Bearer ${SECRET_KEY}`) {
-              return fakeReply(401, {
-                type: 'authentication_error',
-                code: 'authentication_failed',
-                detail: 'Bad auth.',
-              })
-            }
-            if (!isJsonContentType(headers['content-type'])) {
-              return fakeReply(415, {
-                type: 'invalid_request',
-                code: 'unsupported_media_type',
-                detail: 'Expected application/json Content-Type.',
-              })
-            }
-            const parsedBody = parseJsonObject(options.body)
-            if (parsedBody === null) {
-              return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Invalid JSON body.' })
-            }
-            if (!isValidWireCategory(parsedBody.category)) {
-              return fakeReply(400, {
-                type: 'validation_error',
-                code: 'invalid_input',
-                detail: 'Invalid category.',
-                attr: 'category',
-              })
-            }
-            const attachments = parsedBody.attachments
-            const validAttachments =
-              Array.isArray(attachments) &&
-              attachments.length > 0 &&
-              attachments.every(
-                (item) =>
-                  item !== null &&
-                  typeof item === 'object' &&
-                  !Array.isArray(item) &&
-                  typeof (item as Record<string, unknown>).sha256 === 'string' &&
-                  uploadedHashes.has((item as Record<string, unknown>).sha256 as string) &&
-                  typeof (item as Record<string, unknown>).filename === 'string' &&
-                  ((item as Record<string, unknown>).filename as string).length > 0
-              )
-            if (!validAttachments) {
-              return fakeReply(400, {
-                type: 'invalid_request',
-                code: 'attachment_not_uploaded',
-                detail: 'Referenced attachment was not uploaded.',
-                attr: 'attachments',
-              })
-            }
-            state.routes.push('send')
-            state.sendRequests.push({ url, method: options.method, headers, body: parsedBody })
-            const category = parsedBody.category
-            const isCompleteMarketing =
-              category !== null &&
-              typeof category === 'object' &&
-              !Array.isArray(category) &&
-              (category as Record<string, unknown>).type === 'marketing'
-            if (isCompleteMarketing) {
-              return fakeReply(400, {
-                type: 'invalid_request',
-                code: 'workflow_can_wait',
-                detail: 'Workflow can wait.',
-                attr: 'attachments',
-              })
-            }
-            state.queued.push(parsedBody)
-            return fakeReply(202, { message_id: 'msg_1', replayed: false })
-          }
-
-          return fakeReply(404, {
-            type: 'invalid_request',
-            code: 'not_found',
-            detail: `Unexpected route ${options.method} ${url}`,
-          })
-        }
-      )
-
-      return state
-    }
+    const uploadGrantReply = (): Reply => ({
+      status: 200,
+      body: {
+        files: [
+          {
+            sha256: HELLO_SHA256,
+            status: 'upload',
+            url: STORAGE_UPLOAD_URL,
+            method: 'PUT',
+            headers: {
+              'Content-Length': String(HELLO_BYTES.byteLength),
+              'x-amz-checksum-sha256': HELLO_CHECKSUM,
+            },
+            url_expires_at: '2026-11-30T00:00:00Z',
+          },
+        ],
+      },
+    })
 
     const sendIn = (
       category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory,
@@ -1842,20 +1636,24 @@ describe('emails', () => {
     const sendUnchecked = (send: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
       posthog.emails.send(send as unknown as SendEmailOptions)
 
-    const postedSend = (
-      callIndex = 0
-    ): { url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> } => {
-      const [url, options] = fetch.mock.calls[callIndex]
-      const headers = Object.fromEntries(
+    const requestHeaders = (callIndex = 0): Record<string, string> => {
+      const [, options] = fetch.mock.calls[callIndex]
+      return Object.fromEntries(
         Object.entries((options.headers ?? {}) as Record<string, string>).map(([key, value]) => [
           key.toLowerCase(),
           value,
         ])
       )
+    }
+
+    const postedSend = (
+      callIndex = 0
+    ): { url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> } => {
+      const [url, options] = fetch.mock.calls[callIndex]
       return {
         url,
         method: options.method,
-        headers,
+        headers: requestHeaders(callIndex),
         body: JSON.parse(options.body),
       }
     }
@@ -1904,7 +1702,7 @@ describe('emails', () => {
     })
 
     it('sends a categorized transactional email with attachments and preserves exact outbound fields', async () => {
-      const boundary = stubAttachmentSendRoutes()
+      replies = [uploadGrantReply(), { status: 200, body: {} }, accepted()]
 
       const { data, error } = await sendIn(RECEIPTS, {
         attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
@@ -1912,28 +1710,61 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
-      expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
-      expect(boundary.sendRequests).toHaveLength(1)
-      expect(boundary.sendRequests[0].url).toBe(SEND_URL)
-      expect(boundary.sendRequests[0].method).toBe('POST')
-      expect(boundary.sendRequests[0].headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
-      expect(boundary.sendRequests[0].headers['content-type']).toBe('application/json')
-      expect(boundary.sendRequests[0].headers['idempotency-key']).toBeTruthy()
-      expect(boundary.queued).toEqual([
-        {
-          to: CODE_SEND.to,
-          template_key: CODE_SEND.templateKey,
-          subject: CODE_SEND.subject,
-          html: CODE_SEND.html,
-          category: RECEIPTS,
-          attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+      expect(fetch).toHaveBeenCalledTimes(3)
+
+      const uploadsRequest = postedSend(0)
+      expect(uploadsRequest.url).toBe(UPLOADS_URL)
+      expect(uploadsRequest.method).toBe('POST')
+      expect(uploadsRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(uploadsRequest.body).toEqual({ files: [{ sha256: HELLO_SHA256, size: HELLO_BYTES.byteLength }] })
+
+      const [putUrl, putOptions] = fetch.mock.calls[1]
+      const putHeaders = requestHeaders(1)
+      expect(putUrl).toBe(STORAGE_UPLOAD_URL)
+      expect(putOptions.method).toBe('PUT')
+      expect('authorization' in putHeaders).toBe(false)
+      expect(putHeaders['content-length']).toBe(String(HELLO_BYTES.byteLength))
+      expect(putHeaders['x-amz-checksum-sha256']).toBe(HELLO_CHECKSUM)
+      expect(new Uint8Array(await new Response(putOptions.body).arrayBuffer())).toEqual(HELLO_BYTES)
+
+      const sendRequest = postedSend(2)
+      expect(sendRequest.url).toBe(SEND_URL)
+      expect(sendRequest.method).toBe('POST')
+      expect(sendRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(sendRequest.headers['content-type']).toBe('application/json')
+      expect(sendRequest.headers['idempotency-key']).toBeTruthy()
+      expect(sendRequest.body).toEqual({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+        category: RECEIPTS,
+        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+      })
+    })
+
+    it('reads an enumerable category getter once and sends the first marketing category', async () => {
+      replies = [accepted()]
+      let reads = 0
+      const options = {
+        ...CODE_SEND,
+        get category(): MessageCategory | undefined {
+          reads += 1
+          return reads === 1 ? NEWSLETTER : undefined
         },
-      ])
+      }
+
+      const { data, error } = await posthog.emails.send(options as unknown as SendEmailOptions)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
+      expect(reads).toBe(1)
     })
 
     it('sends getter-backed idempotencyKey and category on a class instance', async () => {
-      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
+      replies = [accepted()]
       class ClassEmailSend {
         readonly to = CODE_SEND.to
         readonly templateKey = CODE_SEND.templateKey
@@ -1949,18 +1780,13 @@ describe('emails', () => {
         }
       }
 
-      const first = await posthog.emails.send(new ClassEmailSend())
-      const second = await posthog.emails.send(new ClassEmailSend())
+      const { data, error } = await posthog.emails.send(new ClassEmailSend())
 
-      expect(first.error).toBeNull()
-      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(second.error).toBeNull()
-      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(2)
-      expect(postedSend(0).headers['idempotency-key']).toBe('idem-class-parity-1')
-      expect(postedSend(1).headers['idempotency-key']).toBe('idem-class-parity-1')
-      expect(postedSend(0).body.category).toEqual(NEWSLETTER)
-      expect(postedSend(1).body.category).toEqual(NEWSLETTER)
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().headers['idempotency-key']).toBe('idem-class-parity-1')
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
     })
 
     it('sends a non-enumerable own category on a code send', async () => {
@@ -1977,7 +1803,7 @@ describe('emails', () => {
     })
 
     it('preserves getter-backed idempotencyKey across retries on a templateId class instance', async () => {
-      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
+      replies = [rejected(503, 'delivery_unavailable'), accepted()]
       class ClassTemplateSend {
         readonly to = 'reader@example.com'
         readonly templateId = TEMPLATE_ID
@@ -1987,17 +1813,19 @@ describe('emails', () => {
         }
       }
 
-      const first = await posthog.emails.send(new ClassTemplateSend())
-      const second = await posthog.emails.send(new ClassTemplateSend())
+      const { data, error } = await settle(posthog.emails.send(new ClassTemplateSend()))
 
-      expect(first.error).toBeNull()
-      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(second.error).toBeNull()
-      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(postedSend(0).headers['idempotency-key']).toBe('idem-template-class-1')
       expect(postedSend(1).headers['idempotency-key']).toBe('idem-template-class-1')
       expect(postedSend(0).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: {},
+      })
+      expect(postedSend(1).body).toEqual({
         to: 'reader@example.com',
         template_id: TEMPLATE_ID,
         message_data: {},
@@ -2140,7 +1968,20 @@ describe('emails', () => {
     )
 
     it('surfaces server workflow_can_wait (400) refusal on categorized marketing send with attachments without retrying', async () => {
-      const boundary = stubAttachmentSendRoutes()
+      replies = [
+        uploadGrantReply(),
+        { status: 200, body: {} },
+        {
+          status: 400,
+          body: {
+            type: 'invalid_request',
+            code: 'workflow_can_wait',
+            detail: 'Workflow can wait.',
+            attr: 'attachments',
+          },
+        },
+        accepted(),
+      ]
 
       const { data, error } = await settle(
         sendIn(NEWSLETTER, {
@@ -2156,10 +1997,18 @@ describe('emails', () => {
         statusCode: 400,
         field: 'attachments',
       })
-      expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
-      expect(boundary.sendRequests).toHaveLength(1)
-      expect(boundary.sendRequests[0].headers['idempotency-key']).toBeTruthy()
-      expect(boundary.sendRequests[0].body).toEqual({
+      expect(fetch).toHaveBeenCalledTimes(3)
+      expect(fetch.mock.calls[0][0]).toBe(UPLOADS_URL)
+      expect(fetch.mock.calls[1][0]).toBe(STORAGE_UPLOAD_URL)
+      expect(new Uint8Array(await new Response(fetch.mock.calls[1][1].body).arrayBuffer())).toEqual(HELLO_BYTES)
+
+      const sendRequest = postedSend(2)
+      expect(sendRequest.url).toBe(SEND_URL)
+      expect(sendRequest.method).toBe('POST')
+      expect(sendRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(sendRequest.headers['content-type']).toBe('application/json')
+      expect(sendRequest.headers['idempotency-key']).toBeTruthy()
+      expect(sendRequest.body).toEqual({
         to: CODE_SEND.to,
         template_key: CODE_SEND.templateKey,
         subject: CODE_SEND.subject,
@@ -2167,8 +2016,6 @@ describe('emails', () => {
         category: NEWSLETTER,
         attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
       })
-      expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
-      expect(boundary.queued).toEqual([])
     })
 
     it.each([
