@@ -63,8 +63,7 @@ import {
 import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
-import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
-import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
+import { buildAiEventStorage, buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
@@ -336,11 +335,11 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
    * dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps
    * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
    *
-   * Unsent AI events are stored on the device, each under its own storage key, so they are sent on the
-   * next launch if the app is killed. With `persistence: 'memory'`, or when events are stored in
-   * AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system isn't
-   * available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself rather
-   * than a wrapper around it: a wrapper is used like file storage and holds the AI queue.
+   * With the default storage on iOS and Android, unsent AI events are stored as files in the app's
+   * cache directory, which isn't backed up, so they are sent on the next launch if the app is killed.
+   * The OS may clear that directory when the device is low on space. With `persistence: 'memory'`,
+   * `customStorage`, or where Expo's file system isn't available, unsent AI events are kept only in
+   * memory.
    *
    * @default 100
    */
@@ -639,14 +638,16 @@ export class PostHog extends PostHogCore {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
-      // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
-      // database at 6 MB by default, so an AI queue there could break every other key's writes.
-      if (theStorage === OptionalAsyncStorage) {
-        this._aiStorage = createAiMemoryStorage()
-      } else {
+      // AI events can be megabytes, so they are stored only in Expo's cache directory, outside the
+      // app's backups. Custom storage and AsyncStorage (whose Android rows and database are
+      // size-limited) keep them in memory.
+      const aiEventStorage = options?.customStorage ? undefined : buildAiEventStorage()
+      if (aiEventStorage) {
         const projectToken = this.projectToken
-        this._aiStorage = createAiStorage(theStorage, projectToken)
-        this._aiEventFiles = { storage: theStorage, key: (slot) => aiEventKey(projectToken, slot) }
+        this._aiStorage = createAiStorage(aiEventStorage, projectToken)
+        this._aiEventFiles = { storage: aiEventStorage, key: (slot) => aiEventKey(projectToken, slot) }
+      } else {
+        this._aiStorage = createAiMemoryStorage()
       }
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.

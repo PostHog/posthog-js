@@ -1,4 +1,40 @@
+// The default storage on iOS and Android: Expo's file system, backed here by `expoFiles.files`, keyed by directory + name.
+const { expoFiles } = vi.hoisted(() => ({
+  expoFiles: { files: {} as Record<string, string>, readDelayMs: 0, write: vi.fn() },
+}))
+
+vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
+  OptionalExpoFileSystem: {
+    Paths: { document: { uri: '' }, cache: { uri: 'cache/' } },
+    File: class {
+      private readonly path: string
+      constructor(directory: { uri: string }, name: string) {
+        this.path = directory.uri + name
+      }
+      async text(): Promise<string> {
+        if (expoFiles.readDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, expoFiles.readDelayMs))
+        }
+        const content = expoFiles.files[this.path]
+        if (content === undefined) {
+          throw new Error('missing file')
+        }
+        return content
+      }
+      async write(content: string): Promise<void> {
+        expoFiles.write(this.path, content)
+        expoFiles.files[this.path] = content
+      }
+    },
+  },
+}))
+vi.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({ OptionalExpoFileSystemLegacy: undefined }))
+vi.mock('../src/optional/OptionalAsyncStorage', () => ({ OptionalAsyncStorage: undefined }))
+
 import { PostHog, PostHogCustomStorage, PostHogOptions } from '../src'
+
+const AI_INDEX = 'cache/.posthog-rn-ai-test-token.json'
+const aiSlot = (slot: number): string => `cache/.posthog-rn-ai-test-token.event-${slot}`
 
 type CaptureRequest = {
   path: string
@@ -17,7 +53,6 @@ describe('React Native captureAi', () => {
   ) => { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>
   let posthog: PostHog | undefined
   let cache: Record<string, string>
-  let storage: PostHogCustomStorage
 
   beforeAll(() => {
     vi.useRealTimers()
@@ -30,13 +65,9 @@ describe('React Native captureAi', () => {
 
   beforeEach(() => {
     requests = []
-    cache = {}
-    storage = {
-      getItem: async (key) => cache[key] ?? null,
-      setItem: async (key, value) => {
-        cache[key] = value
-      },
-    }
+    cache = expoFiles.files = {}
+    expoFiles.readDelayMs = 0
+    expoFiles.write.mockClear()
     respond = () => ({ status: 200, body: { results: {} } })
     ;(globalThis as any).window.fetch = vi.fn(async (url: string, options: any) => {
       const path = new URL(String(url)).pathname
@@ -63,7 +94,6 @@ describe('React Native captureAi', () => {
 
   const newPostHog = async (options: PostHogOptions = {}): Promise<PostHog> => {
     posthog = new PostHog('test-token', {
-      customStorage: storage,
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -311,35 +341,31 @@ describe('React Native captureAi', () => {
     await client.shutdown()
     posthog = undefined
 
-    const [stored] = JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue
+    const [stored] = JSON.parse(cache[AI_INDEX]).content.ai_queue
     expect(Object.keys(stored).sort()).toEqual(['bytes', 'propertiesBytes', 'slot', 'uuid'])
-    expect(cache[`.posthog-rn-ai-test-token.event-${stored.slot}`]).toMatch(new RegExp(`^${uuid}\\n\\{`))
+    expect(cache[aiSlot(stored.slot)]).toMatch(new RegExp(`^${uuid}\\n\\{`))
   })
 
   it('writes each AI event once and clears its slot once it is sent', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
-    const setItem = vi.spyOn(storage, 'setItem')
     const client = await newPostHog({ flushAt: 10 })
     client.captureAi('$ai_generation', { index: 0 })
     client.captureAi('$ai_generation', { index: 1 })
     await client.flush()
     await client.flush()
     const slotWrites = (): [string, string][] =>
-      setItem.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
+      expoFiles.write.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
 
-    expect(slotWrites().map(([key]) => key)).toEqual([
-      '.posthog-rn-ai-test-token.event-0',
-      '.posthog-rn-ai-test-token.event-1',
-    ])
+    expect(slotWrites().map(([key]) => key)).toEqual([aiSlot(0), aiSlot(1)])
 
     respond = () => ({ status: 200, body: { results: {} } })
     await client.flush()
 
     expect(slotWrites().slice(2)).toEqual([
-      ['.posthog-rn-ai-test-token.event-0', ''],
-      ['.posthog-rn-ai-test-token.event-1', ''],
+      [aiSlot(0), ''],
+      [aiSlot(1), ''],
     ])
-    expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toBeUndefined()
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
   })
 
   it('skips a stored AI event whose slot now holds a different event', async () => {
@@ -350,7 +376,7 @@ describe('React Native captureAi', () => {
     await earlier.flush()
     await earlier.shutdown()
     posthog = undefined
-    cache['.posthog-rn-ai-test-token.event-0'] = cache['.posthog-rn-ai-test-token.event-1']
+    cache[aiSlot(0)] = cache[aiSlot(1)]
 
     respond = () => ({ status: 200, body: { results: {} } })
     requests = []
@@ -371,7 +397,6 @@ describe('React Native captureAi', () => {
     respond = () => ({ status: 200, body: { results: {} } })
     requests = []
     posthog = new PostHog('other-token', {
-      customStorage: storage,
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -381,7 +406,7 @@ describe('React Native captureAi', () => {
     await posthog.flush()
 
     expect(sent(AI_PATH)).toEqual([])
-    expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toHaveLength(1)
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toHaveLength(1)
   })
 
   it('keeps every queued AI event for the next launch, including one over 5 MiB', async () => {
@@ -402,6 +427,25 @@ describe('React Native captureAi', () => {
     expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1, 2])
   })
 
+  it('keeps the AI queue in memory, out of both stores, when customStorage is set', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const custom: Record<string, string> = {}
+    const customStorage: PostHogCustomStorage = {
+      getItem: async (key) => custom[key] ?? null,
+      setItem: async (key, value) => {
+        custom[key] = value
+      },
+    }
+    const client = await newPostHog({ customStorage })
+    client.captureAi('$ai_generation')
+    await client.flush()
+    await client.shutdown()
+    posthog = undefined
+
+    expect(Object.keys(custom).filter((key) => key.includes('-ai-'))).toEqual([])
+    expect(Object.keys(cache).filter((key) => key.startsWith('cache/'))).toEqual([])
+  })
+
   it('keeps AI events from an earlier launch when flush() runs before storage has loaded', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog()
@@ -411,11 +455,8 @@ describe('React Native captureAi', () => {
 
     respond = () => ({ status: 200, body: { results: {} } })
     requests = []
+    expoFiles.readDelayMs = 50
     posthog = new PostHog('test-token', {
-      customStorage: {
-        ...storage,
-        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
-      },
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -490,11 +531,8 @@ describe('React Native captureAi', () => {
   })
 
   const newPostHogWithSlowStorage = (options: PostHogOptions = {}): PostHog => {
+    expoFiles.readDelayMs = 50
     posthog = new PostHog('test-token', {
-      customStorage: {
-        ...storage,
-        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
-      },
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -632,7 +670,7 @@ describe('React Native captureAi', () => {
     await new Promise((resolve) => setTimeout(resolve, 150))
 
     expect(captured).toEqual([])
-    expect(cache['.posthog-rn-ai-test-token.json']).toBeUndefined()
+    expect(cache[AI_INDEX]).toBeUndefined()
   })
 
   it('returns the uuid sent on the wire when before_send sets an uppercase uuid', async () => {
@@ -650,17 +688,16 @@ describe('React Native captureAi', () => {
 
   it('does not rewrite the stored AI queue when a send sends nothing', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
-    const setItem = vi.spyOn(storage, 'setItem')
     const client = await newPostHog({ flushAt: 10 })
     client.captureAi('$ai_generation')
     await client.flush()
-    const writes = setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length
+    const writes = expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length
 
     await client.flush()
     await client.flush()
 
     expect(writes).toBeGreaterThan(0)
-    expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length).toBe(writes)
+    expect(expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length).toBe(writes)
   })
 
   it('halves the AI batch on 413 and sends every event', async () => {
