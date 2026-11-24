@@ -882,6 +882,8 @@ export class SessionRecorder {
     }
 
     private _onEmit(rawEvent: eventWithTime): void {
+        // drop lingering rrweb emissions (such as a batched mousemove) after capture consent is denied
+        if (!this._client.canCapture) return
         try {
             this._addQueuedCustomEvents()
             this._processEvent(rawEvent)
@@ -948,6 +950,7 @@ export class SessionRecorder {
               ).payload ?? null)
             : null
 
+        const wasRecording = this._recording
         if (sessionEndingPayload || sessionStartingPayload) {
             // backdate $session_ending to the old session's last activity; $session_starting keeps its live timestamp
             if (sessionEndingPayload?.lastActivityTimestamp) {
@@ -957,7 +960,7 @@ export class SessionRecorder {
             this._updateSessionAndIdle(event)
         }
         // a new-session listener may have stopped recording during rotation
-        if (!this._recording) return
+        if (wasRecording && !this._recording) return
 
         const allowedWhileIdle = !!(idlePayload || sessionEndingPayload || sessionStartingPayload)
         if (this._isIdle === true && !allowedWhileIdle) return
