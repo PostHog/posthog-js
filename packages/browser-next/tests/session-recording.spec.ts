@@ -142,6 +142,35 @@ describe('session recording controls', () => {
     })
 })
 
+describe('session recording page URLs', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'))
+
+    // Meta events and the given custom event tags, with the URL each records
+    const urlMarkers = (
+        network: Parameters<typeof recordedEvents>[0],
+        tags: string[]
+    ): Array<[string, string | undefined]> =>
+        recordedEvents(network)
+            .filter((event) => event.type === 4 || event.type === 5)
+            .map((event): [string, string | undefined] => {
+                if (event.type === 4) return ['meta', (event.data as { href?: string }).href]
+                const data = event.data as { tag: string; payload: { href?: string } }
+                return [data.tag, data.payload?.href]
+            })
+            .filter(([tag]) => tags.includes(tag))
+
+    it('omits $url_changed fallback markers when capturePageview is enabled', async () => {
+        const { replay, transport: network } = await setup({}, {}, { capturePageview: true })
+        await started(replay)
+
+        window.history.pushState(null, '', '/next')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$url_changed'])).toEqual([])
+    })
+})
+
 describe('session recording debug properties', () => {
     const OPTIONAL = [
         '$sdk_debug_replay_internal_buffer_size',
