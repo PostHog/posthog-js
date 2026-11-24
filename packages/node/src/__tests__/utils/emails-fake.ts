@@ -473,11 +473,6 @@ export class FakePostHog {
         fix: 'Split the recipients into smaller batches.',
       })
     }
-    if (this.options.batchUnavailable) {
-      throw refusal(409, 'invalid_request', 'batch_unavailable', null, {
-        detail: "Batch sends aren't available for this project yet, so PostHog didn't send any email.",
-      })
-    }
     const { recipients, ...shared } = jsonBody(options)
     const refused = Object.keys(shared).find((field) => BATCH_REFUSED_FIELDS.has(field))
     if (refused !== undefined) {
@@ -485,15 +480,6 @@ export class FakePostHog {
     }
     if (!Array.isArray(recipients) || recipients.length === 0 || recipients.length > BATCH_MAX_RECIPIENTS) {
       throw invalidField('recipients', `Send 1 to ${BATCH_MAX_RECIPIENTS} recipients.`)
-    }
-    const sharedContent = 'template_id' in shared ? (shared.message_data ?? {}) : shared
-    if (new TextEncoder().encode(JSON.stringify(sharedContent)).byteLength > BATCH_SHARED_MAX_BYTES) {
-      // As PostHog's check_email_batch answers it: a 400 with a detail and no fix, since splitting the recipients
-      // doesn't help.
-      throw refusal(400, 'invalid_request', 'content_too_large', null, {
-        detail:
-          'The content or `message_data` that a batch sends to every recipient can be at most 256 KiB. Send larger emails one at a time.',
-      })
     }
     const keys = new Set<string>()
     recipients.forEach((recipient: unknown, index) => {
@@ -511,6 +497,24 @@ export class FakePostHog {
       }
       keys.add(key)
     })
+    // As PostHog's check_email_batch measures it, after the request's own checks and before the pipeline. For code
+    // content PostHog also counts the text it derives from html, which the fake doesn't derive.
+    const sharedContent =
+      'template_id' in shared
+        ? (shared.message_data ?? {})
+        : [shared.subject ?? null, shared.html ?? null, shared.text ?? null]
+    if (pythonJsonBytes(sharedContent) > BATCH_SHARED_MAX_BYTES) {
+      // A 400 with a detail and no fix, since splitting the recipients doesn't help.
+      throw refusal(400, 'invalid_request', 'content_too_large', null, {
+        detail:
+          'The content or `message_data` that a batch sends to every recipient can be at most 256 KiB. Send larger emails one at a time.',
+      })
+    }
+    if (this.options.batchUnavailable) {
+      throw refusal(409, 'invalid_request', 'batch_unavailable', null, {
+        detail: "Batch sends aren't available for this project yet, so PostHog didn't send any email.",
+      })
+    }
     this.batches.push({ recipients: recipients.length, bytes })
     return { status: 200, body: { results: recipients.map((recipient: Json) => this.batchSlot(shared, recipient)) } }
   }
@@ -667,6 +671,22 @@ export class FakePostHog {
       })
     }
   }
+}
+
+/** The UTF-8 size of `value` as Python's `json.dumps(value, ensure_ascii=False)` writes it, with `, ` and `: `. */
+function pythonJsonBytes(value: unknown): number {
+  const write = (item: unknown): string => {
+    if (Array.isArray(item)) {
+      return `[${item.map(write).join(', ')}]`
+    }
+    if (item !== null && typeof item === 'object') {
+      return `{${Object.entries(item)
+        .map(([name, entry]) => `${JSON.stringify(name)}: ${write(entry)}`)
+        .join(', ')}}`
+    }
+    return JSON.stringify(item) ?? 'null'
+  }
+  return new TextEncoder().encode(write(value)).byteLength
 }
 
 function faultAnswer(route: Route, { status, code, message, page }: Exclude<Fault, string>): Answer {

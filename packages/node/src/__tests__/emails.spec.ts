@@ -1795,6 +1795,32 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
+    it.each([
+      [262_132, null],
+      [262_133, 'content_too_large'],
+    ])('measures shared template data as PostHog does: %i characters', async (length, code) => {
+      const postHog = againstPostHog()
+
+      const { error } = await settle(
+        posthog.emails.batch({ templateId: TEMPLATE_ID, templateData: { note: 'x'.repeat(length) } }, recipientsTo(1))
+      )
+
+      expect(error?.code ?? null).toBe(code)
+    })
+
+    it('refuses shared content too large for a batch before it says batch sends are off, as PostHog does', async () => {
+      againstPostHog({ batchUnavailable: true })
+
+      const { error } = await settle(
+        posthog.emails.batch(
+          { templateId: TEMPLATE_ID, templateData: { note: 'x'.repeat(300 * 1024) } },
+          recipientsTo(1)
+        )
+      )
+
+      expect(error).toMatchObject({ code: 'content_too_large', statusCode: 400 })
+    })
+
     it("returns shared content too large for a batch as the 400 error, with PostHog's advice to send it one at a time", async () => {
       const postHog = againstPostHog()
 
@@ -1809,7 +1835,8 @@ describe('emails', () => {
       expect(error).toMatchObject({
         code: 'content_too_large',
         statusCode: 400,
-        message: expect.stringMatching(/Send larger emails one at a time/),
+        message:
+          'The content or `message_data` that a batch sends to every recipient can be at most 256 KiB. Send larger emails one at a time.',
       })
       expect(error?.fix).toBeUndefined()
       expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
@@ -1832,6 +1859,7 @@ describe('emails', () => {
       expect(error).toMatchObject({
         code: 'content_too_large',
         statusCode: 413,
+        message: "The batch is larger than PostHog can send at once, so PostHog didn't send it.",
         fix: 'Split the recipients into smaller batches.',
       })
       expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
