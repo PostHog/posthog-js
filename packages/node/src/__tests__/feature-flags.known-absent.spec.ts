@@ -199,6 +199,55 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()).toHaveLength(0)
     })
 
+    it.each([
+      ['a group flag', { aggregation_group_type_index: 0 }, {}],
+      ['a mixed group condition', {}, { aggregation_group_type_index: 0 }],
+    ])(
+      'do not apply to a dynamic cohort in %s, which stays as without known absence',
+      async (_name, flagExtra, conditionExtra) => {
+        setup(
+          {
+            flags: [
+              {
+                id: 1,
+                key: 'cohort-flag',
+                active: true,
+                filters: {
+                  groups: [
+                    {
+                      properties: [{ key: 'id', type: 'cohort', value: 'c1', operator: 'in' }],
+                      rollout_percentage: 100,
+                      ...conditionExtra,
+                    },
+                  ],
+                  ...flagExtra,
+                },
+              },
+            ],
+            cohorts: { c1: { type: 'AND', values: [personFilter('is_not_set', null)] } },
+            group_type_mapping: { '0': 'organization' },
+          },
+          { 'cohort-flag': 'remote' }
+        )
+
+        const options = {
+          groups: { organization: 'acme' },
+          personProperties: { plan: 'pro' },
+          groupProperties: { organization: {} },
+        }
+        for (const listing of [
+          { groupPropertyKeysKnownAbsent: { organization: ['plan'] } },
+          { personPropertyKeysKnownAbsent: ['plan'] },
+        ]) {
+          expect(
+            await posthog.getFeatureFlag('cohort-flag', 'user', { ...options, ...listing, onlyEvaluateLocally: true })
+          ).toBeUndefined()
+          expect(await posthog.getFeatureFlag('cohort-flag', 'user', { ...options, ...listing })).toBe('remote')
+        }
+        expect(flagsRequests()).toHaveLength(2)
+      }
+    )
+
     it('apply in mixed group conditions of a person flag', async () => {
       setup({
         flags: [

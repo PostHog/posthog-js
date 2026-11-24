@@ -796,6 +796,10 @@ class FeatureFlagsPoller {
 
         try {
           if (propertyType === 'cohort') {
+            // Cohorts are person-scoped, so group known-absent keys must not apply to a cohort in a
+            // group condition. That cohort still reads the group properties, as before known absence.
+            const isGroupCondition =
+              flag.filters?.aggregation_group_type_index != null || condition.aggregation_group_type_index != null
             matches = await matchCohort(
               prop,
               properties,
@@ -803,7 +807,7 @@ class FeatureFlagsPoller {
               this.debugMode,
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
               definitions.propertyMatchingVersion,
-              knownAbsentKeys
+              isGroupCondition ? undefined : knownAbsentKeys
             )
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
