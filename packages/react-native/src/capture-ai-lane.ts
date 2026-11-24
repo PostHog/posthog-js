@@ -126,6 +126,11 @@ export class CaptureAiLane {
       this._logger.warn(`Dropping AI event "${name}": ${event.bytes} bytes is over the ${maxEventBytes}-byte limit.`)
       return drop('event too large')
     }
+    if (event.bytes > CAPTURE_AI_MAX_PERSISTED_BYTES) {
+      this._logger.warn(
+        `AI event "${name}" is ${event.bytes} bytes, over the ${CAPTURE_AI_MAX_PERSISTED_BYTES}-byte on-device limit, so it is lost if the app is killed before it is sent.`
+      )
+    }
 
     const queue = [...this._queue(), event]
     let queuedBytes = queue.reduce((total, item) => total + item.bytes, 0)

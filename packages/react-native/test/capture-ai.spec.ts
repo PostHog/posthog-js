@@ -361,8 +361,10 @@ describe('React Native captureAi', () => {
   it('still persists smaller AI events when the newest is over 5 MiB', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog({ flushAt: 10 })
+    const warn = vi.spyOn((earlier as any)._logger, 'warn').mockImplementation(() => {})
     earlier.captureAi('$ai_generation', { index: 0 })
     earlier.captureAi('$ai_generation', { blob: 'x'.repeat(6 * 1024 * 1024), index: 1 })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('on-device limit'))
     await earlier.flush()
     await earlier.shutdown()
     posthog = undefined
