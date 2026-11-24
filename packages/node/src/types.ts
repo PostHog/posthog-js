@@ -356,9 +356,10 @@ export type PostHogOptions = Omit<
    */
   disableCompression?: boolean
   /**
-   * Lets the Express, NestJS, Hono, `instrumentRequest`, `captureRequestException` and `createReactRouterErrorHandler`
-   * integrations read the session ID, and the distinct ID of an identified user, from the
-   * posthog-js cookie when a request has neither tracing header.
+   * Lets the Express, NestJS, Hono and `instrumentRequest` integrations read the session ID, and the distinct ID of an
+   * identified user, from the posthog-js cookie when a request has neither tracing header. `captureRequestException`
+   * and `createReactRouterErrorHandler` also read an anonymous visitor's distinct ID, and send their exceptions with
+   * `$process_person_profile: false`.
    *
    * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server
    * cannot read an opt-out that posthog-js keeps in localStorage (its default).

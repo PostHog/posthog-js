@@ -1663,6 +1663,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Queues an exception event a framework integration built. It skips an error that exception autocapture already sent
+   * to this project in this turn, and logs a failure instead of rejecting, so `shutdown()` still flushes the queue.
+   * Resolves once the event is queued.
+   * @internal
+   */
+  _captureIntegrationException(error: unknown, buildEvent: () => Promise<EventMessage>): Promise<void> {
+    if (!this.errorTracking.claimExplicitCapture(error)) {
+      return Promise.resolve()
+    }
+    return this.addPendingPromise(
+      buildEvent()
+        .then((msg) => this._capturePreparedEvent(msg, false))
+        .catch((captureError) => {
+          this._logger.error('Failed to capture an exception:', captureError)
+        })
+    )
+  }
+
+  /**
    * Capture an event manually.
    *
    * @example
