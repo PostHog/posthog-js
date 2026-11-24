@@ -507,8 +507,15 @@ export class PostHog extends PostHogCore {
     if (!normalizedProjectToken) {
       console.error('You must pass your PostHog project token. The client will be disabled.')
     }
+    // Capture rejects personal API keys, so a secret key never reaches the wire.
+    const personalApiKey = normalizedProjectToken.startsWith('phx_')
+    if (personalApiKey) {
+      console.error(
+        'A personal API key ("phx_...") was passed where the project token ("phc_...") belongs. The client will be disabled.'
+      )
+    }
 
-    super(normalizedProjectToken, options)
+    super(normalizedProjectToken, personalApiKey ? { ...options, disabled: true } : options)
     this._isInitialized = false
     // Replay has no macOS backend, so opt-in has nothing to restart there.
     this._sessionReplayWanted = options?.enableSessionReplay === true && !isMacOS()

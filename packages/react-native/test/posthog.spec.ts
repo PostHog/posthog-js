@@ -200,6 +200,29 @@ describe('PostHog React Native', () => {
     }
   })
 
+  it('initializes disabled and never sends a personal API key', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      posthog = new PostHog('phx_secret_personal_key', {
+        persistence: 'memory',
+        flushInterval: 0,
+        flushAt: 1,
+      })
+      await posthog.ready()
+
+      expect(posthog.isDisabled).toEqual(true)
+      posthog.capture('event')
+      await posthog.flush()
+
+      expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+      expect(String(consoleErrorSpy.mock.calls[0][0])).not.toContain('phx_secret_personal_key')
+    } finally {
+      consoleErrorSpy.mockRestore()
+    }
+  })
+
   it('should initialize properly with bootstrap using async storage', async () => {
     posthog = new PostHog('test-token', {
       bootstrap: { distinctId: 'bar' },

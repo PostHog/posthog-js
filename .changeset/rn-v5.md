@@ -18,4 +18,5 @@
 - Drop an event that can't be serialized, such as one with a property whose `toJSON()` throws, on its own and report it on `posthog.on('error')` with `details: 'unserializable event'`; an invalid event name or id is reported with `details: 'invalid event'`
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
+- **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog
 - Cap each capture request at 5 MiB of event bytes, starting a new request before a batch would pass it
