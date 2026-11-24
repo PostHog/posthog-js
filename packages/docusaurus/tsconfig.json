@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "declaration": true,
+        "rootDir": "./src",
+        "outDir": "./dist",
+        "strict": true,
+        "target": "ES2015",
+        "module": "commonjs",
+        "types": ["node"]
+    },
+    "include": ["src/**/*.js", "types/**/*.d.ts"]
+}

@@ -48,7 +48,7 @@ Both converge on the same internal `McpEvent` shape (`src/types.ts`) and funnel 
 client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captureToolCall (instrumentation.ts)
   ├─ prepareToolCallEvent         ← build McpEvent, resolve session
   ├─ handleIdentify               ← resolves identity (§4)
-  ├─ applyResolvedMetadata        ← runs eventProperties callback
+  ├─ applyResolvedMetadata        ← runs eventProperties and eventOptions callbacks
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ execute(request, extra)      ← run the wrapped tool handler
   ├─ attach result, duration, error
@@ -71,8 +71,9 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 3. **Build PostHog events** — `buildPostHogCaptureEvents` (`src/extensions/posthog-events.ts`) fans one internal event out to up to **2 PostHog events**:
    - Always: the main `$mcp_*` capture event.
    - If `event.isError && event.error` (and `enableExceptionAutocapture !== false`): a sibling `$exception` event.
-4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
-5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
+   - Each payload gets its own copy of the event's per-event `options`, plus the anonymous `process_person_profile: false` default (see §4).
+4. **`beforeSend`**: each fully-built PostHog payload (`{ event, distinct_id, properties, options }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch, so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it. Returning a nullish value drops it. A throw drops that event (and is logged). This is the seam for customer redaction or property and option tweaks. The SDK sends the options the hook returns.
+5. **Dispatch**: each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. On posthog-node 6.x.x, detected by `registerOptions`, the payload's `options` are passed as the event's `options`. posthog-node 5.x.x has no per-event options, so the SDK sends each known option the way that version reads it and drops unknown keys. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain. The SDK installs no process-signal handlers and owns no client lifecycle.
 
 ### Tool input field names
 
@@ -182,7 +183,7 @@ The SDK does not normalize arguments; the map only describes what the server's o
 
 The helper adds no request values to the event.
 Existing parameter and response capture remains unchanged.
-Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+Use `beforeSend` to remove `$mcp_input_keys` when needed. The underlying PostHog client also exposes `beforeSend` in Node 6 (`before_send` in Node 5).
 No session store or additional network request is required.
 
 ## 4. Session & identity
@@ -206,27 +207,30 @@ The server supplies it from its deployment configuration; the SDK does not read 
 Registered properties apply to MCP events sent through `posthog.capture()`, including tool calls and their exception events, and to ordinary `capture()` events from the client.
 Do not depend on them for inherited `identify()`, `groupIdentify()`, or `alias()` events, or for minimized `$feature_flag_called` events.
 An event's own properties take precedence over registered properties.
-The underlying client's `before_send` hook receives the merged properties.
-The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties.
+The underlying client's `beforeSend` hook (`before_send` in Node 5) receives the merged properties.
+The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties or registered options.
 Use a separate client when servers need different shared properties.
 Keep user and request data on individual events, because a shared client can serve concurrent requests.
 
 ### Session resolution
 
 - **Session ID format**: `ses_<uuidv7>` (`src/extensions/ids.ts`). Uses `uuidv7` from `@posthog/core`.
-- **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — four sources, first match wins:
-  1. **Conversation handle** (an agent-carried `conversation_id` tool argument, `enableConversationId: true`): hash it (`deriveSessionIdFromConversation`) — the 2026-07-28 anchor. Never persisted to shared state. See ADR-0004.
-  2. **Session token** (the replayed `mcp-session-id` request header): use the session id inside it and save the token's client name/version for events. See "Session tokens" below.
-  3. **Transport session id** (`extra.sessionId`, stateful servers): hash it (`deriveSessionIdFromMCPSession`) so the same MCP session maps to the same PostHog session across restarts.
-  4. **Memory**: keep the current id. Only generated sessions roll over, after **30 minutes of inactivity**; conversation/token/MCP sessions live as long as the client replays them.
+- **Session resolution** (`resolveSession`, `src/extensions/session.ts`) — five sources, first match wins. The winning source is stamped as `$mcp_session_source` (`client_metadata`, `conversation`, `transport`, `generated`):
+  1. **Client conversation id** (tool calls only): a recognized client's own id in `params._meta`, per the table in `src/extensions/client-conversation.ts` — ChatGPT's `openai/session`, Codex's `sessionId`, VS Code's `vscode.conversationId`. A row's key is read only from a request whose `User-Agent` or client name recognizes that client. Hash `<key>:<id>` (`deriveSessionIdFromClientConversation`). Wins over a handle the agent echoes, sets no `$mcp_conversation_id`, and is never persisted to shared state. See ADR-0014.
+  2. **Conversation handle** (an agent-carried `conversation_id` tool argument, `enableConversationId: true`): hash it (`deriveSessionIdFromConversation`) — the 2026-07-28 anchor. Never persisted to shared state. See ADR-0004.
+  3. **Session token** (the replayed `mcp-session-id` request header): use the session id inside it and save the token's client name/version for events. See "Session tokens" below.
+  4. **Transport session id** (`extra.sessionId`, stateful servers): hash it (`deriveSessionIdFromMCPSession`) so the same MCP session maps to the same PostHog session across restarts.
+  5. **Memory**: keep the current id. Only generated sessions roll over, after **30 minutes of inactivity**; conversation/token/MCP sessions live as long as the client replays them.
 - **Session tokens — stateless / multi-pod continuity on MCP 2025-11-25** (`src/extensions/session-token.ts`, ADR-0003):
   - At `initialize`, when neither the client nor the transport supplied a session id, `mintStatelessSessionOnInitialize` sets the `Mcp-Session-Id` response header to `base64url(JSON)` with shortened keys (`sid` = session id, `cn`/`cv` = client name/version, `pv` = protocol version). Any pod decodes the replayed header — no store, no sticky routing, no client changes. The token is unsigned and re-minted after the handler runs so it carries the _negotiated_ protocol version, not the requested one.
   - **JSON-mode constraint**: the auto-mint reaches the wire only with `enableJsonResponse: true` (headers are built after handlers run). SSE flushes headers first, so SSE servers set the header themselves with the exported `encodeSessionId`; the SDK still decodes it. Stateless mode also needs the SDK's usual fresh-transport-per-request pattern.
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
 - **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
-- **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
+- **Handle-free clients**: a client whose row sends an id on every call (ChatGPT) gets no `conversation_id` argument in its `tools/list` and is minted no handle. Codex and VS Code keep the handle as a fallback for calls that carry no valid id.
+- **Custom dispatchers**: `PostHogMCP` uses the same order. `prepareToolCall` reads the client conversation id from `requestMeta`, recognizing the client from `headers` and `clientInfo`, then validates or mints the conversation handle, then falls back to the carried `sessionId`. `prepareToolList` takes `headers` to leave `conversation_id` out for a handle-free client. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user. The SDK does not merge the earlier session-scoped events into that person.
-- **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
+- **Person processing**: events for sessions with **no resolved identity** carry the `process_person_profile: false` option, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). As a per-event option it beats a registered or context `process_person_profile` option on the client. Once an identity is resolved, the SDK sets no default, so `$set` lands on a real person.
+- **The user's choice wins**: an explicit `process_person_profile` in `eventOptions` (per call or from the callback), or one `beforeSend` sets, replaces the anonymous default. The default applies only when the user chose no value. This package deliberately lets the host opt anonymous sessions into person processing.
 - **No `$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request and merged into an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server**. The result stamps `distinct_id`/`$set` onto each event. The SDK publishes no standalone `$identify`: it would carry no `$anon_distinct_id`, so ingestion would merge no person.
 - **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
 - **Person properties (`$set`)**: the `properties` object returned from `options.identify()` is written verbatim to `$set` (same as posthog-node's `identify({ distinctId, properties })`). Put `name`/`email`/etc in there.
@@ -284,11 +288,22 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 
 ### Person & group properties
 
-| Key                       | On                                   | Source                                                                                         |
-| ------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `$set.<anything>`         | events with a resolved identity      | Keys of `UserIdentity.properties` (e.g. `name`, `email`), written to `$set` verbatim           |
-| `$groups`                 | every event for the session          | `UserIdentity.groups` (`{ groupType: groupKey }`) — callers never hand-write the `$groups` key |
-| `$process_person_profile` | events with **no** resolved identity | Set to `false` so anonymous sessions don't mint a person profile each (see §4)                 |
+| Key               | On                              | Source                                                                               |
+| ----------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| `$set.<anything>` | events with a resolved identity | Keys of `UserIdentity.properties` (e.g. `name`, `email`), written to `$set` verbatim |
+| `$groups`         | every event for the session     | `UserIdentity.groups` (`{ groupType: groupKey }`)                                    |
+
+Callers never hand-write the `$groups` key.
+
+### Event options
+
+| Option                   | On                                   | Source         |
+| ------------------------ | ------------------------------------ | -------------- |
+| `process_person_profile` | events with **no** resolved identity | `false`        |
+| any key                  | every event, `$exception` included   | `eventOptions` |
+
+- `process_person_profile` is `false` so anonymous sessions don't mint a person profile each, unless the user chose a value (see §4).
+- Any key comes from `eventOptions`, from the callback on auto-captured events or per call on the others.
 
 ### Exception properties (`$exception` event)
 
@@ -297,6 +312,10 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 ### Customer-defined properties
 
 The `eventProperties` callback returns key/value pairs that are **spread flat at the top level of the PostHog event properties**, alongside the `$mcp_*` keys. They can therefore override built-in `$mcp_*` keys — intentional, so customers can backfill missing context. Values must be JSON-serializable; the SDK does not validate keys or values beyond truncation.
+
+### Customer-defined options
+
+`eventOptions` sets posthog-node per-event options, such as `process_person_profile`. The `instrument()` path takes a per-request callback in `MCPAnalyticsOptions`. `analytics.capture()` and every `PostHogMCP` capture method take a per-call `eventOptions` field. The callback runs only on the request-handling paths, after any options the event already carries, which win. The options reach every payload of the event, including the `$exception` sibling. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it takes posthog-node's `options` field instead.
 
 ## 7. Customer extension points (`MCPAnalyticsOptions`, `src/types.ts`)
 
@@ -315,6 +334,9 @@ The `posthog-node` client is **not** an option — it is the required positional
 | `identify`                   | —                                                                                              | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`.                                                                                                                |
 | `beforeSend`                 | —                                                                                              | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event.                |
 | `eventProperties`            | —                                                                                              | Freeform JSON, spread flat.                                                                                                                                                                                                                                                  |
+| `eventOptions`               | none                                                                                           | Per-request callback returning posthog-node per-event options                                                                                                                                                                                                                |
+
+`eventOptions` returns options for every auto-captured event, `$exception` included. `beforeSend` sees them as the payload's `options`. An explicit `process_person_profile` wins over the anonymous default.
 
 ## 8. Useful queries
 

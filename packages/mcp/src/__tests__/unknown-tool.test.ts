@@ -155,10 +155,11 @@ describe('a tools/call for a tool the server does not have', () => {
       $mcp_tool_name: 'no_such_tool',
       $mcp_server_name: expect.any(String),
       $session_id: expect.stringMatching(/.+/),
+      $mcp_session_source: 'conversation',
     })
   })
 
-  it.each([
+  it.each<[string, () => Setup, string]>([
     ['a disabled tool on MCP SDK v1 McpServer', () => v1HighLevel(true), 'search_docs'],
     ['a disabled tool on MCP SDK v2 McpServer', () => v2HighLevel(true), 'search_docs'],
     ...(['v1', 'v2'] as const).flatMap((major) =>
@@ -169,7 +170,7 @@ describe('a tools/call for a tool the server does not have', () => {
               `${name} (${fails}) on an MCP SDK ${major} McpServer with its own dispatcher`,
               () => highLevelWithOwnDispatcher(major, fails),
               name,
-            ] as const
+            ] as [string, () => Setup, string]
         )
       )
     ),

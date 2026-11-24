@@ -1,5 +1,47 @@
 # @posthog/browser
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+  - @posthog/types@1.427.1
+
+## 0.4.1
+
+### Patch Changes
+
+- [#5668](https://github.com/PostHog/posthog-js/pull/5668) [`6b5843e`](https://github.com/PostHog/posthog-js/commit/6b5843e0b203e5cf3f80010d95d65c5b1b6f4a20) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reorganize browser SDK modules while retaining supported package import paths.
+  (2026-11-16)
+
+## 0.4.0
+
+### Minor Changes
+
+- [#5693](https://github.com/PostHog/posthog-js/pull/5693) [`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat failed flag evaluations as unavailable: Node `getFeatureFlag()`/`isFeatureEnabled()` return `undefined`, `getAllFlags()` omits failed keys, and no failed values or payloads are exposed.
+  (2026-11-15)
+
+### Patch Changes
+
+- Updated dependencies [[`d8389d7`](https://github.com/PostHog/posthog-js/commit/d8389d7a4e7070e26c3baab96b77f8c0607df82a)]:
+  - @posthog/browser-common@0.12.0
+
+## 0.3.0
+
+### Minor Changes
+
+- [#5656](https://github.com/PostHog/posthog-js/pull/5656) [`54908e4`](https://github.com/PostHog/posthog-js/commit/54908e402abec6ad46c7a07e0b56b1585fec74f8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add persistent event properties through analytics `register`, `registerOnce`, `unregister`, and `getProperty`, with snapshot isolation and per-event override precedence.
+  (2026-11-14)
+
+- [#5657](https://github.com/PostHog/posthog-js/pull/5657) [`52e926e`](https://github.com/PostHog/posthog-js/commit/52e926e1b069600025b1adfa21758de1a3035298) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add tab-scoped session event properties through `registerForSession` and `unregisterForSession`, with reload persistence and scope transitions tied to admitted Core sessions.
+  (2026-11-14)
+
+### Patch Changes
+
+- [#5657](https://github.com/PostHog/posthog-js/pull/5657) [`52e926e`](https://github.com/PostHog/posthog-js/commit/52e926e1b069600025b1adfa21758de1a3035298) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Keep fresh session properties through expiry and omit root-level event serializer functions.
+  (2026-11-14)
+
 ## 0.2.0
 
 ### Minor Changes

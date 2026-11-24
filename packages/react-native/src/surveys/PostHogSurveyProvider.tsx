@@ -105,6 +105,12 @@ export type PostHogSurveyProviderProps = {
   children: React.ReactNode
 }
 
+/**
+ * Presents the surveys that match the current user.
+ *
+ * Surveys in React Native don't support URL or CSS selector targeting.
+ * Surveys that rely on these conditions don't appear.
+ */
 export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.Element {
   const posthogFromHook = usePostHog()
   const posthog = props.client ?? posthogFromHook

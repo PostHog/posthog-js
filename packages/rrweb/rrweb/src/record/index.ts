@@ -71,7 +71,11 @@ import {
 } from './error-handler';
 import dom from '@posthog/rrweb-utils';
 
-let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
+let wrappedEmit!: (
+  e: eventWithoutTime,
+  isCheckout?: boolean,
+  nonInteractive?: boolean,
+) => void;
 
 let takeFullSnapshot!: (isCheckout?: boolean) => void;
 let canvasManager!: CanvasManager;
@@ -344,6 +348,7 @@ function record<T = eventWithTime>(
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
     maskInputFn,
+    selectMaskingFn,
     maskTextFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
@@ -471,7 +476,11 @@ function record<T = eventWithTime>(
     }
     return e as unknown as T;
   };
-  wrappedEmit = (r: eventWithoutTime, isCheckout?: boolean) => {
+  wrappedEmit = (
+    r: eventWithoutTime,
+    isCheckout?: boolean,
+    nonInteractive?: boolean,
+  ) => {
     const e = r as eventWithTime;
     e.timestamp = nowTimestamp();
     if (
@@ -488,7 +497,8 @@ function record<T = eventWithTime>(
     }
 
     if (inEmittingFrame) {
-      emit?.(eventProcessor(e), isCheckout);
+      if (nonInteractive) emit?.(eventProcessor(e), isCheckout, true);
+      else emit?.(eventProcessor(e), isCheckout);
     } else if (passEmitsToParent) {
       const message: CrossOriginIframeMessageEventContent<T> = {
         type: 'rrweb',
@@ -496,6 +506,7 @@ function record<T = eventWithTime>(
         origin: window.location.origin,
         isCheckout,
       };
+      if (nonInteractive) message.nonInteractive = true;
       window.parent.postMessage(message, '*');
     }
 
@@ -675,6 +686,7 @@ function record<T = eventWithTime>(
       dataURLOptions,
       maskTextFn,
       maskInputFn,
+      selectMaskingFn,
       maskAllElementAttributes,
       maskAttributeFn,
       recordCanvas,
@@ -744,6 +756,7 @@ function record<T = eventWithTime>(
           inlineStylesheetBudgetRules,
           maskTextFn,
           maskInputFn,
+          selectMaskingFn,
           maskAllElementAttributes,
           maskAttributeFn,
           slimDOM: slimDOMOptions,
@@ -935,14 +948,18 @@ function record<T = eventWithTime>(
                 ...d,
               },
             }),
-          inputCb: (v) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.Input,
-                ...v,
+          inputCb: (v, fromMutation) =>
+            wrappedEmit(
+              {
+                type: EventType.IncrementalSnapshot,
+                data: {
+                  source: IncrementalSource.Input,
+                  ...v,
+                },
               },
-            }),
+              undefined,
+              fromMutation,
+            ),
           mediaInteractionCb: (p) =>
             wrappedEmit({
               type: EventType.IncrementalSnapshot,
@@ -1010,6 +1027,7 @@ function record<T = eventWithTime>(
           collectFonts,
           doc,
           maskInputFn,
+          selectMaskingFn,
           maskTextFn,
           maskAllElementAttributes,
           maskAttributeFn,
@@ -1274,6 +1292,7 @@ declare namespace record {
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
   var isRecording: () => boolean;
+  var supportsSelectMasking: boolean;
   var withStyleRuleSourceHandoff: (
     stop: listenerHandler,
     restart: (cancel: listenerHandler) => void,
@@ -1311,6 +1330,7 @@ record.takeFullSnapshot = ((isCheckout?: boolean) => {
 // until DOMContentLoaded or load. Until init() runs nothing is observed, so a
 // caller that only holds the stop handler cannot tell recording from pending.
 record.isRecording = (() => recording) satisfies typeof record.isRecording;
+record.supportsSelectMasking = true;
 
 record.mirror = mirror;
 

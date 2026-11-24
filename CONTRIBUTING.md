@@ -43,11 +43,13 @@ The repository contains the following top-level packages in `./packages/`:
 | Package                      | Name                                 | Description                                              |
 | ---------------------------- | ------------------------------------ | -------------------------------------------------------- |
 | `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs          |
+| `electron/`                  | `@posthog/electron`                  | Electron analytics, shared app state and client flags    |
 | `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage          |
 | `browser-common/`            | `@posthog/browser-common`            | Internal shared browser utilities and extensions         |
 | `browser-next/`              | `@posthog/browser`                   | Experimental browser SDK                                 |
 | `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                                  |
 | `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                              |
+| `docusaurus/`                | `posthog-docusaurus`                 | Docusaurus analytics plugin                              |
 | `convex/`                    | `@posthog/convex`                    | Convex.dev component                                     |
 | `node/`                      | `posthog-node`                       | Node.js backend SDK (see its `engines.node` requirement) |
 | `mcp/`                       | `@posthog/mcp`                       | MCP server analytics                                     |

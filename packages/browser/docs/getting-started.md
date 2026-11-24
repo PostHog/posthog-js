@@ -49,3 +49,88 @@ posthog.capture('signed_up', { plan: 'pro' })
 ```ts
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
+
+## Pin the snippet version
+
+To pin the snippet, change `/static/array.js` to a major path such as `/static/1/array.js` or an exact path such as `/static/1.380.0/array.js`. Minor paths such as `/static/1.380/array.js` are not supported. Exact version paths never change, so your CDN or proxy can cache them for a long time. Keep cache times short for `/static/array.js` and `/static/1/array.js`.
+
+## Verify the SDK with Subresource Integrity
+
+From `posthog-js` 1.445.0, each release publishes a manifest of SHA-384 hashes at `/static/<SDK_VERSION>/integrity.json`. The npm package includes the same manifest at `dist/integrity.json`.
+
+```bash
+curl --fail --silent --show-error --location \
+  "https://us-assets.i.posthog.com/static/<SDK_VERSION>/integrity.json" \
+  --output posthog-integrity.json
+```
+
+The `files` object in the manifest maps each asset to its hash. Store the hashes in your source code. Don't fetch them at page load. Then replace the inline snippet with the static loader. Set `integrity` to `files["loader.js"]` and `data-core-integrity` to `files["array.js"]`.
+
+```html
+<script
+    src="https://us-assets.i.posthog.com/static/<SDK_VERSION>/loader.js"
+    integrity="sha384-<LOADER_SHA384_BASE64_DIGEST>"
+    data-core-integrity="sha384-<ARRAY_SHA384_BASE64_DIGEST>"
+    data-project-token="<ph_project_api_key>"
+    crossorigin="anonymous"
+></script>
+```
+
+The loader reads its options from these attributes:
+
+- `data-api-host` sets your ingestion URL when you use a reverse proxy.
+- `data-config` takes your other `init` options as JSON.
+- `data-defer-init="true"` skips the automatic `init`, so you can call `posthog.init` yourself with function options.
+
+A cross-origin asset proxy must preserve the CORS response headers from PostHog's asset host and serve the same approved script bytes. When upgrading, update the pinned version and both hashes together. A hash mismatch blocks execution. Don't retry without integrity.
+
+The hashes cover only `loader.js` and `array.js`. They don't cover the recorder, surveys, toolbar, or `config.js` scripts. Use the manifest from the regional asset host you serve, because toolbar assets differ between regions.
+
+## Prevent runtime script downloads
+
+Use a no-external build and set `disable_external_dependency_loading: true` on the first initialization of every SDK instance. See [browser extension setup](https://posthog.com/docs/advanced/browser-extension) for no-external imports and feature trade-offs. The default `posthog-js` npm import can still download dependencies.
+
+Don't combine this setup with the snippet, a tag-manager installation, or another permissively configured SDK copy. A no-external build doesn't remove shared loaders or renderers registered by another bundle.
+
+With external loading disabled, the standard loader doesn't fetch executable `config.js`. Without preloaded configuration, the SDK requests configuration as JSON instead. Configuration, flags and events still use the network. Preventing script downloads doesn't sanitize remote HTML or disable bundled renderers.
+
+## Use samplers with the HTML snippet
+
+Load the customization script before the snippet calls `posthog.init`. Adjust the host for your region or proxy:
+
+```html
+<script src="https://us.i.posthog.com/static/customizations.full.js"></script>
+```
+
+Set the snippet's `before_send` option to `posthogCustomizations.sampleByDistinctId(0.4)` to keep about 40% of distinct IDs, or `posthogCustomizations.sampleBySessionId(0.25)` to keep about 25% of sessions. A given distinct ID or session sends either all its events or none.
+
+## Cookies in iframes
+
+In an iframe on another site, browsers treat PostHog cookies as third-party cookies and can block them. Pass an ID from the parent page and call `identify` inside the iframe.
+
+## Enriched flag analytics
+
+To add view and interaction charts to a flag's Usage tab, capture `$feature_view` when a user sees the feature and `$feature_interaction` when they use it.
+
+```ts
+posthog.capture('$feature_view', { feature_flag: flag })
+
+posthog.capture('$feature_interaction', {
+    feature_flag: flag,
+    $set: { [`$feature_interaction/${flag}`]: true },
+})
+```
+
+## Block Lighthouse traffic
+
+posthog-js already skips browsers whose user agent contains `Chrome-Lighthouse`, ignoring case. Some tools built on Lighthouse, such as Ahrefs and Semrush, send an ordinary browser user agent instead, so PostHog can't tell them apart from real visitors. If one of them inflates your numbers, add a string that only its user agent contains to `custom_blocked_useragents`. The SDK sends nothing from a browser whose user agent contains one of these strings, ignoring case, so never add a full browser user agent: that also blocks real visitors on the same browser and platform.
+
+```ts
+posthog.init('<ph_project_api_key>', {
+    custom_blocked_useragents: ['example-crawler'],
+})
+```
+
+## Use `posthog` in the browser console
+
+Bundled apps often don't expose `window.posthog`. To reach the instance in Chrome or Firefox, set `debug: true`, find the `[PostHog.js] Starting in debug mode` log, expand the logged object, right-click `this`, and select **Store as global variable**. The instance is then available as `temp1` in Chrome or `temp0` in Firefox.

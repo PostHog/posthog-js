@@ -23,6 +23,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
 import { createRemoteConfig } from './helpers/posthog-instance'
+import { sendRequest } from '../request-dispatch'
 
 const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
@@ -219,7 +220,80 @@ describe('RemoteConfigLoader', () => {
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
-        it('loads the script if window config not set', () => {
+        it('loads the json without the script when site apps are disabled', () => {
+            new RemoteConfigLoader(posthog).load()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(posthog._send_request).toHaveBeenCalledTimes(1)
+            expect(posthog._send_request).toHaveBeenCalledWith({
+                method: 'GET',
+                url: 'https://test.com/array/testtoken/config',
+                batchKey: 'remote_config',
+                fireCallbackOnDrop: true,
+                callback: expect.any(Function),
+            })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
+        it('shares one in-flight json request between concurrent loads', () => {
+            let completeRequest: (response: RequestResponse) => void = () => {}
+            posthog._send_request = vi.fn(({ callback }) => {
+                completeRequest = callback!
+            })
+
+            new RemoteConfigLoader(posthog).load()
+            new RemoteConfigLoader(posthog).load()
+            expect(posthog._send_request).toHaveBeenCalledTimes(1)
+
+            completeRequest({ statusCode: 200, json: config })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(2)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
+
+            new RemoteConfigLoader(posthog).load()
+            expect(posthog._send_request).toHaveBeenCalledTimes(2)
+        })
+
+        it('reports one failed outcome per caller without loading the script when the json request has status 0', () => {
+            let completeRequest: (response: RequestResponse) => void = () => {}
+            posthog._send_request = vi.fn(({ callback }) => {
+                completeRequest = callback!
+            })
+
+            new RemoteConfigLoader(posthog).load()
+            new RemoteConfigLoader(posthog).load()
+            completeRequest({ statusCode: 0, error: new TypeError('Failed to fetch') })
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(2)
+            expect(posthog._onRemoteConfig).toHaveBeenNthCalledWith(1, { ok: false })
+            expect(posthog._onRemoteConfig).toHaveBeenNthCalledWith(2, { ok: false })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalledTimes(2)
+        })
+
+        it('is not dropped while events are quota limited', () => {
+            const onDispatch = vi.fn()
+            posthog.__loaded = true
+            posthog.rateLimiter.serverLimits['events'] = new Date().getTime() + 60_000
+            posthog._send_request = vi.fn((options) => sendRequest(posthog, { ...options, onDispatch }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(onDispatch).toHaveBeenCalledTimes(1)
+            expect(posthog._onRemoteConfig).not.toHaveBeenCalled()
+        })
+
+        it.each([404, 500])('does not load the script on HTTP %s when site apps are disabled', (statusCode) => {
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ statusCode }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
+        })
+
+        it('loads the script if window config not set and site apps are enabled', () => {
+            posthog.config.opt_in_site_apps = true
             new RemoteConfigLoader(posthog).load()
 
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalledWith(
@@ -232,6 +306,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('loads the json if window config not set and js failed', () => {
+            posthog.config.opt_in_site_apps = true
             assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     cb()
@@ -244,6 +319,8 @@ describe('RemoteConfigLoader', () => {
             expect(posthog._send_request).toHaveBeenCalledWith({
                 method: 'GET',
                 url: 'https://test.com/array/testtoken/config',
+                batchKey: 'remote_config',
+                fireCallbackOnDrop: true,
                 callback: expect.any(Function),
             })
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
@@ -306,6 +383,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('reports synchronous loading errors as a failed outcome', () => {
+            posthog.config.opt_in_site_apps = true
             assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(() => {
                 throw new Error('loader failed')
             })

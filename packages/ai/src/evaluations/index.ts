@@ -19,6 +19,7 @@ export type {
   ResultStatus,
 } from './declarations'
 export { EvaluationAPIError, ExperimentCreationAbortedError } from './errors'
+export type { ItemUpdate, ResultUpdate, RevisionOptions } from './mutations'
 export type { EvaluationErrorFields, Persistence } from './errors'
 export { Datasets, DatasetSnapshot } from './datasets'
 export type {

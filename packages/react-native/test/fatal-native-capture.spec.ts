@@ -186,19 +186,19 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     await posthog.shutdown()
 
     mockPlugin.captureFatalException = undefined as any
-    posthog = await readyClient()
+    posthog = await readyClient({ enableSessionReplay: true })
     const enqueued = observeEnqueuedExceptions(posthog)
 
     handler(new Error('js-fallback-keeps-keys'), true)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(enqueued).toHaveLength(1)
-    expect(enqueued[0].properties.$recording_status).toBe('disabled')
+    expect(enqueued[0].properties.$recording_status).toBe('active')
     expect(typeof enqueued[0].properties.$sdk_debug_session_start).toBe('number')
   })
 
   it('releases the replay debug bundle claim when native takes the fatal exception', async () => {
-    posthog = await readyClient()
+    posthog = await readyClient({ enableSessionReplay: true })
     const seen: any[] = []
     posthog.on('capture', (message: any) => seen.push(message))
 

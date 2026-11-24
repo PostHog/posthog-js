@@ -239,6 +239,8 @@ export interface PerformanceCaptureConfig {
      * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
      * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
      * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
+     *
+     * A boolean here overrides the project setting. When unset, the project setting applies.
      */
     web_vitals?: boolean
 
@@ -706,6 +708,29 @@ export interface SessionRecordingOptions {
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      */
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
+
+    /**
+     * Opt in to explicit select selection masking, overriding the select category setting.
+     * Masked selects use `maskInputFn` for replacement text but omit selection identity metadata.
+     * Returning original text from `maskInputFn` still records that text, even when this
+     * policy returns 'masked'. The callback is responsible for sanitizing its output.
+     * Unmasked selects retain their choices, including duplicate-valued options.
+     * Masked native `<selectedcontent>` clones are omitted. Static option labels remain visible.
+     * Pointer events are not covered: clicks on options in listbox-style selects (`multiple`,
+     * `size` > 1 or a customizable picker) still record the clicked option and position.
+     * Block selects whose choices must stay private, for example with `ph-no-capture`.
+     * Omit this option to preserve legacy `maskInputFn` behavior.
+     * Use a pure policy. It is evaluated for input events, select subtree mutations
+     * and snapshots; changes to external state take effect at the next such capture.
+     * Keep the callback reference stable. Replacing it restarts recording and discards
+     * queued old-policy data; changing its return value does not require a restart.
+     * Pending buffers are not carried across page loads with this option, because
+     * callback compatibility cannot be verified across pages.
+     * Invalid return values and exceptions resolve to masked. Recording does not start
+     * if the loaded recorder or driver does not support this option. Policy transitions
+     * also require a matching replay player.
+     */
+    selectMaskingFn?: (element: HTMLSelectElement) => 'masked' | 'unmasked'
 
     /**
      * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
@@ -1202,6 +1227,8 @@ export interface LogsConfig extends LogCaptureOptions {
      * Review console output before enabling, as messages can include sensitive values
      * written by your code or by third-party libraries.
      *
+     * The project setting can also turn this on. Console logs are captured when either one enables them.
+     *
      * @default undefined
      */
     captureConsoleLogs?: boolean
@@ -1476,6 +1503,8 @@ export interface PostHogConfig {
      * This setting does not affect capturing pageview events (see `capture_pageview`).
      *
      * by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent
+     *
+     * The project setting can also turn autocapture off. Events are autocaptured only when both allow it.
      * @default true
      */
     autocapture: boolean | AutocaptureConfig
@@ -1508,6 +1537,16 @@ export interface PostHogConfig {
     /**
      * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
      *
+     * PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser.
+     *
+     * - `'localStorage+cookie'` stores essential state, such as the distinct ID, device ID and session ID, in a cookie, and other data in `localStorage`. `cookie_persisted_properties` adds custom properties to the cookie.
+     * - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors.
+     * - `'localStorage'` stores everything in `localStorage`.
+     * - `'sessionStorage'` stores everything in `sessionStorage`.
+     * - `'memory'` stores everything in page memory, so it lasts for one pageview.
+     *
+     * Call `set_config` to change the mode after `init`, for example when a user accepts cookies.
+     *
      * @default 'localStorage+cookie'
      */
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
@@ -1526,6 +1565,8 @@ export interface PostHogConfig {
      * List of custom property names that should be stored in cookies (in addition to the default ones)
      * when using 'localStorage+cookie' persistence mode. This allows these properties to be shared
      * across subdomains when cross_subdomain_cookie is enabled.
+     *
+     * Cookies hold about 4KB, so large values can cause `431 Request Header Fields Too Large` errors.
      *
      * @default []
      */
@@ -1653,6 +1694,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should disable session recording.
+     * Recording starts only when this option and the project setting both allow it.
      *
      * @default false
      */
@@ -1837,6 +1879,37 @@ export interface PostHogConfig {
      * @default 'fallback'
      */
     strict_script_versioning: boolean | 'fallback'
+
+    /**
+     * Requires Subresource Integrity (SRI) for every extension script the SDK loads, such as
+     * recorder.js, surveys.js or web-vitals.js.
+     *
+     * When enabled, each extension loads only from the exact-version path
+     * `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set,
+     * using the SHA-384 hashes built into this SDK bundle. A missing hash, an integrity failure
+     * or a `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin`
+     * disables only that feature. The SDK never retries through the mutable legacy path,
+     * whatever {@link strict_script_versioning} says. The asset host, or a reverse proxy in
+     * front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`).
+     *
+     * This mode also disables site apps, overriding {@link opt_in_site_apps}, including site app
+     * code preloaded by the token-specific `/array/<token>/array.js`. It refuses the toolbar and the
+     * executable `/array/<token>/config.js` remote config, which is then fetched as JSON.
+     *
+     * The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK
+     * code you already trust: an npm build, or an `array.js` you pin yourself. Because the
+     * extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an
+     * exact-version `loader.js` that itself has an `integrity` attribute pins every extension too.
+     * The token-specific `/array/<token>/array.js` changes with project configuration, so it cannot be
+     * pinned: use `/static/<sdk version>/array.js`, the loader or npm instead. The guarantee does not
+     * cover an unpinned initial loader, third-party widgets such as Intercom or Crisp, or a malicious
+     * release with valid hashes.
+     * Extensions share page globals, so if another PostHog instance or any other code on the page
+     * already ran unverified extension code, this instance reuses it and the guarantee does not hold.
+     *
+     * @default false
+     */
+    require_subresource_integrity?: boolean
 
     /**
      * Optional host override for static assets loaded by PostHog, such as
@@ -2048,7 +2121,16 @@ export interface PostHogConfig {
      * for cookie changes before captures and persistence writes so already-open sibling
      * subdomains adopt identity changes made by `identify()` or `reset()`.
      *
+     * Synchronization happens on the tab's next PostHog activity, not immediately.
+     * A persistence write can adopt an identity without immediately reloading feature flags.
+     * When the SDK next processes that identity, such as before a capture, it clears
+     * identity-bound flag state and starts a reload. `onFeatureFlags` runs after that reload.
+     * If the session ID changes, `onSessionId` runs when the tab next checks its session.
+     * A synchronized `reset()` also clears event and session properties of the previous identity.
+     *
      * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
+     *
+     * Requires `posthog-js` 1.418.0 or later.
      *
      * @default false
      */
@@ -2113,7 +2195,7 @@ export interface PostHogConfig {
      * This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add
      * custom properties to mask with `custom_personal_data_properties`.
      * @default false
-     * @see {PERSONAL_DATA_CAMPAIGN_PARAMS} - Default campaign parameters that are masked by default.
+     * @see {PERSONAL_DATA_URL_PARAMS} - Default URL parameters that are masked, including other spellings of them such as Snapchat's `ScCid`.
      * @see {PostHogConfig.custom_personal_data_properties} - Custom list of personal data properties to mask.
      */
     mask_personal_data_properties: boolean
@@ -2449,6 +2531,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture heatmaps.
+     * When set, this overrides the project setting. When unset, the project setting applies.
      *
      * @see {HeatmapConfig}
      * @default undefined
@@ -2481,6 +2564,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture exceptions.
+     * When set, this overrides the project setting. When unset, the project setting applies.
      *
      * @see {ExceptionAutoCaptureConfig}
      * @default undefined

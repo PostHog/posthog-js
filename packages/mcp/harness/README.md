@@ -13,7 +13,7 @@ NestJS customer stacks**.
 ## Running it
 
 ```bash
-pnpm test:mcp-harness      # from the repo root: builds @posthog/mcp, runs all four lanes
+pnpm test:mcp-harness      # from the repo root: builds @posthog/mcp, runs every lane
 ```
 
 Or one lane at a time — exactly what CI runs, one job per lane:
@@ -23,6 +23,8 @@ pnpm --filter @posthog/mcp run test:integration:sdk-v1     # "official SDK v1"
 pnpm --filter @posthog/mcp run test:integration:sdk-v2     # "official SDK v2"
 pnpm --filter @posthog/mcp run test:integration:nest-v1    # "mcp-nest (SDK v1)"
 pnpm --filter @posthog/mcp run test:integration:nest-v2    # "mcp-nest (SDK v2)"
+pnpm --filter @posthog/mcp run test:integration:mcp-handler  # "mcp-handler"
+pnpm --filter @posthog/mcp run test:integration:fastmcp      # "FastMCP"
 ```
 
 No secrets, no network: the PostHog client is an in-process recorder
@@ -46,6 +48,8 @@ Fixtures import `@posthog/mcp` through Node self-reference, which resolves to
 | each SDK lane          | `dual-era/probe-mcp-apps.mjs --major v1\|v2`      | a real MCP App tool and `ui://` resource: app metadata, HTML/CSP, structured results and result `_meta` survive instrumentation; client model metadata wins over self-report              |
 | `mcp-nest (SDK v1)`    | `nest-v1/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low`                                                                                                    |
 | `mcp-nest (SDK v2)`    | `nest-v2/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low`                                                                                         |
+| `mcp-handler`          | `frameworks/verify.mjs mcp-handler`               | Vercel's `mcp-handler` (SDK v2, a server per request) behind `withMcpAuth`, both eras × `instrument()` first/last, plus a control row without `withMcpSessionHeader`                      |
+| `FastMCP`              | `frameworks/verify.mjs fastmcp`                   | FastMCP 4 (SDK v1, a server per session) through `instrumentFastMCP`: stateful, stateless SSE and stateless JSON on the 2025 protocol                                                     |
 
 `LEVEL=high` is `instrument(server)`, as documented. `LEVEL=low` is `instrument(server.server)`,
 the workaround users adopted before the compatibility gate opened. Both run.
@@ -59,8 +63,8 @@ The matrix asserts ten columns per row, grouped as capture (`calls`, `errors`, `
 
 ## Expected failures: exact-match snapshots
 
-Known-broken cells are pinned in `dual-era/expected-failures.json` and
-`nest-v2/expected-failures.json`, each entry carrying a `why`. A run passes iff the failing set
+Known-broken cells are pinned in `dual-era/expected-failures.json`,
+`nest-v2/expected-failures.json` and `frameworks/expected-failures.json`, each entry carrying a `why`. A run passes iff the failing set
 **exactly matches** the file:
 
 - a new failure prints `regressed: …` and exits non-zero;

@@ -10,6 +10,25 @@ const packageRoot = resolve(__dirname, '../..')
 const require = createRequire(join(packageRoot, 'package.json'))
 const rslib = join(dirname(require.resolve('@rslib/core/package.json')), 'bin/rslib.js')
 
+test('production type checking excludes Vitest ambient declarations', () => {
+    const tsc = join(dirname(require.resolve('typescript/package.json')), 'bin/tsc')
+    const result = spawnSync(
+        process.execPath,
+        [tsc, '--project', 'tsconfig.build.json', '--noEmit', '--listFilesOnly'],
+        {
+            cwd: packageRoot,
+            encoding: 'utf8',
+            timeout: 30_000,
+        }
+    )
+    expect(result.error).toBeUndefined()
+    expect(result.signal).toBeNull()
+    expect(result.status, result.stdout + result.stderr).toBe(0)
+    const files = result.stdout.replaceAll('\\', '/').trim().split(/\r?\n/)
+    expect(files).toContain(join(packageRoot, 'src/index.ts').replaceAll('\\', '/'))
+    expect(files.filter((file) => /\/vitest\/|\/vitest-compat\.d\.ts$/.test(file))).toEqual([])
+}, 30_000)
+
 test('native declarations match TypeScript and retain semantic build failures', () => {
     const fixture = mkdtempSync(join(packageRoot, '.declaration-build-'))
     const source = join(fixture, 'src')

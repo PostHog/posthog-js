@@ -329,6 +329,14 @@ export class PostHogPersistence {
         }
     }
 
+    /** @internal Adopt shared flag state before deriving a partial/error merge, preserving pending local writes. */
+    reconcileFeatureFlagsBeforeMerge(): boolean {
+        if (this._disabled || this._cookieSyncSuppressed || this._storageMigrationInProgress) {
+            return false
+        }
+        return this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
+    }
+
     markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[] | true>): void {
         Object.entries(changes).forEach(([key, properties]) => {
             const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
@@ -1879,7 +1887,9 @@ export class PostHogPersistence {
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(
                 initialPersonInfo,
-                this._config.disable_capture_url_hashes
+                this._config.disable_capture_url_hashes,
+                this._config.mask_personal_data_properties,
+                this._config.custom_personal_data_properties
             )
             extend(p, initialPersonProps)
         }

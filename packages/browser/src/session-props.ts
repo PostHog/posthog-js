@@ -89,7 +89,12 @@ export class SessionPropsManager {
             return {}
         }
         if ('r' in p) {
-            return getPersonPropsFromInfo(p, this._instance.config.disable_capture_url_hashes)
+            return getPersonPropsFromInfo(
+                p,
+                this._instance.config.disable_capture_url_hashes,
+                this._instance.config.mask_personal_data_properties,
+                this._instance.config.custom_personal_data_properties
+            )
         } else {
             return {
                 $referring_domain: p.referringDomain,
