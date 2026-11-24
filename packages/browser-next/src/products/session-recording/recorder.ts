@@ -120,6 +120,8 @@ export interface RecorderHost {
     documentWasEverVisible(): boolean
     /** Events admitted before the recorder first started. Later calls return none. */
     takeEarlyEvents(): readonly CapturedEventInfo[]
+    /** `$pageview` events captured while the recorder was loading, for replay markers. */
+    takeLoadingPageviews(): readonly CapturedEventInfo[]
     /** Whether `stopSessionRecording()` turned recording off, which a new session must not undo. */
     stoppedLocally(): boolean
 }
@@ -339,6 +341,12 @@ export class SessionRecorder {
         this._listen()
         if (this.status === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
+        }
+        // a deferred initial `$pageview` captured while the recorder loaded (e.g. on optIn) still gets its marker
+        for (const event of this._host.takeLoadingPageviews()) {
+            if (event.properties.$session_id === this._sessionId) {
+                this._recordPageview(event.properties)
+            }
         }
         // events captured while the recorder loaded can still activate this session's event triggers
         for (const event of this._host.takeEarlyEvents()) {
@@ -627,12 +635,16 @@ export class SessionRecorder {
             }),
             this._client.onEvent(({ event, properties }) => {
                 if (event !== '$pageview') return
-                const href = typeof properties.$current_url === 'string' ? this._maskUrl(properties.$current_url) : ''
-                if (!href) return
-                this._lastHref = href
-                this._addCustomEvent('$pageview', { href })
+                this._recordPageview(properties)
             })
         )
+    }
+
+    private _recordPageview(properties: Readonly<Record<string, unknown>>): void {
+        const href = typeof properties.$current_url === 'string' ? this._maskUrl(properties.$current_url) : ''
+        if (!href) return
+        this._lastHref = href
+        this._addCustomEvent('$pageview', { href })
     }
 
     private _teardown(): void {
