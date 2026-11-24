@@ -6,6 +6,7 @@ import type { LogsExtension, LogsOptions } from '../src/products/logs/logs'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import type { OtlpLogsPayload } from '@posthog/types'
 import { MemoryStorage } from './helpers'
+import { extensionHost } from './extension-host'
 
 const clients: IPostHog[] = []
 const extensions = new WeakMap<IPostHog, LogsExtension>()
@@ -61,37 +62,67 @@ afterEach(async () => {
 })
 
 describe('logs', () => {
-    it.each(['static', 'dynamic'] as const)(
-        'applies snapshotted URL options to %s programmatic and console logs',
-        async (mode) => {
+    it.each([
+        ['static', 'the default', undefined, 'https://example.test/path?email=private'],
+        ['dynamic', 'the default', undefined, 'https://example.test/path?email=private'],
+        ['static', 'query: false', { query: false }, 'https://example.test/path'],
+        ['dynamic', 'path and hash: false', { path: false, hash: false }, 'https://example.test/?email=private'],
+        [
+            'static',
+            'sanitize',
+            {
+                sanitize: (url: URL) => {
+                    url.searchParams.delete('email')
+                    return url
+                },
+            },
+            'https://example.test/path',
+        ],
+    ] as const)(
+        'records the page URL of %s programmatic and console logs with %s urlSanitization',
+        async (mode, _label, urlSanitization, expected) => {
             const { window, output } = browser()
             window.location.href = 'https://example.test/path?email=private#route'
             const bodies: OtlpLogsPayload[] = []
-            const config: LogsOptions = {
-                captureConsoleLogs: true,
-                urlCapture: { path: false, search: true, hash: true },
-            }
-            const logger = logs(config)
+            const config: LogsOptions = { captureConsoleLogs: true }
             const client = await create({
-                ...(mode === 'static' ? { extensions: [logger], logs: false } : { logs: config }),
+                ...(mode === 'static' ? { extensions: [logs(config)], logs: false } : { logs: config }),
+                ...(urlSanitization ? { urlSanitization } : {}),
                 fetch: async (_url, init) => {
                     bodies.push(JSON.parse(String(init?.body)))
                     return new Response('{}')
                 },
             })
-            config.urlCapture!.search = false
             output.log('console')
             getLogs(client).captureLog({ body: 'programmatic' })
             await client.flush()
             expect(bodies.flatMap(records)).toHaveLength(2)
             for (const record of bodies.flatMap(records)) {
-                expect(record.attributes).toContainEqual({
-                    key: 'url.full',
-                    value: { stringValue: 'https://example.test/?email=private#route' },
-                })
+                expect(record.attributes).toContainEqual({ key: 'url.full', value: { stringValue: expected } })
             }
         }
     )
+
+    it('captures a log without its URL when sanitize fails', async () => {
+        browser()
+        const bodies: OtlpLogsPayload[] = []
+        const client = await create({
+            urlSanitization: {
+                sanitize: () => {
+                    throw new Error('unavailable')
+                },
+            },
+            fetch: async (_url, init) => {
+                bodies.push(JSON.parse(String(init?.body)))
+                return new Response('{}')
+            },
+        })
+        getLogs(client).captureLog({ body: 'record' })
+        await client.flush()
+        const [record] = records(bodies[0]!)
+        expect(record?.body).toEqual({ stringValue: 'record' })
+        expect(record?.attributes.some((attribute) => attribute.key === 'url.full')).toBe(false)
+    })
 
     it('omits invalid URLs from log context', async () => {
         const { window } = browser()
@@ -232,7 +263,7 @@ describe('logs', () => {
                 expect.arrayContaining([
                     { key: 'log.source', value: { stringValue: 'console.log' } },
                     { key: 'host', value: { stringValue: 'example.test' } },
-                    { key: 'url.full', value: { stringValue: 'https://example.test/path' } },
+                    { key: 'url.full', value: { stringValue: 'https://example.test/path?email=private' } },
                 ])
             )
             await client.dispose()
@@ -366,7 +397,7 @@ describe('logs', () => {
         const client = await create({ fetch })
         getLogs(client).captureLog({ body: 'before closing' })
         const closing = client.shutdown(10)
-        expect((await client.sendRequest('/ordinary')).statusCode).toBe(200)
+        expect((await extensionHost(client).sendRequest('/ordinary')).statusCode).toBe(200)
         await closing
         expect(fetch.mock.calls.some(([url]) => String(url).includes('/i/v1/logs'))).toBe(true)
         expect(vi.getTimerCount()).toBe(0)

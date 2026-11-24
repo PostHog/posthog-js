@@ -5,8 +5,16 @@ import { localRemoteConfig } from './helpers'
 import type { ExtensionToken } from '@posthog/browser-common'
 import type { ConsentChangeInfo } from '../src/core/context/browser-client'
 
-import type { CorePostHogOptions, Extension, IPostHog, RemoteConfig } from '../src/composition/npm/core'
+import type {
+    BrowserExtension,
+    CorePostHogOptions,
+    Extension,
+    IPostHog,
+    IPostHogExtensionHost,
+    RemoteConfig,
+} from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
+import { extensionHost } from './extension-host'
 
 /** A client with Capture V1 delivery that sends each event as soon as it is admitted. */
 const createDeliveringPostHog = (options: CorePostHogOptions) =>
@@ -43,6 +51,12 @@ const flagExtension = (events: string[]): FlagCapability => {
 }
 
 describe('@posthog/browser extensions', () => {
+    it('keeps request sending off the application API and on the extension host', () => {
+        expectTypeOf<IPostHog>().not.toHaveProperty('sendRequest')
+        expectTypeOf<IPostHogExtensionHost>().toHaveProperty('sendRequest')
+        expectTypeOf<Parameters<NonNullable<BrowserExtension['setup']>>[0]>().toHaveProperty('sendRequest')
+    })
+
     it('notifies extensions of consent changes without replaying initial state', async () => {
         const changes: ConsentChangeInfo[] = []
         const posthog = await createPostHog({
@@ -306,7 +320,7 @@ describe('@posthog/browser extensions', () => {
             deniedClient = client
             client.kv.set('private', true)
             client.capture('denied-output')
-            await client.sendRequest('/flags/')
+            await extensionHost(client).sendRequest('/flags/')
         })
         const configResponse = vi.fn(async () => createRemoteConfig())
         const denied = await createDeliveringPostHog({
@@ -318,7 +332,7 @@ describe('@posthog/browser extensions', () => {
             extensions: [{ name: 'denied', setup: deniedSetup }],
         })
 
-        await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(denied).sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
         expect(await denied.resolveExtension('denied')).toBeDefined()
         expect(configResponse).toHaveBeenCalledTimes(1)
@@ -340,7 +354,7 @@ describe('@posthog/browser extensions', () => {
         const blockedRequests: SentRequest[] = []
         const blockedSetup = vi.fn(async (client: IPostHog) => {
             client.capture('bot-output')
-            await client.sendRequest('/flags/')
+            await extensionHost(client).sendRequest('/flags/')
         })
         const blocked = await createPostHog({
             projectToken: 'ph_test',
@@ -350,7 +364,7 @@ describe('@posthog/browser extensions', () => {
             remoteConfig: createRemoteConfig(),
             extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
-        await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(blocked).sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(blocked.getRemoteConfig()).resolves.toEqual(createRemoteConfig())
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(await blocked.resolveExtension('blocked')).toBeDefined()

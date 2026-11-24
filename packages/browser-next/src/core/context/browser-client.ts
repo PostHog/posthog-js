@@ -1,5 +1,5 @@
 import type { DeepReadonly, Extension } from '@posthog/browser-common'
-import type { IPostHog } from '../types'
+import type { IPostHogExtensionHost } from '../types'
 import type { FeatureFlags } from '../../products/flags/flags-token'
 import type { LogsExtension } from '../../products/logs/logs-internal'
 import type { SurveysExtension } from '../../products/surveys/surveys-internal'
@@ -37,7 +37,7 @@ export interface ConsentChangeInfo {
 }
 
 /** The shared extension contract, hosted by the browser client itself. */
-export type BrowserExtension = Extension<IPostHog>
+export type BrowserExtension = Extension<IPostHogExtensionHost>
 
 export interface BrowserProducts {
     featureFlags: FeatureFlags

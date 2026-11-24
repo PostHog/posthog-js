@@ -12,7 +12,7 @@ import {
 } from '@posthog/browser-common/constants'
 import { createId } from '../primitives/id'
 import { CLIENT_KV_NAMESPACE, incrementRevision, isRecord, isTimestamp } from '../core/state/state'
-import { isValidDistinctId } from '../products/analytics/analytics-core'
+import { isValidDistinctId } from '../products/analytics/identifiers'
 import { REGISTERED_PROPERTIES } from '../products/analytics/properties/analytics-properties'
 import type { CookiePersistence, StorageLike } from '../core/types'
 

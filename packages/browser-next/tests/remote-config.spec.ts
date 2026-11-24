@@ -1,6 +1,7 @@
 import { createPostHog as createRoot } from '../src/composition/npm'
 import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/composition/npm/core'
 import { localRemoteConfig } from './helpers'
+import { extensionHost } from './extension-host'
 
 const options: CorePostHogOptions = {
     projectToken: 'ph_test',
@@ -117,7 +118,7 @@ describe.each([
         })
         await posthog.getRemoteConfig()
         expect(observed).toHaveBeenCalledWith({ ok: true, config: localRemoteConfig })
-        expect((await posthog.sendRequest('/flags/')).statusCode).toBe(0)
+        expect((await extensionHost(posthog).sendRequest('/flags/')).statusCode).toBe(0)
         expect(fetch).toHaveBeenCalledTimes(1)
         await posthog.dispose()
     })

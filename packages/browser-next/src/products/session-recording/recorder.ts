@@ -60,7 +60,8 @@ import { createId } from '../../primitives/id'
 import { version } from '../../primitives/version'
 import type { IPostHog, NewSessionInfo, NewSessionReason } from '../../core/types'
 import type { BrowserState } from '../../core/state/state'
-import { analyticsOf, type Analytics } from '../analytics/analytics-core'
+import type { Analytics } from '../analytics/analytics-core'
+import { analyticsOf } from '../analytics/analytics-of'
 import { createReplayTriggerHost, type ReplayDebugHost } from './replay-trigger-host'
 import { createSnapshotDelivery, type SnapshotDelivery } from './snapshot-delivery'
 import type { SessionRecordingOptions } from './session-recording-options'
@@ -660,7 +661,8 @@ export class SessionRecorder {
     private _recordPageview(properties: Readonly<Record<string, unknown>>): void {
         const href = typeof properties.$current_url === 'string' ? this._maskUrl(properties.$current_url) : ''
         if (!href) return
-        this._lastHref = href
+        // The event's URL can drop parts the live URL keeps, so compare later changes with the live URL.
+        this._lastHref = this._liveHref() ?? href
         this._addCustomEvent('$pageview', { href })
     }
 
@@ -802,7 +804,9 @@ export class SessionRecorder {
             this._onTriggerActivated()
             this._flushBuffer()
             this._reportStarted(`${triggerType}_trigger_matched` as SessionStartReason, {
-                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
+                // the matched URL is the raw page URL; record it like other replay page URLs
+                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']:
+                    triggerType === 'url' && matchDetail ? this._maskUrl(matchDetail) : matchDetail,
             })
         } finally {
             this._activatingTrigger = false
@@ -880,11 +884,10 @@ export class SessionRecorder {
     }
 
     private _maskUrl(rawUrl: string): string | undefined {
-        // fragments often hold tokens (for example OAuth redirects); posthog-js strips them from replay URLs by default
-        const hashIndex = rawUrl.indexOf('#')
-        const url = hashIndex < 0 ? rawUrl : rawUrl.slice(0, hashIndex)
+        // the client's urlSanitization applies first, as posthog-js applies its URL settings before the replay mask
+        const url = this._analytics?.recordUrl(rawUrl)
         const mask = this._host.options.maskCapturedNetworkRequestFn
-        if (!mask) return url
+        if (!url || !mask) return url
         try {
             // page URLs are masked with the network request callback, which reads only `name` here
             // oxlint-disable-next-line typescript/consistent-type-assertions
@@ -1023,19 +1026,24 @@ export class SessionRecorder {
         )
     }
 
+    private _liveHref(): string | undefined {
+        try {
+            // the full href goes through the same policy as Meta events, so both compare like-for-like
+            const href = globalThis.window?.location?.href
+            return href ? this._maskUrl(href) : undefined
+        } catch {
+            // URL processing failures do not interrupt recording.
+            return undefined
+        }
+    }
+
     private _trackUrlChange(): void {
         // as in posthog-js _pageViewFallBack, only synthesize `$url_changed` when pageview capture is disabled
         if (this._analytics?._core._capturePageview) return
-        try {
-            const location = globalThis.window?.location
-            if (!location) return
-            const href = this._maskUrl(location.origin + location.pathname + location.search)
-            if (href && href !== this._lastHref) {
-                this._lastHref = href
-                this._addCustomEvent('$url_changed', { href })
-            }
-        } catch {
-            // URL processing failures do not interrupt recording.
+        const href = this._liveHref()
+        if (href && href !== this._lastHref) {
+            this._lastHref = href
+            this._addCustomEvent('$url_changed', { href })
         }
     }
 
@@ -1309,8 +1317,7 @@ export class SessionRecorder {
 
     private _currentMaskedHostname(): string | undefined {
         try {
-            const href = globalThis.window?.location?.href
-            const masked = href ? this._maskUrl(href) : undefined
+            const masked = this._liveHref()
             return masked ? new URL(masked).hostname || undefined : undefined
         } catch {
             return undefined

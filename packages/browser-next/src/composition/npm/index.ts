@@ -33,6 +33,7 @@ export type {
     NewSessionInfo,
     NewSessionReason,
     IPostHog,
+    IPostHogExtensionHost,
     PostHogOptions,
     RemoteConfig,
     ResetOptions,
@@ -40,6 +41,7 @@ export type {
     SendRequestInit,
     SessionContext,
     StorageLike,
+    UrlSanitizationOptions,
 } from '../../core/types'
 
 export type {

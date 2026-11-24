@@ -2,7 +2,7 @@ import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import type { IPostHog } from '../../core/types'
+import type { IPostHogExtensionHost } from '../../core/types'
 import type { FlagsExtension } from './flags-internal'
 import type { FeatureFlagResult, FlagsOptions, JsonType } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
@@ -41,7 +41,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
     const setupBootstrap = config.bootstrap
-    let client: IPostHog | undefined
+    let client: IPostHogExtensionHost | undefined
     let disposed = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
@@ -58,7 +58,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         name: FeatureFlagsExtension,
         bindings: { [FeatureFlagsCommonExtension]: shared },
         getSurveyContext: () => ({ remoteEvaluation: !config.featureFlagsDisabled }),
-        setup: async (value: IPostHog) => {
+        setup: async (value: IPostHogExtensionHost) => {
             client = value
             await shared.setup(value)
             if (disposed) return

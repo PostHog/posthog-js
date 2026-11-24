@@ -26,12 +26,14 @@ export type {
     NewSessionInfo,
     NewSessionReason,
     IPostHog,
+    IPostHogExtensionHost,
     RemoteConfig,
     ResetOptions,
     RuntimeOptions,
     SendRequestInit,
     SessionContext,
     StorageLike,
+    UrlSanitizationOptions,
 } from '../../core/types'
 
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'

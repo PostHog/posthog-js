@@ -8,6 +8,7 @@ import type { IPostHog } from '../src/core/types'
 
 import type { BrowserFetch, RemoteConfig, SendRequestInit, StorageLike } from '../src/composition/npm/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
+import { extensionHost } from './extension-host'
 
 const analytics = { flushAt: 1, flushInterval: 0 }
 const bufferedAnalytics = { flushAt: 100, flushInterval: 0 }
@@ -179,7 +180,7 @@ describe('portable consent persistence', () => {
         const extensionSetup = vi.fn(async (client: IPostHog) => {
             client.kv.set('private', true)
             client.capture('extension-blocked')
-            await client.sendRequest('/i/v1/analytics/events')
+            await extensionHost(client).sendRequest('/i/v1/analytics/events')
         })
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
         const storage = new MemoryStorage()
@@ -194,7 +195,7 @@ describe('portable consent persistence', () => {
             extensions: [{ name: 'blocked-by-consent', setup: extensionSetup }],
         })
         posthog.capture('blocked')
-        await posthog.sendRequest('/i/v1/analytics/events')
+        await extensionHost(posthog).sendRequest('/i/v1/analytics/events')
 
         expect(extensionSetup).toHaveBeenCalledTimes(1)
         expect(await posthog.resolveExtension('blocked-by-consent')).toBeDefined()
@@ -539,7 +540,9 @@ describe('portable consent persistence', () => {
         })
         nextGate.capture('plain-private')
         plain.values.set(DEFAULT_KEY, '0')
-        await expect(nextGate.sendRequest('/i/v1/analytics/events')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(nextGate).sendRequest('/i/v1/analytics/events')).resolves.toMatchObject({
+            statusCode: 0,
+        })
         plain.values.set(DEFAULT_KEY, '1')
         await nextGate.flush()
         expect(plainRequests).toHaveLength(0)
@@ -823,7 +826,9 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({ statusCode: 200 })
+        await expect(extensionHost(first).sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({
+            statusCode: 200,
+        })
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ 'X-Test': 'value' })
     })
@@ -848,7 +853,9 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
-        await expect(first.sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(first).sendRequest('/i/v1/analytics/events', init)).resolves.toMatchObject({
+            statusCode: 0,
+        })
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -870,7 +877,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/i/v1/analytics/events')
+        const response = extensionHost(first).sendRequest('/i/v1/analytics/events')
         second.optOut()
         second.optIn()
         finishFetch?.(new Response('{}', { status: 200 }))
@@ -897,7 +904,7 @@ describe('portable consent persistence', () => {
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const response = first.sendRequest('/i/v1/analytics/events')
+        const response = extensionHost(first).sendRequest('/i/v1/analytics/events')
         second.optOut()
         second.optIn()
         failFetch?.(new Error('private transport failure'))
@@ -929,7 +936,11 @@ describe('portable consent persistence', () => {
         }
 
         await expect(
-            first.sendRequest('/i/v1/analytics/events', { body: {}, method: 'POST', transport: 'sendBeacon' })
+            extensionHost(first).sendRequest('/i/v1/analytics/events', {
+                body: {},
+                method: 'POST',
+                transport: 'sendBeacon',
+            })
         ).resolves.toMatchObject({ statusCode: 202 })
     })
 
@@ -969,7 +980,9 @@ describe('portable consent persistence', () => {
         async (path) => {
             const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
             const posthog = await createOptedOut(fetch)
-            await expect(posthog.sendRequest(path, flagsEvaluation)).resolves.toMatchObject({ statusCode: 200 })
+            await expect(extensionHost(posthog).sendRequest(path, flagsEvaluation)).resolves.toMatchObject({
+                statusCode: 200,
+            })
             expect(fetch).toHaveBeenCalledOnce()
         }
     )
@@ -999,7 +1012,9 @@ describe('portable consent persistence', () => {
     ] as const)('refuses %s while analytics consent is denied', async (_label, path, init) => {
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
         const posthog = await createOptedOut(fetch)
-        await expect(posthog.sendRequest(path, init as SendRequestInit)).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(posthog).sendRequest(path, init as SendRequestInit)).resolves.toMatchObject({
+            statusCode: 0,
+        })
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -1014,7 +1029,9 @@ describe('portable consent persistence', () => {
             optOutByDefault: true,
             flagsHost: 'https://proxy.example.com/ingest',
         })
-        await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 200 })
+        await expect(extensionHost(posthog).sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({
+            statusCode: 200,
+        })
         expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^https:\/\/proxy\.example\.com\/ingest\/flags\/\?v=2&/)
     })
 
@@ -1029,9 +1046,11 @@ describe('portable consent persistence', () => {
             optOutByDefault: true,
             apiHost: 'https://proxy.example.com/ingest',
         })
-        await expect(posthog.sendRequest('/api/conversations/v1/widget/tickets')).resolves.toMatchObject({
-            statusCode: 200,
-        })
+        await expect(extensionHost(posthog).sendRequest('/api/conversations/v1/widget/tickets')).resolves.toMatchObject(
+            {
+                statusCode: 200,
+            }
+        )
         expect(String(fetch.mock.calls[0]?.[0])).toMatch(
             /^https:\/\/proxy\.example\.com\/ingest\/api\/conversations\/v1\/widget\/tickets/
         )
@@ -1040,7 +1059,9 @@ describe('portable consent persistence', () => {
     it('refuses the flags evaluation request from a blocked client', async () => {
         const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
         const posthog = await createOptedOut(fetch, { webdriver: true })
-        await expect(posthog.sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({ statusCode: 0 })
+        await expect(extensionHost(posthog).sendRequest('/flags/?v=2', flagsEvaluation)).resolves.toMatchObject({
+            statusCode: 0,
+        })
         expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -1059,7 +1080,7 @@ describe('portable consent persistence', () => {
             let result: Promise<unknown> | undefined
             expect(() => {
                 // Verify untyped JavaScript consumers.
-                result = posthog.sendRequest('/api/surveys/', null as unknown as SendRequestInit)
+                result = extensionHost(posthog).sendRequest('/api/surveys/', null as unknown as SendRequestInit)
             }).not.toThrow()
             await expect(result).resolves.toHaveProperty('statusCode')
         }

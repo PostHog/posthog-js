@@ -247,6 +247,70 @@ describe('session recording page URLs', () => {
             })
             .filter(([tag]) => tags.includes(tag))
 
+    it('does not report a URL change after a pageview whose recorded URL drops parts of the page URL', async () => {
+        window.history.replaceState(null, '', '/checkout?step=2')
+        const { posthog, replay, transport: network } = await setup({}, {}, { urlSanitization: { query: false } })
+        await started(replay)
+
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'xy')
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$pageview', '$url_changed'])).toEqual([
+            ['$pageview', 'http://localhost:3000/checkout'],
+            ['$pageview', 'http://localhost:3000/checkout'],
+        ])
+    })
+
+    // a hash-routed app whose sanitizer moves the fragment route into the path
+    const hashRouter = (url: URL): URL => {
+        if (url.hash.startsWith('#/')) url.pathname = url.hash.slice(1)
+        url.hash = ''
+        return url
+    }
+
+    it.each([
+        ['the default urlSanitization', {}, 'http://localhost:3000/'],
+        ['hash: true', { urlSanitization: { hash: true } }, 'http://localhost:3000/#/users/7'],
+        [
+            'a sanitize that reads the fragment',
+            { urlSanitization: { sanitize: hashRouter } },
+            'http://localhost:3000/users/7',
+        ],
+    ])(
+        'does not report a URL change after a later full snapshot when the page has not navigated (%s)',
+        async (_label, overrides, recordedHref) => {
+            window.history.replaceState(null, '', '/#/users/7')
+            // a short interval so a later full snapshot re-emits the Meta event while recording
+            const { replay, transport: network } = await setup({}, { fullSnapshotIntervalMs: 50 }, overrides)
+            await started(replay)
+            await new Promise((resolve) => setTimeout(resolve, 130))
+
+            typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+            typeInto(document.getElementById('name') as HTMLInputElement, 'xy')
+            await replay.flush?.()
+
+            const markers = urlMarkers(network, ['meta', '$url_changed'])
+            expect(markers.length).toBeGreaterThan(1)
+            // every full snapshot records the same URL, and no `$url_changed` follows it
+            expect(markers).toEqual(markers.map(() => ['meta', recordedHref]))
+        }
+    )
+
+    it('reports a hash route change when hash capture is enabled', async () => {
+        window.history.replaceState(null, '', '/#/a')
+        const { replay, transport: network } = await setup({}, {}, { urlSanitization: { hash: true } })
+        await started(replay)
+
+        window.history.replaceState(null, '', '/#/b')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$url_changed'])).toEqual([['$url_changed', 'http://localhost:3000/#/b']])
+    })
+
     it('omits $url_changed fallback markers when capturePageview is enabled', async () => {
         const { replay, transport: network } = await setup({}, {}, { capturePageview: true })
         await started(replay)
@@ -268,6 +332,52 @@ describe('session recording page URLs', () => {
         await replay.flush?.()
 
         expect(urlMarkers(network, ['$pageview'])).toEqual([['$pageview', 'http://localhost:3000/']])
+    })
+})
+
+describe('session recording URL sanitization', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'))
+
+    it('applies the client urlSanitization to recorded page URLs, as posthog-js applies its URL settings', async () => {
+        window.history.replaceState(null, '', '/account/42?token=secret-token')
+        const sanitize = (url: URL) => {
+            url.searchParams.delete('token')
+            url.pathname = url.pathname.replace(/\/\d+$/, '/:id')
+            return url
+        }
+        const { posthog, replay, transport: network } = await setup({}, {}, { urlSanitization: { sanitize } })
+        await started(replay)
+
+        posthog.capture('$pageview')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        const serialized = JSON.stringify(recordedEvents(network))
+        expect(serialized).toContain('http://localhost:3000/account/:id')
+        expect(serialized).not.toContain('secret-token')
+    })
+})
+
+describe('session recording URL trigger diagnostics', () => {
+    afterEach(() => window.history.pushState({}, '', '/'))
+
+    it('applies urlSanitization to the URL a trigger matched', async () => {
+        const { replay, transport: network } = await setup(
+            { urlTriggers: [{ url: 'account', matching: 'regex' }] },
+            {},
+            { urlSanitization: { query: false } }
+        )
+        await started(replay)
+        window.history.pushState({}, '', '/account?token=secret')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        const markers = recordedEvents(network).filter(
+            (event) => event.type === 5 && (event.data as { tag?: string })?.tag === '$recording_started'
+        )
+        const matched = markers.map((event) => (event.data as { payload: { matchedUrl?: string } }).payload.matchedUrl)
+        expect(matched).toContain('http://localhost:3000/account')
+        expect(JSON.stringify(markers)).not.toContain('secret')
     })
 })
 

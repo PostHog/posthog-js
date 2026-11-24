@@ -277,7 +277,7 @@ export class WebVitalsAutocapture implements Extension {
               : 'web-vitals'
     }
 
-    private _maskedURL(url?: string): string | undefined {
+    protected _maskedURL(url?: string): string | undefined {
         const href = url || getWindow()?.location.href
         if (!href) {
             this._client?.logger.error('[Web Vitals] Could not determine current URL')

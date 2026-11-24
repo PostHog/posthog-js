@@ -4,6 +4,7 @@ import type { RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
 import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 
 import { createFetch, type SentRequest } from './helpers'
+import { extensionHost } from './extension-host'
 
 runClientConformanceSuite('browser-next', async () => {
     const requests: SentRequest[] = []
@@ -23,7 +24,7 @@ runClientConformanceSuite('browser-next', async () => {
     })
 
     return {
-        client: posthog,
+        client: extensionHost(posthog),
         async publishRemoteConfig(result) {
             const config = posthog.getRemoteConfig()
             await Promise.resolve()

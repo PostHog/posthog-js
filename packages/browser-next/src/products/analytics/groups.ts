@@ -1,6 +1,7 @@
 import type { CaptureOptions } from '@posthog/browser-common'
 import type { IPostHog } from '../../core/types'
-import { analyticsOf, isNonEmptyString } from './analytics-core'
+import { isNonEmptyString } from './identifiers'
+import { analyticsOf } from './analytics-of'
 
 const isValidGroupKey = (value: unknown): value is string | number => isNonEmptyString(value) || Number.isFinite(value)
 

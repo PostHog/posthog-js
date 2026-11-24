@@ -79,28 +79,55 @@ With default browser storage, session properties use Core-owned per-tab storage,
 
 Registration and removal are local, do not create a session, and remain available under capture denial or `personProfiles: 'never'`. Properties registered before the first event or after the current session expires remain pending for the next admitted session. Registration does not extend session activity. On Core session rotation or adoption, old properties are excluded from the new session's events and cleared only after successful admission; rejected events retain the old scope. Full `reset()` clears session properties; `resetGroups()` retains them. Already-admitted events retain their finalized properties.
 
+## Page URL and title
+
+Every event carries the page URL as `$current_url`, with its `$host` and `$pathname`, read from `window.location` when the event is captured. `$pageview` events also carry the document `title`. Without a `window` or `document`, these properties are omitted. Registered and caller values replace them for that event. Web vitals replaces only `$current_url`, with the URL of the page it measured.
+
+By default, the URL is the page URL without its fragment, as with `posthog-js`'s current `defaults`, and credentials are always removed. `urlSanitization` selects what is kept:
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    urlSanitization: {
+        path: true, // default true; false records `/`
+        query: true, // default true; false drops query parameters
+        hash: true, // default false; true keeps the fragment, which can carry tokens
+        sanitize: (url) => {
+            url.searchParams.delete('token')
+            return url
+        },
+    },
+})
+```
+
+`sanitize` receives a copy of the page URL and runs before `path`, `query` and `hash` apply. Replay can pass it a URL it already sanitized, so it must leave a sanitized URL unchanged. It returns an absolute URL or URL string. If it throws or returns anything else, the event is sent without `$current_url`, `$host` and `$pathname`. `$host` and `$pathname` come from the sanitized URL. Actions, including survey action triggers, match on the recorded URL; survey URL conditions use the page URL and `surveys.getCurrentUrl`. Logs, web vitals and session replay record their URLs with the same `urlSanitization`; replay then applies its own `maskCapturedNetworkRequestFn`. Conversations sends the page URL without its fragment, independently of `urlSanitization`, because its restore links return to that page. Autocapture element link `href`s are not affected by `urlSanitization`; they follow `autocapture.disableCaptureUrlHashes`. The classic script's query options cannot set `urlSanitization`.
+
 ## Migrating from the analytics extension
 
 Earlier 0.x versions exposed analytics as a separate product. It is now part of the client:
 
-| Previous API                                                                  | Replacement                                                        |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                       |
-| `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                       |
-| `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                         |
-| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                       |
-| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                       |
-| `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing |
-| `IPostHogInternal`, `sharedClient`                                            | Extensions receive the `IPostHog` client in `setup()`              |
-| `analytics: false`, `/core` without the analytics extension                   | Always captures; see `capturePageview` and `autocapture` below     |
+| Previous API                                                                  | Replacement                                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `posthog.analytics?.capture()`, `captureImmediate()`, `identify()`, `reset()` | The same method on `posthog`                                          |
+| `posthog.analytics?.register*()`, `getProperty()`, `registerForSession()`     | The same method on `posthog`                                          |
+| `posthog.analytics?.onEvent`, `isRateLimited`                                 | `posthog.onEvent`, `posthog.isRateLimited`                            |
+| `posthog.analytics?.alias()`, person helpers                                  | The same method on `posthog`                                          |
+| `posthog.analytics?.group()`, `groupIdentify()`, `resetGroups()`              | The same method on `posthog`                                          |
+| `analytics()` from `@posthog/browser/analytics`, `analytics: { load }`        | The `analytics` option configures scheduling and person processing    |
+| `IPostHogInternal`, `sharedClient`                                            | Extensions receive the client in `setup()` as `IPostHogExtensionHost` |
+| `analytics: false`, `/core` without the analytics extension                   | Always captures; see `capturePageview` and `autocapture` below        |
 
 Capture is part of every client, so `analytics: false` (ignored, with a debug warning) and `/core` without the analytics extension no longer turn it off. Both entrypoints send the initial `$pageview`, `$feature_flag_called` the first time each flag value is read when flags is installed, and events from other installed products. Set `capturePageview: false` to skip the initial pageview and, on the root entrypoint, `autocapture: false` to turn off autocapture. `optOutByDefault: true` stops all capture until `optIn()`, but it also blocks flag and other product requests.
 
+Pages that load the `/static/browser/0/` alias receive this change automatically, and 0.4.x `client.analytics?.…` calls, such as `client.analytics?.capture()` in a ready handler, silently do nothing. Change each `client.analytics?.…` call to the same method on `client`.
+
 Extensions share the client's key-value store, as posthog-js extensions share its persistence. Data saved by earlier 0.x versions under per-extension namespaces is not migrated.
+
+The logs `urlCapture` option and `UrlCaptureOptions` type are removed. Logs' `url.full` now follows the client's [`urlSanitization`](#page-url-and-title), which also applies to events, and includes the query string by default. `urlCapture` dropped the query string by default, so use `urlSanitization: { query: false }` to keep 0.4.x's default of origin and path, and `urlSanitization: { path: false, query: false }` in place of `urlCapture: { path: false }`.
 
 ## Classic script installation (draft CDN distribution)
 
-The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. The proposed asset namespace is `/static/browser/<exact-version-or-major>/`; availability depends on CDN deployment. For example, once deployed:
+The CDN build supports a plain external classic script in ordinary, `async`, or `defer` placement. Assets are published under `/static/browser/<exact-version-or-major>/`. The major alias, such as `/static/browser/0/`, moves to every stable release, including breaking 0.x minors; use an exact-version URL to avoid automatic upgrades. For example:
 
 ```html
 <script async src="https://us-assets.i.posthog.com/static/browser/0/script.js?projectToken=YOUR_PROJECT_TOKEN"></script>
@@ -198,9 +225,9 @@ const posthog = await createPostHog({
 })
 ```
 
-The options mirror posthog-js `capture_performance`: `allowedMetrics` (defaults to the project setting, else `LCP`, `CLS`, `FCP` and `INP`), `attribution` (`true`, `false` or a metric list; defaults to `INP` and `LCP`), `delayedFlushMs` (default `5000`) and `previewSoftNavigations` (default `false`). Captured URLs drop fragments (`disableCaptureUrlHashes`, default `true`) and mask person-identifying campaign parameters such as `gclid` (`maskPersonalDataProperties`, default `true`, extended by `customPersonalDataProperties`). Metrics are buffered per navigation and batched into a `$web_vitals` event once every allowed metric is reported, after `delayedFlushMs`, or when the page is hidden, so one page view can produce more than one event; `flush()` does not capture them early. Metrics reported while capture is not permitted are dropped, and `reset()` and `shutdown()` discard metrics already reported to the SDK that have not been captured yet. As in posthog-js, the web-vitals library can still report an interaction that happened before `reset()`. Disposal stops capture; the browser observers themselves cannot be removed.
+The options mirror posthog-js `capture_performance`: `allowedMetrics` (defaults to the project setting, else `LCP`, `CLS`, `FCP` and `INP`), `attribution` (`true`, `false` or a metric list; defaults to `INP` and `LCP`), `delayedFlushMs` (default `5000`) and `previewSoftNavigations` (default `false`). Captured URLs, including the measured navigation URL and the LCP attribution `url`, follow the client's [`urlSanitization`](#page-url-and-title); a metric whose page URL can't be recorded is dropped. Metrics are buffered per navigation and batched into a `$web_vitals` event once every allowed metric is reported, after `delayedFlushMs`, or when the page is hidden, so one page view can produce more than one event; `flush()` does not capture them early. Metrics reported while capture is not permitted are dropped, and `reset()` and `shutdown()` discard metrics already reported to the SDK that have not been captured yet. As in posthog-js, the web-vitals library can still report an interaction that happened before `reset()`. Disposal stops capture; the browser observers themselves cannot be removed.
 
-Attribution can include CSS selectors for page elements, such as the LCP element or the interaction target, and URL masking does not apply to them. Set `attribution: false` to omit attribution. `previewSoftNavigations` only has an effect in browsers that support soft navigation detection; other browsers keep measuring hard navigations only.
+Attribution can include CSS selectors for page elements, such as the LCP element or the interaction target, and `urlSanitization` does not apply to them. Set `attribution: false` to omit attribution. `previewSoftNavigations` only has an effect in browsers that support soft navigation detection; other browsers keep measuring hard navigations only.
 
 ## Feature flags
 
@@ -283,7 +310,7 @@ Creating an extension does not initialize it. Pass it in the `extensions` option
 
 ### Lifecycle notifications
 
-Extensions receive the `IPostHog` client in `setup()`. It exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+Extensions receive the client in `setup()` as `IPostHogExtensionHost`: the `IPostHog` API plus `sendRequest()`, which sends requests through the SDK's hosts, consent checks and transport. Applications don't get `sendRequest()`. The client exposes installed products, asynchronous dependency resolution, and `onIdentify`, `onChangeProperties`, `onGroup`, `onGroupsReset` and `onReset` listeners. Identification uses `onIdentify`; person-property setters use `onChangeProperties` with `set`, `setOnce` and `unset` fields. Identification with properties publishes both kinds of notification. Group-only reset uses `onGroupsReset`; full identity reset uses `onReset`. These notifications fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
 ```ts
 import type { Disposable, IPostHog } from '@posthog/browser'
@@ -331,7 +358,7 @@ logger.captureLog({ body: 'Checkout completed' })
 
 An explicit logs extension takes precedence over the top-level option, including `false`. The manual core entrypoint never loads logs automatically. Both paths accept the same options: `captureConsoleLogs`, `serviceName`, `serviceVersion`, `environment`, `resourceAttributes`, `beforeSend`, `flushIntervalMs`, `maxBufferSize`, and `maxLogsPerInterval`. Defaults match the legacy browser SDK: a 3,000ms flush interval, 100-record flush trigger, and 1,000 programmatic logs per interval. Console logs have a separate bounded queue and `console` scope, without the programmatic rate cap. Console service defaults to `posthog-browser-logs`; programmatic service defaults to `unknown_service`.
 
-Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { path: true, search: false, hash: false } }` or pass the same `urlCapture` option to `logs()` to select which URL components are retained. These are the defaults, including for omitted fields: the origin and pathname are retained, while query parameters and fragments are removed. With `path: false`, the pathname becomes `/`. Invalid URLs are omitted. Component selection does not redact sensitive values within retained components.
+Logs includes the current page URL as `url.full`, shaped by the client's [`urlSanitization`](#page-url-and-title) like events' `$current_url`: the URL without credentials or fragment by default. A URL that can't be recorded is omitted; the log is still captured.
 
 The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits the client's capture queue and all installed extensions' flush methods, including logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 
@@ -482,7 +509,7 @@ replay?.stopSessionRecording()
 
 `startSessionRecording(true)` treats sampling, the linked flag and triggers as satisfied for the current session; pass `{ sampling, linkedFlag, urlTrigger, eventTrigger }` to choose. Overrides apply to the project's sample rate, linked flag and triggers. A project that uses trigger groups decides sampling, linked flags and triggers for each group, and neither overrides nor the local `sampleRate` option change those decisions. Capture consent still gates recording. The privacy options match posthog-js `session_recording`: input values are masked by default, `ph-no-capture` blocks an element, `ph-mask` and `maskTextSelector` mask text, and `maskCapturedNetworkRequestFn` can redact recorded network requests and page URLs. Local masking options take precedence over the project's privacy settings. `captureConsoleLogs`, `capturePerformance` and `sampleRate` override the project setting when set.
 
-A recording that starts without user interaction is held until the user interacts; a visible page that unloads still sends it. A new session that starts while the user is idle is held the same way and is dropped if nobody interacts. A recording still below the minimum duration when the page unloads continues from the next page in the same tab. Page URLs in replay metadata never include fragments; network capture records request URLs as the browser reports them, as posthog-js does, so use `maskCapturedNetworkRequestFn` to remove tokens from them. Snapshots use their own `/s/` lane in the format posthog-js sends, separate from analytics batches, with posthog-js's per-event compression and gzip request bodies when the project supports them. On pagehide, replay hands snapshots to the browser by beacon, or by keepalive request where beacons are unavailable, within 80% of the browser's keepalive quota, and sends the rest as regular requests. As in posthog-js, a keepalive request holds its bytes in a budget shared with analytics until it settles, and beacons hold none. The lane sends up to 10 snapshots per request and holds at most 100 snapshots or 25 MB; snapshots older than 10 minutes are dropped. Canvas recording follows the project setting, and `canvasCapture.maskRegionsFn` masks canvas regions as in posthog-js.
+A recording that starts without user interaction is held until the user interacts; a visible page that unloads still sends it. A new session that starts while the user is idle is held the same way and is dropped if nobody interacts. A recording still below the minimum duration when the page unloads continues from the next page in the same tab. Page URLs in replay metadata follow `urlSanitization`, so they omit fragments unless `hash: true`; network capture records request URLs as the browser reports them, as posthog-js does, so use `maskCapturedNetworkRequestFn` to remove tokens from them. Snapshots use their own `/s/` lane in the format posthog-js sends, separate from analytics batches, with posthog-js's per-event compression and gzip request bodies when the project supports them. On pagehide, replay hands snapshots to the browser by beacon, or by keepalive request where beacons are unavailable, within 80% of the browser's keepalive quota, and sends the rest as regular requests. As in posthog-js, a keepalive request holds its bytes in a budget shared with analytics until it settles, and beacons hold none. The lane sends up to 10 snapshots per request and holds at most 100 snapshots or 25 MB; snapshots older than 10 minutes are dropped. Canvas recording follows the project setting, and `canvasCapture.maskRegionsFn` masks canvas regions as in posthog-js.
 
 Use `sessionRecording: false` to omit it. For static inclusion, import `sessionRecording` from `@posthog/browser/session-recording` and pass the instance in `extensions`.
 
@@ -517,7 +544,7 @@ Both factories start one JSON remote-config request during initialization, witho
 
 When remote configuration advertises gzip, eligible normal batches use native `CompressionStream`; delivery remains uncompressed while configuration is unresolved or compression is unavailable, invalid, stalled, or larger than the JSON body. While offline, finalized events remain admitted and avoid network attempts until an `online` notification. On `pagehide`, or `unload` where `pagehide` is unavailable, queued analytics receive one synchronous uncompressed handoff through headered keepalive Fetch under one conservative aggregate body budget. Beacon remains disabled until Capture V1 supports the required metadata without request headers.
 
-One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Events captured after a `$pageview` in the same session carry its UUID as `$pageview_id`, and `posthog.getPageViewId()` returns it. Navigation tracking, URL/title enrichment, and page-leave capture remain optional product behavior.
+One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Events captured after a `$pageview` in the same session carry its UUID as `$pageview_id`, and `posthog.getPageViewId()` returns it. Events carry the page URL and pageviews the title (see [Page URL and title](#page-url-and-title)). Pageviews for client-side navigation and page-leave capture are not available yet.
 
 Consent is stored separately from identity under `__ph_opt_in_out_<project-token>`. Use `consentPersistenceName` to supply a shared key verbatim. The client reads established `1`/`true`/`yes` and `0`/`false`/`no` values, including raw boolean and numeric compatibility values, and writes `1` or `0`. Configured extensions still initialize under prior denial. Identity, key-value persistence, remote configuration, feature flag evaluation and the early-access listing remain available, as in `posthog-js`, while analytics capture and other request transmission are consent-gated.
 

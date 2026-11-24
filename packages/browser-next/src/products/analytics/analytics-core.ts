@@ -11,7 +11,13 @@ import {
     type CaptureHost,
 } from './analytics-internal'
 import type { ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { BootstrapOptions, NewSessionInfo, CaptureSummary, ResetOptions } from '../../core/types'
+import type {
+    BootstrapOptions,
+    NewSessionInfo,
+    CaptureSummary,
+    ResetOptions,
+    UrlSanitizationOptions,
+} from '../../core/types'
 import { readBootstrapSession } from '../../core/state/state'
 import type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './admission/event-buffer'
@@ -33,8 +39,11 @@ import {
     snapshotPersonProperties,
     type PersonProperties,
 } from './properties/person-processing'
+import { pageProperties, recordedUrl } from './properties/page-properties'
 import { version } from '../../primitives/version'
+import { isNonEmptyString, isValidDistinctId } from './identifiers'
 import { utf8Bytes } from '../../primitives/utf8'
+import type { LogState } from '../../platform/logger'
 
 const numberOption = (read: () => number | undefined, fallback: number, minimum: number, maximum: number): number => {
     try {
@@ -50,11 +59,6 @@ const numberOption = (read: () => number | undefined, fallback: number, minimum:
 }
 
 const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
-export const isNonEmptyString = (value: unknown): value is string =>
-    typeof value === 'string' && value.trim().length > 0
-export const isValidDistinctId = (value: unknown): value is string =>
-    isNonEmptyString(value) &&
-    !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
 
 const eventTimestamp = (timestamp: Date | undefined): string => {
     try {
@@ -114,11 +118,24 @@ export class Analytics {
     private readonly _beforeResetPublisher: Publisher<void>
     private readonly _buffer: EventBuffer<AnalyticsMessage>
     private readonly _deliveryHost: CaptureHost
+    private _reportedSanitizeFailure = false
+    // Warns once per client: a failing `sanitize` fails for every URL, and each one is omitted.
+    // The flag is set only while output is on, so enabling debug later still shows the warning.
+    private readonly _reportSanitizeFailure = (error: unknown): void => {
+        if (this._reportedSanitizeFailure || !this._logState.enabled) return
+        this._reportedSanitizeFailure = true
+        this._core.logger.warn(
+            'urlSanitization.sanitize failed or returned an invalid URL, so page URLs are omitted',
+            error
+        )
+    }
 
     constructor(
         readonly _core: AnalyticsCore,
         options: AnalyticsOptions,
-        createDelivery: AnalyticsDeliveryFactory
+        createDelivery: AnalyticsDeliveryFactory,
+        private readonly _urlSanitization: UrlSanitizationOptions,
+        private readonly _logState: LogState
     ) {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
@@ -375,9 +392,13 @@ export class Analytics {
         const pageviewId = isPageview ? uuid : activePageviewId
         // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
         // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
-        const defaults: Record<string, string> = {}
-        if (pageviewId && !snapshot.overrides.has('$pageview_id')) defaults.$pageview_id = pageviewId
-        if (activePageviewId && (isPageview || event === '$pageleave') && !snapshot.overrides.has('$prev_pageview_id'))
+        // As in posthog-js, a registered or session null also omits page context.
+        const owned = (key: string): boolean => snapshot.overrides.has(key)
+        const page = pageProperties(event, this._urlSanitization, this._reportSanitizeFailure)
+        const defaults: Record<string, unknown> = { ...page }
+        for (const key in page) if (owned(key) || key in snapshot.observed) delete defaults[key]
+        if (pageviewId && !owned('$pageview_id')) defaults.$pageview_id = pageviewId
+        if (activePageviewId && (isPageview || event === '$pageleave') && !owned('$prev_pageview_id'))
             defaults.$prev_pageview_id = activePageviewId
         const metadata = {
             token: this._core.projectToken,
@@ -411,7 +432,9 @@ export class Analytics {
                     return undefined
                 }
             }
-            const changed = applySessionProperties(snapshot, this._sessionProperties.values(session.sessionId))
+            const sessionValues = this._sessionProperties.values(session.sessionId)
+            const changed = applySessionProperties(snapshot, sessionValues)
+            for (const key in sessionValues) if (key in page) delete defaults[key]
             message.properties = { ...defaults, ...snapshot.message, ...metadata }
             if (changed) bytes = utf8Bytes(JSON.stringify(message))
             return {
@@ -663,6 +686,11 @@ export class Analytics {
         return this._canUseProperties() ? this._registeredProperties.get(property) : undefined
     }
 
+    /** Shapes a page URL with the client's `urlSanitization`, as events record `$current_url`. */
+    recordUrl(href: string | undefined): string | undefined {
+        return recordedUrl(href, this._urlSanitization, this._reportSanitizeFailure)?.href
+    }
+
     /** Registers a producer of properties for each event, given the event name as passed to capture. */
     registerDynamicEventProperties(producer: (event: string) => Record<string, unknown>): Disposable {
         if (this._disposed || this._core._disposed) return { dispose() {} }
@@ -678,7 +706,3 @@ export class Analytics {
         }
     }
 }
-
-/** The client's capture pipeline, for optional modules that extend it with less common operations. */
-export const analyticsOf = (posthog: object): Analytics | undefined =>
-    (posthog as { _analytics?: Analytics })._analytics
