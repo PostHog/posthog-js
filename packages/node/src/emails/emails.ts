@@ -484,15 +484,36 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send = snapshotOptions(options)
-  const { to, distinctId, idempotencyKey, maxRetries } = send
+  const send: Record<string, unknown> = Object.create(null)
+  const raw = isOptionsObject(options) ? options : undefined
+  const read = (name: string): unknown => {
+    const value = raw?.[name]
+    send[name] = value
+    return value
+  }
+  const to = read('to')
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
+  const distinctId = read('distinctId')
+  const idempotencyKey = read('idempotencyKey')
+  const maxRetries = read('maxRetries')
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const { content, files } = contentOf(send, options, distinctId)
+  const templateId = read('templateId')
+  const templateKey = read('templateKey')
+  if ((templateId === undefined) === (templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
+    })
+  }
+  const unchecked = send as UncheckedSend
+  const { content, files } =
+    templateKey === undefined
+      ? { content: templateContent(unchecked, raw, read, distinctId), files: [] }
+      : codeContent(unchecked, raw, read, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -518,32 +539,6 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
 
 function isOptionsObject(value: unknown): value is Record<string, unknown> {
   return value !== null && (typeof value === 'object' || typeof value === 'function')
-}
-
-function snapshotOptions(options: unknown): UncheckedSend {
-  const send: Record<string, unknown> = Object.create(null)
-  if (!isOptionsObject(options)) {
-    return send as UncheckedSend
-  }
-  for (const name of Object.keys(SHARED_FIELDS)) {
-    send[name] = options[name]
-  }
-  send.templateId = options.templateId
-  send.templateKey = options.templateKey
-  const formFields =
-    send.templateKey !== undefined && send.templateId === undefined
-      ? CODE_FIELDS
-      : send.templateId !== undefined && send.templateKey === undefined
-        ? TEMPLATE_FIELDS
-        : undefined
-  if (formFields !== undefined) {
-    for (const name of Object.keys(formFields)) {
-      if (name !== 'templateId' && name !== 'templateKey') {
-        send[name] = options[name]
-      }
-    }
-  }
-  return send as UncheckedSend
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -588,34 +583,24 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function contentOf(send: UncheckedSend, options: unknown, distinctId: string | undefined): SendContent {
-  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
-    throw new EmailError({
-      code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html, text or react.',
-    })
-  }
-  return send.templateKey === undefined
-    ? { content: templateContent(send, options, distinctId), files: [] }
-    : codeContent(send, options, distinctId)
-}
-
 function templateContent(
   send: UncheckedSend,
-  options: unknown,
+  raw: Record<string, unknown> | undefined,
+  read: (name: string) => unknown,
   distinctId: string | undefined
 ): Record<string, unknown> {
-  const { templateId, templateData } = send
+  const { templateId } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
   }
+  const templateData = read('templateData')
   if (
     templateData !== undefined &&
     (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(options, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(raw, send, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -623,8 +608,13 @@ function templateContent(
   }
 }
 
-function codeContent(send: UncheckedSend, options: unknown, distinctId: string | undefined): SendContent {
-  const { templateKey, subject, html, text, react } = send
+function codeContent(
+  send: UncheckedSend,
+  raw: Record<string, unknown> | undefined,
+  read: (name: string) => unknown,
+  distinctId: string | undefined
+): SendContent {
+  const { templateKey } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -632,7 +622,13 @@ function codeContent(send: UncheckedSend, options: unknown, distinctId: string |
       'templateKey'
     )
   }
-  refuseFieldsOutside(options, CODE_FORM, TEMPLATE_FORM)
+  for (const name of Object.keys(CODE_FIELDS)) {
+    if (name !== 'templateKey') {
+      read(name)
+    }
+  }
+  refuseFieldsOutside(raw, send, CODE_FORM, TEMPLATE_FORM)
+  const { subject, html, text, react } = send
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -781,17 +777,26 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(options: unknown, form: SendForm, otherForm: SendForm): void {
-  if (!isOptionsObject(options)) {
+function refuseFieldsOutside(
+  raw: Record<string, unknown> | undefined,
+  send: UncheckedSend,
+  form: SendForm,
+  otherForm: SendForm
+): void {
+  if (raw === undefined) {
     return
   }
   let field: string | undefined
-  for (const name of Object.getOwnPropertyNames(options)) {
+  for (const name of Object.getOwnPropertyNames(raw)) {
     if (form.fields.has(name)) {
       continue
     }
-    const descriptor = Object.getOwnPropertyDescriptor(options, name)
-    if (descriptor?.enumerable && options[name] !== undefined) {
+    const descriptor = Object.getOwnPropertyDescriptor(raw, name)
+    if (!descriptor?.enumerable) {
+      continue
+    }
+    const value = name in send ? (send as Record<string, unknown>)[name] : raw[name]
+    if (value !== undefined) {
       field = name
       break
     }

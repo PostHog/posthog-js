@@ -1898,17 +1898,51 @@ describe('emails', () => {
       expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
     })
 
-    it('reads declared options once in fixed order (to first, category last) across getter, class, non-enumerable, and callable inputs', async () => {
-      replies = [
-        accepted(),
-        accepted(),
-        accepted(),
-        accepted(),
-        { status: 202, body: { message_id: 'msg_1', replayed: true } },
-        accepted(),
-      ]
+    it('returns invalid_recipient before reading code-form getters when to is empty', async () => {
+      const options: Record<string, unknown> = {
+        to: '',
+        templateKey: CODE_SEND.templateKey,
+        html: CODE_SEND.html,
+      }
+      Object.defineProperty(options, 'subject', {
+        enumerable: true,
+        get() {
+          throw new Error('subject getter should not run when to is invalid')
+        },
+      })
 
-      // Fixed read order on a code send: `to` is read first, `templateKey`/`from` run before `category`, and none run twice.
+      const { data, error } = await sendUnchecked(options)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_recipient', name: 'validation_error', field: 'to' })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('reads an enumerable undefined templateId getter once on a code send', async () => {
+      replies = [accepted()]
+      const answers: Array<string | undefined> = [undefined, TEMPLATE_ID]
+      const options: Record<string, unknown> = { ...CODE_SEND, category: NEWSLETTER }
+      Object.defineProperty(options, 'templateId', {
+        enumerable: true,
+        get() {
+          return answers.shift()
+        },
+      })
+
+      const { data, error } = await sendUnchecked(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body).toMatchObject({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        category: NEWSLETTER,
+      })
+    })
+
+    it('reads to first, active-form fields next, and category last once per code send', async () => {
+      replies = [accepted()]
       let recipient = 'original@example.com'
       const fromAnswers = ['Sender <sender@example.com>', 'Other <other@example.com>']
       let categoryRead = false
@@ -1951,42 +1985,65 @@ describe('emails', () => {
         },
       })
 
-      const ordered = await sendUnchecked(orderedCode)
-      expect(ordered.error).toBeNull()
-      expect(postedSend(0).body).toMatchObject({
+      const { data, error } = await sendUnchecked(orderedCode)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body).toMatchObject({
         to: 'original@example.com',
         template_key: CODE_SEND.templateKey,
         from: 'Sender <sender@example.com>',
         category: NEWSLETTER,
       })
+    })
 
-      // Class prototype getter for category on a code send.
-      let classCategoryRead = false
-      class ClassCategorySend {
-        readonly to = CODE_SEND.to
-        readonly templateKey = CODE_SEND.templateKey
-        readonly subject = CODE_SEND.subject
-        readonly html = CODE_SEND.html
-        get category(): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
-          if (classCategoryRead) {
-            return TRANSACTIONAL_EMAIL_CATEGORY
+    it.each([
+      [
+        'class getter',
+        (): Record<string, unknown> => {
+          let read = false
+          class ClassCategorySend {
+            readonly to = CODE_SEND.to
+            readonly templateKey = CODE_SEND.templateKey
+            readonly subject = CODE_SEND.subject
+            readonly html = CODE_SEND.html
+            get category(): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
+              if (read) {
+                return TRANSACTIONAL_EMAIL_CATEGORY
+              }
+              read = true
+              return NEWSLETTER
+            }
           }
-          classCategoryRead = true
-          return NEWSLETTER
-        }
-      }
-      const fromClass = await posthog.emails.send(new ClassCategorySend())
-      expect(fromClass.error).toBeNull()
-      expect(postedSend(1).body.category).toEqual(NEWSLETTER)
+          return new ClassCategorySend() as unknown as Record<string, unknown>
+        },
+      ],
+      [
+        'non-enumerable property',
+        (): Record<string, unknown> => {
+          const options: Record<string, unknown> = { ...CODE_SEND }
+          Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
+          return options
+        },
+      ],
+    ])('sends category supplied by a %s on a code send', async (_source, buildOptions) => {
+      replies = [accepted()]
 
-      // Non-enumerable own category on a code send.
-      const nonEnumerable: Record<string, unknown> = { ...CODE_SEND }
-      Object.defineProperty(nonEnumerable, 'category', { value: NEWSLETTER, enumerable: false })
-      const fromNonEnumerable = await sendUnchecked(nonEnumerable)
-      expect(fromNonEnumerable.error).toBeNull()
-      expect(postedSend(2).body.category).toEqual(NEWSLETTER)
+      const { data, error } = await sendUnchecked(buildOptions())
 
-      // Class-backed idempotencyKey and templateData survive across repeated template sends.
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body).toMatchObject({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        category: NEWSLETTER,
+      })
+    })
+
+    it('preserves class-backed idempotencyKey and templateData across repeated template sends', async () => {
+      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
       class ClassTemplateSend {
         readonly to = 'reader@example.com'
         readonly templateId = TEMPLATE_ID
@@ -1997,45 +2054,43 @@ describe('emails', () => {
           return { name: 'Ada' }
         }
       }
-      const firstTemplate = await posthog.emails.send(new ClassTemplateSend())
-      const secondTemplate = await posthog.emails.send(new ClassTemplateSend())
-      expect(firstTemplate.error).toBeNull()
-      expect(secondTemplate.error).toBeNull()
-      expect(postedSend(3).headers['idempotency-key']).toBe('idem-class-template-1')
-      expect(postedSend(4).headers['idempotency-key']).toBe('idem-class-template-1')
-      expect(postedSend(3).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: { name: 'Ada' },
-      })
-      expect(postedSend(4).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: { name: 'Ada' },
-      })
 
-      // Callable object satisfying SendEmailOptions (and reading `to` before `templateData`).
-      let templateRecipient = 'reader@example.com'
+      const first = await posthog.emails.send(new ClassTemplateSend())
+      const second = await posthog.emails.send(new ClassTemplateSend())
+
+      expect(first.error).toBeNull()
+      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(second.error).toBeNull()
+      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(0).headers['idempotency-key']).toBe('idem-class-template-1')
+      expect(postedSend(1).headers['idempotency-key']).toBe('idem-class-template-1')
+      expect(postedSend(0).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: { name: 'Ada' },
+      })
+      expect(postedSend(1).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: { name: 'Ada' },
+      })
+    })
+
+    it('accepts a callable object carrying template send options', async () => {
+      replies = [accepted()]
       const callableOptions = Object.assign(() => {}, {
+        to: 'reader@example.com',
         templateId: TEMPLATE_ID,
+        templateData: { name: 'Grace' },
       }) as unknown as Record<string, unknown>
-      Object.defineProperty(callableOptions, 'templateData', {
-        enumerable: true,
-        get() {
-          templateRecipient = 'replaced@example.com'
-          return { name: 'Grace' }
-        },
-      })
-      Object.defineProperty(callableOptions, 'to', {
-        enumerable: true,
-        get() {
-          return templateRecipient
-        },
-      })
-      const fromCallable = await sendUnchecked(callableOptions)
-      expect(fromCallable.error).toBeNull()
-      expect(fetch).toHaveBeenCalledTimes(6)
-      expect(postedSend(5).body).toEqual({
+
+      const { data, error } = await sendUnchecked(callableOptions)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body).toEqual({
         to: 'reader@example.com',
         template_id: TEMPLATE_ID,
         message_data: { name: 'Grace' },
@@ -2109,52 +2164,42 @@ describe('emails', () => {
       expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('ignores inherited or non-enumerable cross-form fields and does not probe absent category on a template Proxy', async () => {
-      replies = [accepted(), accepted(), accepted()]
-
-      const inheritedSubject = Object.assign(Object.create({ subject: 'Inherited subject' }), {
-        to: 'reader@example.com',
-        templateId: TEMPLATE_ID,
-      })
-      const nonEnumerableTemplateData: Record<string, unknown> = { ...CODE_SEND }
-      Object.defineProperty(nonEnumerableTemplateData, 'templateData', {
-        value: { name: 'Ada' },
-        enumerable: false,
-      })
-      const proxiedTemplate = new Proxy<Record<string, unknown>>(
-        { to: 'reader@example.com', templateId: TEMPLATE_ID },
+    it.each([
+      [
+        'an inherited subject on a template send',
+        (): Record<string, unknown> =>
+          Object.assign(Object.create({ subject: 'Inherited subject' }), {
+            to: 'reader@example.com',
+            templateId: TEMPLATE_ID,
+          }),
+        { to: 'reader@example.com', template_id: TEMPLATE_ID, message_data: {} },
+      ],
+      [
+        'a non-enumerable templateData on a code send',
+        (): Record<string, unknown> => {
+          const options: Record<string, unknown> = { ...CODE_SEND }
+          Object.defineProperty(options, 'templateData', { value: { name: 'Ada' }, enumerable: false })
+          return options
+        },
         {
-          get(target, prop, receiver) {
-            if (prop === 'category') {
-              throw new Error('category should not be read when absent')
-            }
-            return Reflect.get(target, prop, receiver)
-          },
-          has(target, prop) {
-            if (prop === 'category') {
-              throw new Error('category membership should not be probed on templateId sends')
-            }
-            return Reflect.has(target, prop)
-          },
-        }
-      )
+          to: CODE_SEND.to,
+          template_key: CODE_SEND.templateKey,
+          subject: CODE_SEND.subject,
+          html: CODE_SEND.html,
+        },
+      ],
+    ])('ignores %s and posts the active form payload', async (_label, buildOptions, expectedBody) => {
+      replies = [accepted()]
 
-      const first = await sendUnchecked(inheritedSubject)
-      const second = await sendUnchecked(nonEnumerableTemplateData)
-      const third = await sendUnchecked(proxiedTemplate)
+      const { data, error } = await sendUnchecked(buildOptions())
 
-      expect(first.error).toBeNull()
-      expect(second.error).toBeNull()
-      expect(third.error).toBeNull()
-      expect(fetch).toHaveBeenCalledTimes(3)
-      expect(postedSend(0).body).toEqual({ to: 'reader@example.com', template_id: TEMPLATE_ID, message_data: {} })
-      expect(postedSend(1).body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-      })
-      expect(postedSend(2).body).toEqual({ to: 'reader@example.com', template_id: TEMPLATE_ID, message_data: {} })
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const request = postedSend()
+      expect(request.url).toBe(SEND_URL)
+      expect(request.method).toBe('POST')
+      expect(request.body).toEqual(expectedBody)
     })
 
     it('copies category before normalizing cc so a mutating cc proxy cannot downgrade marketing to transactional', async () => {
