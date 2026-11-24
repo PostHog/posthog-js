@@ -198,7 +198,7 @@ describe('null event properties', () => {
     expect(payload).not.toHaveProperty('gone')
   })
 
-  it('queues the event unchanged when a property getter throws during cleanup', () => {
+  it('queues the event when a property getter throws during cleanup', () => {
     const client = newPostHog()
     let reads = 0
     const flaky = {
@@ -211,7 +211,7 @@ describe('null event properties', () => {
       },
     }
     expect(() => client.capture('Getter', { flaky: { inner: flaky }, gone: null })).not.toThrow()
-    expect(queued(client, 'Getter').properties).toHaveProperty('gone', null)
+    expect(queued(client, 'Getter').properties.flaky.inner).toBe(flaky)
   })
 
   it('leaves an object with toJSON as it is', () => {
@@ -219,5 +219,45 @@ describe('null event properties', () => {
     const custom = { value: null, toJSON: () => 'custom' }
     client.capture('Custom', { custom })
     expect(queued(client, 'Custom').properties.custom).toBe(custom)
+  })
+
+  it('drops null members from events restored from a 4.x queue when sending them', async () => {
+    const store: Record<string, string> = {
+      '.posthog-rn.json': JSON.stringify({
+        version: 'v1',
+        content: {
+          [PostHogPersistedProperty.Queue]: [
+            {
+              message: {
+                event: 'Restored',
+                distinct_id: 'user-123',
+                uuid: '01950000-0000-7000-8000-000000000001',
+                timestamp: '2026-01-01T00:00:00.000Z',
+                properties: {
+                  test: null,
+                  nested: { drop: null },
+                  items: ['1', null, { drop: null }],
+                  $set: { email: null },
+                },
+              },
+            },
+          ],
+        },
+      }),
+    }
+    const customStorage = {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => {
+        store[key] = value
+      },
+    }
+    const client = newPostHog({ persistence: 'file', customStorage, disableCompression: true })
+    await client.ready()
+    await client.flush()
+
+    const batchCall = (global.fetch as any).mock.calls.find(([url]: [string]) => String(url).includes('/batch/'))
+    const sent = JSON.parse(batchCall[1].body).batch[0].properties
+    expect(sent).not.toHaveProperty('test')
+    expect(sent).toMatchObject({ nested: {}, items: ['1', null, {}], $set: { email: null } })
   })
 })

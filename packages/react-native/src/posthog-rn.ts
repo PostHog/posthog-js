@@ -3797,6 +3797,12 @@ export class PostHog extends PostHogCoreBase {
     return recordingActive
   }
 
+  // Events queued by 4.x kept their null members, so queued events are cleaned again when they are sent.
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    const normalized = super.normalizeMessage(message)
+    return withoutNullProperties(normalized) ?? normalized
+  }
+
   /**
    * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
    * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
