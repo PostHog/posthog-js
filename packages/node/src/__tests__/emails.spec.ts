@@ -1480,6 +1480,37 @@ describe('emails', () => {
       expect(postHog.emails[0].scheduledAt).toBeUndefined()
     })
 
+    it.each([
+      [
+        'is lost and replayed on a retry',
+        (postHog: FakePostHog): void => {
+          postHog.failNext('send', 'lost reply')
+          makeClient({ fetch: postHog.fetch })
+        },
+      ],
+      [
+        'arrives two seconds late',
+        (postHog: FakePostHog): void => {
+          makeClient({
+            fetch: async (url, options) => {
+              const reply = await postHog.fetch(url, options)
+              vi.setSystemTime(Date.now() + 2000)
+              return reply
+            },
+          })
+        },
+      ],
+    ])('reports an email PostHog queued now over a minute early, even when its answer %s', async (_name, connect) => {
+      const postHog = new FakePostHog({ secretKey: SECRET_KEY, queuesScheduledSendsNow: true })
+      connect(postHog)
+
+      const { data, error } = await settle(send({ scheduledAt: '2026-11-22T10:01:00.001Z' }))
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'schedule_not_confirmed', messageId: postHog.emails[0].id })
+      expect(postHog.emails).toHaveLength(1)
+    })
+
     it('accepts PostHog sending now a time at most a minute ahead, since its clock may run ahead of ours', async () => {
       const postHog = againstPostHog({ queuesScheduledSendsNow: true })
 

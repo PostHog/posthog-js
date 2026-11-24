@@ -217,10 +217,12 @@ export class EmailSender implements Emails {
         'Content-Type': 'application/json',
         'Idempotency-Key': prepared.idempotencyKey,
       })
+      const firstSentAtMs = Date.now()
       const result = await this.withRetries(prepared.maxRetries, async () =>
         parseSendReply(
           await this.request(appHost + SEND_PATH, 'POST', headers, body),
           prepared.scheduledAtMs,
+          firstSentAtMs,
           prepared.callerChoseKey
         )
       )
@@ -866,6 +868,7 @@ function replyFields(payload: unknown): Record<string, unknown> {
 function parseSendReply(
   { status, text: body, retryAfterMs }: Reply,
   scheduledAtMs: number | undefined,
+  firstSentAtMs: number,
   callerChoseKey: boolean
 ): SendEmailResult {
   const fields = replyFields(parseJson(body))
@@ -893,7 +896,7 @@ function parseSendReply(
     const result = { id, replayed: fields.replayed === true, warnings }
     return scheduledAtMs === undefined
       ? result
-      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, id, status, callerChoseKey) }
+      : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, firstSentAtMs, id, status, callerChoseKey) }
   }
   throw replyError(fields, status, retryAfterMs)
 }
@@ -903,11 +906,12 @@ const CLOCK_SKEW_MS = 60_000
 function confirmedSchedule(
   fields: Record<string, unknown>,
   scheduledAtMs: number,
+  firstSentAtMs: number,
   messageId: string,
   status: number,
   callerChoseKey: boolean
 ): string | null {
-  if (fields.status === 'queued' && fields.scheduled_at === null && scheduledAtMs - Date.now() <= CLOCK_SKEW_MS) {
+  if (fields.status === 'queued' && fields.scheduled_at === null && scheduledAtMs - firstSentAtMs <= CLOCK_SKEW_MS) {
     return null
   }
   if (fields.status === 'scheduled' && timeWithOffsetToTheMillisecond(fields.scheduled_at) === scheduledAtMs) {
@@ -920,7 +924,7 @@ function confirmedSchedule(
     messageId,
     field: 'scheduledAt',
     fix: callerChoseKey
-      ? 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey returns the same answer.'
+      ? 'Read what happened to the email with emails.get(error.messageId). Sending it again with the same idempotencyKey queues no second email, and it cannot schedule this one again.'
       : "Read what happened to the email with emails.get(error.messageId). Don't send it again: the client chose this send's idempotencyKey, so a new send with any key queues a second email.",
   })
 }

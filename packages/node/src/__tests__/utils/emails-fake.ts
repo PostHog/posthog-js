@@ -390,7 +390,7 @@ export class FakePostHog {
           detail: 'This idempotency key was used for a different email.',
         })
       }
-      return { status: 200, body: { ...earlier.answer, replayed: true } }
+      return { status: 202, body: { ...earlier.answer, replayed: true } }
     }
     const scheduling = scheduledAtMs !== undefined && this.options.answersSchedule
     const waitsUntilMs =
