@@ -44,6 +44,12 @@ function _useNavigationTracker(options?: PostHogAutocaptureNavigationTrackerOpti
     if (!navigation || !posthog) {
       return
     }
+    if (typeof posthog.screen !== 'function') {
+      console.error(
+        '[PostHog] useNavigationTracker received a client without screen(). Call useNavigationTracker(options, client).'
+      )
+      return
+    }
 
     let currentRoute: any = undefined
 
