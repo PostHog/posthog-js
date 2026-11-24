@@ -204,6 +204,24 @@ describe('session recording timing', () => {
         expect(sessions).toEqual(new Set([firstSession, posthog.session!.sessionId]))
     })
 
+    it('stays stopped when a new-session listener stops recording during rotation', async () => {
+        const { replay, posthog, transport: network } = await setup()
+        await started(replay)
+        interact()
+        await replay.flush?.()
+        const firstSession = posthog.session!.sessionId
+        posthog.onNewSession(() => replay.stopSessionRecording())
+
+        advance(31 * 60_000)
+        interact()
+        interact()
+        await replay.flush?.()
+
+        expect(posthog.session!.sessionId).not.toBe(firstSession)
+        expect(replay.sessionRecordingStarted()).toBe(false)
+        expect(snapshotEvents(network).every((event) => event.properties.$session_id === firstSession)).toBe(true)
+    })
+
     it('keeps recording the next session after reset', async () => {
         const { replay, posthog, transport: network } = await setup()
         await started(replay)
