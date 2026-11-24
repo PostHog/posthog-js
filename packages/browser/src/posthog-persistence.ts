@@ -1181,17 +1181,17 @@ export class PostHogPersistence {
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
             const hasPreviousLocalIdentity =
                 !isUndefined(previousDistinctId) || !isUndefined(localEntryBeforeMerge?.[USER_STATE])
-            if (
-                hasPreviousLocalIdentity &&
-                (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)
-            ) {
-                this._cookieIdentityChangePending = true
-                if (!this._disabled) {
-                    sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+            if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+                if (hasPreviousLocalIdentity) {
+                    this._cookieIdentityChangePending = true
+                    if (!this._disabled) {
+                        sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                    }
                 }
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
                 const siblingReset =
+                    hasPreviousLocalIdentity &&
                     nextUserState === USER_STATE_ANONYMOUS &&
                     (previousUserState === USER_STATE_IDENTIFIED ||
                         cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS ||

@@ -1944,17 +1944,16 @@ export class PostHog implements PostHogInterface {
 
         // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
         const uuid = getEventUuid(options?.uuid, uuidv7)
-        let eventProperties: Properties
+        let data: CaptureResult
         this._cookieSyncedForCurrentCapture = true
         try {
-            eventProperties = this.calculateEventProperties(event_name, properties || {}, timestamp, uuid)
+            data = {
+                uuid,
+                event: event_name,
+                properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            }
         } finally {
             this._cookieSyncedForCurrentCapture = false
-        }
-        let data: CaptureResult = {
-            uuid,
-            event: event_name,
-            properties: eventProperties,
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled

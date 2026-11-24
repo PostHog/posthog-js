@@ -1122,6 +1122,53 @@ describe('persistence', () => {
                 expect(sessionStore._get(`${persistenceName}_cookie_identity_change_pending`)).toBeNull()
             })
 
+            it.each([true, false])(
+                'flag on: adopting a shared cookie into missing main localStorage clears orphaned split_storage flags without flagging an identity change (split_storage=%s)',
+                (splitStorage) => {
+                    document.cookie = encodeCookie({
+                        distinct_id: 'shared-anonymous',
+                        $device_id: 'shared-device',
+                        $user_state: 'anonymous',
+                    })
+                    localStorage.setItem(
+                        `${persistenceName}__flags`,
+                        JSON.stringify({
+                            [ENABLED_FEATURE_FLAGS]: ['orphaned-flag'],
+                            [PERSISTENCE_FEATURE_FLAG_DETAILS]: { 'orphaned-flag': { key: 'orphaned-flag' } },
+                        })
+                    )
+                    sessionStore._remove(`${persistenceName}_cookie_identity_change_pending`)
+
+                    let lib: PostHogPersistence | undefined
+                    let splitLib: PostHogPersistence | undefined
+
+                    try {
+                        lib = new PostHogPersistence({
+                            ...makeConfig('localStorage+cookie', true),
+                            split_storage: splitStorage,
+                        })
+
+                        expect(lib.props.distinct_id).toBe('shared-anonymous')
+                        expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                        expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                        expect(localStorage.getItem(`${persistenceName}__flags`)).toBeNull()
+                        expect(lib.consumeCookieIdentityChange()).toBe(false)
+                        expect(sessionStore._get(`${persistenceName}_cookie_identity_change_pending`)).toBeNull()
+
+                        splitLib = new PostHogPersistence({
+                            ...makeConfig('localStorage+cookie', true),
+                            split_storage: true,
+                        })
+
+                        expect(splitLib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                        expect(splitLib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                    } finally {
+                        lib?.destroy()
+                        splitLib?.destroy()
+                    }
+                }
+            )
+
             it('clear resets the memoized campaign params URL so subsequent updates re-read the current URL', () => {
                 const urlSpy = vi
                     .spyOn(document, 'URL', 'get')
@@ -3408,27 +3455,28 @@ describe('posthog instance persistence', () => {
         expect(localStore._parse(`ph_${posthog.config.token}_posthog`).verify_write).toBe('yes')
     })
 
-    it('preserves campaign params, referrer, and bootstrapped flags when adopting a shared anonymous cookie into empty localStorage', () => {
+    function withCookieWinsInstance(
+        options: {
+            url: string
+            initialReferrer?: string
+            seedStorage: (key: string) => void
+            config?: Partial<PostHogConfig>
+        },
+        run: (context: {
+            key: string
+            posthog: ReturnType<ReturnType<typeof defaultPostHog>['init']>
+            captured: any[]
+        }) => void
+    ): void {
         const token = uuidv7()
         const key = `ph_${token}_posthog`
-        const sharedIdentity = {
-            distinct_id: uuidv7(),
-            $device_id: uuidv7(),
-            $user_state: 'anonymous',
-            $sesid: [Date.now(), uuidv7(), Date.now()],
-        }
-        cookieStore._set(key, sharedIdentity, 365, true, false)
-        localStore._remove(key)
-        sessionStore._remove(key)
-        sessionStore._remove(`${key}_cookie_identity_change_pending`)
+        options.seedStorage(key)
 
         let urlSpy: ReturnType<typeof vi.spyOn> | undefined
         let posthog: ReturnType<ReturnType<typeof defaultPostHog>['init']> | undefined
         try {
-            urlSpy = vi
-                .spyOn(document, 'URL', 'get')
-                .mockReturnValue('https://a.example.test/?utm_source=test&utm_medium=qa&utm_campaign=xsub')
-            referrer = 'https://marketing.example.org/'
+            urlSpy = vi.spyOn(document, 'URL', 'get').mockReturnValue(options.url)
+            referrer = options.initialReferrer ?? ''
             const captured: any[] = []
             posthog = defaultPostHog().init(
                 token,
@@ -3438,9 +3486,7 @@ describe('posthog instance persistence', () => {
                     cookieWinsOnConflict: true,
                     capture_pageview: false,
                     advanced_disable_flags: true,
-                    bootstrap: {
-                        featureFlags: { 'bootstrapped-flag': true },
-                    },
+                    ...options.config,
                     before_send: (event) => {
                         captured.push(event)
                         return event
@@ -3448,29 +3494,7 @@ describe('posthog instance persistence', () => {
                 },
                 uuidv7()
             )
-            const resetFlagsSpy = vi.spyOn(posthog.featureFlags!, 'reset')
-
-            posthog.capture('$pageview')
-            posthog.capture('follow-up')
-
-            expect(captured).toHaveLength(2)
-            expect(captured[0].properties).toMatchObject({
-                distinct_id: sharedIdentity.distinct_id,
-                $device_id: sharedIdentity.$device_id,
-                utm_source: 'test',
-                utm_medium: 'qa',
-                utm_campaign: 'xsub',
-                $referrer: 'https://marketing.example.org/',
-                $referring_domain: 'marketing.example.org',
-            })
-            expect(captured[1].properties).toMatchObject({
-                distinct_id: sharedIdentity.distinct_id,
-                utm_source: 'test',
-                utm_medium: 'qa',
-                utm_campaign: 'xsub',
-            })
-            expect(resetFlagsSpy).not.toHaveBeenCalled()
-            expect(posthog.isFeatureEnabled('bootstrapped-flag')).toBe(true)
+            run({ key, posthog, captured })
         } finally {
             urlSpy?.mockRestore()
             referrer = ''
@@ -3484,105 +3508,129 @@ describe('posthog instance persistence', () => {
             sessionStore._remove(key)
             sessionStore._remove(`${key}_cookie_identity_change_pending`)
         }
+    }
+
+    it('preserves campaign params, referrer, and bootstrapped flags when adopting a shared anonymous cookie into empty localStorage', () => {
+        const sharedIdentity = {
+            distinct_id: uuidv7(),
+            $device_id: uuidv7(),
+            $user_state: 'anonymous',
+            $sesid: [Date.now(), uuidv7(), Date.now()],
+        }
+
+        withCookieWinsInstance(
+            {
+                url: 'https://a.example.test/?utm_source=test&utm_medium=qa&utm_campaign=xsub',
+                initialReferrer: 'https://marketing.example.org/',
+                seedStorage: (key) => {
+                    cookieStore._set(key, sharedIdentity, 365, true, false)
+                    localStore._remove(key)
+                    sessionStore._remove(key)
+                    sessionStore._remove(`${key}_cookie_identity_change_pending`)
+                },
+                config: {
+                    bootstrap: {
+                        featureFlags: { 'bootstrapped-flag': true },
+                    },
+                },
+            },
+            ({ posthog, captured }) => {
+                const resetFlagsSpy = vi.spyOn(posthog.featureFlags!, 'reset')
+
+                posthog.capture('$pageview')
+                posthog.capture('follow-up')
+
+                expect(captured).toHaveLength(2)
+                expect(captured[0].properties).toMatchObject({
+                    distinct_id: sharedIdentity.distinct_id,
+                    $device_id: sharedIdentity.$device_id,
+                    utm_source: 'test',
+                    utm_medium: 'qa',
+                    utm_campaign: 'xsub',
+                    $referrer: 'https://marketing.example.org/',
+                    $referring_domain: 'marketing.example.org',
+                })
+                expect(captured[1].properties).toMatchObject({
+                    distinct_id: sharedIdentity.distinct_id,
+                    utm_source: 'test',
+                    utm_medium: 'qa',
+                    utm_campaign: 'xsub',
+                })
+                expect(resetFlagsSpy).not.toHaveBeenCalled()
+                expect(posthog.isFeatureEnabled('bootstrapped-flag')).toBe(true)
+            }
+        )
     })
 
     it('preserves current-page campaign params when capture reconciles a sibling cookie reset', () => {
-        const token = uuidv7()
-        const key = `ph_${token}_posthog`
         const resetDistinctId = uuidv7()
-        localStore._set(key, {
-            distinct_id: 'prior-identified-user',
-            $device_id: 'prior-device',
-            $user_state: 'identified',
-        })
-        sessionStore._set(key, { stale_session_prop: 'old-user' })
-        cookieStore._set(
-            key,
+
+        withCookieWinsInstance(
             {
-                distinct_id: resetDistinctId,
-                $device_id: 'prior-device',
-                $user_state: 'anonymous',
+                url: 'https://a.example.test/?utm_source=after-reset&utm_medium=cpc&utm_campaign=brand',
+                seedStorage: (key) => {
+                    localStore._set(key, {
+                        distinct_id: 'prior-identified-user',
+                        $device_id: 'prior-device',
+                        $user_state: 'identified',
+                    })
+                    sessionStore._set(key, { stale_session_prop: 'old-user' })
+                    cookieStore._set(
+                        key,
+                        {
+                            distinct_id: resetDistinctId,
+                            $device_id: 'prior-device',
+                            $user_state: 'anonymous',
+                        },
+                        365,
+                        true,
+                        false
+                    )
+                },
             },
-            365,
-            true,
-            false
-        )
+            ({ key, posthog, captured }) => {
+                posthog.capture('$pageview')
+                posthog.capture('follow-up')
 
-        let urlSpy: ReturnType<typeof vi.spyOn> | undefined
-        let posthog: ReturnType<ReturnType<typeof defaultPostHog>['init']> | undefined
-        try {
-            urlSpy = vi
-                .spyOn(document, 'URL', 'get')
-                .mockReturnValue('https://a.example.test/?utm_source=after-reset&utm_medium=cpc&utm_campaign=brand')
-            const captured: any[] = []
-            posthog = defaultPostHog().init(
-                token,
-                {
-                    persistence: 'localStorage+cookie',
-                    cross_subdomain_cookie: true,
-                    cookieWinsOnConflict: true,
-                    capture_pageview: false,
-                    advanced_disable_flags: true,
-                    before_send: (event) => {
-                        captured.push(event)
-                        return event
+                expect(captured[0].properties).toMatchObject({
+                    distinct_id: resetDistinctId,
+                    utm_source: 'after-reset',
+                    utm_medium: 'cpc',
+                    utm_campaign: 'brand',
+                })
+                expect(captured[0].properties).not.toHaveProperty('stale_session_prop')
+                expect(captured[1].properties).toMatchObject({
+                    distinct_id: resetDistinctId,
+                    utm_source: 'after-reset',
+                    utm_medium: 'cpc',
+                    utm_campaign: 'brand',
+                })
+
+                // Live sibling reset observed right before capture on the same campaign URL
+                const secondResetDistinctId = uuidv7()
+                posthog.register_for_session({ live_stale_prop: 'remove-me' })
+                cookieStore._set(
+                    key,
+                    {
+                        distinct_id: secondResetDistinctId,
+                        $device_id: 'prior-device',
+                        $user_state: 'anonymous',
                     },
-                },
-                uuidv7()
-            )
+                    365,
+                    true,
+                    false
+                )
+                posthog.capture('after-live-reset')
 
-            posthog.capture('$pageview')
-            posthog.capture('follow-up')
-
-            expect(captured[0].properties).toMatchObject({
-                distinct_id: resetDistinctId,
-                utm_source: 'after-reset',
-                utm_medium: 'cpc',
-                utm_campaign: 'brand',
-            })
-            expect(captured[0].properties).not.toHaveProperty('stale_session_prop')
-            expect(captured[1].properties).toMatchObject({
-                distinct_id: resetDistinctId,
-                utm_source: 'after-reset',
-                utm_medium: 'cpc',
-                utm_campaign: 'brand',
-            })
-
-            // Live sibling reset observed right before capture on the same campaign URL
-            const secondResetDistinctId = uuidv7()
-            posthog.register_for_session({ live_stale_prop: 'remove-me' })
-            cookieStore._set(
-                key,
-                {
+                expect(captured[2].properties).toMatchObject({
                     distinct_id: secondResetDistinctId,
-                    $device_id: 'prior-device',
-                    $user_state: 'anonymous',
-                },
-                365,
-                true,
-                false
-            )
-            posthog.capture('after-live-reset')
-
-            expect(captured[2].properties).toMatchObject({
-                distinct_id: secondResetDistinctId,
-                utm_source: 'after-reset',
-                utm_medium: 'cpc',
-                utm_campaign: 'brand',
-            })
-            expect(captured[2].properties).not.toHaveProperty('live_stale_prop')
-        } finally {
-            urlSpy?.mockRestore()
-            posthog?.persistence?.clear()
-            posthog?.persistence?.destroy()
-            posthog?.sessionPersistence?.clear()
-            posthog?.sessionPersistence?.destroy()
-            cookieStore._remove(key, false)
-            cookieStore._remove(key, true)
-            localStore._remove(key)
-            sessionStore._remove(key)
-            sessionStore._remove(`${key}_cookie_identity_change_pending`)
-        }
+                    utm_source: 'after-reset',
+                    utm_medium: 'cpc',
+                    utm_campaign: 'brand',
+                })
+                expect(captured[2].properties).not.toHaveProperty('live_stale_prop')
+            }
+        )
     })
 })
 

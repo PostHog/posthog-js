@@ -167,6 +167,7 @@
         "_context",
         "_cookieIdentityChangePending",
         "_cookieSyncSuppressed",
+        "_cookieSyncedForCurrentCapture",
         "_copiedTextHandler",
         "_core",
         "_coreLogger",
