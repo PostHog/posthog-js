@@ -217,7 +217,23 @@ describe('null event properties', () => {
       },
     }
     expect(() => client.capture('Getter', { flaky: { inner: flaky }, gone: null })).not.toThrow()
+    expect(reads).toBe(1)
     expect(queued(client, 'Getter').properties.flaky.inner).toBe(flaky)
+    expect(queued(client, 'Getter').properties).toHaveProperty('gone', null)
+  })
+
+  it('cleans event properties once during capture', () => {
+    const client = newPostHog()
+    let reads = 0
+    const tracked = {
+      get value(): number {
+        reads++
+        return 1
+      },
+    }
+    client.capture('Tracked', { tracked, gone: null })
+    expect(reads).toBe(1)
+    expect(queued(client, 'Tracked').properties).not.toHaveProperty('gone')
   })
 
   it('leaves an object with toJSON as it is', () => {

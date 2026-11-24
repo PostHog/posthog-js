@@ -3799,7 +3799,7 @@ export class PostHog extends PostHogCoreBase {
     return recordingActive
   }
 
-  // Events queued by 4.x kept their null members, so queued events are cleaned again when they are sent.
+  // The one null-property cleanup for enqueue(), sendImmediate() and events restored from a 4.x queue.
   protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
     const normalized = super.normalizeMessage(message)
     return withoutNullProperties(normalized) ?? normalized
@@ -3822,7 +3822,7 @@ export class PostHog extends PostHogCoreBase {
       const observation = this._fatalCaptureObservation
       const isObservedFatal =
         observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
-      const processed = withoutNullProperties(super.processBeforeEnqueue(message))
+      const processed = super.processBeforeEnqueue(message)
       let backdated = false
       if (processed) {
         try {
@@ -3842,10 +3842,10 @@ export class PostHog extends PostHogCoreBase {
           // Native runs its own debug-property builder on the handed-off event, so the JS
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
-          observation.nativeCapture = observation.prepareNativeCapture({
-            ...processed,
-            properties: withoutDebugProperties(processed.properties),
-          })
+          const nativePayload = { ...processed, properties: withoutDebugProperties(processed.properties) }
+          observation.nativeCapture = observation.prepareNativeCapture(
+            withoutNullProperties(nativePayload) ?? nativePayload
+          )
         } catch (e) {
           this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
           observation.nativeCapture = undefined
