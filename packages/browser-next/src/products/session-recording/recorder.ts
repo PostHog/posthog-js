@@ -362,6 +362,8 @@ export class SessionRecorder {
     dispose(): void {
         if (this._disposed) return
         this.stop()
+        // hands over the buffer stop() just queued, which disposing the delivery would drop, as posthog-js's shutdown does
+        this._delivery.teardown()
         this._disposed = true
         this._unloadSubscription.dispose()
         void this._delivery.dispose()
