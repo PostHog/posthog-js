@@ -22,6 +22,13 @@ stable with no server-side store.
 The SDK publishes no standalone `$identify` event. The `identify` callback runs on every request,
 on any pod, and stamps `distinct_id` and `$set` onto each event it sends.
 
+A custom event from `analytics.capture()` takes the session and identity of the request it
+was captured in, even when requests overlap on one instance. That needs `AsyncLocalStorage`,
+which Node, Bun, Deno, Vercel Edge and Cloudflare Workers with the `nodejs_compat` or
+`nodejs_als` flag provide. Without it the SDK cannot tell requests apart, so it sends custom
+events with a session of their own and no identity rather than another caller's, and logs one
+warning.
+
 ### Streamable HTTP: set `enableJsonResponse: true`
 
 The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`

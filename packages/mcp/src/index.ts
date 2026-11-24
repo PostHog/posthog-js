@@ -252,7 +252,14 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   }
 
   const scope = currentRequestScope(trackingData)
-  const unattributed = !scope && !canScopeRequests
+  const unattributed = !scope && !(await canScopeRequests())
+  if (unattributed && !trackingData.warnedUnattributedCustomEvents) {
+    trackingData.warnedUnattributedCustomEvents = true
+    trackingData.logger(
+      'Warning: this runtime has no AsyncLocalStorage, so custom events cannot be tied to the request that captured them. ' +
+        'They are sent with a session of their own and no identity. On Cloudflare Workers, enable the nodejs_compat or nodejs_als compatibility flag.'
+    )
+  }
   const event: McpEvent = {
     sessionId: scope?.sessionId ?? (unattributed ? newSessionId() : trackingData.sessionId),
     sessionSource: scope ? scope.sessionSource : unattributed ? 'generated' : instanceSessionSource(trackingData),

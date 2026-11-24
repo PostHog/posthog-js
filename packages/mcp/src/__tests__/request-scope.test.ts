@@ -6,14 +6,22 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
 
-type Runtime = 'async context' | 'no async context'
+type Runtime = 'async context' | 'module import only' | 'no async context'
 type Method = 'tools/call' | 'tools/list' | 'resources/read'
 
-/** Loads the SDK fresh, as a runtime without `process.getBuiltinModule` (Workers without Node compatibility) would. */
+/**
+ * Loads the SDK fresh, as each runtime would: Node has `process.getBuiltinModule`;
+ * Workers with only `nodejs_als` reach `AsyncLocalStorage` through a module import
+ * alone; Workers without Node compatibility have neither.
+ */
 async function loadSdk(runtime: Runtime) {
   vi.resetModules()
-  const original = process.getBuiltinModule
+  vi.doUnmock('node:async_hooks')
   if (runtime === 'no async context') {
+    vi.doMock('node:async_hooks', () => ({}))
+  }
+  const original = process.getBuiltinModule
+  if (runtime !== 'async context') {
     ;(process as { getBuiltinModule?: unknown }).getBuiltinModule = undefined
   }
   try {
@@ -41,7 +49,11 @@ const requests: Record<Method, MCPRequestLike> = {
 }
 
 /** A server whose every handler captures a custom event, after waiting at `pause` for its caller. */
-function createServer({ sdk, utils }: Sdk, pause: (name: string) => Promise<void> = async () => {}) {
+function createServer(
+  { sdk, utils }: Sdk,
+  pause: (name: string) => Promise<void> = async () => {},
+  logs: string[] = []
+) {
   const server = new Server({ name: 'request-scope', version: '1.0.0' }, { capabilities: { tools: {}, resources: {} } })
   const lowLevel = server as unknown as MCPServerLike
   const handle = async (extra: unknown): Promise<void> => {
@@ -62,6 +74,7 @@ function createServer({ sdk, utils }: Sdk, pause: (name: string) => Promise<void
   })
   const analytics = sdk.instrument(lowLevel, utils.fakePostHog(), {
     enableConversationId: false,
+    logger: (message) => logs.push(String(message)),
     identify: async (_request, extra) => ({
       distinctId: callerOf(extra),
       groups: { org: `${callerOf(extra)}-org` },
@@ -71,7 +84,7 @@ function createServer({ sdk, utils }: Sdk, pause: (name: string) => Promise<void
     lowLevel._requestHandlers.get(method)!(requests[method], extra)
 }
 
-const runtimes: Runtime[] = ['async context', 'no async context']
+const runtimes: Runtime[] = ['async context', 'module import only', 'no async context']
 const methods: Method[] = ['tools/call', 'tools/list', 'resources/read']
 const cases = runtimes.flatMap((runtime) => methods.map((method) => [runtime, method] as const))
 
@@ -82,7 +95,7 @@ const cases = runtimes.flatMap((runtime) => methods.map((method) => [runtime, me
 function expectCustomEventsAttributed(loaded: Sdk, runtime: Runtime, callers: string[]): void {
   const calls = loaded.capture.findCapturesByEvent('$mcp_tool_call')
   const customs = loaded.capture.findCapturesByEvent('domain_action')
-  if (runtime === 'async context') {
+  if (runtime !== 'no async context') {
     for (const name of callers) {
       const own = customs.filter((e) => e.distinct_id === name)
       expect(own).toHaveLength(1)
@@ -144,5 +157,17 @@ describe('a custom event captured while a request is handled', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expectCustomEventsAttributed(loaded, runtime, ['alice', 'bob'])
+  })
+
+  it.each(runtimes)('warns once per server when custom events cannot be attributed (%s)', async (runtime) => {
+    loaded = await loadSdk(runtime)
+    const logs: string[] = []
+    const send = createServer(loaded, undefined, logs)
+
+    await send('tools/call', caller('alice'))
+    await send('tools/call', caller('bob'))
+
+    const warnings = logs.filter((message) => message.includes('no AsyncLocalStorage'))
+    expect(warnings).toHaveLength(runtime === 'no async context' ? 1 : 0)
   })
 })

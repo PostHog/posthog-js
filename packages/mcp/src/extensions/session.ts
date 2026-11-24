@@ -138,8 +138,8 @@ function readHostSessionId(
  *   1. the client named the conversation in `_meta`          — a tool call
  *   2. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   3. the request carried a session id                      — 2025-11-25
- *   4. nothing was carried, so reuse this instance's own id  — stdio;
- *      a handle-free client's HTTP call gets a fresh id of its own instead
+ *   4. nothing was carried: a one-client connection (stdio) reuses this
+ *      instance's own id; a stateless HTTP request gets a fresh id of its own
  *
  * A client that names its conversation (1) sends that id on every call, while a
  * handle (2) groups calls only while the agent copies it into each one, so the

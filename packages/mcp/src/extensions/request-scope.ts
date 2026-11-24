@@ -13,45 +13,81 @@ interface AsyncLocalStorageLike<T> {
   getStore(): T | undefined
 }
 
-type AsyncLocalStorageConstructor = new <T>() => AsyncLocalStorageLike<T>
+function createScopeStore(candidate: unknown): AsyncLocalStorageLike<RequestScope> | undefined {
+  try {
+    if (typeof candidate !== 'function') {
+      return undefined
+    }
+    const store = new (candidate as new () => AsyncLocalStorageLike<RequestScope>)()
+    return typeof store.run === 'function' && typeof store.getStore === 'function' ? store : undefined
+  } catch {
+    return undefined
+  }
+}
 
-// `getBuiltinModule` loads it synchronously without a static `node:` import, so a
-// runtime without it still loads us. Edge runtimes that expose it as a global
-// (Vercel Edge, Workers with `nodejs_als`) use that instead.
-function loadAsyncLocalStorage(): AsyncLocalStorageConstructor | undefined {
+// Node, Bun, Deno and Workers with `nodejs_compat` have `getBuiltinModule`, which
+// loads it without a static `node:` import; Vercel Edge has a global.
+function findSynchronously(): AsyncLocalStorageLike<RequestScope> | undefined {
   const runtime = globalThis as {
     AsyncLocalStorage?: unknown
     process?: { getBuiltinModule?: (id: string) => { AsyncLocalStorage?: unknown } | undefined }
   }
+  let builtin: unknown
   try {
-    return (runtime.process?.getBuiltinModule?.('node:async_hooks')?.AsyncLocalStorage ?? runtime.AsyncLocalStorage) as
-      | AsyncLocalStorageConstructor
-      | undefined
+    builtin = runtime.process?.getBuiltinModule?.('node:async_hooks')?.AsyncLocalStorage
   } catch {
-    return runtime.AsyncLocalStorage as AsyncLocalStorageConstructor | undefined
+    builtin = undefined
+  }
+  return createScopeStore(builtin) ?? createScopeStore(runtime.AsyncLocalStorage)
+}
+
+// Workers with only `nodejs_als` expose it to a module import and nowhere else. The
+// specifier is a variable so bundlers leave the import to the runtime, where it
+// fails cleanly when the module does not exist.
+async function importAsyncHooks(): Promise<AsyncLocalStorageLike<RequestScope> | undefined> {
+  const moduleId = 'node:async_hooks'
+  try {
+    const module = (await import(/* webpackIgnore: true */ /* @vite-ignore */ moduleId)) as {
+      AsyncLocalStorage?: unknown
+    }
+    return createScopeStore(module.AsyncLocalStorage)
+  } catch {
+    return undefined
   }
 }
 
-const AsyncLocalStorageImpl = loadAsyncLocalStorage()
-const scopes = AsyncLocalStorageImpl ? new AsyncLocalStorageImpl<RequestScope>() : undefined
+let scopes = findSynchronously()
+let lookup: Promise<AsyncLocalStorageLike<RequestScope> | undefined> | undefined
+
+function requestScopes(): Promise<AsyncLocalStorageLike<RequestScope> | undefined> {
+  if (scopes) {
+    return Promise.resolve(scopes)
+  }
+  lookup ??= importAsyncHooks().then((found) => (scopes = found))
+  return lookup
+}
 
 /**
- * Without async context nothing tells which request a custom event belongs to, so
- * it cannot borrow the instance's session: that is the last caller's.
+ * Whether custom events can be told apart by request. Without async context nothing
+ * says which request one belongs to, so it cannot borrow the instance's session:
+ * that is the last caller's.
  */
-export const canScopeRequests = scopes !== undefined
+export async function canScopeRequests(): Promise<boolean> {
+  return (await requestScopes()) !== undefined
+}
 
 /** A concurrent request may rewrite the instance's session while the handler awaits, so custom events read session and identity from this scope. */
-export function runInRequestScope<R>(
+export async function runInRequestScope<R>(
   data: MCPAnalyticsData,
   prepared: { event: McpEvent; requestAttribution: SessionInfo } | null,
   fn: () => Promise<R>
 ): Promise<R> {
+  const store = await requestScopes()
   const sessionId = prepared?.event.sessionId
-  if (!scopes || !prepared || !sessionId) {
+  if (!store || !prepared || !sessionId) {
     return fn()
   }
-  return scopes.run(
+  return store.run(
     { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution },
     fn
   )

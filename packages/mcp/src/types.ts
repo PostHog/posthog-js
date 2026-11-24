@@ -91,6 +91,12 @@ export interface McpAnalytics {
    * verbatim (a customer event, so it is not `$`-prefixed). Resolves once the event
    * has been processed. Use for domain-specific actions that aren't auto-captured
    * (user feedback, workflow milestones, etc).
+   *
+   * Captured while a request is handled, the event carries that request's session and
+   * identity. That needs `AsyncLocalStorage` (Node, Bun, Deno, Vercel Edge, Cloudflare
+   * Workers with `nodejs_compat` or `nodejs_als`). Without it, nothing tells requests
+   * apart, so the event gets a session of its own and no identity rather than another
+   * caller's, and the SDK logs one warning.
    */
   capture(eventData: CaptureEventData): Promise<void>
 }
@@ -142,8 +148,9 @@ export interface MCPAnalyticsOptions {
    * instances.
    *
    * On by default, and fully inert when disabled: no parameter is injected, no schema is
-   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
-   * before (the request's own session id, else this instance's).
+   * touched, no prompt-back is appended, and `$session_id` comes from the request's own
+   * session, else a one-client connection's (stdio), else a fresh one for each stateless
+   * HTTP request that carries none.
    */
   enableConversationId?: boolean
   /**
@@ -635,6 +642,7 @@ export interface MCPAnalyticsData {
   toolInputSchemas: BoundedCache<Map<string, unknown>>
   /** From `cacheToolListing`: outside the LRU, so other sessions' listings never evict it. */
   seededToolInputSchemas?: Map<string, unknown>
+  warnedUnattributedCustomEvents?: boolean
 }
 
 export interface CaptureEventData {
