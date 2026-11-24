@@ -17,7 +17,7 @@ import {
 import { createLogger } from './extensions/logger'
 import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
-import { canScopeRequests, currentRequestScope } from './extensions/request-scope'
+import { canScopeRequests, currentRequestScope, holdCustomEvent } from './extensions/request-scope'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import {
   deriveSessionIdFromMCPSession,
@@ -274,8 +274,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
   if (scope?.pending && !scope.pending.settled) {
-    // Sent once the call settles; its duration is still the moment it was captured.
-    scope.pending.events.push({ ...event, duration: 0 })
+    holdCustomEvent(scope.pending, event, trackingData.logger)
     return
   }
   const attribution =

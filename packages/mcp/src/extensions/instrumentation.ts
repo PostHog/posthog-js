@@ -269,7 +269,10 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     preparedEvent.event.parameters = undefined
   }
 
-  const pendingCustomEvents: PendingCustomEvents | undefined = conversation.minted ? { events: [] } : undefined
+  // Only a session the minted handle chose can still change with the outcome.
+  const pendingCustomEvents: PendingCustomEvents | undefined = preparedEvent?.sessionWithoutHandle
+    ? { events: [] }
+    : undefined
   let result: unknown
   try {
     result = await runInRequestScope(data, preparedEvent, () => execute(downstreamRequest), pendingCustomEvents)
@@ -465,9 +468,11 @@ async function prepareToolCallEvent(
     } = resolveSession(server, extra, conversation.conversationId, request, client)
     // Resolved now, with the handle's, so both describe the call as it arrived.
     // Only when the minted handle chose the session; a host or client id outranks it.
+    // The handle chose the session only when the host's callback declined, so the
+    // fallback skips the callback rather than asking it again.
     const sessionWithoutHandle =
       conversation.minted && sessionSource === 'conversation'
-        ? resolveSession(server, extra, undefined, request, client)
+        ? resolveSession(server, extra, undefined, undefined, client)
         : undefined
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.

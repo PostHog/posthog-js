@@ -6,6 +6,7 @@ import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token
 import { getServerTrackingData } from '../extensions/internal'
 import { deriveSessionIdFromConversation, resolveSession } from '../extensions/session'
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
+import { MAX_HELD_CUSTOM_EVENTS } from '../extensions/request-scope'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -497,5 +498,77 @@ describe('a custom event captured on a minted handle', () => {
     )
 
     expect(Date.now() - started).toBeLessThan(150)
+  })
+
+  /** A tool call on a stateless HTTP request with a minted handle, whose tool runs `body` with the analytics handle. */
+  async function callMintingTool(
+    body: (analytics: ReturnType<typeof instrument>) => Promise<void>,
+    options: Parameters<typeof instrument>[2] = {}
+  ): Promise<void> {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      await body(analytics)
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true, ...options })
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    )
+    await new Promise((r) => setTimeout(r, 50))
+  }
+
+  it('asks a declining host session callback once per call', async () => {
+    let asked = 0
+    await callMintingTool(async (analytics) => analytics.capture({ event: 'inside_tool' }), {
+      sessionId: () => {
+        asked += 1
+        return undefined
+      },
+    })
+
+    expect(asked).toBe(1)
+  })
+
+  it.each([
+    ['the host fixes the session, so it is sent at once', () => 'host-session', 1],
+    ['a minted handle chose the session, so it waits for the call', undefined, 0],
+  ] as const)('completes a capture when %s', async (_case, sessionId, sentDuringTheCall) => {
+    let sent = -1
+    await callMintingTool(
+      async (analytics) => {
+        await analytics.capture({ event: 'inside_tool' })
+        sent = capture.findCapturesByEvent('inside_tool').length
+      },
+      sessionId ? { sessionId } : {}
+    )
+
+    expect(sent).toBe(sentDuringTheCall)
+    expect(capture.findCapturesByEvent('inside_tool')).toHaveLength(1)
+  })
+
+  it('keeps the properties and options a held event was captured with', async () => {
+    await callMintingTool(async (analytics) => {
+      const properties: Record<string, number> = { step: 0 }
+      const eventOptions = { process_person_profile: true }
+      await analytics.capture({ event: 'progress', properties, eventOptions })
+      properties.step = 1
+      await analytics.capture({ event: 'progress', properties })
+      delete properties.step
+      eventOptions.process_person_profile = false
+    })
+
+    expect(capture.findCapturesByEvent('progress').map((e) => e.properties.step)).toEqual([0, 1])
+  })
+
+  it('holds at most its bound of custom events per call', async () => {
+    await callMintingTool(async (analytics) => {
+      for (let i = 0; i < MAX_HELD_CUSTOM_EVENTS + 5; i++) {
+        await analytics.capture({ event: 'tick' })
+      }
+    })
+
+    expect(capture.findCapturesByEvent('tick')).toHaveLength(MAX_HELD_CUSTOM_EVENTS)
   })
 })
