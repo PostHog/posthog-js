@@ -1175,6 +1175,48 @@ describe('$experiment_exposure', () => {
             ])
         })
 
+        it('keeps at most 10 keys per flag, and evicts the oldest one at a time', async () => {
+            const client = createTestClient()
+            const harness = await setup({ client })
+            await harness.load(response([split()]))
+            const keysOf = (company: string): string[] => [
+                JSON.stringify([
+                    'annual',
+                    [['company', company]],
+                    2,
+                    'experiment_split',
+                    RULE,
+                    'experiment',
+                    'annual-first',
+                ]),
+                JSON.stringify(['$experiment_exposure', [['company', company]], 2, RULE, 'annual-first']),
+            ]
+            const readAs = (company: string): void => {
+                client.groups = { company }
+                harness.flags.getFeatureFlag(FLAG)
+            }
+
+            // Each group adds the keys of both events.
+            for (let i = 0; i < 5; i++) {
+                readAs(`company-${i}`)
+            }
+            expect(storedReports(client)[FLAG]).toEqual([0, 1, 2, 3, 4].flatMap((i) => keysOf(`company-${i}`)))
+
+            readAs('company-5')
+            expect(storedReports(client)[FLAG]).toEqual([1, 2, 3, 4, 5].flatMap((i) => keysOf(`company-${i}`)))
+            for (let i = 6; i < 30; i++) {
+                readAs(`company-${i}`)
+            }
+            expect(storedReports(client)[FLAG]).toEqual([25, 26, 27, 28, 29].flatMap((i) => keysOf(`company-${i}`)))
+
+            // The groups that are still stored send nothing again, and an evicted one sends both events.
+            harness.events.length = 0
+            readAs('company-25')
+            expect(harness.events).toEqual([])
+            readAs('company-0')
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED, EXPOSURE])
+        })
+
         it('a reported call never suppresses its exposure, and the reverse', async () => {
             const harness = await setup()
             await harness.load(response([split()]))

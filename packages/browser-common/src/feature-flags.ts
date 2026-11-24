@@ -378,6 +378,11 @@ export type ConfigVersion2FlagEvents = {
 
 const FLAGS_RESPONSE_V2: FlagsResponseFormat = { version: 2 }
 
+// The most reported calls a flag keeps once it stores config version 2 keys. Those keys include
+// the groups, so each group context adds keys. A new key evicts the oldest ones, so the stored
+// reported calls stay bounded and are never cleared because they are full.
+const MAX_REPORTED_CALLS_PER_FLAG = 10
+
 /** Who read a flag, and where. An exposure is reported only in the context of its read. */
 type FlagCallContext = {
     distinctId: string | undefined
@@ -1780,7 +1785,8 @@ export class PostHogFeatureFlags implements Extension {
      * last two the read is also held, so the next capture sends it. After a throw, one later read
      * tries again; after a second throw the event waits for the next page or identity. An event
      * that `before_send` discards keeps its key: the application chose to drop it, and later reads
-     * would be dropped the same way. A failure is logged and never reaches the read.
+     * would be dropped the same way. A failure is logged and never reaches the read. A flag keeps
+     * at most {@link MAX_REPORTED_CALLS_PER_FLAG} reported calls, and a new key evicts the oldest.
      */
     private _captureFlagEventOnce(key: string, dedupeKey: string, flagEvent: FlagEvent, hold: () => void): void {
         const reported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
@@ -1792,7 +1798,12 @@ export class PostHogFeatureFlags implements Extension {
         if (reported[key]?.includes(dedupeKey) || throws > 1) {
             return
         }
-        this._set({ [FLAG_CALL_REPORTED]: { ...reported, [key]: [...(reported[key] || []), dedupeKey] } })
+        this._set({
+            [FLAG_CALL_REPORTED]: {
+                ...reported,
+                [key]: [...(reported[key] || []), dedupeKey].slice(-MAX_REPORTED_CALLS_PER_FLAG),
+            },
+        })
         let threw = false
         this._flagEventCaptures.set(flagEvent.properties, {
             ...flagEvent.capture,
