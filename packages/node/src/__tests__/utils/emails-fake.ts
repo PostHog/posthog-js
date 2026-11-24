@@ -91,6 +91,7 @@ export interface FakePostHogOptions {
   suppressed?: string[]
   /** How many batch requests answer `delivery_unavailable` for an address before PostHog queues its email. */
   unavailableFor?: Record<string, number>
+  queuesScheduledSendsNow?: boolean
 }
 
 export interface QueuedAttachment {
@@ -192,6 +193,7 @@ export class FakePostHog {
       batchUnavailable: false,
       suppressed: [],
       unavailableFor: {},
+      queuesScheduledSendsNow: false,
       ...options,
     }
   }
@@ -426,11 +428,13 @@ export class FakePostHog {
           detail: 'This idempotency key was used for a different email.',
         })
       }
-      return { status: 200, body: { ...earlier.answer, replayed: true } }
+      return { status: 202, body: { ...earlier.answer, replayed: true } }
     }
     const scheduling = scheduledAtMs !== undefined && this.options.answersSchedule
     const waitsUntilMs =
-      scheduling && scheduledAtMs > Date.now() ? scheduledAtMs + this.options.scheduleShiftMs : undefined
+      scheduling && scheduledAtMs > Date.now() && !this.options.queuesScheduledSendsNow
+        ? scheduledAtMs + this.options.scheduleShiftMs
+        : undefined
     const queued = {
       id: globalThis.crypto.randomUUID(),
       ...email,

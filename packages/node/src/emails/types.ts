@@ -27,6 +27,10 @@ export interface SendEmailBase {
    * Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends
    * nothing and returns an error with code `scheduling_requires_cloud`. Work out a relative time, such as an hour from
    * now, once, and send the same time when you send again with the same `idempotencyKey`.
+   *
+   * When PostHog accepts the email but doesn't confirm the time, such as when it queues a time more than a minute
+   * ahead to go out now, the client returns an error with code `schedule_not_confirmed` and the email's
+   * `messageId`.
    */
   scheduledAt?: Date | string
 }

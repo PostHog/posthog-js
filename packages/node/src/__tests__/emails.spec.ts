@@ -1480,6 +1480,47 @@ describe('emails', () => {
       expect(postHog.emails[0].scheduledAt).toBeUndefined()
     })
 
+    it.each([
+      [
+        'is lost and replayed on a retry',
+        (postHog: FakePostHog): void => {
+          postHog.failNext('send', 'lost reply')
+          makeClient({ fetch: postHog.fetch })
+        },
+      ],
+      [
+        'arrives two seconds late',
+        (postHog: FakePostHog): void => {
+          makeClient({
+            fetch: async (url, options) => {
+              const reply = await postHog.fetch(url, options)
+              vi.setSystemTime(Date.now() + 2000)
+              return reply
+            },
+          })
+        },
+      ],
+    ])('reports an email PostHog queued now over a minute early, even when its answer %s', async (_name, connect) => {
+      const postHog = new FakePostHog({ secretKey: SECRET_KEY, queuesScheduledSendsNow: true })
+      connect(postHog)
+
+      const { data, error } = await settle(send({ scheduledAt: '2026-11-22T10:01:00.001Z' }))
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'schedule_not_confirmed', messageId: postHog.emails[0].id })
+      expect(postHog.emails).toHaveLength(1)
+    })
+
+    it('accepts PostHog sending now a time at most a minute ahead, since its clock may run ahead of ours', async () => {
+      const postHog = againstPostHog({ queuesScheduledSendsNow: true })
+
+      const { data, error } = await settle(send({ scheduledAt: '2026-11-22T10:01:00Z' }))
+
+      expect(error).toBeNull()
+      expect(data?.scheduledAt).toBeNull()
+      expect(postHog.emails).toHaveLength(1)
+    })
+
     it('leaves scheduledAt out of the result of a send without it', async () => {
       againstPostHog()
 
@@ -1533,12 +1574,14 @@ describe('emails', () => {
     })
 
     it.each([
-      ['leaves the time out of its answer', { answersSchedule: false }],
-      ['schedules it for another time', { scheduleShiftMs: 1 }],
-    ])('reports an email PostHog accepted but %s, with its message ID', async (_name, server) => {
+      ['leaves the time out of its answer', { answersSchedule: false }, '2026-11-23T09:00:00Z'],
+      ['schedules it for another time', { scheduleShiftMs: 1 }, '2026-11-23T09:00:00Z'],
+      ['queues it now, a day early', { queuesScheduledSendsNow: true }, '2026-11-23T09:00:00Z'],
+      ['queues it now, just over a minute early', { queuesScheduledSendsNow: true }, '2026-11-22T10:01:00.001Z'],
+    ])('reports an email PostHog accepted but %s, with its message ID', async (_name, server, scheduledAt) => {
       const postHog = againstPostHog(server)
 
-      const { data, error } = await settle(send({ scheduledAt: '2026-11-23T09:00:00Z' }))
+      const { data, error } = await settle(send({ scheduledAt }))
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'schedule_not_confirmed', messageId: postHog.emails[0].id })
