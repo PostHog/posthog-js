@@ -1475,7 +1475,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * @param {String} key Key of the feature flag.
      * @param {Object} options Optional settings.
-     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
+     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called or $experiment_exposure event to PostHog.
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state,
      *                  such as after making a flag globally inactive. Returns undefined until the /flags endpoint responds.
@@ -1549,7 +1549,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * @param {String} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
-     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called or $experiment_exposure event.
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state.
      *                  Returns undefined until the /flags endpoint responds.
@@ -2006,7 +2006,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * @param {String} key Key of the feature flag.
      * @param {Object} [options] Optional settings.
-     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
+     * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called or $experiment_exposure event to PostHog.
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state.
      *                  Returns undefined until the /flags endpoint responds.

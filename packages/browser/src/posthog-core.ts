@@ -2749,7 +2749,7 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
+     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
      * @returns {boolean | string | undefined} The feature flag value, or undefined if the flag is unavailable.
      */
     getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
@@ -2788,7 +2788,8 @@ export class PostHog implements PostHogInterface {
      * evaluation is available for the key. This includes globally inactive flags, which are omitted
      * from the remote `/flags` response.
      *
-     * By default, this method emits the `$feature_flag_called` event.
+     * By default, this method emits the `$feature_flag_called` event, and also `$experiment_exposure` when a
+     * config version 2 experiment split supplies the value.
      *
      * {@label Feature flags}
      *
@@ -2813,7 +2814,7 @@ export class PostHog implements PostHogInterface {
      *
      * @param {string} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
-     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called or $experiment_exposure event.
      * @param {boolean} [options.fresh=false] If true, won't return cached values from localStorage - only values loaded from the server.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
@@ -2865,7 +2866,7 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
+     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
      * @returns {boolean | undefined} Whether the feature flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
     isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
