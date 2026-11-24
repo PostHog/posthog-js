@@ -1538,8 +1538,9 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
-   * such as after a network error or a `503`, stay queued and are sent again later; the promise
-   * still resolves.
+   * such as after a network error or a `503`, stay queued and are sent again later. Events PostHog
+   * dropped, such as after a `400` or `401`, are reported on `posthog.on('error')`. The promise
+   * resolves in both cases.
    */
   flush(): Promise<void> {
     return super.flush()
