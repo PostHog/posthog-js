@@ -96,7 +96,7 @@ function pickUnresolvedReason(
   return UNRESOLVED_REASON_PRECEDENCE.indexOf(next) < UNRESOLVED_REASON_PRECEDENCE.indexOf(current) ? next : current
 }
 
-function preserveRegexUncertainty(error: InconclusiveMatchError, original: unknown): InconclusiveMatchError {
+function preserveServerOnlyUncertainty(error: InconclusiveMatchError, original: unknown): InconclusiveMatchError {
   if (original instanceof InconclusiveMatchError && Symbol.for('posthog.requiresServerRegexEvaluation') in original) {
     Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
   }
@@ -562,7 +562,7 @@ class FeatureFlagsPoller {
                 'unresolved_dependency'
               )
             }
-            throw preserveRegexUncertainty(
+            throw preserveServerOnlyUncertainty(
               new InconclusiveMatchError(
                 `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`,
                 'unresolved_dependency'
@@ -625,8 +625,8 @@ class FeatureFlagsPoller {
     const earlyExitEnabled = flagFilters.early_exit ?? false
     const { groups, groupProperties } = evaluationContext
     let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
-    let regexError: InconclusiveMatchError | undefined
-    const deferredRegexValues = new Set<FeatureFlagValue>()
+    let serverOnlyError: InconclusiveMatchError | undefined
+    const deferredValues = new Set<FeatureFlagValue>()
     let result = undefined
 
     for (const condition of flagConditions) {
@@ -709,17 +709,17 @@ class FeatureFlagsPoller {
           // Track that we had an inconclusive match, but try other conditions
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
           if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) {
-            regexError = e
+            serverOnlyError = e
             if (
               earlyExitEnabled &&
               condition.rollout_percentage != undefined &&
               (await getFeatureFlagHash(flag.key, effectiveBucketingValue)) > condition.rollout_percentage / 100.0
             ) {
-              deferredRegexValues.add(false)
+              deferredValues.add(false)
             } else {
               const variants = flagFilters.multivariate?.variants || []
               const override = condition.variant
-              deferredRegexValues.add(
+              deferredValues.add(
                 override && variants.some((variant) => variant.key === override)
                   ? override
                   : (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
@@ -732,17 +732,17 @@ class FeatureFlagsPoller {
       }
     }
 
-    // A later match cannot choose a different value while an earlier regex rule is unresolved.
-    if (result !== undefined && !(regexError && [...deferredRegexValues].some((value) => value !== result))) {
+    // A later match cannot choose a different value while an earlier server-only rule is unresolved.
+    if (result !== undefined && !(serverOnlyError && [...deferredValues].some((value) => value !== result))) {
       return result
     } else if (inconclusiveReason) {
       // An unresolved condition can still change the selected value.
-      throw preserveRegexUncertainty(
+      throw preserveServerOnlyUncertainty(
         new InconclusiveMatchError(
           "Can't determine if feature flag is enabled or not with given properties",
           inconclusiveReason
         ),
-        regexError
+        serverOnlyError
       )
     }
 
@@ -767,7 +767,7 @@ class FeatureFlagsPoller {
       // Filters in a condition have no defined order, so an inconclusive filter does not stop
       // the loop: a later filter can still rule the condition out or carry a higher-precedence reason.
       let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
-      let regexError: InconclusiveMatchError | undefined
+      let serverOnlyError: InconclusiveMatchError | undefined
       let serverEvaluationError: RequiresServerEvaluation | undefined = undefined
       for (const prop of condition.properties) {
         const propertyType = prop.type
@@ -807,7 +807,7 @@ class FeatureFlagsPoller {
             continue
           }
           if (e instanceof InconclusiveMatchError) {
-            if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) regexError = e
+            if (Symbol.for('posthog.requiresServerRegexEvaluation') in e) serverOnlyError = e
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, e.reason)
             continue
           }
@@ -830,9 +830,9 @@ class FeatureFlagsPoller {
         throw serverEvaluationError
       }
       if (inconclusiveReason) {
-        throw preserveRegexUncertainty(
+        throw preserveServerOnlyUncertainty(
           new InconclusiveMatchError(`Can't determine if a condition of flag ${flag.key} matches`, inconclusiveReason),
-          regexError
+          serverOnlyError
         )
       }
 
@@ -1453,10 +1453,14 @@ const PROPERTY_FILTER_TYPES = new Set(['person', 'group'])
 
 function assertPropertyFilterTypeSupported(property: FlagProperty): void {
   if (property.type && !PROPERTY_FILTER_TYPES.has(property.type)) {
-    throw new InconclusiveMatchError(
+    const error = new InconclusiveMatchError(
       `Can't evaluate a '${property.type}' filter on '${property.key}' locally`,
       'unsupported_definition'
     )
+    // No caller can supply the value, so as with a regex only the server can run, a later
+    // condition must not choose a different value for the flag.
+    Object.defineProperty(error, Symbol.for('posthog.requiresServerRegexEvaluation'), { value: true })
+    throw error
   }
 }
 
@@ -1531,7 +1535,7 @@ async function matchPropertyGroup(
   }
 
   let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
-  let regexError: InconclusiveMatchError | undefined
+  let serverOnlyError: InconclusiveMatchError | undefined
 
   if ('values' in properties[0]) {
     // a nested property group
@@ -1564,7 +1568,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
-          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) serverOnlyError = err
         } else {
           throw err
         }
@@ -1572,9 +1576,9 @@ async function matchPropertyGroup(
     }
 
     if (inconclusiveReason) {
-      throw preserveRegexUncertainty(
+      throw preserveServerOnlyUncertainty(
         new InconclusiveMatchError("Can't match cohort without a given cohort property value", inconclusiveReason),
-        regexError
+        serverOnlyError
       )
     }
     // if we get here, all matched in AND case, or none matched in OR case
@@ -1631,7 +1635,7 @@ async function matchPropertyGroup(
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
           inconclusiveReason = pickUnresolvedReason(inconclusiveReason, err.reason)
-          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) regexError = err
+          if (Symbol.for('posthog.requiresServerRegexEvaluation') in err) serverOnlyError = err
         } else {
           throw err
         }
@@ -1639,9 +1643,9 @@ async function matchPropertyGroup(
     }
 
     if (inconclusiveReason) {
-      throw preserveRegexUncertainty(
+      throw preserveServerOnlyUncertainty(
         new InconclusiveMatchError("can't match cohort without a given cohort property value", inconclusiveReason),
-        regexError
+        serverOnlyError
       )
     }
 
