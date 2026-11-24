@@ -249,7 +249,8 @@ export interface BatchEmailRecipient {
  *   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, or its key was still in flight
  *   (`idempotency_key_in_flight`) after the retries. A later refusal doesn't change it, since the email may still be
  *   queued. `error` holds the latest answer, and `id` the message ID when PostHog named one. Send the recipient again,
- *   unchanged and with the same `idempotencyKey`, within 24 hours: PostHog queues no second email for a key it has.
+ *   unchanged and with the same `idempotencyKey`, within 24 hours of the first request with that key: PostHog queues
+ *   no second email for a key it has.
  * - `not_attempted`: the batch stopped before it sent this recipient.
  */
 export type BatchEmailRecipientResult = {
