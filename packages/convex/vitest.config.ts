@@ -10,6 +10,10 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../core/src/index.ts', import.meta.url)),
       },
       {
+        find: /^@posthog\/core\/capture-v1$/,
+        replacement: fileURLToPath(new URL('../core/src/capture-v1/index.ts', import.meta.url)),
+      },
+      {
         find: /^@\/(.*)$/,
         replacement: `${fileURLToPath(new URL('../core/src', import.meta.url))}/$1`,
       },

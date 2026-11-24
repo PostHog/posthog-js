@@ -1005,9 +1005,9 @@ export class PostHog extends PostHogCore {
    * 1 second doubling to 30 seconds, with jitter.
    */
   protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
-    const queuedUuids = new Map<SerializedV1Event, string | undefined>()
+    const batchIndices = new Map<SerializedV1Event, number>()
     const drops: CaptureDroppedEvent[] = []
-    for (const message of batchMessages) {
+    for (const [index, message] of batchMessages.entries()) {
       if (!message) {
         continue
       }
@@ -1028,7 +1028,7 @@ export class PostHog extends PostHogCore {
         drop('unserializable event', `it can't be serialized (${String(error)})`)
         continue
       }
-      queuedUuids.set(serialized, queuedUuid)
+      batchIndices.set(serialized, index)
     }
     if (drops.length > 0) {
       const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
@@ -1037,7 +1037,7 @@ export class PostHog extends PostHogCore {
     }
 
     let deferral: V1SendDeferral | undefined
-    const kept = await this._getCaptureV1Sender().send([...queuedUuids.keys()], {
+    const kept = await this._getCaptureV1Sender().send([...batchIndices.keys()], {
       keepUnsent: true,
       onDeferred: (reason) => {
         deferral = reason
@@ -1046,14 +1046,20 @@ export class PostHog extends PostHogCore {
     if (!deferral) {
       this._captureResendCount = 0
       this._captureResendAt = 0
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
       return
     }
     if (!deferral.tooLarge) {
       this._scheduleCaptureResend(deferral.retryAfterMs)
     }
     this._logger.info(`Keeping ${kept.length} events to send again: ${deferral.reason}.`)
-    const keepUuids = kept.map((event) => queuedUuids.get(event)).filter((uuid): uuid is string => uuid !== undefined)
-    return { keepUuids, tooLarge: deferral.tooLarge }
+    const keepIndices = kept
+      .map((event) => batchIndices.get(event))
+      .filter((index): index is number => index !== undefined)
+    return { keepIndices, tooLarge: deferral.tooLarge }
   }
 
   protected batchByteTarget(): number {
@@ -1085,13 +1091,9 @@ export class PostHog extends PostHogCore {
     return serialized
   }
 
-  protected flushAutomatic(): Promise<void> {
-    // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
-    if (Date.now() < this._captureResendAt) {
-      return Promise.resolve()
-    }
-    // Analytics only: the AI lane runs its own timer and resend wait.
-    return super.flush()
+  // Holds the timer and flushAt flushes while capture waits; flush() and shutdown() still send.
+  protected holdsAutomaticFlush(): boolean {
+    return Date.now() < this._captureResendAt
   }
 
   private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
@@ -1100,7 +1102,9 @@ export class PostHog extends PostHogCore {
     }
     const maxWaitMs = 30_000
     const jitter = 0.75 + 0.5 * Math.random()
-    const backoffMs = Math.min(1000 * 2 ** this._captureResendCount * jitter, maxWaitMs)
+    // Cap before jitter so waits at the ceiling stay spread out.
+    const baseMs = Math.min(1000 * 2 ** Math.min(this._captureResendCount, 5), maxWaitMs)
+    const backoffMs = Math.min(baseMs * jitter, maxWaitMs)
     const waitMs = retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, maxWaitMs))
     this._captureResendCount++
     this._captureResendAt = Date.now() + waitMs
@@ -1727,8 +1731,9 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
-   * such as after a network error or a `503`, stay queued and are sent again later; the promise
-   * still resolves.
+   * such as after a network error or a `503`, stay queued and are sent again later. Events PostHog
+   * dropped, such as after a `400` or `401`, are reported on `posthog.on('error')`. The promise
+   * resolves in both cases.
    */
   flush(): Promise<void> {
     // Signal both lanes before waiting on either.
@@ -3703,11 +3708,12 @@ export class PostHog extends PostHogCore {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
-      iOSCaptureMethod = 'standard',
+      iOSCaptureMethod: localIOSCaptureMethod,
       sampleRate: localSampleRate,
     } = options?.sessionReplayConfig ?? {}
+    const iOSCaptureMethod = localIOSCaptureMethod === 'gpu' ? 'gpu' : 'standard'
 
-    if (iOSCaptureMethod !== 'standard' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
+    if (iOSCaptureMethod === 'gpu' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
       this._logger.warn(
         `sessionReplayConfig.iOSCaptureMethod: '${iOSCaptureMethod}' requires @posthog/react-native-plugin 3.0.0 or later. ` +
           `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) captures with 'standard'.`

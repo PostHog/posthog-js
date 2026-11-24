@@ -279,11 +279,11 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
 
 /**
  * What a `sendBatch()` override can resolve with when the transport keeps some events for a later
- * flush. The flush removes the rest of the batch from the queue, keeps the events whose `uuid` is in
- * `keepUuids`, and stops draining that route until the next flush. `tooLarge` halves the batch size
- * and resends the same events instead.
+ * flush. The flush removes the rest of the batch from the queue, keeps the events at `keepIndices`
+ * (positions in the batch passed to `sendBatch()`), and stops draining that route until the next
+ * flush. `tooLarge` halves the batch size and resends the kept events instead.
  */
-export type SendBatchOutcome = { keepUuids: readonly string[]; tooLarge?: boolean }
+export type SendBatchOutcome = { keepIndices: readonly number[]; tooLarge?: boolean }
 
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core so
@@ -352,6 +352,8 @@ export abstract class PostHogCoreStateless {
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
   private pendingFlushPromise: Promise<void> | null = null
+  // Whether the pending flush was started only by flushAutomatic(), so a hold can still skip it.
+  private pendingFlushIsAutomatic = false
   private flushPromises: Set<Promise<any>> = new Set()
   private _dequeuedMessagesCount: number = 0
   private shutdownPromise: Promise<void> | null = null
@@ -1513,7 +1515,18 @@ export abstract class PostHogCoreStateless {
    * endpoint has asked it to wait on, which an explicit flush overrides.
    */
   protected flushAutomatic(): Promise<void> {
-    return this.flush()
+    if (this.holdsAutomaticFlush()) {
+      return Promise.resolve()
+    }
+    return this.flushInternal(false, true)
+  }
+
+  /**
+   * Whether automatic flushes wait for now. Checked when one is requested and again right before it
+   * sends, so a flush queued behind one that got told to wait also waits.
+   */
+  protected holdsAutomaticFlush(): boolean {
+    return false
   }
 
   private async waitForPendingPromises(
@@ -1574,12 +1587,15 @@ export abstract class PostHogCoreStateless {
     return this.flushInternal(false)
   }
 
-  private flushInternal(waitForPendingPromises: boolean): Promise<void> {
+  private flushInternal(waitForPendingPromises: boolean, automatic = false): Promise<void> {
     if (this.disabled) {
       return Promise.resolve()
     }
 
     if (!waitForPendingPromises && this.pendingFlushPromise) {
+      if (!automatic) {
+        this.pendingFlushIsAutomatic = false
+      }
       return this.pendingFlushPromise
     }
 
@@ -1599,13 +1615,19 @@ export abstract class PostHogCoreStateless {
       // Use a custom allSettled implementation to avoid issues with patching Promise on RN
       .then(() => allSettled([previousFlushPromise]))
       .then(() => {
+        let heldAutomatic = automatic
         if (this.pendingFlushPromise === nextFlushPromise) {
+          heldAutomatic = this.pendingFlushIsAutomatic
           this.pendingFlushPromise = null
+        }
+        if (heldAutomatic && this.holdsAutomaticFlush()) {
+          return
         }
         return this._flush()
       })
 
     this.pendingFlushPromise = nextFlushPromise
+    this.pendingFlushIsAutomatic = automatic
     this.flushPromise = nextFlushPromise
     this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
@@ -1737,7 +1759,9 @@ export abstract class PostHogCoreStateless {
       throw firstError
     }
 
-    this._events.emit('flush', sentMessages)
+    if (sentMessages.length > 0) {
+      this._events.emit('flush', sentMessages)
+    }
   }
 
   protected shouldRetainBatchOnError(error: unknown): boolean {
@@ -1764,34 +1788,26 @@ export abstract class PostHogCoreStateless {
       const batchItems = countItems.slice(0, batchSize)
       const batchMessages = countMessages.slice(0, batchSize)
 
-      const persistQueueChange = async (keepUuids?: ReadonlySet<string>): Promise<void> => {
+      const persistQueueChange = async (keepIndices?: ReadonlySet<number>): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
+        const removedBatchItems = keepIndices ? batchItems.filter((_, index) => !keepIndices.has(index)) : batchItems
         // The live queue may have overflowed while this batch was in flight. Remove only
-        // snapshotted items: UUID survives persistence, while reference identity supports
-        // legacy queue items without a UUID.
-        const removedBatchItems = keepUuids
-          ? batchItems.filter((_, index) => {
-              // Match by position: normalizing can replace a stored uuid that isn't a valid UUID.
-              const uuid = batchMessages[index]?.uuid
-              return !(typeof uuid === 'string' && keepUuids.has(uuid))
-            })
-          : batchItems
-        const remainingBatchItems = [...removedBatchItems]
-        const newQueue = refreshedQueue.filter((item) => {
-          const itemUuid = item.message?.uuid
-          const batchItemIndex = remainingBatchItems.findIndex(
-            (batchItem) =>
-              batchItem === item ||
-              (typeof itemUuid === 'string' && itemUuid.length > 0 && batchItem.message?.uuid === itemUuid)
-          )
-
-          if (batchItemIndex === -1) {
-            return true
+        // snapshotted items, by reference first so events sharing a UUID keep their own copy,
+        // then by UUID, which survives persistence.
+        const removedQueueIndices = new Set<number>()
+        const findQueueIndex = (matches: (item: PostHogQueueItem) => boolean): number =>
+          refreshedQueue.findIndex((item, index) => !removedQueueIndices.has(index) && matches(item))
+        for (const batchItem of removedBatchItems) {
+          let queueIndex = findQueueIndex((item) => item === batchItem)
+          const uuid = batchItem.message?.uuid
+          if (queueIndex === -1 && typeof uuid === 'string' && uuid.length > 0) {
+            queueIndex = findQueueIndex((item) => item.message?.uuid === uuid)
           }
-
-          remainingBatchItems.splice(batchItemIndex, 1)
-          return false
-        })
+          if (queueIndex !== -1) {
+            removedQueueIndices.add(queueIndex)
+          }
+        }
+        const newQueue = refreshedQueue.filter((_, index) => !removedQueueIndices.has(index))
         this.setPersistedProperty<PostHogQueueItem[]>(queueKey, newQueue)
         queue = newQueue
         this._dequeuedMessagesCount += removedBatchItems.length
@@ -1834,20 +1850,23 @@ export abstract class PostHogCoreStateless {
         throw err
       }
 
-      if (outcome?.tooLarge && batchMessages.length > 1) {
-        this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
+      const keepIndices = outcome ? new Set(outcome.keepIndices) : undefined
+
+      if (outcome?.tooLarge && keepIndices && keepIndices.size > 1) {
+        if (keepIndices.size < batchMessages.length) {
+          // Remove events the transport already dropped so the smaller batches don't report them again.
+          await persistQueueChange(keepIndices)
+        }
+        this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
         this._logger.warn(
-          `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
+          `Received 413 when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
         )
         continue
       }
 
-      if (outcome && outcome.keepUuids.length > 0) {
-        const keepUuids = new Set(outcome.keepUuids)
-        await persistQueueChange(keepUuids)
-        sentMessages.push(
-          ...batchMessages.filter((message) => !(typeof message?.uuid === 'string' && keepUuids.has(message.uuid)))
-        )
+      if (keepIndices && keepIndices.size > 0) {
+        await persistQueueChange(keepIndices)
+        sentMessages.push(...batchMessages.filter((_, index) => !keepIndices.has(index)))
         // The transport asked to wait before sending the kept events again.
         return
       }

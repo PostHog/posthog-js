@@ -279,6 +279,148 @@ describe('React Native capture v1 delivery', () => {
     ])
   })
 
+  it('does not keep or resend a duplicate of an event capture asks to retry', async () => {
+    const uuid = '0198c0de-1234-7abc-8def-0123456789ad'
+    respond = () => ({
+      status: 200,
+      body: { results: { [uuid]: { result: 'retry', details: 'not_persisted', duplicates_dropped: 1 } } },
+    })
+    posthog.capture('first', {}, { uuid })
+    posthog.capture('second', {}, { uuid })
+    await posthog.flush()
+    expect(queuedEvents()).toEqual(['first'])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    await posthog.flush()
+    expect(sentEvents()).toEqual([['first', 'second'], ['first']])
+  })
+
+  it('holds an automatic flush queued behind a send that gets a 503', async () => {
+    let releaseFirst: () => void = () => {}
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve))
+    const fetchMock = (globalThis as any).window.fetch as vi.Mock
+    const respondNow = fetchMock.getMockImplementation()!
+    let captureCalls = 0
+    fetchMock.mockImplementation(async (url: string, options: any) => {
+      if (String(url).includes(CAPTURE_PATH) && ++captureCalls === 1) {
+        await firstHeld
+      }
+      return respondNow(url, options)
+    })
+    respond = () => ({ status: 503, headers: { 'Retry-After': '30' } })
+    posthog.capture('first')
+    const firstFlush = (posthog as any).flushAutomatic()
+    await vi.waitFor(() => expect(captureCalls).toBe(1))
+    posthog.capture('second')
+    const secondFlush = (posthog as any).flushAutomatic()
+    releaseFirst()
+    await Promise.all([firstFlush, secondFlush])
+
+    expect(sentEvents()).toEqual([['first']])
+  })
+
+  it('still sends an explicit flush that joins a held automatic one', async () => {
+    respond = () => ({ status: 503, headers: { 'Retry-After': '30' } })
+    posthog.capture('first')
+    await posthog.flush()
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    posthog.capture('second')
+    ;(posthog as any)._captureResendAt = 0
+    const automatic = (posthog as any).flushAutomatic()
+    ;(posthog as any)._captureResendAt = Date.now() + 30_000
+    await Promise.all([automatic, posthog.flush()])
+
+    expect(sentEvents()).toEqual([['first'], ['first', 'second']])
+  })
+
+  it('keeps jitter once the resend wait reaches 30 seconds', () => {
+    const randomSpy = stubJitter()
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    ;(posthog as any)._captureResendCount = 6
+    ;(posthog as any)._scheduleCaptureResend(undefined)
+
+    expect((posthog as any)._captureResendAt - now).toBe(22_500)
+    randomSpy.mockRestore()
+    vi.mocked(Date.now).mockRestore()
+  })
+
+  it('waits at least Retry-After before an automatic resend, up to 30 seconds', async () => {
+    const randomSpy = stubJitter()
+    const now = Date.now()
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+    posthog.capture('kept')
+    respond = () => ({ status: 503, headers: { 'Retry-After': '7' } })
+    await posthog.flush()
+    expect((posthog as any)._captureResendAt - now).toBe(7000)
+
+    respond = () => ({ status: 503, headers: { 'Retry-After': '120' } })
+    await posthog.flush()
+    expect((posthog as any)._captureResendAt - now).toBe(30_000)
+    nowSpy.mockRestore()
+    randomSpy.mockRestore()
+  })
+
+  it('clears a pending resend once a flush gets through', async () => {
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    await posthog.flush()
+    expect((posthog as any)._captureResendTimer).toBeDefined()
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    await posthog.flush()
+
+    expect((posthog as any)._captureResendTimer).toBeUndefined()
+  })
+
+  it('does not emit flush when every event is kept for later', async () => {
+    const flushed: unknown[] = []
+    posthog.on('flush', (messages) => flushed.push(messages))
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    expect(flushed).toEqual([])
+  })
+
+  it.each([400, 401, 402])('drops the batch after a %s, reports it and schedules no resend', async (status) => {
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    respond = () => ({ status })
+    posthog.capture('dropped')
+    await expect(posthog.flush()).resolves.toBeUndefined()
+
+    expect(queuedEvents()).toEqual([])
+    expect(errors).toEqual([expect.objectContaining({ name: 'CaptureError' })])
+    expect((posthog as any)._captureResendTimer).toBeUndefined()
+  })
+
+  it('drops a single event that gets a 413 instead of retrying it', async () => {
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    respond = () => ({ status: 413 })
+    posthog.capture('too-large')
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['too-large']])
+    expect(queuedEvents()).toEqual([])
+    expect(errors).toEqual([expect.objectContaining({ name: 'CaptureError' })])
+  })
+
+  it('reports an event dropped before sending once when its batch is halved after a 413', async () => {
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+    respond = (request) => (request.body.batch.length > 1 ? { status: 413 } : { status: 200, body: { results: {} } })
+    posthog.capture('\ud800')
+    posthog.capture('first')
+    posthog.capture('second')
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['first', 'second'], ['first'], ['second']])
+    expect(errors).toHaveLength(1)
+  })
+
   it('starts a new request before a batch would pass 5 MiB of event bytes', async () => {
     const twoMiB = 'x'.repeat(2 * 1024 * 1024)
     posthog.capture('first', { blob: twoMiB })

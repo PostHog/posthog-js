@@ -229,7 +229,7 @@ The optional `@posthog/react-native-plugin` package needs `posthog-ios`. Choose 
 
 | Path                       | Requirements                                                                                             | Setup                                                                                                                         |
 | -------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| CocoaPods                  | React Native 0.75 or later                                                                               | Run `pod install` in `ios`. The plugin podspec resolves `posthog-ios` 4.0 through Swift Package Manager. This is the default. |
+| CocoaPods                  | React Native 0.75 or later and Xcode 26 or later                                                         | Run `pod install` in `ios`. The plugin podspec resolves `posthog-ios` 4.0 through Swift Package Manager. This is the default. |
 | Full Swift Package Manager | `@posthog/react-native-plugin` 3.0 or later, Xcode 26 or later, and an iOS 15 or later deployment target | Run `npx react-native spm add --deintegrate --yes` in `ios`. Don't run `pod install`.                                         |
 
 The full path uses React Native's experimental integration without CocoaPods. Every native dependency in your app must support it. `--deintegrate` removes CocoaPods from the iOS project, so commit or back up the project first. PostHog verifies this path with an iOS-only React Native 0.87.1 app and React Native Community CLI 20.2.0. It is not verified with Expo.
@@ -884,8 +884,9 @@ flushLogs, and shutdown drains both before terminating.
 `Promise`\<`void`\>
 
 Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
-such as after a network error or a `503`, stay queued and are sent again later; the promise
-still resolves.
+such as after a network error or a `503`, stay queued and are sent again later. Events PostHog
+dropped, such as after a `400` or `401`, are reported on `posthog.on('error')`. The promise
+resolves in both cases.
 
 #### Example
 
@@ -3249,7 +3250,7 @@ Called by the native SDK with the current `distinctId` and `appId`. Return
 | <a id="capturelog-1"></a> `captureLog?` | `boolean` | Enable capturing of logs as console events **Default** `true` |
 | <a id="capturenetworktelemetry"></a> `captureNetworkTelemetry?` | `boolean` | Enable capturing network telemetry iOS only **Default** `true` |
 | <a id="capturetouches-1"></a> `captureTouches?` | `boolean` | Capture touch coordinates in session replay. Set to false to keep screenshots without recording taps that could reveal sensitive input on a known keypad layout. Does not change masking or `PostHogProvider` touch autocapture. Android and iOS only. Requires `@posthog/react-native-plugin`. Set before constructing PostHog. Changes after initialization do not update native state. **Default** `true` |
-| <a id="ioscapturemethod"></a> `iOSCaptureMethod?` | `"standard"` \| `"gpu"` | How iOS captures each replay screenshot. - `'standard'`: draws the window on the main thread. - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread steps. Content from another process, such as a web view's page, and Metal content are not captured. Falls back to `'standard'` when a capture can't be made this way. iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`. **Default** `'standard'` |
+| <a id="ioscapturemethod"></a> `iOSCaptureMethod?` | `"standard"` \| `"gpu"` | How iOS captures each replay screenshot. - `'standard'`: draws the window on the main thread. - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread steps. Content from another process, such as a web view's page, and Metal content are not captured. A custom `CALayer` subclass that is animating, such as a playing Lottie animation, is left out of the frame. Recording keeps roughly 25 to 30 MB more memory resident on average. Falls back to `'standard'` when a capture can't be made this way. iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`. **Default** `'standard'` |
 | <a id="maskallimages"></a> `maskAllImages?` | `boolean` | Enable masking of all images to a placeholder **Default** `true` |
 | <a id="maskallsandboxedviews"></a> `maskAllSandboxedViews?` | `boolean` | Enable masking of all sandboxed system views These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController iOS only **Default** `true` |
 | <a id="maskalltextinputs"></a> `maskAllTextInputs?` | `boolean` | Enable masking of all text and text input fields **Default** `true` |
