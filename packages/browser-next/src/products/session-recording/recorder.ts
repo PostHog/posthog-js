@@ -144,6 +144,7 @@ export class SessionRecorder {
     private readonly _analytics: Analytics | undefined
     private readonly _triggerHost: ReplayDebugHost
     private readonly _delivery: SnapshotDelivery
+    private readonly _unloadSubscription: Disposable
     private readonly _urlTriggerMatching: URLTriggerMatching
     private readonly _eventTriggerMatching: EventTriggerMatching
     private readonly _linkedFlagMatching: LinkedFlagMatching
@@ -193,6 +194,10 @@ export class SessionRecorder {
             gzipEnabled: () => _host.gzipEnabled(),
             reportFailure: (error) => this._client.logger.error('Session recording delivery failed', error),
             reportWarning: (message) => this._client.logger.warn(message),
+        })
+        // a stopped recorder has no unload listener, so the client's unload hands queued snapshots over, as posthog-js's does
+        this._unloadSubscription = this._analytics!.onBeforeTeardown(() => {
+            if (!this.isStarted) this._delivery.teardown()
         })
         this._buffer = this._emptyBuffer()
     }
@@ -358,6 +363,7 @@ export class SessionRecorder {
         if (this._disposed) return
         this.stop()
         this._disposed = true
+        this._unloadSubscription.dispose()
         void this._delivery.dispose()
     }
 

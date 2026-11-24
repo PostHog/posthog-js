@@ -458,6 +458,52 @@ describe('session recording teardown', () => {
 
         expect(stop).toHaveBeenCalled()
     })
+
+    /** A transport that holds the first snapshot request open until released, so later snapshots queue behind it. */
+    const holdFirstSnapshot = (): Transport & { release(): void } => {
+        const network = transport()
+        let release: (() => void) | undefined
+        const fetch: Transport['fetch'] = async (input, init) => {
+            const response = network.fetch(input, init)
+            if (String(input).includes('/s/') && !release) await new Promise<void>((resolve) => (release = resolve))
+            return response
+        }
+        return { ...network, fetch, release: () => release?.() }
+    }
+
+    it('sends snapshots queued before recording stopped when the page unloads', async () => {
+        const network = holdFirstSnapshot()
+        const { replay } = await setup({}, {}, { transport: network })
+        await started(replay)
+        interact()
+        void replay.flush?.()
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
+
+        interact()
+        replay.stopSessionRecording()
+        window.dispatchEvent(new Event('pagehide'))
+
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(2))
+        network.release()
+    })
+
+    it('sends queued and buffered snapshots in one unload request while recording, so they share one allowance', async () => {
+        const network = holdFirstSnapshot()
+        const { replay } = await setup({}, {}, { transport: network })
+        await started(replay)
+        interact()
+        void replay.flush?.()
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
+
+        interact()
+        void replay.flush?.()
+        interact()
+        window.dispatchEvent(new Event('pagehide'))
+        await new Promise((resolve) => setTimeout(resolve, 50))
+
+        expect(network.snapshots).toHaveLength(2)
+        network.release()
+    })
 })
 
 describe('session recording privacy', () => {
