@@ -600,7 +600,7 @@ function templateContent(
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(raw, send, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(raw, send, read, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -627,7 +627,7 @@ function codeContent(
       read(name)
     }
   }
-  refuseFieldsOutside(raw, send, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(raw, send, read, CODE_FORM, TEMPLATE_FORM)
   const { subject, html, text, react } = send
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
@@ -780,41 +780,41 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 function refuseFieldsOutside(
   raw: Record<string, unknown> | undefined,
   send: UncheckedSend,
+  read: (name: string) => unknown,
   form: SendForm,
   otherForm: SendForm
 ): void {
   if (raw === undefined) {
     return
   }
-  let field: string | undefined
-  for (const name of Object.getOwnPropertyNames(raw)) {
+  for (const name of otherForm.fields) {
     if (form.fields.has(name)) {
       continue
     }
-    const descriptor = Object.getOwnPropertyDescriptor(raw, name)
-    if (!descriptor?.enumerable) {
+    const value = name in send ? (send as Record<string, unknown>)[name] : read(name)
+    if (value !== undefined) {
+      throw new EmailError({
+        code: 'invalid_form',
+        message: `A send with ${form.name} doesn't take ${name}, so no email was sent.`,
+        field: name,
+        why: form.why,
+        fix: `Remove ${name}, or ${otherForm.howToSend}.`,
+      })
+    }
+  }
+  for (const name of Object.keys(raw)) {
+    if (form.fields.has(name) || otherForm.fields.has(name)) {
       continue
     }
-    const value = name in send ? (send as Record<string, unknown>)[name] : raw[name]
-    if (value !== undefined) {
-      field = name
-      break
+    if (raw[name] !== undefined) {
+      throw new EmailError({
+        code: 'invalid_form',
+        message: `A send with ${form.name} doesn't take ${name}, so no email was sent.`,
+        field: name,
+        fix: `Remove ${name} and send again.`,
+      })
     }
   }
-  if (field === undefined) {
-    return
-  }
-  const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
-  if (!otherForm.fields.has(field)) {
-    throw new EmailError({ code: 'invalid_form', message, field, fix: `Remove ${field} and send again.` })
-  }
-  throw new EmailError({
-    code: 'invalid_form',
-    message,
-    field,
-    why: form.why,
-    fix: `Remove ${field}, or ${otherForm.howToSend}.`,
-  })
 }
 
 function fieldSet(...groups: object[]): ReadonlySet<string> {

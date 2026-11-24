@@ -2166,40 +2166,52 @@ describe('emails', () => {
 
     it.each([
       [
-        'an inherited subject on a template send',
+        'non-enumerable react on a template send',
+        (): Record<string, unknown> => {
+          const options: Record<string, unknown> = { to: 'reader@example.com', templateId: TEMPLATE_ID }
+          Object.defineProperty(options, 'react', {
+            value: { $$typeof: Symbol.for('react.element'), type: 'div', props: {} },
+            enumerable: false,
+          })
+          return options
+        },
+        'react',
+      ],
+      [
+        'inherited category on a template send',
         (): Record<string, unknown> =>
-          Object.assign(Object.create({ subject: 'Inherited subject' }), {
+          Object.assign(Object.create({ category: NEWSLETTER }), {
             to: 'reader@example.com',
             templateId: TEMPLATE_ID,
           }),
-        { to: 'reader@example.com', template_id: TEMPLATE_ID, message_data: {} },
+        'category',
       ],
       [
-        'a non-enumerable templateData on a code send',
+        'non-enumerable category on a template send',
+        (): Record<string, unknown> => {
+          const options: Record<string, unknown> = { to: 'reader@example.com', templateId: TEMPLATE_ID }
+          Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
+          return options
+        },
+        'category',
+      ],
+      [
+        'non-enumerable templateData on a code send',
         (): Record<string, unknown> => {
           const options: Record<string, unknown> = { ...CODE_SEND }
           Object.defineProperty(options, 'templateData', { value: { name: 'Ada' }, enumerable: false })
           return options
         },
-        {
-          to: CODE_SEND.to,
-          template_key: CODE_SEND.templateKey,
-          subject: CODE_SEND.subject,
-          html: CODE_SEND.html,
-        },
+        'templateData',
       ],
-    ])('ignores %s and posts the active form payload', async (_label, buildOptions, expectedBody) => {
+    ])('refuses %s and sends nothing', async (_label, buildOptions, expectedField) => {
       replies = [accepted()]
 
       const { data, error } = await sendUnchecked(buildOptions())
 
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      const request = postedSend()
-      expect(request.url).toBe(SEND_URL)
-      expect(request.method).toBe('POST')
-      expect(request.body).toEqual(expectedBody)
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: expectedField })
+      expect(fetch).not.toHaveBeenCalled()
     })
 
     it('copies category before normalizing cc so a mutating cc proxy cannot downgrade marketing to transactional', async () => {
