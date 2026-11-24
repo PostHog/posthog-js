@@ -58,7 +58,20 @@ platform :ios, min_ios_version_supported
 platform :ios, '15.0'
 ```
 
-On React Native 0.75, `min_ios_version_supported` is 13.4, so those apps must raise the target. React Native 0.76 and later already default to 15.1. React Native macOS apps set `platform :macos, '12.0'` or later in `macos/Podfile`.
+On React Native 0.75, `min_ios_version_supported` is 13.4, so those apps must raise the target. Raise the app target's iOS Deployment Target (`IPHONEOS_DEPLOYMENT_TARGET`) in the Xcode project to 15.0 or later too, because the 0.75 template sets it to 13.4. React Native 0.76 and later already default to 15.1. React Native macOS apps set `platform :macos, '12.0'` or later in `macos/Podfile`.
+
+Xcode 27 and later build only for iOS 15.0 and later, and React Native 0.75's own pods still set 13.4, so they fail with `The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.4`. Raise them in your Podfile's `post_install`:
+
+```ruby
+post_install do |installer|
+  # Keep React Native's existing react_native_post_install call here.
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
+end
+```
 
 **If ignored:** `pod install` fails because the plugin needs a higher deployment target.
 
@@ -238,7 +251,7 @@ If you ship 3.0 and then go back to 2.x, 2.x sends the native crash reports and 
 - [ ] Your build machines use Xcode 26 or later.
 - [ ] React Native is 0.75 or later, or Expo SDK is 52 or later.
 - [ ] Android apps on React Native 0.75 or 0.76, including Expo SDK 52, build with Kotlin 2.0 or later, and Expo apps keep that setting through `prebuild --clean`.
-- [ ] The iOS deployment target is 15.0 or later, and macOS is 12.0 or later if you ship it.
+- [ ] The iOS deployment target is 15.0 or later in the Podfile and the app target (and, on React Native 0.75 with Xcode 27, every pod target), and macOS is 12.0 or later if you ship it.
 - [ ] Full Swift Package Manager apps resolve `posthog-ios` 4.0.5 or a later 4.0.x version.
 - [ ] `posthog.useSpm` is gone from `ios/Podfile.properties.json`.
 - [ ] Your Podfile doesn't use `generate_multiple_pod_projects`, `deduplicate_targets => false`, or plugin targets with mixed platform or linkage settings.
