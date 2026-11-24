@@ -241,6 +241,8 @@ export type PostHogSessionReplayConfig = {
    * - `'standard'`: draws the window on the main thread.
    * - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread
    *   steps. Content from another process, such as a web view's page, and Metal content are not captured.
+   *   A custom `CALayer` subclass that is animating, such as a playing Lottie animation, is left out of the frame.
+   *   Recording keeps roughly 25 to 30 MB more memory resident on average.
    *   Falls back to `'standard'` when a capture can't be made this way.
    *
    * iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`.
