@@ -89,6 +89,11 @@ export class PostHog {
        * When true, all capture, exception, and feature flag methods short-circuit as no-ops
        * without scheduling or running component functions or invoking callbacks.
        *
+       * @example
+       * ```ts
+       * new PostHog(components.posthog, { disabled: !process.env.POSTHOG_PROJECT_TOKEN })
+       * ```
+       *
        * @default false
        */
       disabled?: boolean

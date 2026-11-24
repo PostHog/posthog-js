@@ -27,6 +27,20 @@ function readProjectToken(): string {
   return (env.POSTHOG_PROJECT_TOKEN ?? '').trim()
 }
 
+function warnIfMissingProjectToken(projectToken: string): void {
+  if (!projectToken) {
+    if (!hasWarnedMissingToken) {
+      hasWarnedMissingToken = true
+      console.warn(
+        '[PostHog] POSTHOG_PROJECT_TOKEN is not configured; PostHog is disabled. ' +
+          'Set it with `npx convex env set POSTHOG_PROJECT_TOKEN phc_…` and forward it in `convex/convex.config.ts` to enable event capture and feature flags.'
+      )
+    }
+  } else {
+    hasWarnedMissingToken = false
+  }
+}
+
 /**
  * Resolve the credentials and host the component was configured with.
  *
@@ -42,17 +56,7 @@ function readConfig(): { projectToken: string; host: string; personalApiKey: str
   const projectToken = readProjectToken()
   const host = (env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
   const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
-  if (!projectToken) {
-    if (!hasWarnedMissingToken) {
-      hasWarnedMissingToken = true
-      console.warn(
-        '[PostHog] POSTHOG_PROJECT_TOKEN is not configured; PostHog is disabled. ' +
-          'Set it with `npx convex env set POSTHOG_PROJECT_TOKEN phc_…` and forward it in `convex/convex.config.ts` to enable event capture and feature flags.'
-      )
-    }
-  } else {
-    hasWarnedMissingToken = false
-  }
+  warnIfMissingProjectToken(projectToken)
   return { projectToken, host, personalApiKey }
 }
 
@@ -310,7 +314,9 @@ export const evaluateAllFlags = action({
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
-    const disabled = !readProjectToken()
+    const projectToken = readProjectToken()
+    warnIfMissingProjectToken(projectToken)
+    const disabled = !projectToken
     const localEvalConfigured = !!(env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
     const row = disabled ? null : await ctx.db.query('flagDefinitions').order('desc').first()
     return {

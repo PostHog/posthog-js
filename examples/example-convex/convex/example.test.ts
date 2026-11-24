@@ -1310,4 +1310,22 @@ describe('disabled component (missing POSTHOG_PROJECT_TOKEN)', () => {
         expect(fetchCalls).toHaveLength(0)
         warnSpy.mockRestore()
     })
+
+    test('warns once when only local flag evaluation runs with a missing token', async () => {
+        // Re-arm the once-per-isolate warning gate with a configured token first.
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_reset'
+        const t = initConvexTest()
+        await t.query(components.posthog.lib.getFlagDefinitions, {})
+
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        await t.query(api.example.testGetFeatureFlag, { distinctId: 'u1', flagKey: 'test-flag' })
+        await t.query(api.example.testGetAllFlags, { distinctId: 'u1' })
+
+        const warnings = warnSpy.mock.calls.filter(
+            ([msg]) => typeof msg === 'string' && msg.includes('POSTHOG_PROJECT_TOKEN is not configured')
+        )
+        expect(warnings).toHaveLength(1)
+    })
 })
