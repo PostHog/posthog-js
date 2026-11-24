@@ -127,15 +127,22 @@ const withoutNullProperties = (message: PostHogEventProperties | null): PostHogE
   const properties = message.properties as PostHogEventProperties
   // A property whose getter throws must not fail the capture, so such an event is sent unchanged.
   try {
-    const kept = withoutNullMembers(
-      omitProperties(properties, (key) => NULL_PRESERVING_PROPERTY_KEYS.includes(key))
-    ) as PostHogEventProperties
-    for (const key of NULL_PRESERVING_PROPERTY_KEYS) {
-      if (key in properties) {
-        kept[key] = properties[key]
+    let changed = false
+    const kept: PostHogEventProperties = {}
+    for (const [key, value] of Object.entries(properties)) {
+      let next = value
+      if (!NULL_PRESERVING_PROPERTY_KEYS.includes(key)) {
+        if (value === null || value === undefined) {
+          changed = true
+          continue
+        }
+        next = withoutNullMembers(value)
+        changed = changed || next !== value
       }
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value: next, enumerable: true, writable: true, configurable: true })
     }
-    return { ...message, properties: kept }
+    return changed ? { ...message, properties: kept } : message
   } catch {
     return message
   }
