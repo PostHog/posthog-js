@@ -533,7 +533,7 @@ if (!isValidToken(req)) {
     status: 401,
     reason: 'token_expired',
     method: body?.method,
-    toolName: body?.params?.name,
+    toolName: body?.method === 'tools/call' ? body?.params?.name : undefined,
     serverName: 'my-mcp',
     serverVersion: '1.0.0',
   })
@@ -552,7 +552,7 @@ event in product analytics or SQL.
 It resolves once the event is handed to the client, so await it before `posthog.flush()` on
 serverless and edge runtimes. `beforeSend`, `serverBuild` and `logger` from `instrument()` don't
 apply to it; the client's own `beforeSend` does. On a `PostHogMCP` client, call
-`posthog.captureRejectedRequest({ ... })` instead, which also sends that client's `serverBuild`.
+`await posthog.captureRejectedRequest({ ... })` instead, which also sends that client's `serverBuild`.
 
 ## Library identity (`$lib`)
 

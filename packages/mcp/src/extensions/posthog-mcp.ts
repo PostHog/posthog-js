@@ -252,10 +252,16 @@ export class PostHogMCP extends PostHog {
    * Capture a request your HTTP layer rejected before the MCP server ran (401, 403, 429,
    * 400). Emits `$mcp_request_rejected` with `$mcp_is_error: true`, `$mcp_error_status` and a
    * `$mcp_error_type` derived from the status, so refusals can be queried alongside tool calls.
-   * No `$exception` is sent: a refused request is not a server failure.
+   * No `$exception` is sent: a refused request is not a server failure. Resolves once the
+   * event is handed to `capture()`, and never rejects, so a serverless host can await it
+   * before `flush()`.
    */
-  captureRejectedRequest(data: RejectedRequestCaptureData): void {
-    this.#emit(buildRejectedRequestEvent(data))
+  async captureRejectedRequest(data: RejectedRequestCaptureData): Promise<void> {
+    try {
+      await this.#emit(buildRejectedRequestEvent(data))
+    } catch (error) {
+      log(`Warning: PostHogMCP failed to capture rejected request - ${error}`)
+    }
   }
 
   /**
@@ -563,11 +569,12 @@ export class PostHogMCP extends PostHog {
   /**
    * Fire-and-forget, mirroring posthog-node's `capture()`: the event is enqueued
    * on the client, not awaited. Never throws — a failure to record analytics
-   * must not break the host request.
+   * must not break the host request. The promise, which never rejects, is for
+   * callers that wait for the event to be handed to `capture()`.
    */
-  #emit(event: McpEvent): void {
+  #emit(event: McpEvent): Promise<void> {
     event.serverBuild = this.#serverBuild
-    void this.#sink
+    return this.#sink
       .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
   }
@@ -641,10 +648,21 @@ function nonBlankString(value: unknown): string | undefined {
   return (typeof value === 'string' && value.trim()) || undefined
 }
 
+/** Like {@link nonBlankString}, but untrimmed, so an id still equals the one on the host's other events. */
+function nonBlankId(value: unknown): string | undefined {
+  return nonBlankString(value) && (value as string)
+}
+
 function buildRejectedRequestEvent(data: RejectedRequestCaptureData): McpEvent {
   const status = isHttpStatus(data.status) ? data.status : undefined
   return {
-    ...baseEvent(MCPAnalyticsEventType.mcpRequestRejected, data),
+    ...baseEvent(MCPAnalyticsEventType.mcpRequestRejected, {
+      ...data,
+      distinctId: nonBlankId(data.distinctId),
+      sessionId: nonBlankId(data.sessionId),
+      conversationId: nonBlankId(data.conversationId),
+      protocolVersion: nonBlankString(data.protocolVersion),
+    }),
     method: nonBlankString(data.method),
     resourceName: nonBlankString(data.toolName),
     serverName: nonBlankString(data.serverName),

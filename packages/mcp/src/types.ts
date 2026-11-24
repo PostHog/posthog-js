@@ -811,7 +811,7 @@ export interface RejectedRequestCaptureData extends McpCaptureCommon {
   reason?: string
   /** JSON-RPC method, if the body was read far enough to know it → `$mcp_method`. */
   method?: string
-  /** Tool name of a rejected `tools/call` → `$mcp_tool_name`. */
+  /** Tool name of a rejected `tools/call` → `$mcp_tool_name`. `prompts/get` has a `params.name` too. */
   toolName?: string
   /** → `$mcp_server_name`. */
   serverName?: string
