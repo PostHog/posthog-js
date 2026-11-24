@@ -190,6 +190,8 @@ export class SessionRecorder {
     private _restarting = false
     private _activatingTrigger = false
     private _disposed = false
+    private _disposing = false
+    private _canDeliverOnDispose = false
     private _parking: KeyValueStore | undefined
     private _parkedBufferSize: number | undefined
     private _parkedBufferRestored = false
@@ -206,8 +208,8 @@ export class SessionRecorder {
         this._delivery = createSnapshotDelivery({
             runtime: this._analytics!._core._requestRuntime,
             endpoint: () => this._config?.endpoint || DEFAULT_ENDPOINT,
-            // core owns delivery authority, so replay follows the same consent rule as analytics
-            canDeliver: () => this._analytics!._core._canDeliver(),
+            // core owns delivery authority; during shutdown disposal, keep the authority observed right before core marked itself disposed
+            canDeliver: () => this._analytics!._core._canDeliver() || (this._disposing && this._canDeliverOnDispose),
             gzipEnabled: () => _host.gzipEnabled(),
             reportFailure: (error) => this._client.logger.error('Session recording delivery failed', error),
             reportWarning: (message) => this._client.logger.warn(message),
@@ -377,16 +379,26 @@ export class SessionRecorder {
         this._heldEpochShipsOnUnload = false
     }
 
-    async flush(): Promise<void> {
-        this._flushBuffer()
+    async flush(shuttingDown = false): Promise<void> {
+        if (shuttingDown) {
+            this._canDeliverOnDispose = this._analytics!._core._canDeliver()
+            this.stop()
+        } else {
+            this._flushBuffer()
+        }
         await this._delivery.flush()
     }
 
     dispose(): void {
         if (this._disposed) return
-        this.stop()
-        // hands over the buffer stop() just queued, which disposing the delivery would drop, as posthog-js's shutdown does
-        this._delivery.teardown()
+        this._disposing = true
+        try {
+            this.stop()
+            // hands over any buffer stop() just queued, or left behind if shutdown's async flush timed out
+            this._delivery.teardown()
+        } finally {
+            this._disposing = false
+        }
         this._disposed = true
         this._unloadSubscription.dispose()
         void this._delivery.dispose()
