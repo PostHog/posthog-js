@@ -257,22 +257,30 @@ describe('PostHogMCP.captureRejectedRequest', () => {
 
   it('resolves only once the sink is done', async () => {
     let finish = () => {}
-    vi.spyOn(McpEventSink.prototype, 'capture').mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    const spy = vi
+      .spyOn(McpEventSink.prototype, 'capture')
+      .mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    try {
+      let resolved = false
+      const captured = posthog.captureRejectedRequest({ status: 401 }).then(() => (resolved = true))
+      await tick()
+      expect(resolved).toBe(false)
 
-    let resolved = false
-    const captured = posthog.captureRejectedRequest({ status: 401 }).then(() => (resolved = true))
-    await tick()
-    expect(resolved).toBe(false)
-
-    finish()
-    await captured
-    expect(resolved).toBe(true)
+      finish()
+      await captured
+      expect(resolved).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('never rejects when the sink fails', async () => {
-    vi.spyOn(McpEventSink.prototype, 'capture').mockRejectedValueOnce(new Error('sink failed'))
-
-    await expect(posthog.captureRejectedRequest({ status: 401 })).resolves.toBeUndefined()
+    const spy = vi.spyOn(McpEventSink.prototype, 'capture').mockRejectedValueOnce(new Error('sink failed'))
+    try {
+      await expect(posthog.captureRejectedRequest({ status: 401 })).resolves.toBeUndefined()
+    } finally {
+      spy.mockRestore()
+    }
     await expect(posthog.captureRejectedRequest(undefined as any)).resolves.toBeUndefined()
   })
 
