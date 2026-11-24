@@ -298,6 +298,7 @@ export class SessionReplayTriggerGroupsEvaluator {
   private lastScreenName: string | null = null
   private lastScreenSessionId: string | null = null
   private screenCheckedSessionId: string | null = null
+  private lastScreenEvaluated = false
 
   onConfig(groups: SessionReplayTriggerGroup[]): void {
     const survivingIds = new Set(groups.map((group) => group.id))
@@ -316,7 +317,9 @@ export class SessionReplayTriggerGroupsEvaluator {
     eventProperties: Record<string, unknown> | undefined,
     personProperties: Record<string, unknown> | undefined
   ): TriggerGroupsEventResult {
-    this.rememberScreen(sessionId, eventName, eventProperties)
+    if (this.rememberScreen(sessionId, eventName, eventProperties)) {
+      this.lastScreenEvaluated = true
+    }
     this.resetActivationForNewSession(sessionId)
 
     let newlyActivated = this.checkScreenOnNewSession(sessionId, personProperties)
@@ -352,23 +355,43 @@ export class SessionReplayTriggerGroupsEvaluator {
   }
 
   // Takes every $screen event, also while no group is armed, so the name is never a screen the app left.
-  rememberScreen(sessionId: string, eventName: string, eventProperties: Record<string, unknown> | undefined): void {
+  rememberScreen(sessionId: string, eventName: string, eventProperties: Record<string, unknown> | undefined): boolean {
     const screenName = eventName === SCREEN_EVENT_NAME ? eventProperties?.[SCREEN_NAME_PROPERTY] : undefined
-    if (typeof screenName === 'string') {
-      this.lastScreenName = screenName
-      this.lastScreenSessionId = sessionId
+    if (typeof screenName !== 'string') {
+      return false
     }
+    this.lastScreenName = screenName
+    this.lastScreenSessionId = sessionId
+    this.lastScreenEvaluated = false
+    return true
   }
 
   // A session that started after the last $screen event gets none for the screen the app is already
   // on, so the screen leg is checked against that screen, once per session. Returns whether a group
   // newly activated. Moves activation to sessionId, so it takes the current session id only.
   checkScreenOnNewSession(sessionId: string, personProperties: Record<string, unknown> | undefined): boolean {
-    const screenName = this.lastScreenName
-    if (screenName === null || sessionId === this.lastScreenSessionId || sessionId === this.screenCheckedSessionId) {
+    if (sessionId === this.lastScreenSessionId || sessionId === this.screenCheckedSessionId) {
       return false
     }
     this.screenCheckedSessionId = sessionId
+    return this.checkLastScreen(sessionId, personProperties)
+  }
+
+  // An explicit start also checks a $screen event of this session that no group was checked
+  // against, because replay was stopped or no group was armed when it arrived. Once per event.
+  checkScreenOnStart(sessionId: string, personProperties: Record<string, unknown> | undefined): boolean {
+    if (sessionId !== this.lastScreenSessionId || this.lastScreenEvaluated) {
+      return this.checkScreenOnNewSession(sessionId, personProperties)
+    }
+    return this.checkLastScreen(sessionId, personProperties)
+  }
+
+  private checkLastScreen(sessionId: string, personProperties: Record<string, unknown> | undefined): boolean {
+    const screenName = this.lastScreenName
+    if (screenName === null) {
+      return false
+    }
+    this.lastScreenEvaluated = true
     this.resetActivationForNewSession(sessionId)
 
     let newlyActivated = false
@@ -419,7 +442,7 @@ export class SessionReplayTriggerGroupsEvaluator {
   }
 
   // Read-only for activation: a caller holding a stale session id must not wipe the current
-  // session's activated groups. Only onEvent, restoreActivation and checkScreenOnNewSession move
+  // session's activated groups. Only onEvent, restoreActivation and the screen checks move
   // activation to a new session.
   evaluate(
     sessionId: string,

@@ -825,6 +825,60 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(startsCount()).toBe(3)
       expect((posthog as any)._sessionReplayRecordingActive).toBe(true)
     })
+
+    describe('then a startSessionRecording() in the same session', () => {
+      const checkoutGroup = (properties: any[] = []): any => ({
+        id: 'g1',
+        name: 'Checkout screens',
+        sampleRate: 1,
+        conditions: { matchType: 'any', urls: [{ url: '^checkout', matching: 'regex' }], properties },
+      })
+      const activation = (): any =>
+        posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)
+
+      it('activates the group of the screen opened while stopped', async () => {
+        currentSessionRecording = v2Config([checkoutGroup()])
+        await reloadFlags({})
+        await posthog.stopSessionRecording()
+        const sessionId = posthog.getSessionId()
+
+        await posthog.screen('checkout-step-2')
+        await wait(50)
+        expect(activation()).toBeFalsy()
+
+        await posthog.startSessionRecording()
+        expect(posthog.getSessionId()).toEqual(sessionId)
+        expect(activation()).toEqual({ sessionId, eventGroupIds: [], screenGroupIds: ['g1'] })
+        expect(startsCount()).toBe(2)
+      })
+
+      it('leaves the group pending when the screen opened while stopped does not match', async () => {
+        currentSessionRecording = v2Config([checkoutGroup()])
+        await reloadFlags({})
+        await posthog.stopSessionRecording()
+
+        await posthog.screen('Home')
+        await posthog.startSessionRecording()
+        expect(activation()).toBeFalsy()
+        expect(startsCount()).toBe(1)
+      })
+
+      it('does not check a screen again that was checked live and did not match', async () => {
+        currentSessionRecording = v2Config([
+          checkoutGroup([{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }]),
+        ])
+        await reloadFlags({})
+        await posthog.screen('checkout-step-2')
+        await wait(50)
+        expect(activation()).toBeFalsy()
+
+        posthog.setPersistedProperty(PostHogPersistedProperty.PersonProperties, { plan: 'pro' })
+        await posthog.stopSessionRecording()
+        await posthog.startSessionRecording()
+        expect(activation()).toBeFalsy()
+        expect(startsCount()).toBe(1)
+      })
+    })
   })
 
   // A session id the given group samples in (or out), picked through the SDK's own sampling hash.

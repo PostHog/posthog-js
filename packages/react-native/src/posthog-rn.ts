@@ -2360,7 +2360,7 @@ export class PostHog extends PostHogCore {
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
       )
     )
-    this._checkTriggerGroupsScreenOnNewSession(sessionId)
+    this._checkTriggerGroupsScreen(sessionId, true)
     const decision = this._triggerGroupsEvaluator.evaluate(
       sessionId,
       this.getKnownFeatureFlags(),
@@ -3890,7 +3890,7 @@ export class PostHog extends PostHogCore {
           PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
         )
       )
-      this._checkTriggerGroupsScreenOnNewSession(sessionId)
+      this._checkTriggerGroupsScreen(sessionId, false)
 
       const decision = this._triggerGroupsEvaluator.evaluate(
         sessionId,
@@ -4339,15 +4339,17 @@ export class PostHog extends PostHogCore {
 
   // Runs where recording is decided for a session, with the session id read there, so the screen
   // the app is already on counts for a session that started without a $screen event.
-  private _checkTriggerGroupsScreenOnNewSession(sessionId: string): void {
+  private _checkTriggerGroupsScreen(sessionId: string, explicitStart: boolean): void {
     // A stopped recording activates nothing until the app starts it again.
     if (!sessionId || this._isReplayExplicitlyStopped()) {
       return
     }
-    const newlyActivated = this._triggerGroupsEvaluator.checkScreenOnNewSession(
-      sessionId,
-      this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+    const personProperties = this.getPersistedProperty<Record<string, unknown>>(
+      PostHogPersistedProperty.PersonProperties
     )
+    const newlyActivated = explicitStart
+      ? this._triggerGroupsEvaluator.checkScreenOnStart(sessionId, personProperties)
+      : this._triggerGroupsEvaluator.checkScreenOnNewSession(sessionId, personProperties)
     if (newlyActivated) {
       this.setPersistedProperty(
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation,
