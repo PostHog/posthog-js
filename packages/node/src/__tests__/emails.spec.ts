@@ -1611,6 +1611,23 @@ describe('emails', () => {
     const sameBytes = (actual: Uint8Array, expected: Uint8Array): boolean =>
       actual.byteLength === expected.byteLength && actual.every((byte, index) => byte === expected[index])
 
+    const isJsonContentType = (value: string | undefined): boolean =>
+      typeof value === 'string' && value.split(';')[0].trim().toLowerCase() === 'application/json'
+
+    const parseJsonObject = (body: BodyInit | null | undefined): Record<string, unknown> | null => {
+      if (typeof body !== 'string') {
+        return null
+      }
+      try {
+        const parsed: unknown = JSON.parse(body)
+        return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : null
+      } catch {
+        return null
+      }
+    }
+
     const stubAttachmentSendRoutes = (
       sendReplies: Array<{ status: number; body: unknown }>
     ): { routes: string[]; uploadedBytes: Uint8Array[]; sentBodies: Record<string, unknown>[] } => {
@@ -1635,13 +1652,18 @@ describe('emails', () => {
                 detail: 'Bad auth.',
               })
             }
-            const payload = typeof options.body === 'string' ? JSON.parse(options.body) : null
+            if (!isJsonContentType(headers['content-type'])) {
+              return fakeReply(415, {
+                type: 'invalid_request',
+                code: 'unsupported_media_type',
+                detail: 'Expected application/json Content-Type.',
+              })
+            }
+            const payload = parseJsonObject(options.body)
             const files = payload?.files
             const grantItem = Array.isArray(files) && files.length === 1 ? files[0] : null
             const validGrant =
               payload !== null &&
-              typeof payload === 'object' &&
-              !Array.isArray(payload) &&
               Object.keys(payload).length === 1 &&
               grantItem !== null &&
               typeof grantItem === 'object' &&
@@ -1703,7 +1725,22 @@ describe('emails', () => {
                 detail: 'Bad auth.',
               })
             }
-            if (!uploaded || typeof options.body !== 'string') {
+            if (!isJsonContentType(headers['content-type'])) {
+              return fakeReply(415, {
+                type: 'invalid_request',
+                code: 'unsupported_media_type',
+                detail: 'Expected application/json Content-Type.',
+              })
+            }
+            if (!headers['idempotency-key']?.trim()) {
+              return fakeReply(400, {
+                type: 'invalid_request',
+                code: 'invalid_idempotency_key',
+                detail: 'Idempotency-Key header is required.',
+              })
+            }
+            const parsedBody = parseJsonObject(options.body)
+            if (!uploaded || parsedBody === null) {
               return fakeReply(400, {
                 type: 'invalid_request',
                 code: 'attachment_not_uploaded',
@@ -1711,7 +1748,7 @@ describe('emails', () => {
               })
             }
             routes.push('send')
-            sentBodies.push(JSON.parse(options.body))
+            sentBodies.push(parsedBody)
             const next = remainingSendReplies.shift()
             if (!next) {
               return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'No send reply left.' })
@@ -2095,6 +2132,91 @@ describe('emails', () => {
       expect(postedSend(1).body).toMatchObject({
         from: 'Sender <sender@example.com>',
         category: NEWSLETTER,
+      })
+    })
+
+    it('preserves category from a class getter or non-enumerable property on a code send', async () => {
+      replies = [accepted(), accepted()]
+
+      let classCategoryRead = false
+      class ClassCategorySend {
+        readonly to = CODE_SEND.to
+        readonly templateKey = CODE_SEND.templateKey
+        readonly subject = CODE_SEND.subject
+        readonly html = CODE_SEND.html
+
+        get category(): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
+          if (classCategoryRead) {
+            return TRANSACTIONAL_EMAIL_CATEGORY
+          }
+          classCategoryRead = true
+          return NEWSLETTER
+        }
+      }
+
+      const fromClass = await posthog.emails.send(new ClassCategorySend())
+
+      expect(fromClass.error).toBeNull()
+      expect(fromClass.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(postedSend(0).body).toMatchObject({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        category: NEWSLETTER,
+      })
+
+      const nonEnumerable: Record<string, unknown> = { ...CODE_SEND }
+      Object.defineProperty(nonEnumerable, 'category', {
+        value: NEWSLETTER,
+        enumerable: false,
+      })
+
+      const fromNonEnumerable = await sendUnchecked(nonEnumerable)
+
+      expect(fromNonEnumerable.error).toBeNull()
+      expect(fromNonEnumerable.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(1).body).toMatchObject({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        category: NEWSLETTER,
+      })
+    })
+
+    it('preserves class-backed idempotencyKey and templateData across repeated template sends', async () => {
+      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
+
+      class ClassTemplateSend {
+        readonly to = 'reader@example.com'
+        readonly templateId = TEMPLATE_ID
+
+        get idempotencyKey(): string {
+          return 'idem-class-template-1'
+        }
+
+        get templateData(): Record<string, unknown> {
+          return { name: 'Ada' }
+        }
+      }
+
+      const first = await posthog.emails.send(new ClassTemplateSend())
+      const second = await posthog.emails.send(new ClassTemplateSend())
+
+      expect(first.error).toBeNull()
+      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(second.error).toBeNull()
+      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(0).headers['idempotency-key']).toBe('idem-class-template-1')
+      expect(postedSend(1).headers['idempotency-key']).toBe('idem-class-template-1')
+      expect(postedSend(0).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: { name: 'Ada' },
+      })
+      expect(postedSend(1).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: { name: 'Ada' },
       })
     })
 

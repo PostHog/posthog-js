@@ -484,7 +484,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send = snapshotOptions(options)
+  const { send, own } = snapshotOptions(options)
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
@@ -492,7 +492,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const { content, files } = contentOf(send, distinctId)
+  const { content, files } = contentOf(send, own, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -516,9 +516,40 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 }
 
-function snapshotOptions(options: unknown): UncheckedSend {
-  const entries = options !== null && typeof options === 'object' ? Object.entries(options) : []
-  return Object.assign(Object.create(null), Object.fromEntries(entries)) as UncheckedSend
+interface OptionsSnapshot {
+  send: UncheckedSend
+  own: ReadonlyMap<string, unknown>
+}
+
+function snapshotOptions(options: unknown): OptionsSnapshot {
+  const send: Record<string, unknown> = Object.create(null)
+  if (options === null || typeof options !== 'object') {
+    return { send: send as UncheckedSend, own: new Map() }
+  }
+  const raw = options as Record<string, unknown>
+  const own = new Map<string, unknown>(Object.entries(options))
+  const read = (name: string): void => {
+    send[name] = own.has(name) ? own.get(name) : raw[name]
+  }
+  for (const name of Object.keys(SHARED_FIELDS)) {
+    read(name)
+  }
+  read('templateId')
+  read('templateKey')
+  const formFields =
+    send.templateKey !== undefined && send.templateId === undefined
+      ? CODE_FIELDS
+      : send.templateId !== undefined && send.templateKey === undefined
+        ? TEMPLATE_FIELDS
+        : undefined
+  if (formFields !== undefined) {
+    for (const name of Object.keys(formFields)) {
+      if (name !== 'templateId' && name !== 'templateKey') {
+        read(name)
+      }
+    }
+  }
+  return { send: send as UncheckedSend, own }
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -563,7 +594,11 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
+function contentOf(
+  send: UncheckedSend,
+  own: ReadonlyMap<string, unknown>,
+  distinctId: string | undefined
+): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
@@ -571,11 +606,15 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): SendCon
     })
   }
   return send.templateKey === undefined
-    ? { content: templateContent(send, distinctId), files: [] }
-    : codeContent(send, distinctId)
+    ? { content: templateContent(send, own, distinctId), files: [] }
+    : codeContent(send, own, distinctId)
 }
 
-function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+function templateContent(
+  send: UncheckedSend,
+  own: ReadonlyMap<string, unknown>,
+  distinctId: string | undefined
+): Record<string, unknown> {
   const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
@@ -586,7 +625,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(own, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -594,7 +633,11 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   }
 }
 
-function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+function codeContent(
+  send: UncheckedSend,
+  own: ReadonlyMap<string, unknown>,
+  distinctId: string | undefined
+): SendContent {
   const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
@@ -603,7 +646,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       'templateKey'
     )
   }
-  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(own, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -752,8 +795,8 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+function refuseFieldsOutside(own: ReadonlyMap<string, unknown>, form: SendForm, otherForm: SendForm): void {
+  const field = [...own].find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
   if (field === undefined) {
     return
   }
