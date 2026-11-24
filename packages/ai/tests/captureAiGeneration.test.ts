@@ -451,13 +451,27 @@ describe('captureAiGeneration', () => {
       name: 'mcp_server',
       args: { url: 'https://mcp.example.com', headers: { 'x-api-key': 'secret' } },
     }
+    const googleMcpServerTool = {
+      type: 'mcp_server',
+      name: 'docs',
+      url: 'https://mcp.example.com',
+      headers: { 'x-api-key': 'secret' },
+    }
     const vercelWebSearchTool = { type: 'provider', id: 'openai.web_search', name: 'web_search', args: {} }
     const functionTool = { type: 'function', function: { name: 'lookup', parameters: {} } }
 
     await captureAiGeneration(client, {
       ...baseRequiredOptions,
       privacyMode,
-      tools: [mcpTool, vercelOpenAIMcpTool, vercelXaiMcpTool, vercelGoogleMcpTool, vercelWebSearchTool, functionTool],
+      tools: [
+        mcpTool,
+        vercelOpenAIMcpTool,
+        vercelXaiMcpTool,
+        vercelGoogleMcpTool,
+        googleMcpServerTool,
+        vercelWebSearchTool,
+        functionTool,
+      ],
     })
 
     expect(lastCaptureProperties(client).$ai_tools).toEqual([
@@ -468,11 +482,13 @@ describe('captureAiGeneration', () => {
       },
       { ...vercelXaiMcpTool, args: { ...vercelXaiMcpTool.args, authorization: '[REDACTED]' } },
       { ...vercelGoogleMcpTool, args: { ...vercelGoogleMcpTool.args, headers: '[REDACTED]' } },
+      { ...googleMcpServerTool, headers: '[REDACTED]' },
       vercelWebSearchTool,
       functionTool,
     ])
     expect(mcpTool.authorization).toBe('secret')
     expect(vercelOpenAIMcpTool.args.authorization).toBe('secret')
+    expect(googleMcpServerTool.headers).toEqual({ 'x-api-key': 'secret' })
   })
 
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
