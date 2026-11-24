@@ -38,11 +38,13 @@ beforeEach(() => {
 /** A client on the browser's own storage, so tab storage survives a simulated navigation. */
 const pageLoad = async (
     network: Transport,
-    config: Parameters<typeof remoteConfig>[0] | undefined
+    config: Parameters<typeof remoteConfig>[0] | undefined,
+    overrides: { projectToken?: string; persistenceKey?: string } = {}
 ): Promise<{ posthog: IPostHog; replay: SessionRecordingExtension }> => {
     const replay = sessionRecording()
     const posthog = await createPostHog({
-        projectToken: 'ph_test',
+        projectToken: overrides.projectToken ?? 'ph_test',
+        ...(overrides.persistenceKey ? { persistenceKey: overrides.persistenceKey } : {}),
         capturePageview: false,
         navigator: false,
         fetch: network.fetch,
@@ -327,6 +329,34 @@ describe('session recording timing', () => {
 
         const metas = recordedEvents(network).filter((event) => event.type === 4)
         expect(metas.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('isolates parked recordings by project token when sharing a custom persistenceKey', async () => {
+        const network = transport()
+        const first = await pageLoad(
+            network,
+            { minimumDurationMilliseconds: 60_000 },
+            { projectToken: 'ph_project_a', persistenceKey: 'shared_key' }
+        )
+        await started(first.replay)
+        document.body.insertAdjacentHTML('beforeend', '<p>project-a-only-content</p>')
+        interact()
+        navigateAway(first.replay)
+        expect(network.snapshots).toHaveLength(0)
+
+        resetDocument()
+        const second = await pageLoad(
+            network,
+            { minimumDurationMilliseconds: 60_000 },
+            { projectToken: 'ph_project_b', persistenceKey: 'shared_key' }
+        )
+        await started(second.replay)
+        advance(61_000)
+        interact()
+        await second.replay.flush?.()
+
+        expect(network.snapshots.length).toBeGreaterThan(0)
+        expect(JSON.stringify(recordedEvents(network))).not.toContain('project-a-only-content')
     })
 
     it('keeps starting from the configuration this page received after an hour', async () => {
