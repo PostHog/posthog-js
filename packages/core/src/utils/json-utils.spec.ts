@@ -1,4 +1,4 @@
-import { toJsonSafeValue } from './json-utils'
+import { MAX_JSON_SAFE_VALUE_DEPTH, toJsonSafeValue, withoutNullMembers } from './json-utils'
 
 describe('toJsonSafeValue', () => {
   it('converts circular and unsupported values while preserving shared references', () => {
@@ -111,5 +111,52 @@ describe('toJsonSafeValue', () => {
     const safeNodeHeavyValue = toJsonSafeValue(nodeHeavyValue) as unknown[]
     expect(safeNodeHeavyValue).toHaveLength(478)
     expect(safeNodeHeavyValue.at(-1)).toBe('[Truncated]')
+  })
+})
+
+describe('withoutNullMembers', () => {
+  it('removes null and undefined members recursively and keeps array positions', () => {
+    const dirty = { a: null, b: undefined, nested: { drop: null }, items: [null, { drop: null, keep: 0 }] }
+    expect(withoutNullMembers(dirty)).toEqual({ nested: {}, items: [null, { keep: 0 }] })
+    expect(dirty.nested).toEqual({ drop: null })
+  })
+
+  it('returns the input when nothing changes', () => {
+    const clean = { a: 1, nested: { b: 'ok' }, items: [1, null, { c: 2 }] }
+    expect(withoutNullMembers(clean)).toBe(clean)
+  })
+
+  it('can be passed directly as a mapper callback', () => {
+    const items = [
+      { a: 1, b: null },
+      { c: undefined, d: 'ok' },
+    ]
+    expect(items.map(withoutNullMembers)).toEqual([{ a: 1 }, { d: 'ok' }])
+  })
+
+  it('cleans null-prototype objects and leaves cycles and non-plain objects as they are', () => {
+    expect(withoutNullMembers(Object.assign(Object.create(null), { keep: 1, drop: null }))).toEqual({ keep: 1 })
+
+    const cyclic: Record<string, unknown> = { drop: null }
+    cyclic.self = cyclic
+    const cleaned = withoutNullMembers(cyclic)
+    expect(cleaned).not.toHaveProperty('drop')
+    expect(cleaned.self).toBe(cyclic)
+
+    const date = new Date('2025-01-01T00:00:00.000Z')
+    expect(withoutNullMembers({ date, drop: null })).toEqual({ date })
+  })
+
+  it('leaves members nested at the depth limit as they are', () => {
+    const deepest = { drop: null }
+    let value: Record<string, unknown> = deepest
+    for (let i = 0; i < MAX_JSON_SAFE_VALUE_DEPTH; i++) {
+      value = { child: value }
+    }
+    let cleaned = withoutNullMembers(value)
+    for (let i = 0; i < MAX_JSON_SAFE_VALUE_DEPTH; i++) {
+      cleaned = cleaned.child as Record<string, unknown>
+    }
+    expect(cleaned).toBe(deepest)
   })
 })
