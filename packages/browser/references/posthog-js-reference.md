@@ -828,7 +828,7 @@ Gets the value of a feature flag for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `FeatureFlagOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. |
+| `options?` | `FeatureFlagOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. |
 
 #### Returns
 
@@ -907,7 +907,8 @@ A result with `enabled: false` is a conclusive off evaluation. `undefined` means
 evaluation is available for the key. This includes globally inactive flags, which are omitted
 from the remote `/flags` response.
 
-By default, this method emits the `$feature_flag_called` event.
+By default, this method emits the `$feature_flag_called` event, and also `$experiment_exposure` when a
+config version 2 experiment split supplies the value.
 
 #### Parameters
 
@@ -1087,7 +1088,7 @@ Checks if a feature flag is enabled for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `FeatureFlagOptions` & `object` & `object` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
+| `options?` | `FeatureFlagOptions` & `object` & `object` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
 
 ##### Returns
 
@@ -1130,7 +1131,7 @@ Checks if a feature flag is enabled for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `IsFeatureEnabledOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
+| `options?` | `IsFeatureEnabledOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
 
 ##### Returns
 
