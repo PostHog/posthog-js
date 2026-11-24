@@ -70,7 +70,14 @@ describe('V1CaptureSender durable-queue options', () => {
       const kept = await sender.send(events, { onDeferred: (deferral) => deferrals.push(deferral) })
 
       expect(kept).toEqual(events)
-      expect(deferrals).toEqual([{ reason: `HTTP ${status}`, retryAfterMs: 7000, tooLarge: false }])
+      expect(deferrals).toEqual([
+        {
+          reason: `HTTP ${status}`,
+          retryAfterMs: 7000,
+          tooLarge: false,
+          request: expect.objectContaining({ attempt: 1 }),
+        },
+      ])
       expect(errors).toEqual([])
     }
   )
@@ -86,7 +93,14 @@ describe('V1CaptureSender durable-queue options', () => {
     const kept = await sender.send([a, event(UUID_B)], { onDeferred: (deferral) => deferrals.push(deferral) })
 
     expect(kept).toEqual([a])
-    expect(deferrals).toEqual([{ reason: 'the server asked to retry them', retryAfterMs: undefined, tooLarge: false }])
+    expect(deferrals).toEqual([
+      {
+        reason: 'the server asked to retry them',
+        retryAfterMs: undefined,
+        tooLarge: false,
+        request: expect.objectContaining({ attempt: 1 }),
+      },
+    ])
     expect(errors).toEqual([
       expect.objectContaining({ drops: [{ uuid: UUID_B, details: undefined }], retryExhausted: [] }),
     ])
@@ -99,10 +113,31 @@ describe('V1CaptureSender durable-queue options', () => {
     const events = [event(UUID_A), event(UUID_B)]
 
     expect(await sender.send(events, { onDeferred: (deferral) => deferrals.push(deferral) })).toEqual(events)
-    expect(deferrals).toEqual([{ reason: 'HTTP 413', retryAfterMs: undefined, tooLarge: true }])
+    expect(deferrals).toEqual([
+      { reason: 'HTTP 413', retryAfterMs: undefined, tooLarge: true, request: expect.objectContaining({ attempt: 1 }) },
+    ])
 
     expect(await sender.send([event(UUID_A)], { onDeferred: (deferral) => deferrals.push(deferral) })).toEqual([])
     expect(errors).toEqual([expect.objectContaining({ retryExhausted: [UUID_A] })])
+  })
+
+  it('resends kept events under the request they were kept from, with the next attempt number', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(503))
+    const { sender } = makeSender(fetch)
+    const deferrals: V1SendDeferral[] = []
+    const onDeferred = (deferral: V1SendDeferral) => deferrals.push(deferral)
+
+    const kept = await sender.send([event(UUID_A)], { onDeferred })
+    await sender.send(kept, { onDeferred, retryOf: deferrals[0].request })
+
+    const [first, resend] = fetch.mock.calls.map(([, options]) => ({
+      requestId: options.headers['PostHog-Request-Id'],
+      attempt: options.headers['PostHog-Attempt'],
+      createdAt: JSON.parse(options.body).created_at,
+    }))
+    expect(deferrals[0].request).toEqual({ ...first, attempt: 1 })
+    expect(resend).toEqual({ ...first, attempt: '2' })
+    expect(deferrals[1].request).toEqual({ ...first, attempt: 2 })
   })
 
   it('reports retryable failures as before without onDeferred', async () => {
