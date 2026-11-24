@@ -1096,7 +1096,8 @@ function initFetchObserver(
                         // captureResponse clones the body before its first await, so the caller can consume it now.
                         const earlyResponse = response
                         timingRecordedLater = true
-                        void captureResponse(earlyResponse).then(() => recordTiming(earlyResponse))
+                        const recordEarlyTiming = (): void => recordTiming(earlyResponse)
+                        void captureResponse(earlyResponse).then(recordEarlyTiming, recordEarlyTiming)
                         return earlyResponse
                     }
                     await captureResponse(response)

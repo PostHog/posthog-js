@@ -12,8 +12,8 @@ describe('config', () => {
     })
 
     it('keeps early replay fetch responses opt-in', () => {
-        expect(defaultConfig().__preview_replay_early_fetch_response).toBe(false)
-        expect(defaultConfig('2026-05-30').__preview_replay_early_fetch_response).toBe(false)
+        expect(defaultConfig().__preview_replay_early_fetch_response).toBeUndefined()
+        expect(defaultConfig('2026-05-30').__preview_replay_early_fetch_response).toBeUndefined()
     })
 
     describe('memory persistence without bootstrap.distinctID', () => {

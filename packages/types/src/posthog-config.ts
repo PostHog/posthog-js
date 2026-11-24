@@ -2759,10 +2759,14 @@ export interface PostHogConfig {
      * Private preview: return a recorded fetch response to the application before its body has been captured.
      * Without it, a response is held until Replay finishes reading its body or the read times out, which
      * delays streamed responses. In WebKit, aborting a request while its body is being read then rejects with
-     * a `TypeError` instead of an `AbortError`. Requires `__preview_replay_sync_fetch`.
+     * a `TypeError` instead of an `AbortError`, so code that ignores aborts by checking `err.name` will report them.
+     * Requires `__preview_replay_sync_fetch`; without it, Replay keeps holding the response.
+     * Pair it with `session_recording.streamNetworkBody` so Replay stops reading a long-lived stream when its
+     * body read times out.
      * Applied when the recorder installs its network observers, not a live remote kill switch.
      *
      * @default false
+     * @internal
      */
     __preview_replay_early_fetch_response?: boolean
 

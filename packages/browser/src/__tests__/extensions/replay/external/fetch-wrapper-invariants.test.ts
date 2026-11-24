@@ -16,7 +16,11 @@ function expectNotToThrow(promise: Promise<Response>) {
 function setupWrappedFetch(
     downstreamFetch: typeof fetch,
     recordBody: NetworkRecordOptions['recordBody'] = true,
-    fetchOptions: { captureFetchSynchronously?: boolean; returnFetchResponseEarly?: boolean } = {
+    fetchOptions: {
+        captureFetchSynchronously?: boolean
+        returnFetchResponseEarly?: boolean
+        streamNetworkBody?: boolean
+    } = {
         captureFetchSynchronously: true,
     },
     onRequests: (data: any) => void = () => {}
@@ -335,11 +339,11 @@ describe('fetch wrapper', () => {
             expect(await clone.text()).toBe('test body')
         })
 
-        describe('streamed response bodies', () => {
+        describe.each([false, true])('streamed response bodies (streamNetworkBody: %s)', (streamNetworkBody) => {
             const encoder = new TextEncoder()
             const decoder = new TextDecoder()
 
-            function setupStreamedFetch(returnFetchResponseEarly: boolean) {
+            function setupStreamedFetch(returnFetchResponseEarly: boolean, captureFetchSynchronously = true) {
                 let controller!: ReadableStreamDefaultController<Uint8Array>
                 const body = new ReadableStream<Uint8Array>({
                     start(c) {
@@ -350,25 +354,33 @@ describe('fetch wrapper', () => {
                 const { wrappedFetch, cleanup } = setupWrappedFetch(
                     async () => new Response(body, { headers: { 'Content-Type': 'application/json' } }),
                     true,
-                    { captureFetchSynchronously: true, returnFetchResponseEarly },
+                    { captureFetchSynchronously, returnFetchResponseEarly, streamNetworkBody },
                     onRequests
                 )
                 return { controller, onRequests, wrappedFetch, cleanup }
+            }
+
+            async function readFastLine(response: Response): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+                const reader = response.body!.getReader()
+                expect(decoder.decode((await reader.read()).value)).toBe('{"fast":1}\n')
+                return reader
+            }
+
+            async function readSlowLineToEnd(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+                expect(decoder.decode((await reader.read()).value)).toBe('{"slow":2}\n')
+                expect((await reader.read()).done).toBe(true)
             }
 
             it('with early response opt-in, resolves before the body ends and still records the whole body', async () => {
                 const { controller, onRequests, wrappedFetch, cleanup } = setupStreamedFetch(true)
                 try {
                     controller.enqueue(encoder.encode('{"fast":1}\n'))
-                    const response = await wrappedFetch('https://example.com/api/stream')
-                    const reader = response.body!.getReader()
-                    expect(decoder.decode((await reader.read()).value)).toBe('{"fast":1}\n')
+                    const reader = await readFastLine(await wrappedFetch('https://example.com/api/stream'))
                     expect(onRequests).not.toHaveBeenCalled()
 
                     controller.enqueue(encoder.encode('{"slow":2}\n'))
                     controller.close()
-                    expect(decoder.decode((await reader.read()).value)).toBe('{"slow":2}\n')
-                    expect((await reader.read()).done).toBe(true)
+                    await readSlowLineToEnd(reader)
 
                     await vi.runAllTimersAsync()
                     expect(onRequests).toHaveBeenCalledTimes(1)
@@ -378,8 +390,50 @@ describe('fetch wrapper', () => {
                 }
             })
 
-            it('by default, holds the response until the body read settles', async () => {
-                const { controller, wrappedFetch, cleanup } = setupStreamedFetch(false)
+            it('with early response opt-in, records the timeout once while the caller keeps reading', async () => {
+                const { controller, onRequests, wrappedFetch, cleanup } = setupStreamedFetch(true)
+                try {
+                    controller.enqueue(encoder.encode('{"fast":1}\n'))
+                    const reader = await readFastLine(await wrappedFetch('https://example.com/api/stream'))
+
+                    await vi.advanceTimersByTimeAsync(500)
+                    controller.enqueue(encoder.encode('{"slow":2}\n'))
+                    controller.close()
+                    await readSlowLineToEnd(reader)
+
+                    await vi.runAllTimersAsync()
+                    expect(onRequests).toHaveBeenCalledTimes(1)
+                    expect(onRequests.mock.calls[0][0].requests[0].responseBody).toBe(
+                        '[SessionReplay] Timeout while trying to read body'
+                    )
+                } finally {
+                    cleanup()
+                }
+            })
+
+            it('with early response opt-in, records nothing once the observer is cleaned up', async () => {
+                const { controller, onRequests, wrappedFetch, cleanup } = setupStreamedFetch(true)
+                try {
+                    controller.enqueue(encoder.encode('{"fast":1}\n'))
+                    const reader = await readFastLine(await wrappedFetch('https://example.com/api/stream'))
+
+                    cleanup()
+                    controller.enqueue(encoder.encode('{"slow":2}\n'))
+                    controller.close()
+                    await readSlowLineToEnd(reader)
+
+                    await vi.runAllTimersAsync()
+                    expect(onRequests).not.toHaveBeenCalled()
+                } finally {
+                    cleanup()
+                }
+            })
+
+            it.each([
+                ['by default', false, true],
+                ['with early response opt-in but without synchronous capture', true, false],
+            ])('%s, holds the response until the body read settles', async (_name, early, synchronous) => {
+                const { controller, wrappedFetch, cleanup } = setupStreamedFetch(early, synchronous)
                 try {
                     controller.enqueue(encoder.encode('{"fast":1}\n'))
                     let resolved = false
