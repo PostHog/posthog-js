@@ -393,6 +393,35 @@ describe('session recording markers', () => {
             },
         })
     })
+
+    it('records a console warning and dropped-mutation count when the mutation throttler blocks a node', async () => {
+        const { replay, transport: network } = await setup()
+        await started(replay)
+
+        interact()
+        const node = document.getElementById('name')!
+        for (let count = 0; count < 150; count++) {
+            node.setAttribute('data-count', String(count))
+            await Promise.resolve()
+        }
+        await replay.flush?.()
+
+        const consoleWarnings = recordedEvents(network).filter(
+            (event) =>
+                event.type === 6 &&
+                (event.data as { plugin?: string; payload?: { level?: string; payload?: string[] } }).plugin ===
+                    'rrweb/console@1' &&
+                (event.data as { payload?: { level?: string } }).payload?.level === 'warn' &&
+                (event.data as { payload?: { payload?: string[] } }).payload?.payload?.[0]?.includes(
+                    '[SessionRecording] Too many mutations on node'
+                )
+        )
+        expect(consoleWarnings).toHaveLength(1)
+        const dropped = snapshotEvents(network).map(
+            (event) => event.properties.$sdk_debug_replay_throttled_mutations_dropped as number | undefined
+        )
+        expect(dropped.some((count) => (count ?? 0) > 0)).toBe(true)
+    })
 })
 
 describe('session recording attribution', () => {
