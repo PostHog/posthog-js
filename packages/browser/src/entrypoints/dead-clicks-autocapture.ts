@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
+import { isFunction, isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
 import {
     getEventTarget,
     isTextSelectionTarget,
@@ -405,6 +405,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // so it can never feed the post-click selection timeout. Keep the candidate queued until the
     // check so it can still deduplicate another click on the same node.
     private _queueCandidate(candidate: DeadClickCandidate): void {
+        if (!this._isCapturing()) {
+            return
+        }
         candidate.selectionChangedDelayMs = priorLivenessDelay(
             candidate.timestamp,
             this._lastSelectionChanged,
@@ -629,7 +632,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // only single-finger gestures are swipes; a second finger (pinch/zoom) is not,
         // so a multi-touch start clears any tracked origin rather than measuring against it
         const touch = touches?.length === 1 ? touches[0] : undefined
-        this._touchStart = touch ? { x: touch.clientX, y: touch.clientY, timestamp: Date.now() } : undefined
+        this._touchStart =
+            touch && this._isCapturing() ? { x: touch.clientX, y: touch.clientY, timestamp: Date.now() } : undefined
+    }
+
+    private _isCapturing(): boolean {
+        return isFunction(this.instance.is_capturing)
+            ? this.instance.is_capturing()
+            : !this.instance.has_opted_out_capturing()
     }
 
     private _onTouchCancel = (): void => {

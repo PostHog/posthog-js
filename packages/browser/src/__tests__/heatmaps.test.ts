@@ -3,7 +3,7 @@ import './helpers/mock-logger'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../posthog-core'
-import { FlagsResponse } from '../types'
+import { DeadClickCandidate, FlagsResponse } from '../types'
 import { isObject } from '@posthog/core'
 import { beforeEach, expect } from 'vitest'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
@@ -258,6 +258,65 @@ describe('heatmaps', () => {
         vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock.mock.calls).toEqual([])
+    })
+
+    describe('consent', () => {
+        const sentHeatmapPoints = (mock = beforeSendMock) =>
+            mock.mock.calls
+                .map(([event]) => event)
+                .filter((event) => event.event === '$$heatmap')
+                .flatMap((event) => Object.values(event.properties.$heatmap_data).flat())
+
+        it('does not send interactions made before consent when another tab grants it', () => {
+            posthog.opt_out_capturing()
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 1, clientY: 1 }))
+            posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent({ clientX: 3, clientY: 3 }))
+
+            posthog.consent.optInOut(true)
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 2, clientY: 2 }))
+            vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints()).toEqual([expect.objectContaining({ x: 2, y: 2, type: 'click' })])
+        })
+
+        it('discards points held at opt-out when another tab grants consent again', () => {
+            const clickedAt = Date.now()
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 1, clientY: 1 }))
+            posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent({ clientX: 3, clientY: 3 }))
+
+            vi.advanceTimersByTime(100)
+            posthog.opt_out_capturing()
+            posthog.consent.optInOut(true)
+            posthog.heatmaps?.['_onDeadClick']?.({
+                originalEvent: createMockMouseEvent({ clientX: 4, clientY: 4 }),
+                timestamp: clickedAt,
+            } as DeadClickCandidate)
+            vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints()).toEqual([])
+        })
+
+        it('does not carry points across a cookieless identity change', async () => {
+            const cookielessBeforeSend = vi.fn().mockImplementation((e) => e)
+            const cookieless = await createPosthogInstance(uuidv7(), {
+                cookieless_mode: 'on_reject',
+                before_send: cookielessBeforeSend,
+                capture_pageview: false,
+            })
+            cookieless.config.capture_heatmaps = true
+            cookieless.heatmaps!.startIfEnabled()
+
+            cookieless.opt_in_capturing()
+            cookieless.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 1, clientY: 1 }))
+            cookieless.opt_out_capturing()
+            vi.advanceTimersByTime(cookieless.heatmaps!.flushIntervalMilliseconds + 1)
+
+            cookieless.heatmaps?.['_onClick']?.(createMockMouseEvent({ clientX: 2, clientY: 2 }))
+            cookieless.opt_in_capturing()
+            vi.advanceTimersByTime(cookieless.heatmaps!.flushIntervalMilliseconds + 1)
+
+            expect(sentHeatmapPoints(cookielessBeforeSend)).toEqual([])
+        })
     })
 
     describe('onRemoteConfig', () => {

@@ -1,5 +1,24 @@
 # @posthog/browser-common
 
+## 0.13.1
+
+### Patch Changes
+
+- [#5857](https://github.com/PostHog/posthog-js/pull/5857) [`2f8247d`](https://github.com/PostHog/posthog-js/commit/2f8247d2dcb40bab0495d390b953768f1e1f32bb) Thanks [@slshults](https://github.com/slshults)! - Updated DOMPurify from 3.4.13 to 3.4.18.
+  (2026-11-23)
+
+## 0.13.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/types@1.427.1
+
 ## 0.12.2
 
 ### Patch Changes

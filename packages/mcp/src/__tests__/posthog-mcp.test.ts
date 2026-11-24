@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { CaptureError, PostHog } from 'posthog-node'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index'
@@ -146,6 +146,46 @@ describe('PostHogMCP', () => {
       vi.restoreAllMocks()
     }
   })
+
+  it.each([
+    ['capture', '/i/v1/analytics/events'],
+    ['captureImmediate', '/i/v1/analytics/events'],
+    ['captureAi', '/i/v1/ai/events'],
+    ['captureAiImmediate', '/i/v1/ai/events'],
+  ] as const)(
+    'drops an event whose properties cannot be read on %s with a server build, without throwing',
+    async (method, endpoint) => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const client = newClient({ serverBuild: 'abc123' })
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+      const properties = Object.defineProperty({}, 'value', {
+        enumerable: true,
+        get: () => {
+          throw new Error('getter failed: secret-value')
+        },
+      })
+      try {
+        const event = { distinctId: 'user-123', event: '$ai_generation', properties }
+        if (method === 'capture' || method === 'captureAi') {
+          expect(() => client[method](event)).not.toThrow()
+          await client.flush()
+        } else {
+          await expect(client[method](event)).resolves.not.toThrow()
+        }
+
+        expect(errors).toHaveLength(1)
+        const error = errors[0] as CaptureError
+        expect(error).toBeInstanceOf(CaptureError)
+        expect(error.endpoint).toBe(endpoint)
+        expect(error.message).toContain('could not be serialized')
+        expect(error.message).not.toContain('secret-value')
+      } finally {
+        await client.shutdown()
+        consoleError.mockRestore()
+      }
+    }
+  )
 
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
