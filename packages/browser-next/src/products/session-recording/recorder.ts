@@ -183,6 +183,7 @@ export class SessionRecorder {
     private _parking: KeyValueStore | undefined
     private _parkedBufferSize: number | undefined
     private _parkedBufferRestored = false
+    private _throttledMutationsDropped = 0
     private _queuedCustomEvents: Array<[tag: string, payload: unknown, enqueuedAt: number]> = []
 
     constructor(private readonly _host: RecorderHost) {
@@ -553,8 +554,14 @@ export class SessionRecorder {
     private _startRrweb(): void {
         if (this._stopRrweb) return
         this._mutationThrottler ??= new MutationThrottler(recordFunction, {
-            onBlockedNode: (id) =>
-                this._client.logger.info(`Session recording is rate limiting mutations on node ${id}`),
+            onBlockedNode: (id) => {
+                const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
+                this._client.logger.info(message)
+                this._emitConsoleLog(`[SessionRecording] ${message}`, 'warn')
+            },
+            onDroppedAttributeMutations: (count) => {
+                this._throttledMutationsDropped += count
+            },
             requestFullSnapshot: () => this._takeFullSnapshot(),
             resyncIntervalMs: this._fullSnapshotIntervalMs(),
         })
@@ -660,6 +667,7 @@ export class SessionRecorder {
             this._lastActivityTimestamp = Date.now()
             // a held epoch is discarded by this stop: its flush is suppressed and the buffer cleared
             this.stop()
+            this._throttledMutationsDropped = 0
             this._strategy?.clearConditionalRecordingPersistence()
             // as posthog-js checks disable_session_recording, a stop from a new-session listener cancels the restart
             if (this._client.canCapture && !this._host.stoppedLocally()) this.start('session_id_changed')
@@ -814,6 +822,22 @@ export class SessionRecorder {
         } catch {
             return undefined
         }
+    }
+
+    private _emitConsoleLog(message: string, level: 'log' | 'warn' | 'error' = 'log'): void {
+        this._onEmit({
+            type: EventType.Plugin,
+            data: {
+                plugin: 'rrweb/console@1',
+                payload: {
+                    level,
+                    trace: [],
+                    // rrweb console payloads carry JSON-stringified values
+                    payload: [JSON.stringify(message)],
+                },
+            },
+            timestamp: Date.now(),
+        })
     }
 
     private _onEmit(rawEvent: eventWithTime): void {
@@ -1063,6 +1087,9 @@ export class SessionRecorder {
                         $lib: 'web',
                         $lib_version: version,
                         ...(host ? { $snapshot_host: host } : {}),
+                        ...(this._throttledMutationsDropped > 0
+                            ? { $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped }
+                            : {}),
                         distinct_id: buffer.distinctId,
                         token: this._client.projectToken,
                     },
