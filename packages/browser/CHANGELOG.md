@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.454.4
+
+### Patch Changes
+
+- [#5742](https://github.com/PostHog/posthog-js/pull/5742) [`fa50a00`](https://github.com/PostHog/posthog-js/commit/fa50a00aae4f28caa12c9dd8de2afb7f58b40c29) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording the contents of an iframe that is blocked with the block class or block selector.
+  (2026-11-24)
+
+- [#5858](https://github.com/PostHog/posthog-js/pull/5858) [`9d28601`](https://github.com/PostHog/posthog-js/commit/9d286015038da56a284b610b607af6fd2b5268e6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve campaign and referrer properties when `cookieWinsOnConflict` adopts a shared cross-subdomain cookie
+  (2026-11-24)
+
+- [#5805](https://github.com/PostHog/posthog-js/pull/5805) [`e4d5c4f`](https://github.com/PostHog/posthog-js/commit/e4d5c4f1ca64710b5bd41705bfe872aba11f2508) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Tracing headers no longer break an app's request when the distinct ID cannot be sent as a header value: the request goes out without the PostHog tracing headers, and a `fetch(Request)` keeps its body.
+  (2026-11-24)
+
 ## 1.454.3
 
 ### Patch Changes
