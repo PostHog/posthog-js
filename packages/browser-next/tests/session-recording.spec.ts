@@ -358,6 +358,29 @@ describe('session recording URL sanitization', () => {
     })
 })
 
+describe('session recording URL trigger diagnostics', () => {
+    afterEach(() => window.history.pushState({}, '', '/'))
+
+    it('applies urlSanitization to the URL a trigger matched', async () => {
+        const { replay, transport: network } = await setup(
+            { urlTriggers: [{ url: 'account', matching: 'regex' }] },
+            {},
+            { urlSanitization: { query: false } }
+        )
+        await started(replay)
+        window.history.pushState({}, '', '/account?token=secret')
+        typeInto(document.getElementById('name') as HTMLInputElement, 'x')
+        await replay.flush?.()
+
+        const markers = recordedEvents(network).filter(
+            (event) => event.type === 5 && (event.data as { tag?: string })?.tag === '$recording_started'
+        )
+        const matched = markers.map((event) => (event.data as { payload: { matchedUrl?: string } }).payload.matchedUrl)
+        expect(matched).toContain('http://localhost:3000/account')
+        expect(JSON.stringify(markers)).not.toContain('secret')
+    })
+})
+
 describe('session recording debug properties', () => {
     const OPTIONAL = [
         '$sdk_debug_replay_internal_buffer_size',

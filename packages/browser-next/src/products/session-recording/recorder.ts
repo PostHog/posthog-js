@@ -804,7 +804,9 @@ export class SessionRecorder {
             this._onTriggerActivated()
             this._flushBuffer()
             this._reportStarted(`${triggerType}_trigger_matched` as SessionStartReason, {
-                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']: matchDetail,
+                // the matched URL is the raw page URL; record it like other replay page URLs
+                [triggerType === 'url' ? 'matchedUrl' : 'matchedEvent']:
+                    triggerType === 'url' && matchDetail ? this._maskUrl(matchDetail) : matchDetail,
             })
         } finally {
             this._activatingTrigger = false
