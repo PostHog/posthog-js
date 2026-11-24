@@ -504,6 +504,16 @@ describe('session recording teardown', () => {
         expect(network.snapshots).toHaveLength(2)
         network.release()
     })
+
+    it('sends the buffer that stopping queues when the recorder is disposed', async () => {
+        const { replay, transport: network } = await setup()
+        await started(replay)
+        interact()
+
+        replay.dispose?.()
+
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
+    })
 })
 
 describe('session recording privacy', () => {
