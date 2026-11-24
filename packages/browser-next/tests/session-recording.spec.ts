@@ -742,6 +742,7 @@ describe('session recording plugins', () => {
             expect(vi.mocked(getRecordNetworkPlugin).mock.calls.at(-1)?.[0]).toMatchObject({
                 recordHeaders: { request: false, response: true },
                 recordBody: { request: false, response: ['application/json'] },
+                captureFetchSynchronously: true,
             })
         } finally {
             vi.mocked(isLocalhost).mockRestore()
