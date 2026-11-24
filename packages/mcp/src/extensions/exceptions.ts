@@ -110,13 +110,17 @@ export function httpStatus(error: unknown): number | undefined {
     for (const holder of [link, readField(link, 'response')]) {
       for (const field of STATUS_FIELDS) {
         const status = readField(holder, field)
-        if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) {
+        if (isHttpStatus(status)) {
           return status
         }
       }
     }
   }
   return undefined
+}
+
+export function isHttpStatus(status: unknown): status is number {
+  return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
 }
 
 function isObject(value: unknown): value is object {

@@ -43,7 +43,7 @@ import {
 } from './context-parameters'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException, httpStatus } from './exceptions'
+import { captureException, httpStatus, isHttpStatus } from './exceptions'
 import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
@@ -230,7 +230,7 @@ export class PostHogMCP extends PostHog {
   /**
    * Capture a request your HTTP layer rejected before the MCP server ran (401, 403, 429,
    * 400). Emits `$mcp_request_rejected` with `$mcp_is_error: true`, `$mcp_error_status` and a
-   * `$mcp_error_type` derived from the status, so refusal rates sit next to tool-call errors.
+   * `$mcp_error_type` derived from the status, so refusals can be queried alongside tool calls.
    * No `$exception` is sent: a refused request is not a server failure.
    */
   captureRejectedRequest(data: RejectedRequestCaptureData): void {
@@ -559,63 +559,12 @@ export class PostHogMCP extends PostHog {
  * routing, groups, person `$set`, and custom properties. Method callers layer
  * the event-specific fields on top.
  */
-/** `$mcp_error_type` for a rejected request's HTTP status. */
-function rejectedRequestErrorType(status: number): string | undefined {
-  if (status === 401 || status === 403) {
-    return 'auth'
-  }
-  if (status === 429) {
-    return 'rate_limited'
-  }
-  return status >= 400 && status < 500 ? 'protocol' : undefined
-}
-
-function buildRejectedRequestEvent(data: RejectedRequestCaptureData): McpEvent {
-  const event = baseEvent(MCPAnalyticsEventType.mcpRequestRejected, data)
-  // A refused request belongs to no MCP session unless the host knows one, so none is minted.
-  if (!data.sessionId) {
-    event.sessionId = undefined
-  }
-  event.method = data.method
-  event.resourceName = data.toolName
-  event.serverName = data.serverName
-  event.serverVersion = data.serverVersion
-  event.clientName = data.clientName
-  event.clientVersion = data.clientVersion
-  event.isError = true
-  event.errorStatus = data.status
-  event.errorType = data.errorType ?? rejectedRequestErrorType(data.status)
-  event.errorMessage = data.reason
-  return event
-}
-
-/**
- * Records a request your HTTP layer rejected before the MCP server ran, on any `posthog-node`
- * client (for servers wired with `instrument()`). Emits `$mcp_request_rejected` through the
- * same sanitize and truncate pipeline as auto-captured events. Resolves once the event is
- * handed to `posthog.capture()`, and never rejects. `instrument()`'s `beforeSend` does not
- * apply here; the client's own `beforeSend` does.
- *
- * @example
- * ```ts
- * if (!token) {
- *   void captureRejectedRequest(posthog, { status: 401, reason: 'missing_token', serverName: 'my-mcp' })
- *   return new Response('Unauthorized', { status: 401 })
- * }
- * ```
- */
-export async function captureRejectedRequest(posthog: PostHog, data: RejectedRequestCaptureData): Promise<void> {
-  try {
-    await new McpEventSink(posthog).capture(buildRejectedRequestEvent(data), { enableExceptionAutocapture: false })
-  } catch (error) {
-    log(`Warning: failed to capture rejected request - ${error}`)
-  }
-}
-
 function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): McpEvent {
   const event: McpEvent = {
     eventType,
-    sessionId: common.sessionId || newSessionId(),
+    // A rejected request belongs to no MCP session unless the host knows one.
+    sessionId:
+      common.sessionId || (eventType === MCPAnalyticsEventType.mcpRequestRejected ? undefined : newSessionId()),
     conversationId: common.conversationId,
     protocolVersion: common.protocolVersion,
     // There is no `extra` on this path, so the host reads the request headers and
@@ -636,6 +585,64 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     event.identifyActorData = common.setProperties
   }
   return event
+}
+
+/** `$mcp_error_type` for a rejected request's HTTP status. */
+function rejectedRequestErrorType(status: number | undefined): string | undefined {
+  if (status === 401 || status === 403) {
+    return 'auth'
+  }
+  if (status === 429) {
+    return 'rate_limited'
+  }
+  return status !== undefined && status >= 400 && status < 500 ? 'protocol' : undefined
+}
+
+/** Trims a value read from an unvalidated body. Anything but a non-blank string is `undefined`. */
+function nonBlankString(value: unknown): string | undefined {
+  return (typeof value === 'string' && value.trim()) || undefined
+}
+
+function buildRejectedRequestEvent(data: RejectedRequestCaptureData): McpEvent {
+  const status = isHttpStatus(data.status) ? data.status : undefined
+  return {
+    ...baseEvent(MCPAnalyticsEventType.mcpRequestRejected, data),
+    method: nonBlankString(data.method),
+    resourceName: nonBlankString(data.toolName),
+    serverName: nonBlankString(data.serverName),
+    serverVersion: nonBlankString(data.serverVersion),
+    clientName: nonBlankString(data.clientName),
+    clientVersion: nonBlankString(data.clientVersion),
+    isError: true,
+    errorStatus: status,
+    errorType: nonBlankString(data.errorType) ?? rejectedRequestErrorType(status),
+    errorMessage: nonBlankString(data.reason),
+  }
+}
+
+/**
+ * Records a request your HTTP layer rejected before the MCP server ran, on any `posthog-node`
+ * client (for servers wired with `instrument()`). Emits `$mcp_request_rejected` through the
+ * same sanitize and truncate pipeline as auto-captured events, and labels the client's `$lib`
+ * as `instrument()` does. Resolves once the event is handed to `posthog.capture()`, and never
+ * rejects. `instrument()`'s `beforeSend`, `serverBuild` and `logger` do not apply here; the
+ * client's own `beforeSend` does.
+ *
+ * @example
+ * ```ts
+ * if (!token) {
+ *   await captureRejectedRequest(posthog, { status: 401, reason: 'missing_token', serverName: 'my-mcp' })
+ *   return new Response('Unauthorized', { status: 401 })
+ * }
+ * ```
+ */
+export async function captureRejectedRequest(posthog: PostHog, data: RejectedRequestCaptureData): Promise<void> {
+  try {
+    applyMcpLibIdentity(posthog)
+    await new McpEventSink(posthog).capture(buildRejectedRequestEvent(data), { enableExceptionAutocapture: false })
+  } catch (error) {
+    log(`Warning: failed to capture rejected request - ${error}`)
+  }
 }
 
 function collectAnalyticsParameterOwnership<TTool extends ContextInjectableTool>(

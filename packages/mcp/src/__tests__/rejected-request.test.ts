@@ -1,7 +1,8 @@
 import type { EventMessage, PostHog } from 'posthog-node'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { captureRejectedRequest, PostHogMCP, PostHogMCPAnalyticsEvent } from '../index'
+import { captureRejectedRequest, PostHog as PostHogClient, PostHogMCP, PostHogMCPAnalyticsEvent } from '../index'
+import { version } from '../version'
 import { EventCapture } from './test-utils'
 
 /**
@@ -103,11 +104,125 @@ describe('PostHogMCP.captureRejectedRequest', () => {
     expect(rejected().properties).toMatchObject({ $session_id: 'session-1', region: 'eu' })
   })
 
-  it('bounds a long reason', async () => {
-    posthog.captureRejectedRequest({ status: 400, reason: 'x'.repeat(10_000) })
+  it('bounds long values', async () => {
+    const long = 'x '.repeat(5_000)
+    posthog.captureRejectedRequest({ status: 400, reason: long, method: long, toolName: long, errorType: long })
     await tick()
 
-    expect((rejected().properties.$mcp_error_message as string).length).toBeLessThan(10_000)
+    const { properties } = rejected()
+    expect(properties.$mcp_error_message).toHaveLength(2048)
+    expect(properties.$mcp_error_message).toMatch(/\.\.\.$/)
+    for (const key of ['$mcp_method', '$mcp_tool_name', '$mcp_error_type']) {
+      expect(properties[key]).toHaveLength(256)
+      expect(properties[key]).toMatch(/\.\.\.$/)
+    }
+  })
+
+  it('redacts credentials, and personal data the client could have sent', async () => {
+    posthog.captureRejectedRequest({
+      status: 401,
+      reason: 'invalid phx_123456789012345678901234567890 at https://svc:hunter2@auth.test/?token=abc',
+      method: 'call https://u:p4ss@evil.test/?token=xyz for alice@example.com',
+      toolName: 'mail jane@example.com',
+    })
+    await tick()
+
+    const sent = JSON.stringify(rejected())
+    for (const secret of [
+      'phx_123456789012345678901234567890',
+      'hunter2',
+      'token=abc',
+      'p4ss',
+      'token=xyz',
+      'alice@example.com',
+      'jane@example.com',
+    ]) {
+      expect(sent).not.toContain(secret)
+    }
+  })
+
+  it.each([
+    ['a number', 123],
+    ['an object', { bad: true }],
+    ['an array', ['tools/call']],
+    ['a long array', Array(300).fill('x')],
+    ['null', null],
+    ['a blank string', '  '],
+  ])('leaves out %s where a string belongs', async (_, value) => {
+    const bad = value as any
+    posthog.captureRejectedRequest({
+      status: 400,
+      reason: bad,
+      method: bad,
+      toolName: bad,
+      clientName: bad,
+      clientVersion: bad,
+      serverName: bad,
+      serverVersion: bad,
+      errorType: bad,
+    })
+    await tick()
+
+    const { properties } = rejected()
+    expect(properties).toMatchObject({ $mcp_is_error: true, $mcp_error_status: 400, $mcp_error_type: 'protocol' })
+    for (const key of [
+      '$mcp_error_message',
+      '$mcp_method',
+      '$mcp_tool_name',
+      '$mcp_resource_name',
+      '$mcp_client_name',
+      '$mcp_client_version',
+      '$mcp_server_name',
+      '$mcp_server_version',
+    ]) {
+      expect(properties[key]).toBeUndefined()
+    }
+  })
+
+  it.each([NaN, 401.5, 0, 999, '401'])('leaves out the invalid status %s', async (status) => {
+    posthog.captureRejectedRequest({ status: status as number, reason: 'bad status' })
+    await tick()
+
+    const { properties } = rejected()
+    expect(properties).toMatchObject({ $mcp_is_error: true, $mcp_error_message: 'bad status' })
+    expect(properties).not.toHaveProperty('$mcp_error_status')
+    expect(properties).not.toHaveProperty('$mcp_error_type')
+  })
+
+  it('keeps the common capture fields', async () => {
+    posthog.captureRejectedRequest({
+      status: 401,
+      distinctId: 'user-123',
+      clientUserAgent: ' claude-code/2.0 (cli) ',
+      vendorClient: 'claude-code',
+      protocolVersion: '2025-06-18',
+      groups: { company: 'acme' },
+      setProperties: { plan: 'pro' },
+      eventOptions: { process_person_profile: true },
+    })
+    await tick()
+
+    const event = rejected()
+    expect(event.properties).toMatchObject({
+      $mcp_client_user_agent: 'claude-code/2.0 (cli)',
+      $mcp_vendor_client: 'claude-code',
+      $mcp_protocol_version: '2025-06-18',
+      $groups: { company: 'acme' },
+      $set: { plan: 'pro' },
+    })
+    expect(event.options).toMatchObject({ process_person_profile: true })
+  })
+
+  it("sends the client's serverBuild", async () => {
+    const built = new PostHogMCP('phc_test', { host: 'http://localhost', serverBuild: 'build-7' })
+    try {
+      built.captureRejectedRequest({ status: 401 })
+      await tick()
+
+      expect(rejected().properties.$mcp_server_build).toBe('build-7')
+    } finally {
+      await built.shutdown()
+    }
   })
 })
 
@@ -131,6 +246,39 @@ describe('captureRejectedRequest(posthog, data)', () => {
       $mcp_method: 'tools/call',
       $mcp_server_name: 'my-mcp',
     })
+  })
+
+  it('labels a client that was never instrumented, before its first capture', async () => {
+    const fetch = vi.fn(async (_url: string, _init: any) => ({
+      status: 200,
+      text: async () => JSON.stringify({ results: {} }),
+      json: async () => ({ results: {} }),
+      headers: { get: () => null },
+    }))
+    const posthog = new PostHogClient('phc_test', {
+      host: 'http://localhost',
+      flushAt: 1,
+      fetchRetryCount: 0,
+      captureCompression: 'none',
+      fetch: fetch as any,
+    })
+    try {
+      await captureRejectedRequest(posthog, { status: 401, reason: 'token_expired' })
+      await posthog.flush()
+
+      const captureCalls = fetch.mock.calls.filter(([url]) => String(url).endsWith('/i/v1/analytics/events'))
+      expect(captureCalls).toHaveLength(1)
+      expect(captureCalls[0][1].headers['PostHog-Sdk-Info']).toBe(`posthog-node-mcp/${version}`)
+      const [event] = JSON.parse(captureCalls[0][1].body).batch
+      expect(event.properties).toMatchObject({ $lib: 'posthog-node-mcp', $lib_version: version })
+      expect(event.options).toMatchObject({ process_person_profile: false })
+    } finally {
+      await posthog.shutdown()
+    }
+  })
+
+  it('never rejects without a client', async () => {
+    await expect(captureRejectedRequest(undefined as any, { status: 401 })).resolves.toBeUndefined()
   })
 
   it('never rejects when the client throws', async () => {

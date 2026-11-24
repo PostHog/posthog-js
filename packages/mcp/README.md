@@ -513,13 +513,13 @@ does not — the registry is empty and the two calls behave the same.
 Remote MCP servers often refuse a request before the MCP server object sees it: a 401 for a missing
 or expired OAuth token, a 403 for a missing scope or a bad `Origin`, a 429 from a rate limiter, or a
 400 for an unsupported `MCP-Protocol-Version`. `instrument()` never sees these. Record them from
-your HTTP layer so refusal rates sit next to tool-call errors:
+your HTTP layer so you can query refusals alongside `$mcp_tool_call`:
 
 ```ts
 import { captureRejectedRequest } from '@posthog/mcp'
 
 if (!isValidToken(req)) {
-  void captureRejectedRequest(posthog, {
+  await captureRejectedRequest(posthog, {
     status: 401,
     reason: 'token_expired',
     method: body?.method,
@@ -535,15 +535,21 @@ This emits `$mcp_request_rejected` with `$mcp_is_error: true`, `$mcp_error_statu
 `$mcp_error_type` derived from the status: `auth` for 401 and 403, `rate_limited` for 429, and
 `protocol` for other 4xx. Pass `errorType` to choose your own. `reason` becomes
 `$mcp_error_message`, so keep it short and free of secrets. No `$exception` is sent, and no
-`$session_id` unless you pass `sessionId`. On a `PostHogMCP` client, call
-`posthog.captureRejectedRequest({ ... })` instead.
+`$session_id` unless you pass `sessionId`. Values that aren't strings, or are blank, are left out,
+so an unvalidated body is safe to pass. PostHog's MCP views read `$mcp_tool_call` only, so chart this
+event in product analytics or SQL.
+
+It resolves once the event is handed to the client, so await it before `posthog.flush()` on
+serverless and edge runtimes. `beforeSend`, `serverBuild` and `logger` from `instrument()` don't
+apply to it; the client's own `beforeSend` does. On a `PostHogMCP` client, call
+`posthog.captureRejectedRequest({ ... })` instead, which also sends that client's `serverBuild`.
 
 ## Library identity (`$lib`)
 
-`instrument()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
+`instrument()`, `captureRejectedRequest()` and `PostHogMCP` label the whole posthog-node client: every event it captures afterwards reports `$lib` `posthog-node-mcp` and `$lib_version` set to the `@posthog/mcp` version, not only the `$mcp_*` events. So:
 
 - Give MCP analytics its own `PostHog` client if your app also captures other events.
-- With posthog-node 6.x.x, events the client captured before `instrument()` keep `posthog-node`, except an exception it was still building. With posthog-node 5.x.x, an event captured just before `instrument()` can get the MCP label too.
+- With posthog-node 6.x.x, events the client captured before the first of those calls keep `posthog-node`, except an exception it was still building. With posthog-node 5.x.x, an event captured just before that call can get the MCP label too.
 - With posthog-node 6.x.x, a `$lib` you set on an event, in a context or with `register()` wins over the label. Set `$lib_version` too, or the event is sent without one.
 - To find MCP traffic, filter on `$mcp_*` events or `$mcp_source = 'posthog_mcp_analytics'` rather than `$lib`.
 

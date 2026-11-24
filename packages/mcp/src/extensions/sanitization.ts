@@ -36,10 +36,12 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
   // Every event type, not just `resources/read`: the `$exception` sibling
   // carries the same name, and a tool or prompt name is free text an
   // application can spell as a URL too. An unknown tool's name is whatever the
-  // agent typed, so it also gets the intent's personal-data redaction.
+  // agent typed, and a rejected request's is whatever an unauthenticated client
+  // sent, so they also get the intent's personal-data redaction.
   if (result.resourceName != null) {
     result.resourceName =
-      result.eventType === MCPAnalyticsEventType.mcpUnknownTool
+      result.eventType === MCPAnalyticsEventType.mcpUnknownTool ||
+      result.eventType === MCPAnalyticsEventType.mcpRequestRejected
         ? sanitizeFreeText(result.resourceName)
         : (sanitizeCapturedValue(result.resourceName) as string)
   }
@@ -61,6 +63,14 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   if (result.errorType != null) {
     result.errorType = sanitizeCapturedValue(result.errorType) as string
+  }
+
+  if (result.errorMessage != null) {
+    result.errorMessage = sanitizeCapturedValue(result.errorMessage) as string
+  }
+
+  if (result.method != null) {
+    result.method = sanitizeFreeText(result.method)
   }
 
   if (result.error != null) {

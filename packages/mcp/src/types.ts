@@ -798,7 +798,7 @@ export interface RejectedRequestCaptureData extends McpCaptureCommon {
    * `rate_limited` for 429, `protocol` for any other 4xx, and none otherwise.
    */
   errorType?: string
-  /** Short, non-sensitive reason → `$mcp_error_message`, e.g. `token_expired`. */
+  /** Short, non-sensitive reason → `$mcp_error_message`, e.g. `token_expired`. Secrets are redacted. */
   reason?: string
   /** JSON-RPC method, if the body was read far enough to know it → `$mcp_method`. */
   method?: string

@@ -246,6 +246,18 @@ describe('buildPostHogCaptureEvents', () => {
       'validation',
       undefined,
     ],
+    [
+      'errorMessage is the message when nothing was thrown',
+      { isError: true, errorMessage: 'token_expired' },
+      undefined,
+      'token_expired',
+    ],
+    [
+      "a thrown error's message wins over errorMessage",
+      { isError: true, errorMessage: 'token_expired', error: makeError('boom', 'Error') },
+      'Error',
+      'boom',
+    ],
     ['successful call omits both', { isError: false }, undefined, undefined],
   ])('error properties on the tool-call event: %s', (_, overrides, expectedType, expectedMessage) => {
     const [event] = buildPostHogCaptureEvents(makeEvent(overrides))
