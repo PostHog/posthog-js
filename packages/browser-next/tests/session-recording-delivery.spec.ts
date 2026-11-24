@@ -432,6 +432,8 @@ describe('snapshot delivery', () => {
 
             for (const snapshot of messages) delivery.enqueue(snapshot, 10)
             delivery.teardown()
+            // accepted beacons reserve their bytes from the shared budget during the unload turn
+            const remainingDuringUnload = keepalive.remaining
             await settled()
             await vi.waitFor(() => expect(beacons.length + requests.length).toBeGreaterThan(1))
             await delivery.flush()
@@ -439,8 +441,9 @@ describe('snapshot delivery', () => {
             const beaconBytes = beacons.reduce((total, beacon) => total + beacon.bytes.byteLength, 0)
             expect(beacons.length).toBeGreaterThan(0)
             expect(beaconBytes).toBeLessThanOrEqual(10_000)
-            // the browser accounts for beacons, so they do not hold the shared budget, as in posthog-js
-            expect(keepalive.remaining).toBe(10_000)
+            expect(remainingDuringUnload).toBe(10_000 - beaconBytes)
+            // after the unload turn ends, the beacon's reservation returns so a bfcache restore keeps its budget
+            await vi.waitFor(() => expect(keepalive.remaining).toBe(10_000))
             expect(requests.length).toBeGreaterThan(0)
             expect(requests.every((request) => request.init.keepalive !== true)).toBe(true)
             const sent = [

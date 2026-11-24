@@ -59,7 +59,7 @@ const recordingPage = async (withBeacon: boolean) => {
     })
     clients.push(posthog)
     await started(replay)
-    return { posthog, analytics, replaySends }
+    return { posthog, replay, analytics, replaySends }
 }
 
 describe('session recording unload delivery', () => {
@@ -82,4 +82,20 @@ describe('session recording unload delivery', () => {
             expect(analytics.find((request) => request.events.includes('after_restore'))?.keepalive).toBe(true)
         }
     )
+
+    it('reserves a post-stop replay beacon from the shared budget before analytics runs in the same unload', async () => {
+        const { posthog, replay, analytics, replaySends } = await recordingPage(true)
+        const input = document.getElementById('name') as HTMLInputElement
+        input.value = 'x'
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+
+        // stop flushes the ~40 KB snapshot into replay's delivery queue; unload runs replay's beforeTeardown first
+        replay.stopSessionRecording()
+        posthog.capture('large_unload_event', { detail: 'x'.repeat(30_000) })
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(replaySends[0]).toBe('beacon')
+        // replay's beacon already reserved ~40 KB, so a 30 KB analytics keepalive send would exceed 64 KiB and is skipped
+        expect(analytics.find((request) => request.events.includes('large_unload_event'))).toBeUndefined()
+    })
 })

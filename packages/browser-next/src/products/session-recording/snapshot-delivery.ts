@@ -154,28 +154,29 @@ const unloadBody = (host: SnapshotDeliveryHost, messages: readonly SnapshotMessa
 
 /**
  * Hands queued snapshots to the browser as the page unloads. Beacons and keepalive requests share the
- * browser's keepalive quota, so replay splits batches to fit this unload's allowance and sends what does
- * not fit as a regular request, which completes when the page lingers (for example in the back/forward
- * cache). Only keepalive requests reserve bytes from the client's keepalive budget, which analytics
- * shares, and they return them when they settle, as in posthog-js. Snapshots leave the queue while they
- * are sent, and return to it when that send fails, so a page that survives retries them instead of
- * losing or duplicating them.
+ * browser's keepalive quota, so replay splits batches to fit the shared keepalive budget (`runtime[4]`)
+ * and sends what does not fit as a regular request, which completes when the page lingers (for example in
+ * the back/forward cache). Accepted beacons reserve their bytes from the shared budget for the unload
+ * turn (so analytics' unload send in the same tick cannot exceed the quota) and release them once the
+ * turn ends (since `sendBeacon` has no completion callback, keeping a bfcache restore from losing its
+ * budget). Keepalive requests hold their bytes until they settle, as in capture-v1. Snapshots leave the
+ * queue while they are sent, and return to it when that send fails, so a page that survives retries them
+ * instead of losing or duplicating them.
  */
 const sendOnUnload = (
     host: SnapshotDeliveryHost,
     messages: readonly SnapshotMessage[],
-    allowance: { remaining: number },
     queue: { take(messages: readonly SnapshotMessage[]): void; restore(messages: readonly SnapshotMessage[]): void }
 ): void => {
     const encoded = unloadBody(host, messages)
     const url = endpointUrl(host, encoded.query)
     const navigator = host.runtime[3]
     const fetch = host.runtime[2]
+    const budget = host.runtime[4]
     const request = (keepalive: boolean): void => {
         if (!fetch) return
         queue.take(messages)
         // a keepalive request holds its bytes in the shared budget until it settles, as capture-v1 holds them
-        const budget = host.runtime[4]
         const reserved = keepalive ? encoded.bytes : 0
         const release = (): void => {
             budget.remaining += reserved
@@ -189,17 +190,25 @@ const sendOnUnload = (
         })
             .then((response) => {
                 if (response.status < 200 || response.status >= 300) queue.restore(messages)
+                return cancelResponseBody(response)
             })
             .catch(() => queue.restore(messages))
             .then(release, release)
         // reserved only once fetch accepted the request, so a synchronous throw holds nothing
         budget.remaining -= reserved
     }
-    if (encoded.bytes <= allowance.remaining) {
-        allowance.remaining -= encoded.bytes
+    if (encoded.bytes <= budget.remaining) {
         if (navigator?.sendBeacon) {
             const data = new Blob([encoded.body as BlobPart], { type: 'text/plain' })
             if (navigator.sendBeacon.call(navigator, url, data)) {
+                budget.remaining -= encoded.bytes
+                try {
+                    globalThis.setTimeout(() => {
+                        budget.remaining += encoded.bytes
+                    }, 0)
+                } catch {
+                    // Without timers the page is unloading anyway.
+                }
                 queue.take(messages)
                 return
             }
@@ -210,10 +219,10 @@ const sendOnUnload = (
         return
     }
     // split only while a snapshot of average size still fits what is left, since every split encodes its half again
-    if (messages.length > 1 && encoded.bytes <= allowance.remaining * messages.length) {
+    if (messages.length > 1 && encoded.bytes <= budget.remaining * messages.length) {
         const middle = Math.ceil(messages.length / 2)
-        sendOnUnload(host, messages.slice(0, middle), allowance, queue)
-        sendOnUnload(host, messages.slice(middle), allowance, queue)
+        sendOnUnload(host, messages.slice(0, middle), queue)
+        sendOnUnload(host, messages.slice(middle), queue)
         return
     }
     request(false)
@@ -291,8 +300,6 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
             // snapshots already in flight finish on their own; resending them would duplicate them
             const queued = buffer._queue.map((entry) => entry[1])
             if (!queued.length || !host.canDeliver()) return
-            // this unload's share of the browser quota, which beacons spend without holding the shared budget
-            const allowance = { remaining: host.runtime[4].remaining }
             const queue = {
                 take: (messages: readonly SnapshotMessage[]) => {
                     for (const message of messages) buffer.discardQueued(message)
@@ -303,7 +310,7 @@ export const createSnapshotDelivery = (host: SnapshotDeliveryHost): SnapshotDeli
             }
             for (const group of groupBySessionWindow(queued)) {
                 try {
-                    sendOnUnload(host, group, allowance, queue)
+                    sendOnUnload(host, group, queue)
                 } catch (error) {
                     host.reportFailure(error)
                 }
