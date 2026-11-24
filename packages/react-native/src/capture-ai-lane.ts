@@ -6,6 +6,7 @@ import {
   type CaptureDroppedEvent,
   type SerializedV1Event,
   type V1CaptureSender,
+  type V1RequestIdentity,
   type V1SendDeferral,
 } from '@posthog/core/capture-v1'
 import type { PostHogRNStorage } from './storage'
@@ -71,6 +72,9 @@ export class CaptureAiLane {
   private _resendTimer?: ReturnType<typeof setTimeout>
   private _resendAt = 0
   private _resendCount = 0
+  // The events the last request left to send again, which a resend of exactly those events sends as a retry of it.
+  private _resend?: { events: SerializedV1Event[]; request: V1RequestIdentity }
+  private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
   private _stopped = false
   private _events?: SerializedV1Event[]
@@ -156,14 +160,28 @@ export class CaptureAiLane {
     return event.uuid
   }
 
-  /** Sends every queued AI event now, ignoring the resend wait. Never rejects. */
+  /** Sends every queued AI event now, unless the endpoint asked to wait; then it resolves without sending. Never rejects. */
   flush(): Promise<void> {
     return this._queueDrain(false)
   }
 
-  /** Flushes once more, then stops the lane's timers so nothing sends after shutdown. */
-  async shutdown(): Promise<void> {
+  /**
+   * Flushes once more, waiting out a resend wait that ends within `timeoutMs`, then stops the lane's
+   * timers so nothing sends after shutdown.
+   */
+  async shutdown(timeoutMs: number): Promise<void> {
     try {
+      const holdMs = Math.max(0, this._resendAt - Date.now())
+      if (holdMs > 0 && this._queue().length > 0) {
+        if (holdMs >= timeoutMs) {
+          return
+        }
+        await new Promise<void>((resolve) => {
+          this._shutdownWait = { timer: safeSetTimeout(resolve, holdMs), resolve }
+        })
+        this._shutdownWait = undefined
+        this._resendAt = 0
+      }
       await this.flush()
     } finally {
       this.stop()
@@ -173,11 +191,13 @@ export class CaptureAiLane {
   stop(): void {
     this._stopped = true
     this._clearFlushTimer()
-    if (this._resendTimer) {
-      clearTimeout(this._resendTimer)
-      this._resendTimer = undefined
-    }
+    this._clearResendTimer()
     this._resendAt = 0
+    if (this._shutdownWait) {
+      clearTimeout(this._shutdownWait.timer)
+      this._shutdownWait.resolve()
+      this._shutdownWait = undefined
+    }
   }
 
   private _flushInBackground(): void {
@@ -194,28 +214,37 @@ export class CaptureAiLane {
         if (automatic) {
           this._automaticFlushQueued = false
         }
-        return this._drain(automatic)
+        return this._drain()
       })
       .catch((e) => this._logger.error('AI event flush failed:', e))
     this._chain = next
     return next
   }
 
-  private async _drain(automatic: boolean): Promise<void> {
+  private async _drain(): Promise<void> {
     this._clearFlushTimer()
-    if (this._stopped || (automatic && Date.now() < this._resendAt)) {
+    if (this._stopped || Date.now() < this._resendAt) {
       return
     }
     let remaining = this._queue().length
     // stop() can run while a request is in flight, when the shutdown deadline passes.
     while (remaining > 0 && !this._stopped) {
-      const batch = this._takeBatch(this._queue())
+      const queue = this._queue()
+      const resend = this._resend
+      this._resend = undefined
+      // Eviction can break the match; then the events left go out in a new request.
+      const exactResend =
+        resend !== undefined &&
+        queue.length >= resend.events.length &&
+        resend.events.every((event, index) => queue[index] === event)
+      const batch = exactResend ? resend.events : this._takeBatch(queue)
       if (batch.length === 0) {
         return
       }
       let deferral: V1SendDeferral | undefined
       const kept = await this._sender().send(batch, {
         keepUnsent: true,
+        retryOf: exactResend ? resend.request : undefined,
         onDeferred: (reason) => {
           deferral = reason
         },
@@ -230,12 +259,17 @@ export class CaptureAiLane {
       if (!deferral) {
         this._resendCount = 0
         this._resendAt = 0
+        this._clearResendTimer()
         remaining -= batch.length
         continue
       }
       if (deferral.tooLarge) {
         this._batchSize = Math.max(1, Math.floor(batch.length / 2))
         continue
+      }
+      const keptInOrder = batch.filter((event) => keptEvents.has(event))
+      if (keptInOrder.length > 0) {
+        this._resend = { events: keptInOrder, request: deferral.request }
       }
       this._scheduleResend(deferral.retryAfterMs)
       return
@@ -269,6 +303,13 @@ export class CaptureAiLane {
     if (this._flushTimer) {
       clearTimeout(this._flushTimer)
       this._flushTimer = undefined
+    }
+  }
+
+  private _clearResendTimer(): void {
+    if (this._resendTimer) {
+      clearTimeout(this._resendTimer)
+      this._resendTimer = undefined
     }
   }
 

@@ -643,8 +643,11 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsStorage(theStorage)
       // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
       // database at 6 MB by default, so an AI queue there could break every other key's writes.
+      // A disabled client never sends, so its AI queue stays in memory too.
       this._aiStorage =
-        theStorage === OptionalAsyncStorage ? createAiMemoryStorage() : createAiStorage(theStorage, this.projectToken)
+        this.isDisabled || theStorage === OptionalAsyncStorage
+          ? createAiMemoryStorage()
+          : createAiStorage(theStorage, this.projectToken)
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []
@@ -955,8 +958,14 @@ export class PostHog extends PostHogCore {
           ? Promise.resolve()
           : // Events captured before initialization reach the lane once it completes.
             raceWithTimeout(
-              this._initPromise.then(() => this._aiLane.shutdown()),
-              remainingMs
+              this._initPromise.then(() => this._aiLane.shutdown(Math.max(0, remainingMs - (Date.now() - start)))),
+              remainingMs,
+              () => {
+                this._logger.critical(
+                  'PostHog AI events were still sending when shutdown timed out. Some may not have been sent.',
+                  { shutdownTimeoutMs }
+                )
+              }
             ),
       ])
     } finally {
@@ -1282,6 +1291,7 @@ export class PostHog extends PostHogCore {
       const normalized = this.normalizeMessage(processed)
       const queuedUuid = this._aiLane.enqueue(normalized)
       if (queuedUuid !== undefined) {
+        normalized.uuid = queuedUuid
         const admission = (options as CaptureAiOptions | undefined)?._admission
         if (admission) {
           admission.uuid = queuedUuid
