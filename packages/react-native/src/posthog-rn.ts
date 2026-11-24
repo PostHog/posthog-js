@@ -939,7 +939,7 @@ export class PostHog extends PostHogCore {
     if (drops.length > 0) {
       const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
       error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
-      this._events.emit('error', error)
+      this._emitCaptureError(error)
     }
 
     let deferral: V1SendDeferral | undefined
@@ -1025,6 +1025,15 @@ export class PostHog extends PostHogCore {
     }, waitMs)
   }
 
+  // A throwing listener must not stop delivery or decide which events stay queued.
+  private _emitCaptureError(error: CaptureError): void {
+    try {
+      this._events.emit('error', error)
+    } catch (e) {
+      this._logger.error('An error listener threw:', e)
+    }
+  }
+
   private _getCaptureV1Sender(): V1CaptureSender {
     this._captureV1Sender ??= new V1CaptureSender(
       {
@@ -1048,7 +1057,7 @@ export class PostHog extends PostHogCore {
         fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
         onError: (error, summary) => {
           this._logger.warn(summary)
-          this._events.emit('error', error)
+          this._emitCaptureError(error)
         },
       }
     )
