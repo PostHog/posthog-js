@@ -156,6 +156,7 @@ export class SessionRecorder {
     private _strategy: RecordingStrategy | undefined
     private _config: SessionRecordingPersistedConfig | undefined
     private _stopRrweb: listenerHandler | undefined
+    private _recording = false
     private _mutationThrottler: MutationThrottler | undefined
     private _rrwebError = false
     private _maskRegionsFnFailed = false
@@ -569,6 +570,7 @@ export class SessionRecorder {
         })
         const plugins = this._plugins()
         const sessionRecordingOptions = this._recordOptions()
+        this._recording = true
         try {
             this._stopRrweb = recordFunction({
                 ...sessionRecordingOptions,
@@ -582,6 +584,7 @@ export class SessionRecorder {
         }
         this._rrwebError = !this._stopRrweb
         if (this._rrwebError) {
+            this._recording = false
             this._queuedCustomEvents = []
             return
         }
@@ -643,6 +646,7 @@ export class SessionRecorder {
     }
 
     private _stopProducers(): void {
+        this._recording = false
         const stop = this._stopRrweb
         this._stopRrweb = undefined
         try {
@@ -894,8 +898,9 @@ export class SessionRecorder {
                   }
               ).payload ?? null)
             : null
-        // the restart records the new session from a fresh full snapshot; this event belongs to the old recorder
-        if (!idlePayload && this._updateSessionAndIdle(event)) return
+        if (!idlePayload) this._updateSessionAndIdle(event)
+        // a new-session listener may have stopped recording during rotation
+        if (!this._recording) return
 
         if (this._isIdle === true && !idlePayload) return
         if (idlePayload) {
@@ -938,8 +943,8 @@ export class SessionRecorder {
         }
     }
 
-    /** Tracks idleness and session changes. Returns true when the session changed and recording restarted. */
-    private _updateSessionAndIdle(event: eventWithTime): boolean {
+    /** Tracks idleness and session changes, restarting the recorder when the session rotates. */
+    private _updateSessionAndIdle(event: eventWithTime): void {
         const isUserInteraction =
             event.type === EventType.IncrementalSnapshot &&
             USER_INTERACTION_SOURCES.includes((event.data as { source: number }).source)
@@ -971,6 +976,19 @@ export class SessionRecorder {
         // after reset there is no session until something starts one, as posthog-js starts it on the next replay event
         const session =
             (touch ? this._touchSession(event.timestamp) : this._client.session) ?? this._touchSession(event.timestamp)
+
+        if (session && session.sessionId !== this._sessionId) {
+            const holdNextEpoch = !isUserInteraction && this._isIdle !== false
+            if (isUserInteraction) {
+                this._lastActivityTimestamp = event.timestamp
+                this._isIdle = false
+            } else if (holdNextEpoch) {
+                this._isIdle = 'unknown'
+            }
+            this._restartForSessionChange(holdNextEpoch)
+            return
+        }
+
         let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
@@ -980,13 +998,6 @@ export class SessionRecorder {
             }
             this._isIdle = false
         }
-
-        if (session && session.sessionId !== this._sessionId) {
-            const holdNextEpoch = this._isIdle !== false
-            if (holdNextEpoch) this._isIdle = 'unknown'
-            this._restartForSessionChange(holdNextEpoch)
-            return true
-        }
         if (session) this._windowId = session.windowId
         if (isUserInteraction) this._releaseHoldAndFlush()
         if (returningFromIdle) {
@@ -994,7 +1005,6 @@ export class SessionRecorder {
             this._takeFullSnapshot()
             this._scheduleFullSnapshot()
         }
-        return false
     }
 
     private _addToBuffer(
