@@ -67,6 +67,14 @@ describe('useNavigationTracker', () => {
     expect(client.screen).toHaveBeenCalledWith('Redacted screen', { safe: true })
   })
 
+  it('logs instead of throwing when the client argument is not a PostHog client', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const legacyNavigationRef = { current: mock.navigation }
+    expect(() => renderHook(() => (useNavigationTracker as any)(undefined, legacyNavigationRef, client))).not.toThrow()
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('useNavigationTracker(options, client)'))
+    expect(client.screen).not.toHaveBeenCalled()
+  })
+
   it('does not capture screens during server rendering', () => {
     const Tracker = (): null => {
       useNavigationTracker(undefined, client)
