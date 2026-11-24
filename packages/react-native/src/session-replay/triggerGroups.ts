@@ -16,7 +16,8 @@ export type SessionReplayTriggerEventCondition = {
 
 export type SessionReplayTriggerFlagCondition = {
   flag: string
-  variant: string | null
+  // null matches any variant. A non-string variant is kept, so it matches no string flag value.
+  variant: JsonType | null
 }
 
 // A leg counts as configured when the raw config has it, even if none of its entries parse: like
@@ -167,7 +168,7 @@ function parseTriggerFlag(flag: JsonType | undefined): SessionReplayTriggerFlagC
     const name = map['flag']
     if (typeof name === 'string') {
       const variant = map['variant']
-      return { flag: name, variant: typeof variant === 'string' ? variant : null }
+      return { flag: name, variant: variant ?? null }
     }
   }
   return null

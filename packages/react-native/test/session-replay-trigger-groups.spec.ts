@@ -601,6 +601,20 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
       const alpha = evaluator.evaluate('s1', { multivariant: 'alpha' }, undefined)
       expect(alpha.matchedGroups.map((match) => match.id)).toEqual(['any-variant'])
     })
+
+    it('matches no string value for a non-string variant, and still matches boolean true', () => {
+      const groups = parseSessionRecordingTriggerGroups({
+        version: 2,
+        triggerGroups: [{ id: 'g1', conditions: { flag: { flag: 'multivariant', variant: 123 } } }],
+      })
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig(groups!)
+
+      const control = evaluator.evaluate('s1', { multivariant: 'control' }, undefined)
+      expect(control.shouldRecord).toBe(false)
+      expect(control.hasPendingGroups).toBe(true)
+      expect(evaluator.evaluate('s1', { multivariant: true }, undefined).shouldRecord).toBe(true)
+    })
   })
 
   describe('per-group sampling', () => {
