@@ -78,20 +78,38 @@ describe('the schemas a listing advertises', () => {
     expect(await inputKeys()).toEqual([['a_field'], ['b_field']])
   })
 
-  it.each([
-    ['answers for the call but not its listing', undefined, 'chat-1'],
-    ['answers for the listing but not its call', 'chat-1', undefined],
-    ['gives the listing and its call different answers', 'chat-1', 'chat-2'],
-  ])('reach a call when the host session callback %s', async (_case, listChat, callChat) => {
+  it('reach a call the host session callback answers for when its listing had no session', async () => {
     const { list, call } = createServer({
       sessionId: (extra) => header(extra, 'x-chat'),
       tools: () => [{ name: 'search', argument: 'query' }],
     })
 
-    await list(tenant('a', listChat))
-    await call(tenant('a', callChat), 'search', { query: 'x', other: 'y' })
+    await list(tenant('a'))
+    await call(tenant('a', 'chat-1'), 'search', { query: 'x', other: 'y' })
 
     expect(await inputKeys()).toEqual([['query', '[redacted]']])
+  })
+
+  it.each([
+    ['its own listing omitted the tool', false],
+    ['its own listing was evicted', true],
+  ])("never reach another host session's call when %s", async (_case, evict) => {
+    const { list, call } = createServer({
+      sessionId: (extra) => header(extra, 'x-tenant'),
+      tools: (t) =>
+        t === 'a' || evict ? [{ name: 'search', argument: `${t}_field` }] : [{ name: 'other_tool', argument: 'id' }],
+    })
+
+    await list(tenant('b'))
+    await list(tenant('a'))
+    if (evict) {
+      for (let i = 0; i < 1005; i++) {
+        await list(tenant(`tenant_${i}`))
+      }
+    }
+    await call(tenant('b'), 'search', { a_field: 'x', tenant_1004_field: 'y' })
+
+    expect(await inputKeys()).toEqual([['[redacted]']])
   })
 
   it('all reach their calls from one large catalogue', async () => {
@@ -123,7 +141,7 @@ describe('the schemas a listing advertises', () => {
   })
 
   it.each([
-    ['host sessions, an entry each plus the shared one', true, 11_100, 1000 + 10_000],
+    ['host sessions, one entry each', true, 1100, 1000],
     ['sessionless requests, one shared entry', false, 10_100, 10_000],
   ])('stay bounded across many listings from %s', async (_case, hostSessions, listings, bound) => {
     const { lowLevel, list } = createServer({

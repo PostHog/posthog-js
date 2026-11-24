@@ -94,17 +94,28 @@ const UNBOUND_HTTP_SCHEMA_KEY = 'unbound-http'
 const MAX_SHARED_SCHEMAS = 10_000
 
 /**
- * Where a listing caches schemas and where a call looks for them, in order. A host
- * `sessionId` callback may give a listing and its call different answers, or none,
- * so both also use the transport's key.
+ * A host session keeps its listings to itself: its schemas decide which argument
+ * names a call may send verbatim, so another tenant's must never apply.
  */
-function toolSchemaKeys(
+function listingSchemaKey(
   data: MCPAnalyticsData,
   extra: CompatibleRequestHandlerExtra | undefined,
   hostSessionId: string | undefined
-): string[] {
-  const transportKey = transportSchemaKey(data, extra)
-  return hostSessionId ? [hostSessionId, transportKey] : [transportKey]
+): string {
+  return hostSessionId ?? transportSchemaKey(data, extra)
+}
+
+/**
+ * A call reads its host session's listing when it has one. A host session with no
+ * listing yet (the callback answered for the call but not its listing) reads the
+ * transport's, which holds only listings no host session claimed.
+ */
+function callSchemaKey(
+  data: MCPAnalyticsData,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  hostSessionId: string | undefined
+): string {
+  return hostSessionId && data.toolInputSchemas.has(hostSessionId) ? hostSessionId : transportSchemaKey(data, extra)
 }
 
 function transportSchemaKey(data: MCPAnalyticsData, extra: CompatibleRequestHandlerExtra | undefined): string {
@@ -238,7 +249,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const schema = inputSchema ?? listedSchema(data, toolSchemaKeys(data, extra, preparedEvent.hostSessionId), request)
+    const schema = inputSchema ?? listedSchema(data, callSchemaKey(data, extra, preparedEvent.hostSessionId), request)
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
       ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
@@ -900,7 +911,7 @@ export async function handleListToolsRequest(
     originalListToolsHandler,
     request,
     extra,
-    data ? toolSchemaKeys(data, extra, fromHost && sessionId) : undefined,
+    data ? listingSchemaKey(data, extra, fromHost && sessionId) : undefined,
     event,
     logger,
     requestAttribution,
@@ -937,8 +948,6 @@ export async function handleListToolsRequest(
   }
   return response
 }
-
-/** Input schemas from a listing no client asked for, which belongs to no session. */
 
 /**
  * Caches what a client's own `tools/list` on this server would: which analytics
@@ -997,13 +1006,10 @@ function rememberListedSchemas(data: MCPAnalyticsData, key: string, tools: Compa
   data.toolInputSchemas.set(key, schemas)
 }
 
-function listedSchema(data: MCPAnalyticsData, keys: string[], request: MCPRequestLike): unknown {
+function listedSchema(data: MCPAnalyticsData, key: string, request: MCPRequestLike): unknown {
   const name = request.params?.name ?? ''
-  for (const key of keys) {
-    const schemas = data.toolInputSchemas.get(key)
-    if (schemas?.has(name)) return schemas.get(name)
-  }
-  return data.seededToolInputSchemas?.get(name)
+  const schemas = data.toolInputSchemas.get(key)
+  return schemas?.has(name) ? schemas.get(name) : data.seededToolInputSchemas?.get(name)
 }
 
 async function getTracedToolsList(
@@ -1011,7 +1017,7 @@ async function getTracedToolsList(
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
-  schemaKeys: string[] | undefined,
+  schemaKey: string | undefined,
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo,
@@ -1029,11 +1035,9 @@ async function getTracedToolsList(
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
-    if (data && schemaKeys) {
+    if (data && schemaKey !== undefined) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-      for (const key of schemaKeys) {
-        rememberListedSchemas(data, key, tools)
-      }
+      rememberListedSchemas(data, schemaKey, tools)
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
