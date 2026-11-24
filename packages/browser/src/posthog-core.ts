@@ -1951,6 +1951,11 @@ export class PostHog implements PostHogInterface {
             each(flagEventCapture.omit, (name) => {
                 delete data.properties[name]
             })
+            // The extension drops an exposure whose distinct ID, groups, session or person processing is not
+            // the one its call was captured with.
+            if (flagEventCapture.resolved?.(data.properties) === false) {
+                return
+            }
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled

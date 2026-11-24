@@ -431,6 +431,69 @@ describe('config version 2 flag events in posthog-js', () => {
             client.posthog.reset()
             expect(client.reported()).toEqual({})
         })
+
+        it.each([false, true])(
+            'a read after the session idled sends both events in the next session, once (per-session dedupe %s)',
+            async (perSession) => {
+                const client = await startClient({ advanced_feature_flags_dedup_per_session: perSession })
+                await client.load(response([split()]))
+                client.posthog.capture('before-idle')
+                const idleSession = client.posthog.get_session_id()
+                // Past the idle timeout, and before the timer that ends an idle session. The session ends when the
+                // next event is captured, which is the call.
+                await vi.advanceTimersByTimeAsync(31 * 60 * 1000)
+
+                client.posthog.getFeatureFlag(FLAG)
+                client.posthog.getFeatureFlag(FLAG)
+
+                expect(flagEventNames(client.events)).toEqual([FLAG_CALLED, EXPOSURE])
+                const called = named(client.events, FLAG_CALLED)[0]!
+                expect(called.properties.$session_id).not.toBe(idleSession)
+                expect(named(client.events, EXPOSURE)[0]!.properties.$session_id).toBe(called.properties.$session_id)
+            }
+        )
+
+        it.each<[string, Partial<PostHogConfig>, (posthog: PostHog) => void]>([
+            ['starts a new session', {}, (posthog) => posthog.sessionManager?.resetSessionId()],
+            [
+                'turns on person processing',
+                { person_profiles: 'identified_only' },
+                (posthog) => posthog.createPersonProfile(),
+            ],
+            ['identifies the user', {}, (posthog) => posthog.identify('visitor-42')],
+            ['sets a group', {}, (posthog) => posthog.group('company', 'acme')],
+        ])(
+            'a hook that %s while the call is captured leaves the exposure to a read in the new context',
+            async (_, config, change) => {
+                let changes = true
+                const page: { posthog?: PostHog } = {}
+                const client = await startClient(config, (event) => {
+                    if (event.event === FLAG_CALLED && changes) {
+                        changes = false
+                        change(page.posthog!)
+                    }
+                    return event
+                })
+                page.posthog = client.posthog
+                await client.load(response([split()]))
+                const identity = (event: CaptureResult): unknown[] =>
+                    ['distinct_id', '$groups', '$session_id', '$process_person_profile'].map(
+                        (name) => event.properties[name]
+                    )
+
+                client.posthog.getFeatureFlag(FLAG)
+                // The exposure would not have the capture identity of its call.
+                expect(flagEventNames(client.events)).toEqual([FLAG_CALLED])
+
+                client.posthog.getFeatureFlag(FLAG)
+                client.posthog.capture('probe')
+
+                const exposures = named(client.events, EXPOSURE)
+                expect(exposures).toHaveLength(1)
+                expect(identity(exposures[0]!)).toEqual(identity(client.events.find((e) => e.event === 'probe')!))
+                expect(identity(exposures[0]!)).not.toEqual(identity(named(client.events, FLAG_CALLED)[0]!))
+            }
+        )
     })
 
     it('sends nothing when flags are disabled', async () => {

@@ -345,6 +345,12 @@ export type FlagEventCapture = {
     readonly keep: readonly string[]
     /** The client calls it when application code that runs during capture throws and the event is dropped. */
     readonly failed?: () => void
+    /**
+     * The client calls it with the event's properties once they hold the distinct ID, groups,
+     * session and person-processing setting of the capture, before application code runs, and
+     * drops the event when it returns `false`.
+     */
+    readonly resolved?: (properties: Record<string, unknown>) => boolean
 }
 
 /**
@@ -1636,15 +1642,14 @@ export class PostHogFeatureFlags implements Extension {
                 const events = flagEvents.build(
                     this._flagCalledProperties(key, flagValue, payload, requestId, evaluatedAt)
                 )
-                const context = this._flagCallContext()
                 // Each event is attempted on its own, so a failed capture of one does not stop the other.
-                if (callIsNew) {
-                    this._captureFlagEventOnce(key, reportKey, events.called, hold)
-                }
-                // Application code that runs while the call is captured can change who reads the flag. The
-                // exposure belongs to the read's own context, like a read that is held.
-                if (exposureIsNew && events.exposure && isSameFlagCallContext(context, this._flagCallContext())) {
-                    this._captureFlagEventOnce(key, exposureKey, events.exposure, hold)
+                const callIdentity = callIsNew
+                    ? this._captureFlagEventOnce(key, reportKey, events.called, hold)
+                    : undefined
+                // Application code that runs while the call is captured can change who reads the flag, the
+                // session or person processing. The exposure is sent only with the capture identity of its call.
+                if (exposureIsNew && events.exposure) {
+                    this._captureFlagEventOnce(key, exposureKey, events.exposure, hold, callIdentity)
                 }
             } else if (canCapture && callIsNew) {
                 if (isArray(flagCallReported[key])) {
@@ -1788,8 +1793,19 @@ export class PostHogFeatureFlags implements Extension {
      * that `before_send` discards keeps its key: the application chose to drop it, and later reads
      * would be dropped the same way. A failure is logged and never reaches the read. A flag keeps
      * at most {@link MAX_REPORTED_CALLS_PER_FLAG} reported calls, and a new key evicts the oldest.
+     *
+     * Returns the capture identity of the event (its distinct ID, groups, session and
+     * person-processing setting) once the client resolved it. With `callIdentity`, the identity of
+     * the read's call, the event is dropped and its key removed when its identity is another, so a
+     * read in the new context sends it.
      */
-    private _captureFlagEventOnce(key: string, dedupeKey: string, flagEvent: FlagEvent, hold: () => void): void {
+    private _captureFlagEventOnce(
+        key: string,
+        dedupeKey: string,
+        flagEvent: FlagEvent,
+        hold: () => void,
+        callIdentity?: string
+    ): string | undefined {
         const reported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
         const attempt = key + dedupeKey
         const throws = this._flagEventCaptureThrows.get(attempt) || 0
@@ -1797,7 +1813,7 @@ export class PostHogFeatureFlags implements Extension {
         // An event whose capture threw twice is left for the next page: a hook that always throws
         // must not make every read capture again, because each capture uses a rate limit token.
         if (reported[key]?.includes(dedupeKey) || throws > 1) {
-            return
+            return undefined
         }
         this._set({
             [FLAG_CALL_REPORTED]: {
@@ -1806,10 +1822,24 @@ export class PostHogFeatureFlags implements Extension {
             },
         })
         let threw = false
+        let identity: string | undefined
+        let sessionId: string | undefined
+        let rejected = false
         this._flagEventCaptures.set(flagEvent.properties, {
             ...flagEvent.capture,
             failed: () => {
                 threw = true
+            },
+            resolved: (properties) => {
+                sessionId = properties.$session_id as string | undefined
+                identity = JSON.stringify([
+                    properties.distinct_id,
+                    properties.$groups,
+                    sessionId,
+                    properties.$process_person_profile,
+                ])
+                rejected = !!callIdentity && identity !== callIdentity
+                return !rejected
             },
         })
         let handled = false
@@ -1826,9 +1856,24 @@ export class PostHogFeatureFlags implements Extension {
         if (threw) {
             this._flagEventCaptureThrows.set(attempt, throws + 1)
         }
-        if (!handled || threw) {
+        const kept = handled && !threw && !rejected
+        if (!kept) {
             this._unmarkFlagCallReported(key, dedupeKey)
         }
+        // With per-session deduplication, the reported calls belong to the session they were captured in. Capture
+        // starts a new session after the tab was idle, and a hook can start one, so the reported calls of the
+        // earlier session do not count in it.
+        if (
+            this._config.deduplicateCallsPerSession &&
+            sessionId &&
+            sessionId !== this._prop(FLAG_CALL_REPORTED_SESSION_ID)
+        ) {
+            this._set({
+                [FLAG_CALL_REPORTED]: kept ? { [key]: [dedupeKey] } : {},
+                [FLAG_CALL_REPORTED_SESSION_ID]: sessionId,
+            })
+        }
+        return identity
     }
 
     /**

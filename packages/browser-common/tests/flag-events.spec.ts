@@ -1538,11 +1538,20 @@ describe('$experiment_exposure', () => {
             expect(storedReports(client)[FLAG]).toEqual([SPLIT_CALLED_KEY, SPLIT_EXPOSURE_KEY])
         })
 
-        it('an identity change while the call is captured sends no exposure for the earlier identity', async () => {
+        it('an identity change while the call is captured leaves the exposure to a read for the new identity', async () => {
             const client = createTestClient()
             const harness = await setup({ client })
             const capture = client.capture.bind(client)
             vi.spyOn(client, 'capture').mockImplementation((name, properties, options) => {
+                // The client resolves the capture identity of the event before application code runs.
+                const resolved = harness.flags.flagEventCapture(properties)?.resolved?.({
+                    ...properties,
+                    distinct_id: client.distinctId,
+                    $session_id: client.session?.sessionId,
+                })
+                if (resolved === false) {
+                    return true
+                }
                 const result = capture(name, properties, options)
                 if (name === FLAG_CALLED) {
                     // A hook that runs while the call is captured identifies the user.
@@ -1553,9 +1562,12 @@ describe('$experiment_exposure', () => {
             await harness.load(response([split()]))
 
             harness.flags.getFeatureFlag(FLAG)
-
             expect(eventNames(harness.events)).toEqual([FLAG_CALLED])
             expect(storedReports(client)[FLAG]).toEqual([SPLIT_CALLED_KEY])
+
+            harness.flags.getFeatureFlag(FLAG)
+            expect(eventNames(harness.events)).toEqual([FLAG_CALLED, EXPOSURE])
+            expect(storedReports(client)[FLAG]).toEqual([SPLIT_CALLED_KEY, SPLIT_EXPOSURE_KEY])
         })
 
         it('a config version 1 call whose capture throws keeps its mark, as before', async () => {
