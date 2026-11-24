@@ -668,6 +668,29 @@ describe('session recording teardown', () => {
 
         await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
     })
+
+    it('delivers the final replay buffer during posthog.shutdown() even when the flush times out', async () => {
+        const { posthog, replay, transport: network } = await setup()
+        await started(replay)
+        interact()
+
+        // shutdown(0) times out before the async flush completes and marks the client disposed before disposing extensions
+        await posthog.shutdown(0)
+
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
+        expect(replay.sessionRecordingStarted()).toBe(false)
+    })
+
+    it('delivers nothing during posthog.shutdown() after an opt-out', async () => {
+        const { posthog, replay, transport: network } = await setup()
+        await started(replay)
+        interact()
+        posthog.optOut()
+
+        await posthog.shutdown(0)
+
+        expect(network.snapshots).toHaveLength(0)
+    })
 })
 
 describe('session recording privacy', () => {

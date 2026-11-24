@@ -264,8 +264,8 @@ class SessionRecordingProduct implements SessionRecordingExtension {
         return url
     }
 
-    async flush(): Promise<void> {
-        await this._recorder?.flush()
+    async flush(reason?: 'flush' | 'shutdown'): Promise<void> {
+        await this._recorder?.flush(reason === 'shutdown')
     }
 
     dispose(): void {
