@@ -541,4 +541,31 @@ describe('React Native captureAi', () => {
 
     expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
+
+  it('returns undefined and stores nothing when captureAi() is called after shutdown()', async () => {
+    const client = await newPostHog()
+    const captured: unknown[] = []
+    client.on('capture', (event) => captured.push(event))
+    await client.shutdown()
+    posthog = undefined
+
+    expect(client.captureAi('$ai_generation')).toBeUndefined()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    expect(captured).toEqual([])
+    expect(cache['.posthog-rn-ai.json']).toBeUndefined()
+  })
+
+  it('returns the uuid sent on the wire when before_send sets an uppercase uuid', async () => {
+    const client = await newPostHog({
+      flushAt: 10,
+      before_send: (event) => (event ? { ...event, uuid: '0198C0DE-1234-7ABC-8DEF-0123456789AB' } : event),
+    })
+
+    const uuid = client.captureAi('$ai_generation')
+    await client.flush()
+
+    expect(uuid).toBe('0198c0de-1234-7abc-8def-0123456789ab')
+    expect(requests[0].body.batch[0].uuid).toBe(uuid)
+  })
 })

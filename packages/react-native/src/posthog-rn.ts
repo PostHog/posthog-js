@@ -1220,10 +1220,11 @@ export class PostHog extends PostHogCore {
         return
       }
       const normalized = this.normalizeMessage(processed)
-      if (this._aiLane.enqueue(normalized)) {
+      const queuedUuid = this._aiLane.enqueue(normalized)
+      if (queuedUuid !== undefined) {
         const admission = (options as CaptureAiOptions | undefined)?._admission
         if (admission) {
-          admission.uuid = normalized.uuid as string
+          admission.uuid = queuedUuid
         }
         try {
           this._maybeActivateEventTrigger(normalized.event)
@@ -1775,7 +1776,7 @@ export class PostHog extends PostHogCore {
    */
   captureAi(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): string | undefined {
     // Before initialization, consent isn't loaded yet; the lane checks it once initialization completes.
-    if (this.isDisabled || (this._isInitialized && this.optedOut)) {
+    if (this.isDisabled || this._shuttingDown || (this._isInitialized && this.optedOut)) {
       return undefined
     }
     if (typeof event !== 'string' || event === '') {

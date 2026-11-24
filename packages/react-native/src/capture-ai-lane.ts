@@ -96,13 +96,16 @@ export class CaptureAiLane {
     }
   }
 
-  /** Queues an already built and normalized event; false when it is dropped instead. */
-  enqueue(message: PostHogEventProperties): boolean {
+  /** Queues an already built and normalized event and returns its uuid as sent; undefined when it is dropped instead. */
+  enqueue(message: PostHogEventProperties): string | undefined {
+    if (this._stopped) {
+      return undefined
+    }
     const name = String(message.event)
     const problem = wireProblem(message)
     if (problem) {
       this._logger.warn(`Dropping AI event "${name}": ${problem}.`)
-      return false
+      return undefined
     }
     let event: SerializedV1Event
     try {
@@ -110,12 +113,12 @@ export class CaptureAiLane {
       event = serializeV1Event(uuid ? { ...message, uuid } : message)
     } catch (e) {
       this._logger.error(`Dropping AI event "${name}": it could not be serialized.`, e)
-      return false
+      return undefined
     }
     const { maxEventBytes, maxQueueSize, flushAt } = this._settings
     if (event.bytes > maxEventBytes) {
       this._logger.warn(`Dropping AI event "${name}": ${event.bytes} bytes is over the ${maxEventBytes}-byte limit.`)
-      return false
+      return undefined
     }
 
     const queue = [...this._queue(), event]
@@ -135,7 +138,7 @@ export class CaptureAiLane {
     } else {
       this._scheduleFlush()
     }
-    return true
+    return event.uuid
   }
 
   /** Sends every queued AI event now, ignoring the resend wait. Never rejects. */
