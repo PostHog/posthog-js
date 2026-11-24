@@ -1,23 +1,38 @@
 import type { GenerateContentResponse, GenerateContentResponseUsageMetadata } from '@google/genai'
 import type { TokenUsage } from '../types'
 
-/** Built-in retrieval tools seen in a response, or across the chunks of a stream. */
+/** Built-in tools seen in a response, or across the chunks of a stream. */
 export interface GeminiRetrievalTools {
   googleSearch: boolean
   urlContext: boolean
+  codeExecution: boolean
 }
 
-/** Record which built-in retrieval tools a response (or a streamed chunk) used. */
+export function emptyGeminiRetrievalTools(): GeminiRetrievalTools {
+  return { googleSearch: false, urlContext: false, codeExecution: false }
+}
+
+/** Record which built-in tools a response (or a streamed chunk) used. */
 export function detectGeminiRetrievalTools(
   response: Pick<GenerateContentResponse, 'candidates'>,
-  seen: GeminiRetrievalTools = { googleSearch: false, urlContext: false }
+  seen: GeminiRetrievalTools = emptyGeminiRetrievalTools()
 ): GeminiRetrievalTools {
   for (const candidate of response.candidates ?? []) {
-    if ((candidate.groundingMetadata?.webSearchQueries?.length ?? 0) > 0) {
+    const grounding = candidate.groundingMetadata
+    // Web and image Search only: File Search also fills groundingChunks, with
+    // retrievedContext, and its retrieved tokens are billed as input.
+    if (
+      (grounding?.webSearchQueries?.length ?? 0) > 0 ||
+      (grounding?.imageSearchQueries?.length ?? 0) > 0 ||
+      grounding?.groundingChunks?.some((chunk) => Boolean(chunk.web || chunk.image))
+    ) {
       seen.googleSearch = true
     }
-    if ((candidate.urlContextMetadata?.urlMetadata?.length ?? 0) > 0) {
+    if (candidate.urlContextMetadata) {
       seen.urlContext = true
+    }
+    if (candidate.content?.parts?.some((part) => Boolean(part.executableCode || part.codeExecutionResult))) {
+      seen.codeExecution = true
     }
   }
   return seen
@@ -25,13 +40,13 @@ export function detectGeminiRetrievalTools(
 
 /**
  * Whether toolUsePromptTokenCount is billed as input. Google bills the content
- * that URL context and the other built-in tools add to the prompt as input, but
- * not the context retrieved by Grounding with Google Search
- * (https://ai.google.dev/gemini-api/docs/pricing). A response that used both
- * Search and URL context cannot be split from these counts, so it is billed.
+ * that URL context, Code Execution, File Search and the other built-in tools add
+ * to the prompt as input, but not the context retrieved by Grounding with Google
+ * Search (https://ai.google.dev/gemini-api/docs/pricing). When Search ran with
+ * URL context or Code Execution, the count cannot be split, so it is billed.
  */
 export function geminiToolUseTokensBilled(tools: GeminiRetrievalTools): boolean {
-  return !tools.googleSearch || tools.urlContext
+  return !tools.googleSearch || tools.urlContext || tools.codeExecution
 }
 
 /** Map Gemini usage metadata to PostHog's provider-agnostic token fields. */
