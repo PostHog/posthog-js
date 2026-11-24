@@ -859,6 +859,34 @@ describe('session recording ingestion controls', () => {
             eventTriggers: ['checkout'],
         })
     })
+
+    it('keeps raw canvas keys alongside canvasRecording in the persisted remote config', async () => {
+        const {
+            replay,
+            posthog,
+            transport: network,
+        } = await setup({
+            recordCanvas: true,
+            canvasFps: 4,
+            canvasQuality: '0.4',
+        })
+        await started(replay)
+
+        interact()
+        await replay.flush?.()
+
+        const expected = {
+            recordCanvas: true,
+            canvasFps: 4,
+            canvasQuality: '0.4',
+            canvasRecording: { enabled: true, fps: 4, quality: '0.4' },
+        }
+        expect(posthog.kv.get('$session_recording_remote_config')).toMatchObject(expected)
+        const marker = recordedEvents(network).find(
+            (event) => event.type === 5 && (event.data as { tag: string }).tag === '$remote_config_received'
+        )
+        expect((marker?.data as { payload: unknown } | undefined)?.payload).toMatchObject(expected)
+    })
 })
 
 describe('session replay URL', () => {
