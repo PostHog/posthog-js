@@ -28,7 +28,12 @@ import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isObject, isString } from '../typeGuards'
 import { formatToolResult } from '../toolResult'
-import { mapGeminiUsage } from './usage'
+import {
+  detectGeminiRetrievalTools,
+  geminiToolUseTokensBilled,
+  mapGeminiUsage,
+  type GeminiRetrievalTools,
+} from './usage'
 import { WrappedInteractions } from './interactions'
 
 /** Append streamed text to the last block of the same type, or start a new one. */
@@ -107,7 +112,11 @@ export class WrappedModels {
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
-        usage: mapGeminiUsage(metadata, { webSearchCount: calculateGoogleWebSearchCount(response) }),
+        usage: mapGeminiUsage(
+          metadata,
+          { webSearchCount: calculateGoogleWebSearchCount(response) },
+          { billToolUseTokens: geminiToolUseTokensBilled(detectGeminiRetrievalTools(response)) }
+        ),
         stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
@@ -143,6 +152,10 @@ export class WrappedModels {
       webSearchCount: 0,
       rawUsage: undefined,
     }
+    // Grounding and URL context metadata can arrive on a different chunk than
+    // the final usageMetadata, so remember them across the stream.
+    const retrievalTools: GeminiRetrievalTools = { googleSearch: false, urlContext: false }
+    let lastUsageMetadata: GeminiResponse['usageMetadata']
     let errored = false
 
     try {
@@ -153,6 +166,7 @@ export class WrappedModels {
         if (firstTokenTime === undefined && chunk.text) {
           firstTokenTime = Date.now()
         }
+        detectGeminiRetrievalTools(chunk, retrievalTools)
         const chunkWebSearchCount = calculateGoogleWebSearchCount(chunk)
         if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
           usage.webSearchCount = chunkWebSearchCount
@@ -207,7 +221,12 @@ export class WrappedModels {
 
         // Update usage metadata - handle both old and new field names
         if (chunk.usageMetadata) {
-          usage = mapGeminiUsage(chunk.usageMetadata, { webSearchCount: usage.webSearchCount })
+          lastUsageMetadata = chunk.usageMetadata
+          usage = mapGeminiUsage(
+            chunk.usageMetadata,
+            { webSearchCount: usage.webSearchCount },
+            { billToolUseTokens: geminiToolUseTokensBilled(retrievalTools) }
+          )
         }
         yield chunk
       }
@@ -236,6 +255,15 @@ export class WrappedModels {
         const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
 
         const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
+        // A grounding chunk after the usage chunk still decides how tool-use tokens count.
+        if (lastUsageMetadata) {
+          usage = mapGeminiUsage(
+            lastUsageMetadata,
+            { webSearchCount: usage.webSearchCount },
+            { billToolUseTokens: geminiToolUseTokensBilled(retrievalTools) }
+          )
+        }
 
         // Format output similar to formatResponseGemini
         const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
