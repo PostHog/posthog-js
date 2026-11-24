@@ -449,12 +449,24 @@ describe('matchFeatureFlagProperty with knownAbsentKeys', () => {
     )
   })
 
-  test('a malformed condition value on a known-absent key stays inconclusive', () => {
-    expect(() => matchFeatureFlagProperty(property('semver_neq', 'not-a-version'), {}, { knownAbsentKeys })).toThrow(
-      InconclusiveMatchError
-    )
-    expect(() => matchFeatureFlagProperty(property('is_date_before', true), {}, { knownAbsentKeys })).toThrow(
-      InconclusiveMatchError
-    )
+  // Like the flags service, the known-absent table resolves before the condition value is read.
+  test.each([
+    ['not_regex', '[', true],
+    ['regex', '[', false],
+    ['not_regex', '\\p{L}', true],
+    ['regex', '\\p{L}', false],
+    ['gt', 'not-a-number', false],
+    ['gte', 'not-a-number', false],
+    ['lt', 'not-a-number', false],
+    ['lte', 'not-a-number', false],
+    ['semver_neq', 'not-a-version', false],
+    ['semver_tilde', 'not-a-version', false],
+    ['semver_caret', 'not-a-version', false],
+    ['semver_wildcard', 'not-a-version', false],
+    ['is_date_before', 'not-a-date', false],
+    ['is_date_after', true, false],
+    ['is_not', '\ud800', true],
+  ])('a known-absent key with %s and unusable value %j matches %s', (operator, value, expected) => {
+    expect(matchFeatureFlagProperty(property(operator, value), {}, { knownAbsentKeys })).toBe(expected)
   })
 })

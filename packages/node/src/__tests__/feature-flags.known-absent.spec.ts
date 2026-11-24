@@ -76,6 +76,30 @@ describe('known-absent property keys', () => {
     expect(flagsRequests()).toHaveLength(0)
   })
 
+  it.each([
+    ['not_regex', '[', true],
+    ['regex', '[', false],
+    ['not_regex', '\\p{L}', true],
+    ['regex', '\\p{L}', false],
+    ['gt', 'not-a-number', false],
+    ['lte', 'not-a-number', false],
+    ['semver_eq', 'not-a-version', false],
+    ['semver_caret', 'not-a-version', false],
+    ['is_date_after', 'not-a-date', false],
+  ])('resolves %s with unusable value %j on a listed key locally to %s', async (operator, value, expected) => {
+    setup({ flags: [flag('flag', [personFilter(operator, value)])] }, { flag: 'remote' })
+
+    const result = await posthog.evaluateFlags('user', {
+      flagKeys: ['flag'],
+      onlyEvaluateLocally: true,
+      personPropertyKeysKnownAbsent: ['plan'],
+    })
+    expect(result.getFlag('flag')).toBe(expected)
+    expect(result.unresolvedFlags).toEqual({})
+    expect(await posthog.getFeatureFlag('flag', 'user', { personPropertyKeysKnownAbsent: ['plan'] })).toBe(expected)
+    expect(flagsRequests()).toHaveLength(0)
+  })
+
   it('treats a listed key as absent even when a value is supplied', async () => {
     setup({ flags: [flag('flag', [personFilter('is_not_set', null)])] })
 

@@ -55,6 +55,32 @@ const KNOWN_ABSENT_MATCHING_OPERATORS = [
   'not_regex',
 ]
 
+// Operators the local evaluator implements, as handled by assertFeatureFlagFilterSupported.
+const LOCALLY_SUPPORTED_OPERATORS = [
+  ...KNOWN_ABSENT_MATCHING_OPERATORS,
+  'is_set',
+  'exact',
+  'icontains',
+  'starts_with',
+  'ends_with',
+  'regex',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'is_date_after',
+  'is_date_before',
+  'semver_eq',
+  'semver_neq',
+  'semver_gt',
+  'semver_gte',
+  'semver_lt',
+  'semver_lte',
+  'semver_tilde',
+  'semver_caret',
+  'semver_wildcard',
+]
+
 // This value is intentionally larger than Number.MAX_SAFE_INTEGER. Changing its rounding changes
 // existing rollout and variant assignments.
 // oxlint-disable-next-line no-loss-of-precision
@@ -595,8 +621,10 @@ export function matchFeatureFlagProperty(
     if (property.value == null && operator !== 'is_set' && operator !== 'is_not_set') {
       throw new InconclusiveMatchError(`Operator ${operator} requires a condition value`)
     }
-    // An unusable filter stays inconclusive even for a known-absent key.
-    assertFeatureFlagFilterSupported(property, options)
+    if (!LOCALLY_SUPPORTED_OPERATORS.includes(operator)) {
+      throw new InconclusiveMatchError(`Unknown operator: ${property.operator}`)
+    }
+    // Like the flags service, resolve without parsing or validating a present condition value.
     return KNOWN_ABSENT_MATCHING_OPERATORS.includes(operator)
   }
   try {
