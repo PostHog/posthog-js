@@ -127,6 +127,31 @@ describe('session recording controls', () => {
         expect(network.snapshots).toHaveLength(0)
     })
 
+    it('drops lingering rrweb mousemove emissions after opt-out instead of leaking them after opt-in', async () => {
+        const { replay, posthog, transport: network } = await setup()
+        await started(replay)
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+        typeInto(document.getElementById('name') as HTMLInputElement, 'before')
+        await replay.flush?.()
+        network.snapshots.length = 0
+
+        // rrweb batches mousemoves and emits them 500 ms later, even after stop()
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42, clientY: 24 }))
+        posthog.optOut()
+        vi.advanceTimersByTime(600)
+        await replay.flush?.()
+        expect(network.snapshots).toHaveLength(0)
+
+        posthog.optIn()
+        await started(replay)
+        await replay.flush?.()
+        // no mousemove from before opt-out should leak into snapshots sent after opt-in
+        const mouseMoves = recordedEvents(network).filter(
+            (event) => event.type === 3 && (event.data as { source?: number }).source === 1
+        )
+        expect(mouseMoves).toHaveLength(0)
+    })
+
     it('contains a recorder that fails to load', async () => {
         const failing = createSessionRecording({}, () => Promise.reject(new Error('blocked')))
         const { posthog, transport: network } = await setup({}, {}, { replay: failing })
