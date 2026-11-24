@@ -50,10 +50,12 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
   createAiStorage,
+  aiEventKey,
   createAiMemoryStorage,
 } from './storage'
 import {
   CaptureAiLane,
+  type CaptureAiEventFiles,
   CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES,
   CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE,
   CAPTURE_AI_DEFAULT_TIMEOUT_MS,
@@ -334,11 +336,11 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
    * dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps
    * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
    *
-   * Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is
-   * killed, older events and an event over 5 MiB are lost. With `persistence: 'memory'`, or when events
-   * are stored in AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system
-   * isn't available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself
-   * rather than a wrapper around it: a wrapper is used like file storage and holds the AI queue.
+   * Unsent AI events are stored on the device, each under its own storage key, so they are sent on the
+   * next launch if the app is killed. With `persistence: 'memory'`, or when events are stored in
+   * AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system isn't
+   * available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself rather
+   * than a wrapper around it: a wrapper is used like file storage and holds the AI queue.
    *
    * @default 100
    */
@@ -440,6 +442,7 @@ export class PostHog extends PostHogCore {
   private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
   private _aiStorage: PostHogRNStorage
+  private _aiEventFiles?: CaptureAiEventFiles
   private _aiLane: CaptureAiLane
   // Set while `_shutdown` runs: core's drain loop calls `flush()`, and the AI lane drains on its own there.
   private _shuttingDown = false
@@ -638,8 +641,13 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsStorage(theStorage)
       // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
       // database at 6 MB by default, so an AI queue there could break every other key's writes.
-      this._aiStorage =
-        theStorage === OptionalAsyncStorage ? createAiMemoryStorage() : createAiStorage(theStorage, this.projectToken)
+      if (theStorage === OptionalAsyncStorage) {
+        this._aiStorage = createAiMemoryStorage()
+      } else {
+        const projectToken = this.projectToken
+        this._aiStorage = createAiStorage(theStorage, projectToken)
+        this._aiEventFiles = { storage: theStorage, key: (slot) => aiEventKey(projectToken, slot) }
+      }
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []
@@ -749,7 +757,7 @@ export class PostHog extends PostHogCore {
       // Persist pending writes before the OS may suspend the process.
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
-      void this._aiStorage.waitForPersist()
+      void this._aiLane.waitForPersist()
 
       if (state === 'active') {
         this.getSessionId()
@@ -971,7 +979,7 @@ export class PostHog extends PostHogCore {
       const drain = Promise.all([
         this._eventsStorage.waitForPersist(),
         this._logsStorage.waitForPersist(),
-        this._aiStorage.waitForPersist(),
+        this._aiLane.waitForPersist(),
       ])
       await raceWithTimeout(drain, remainingMs)
     }
@@ -1210,6 +1218,7 @@ export class PostHog extends PostHogCore {
     )
     return new CaptureAiLane(
       this._aiStorage,
+      this._aiEventFiles,
       {
         // A queue smaller than flushAt would evict events before a count flush could send them.
         flushAt: Math.min(this.flushAt, maxQueueSize),

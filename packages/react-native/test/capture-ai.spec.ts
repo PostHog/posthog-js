@@ -303,16 +303,61 @@ describe('React Native captureAi', () => {
     await vi.waitFor(() => expect(sent(AI_PATH)).toEqual([['$ai_generation', '$ai_generation']]))
   })
 
-  it('stores kept AI events with only their uuid, JSON and sizes', async () => {
+  it('indexes kept AI events by uuid, sizes and slot, with each event in its own slot', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const client = await newPostHog()
-    client.captureAi('$ai_generation')
+    const uuid = client.captureAi('$ai_generation')
     await client.flush()
     await client.shutdown()
     posthog = undefined
 
     const [stored] = JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue
-    expect(Object.keys(stored).sort()).toEqual(['bytes', 'json', 'propertiesBytes', 'uuid'])
+    expect(Object.keys(stored).sort()).toEqual(['bytes', 'propertiesBytes', 'slot', 'uuid'])
+    expect(cache[`.posthog-rn-ai-test-token.event-${stored.slot}`]).toMatch(new RegExp(`^${uuid}\\n\\{`))
+  })
+
+  it('writes each AI event once and clears its slot once it is sent', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const setItem = vi.spyOn(storage, 'setItem')
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    await client.flush()
+    const slotWrites = (): [string, string][] =>
+      setItem.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
+
+    expect(slotWrites().map(([key]) => key)).toEqual([
+      '.posthog-rn-ai-test-token.event-0',
+      '.posthog-rn-ai-test-token.event-1',
+    ])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    await client.flush()
+
+    expect(slotWrites().slice(2)).toEqual([
+      ['.posthog-rn-ai-test-token.event-0', ''],
+      ['.posthog-rn-ai-test-token.event-1', ''],
+    ])
+    expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toBeUndefined()
+  })
+
+  it('skips a stored AI event whose slot now holds a different event', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache['.posthog-rn-ai-test-token.event-0'] = cache['.posthog-rn-ai-test-token.event-1']
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
   })
 
   it('never sends AI events stored for one project with another project token', async () => {
@@ -339,32 +384,12 @@ describe('React Native captureAi', () => {
     expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toHaveLength(1)
   })
 
-  it('persists only the newest 5 MiB of kept AI events for the next launch', async () => {
+  it('keeps every queued AI event for the next launch, including one over 5 MiB', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog({ flushAt: 10 })
-    const twoMiB = 'x'.repeat(2 * 1024 * 1024)
-    for (const index of [0, 1, 2]) {
-      earlier.captureAi('$ai_generation', { blob: twoMiB, index })
-    }
-    await earlier.flush()
-    await earlier.shutdown()
-    posthog = undefined
-
-    respond = () => ({ status: 200, body: { results: {} } })
-    requests = []
-    const next = await newPostHog()
-    await next.flush()
-
-    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1, 2])
-  })
-
-  it('still persists smaller AI events when the newest is over 5 MiB', async () => {
-    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
-    const earlier = await newPostHog({ flushAt: 10 })
-    const warn = vi.spyOn((earlier as any)._logger, 'warn').mockImplementation(() => {})
-    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { blob: 'x'.repeat(3 * 1024 * 1024), index: 0 })
     earlier.captureAi('$ai_generation', { blob: 'x'.repeat(6 * 1024 * 1024), index: 1 })
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('on-device limit'))
+    earlier.captureAi('$ai_generation', { index: 2 })
     await earlier.flush()
     await earlier.shutdown()
     posthog = undefined
@@ -374,7 +399,7 @@ describe('React Native captureAi', () => {
     const next = await newPostHog()
     await next.flush()
 
-    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0])
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1, 2])
   })
 
   it('keeps AI events from an earlier launch when flush() runs before storage has loaded', async () => {
