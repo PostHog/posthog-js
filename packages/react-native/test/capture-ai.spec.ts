@@ -1,6 +1,6 @@
 // The default storage on iOS and Android: Expo's file system, backed here by `expoFiles.files`, keyed by directory + name.
 const { expoFiles } = vi.hoisted(() => ({
-  expoFiles: { files: {} as Record<string, string>, readDelayMs: 0, write: vi.fn() },
+  expoFiles: { files: {} as Record<string, string>, readDelayMs: 0, read: vi.fn(), write: vi.fn() },
 }))
 
 vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
@@ -15,6 +15,7 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
         if (expoFiles.readDelayMs > 0) {
           await new Promise((resolve) => setTimeout(resolve, expoFiles.readDelayMs))
         }
+        expoFiles.read(this.path)
         const content = expoFiles.files[this.path]
         if (content === undefined) {
           throw new Error('missing file')
@@ -67,6 +68,7 @@ describe('React Native captureAi', () => {
     requests = []
     cache = expoFiles.files = {}
     expoFiles.readDelayMs = 0
+    expoFiles.read.mockClear()
     expoFiles.write.mockClear()
     respond = () => ({ status: 200, body: { results: {} } })
     ;(globalThis as any).window.fetch = vi.fn(async (url: string, options: any) => {
@@ -384,6 +386,48 @@ describe('React Native captureAi', () => {
     await next.flush()
 
     expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
+  })
+
+  it('drops a stored AI event cut off mid-write and sends the rest', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache[aiSlot(0)] = cache[aiSlot(0)].slice(0, -5)
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
+  })
+
+  it('reads stored AI events from their slots only when sending them', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    await earlier.flush()
+    expect(expoFiles.read.mock.calls.filter(([path]) => path === aiSlot(0))).toHaveLength(1)
+    await earlier.shutdown()
+    posthog = undefined
+
+    expoFiles.read.mockClear()
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    expect(expoFiles.read.mock.calls.filter(([path]) => path.includes('.event-'))).toEqual([])
+    await next.flush()
+
+    expect(expoFiles.read.mock.calls.map(([path]) => path).filter((path) => path.includes('.event-'))).toEqual([
+      aiSlot(0),
+    ])
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
   })
 
   it('never sends AI events stored for one project with another project token', async () => {

@@ -2,6 +2,7 @@ import { PostHogPersistedProperty, safeSetTimeout, type Logger, type PostHogEven
 import {
   canonicalizeUuid,
   serializeV1Event,
+  utf8Length,
   wireProblem,
   type CaptureDroppedEvent,
   type SerializedV1Event,
@@ -59,14 +60,15 @@ const isStoredEvent = (item: unknown): item is StoredAiEvent => {
   )
 }
 
-// A slot starts with the uuid of the event it holds, so an index entry never reads a slot that was reused.
-const slotContent = (event: SerializedV1Event): string => `${event.uuid}\n${event.json}`
+/** A queued event. With slots, its `json` is let go once its slot is written, and read back when its batch is sent. */
+type QueuedAiEvent = Omit<SerializedV1Event, 'json'> & { json?: string }
 
 /**
  * The `captureAi()` delivery lane: its own durable queue, flush cycle, resend wait and sender, so a
  * slow or failing AI upload never holds back analytics events, and the reverse. Events are queued
  * already serialized, so each one is serialized once. With `files`, each event is written once to its
- * own slot and only a small index is rewritten on each change; without it, the queue is kept in memory.
+ * own slot and only a small index is rewritten on each change; only the index stays in memory, and a
+ * batch's events are read from their slots when it is sent. Without `files`, the queue is kept in memory.
  */
 export class CaptureAiLane {
   private _chain: Promise<void>
@@ -77,11 +79,11 @@ export class CaptureAiLane {
   private _resendCount = 0
   private _batchSize: number
   private _stopped = false
-  private _events: SerializedV1Event[] = []
+  private _events: QueuedAiEvent[] = []
   private _loaded = false
-  private _slots = new Map<SerializedV1Event, number>()
+  private _slots = new Map<QueuedAiEvent, number>()
   // The last write to each slot, so writes to one slot land in order.
-  private _slotWrites = new Map<number, Promise<void>>()
+  private _slotWrites = new Map<number, Promise<boolean>>()
 
   constructor(
     private readonly _storage: PostHogRNStorage,
@@ -192,19 +194,24 @@ export class CaptureAiLane {
     let remaining = this._events.length
     // stop() can run while a request is in flight, when the shutdown deadline passes.
     while (remaining > 0 && !this._stopped) {
-      const batch = this._takeBatch(this._events)
-      if (batch.length === 0) {
+      const queued = this._takeBatch(this._events)
+      if (queued.length === 0) {
         return
       }
+      const batch = await this._readBatch(queued)
+      remaining -= queued.length - batch.size
+      if (batch.size === 0) {
+        continue
+      }
       let deferral: V1SendDeferral | undefined
-      const kept = await this._sender().send(batch, {
+      const kept = await this._sender().send([...batch.keys()], {
         keepUnsent: true,
         onDeferred: (reason) => {
           deferral = reason
         },
       })
       const keptEvents = new Set(kept)
-      const sentEvents = new Set(batch.filter((event) => !keptEvents.has(event)))
+      const sentEvents = new Set([...batch].filter(([event]) => !keptEvents.has(event)).map(([, item]) => item))
       if (sentEvents.size > 0) {
         this._setQueue(this._events.filter((event) => !sentEvents.has(event)))
       }
@@ -213,11 +220,11 @@ export class CaptureAiLane {
       if (!deferral) {
         this._resendCount = 0
         this._resendAt = 0
-        remaining -= batch.length
+        remaining -= batch.size
         continue
       }
       if (deferral.tooLarge) {
-        this._batchSize = Math.max(1, Math.floor(batch.length / 2))
+        this._batchSize = Math.max(1, Math.floor(batch.size / 2))
         continue
       }
       this._scheduleResend(deferral.retryAfterMs)
@@ -225,8 +232,8 @@ export class CaptureAiLane {
     }
   }
 
-  private _takeBatch(queue: SerializedV1Event[]): SerializedV1Event[] {
-    const batch: SerializedV1Event[] = []
+  private _takeBatch(queue: QueuedAiEvent[]): QueuedAiEvent[] {
+    const batch: QueuedAiEvent[] = []
     let bytes = 0
     for (const event of queue) {
       if (batch.length >= this._batchSize || (batch.length > 0 && bytes + event.bytes > CAPTURE_AI_BATCH_BYTE_TARGET)) {
@@ -234,6 +241,26 @@ export class CaptureAiLane {
       }
       batch.push(event)
       bytes += event.bytes
+    }
+    return batch
+  }
+
+  /** The batch's events as sent, each with its queued event; events whose slot can't be read are dropped from the queue. */
+  private async _readBatch(queued: QueuedAiEvent[]): Promise<Map<SerializedV1Event, QueuedAiEvent>> {
+    const jsons = await Promise.all(queued.map((item) => item.json ?? this._readSlot(item)))
+    const batch = new Map<SerializedV1Event, QueuedAiEvent>()
+    const unreadable = new Set<QueuedAiEvent>()
+    queued.forEach((item, i) => {
+      const json = jsons[i]
+      if (json === undefined) {
+        unreadable.add(item)
+      } else {
+        batch.set({ uuid: item.uuid, json, bytes: item.bytes, propertiesBytes: item.propertiesBytes }, item)
+      }
+    })
+    if (unreadable.size > 0) {
+      this._logger.warn(`Dropping ${unreadable.size} stored AI event(s) that could not be read back.`)
+      this._setQueue(this._events.filter((item) => !unreadable.has(item)))
     }
     return batch
   }
@@ -279,14 +306,17 @@ export class CaptureAiLane {
   }
 
   private async _load(): Promise<void> {
-    let restored: SerializedV1Event[] = []
+    const restored: QueuedAiEvent[] = []
     try {
       if (this._files) {
         await this._storage.preloadPromise?.catch(() => {})
         const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
         const entries = Array.isArray(stored) ? stored.filter(isStoredEvent) : []
-        const events = await Promise.all(entries.map((entry) => this._readSlot(entry)))
-        restored = events.filter((event): event is SerializedV1Event => event !== undefined)
+        for (const { uuid, bytes, propertiesBytes, slot } of entries) {
+          const item: QueuedAiEvent = { uuid, bytes, propertiesBytes }
+          this._slots.set(item, slot)
+          restored.push(item)
+        }
       }
     } finally {
       this._loaded = true
@@ -301,29 +331,31 @@ export class CaptureAiLane {
     }
   }
 
-  private async _readSlot(entry: StoredAiEvent): Promise<SerializedV1Event | undefined> {
+  /**
+   * The event's JSON from its slot, or undefined when the slot now holds another event or was cut off
+   * mid-write. A slot starts with its event's uuid, and the JSON must be the size the index recorded.
+   */
+  private async _readSlot(item: QueuedAiEvent): Promise<string | undefined> {
+    const slot = this._slots.get(item)
+    if (!this._files || slot === undefined) {
+      return undefined
+    }
     let content: string | null = null
     try {
-      content = await this._files!.storage.getItem(this._files!.key(entry.slot))
+      content = await this._files.storage.getItem(this._files.key(slot))
     } catch (e) {
       this._logger.error('Reading a stored AI event failed:', e)
     }
-    const prefix = `${entry.uuid}\n`
+    const prefix = `${item.uuid}\n`
     if (typeof content !== 'string' || !content.startsWith(prefix)) {
       return undefined
     }
-    const event: SerializedV1Event = {
-      uuid: entry.uuid,
-      json: content.slice(prefix.length),
-      bytes: entry.bytes,
-      propertiesBytes: entry.propertiesBytes,
-    }
-    this._slots.set(event, entry.slot)
-    return event
+    const json = content.slice(prefix.length)
+    return utf8Length(json) === item.bytes ? json : undefined
   }
 
   /** Drops the oldest events beyond the queue's count and byte caps, then stores what is left. */
-  private _setTrimmedQueue(queue: SerializedV1Event[]): { queue: SerializedV1Event[]; queuedBytes: number } {
+  private _setTrimmedQueue(queue: QueuedAiEvent[]): { queue: QueuedAiEvent[]; queuedBytes: number } {
     let queuedBytes = queue.reduce((total, item) => total + item.bytes, 0)
     const evicted: CaptureDroppedEvent[] = []
     while (
@@ -344,7 +376,7 @@ export class CaptureAiLane {
     return { queue, queuedBytes }
   }
 
-  private _setQueue(queue: SerializedV1Event[]): void {
+  private _setQueue(queue: QueuedAiEvent[]): void {
     const previous = this._events
     this._events = queue
     // Until storage has loaded, slots in use are unknown; _load stores these events once it has.
@@ -356,7 +388,7 @@ export class CaptureAiLane {
       const slot = this._slots.get(event)
       if (slot !== undefined && !kept.has(event)) {
         this._slots.delete(event)
-        this._writeSlot(slot, '')
+        void this._writeSlot(slot, '')
       }
     }
     const used = new Set(this._slots.values())
@@ -368,7 +400,12 @@ export class CaptureAiLane {
         }
         used.add(free)
         this._slots.set(event, free)
-        this._writeSlot(free, slotContent(event))
+        // Only events captured this launch are without a slot, and they still hold their JSON.
+        void this._writeSlot(free, `${event.uuid}\n${event.json!}`).then((stored) => {
+          if (stored) {
+            event.json = undefined
+          }
+        })
       }
     }
     if (queue.length > 0) {
@@ -384,16 +421,24 @@ export class CaptureAiLane {
     }
   }
 
-  private _writeSlot(slot: number, content: string): void {
+  /** Resolves true once `content` is in the slot, or false when the write failed. */
+  private _writeSlot(slot: number, content: string): Promise<boolean> {
     const files = this._files!
-    const write = (this._slotWrites.get(slot) ?? Promise.resolve())
+    const write = (this._slotWrites.get(slot) ?? Promise.resolve(true))
       .then(() => files.storage.setItem(files.key(slot), content))
-      .catch((e) => this._logger.error('Storing an AI event failed:', e))
+      .then(
+        () => true,
+        (e) => {
+          this._logger.error('Storing an AI event failed:', e)
+          return false
+        }
+      )
     this._slotWrites.set(slot, write)
     void write.then(() => {
       if (this._slotWrites.get(slot) === write) {
         this._slotWrites.delete(slot)
       }
     })
+    return write
   }
 }
