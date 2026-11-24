@@ -295,6 +295,52 @@ describe('React Native capture v1 delivery', () => {
     expect(requests.length).toBe(requestsAtShutdown)
   })
 
+  it('sends no background resend while logs are still shutting down', async () => {
+    const randomSpy = stubJitter()
+    vi.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+    const fetchMock = (globalThis as any).window.fetch as vi.Mock
+    const respondNow = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string, options: any) => {
+      if (String(url).includes('/i/v1/logs')) {
+        await new Promise((resolve) => setTimeout(resolve, 1100))
+      }
+      return respondNow(url, options)
+    })
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    posthog.captureLog({ body: 'slow log' })
+
+    await posthog.shutdown(5000)
+    randomSpy.mockRestore()
+
+    expect(sentEvents()).toEqual([['kept']])
+  })
+
+  it('stops after one deferred retry following a partial retry during shutdown', async () => {
+    const randomSpy = stubJitter()
+    vi.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+    let attempt = 0
+    respond = (request) =>
+      ++attempt === 1
+        ? {
+            status: 200,
+            body: {
+              results: {
+                [request.body.batch[0].uuid]: { result: 'ok' },
+                [request.body.batch[1].uuid]: { result: 'retry', details: 'not_persisted' },
+              },
+            },
+          }
+        : { status: 503 }
+    posthog.capture('accepted')
+    posthog.capture('retried')
+
+    await posthog.shutdown(6000)
+    randomSpy.mockRestore()
+
+    expect(sentEvents()).toEqual([['accepted', 'retried'], ['retried']])
+  })
+
   it('sends nothing after shutdown when a capture response arrives after the shutdown timeout', async () => {
     const randomSpy = stubJitter()
     let releaseResponse: () => void = () => {}

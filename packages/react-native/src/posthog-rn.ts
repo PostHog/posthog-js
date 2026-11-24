@@ -460,6 +460,8 @@ export class PostHog extends PostHogCore {
   private _captureResend?: { uuids: string[]; request: V1RequestIdentity }
   // Set once shutdown() returns, so a capture response that lands later schedules no resend.
   private _captureShutDown = false
+  // While shutdown drains, its own hold waits out resends; a background timer would send outside that drain.
+  private _captureShuttingDown = false
 
   /**
    * The project token the client was created with.
@@ -854,6 +856,7 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    this._captureShuttingDown = true
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
       this._captureResendTimer = undefined
@@ -1043,6 +1046,10 @@ export class PostHog extends PostHogCore {
     this._captureResendAt = Date.now() + waitMs
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
+    if (this._captureShuttingDown) {
+      return
     }
     this._captureResendTimer = safeSetTimeout(() => {
       this._captureResendTimer = undefined
