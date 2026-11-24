@@ -80,16 +80,16 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   subject: true,
   from: true,
   replyTo: true,
-  captureEngagement: true,
   cc: true,
   bcc: true,
   attachments: true,
+  captureEngagement: true,
   sensitive: true,
   tracking: true,
-  category: true,
   html: true,
   text: true,
   react: true,
+  category: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
@@ -484,7 +484,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const { send, own } = snapshotOptions(options)
+  const send = snapshotOptions(options)
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
@@ -492,7 +492,7 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const { content, files } = contentOf(send, own, distinctId)
+  const { content, files } = contentOf(send, options, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -516,26 +516,20 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 }
 
-interface OptionsSnapshot {
-  send: UncheckedSend
-  own: ReadonlyMap<string, unknown>
+function isOptionsObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && (typeof value === 'object' || typeof value === 'function')
 }
 
-function snapshotOptions(options: unknown): OptionsSnapshot {
+function snapshotOptions(options: unknown): UncheckedSend {
   const send: Record<string, unknown> = Object.create(null)
-  if (options === null || typeof options !== 'object') {
-    return { send: send as UncheckedSend, own: new Map() }
-  }
-  const raw = options as Record<string, unknown>
-  const own = new Map<string, unknown>(Object.entries(options))
-  const read = (name: string): void => {
-    send[name] = own.has(name) ? own.get(name) : raw[name]
+  if (!isOptionsObject(options)) {
+    return send as UncheckedSend
   }
   for (const name of Object.keys(SHARED_FIELDS)) {
-    read(name)
+    send[name] = options[name]
   }
-  read('templateId')
-  read('templateKey')
+  send.templateId = options.templateId
+  send.templateKey = options.templateKey
   const formFields =
     send.templateKey !== undefined && send.templateId === undefined
       ? CODE_FIELDS
@@ -545,11 +539,11 @@ function snapshotOptions(options: unknown): OptionsSnapshot {
   if (formFields !== undefined) {
     for (const name of Object.keys(formFields)) {
       if (name !== 'templateId' && name !== 'templateKey') {
-        read(name)
+        send[name] = options[name]
       }
     }
   }
-  return { send: send as UncheckedSend, own }
+  return send as UncheckedSend
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -594,11 +588,7 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function contentOf(
-  send: UncheckedSend,
-  own: ReadonlyMap<string, unknown>,
-  distinctId: string | undefined
-): SendContent {
+function contentOf(send: UncheckedSend, options: unknown, distinctId: string | undefined): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
@@ -606,13 +596,13 @@ function contentOf(
     })
   }
   return send.templateKey === undefined
-    ? { content: templateContent(send, own, distinctId), files: [] }
-    : codeContent(send, own, distinctId)
+    ? { content: templateContent(send, options, distinctId), files: [] }
+    : codeContent(send, options, distinctId)
 }
 
 function templateContent(
   send: UncheckedSend,
-  own: ReadonlyMap<string, unknown>,
+  options: unknown,
   distinctId: string | undefined
 ): Record<string, unknown> {
   const { templateId, templateData } = send
@@ -625,7 +615,7 @@ function templateContent(
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(own, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(options, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -633,11 +623,7 @@ function templateContent(
   }
 }
 
-function codeContent(
-  send: UncheckedSend,
-  own: ReadonlyMap<string, unknown>,
-  distinctId: string | undefined
-): SendContent {
+function codeContent(send: UncheckedSend, options: unknown, distinctId: string | undefined): SendContent {
   const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
@@ -646,7 +632,7 @@ function codeContent(
       'templateKey'
     )
   }
-  refuseFieldsOutside(own, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(options, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -795,8 +781,21 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(own: ReadonlyMap<string, unknown>, form: SendForm, otherForm: SendForm): void {
-  const field = [...own].find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+function refuseFieldsOutside(options: unknown, form: SendForm, otherForm: SendForm): void {
+  if (!isOptionsObject(options)) {
+    return
+  }
+  let field: string | undefined
+  for (const name of Object.getOwnPropertyNames(options)) {
+    if (form.fields.has(name)) {
+      continue
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(options, name)
+    if (descriptor?.enumerable && options[name] !== undefined) {
+      field = name
+      break
+    }
+  }
   if (field === undefined) {
     return
   }

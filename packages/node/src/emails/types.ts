@@ -126,17 +126,19 @@ interface CodeEmailFields {
    * A `MessageCategory` files the email under that category. A marketing email honors the
    * recipient's opt-outs and gets unsubscribe headers. Its `html` needs a link with
    * `<a href="{{ unsubscribe_url }}">`, or its `text` needs `{{ unsubscribe_url }}` when it has no
-   * `html`.
+   * `html`. Marketing emails can't carry attachments.
    *
    * The send returns an error with code `category_mismatch` when a category with this key has
    * another type, or when `templateKey` names a sendable template in another category (including an
    * uncategorized template given a `MessageCategory`); `too_many_categories` when creating or
    * restoring a category would pass the project's active category limit;
    * `unsubscribe_link_required` when a marketing email has no unsubscribe link placeholder;
-   * `copies_not_allowed` when a marketing email has `cc` or `bcc`; `recipient_opted_out` when the
-   * recipient opted out of the category or of all marketing email; `template_not_transactional` when
-   * `templateKey` names a template not enabled for transactional sends; and `marketing_template`
-   * when `templateKey` names an enabled template in a marketing category.
+   * `copies_not_allowed` when a marketing email has `cc` or `bcc`; `workflow_can_wait` (verified
+   * sender) or `sandbox_fields_unsupported` (PostHog test sender) when a marketing email has
+   * `attachments`; `recipient_opted_out` when the recipient opted out of the category or of all
+   * marketing email; `template_not_transactional` when `templateKey` names a template not enabled
+   * for transactional sends; and `marketing_template` when `templateKey` names an enabled template
+   * in a marketing category.
    */
   category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
 }
@@ -212,7 +214,10 @@ export type SendTemplateEmailOptions = SendEmailBase &
 
 export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>
 
-/** Options for `posthog.emails.send()`: a template made in PostHog, or content from your code. */
+/**
+ * Options for `posthog.emails.send()`: a template made in PostHog, or content from your code.
+ * Options are read once per send, recipient first and category last, and a getter that changes other fields is not supported.
+ */
 export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 
 /** A warning PostHog returned with a queued email. */
