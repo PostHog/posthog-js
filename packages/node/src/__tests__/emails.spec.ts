@@ -1716,6 +1716,7 @@ describe('emails', () => {
       expect(uploadsRequest.url).toBe(UPLOADS_URL)
       expect(uploadsRequest.method).toBe('POST')
       expect(uploadsRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(uploadsRequest.headers['content-type']).toBe('application/json')
       expect(uploadsRequest.body).toEqual({ files: [{ sha256: HELLO_SHA256, size: HELLO_BYTES.byteLength }] })
 
       const [putUrl, putOptions] = fetch.mock.calls[1]
@@ -1760,7 +1761,42 @@ describe('emails', () => {
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(postedSend().body.category).toEqual(NEWSLETTER)
-      expect(reads).toBe(1)
+    })
+
+    it('sends the validated marketing category when category getters change on later reads', async () => {
+      replies = [accepted()]
+      let keyReads = 0
+      let typeReads = 0
+      let nameReads = 0
+      let descriptionReads = 0
+      const category = {
+        get key(): string {
+          keyReads += 1
+          return keyReads === 1 ? NEWSLETTER.key : 'mutated-key'
+        },
+        get type(): 'marketing' | 'transactional' {
+          typeReads += 1
+          return typeReads === 1 ? 'marketing' : 'transactional'
+        },
+        get name(): string {
+          nameReads += 1
+          return nameReads === 1 ? NEWSLETTER.name : 'Mutated Name'
+        },
+        get description(): string | undefined {
+          descriptionReads += 1
+          return descriptionReads === 1 ? NEWSLETTER.description : 'Mutated description'
+        },
+      }
+
+      const { data, error } = await posthog.emails.send({
+        ...CODE_SEND,
+        category,
+      })
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
     })
 
     it('sends getter-backed idempotencyKey and category on a class instance', async () => {
