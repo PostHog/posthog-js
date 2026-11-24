@@ -117,6 +117,9 @@ describe('session recording timing', () => {
 
         const resumed = recordedEvents(network).slice(sentWhileIdle)
         expect(resumed.map((event) => event.type)).toContain(2)
+        expect(
+            resumed.some((event) => event.type === 5 && (event.data as { tag: string }).tag === 'sessionNoLongerIdle')
+        ).toBe(true)
     })
 
     it('drops a held recording on unload once its session passed the maximum length', async () => {

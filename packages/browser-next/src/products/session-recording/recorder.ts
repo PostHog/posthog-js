@@ -993,10 +993,12 @@ export class SessionRecorder {
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this._isIdle === true) {
+                this._isIdle = false
                 this._addCustomEvent('sessionNoLongerIdle', { reason: 'user activity', type: event.type })
                 returningFromIdle = true
+            } else {
+                this._isIdle = false
             }
-            this._isIdle = false
         }
         if (session) this._windowId = session.windowId
         if (isUserInteraction) this._releaseHoldAndFlush()
