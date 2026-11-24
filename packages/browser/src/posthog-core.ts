@@ -561,7 +561,6 @@ export class PostHog implements PostHogInterface {
     private _hasWarnedAboutVolatileIdentity = false
     private _hasWarnedAboutMissingHistoryAutocapture = false
     private _isConsentTransition = false
-    private _cookieSyncedForCurrentCapture = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -1944,16 +1943,10 @@ export class PostHog implements PostHogInterface {
 
         // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
         const uuid = getEventUuid(options?.uuid, uuidv7)
-        let data: CaptureResult
-        this._cookieSyncedForCurrentCapture = true
-        try {
-            data = {
-                uuid,
-                event: event_name,
-                properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
-            }
-        } finally {
-            this._cookieSyncedForCurrentCapture = false
+        let data: CaptureResult = {
+            uuid,
+            event: event_name,
+            properties: this._calculateEventProperties(event_name, properties || {}, timestamp, uuid, false, true),
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2274,6 +2267,17 @@ export class PostHog implements PostHogInterface {
         uuid?: string,
         readOnly?: boolean
     ): Properties {
+        return this._calculateEventProperties(eventName, eventProperties, timestamp, uuid, readOnly, false)
+    }
+
+    private _calculateEventProperties(
+        eventName: string,
+        eventProperties: Properties,
+        timestamp?: Date,
+        uuid?: string,
+        readOnly?: boolean,
+        skipCookieSync: boolean = false
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return eventProperties
@@ -2284,8 +2288,6 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        const skipCookieSync = this._cookieSyncedForCurrentCapture
-        this._cookieSyncedForCurrentCapture = false
         if (!skipCookieSync) {
             this.persistence.syncCookieProperties()
             this._processCookieIdentityChange()

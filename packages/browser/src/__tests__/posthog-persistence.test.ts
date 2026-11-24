@@ -3632,6 +3632,42 @@ describe('posthog instance persistence', () => {
             }
         )
     })
+
+    it('clears leftover sessionStorage properties when adopting a cookie with missing localStorage', () => {
+        const adoptedDistinctId = uuidv7()
+
+        withCookieWinsInstance(
+            {
+                url: 'https://a.example.test/?utm_source=clean-utm&utm_medium=cpc',
+                seedStorage: (key) => {
+                    localStore._remove(key)
+                    sessionStore._set(key, { stale_session_prop: 'previous-user-secret' })
+                    cookieStore._set(
+                        key,
+                        {
+                            distinct_id: adoptedDistinctId,
+                            $device_id: 'sibling-device',
+                            $user_state: 'anonymous',
+                        },
+                        365,
+                        true,
+                        false
+                    )
+                },
+            },
+            ({ posthog, captured }) => {
+                posthog.capture('$pageview')
+
+                expect(captured).toHaveLength(1)
+                expect(captured[0].properties).toMatchObject({
+                    distinct_id: adoptedDistinctId,
+                    utm_source: 'clean-utm',
+                    utm_medium: 'cpc',
+                })
+                expect(captured[0].properties).not.toHaveProperty('stale_session_prop')
+            }
+        )
+    })
 })
 
 describe('persistence fallback when no browser storage is available', () => {
