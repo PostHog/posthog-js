@@ -49,7 +49,6 @@ import type {
 
 const SEND_PATH = '/api/messaging/send/email/'
 const BATCH_PATH = '/api/messaging/send/email_batch/'
-const STATUS_BY_KEY_PATH = '/api/messaging/emails/status/'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const STATUS_PATH = '/api/messaging/emails/{messageId}/'
 const PREFERENCES_PATH = '/api/messaging/preferences/'
@@ -282,7 +281,7 @@ export class EmailSender implements Emails {
 
   private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
     let slots: Slot[] = []
-    let connection: { appHost: string; secretKey: string } | undefined
+    let connected = false
     const warnings: EmailWarning[] = []
     try {
       const prepared = prepareBatchEmail(email, this.config.maxRetries)
@@ -295,7 +294,7 @@ export class EmailSender implements Emails {
         prepared.react === undefined
           ? prepared.content
           : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
-      connection = { appHost, secretKey }
+      connected = true
       const body = new BatchBody(content)
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
       const timeoutMs = Math.max(BATCH_ATTEMPT_TIMEOUT_MS, this.config.requestTimeoutMs)
@@ -329,21 +328,14 @@ export class EmailSender implements Emails {
           await new Promise((resolve) => setTimeout(resolve, delayMs))
         }
       }
-      if (!this.hooks.isClosed()) {
-        await this.recoverMessageIds(slots, appHost, secretKey)
-      }
       this.logWarnings(warnings)
       return { data: { results: slots.map(resultOf), warnings }, error: null }
     } catch (caught) {
       const error = asEmailError(caught, 'Sending the batch failed unexpectedly.')
-      if (!connection) {
+      if (!connected) {
         return { data: null, error }
       }
       this.logWarnings(warnings)
-      // A client that shut down sends nothing more, the status reads included.
-      if (!this.hooks.isClosed()) {
-        await this.recoverMessageIds(slots, connection.appHost, connection.secretKey)
-      }
       return { data: null, error: withResults(error, slots) }
     }
   }
@@ -362,29 +354,6 @@ export class EmailSender implements Emails {
   private logWarnings(warnings: EmailWarning[]): void {
     for (const warning of warnings) {
       this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
-    }
-  }
-
-  /**
-   * Reads, by idempotency key, the message ID of each unconfirmed recipient PostHog gave none, so the
-   * caller can read what happened to the email. One try each; the first failure other than not found ends the reads.
-   */
-  private async recoverMessageIds(slots: Slot[], appHost: string, secretKey: string): Promise<void> {
-    const headers = this.headers(secretKey, {})
-    for (const slot of slots) {
-      if (slot.status !== 'unconfirmed' || slot.id !== null) {
-        continue
-      }
-      try {
-        const url = `${appHost}${STATUS_BY_KEY_PATH}?idempotency_key=${encodeURIComponent(slot.idempotencyKey)}`
-        const reply = await this.request(url, 'GET', headers)
-        if (reply.status === 404) {
-          continue
-        }
-        slot.id = parseStatusReply(reply).id
-      } catch {
-        return
-      }
     }
   }
 

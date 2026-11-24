@@ -237,11 +237,30 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
     case 'queued':
       return { index, to, idempotencyKey, status: 'queued', id: slot.id ?? '', replayed: slot.replayed }
     case 'failed':
+      return { index, to, idempotencyKey, status: 'failed', id: slot.id, error: slot.error! }
     case 'unconfirmed':
-      return { index, to, idempotencyKey, status: slot.status, id: slot.id, error: slot.error! }
+      return { index, to, idempotencyKey, status: 'unconfirmed', id: slot.id, error: withResendFix(slot.error!) }
     default:
       return { index, to, idempotencyKey, status: 'not_attempted' }
   }
+}
+
+const RESEND_FIX =
+  'PostHog may have queued this email. Send this recipient again with the same idempotencyKey within 24 hours: PostHog queues no second email for a key it has, and answers whether it queued this one.'
+
+function withResendFix(error: EmailError): EmailError {
+  return new EmailError({
+    code: error.code,
+    message: error.message,
+    statusCode: error.statusCode,
+    why: error.why,
+    fix: RESEND_FIX,
+    docsUrl: error.docsUrl,
+    field: error.field,
+    retryAfterMs: error.retryAfterMs,
+    messageId: error.messageId,
+    cause: error.cause,
+  })
 }
 
 function recordUnanswered(slot: Slot, error: EmailError): void {

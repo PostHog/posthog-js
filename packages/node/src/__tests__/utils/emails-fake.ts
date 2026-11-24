@@ -7,7 +7,6 @@ const APP_HOST = 'https://us.posthog.com'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const SEND_PATH = '/api/messaging/send/email/'
 const BATCH_PATH = '/api/messaging/send/email_batch/'
-const STATUS_BY_KEY_PATH = '/api/messaging/emails/status/?'
 const BATCH_MAX_RECIPIENTS = 100
 const BATCH_MAX_BODY_BYTES = 5 * 1024 * 1024
 const BATCH_REFUSED_FIELDS = new Set(['scheduled_at', 'cc', 'bcc', 'attachments', 'to', 'distinct_id'])
@@ -58,7 +57,7 @@ const MESSAGE_TOO_LARGE_WHY =
 const MESSAGE_TOO_LARGE_FIX =
   'Keep the email under 40 MB after Base64 encoding, about 29 MB of files: send fewer or smaller files, or link to large files from the email body.'
 
-export type Route = 'uploads' | 'storage' | 'send' | 'batch' | 'status'
+export type Route = 'uploads' | 'storage' | 'send' | 'batch'
 
 export type Fault =
   | { status: number; code?: string; message?: string; page?: string }
@@ -164,13 +163,15 @@ export class FakePostHog {
   /** The recipients of each batch request PostHog read, and its body size in bytes. */
   readonly batches: { recipients: number; bytes: number }[] = []
   /** How many requests reached each route, answered or not. */
-  readonly requests: Record<Route, number> = { uploads: 0, storage: 0, send: 0, batch: 0, status: 0 }
+  readonly requests: Record<Route, number> = { uploads: 0, storage: 0, send: 0, batch: 0 }
+  /** The URLs of requests to no route PostHog has. */
+  readonly unrouted: string[] = []
 
   private readonly options: Required<FakePostHogOptions>
   private readonly files = new Map<string, Uint8Array>()
   private readonly issued = new Map<string, IssuedUpload>()
   private readonly sends = new Map<string, { body: string; answer: Json }>()
-  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], batch: [], status: [] }
+  private readonly faults: Record<Route, Fault[]> = { uploads: [], storage: [], send: [], batch: [] }
   private readonly keyedIds = new Map<string, string>()
   private readonly recoveries: Recovery[] = []
   private uploadedBytes = 0
@@ -214,6 +215,8 @@ export class FakePostHog {
     const route = this.routeOf(url)
     if (route) {
       this.requests[route] += 1
+    } else {
+      this.unrouted.push(url)
     }
     const fault = route ? this.faults[route].shift() : undefined
     if (fault === 'network error') {
@@ -264,8 +267,6 @@ export class FakePostHog {
         return this.send(options)
       case 'batch':
         return this.batch(options)
-      case 'status':
-        return this.statusByKey(url, options)
       default:
         return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
@@ -280,9 +281,6 @@ export class FakePostHog {
     }
     if (url === this.options.appHost + BATCH_PATH) {
       return 'batch'
-    }
-    if (url.startsWith(this.options.appHost + STATUS_BY_KEY_PATH)) {
-      return 'status'
     }
     const { storageOrigin, storageRedirectOrigin } = this.options
     return url.startsWith(`${storageOrigin}/`) || (storageRedirectOrigin && url.startsWith(`${storageRedirectOrigin}/`))
@@ -537,17 +535,6 @@ export class FakePostHog {
     this.emails.push({ id: messageId, ...email })
     this.sends.set(key, { body: fingerprint, answer: { message_id: messageId } })
     return { message_id: messageId, status: 'queued', replayed: false }
-  }
-
-  private statusByKey(url: string, options: PostHogFetchOptions): Answer {
-    this.authenticate(options)
-    const key = new URL(url).searchParams.get('idempotency_key') ?? ''
-    const email = this.emails.find(({ id }) => id === this.keyedIds.get(key))
-    if (!email) {
-      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
-    }
-    const now = new Date().toISOString()
-    return { status: 200, body: { id: email.id, status: 'queued', created_at: now, status_at: now, reason: null } }
   }
 
   private codeEmail(body: Json): Omit<QueuedEmail, 'id'> {

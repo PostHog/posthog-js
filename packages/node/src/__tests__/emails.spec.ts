@@ -1766,7 +1766,11 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(data?.results).toMatchObject([
-        { status: 'unconfirmed', id: expect.stringMatching(UUID_V4), error: { code: 'delivery_unavailable' } },
+        {
+          status: 'unconfirmed',
+          id: expect.stringMatching(UUID_V4),
+          error: { code: 'delivery_unavailable', fix: expect.stringMatching(/again with the same idempotencyKey/) },
+        },
         { status: 'queued' },
       ])
       expect(postHog.requests.batch).toBe(3)
@@ -1815,42 +1819,28 @@ describe('emails', () => {
       expect(postHog.batches).toHaveLength(1)
     })
 
-    it('reports recipients of an unanswered request as unconfirmed, with the IDs PostHog has for their keys', async () => {
+    it('keeps recipients of an unanswered request unconfirmed with their keys, and says to send them again with the same key', async () => {
       const postHog = againstPostHog()
-      postHog.failNext('batch', 'lost reply', 'lost reply', 'lost reply')
-
-      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
-
-      expect(error).toMatchObject({ code: 'network_error' })
-      expect(error?.results).toEqual([
-        expect.objectContaining({ status: 'unconfirmed', id: postHog.emails[0].id }),
-        expect.objectContaining({ status: 'unconfirmed', id: postHog.emails[1].id }),
-      ])
-    })
-
-    it('reads the IDs of the other unconfirmed recipients past one PostHog has no status for', async () => {
-      const postHog = againstPostHog({ suppressed: ['gone@example.com'] })
       postHog.failNext('batch', 'lost reply', 'lost reply', 'lost reply')
 
       const { error } = await settle(
-        posthog.emails.batch(WELCOME, [{ to: 'gone@example.com' }, { to: 'ada@example.com' }])
+        posthog.emails.batch(WELCOME, [
+          { to: 'ada@example.com', idempotencyKey: 'welcome:ada' },
+          { to: 'bob@example.com', idempotencyKey: 'welcome:bob' },
+        ])
       )
 
-      expect(error?.results).toEqual([
-        expect.objectContaining({ status: 'unconfirmed', id: null }),
-        expect.objectContaining({ status: 'unconfirmed', id: postHog.emails[0].id }),
-      ])
-    })
-
-    it('leaves the ID of an unconfirmed recipient unknown while PostHog has no status for its key', async () => {
-      const postHog = againstPostHog()
-      postHog.failNext('batch', { status: 503 }, { status: 503 }, { status: 503 })
-
-      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
-
-      expect(error?.results).toEqual([expect.objectContaining({ status: 'unconfirmed', id: null })])
-      expect(postHog.requests).toMatchObject({ batch: 3, status: 1 })
-      expect(postHog.emails).toEqual([])
+      expect(error).toMatchObject({ code: 'network_error' })
+      expect(error?.results).toMatchObject(
+        ['welcome:ada', 'welcome:bob'].map((idempotencyKey) => ({
+          status: 'unconfirmed',
+          id: null,
+          idempotencyKey,
+          error: { code: 'network_error', fix: expect.stringMatching(/again with the same idempotencyKey/) },
+        }))
+      )
+      expect(postHog.requests).toEqual({ uploads: 0, storage: 0, send: 0, batch: 3 })
+      expect(postHog.unrouted).toEqual([])
     })
 
     it('gives a request 45 seconds before it counts as unanswered', async () => {
@@ -1934,7 +1924,8 @@ describe('emails', () => {
 
       expect(error).toMatchObject({ code: 'client_closed' })
       expect(error?.fix).toMatch(/every recipient that isn't queued/)
-      expect(postHog.requests).toMatchObject({ batch: 1, status: 0 })
+      expect(postHog.requests).toEqual({ uploads: 0, storage: 0, send: 0, batch: 1 })
+      expect(postHog.unrouted).toEqual([])
       expect(error?.results?.map(({ status }) => status)).toEqual([
         ...Array<string>(100).fill('unconfirmed'),
         ...Array<string>(50).fill('not_attempted'),
