@@ -321,6 +321,24 @@ describe('session recording markers', () => {
 
         expect(eventSequence(network).slice(0, 4)).toEqual([4, 2, '$recording_started', '$remote_config_received'])
     })
+
+    it('records the configuration replay started with, without its callbacks', async () => {
+        const { replay, transport: network } = await setup(
+            {},
+            { maskTextSelector: '.secret', maskTextFn: (text) => text }
+        )
+        await started(replay)
+
+        interact()
+        await replay.flush?.()
+
+        const marker = recordedEvents(network).find(
+            (event) => event.type === 5 && (event.data as { tag: string }).tag === '$posthog_config'
+        )
+        expect((marker?.data as { payload: unknown } | undefined)?.payload).toEqual({
+            config: { apiHost: 'https://us.i.posthog.com', sessionRecording: { maskTextSelector: '.secret' } },
+        })
+    })
 })
 
 describe('session recording attribution', () => {
