@@ -381,6 +381,195 @@ describe('known-absent property keys', () => {
     expect(flagsRequests()).toHaveLength(0)
   })
 
+  describe('filter type scoping', () => {
+    const cohortFlag = flag('cohort-flag', [{ key: 'id', type: 'cohort', value: 'c1', operator: 'in' }])
+    const metadataFilter = (operator: string, value: unknown): object => ({
+      key: 'created_at',
+      type: 'person_metadata',
+      operator,
+      value,
+    })
+
+    it.each([
+      ['is_not_set', null],
+      ['is_date_before', '2025-01-01T10:00:00Z'],
+      ['is_date_after', '2025-01-01T10:00:00Z'],
+    ])('a listed person_metadata key with %s does not resolve from the listing', async (operator, value) => {
+      setup(
+        {
+          flags: [flag('flag', [metadataFilter(operator, value)]), cohortFlag],
+          cohorts: { c1: { type: 'AND', values: [metadataFilter(operator, value)] } },
+        },
+        { flag: 'remote', 'cohort-flag': 'remote' }
+      )
+
+      for (const key of ['flag', 'cohort-flag']) {
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: [key],
+          onlyEvaluateLocally: true,
+          personPropertyKeysKnownAbsent: ['created_at'],
+        })
+        expect(result.getFlag(key)).toBeUndefined()
+        expect(await posthog.getFeatureFlag(key, 'user', { personPropertyKeysKnownAbsent: ['created_at'] })).toBe(
+          'remote'
+        )
+      }
+      expect(flagsRequests()).toHaveLength(2)
+    })
+
+    it('a listed person_metadata key resolves from a supplied value, as when it is not listed', async () => {
+      const filter = metadataFilter('is_date_before', '2025-01-01T10:00:00Z')
+      setup({
+        flags: [flag('flag', [filter]), cohortFlag],
+        cohorts: { c1: { type: 'AND', values: [filter] } },
+      })
+
+      const options = {
+        personProperties: { created_at: '2020-01-01T10:00:00Z' },
+        personPropertyKeysKnownAbsent: ['created_at'],
+      }
+      expect(await posthog.getFeatureFlag('flag', 'user', options)).toBe(true)
+      expect(await posthog.getFeatureFlag('cohort-flag', 'user', options)).toBe(true)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it('a person listing does not apply to a group filter in a person condition', async () => {
+      setup(
+        {
+          flags: [
+            flag('flag', [{ key: 'tier', type: 'group', group_type_index: 0, operator: 'is_not_set', value: null }]),
+          ],
+          group_type_mapping: { '0': 'organization' },
+        },
+        { flag: 'remote' }
+      )
+
+      expect(await posthog.getFeatureFlag('flag', 'user', { personPropertyKeysKnownAbsent: ['tier'] })).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+    })
+
+    it('a person listing does not apply to a group flag', async () => {
+      setup(
+        {
+          flags: [
+            flag(
+              'org-flag',
+              [{ key: 'tier', type: 'group', group_type_index: 0, operator: 'is_not_set', value: null }],
+              {
+                aggregation_group_type_index: 0,
+              }
+            ),
+          ],
+          group_type_mapping: { '0': 'organization' },
+        },
+        { 'org-flag': 'remote' }
+      )
+
+      expect(
+        await posthog.getFeatureFlag('org-flag', 'user', {
+          groups: { organization: 'acme' },
+          personPropertyKeysKnownAbsent: ['tier'],
+        })
+      ).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+    })
+
+    it.each([
+      ['a person filter', { key: 'plan', type: 'person', operator: 'is_not_set', value: null }],
+      [
+        'a group filter of another group type',
+        { key: 'plan', type: 'group', group_type_index: 1, operator: 'is_not_set', value: null },
+      ],
+      ['a person_metadata filter', { key: 'plan', type: 'person_metadata', operator: 'is_not_set', value: null }],
+    ])('a group listing does not apply to %s in a group condition', async (_name, filter) => {
+      setup(
+        {
+          flags: [flag('org-flag', [filter], { aggregation_group_type_index: 0 })],
+          group_type_mapping: { '0': 'organization', '1': 'project' },
+        },
+        { 'org-flag': 'remote' }
+      )
+
+      expect(
+        await posthog.getFeatureFlag('org-flag', 'user', {
+          groups: { organization: 'acme' },
+          groupPropertyKeysKnownAbsent: { organization: ['plan'] },
+        })
+      ).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+    })
+
+    it('a group listing does not apply to a person cohort leaf in a person condition', async () => {
+      setup(
+        {
+          flags: [cohortFlag],
+          cohorts: { c1: { type: 'AND', values: [personFilter('is_not_set', null)] } },
+          group_type_mapping: { '0': 'organization' },
+        },
+        { 'cohort-flag': 'remote' }
+      )
+
+      expect(
+        await posthog.getFeatureFlag('cohort-flag', 'user', {
+          groups: { organization: 'acme' },
+          groupPropertyKeysKnownAbsent: { organization: ['plan'] },
+        })
+      ).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+    })
+
+    it.each([
+      [
+        'a person flag on a group dependency with a person listing',
+        { aggregation_group_type_index: 0 },
+        {},
+        { key: 'tier', type: 'group', group_type_index: 0, operator: 'is_not_set', value: null },
+        { personPropertyKeysKnownAbsent: ['tier'] },
+      ],
+      [
+        'a group flag on a person dependency with a group listing',
+        {},
+        { aggregation_group_type_index: 0 },
+        personFilter('is_not_set', null),
+        { groupPropertyKeysKnownAbsent: { organization: ['plan'] } },
+      ],
+      [
+        'a group flag on a dependency of another group type',
+        { aggregation_group_type_index: 1 },
+        { aggregation_group_type_index: 0 },
+        { key: 'tier', type: 'group', group_type_index: 1, operator: 'is_not_set', value: null },
+        { groupPropertyKeysKnownAbsent: { organization: ['tier'] } },
+      ],
+    ])(
+      'a dependency does not use the listing of another aggregation: %s',
+      async (_name, baseExtra, dependentExtra, baseFilter, listing) => {
+        setup(
+          {
+            flags: [
+              flag('base', [baseFilter], baseExtra),
+              flag(
+                'dependent',
+                [{ key: 'base', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['base'] }],
+                dependentExtra
+              ),
+            ],
+            group_type_mapping: { '0': 'organization', '1': 'project' },
+          },
+          { dependent: 'remote' }
+        )
+
+        const options = {
+          groups: { organization: 'acme', project: 'web' },
+          personProperties: { plan: 'pro' },
+          groupProperties: { organization: { tier: 'gold' }, project: { tier: 'gold' } },
+          ...listing,
+        }
+        expect(await posthog.getFeatureFlag('dependent', 'user', options)).toBe(false)
+        expect(flagsRequests()).toHaveLength(0)
+      }
+    )
+  })
+
   describe('remote /flags body', () => {
     // The flag is inconclusive because of an unrelated missing property.
     const inconclusive = { flags: [flag('flag', [personFilter('exact', 'x', 'email')])] }

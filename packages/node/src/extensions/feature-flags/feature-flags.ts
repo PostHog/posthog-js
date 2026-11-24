@@ -659,6 +659,7 @@ class FeatureFlagsPoller {
 
         let effectiveProperties = properties
         let effectiveKnownAbsentKeys = knownAbsentKeys
+        let knownAbsentKeysGroupTypeIndex = flagAggregation
 
         // Mixed-override path: condition-level aggregation differs from flag-level.
         // This assumes flag-level aggregation is null/undefined for mixed flags.
@@ -679,6 +680,7 @@ class FeatureFlagsPoller {
             }
             effectiveProperties = groupProperties[groupName]
             effectiveKnownAbsentKeys = evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
+            knownAbsentKeysGroupTypeIndex = conditionAggregation
             effectiveBucketingValue = groups[groupName]
           }
         }
@@ -689,7 +691,8 @@ class FeatureFlagsPoller {
           condition,
           effectiveProperties,
           evaluationContext,
-          effectiveKnownAbsentKeys
+          effectiveKnownAbsentKeys,
+          knownAbsentKeysGroupTypeIndex
         )
         if (matchResult === 'match') {
           const variantOverride = condition.variant
@@ -776,7 +779,9 @@ class FeatureFlagsPoller {
     condition: FeatureFlagCondition,
     properties: Record<string, any>,
     evaluationContext: FeatureFlagEvaluationContext,
-    knownAbsentKeys?: ReadonlySet<string>
+    knownAbsentKeys?: ReadonlySet<string>,
+    /** The group type index `knownAbsentKeys` belong to, or null/undefined for person keys. */
+    knownAbsentKeysGroupTypeIndex?: number | null
   ): Promise<ConditionMatchResult> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const definitions = evaluationContext.definitions!
@@ -792,6 +797,7 @@ class FeatureFlagsPoller {
       let serverEvaluationError: RequiresServerEvaluation | undefined = undefined
       for (const prop of condition.properties) {
         const propertyType = prop.type
+        const filterKnownAbsentKeys = knownAbsentKeysForFilter(prop, knownAbsentKeys, knownAbsentKeysGroupTypeIndex)
         let matches = false
 
         try {
@@ -811,7 +817,10 @@ class FeatureFlagsPoller {
             )
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
-          } else if (!knownAbsentKeys?.has(prop.key) && !Object.prototype.hasOwnProperty.call(properties, prop.key)) {
+          } else if (
+            !filterKnownAbsentKeys?.has(prop.key) &&
+            !Object.prototype.hasOwnProperty.call(properties, prop.key)
+          ) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
             assertFeatureFlagFilterSupported(prop)
@@ -823,7 +832,7 @@ class FeatureFlagsPoller {
               properties,
               warnFunction,
               definitions.propertyMatchingVersion,
-              knownAbsentKeys
+              filterKnownAbsentKeys
             )
           }
         } catch (e) {
@@ -1477,6 +1486,23 @@ function isUnsupportedPropertyGroup(
   )
 }
 
+/**
+ * Person keys apply only to person filters and group keys only to group filters of their own group
+ * type. Other filter types, such as `person_metadata`, never resolve from a listing.
+ */
+function knownAbsentKeysForFilter(
+  property: FlagProperty & { group_type_index?: number | null },
+  knownAbsentKeys: ReadonlySet<string> | undefined,
+  knownAbsentKeysGroupTypeIndex: number | null | undefined
+): ReadonlySet<string> | undefined {
+  if (knownAbsentKeysGroupTypeIndex == null) {
+    return property.type === 'person' ? knownAbsentKeys : undefined
+  }
+  return property.type === 'group' && property.group_type_index === knownAbsentKeysGroupTypeIndex
+    ? knownAbsentKeys
+    : undefined
+}
+
 function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
@@ -1626,7 +1652,14 @@ async function matchPropertyGroup(
           }
           matches = await flagDependencyEvaluator(prop)
         } else {
-          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion, knownAbsentKeys)
+          // Cohorts only receive person keys, so they apply only to person leaves.
+          matches = matchProperty(
+            prop,
+            propertyValues,
+            undefined,
+            propertyMatchingVersion,
+            knownAbsentKeysForFilter(prop, knownAbsentKeys, null)
+          )
         }
 
         const negation = prop.negation || false
