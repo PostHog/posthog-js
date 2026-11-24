@@ -216,7 +216,7 @@ export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<Templ
 
 /**
  * Options for `posthog.emails.send()`: a template made in PostHog, or content from your code.
- * Options are a plain object; the SDK reads its own enumerable fields once per send, recipient first and category last; inherited, non-enumerable, accessor and proxy fields are not supported.
+ * Options are read once per send, by property access for the fields `SendEmailOptions` declares, recipient first and category last. Other fields count only when they're own enumerable properties. Accessors that change other fields aren't supported.
  */
 export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 

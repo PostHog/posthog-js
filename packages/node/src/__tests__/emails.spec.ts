@@ -1628,17 +1628,48 @@ describe('emails', () => {
       }
     }
 
+    const isValidWireCategory = (value: unknown): boolean => {
+      if (value === undefined || value === TRANSACTIONAL_EMAIL_CATEGORY) {
+        return true
+      }
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return false
+      }
+      const category = value as Record<string, unknown>
+      const keys = Object.keys(category)
+      const allowed = keys.every((k) => k === 'key' || k === 'type' || k === 'name' || k === 'description')
+      return (
+        allowed &&
+        typeof category.key === 'string' &&
+        category.key.trim().length > 0 &&
+        typeof category.name === 'string' &&
+        category.name.trim().length > 0 &&
+        (category.type === 'marketing' || category.type === 'transactional') &&
+        (category.description === undefined || typeof category.description === 'string')
+      )
+    }
+
     const stubAttachmentSendRoutes = (): {
       routes: string[]
       uploadedBytes: Uint8Array[]
+      sendRequests: Array<{
+        url: string
+        method: string
+        headers: Record<string, string>
+        body: Record<string, unknown>
+      }>
       queued: Record<string, unknown>[]
-      sendAttempts: number
     } => {
       const state = {
         routes: [] as string[],
         uploadedBytes: [] as Uint8Array[],
+        sendRequests: [] as Array<{
+          url: string
+          method: string
+          headers: Record<string, string>
+          body: Record<string, unknown>
+        }>,
         queued: [] as Record<string, unknown>[],
-        sendAttempts: 0,
       }
       const uploadedHashes = new Set<string>()
 
@@ -1737,15 +1768,19 @@ describe('emails', () => {
                 detail: 'Expected application/json Content-Type.',
               })
             }
-            if (!headers['idempotency-key']?.trim()) {
+            const parsedBody = parseJsonObject(options.body)
+            if (parsedBody === null) {
+              return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Invalid JSON body.' })
+            }
+            if (!isValidWireCategory(parsedBody.category)) {
               return fakeReply(400, {
-                type: 'invalid_request',
-                code: 'invalid_idempotency_key',
-                detail: 'Idempotency-Key header is required.',
+                type: 'validation_error',
+                code: 'invalid_input',
+                detail: 'Invalid category.',
+                attr: 'category',
               })
             }
-            const parsedBody = parseJsonObject(options.body)
-            const attachments = parsedBody?.attachments
+            const attachments = parsedBody.attachments
             const validAttachments =
               Array.isArray(attachments) &&
               attachments.length > 0 &&
@@ -1759,7 +1794,7 @@ describe('emails', () => {
                   typeof (item as Record<string, unknown>).filename === 'string' &&
                   ((item as Record<string, unknown>).filename as string).length > 0
               )
-            if (parsedBody === null || !validAttachments) {
+            if (!validAttachments) {
               return fakeReply(400, {
                 type: 'invalid_request',
                 code: 'attachment_not_uploaded',
@@ -1768,14 +1803,14 @@ describe('emails', () => {
               })
             }
             state.routes.push('send')
-            state.sendAttempts += 1
+            state.sendRequests.push({ url, method: options.method, headers, body: parsedBody })
             const category = parsedBody.category
-            const isMarketing =
+            const isCompleteMarketing =
               category !== null &&
               typeof category === 'object' &&
               !Array.isArray(category) &&
               (category as Record<string, unknown>).type === 'marketing'
-            if (isMarketing) {
+            if (isCompleteMarketing) {
               return fakeReply(400, {
                 type: 'invalid_request',
                 code: 'workflow_can_wait',
@@ -1879,6 +1914,12 @@ describe('emails', () => {
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
       expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
+      expect(boundary.sendRequests).toHaveLength(1)
+      expect(boundary.sendRequests[0].url).toBe(SEND_URL)
+      expect(boundary.sendRequests[0].method).toBe('POST')
+      expect(boundary.sendRequests[0].headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
+      expect(boundary.sendRequests[0].headers['content-type']).toBe('application/json')
+      expect(boundary.sendRequests[0].headers['idempotency-key']).toBeTruthy()
       expect(boundary.queued).toEqual([
         {
           to: CODE_SEND.to,
@@ -1889,6 +1930,78 @@ describe('emails', () => {
           attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
         },
       ])
+    })
+
+    it('sends getter-backed idempotencyKey and category on a class instance', async () => {
+      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
+      class ClassEmailSend {
+        readonly to = CODE_SEND.to
+        readonly templateKey = CODE_SEND.templateKey
+        readonly subject = CODE_SEND.subject
+        readonly html = CODE_SEND.html
+
+        get idempotencyKey(): string {
+          return 'idem-class-parity-1'
+        }
+
+        get category(): MessageCategory {
+          return NEWSLETTER
+        }
+      }
+
+      const first = await posthog.emails.send(new ClassEmailSend())
+      const second = await posthog.emails.send(new ClassEmailSend())
+
+      expect(first.error).toBeNull()
+      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(second.error).toBeNull()
+      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(0).headers['idempotency-key']).toBe('idem-class-parity-1')
+      expect(postedSend(1).headers['idempotency-key']).toBe('idem-class-parity-1')
+      expect(postedSend(0).body.category).toEqual(NEWSLETTER)
+      expect(postedSend(1).body.category).toEqual(NEWSLETTER)
+    })
+
+    it('sends a non-enumerable own category on a code send', async () => {
+      replies = [accepted()]
+      const options = { ...CODE_SEND }
+      Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
+
+      const { data, error } = await posthog.emails.send(options)
+
+      expect(error).toBeNull()
+      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
+    })
+
+    it('preserves getter-backed idempotencyKey across retries on a templateId class instance', async () => {
+      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
+      class ClassTemplateSend {
+        readonly to = 'reader@example.com'
+        readonly templateId = TEMPLATE_ID
+
+        get idempotencyKey(): string {
+          return 'idem-template-class-1'
+        }
+      }
+
+      const first = await posthog.emails.send(new ClassTemplateSend())
+      const second = await posthog.emails.send(new ClassTemplateSend())
+
+      expect(first.error).toBeNull()
+      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
+      expect(second.error).toBeNull()
+      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(postedSend(0).headers['idempotency-key']).toBe('idem-template-class-1')
+      expect(postedSend(1).headers['idempotency-key']).toBe('idem-template-class-1')
+      expect(postedSend(0).body).toEqual({
+        to: 'reader@example.com',
+        template_id: TEMPLATE_ID,
+        message_data: {},
+      })
     })
 
     it('copies only the four declared category fields and drops extra properties', async () => {
@@ -2044,7 +2157,16 @@ describe('emails', () => {
         field: 'attachments',
       })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
-      expect(boundary.sendAttempts).toBe(1)
+      expect(boundary.sendRequests).toHaveLength(1)
+      expect(boundary.sendRequests[0].headers['idempotency-key']).toBeTruthy()
+      expect(boundary.sendRequests[0].body).toEqual({
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+        category: NEWSLETTER,
+        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
+      })
       expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
       expect(boundary.queued).toEqual([])
     })
