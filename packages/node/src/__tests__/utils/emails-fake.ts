@@ -512,7 +512,8 @@ export class FakePostHog {
     }
     if (this.options.batchUnavailable) {
       throw refusal(409, 'invalid_request', 'batch_unavailable', null, {
-        detail: "Batch sends aren't available for this project yet, so PostHog didn't send any email.",
+        detail:
+          "Batch sends aren't available for this project yet, so PostHog didn't send any of these emails. Send each email on its own instead.",
       })
     }
     this.batches.push({ recipients: recipients.length, bytes })
