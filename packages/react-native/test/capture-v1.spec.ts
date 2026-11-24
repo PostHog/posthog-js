@@ -48,10 +48,20 @@ describe('React Native capture v1 delivery', () => {
 
   afterEach(async () => {
     respond = () => ({ status: 200, body: { results: {} } })
+    ;(posthog as any)._captureResendAt = 0
     await posthog.shutdown()
   })
 
   const sentEvents = (): string[][] => requests.map((request) => request.body.batch.map((event) => event.event))
+  // Ends the wait capture asked for, as the resend timer does.
+  const endResendWait = (): void => {
+    ;(posthog as any)._captureResendAt = 0
+  }
+  const requestIdentity = (request: CaptureRequest) => ({
+    requestId: request.headers['PostHog-Request-Id'],
+    attempt: request.headers['PostHog-Attempt'],
+    createdAt: (request.body as any).created_at,
+  })
 
   it('keeps events capture marks for retry and sends them on the next flush', async () => {
     respond = (request) => ({
@@ -62,23 +72,35 @@ describe('React Native capture v1 delivery', () => {
     await expect(posthog.flush()).resolves.toBeUndefined()
 
     respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
     await posthog.flush()
 
     expect(sentEvents()).toEqual([['kept'], ['kept']])
   })
 
-  it('keeps events after a retryable status and waits before an automatic resend', async () => {
-    respond = () => ({ status: 503 })
+  it.each([
+    ['a retryable status', () => ({ status: 503 })],
+    [
+      'no response',
+      () => {
+        throw new TypeError('Network request failed')
+      },
+    ],
+  ])('holds every flush after %s, then resends as the next attempt of the same request', async (_, failure) => {
+    respond = failure
     posthog.capture('kept')
     await posthog.flush()
 
-    // An automatic flush during the wait does not send.
+    respond = () => ({ status: 200, body: { results: {} } })
     await (posthog as any).flushAutomatic()
+    await posthog.flush()
     expect(sentEvents()).toEqual([['kept']])
 
-    respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
     await posthog.flush()
     expect(sentEvents()).toEqual([['kept'], ['kept']])
+    const [first, resend] = requests.map(requestIdentity)
+    expect(resend).toEqual({ ...first, attempt: '2' })
   })
 
   it('leaves redirects to the platform, so react-native-web follows a 307 or 308', async () => {
@@ -233,6 +255,33 @@ describe('React Native capture v1 delivery', () => {
     }
   })
 
+  it('waits out Retry-After during shutdown when it fits in the timeout', async () => {
+    respond = () => ({ status: 503, headers: { 'Retry-After': '1' } })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    const start = Date.now()
+    await posthog.shutdown(5000)
+
+    expect(Date.now() - start).toBeGreaterThanOrEqual(900)
+    expect(sentEvents()).toEqual([['kept'], ['kept']])
+  })
+
+  it('stops a shutdown drain without sending when the wait would pass the timeout', async () => {
+    vi.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+    respond = () => ({ status: 503, headers: { 'Retry-After': '30' } })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    const start = Date.now()
+    await posthog.shutdown(2000)
+
+    expect(Date.now() - start).toBeLessThan(1000)
+    expect(sentEvents()).toEqual([['kept']])
+    expect(queuedEvents()).toEqual(['kept'])
+  })
+
   it('sends nothing after shutdown when the final flush is deferred', async () => {
     const randomSpy = stubJitter()
     respond = () => ({ status: 503 })
@@ -284,7 +333,7 @@ describe('React Native capture v1 delivery', () => {
     expect(queuedEvents()).toEqual(['legacy'])
   })
 
-  it('keeps only the retried event and a newer capture, and sends exactly those next', async () => {
+  it('resends only the retried event as the same request, then a newer capture in a new one', async () => {
     let capturedDuringRequest = false
     respond = (request) => {
       if (!capturedDuringRequest) {
@@ -307,12 +356,30 @@ describe('React Native capture v1 delivery', () => {
     expect(queuedEvents()).toEqual(['b', 'd'])
 
     respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
     await posthog.flush()
 
-    expect(sentEvents()).toEqual([
-      ['a', 'b', 'c'],
-      ['b', 'd'],
-    ])
+    expect(sentEvents()).toEqual([['a', 'b', 'c'], ['b'], ['d']])
+    const [first, resend, newer] = requests.map(requestIdentity)
+    expect(resend).toEqual({ ...first, attempt: '2' })
+    expect(newer.requestId).not.toBe(first.requestId)
+    expect(newer.attempt).toBe('1')
+  })
+
+  it('starts a new request when an event it was resending has left the queue', async () => {
+    respond = () => ({ status: 503 })
+    posthog.capture('kept')
+    await posthog.flush()
+
+    ;(posthog as any).setPersistedProperty((posthog as any).persistedQueueKeyForRoute('default'), [])
+    posthog.capture('newer')
+    respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['kept'], ['newer']])
+    expect(requests[1].headers['PostHog-Request-Id']).not.toBe(requests[0].headers['PostHog-Request-Id'])
+    expect(requests[1].headers['PostHog-Attempt']).toBe('1')
   })
 
   it('does not keep or resend a duplicate of an event capture asks to retry', async () => {
@@ -327,11 +394,12 @@ describe('React Native capture v1 delivery', () => {
     expect(queuedEvents()).toEqual(['first'])
 
     respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
     await posthog.flush()
     expect(sentEvents()).toEqual([['first', 'second'], ['first']])
   })
 
-  it('holds an automatic flush queued behind a send that gets a 503', async () => {
+  it('holds a flush queued behind a send that gets a 503', async () => {
     let releaseFirst: () => void = () => {}
     const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve))
     const fetchMock = (globalThis as any).window.fetch as vi.Mock
@@ -348,26 +416,11 @@ describe('React Native capture v1 delivery', () => {
     const firstFlush = (posthog as any).flushAutomatic()
     await vi.waitFor(() => expect(captureCalls).toBe(1))
     posthog.capture('second')
-    const secondFlush = (posthog as any).flushAutomatic()
+    const secondFlush = posthog.flush()
     releaseFirst()
     await Promise.all([firstFlush, secondFlush])
 
     expect(sentEvents()).toEqual([['first']])
-  })
-
-  it('still sends an explicit flush that joins a held automatic one', async () => {
-    respond = () => ({ status: 503, headers: { 'Retry-After': '30' } })
-    posthog.capture('first')
-    await posthog.flush()
-
-    respond = () => ({ status: 200, body: { results: {} } })
-    posthog.capture('second')
-    ;(posthog as any)._captureResendAt = 0
-    const automatic = (posthog as any).flushAutomatic()
-    ;(posthog as any)._captureResendAt = Date.now() + 30_000
-    await Promise.all([automatic, posthog.flush()])
-
-    expect(sentEvents()).toEqual([['first'], ['first', 'second']])
   })
 
   it('keeps jitter once the resend wait reaches 30 seconds', () => {
@@ -392,6 +445,7 @@ describe('React Native capture v1 delivery', () => {
     expect((posthog as any)._captureResendAt - now).toBe(7000)
 
     respond = () => ({ status: 503, headers: { 'Retry-After': '120' } })
+    endResendWait()
     await posthog.flush()
     expect((posthog as any)._captureResendAt - now).toBe(30_000)
     nowSpy.mockRestore()
@@ -405,6 +459,7 @@ describe('React Native capture v1 delivery', () => {
     expect((posthog as any)._captureResendTimer).toBeDefined()
 
     respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait()
     await posthog.flush()
 
     expect((posthog as any)._captureResendTimer).toBeUndefined()

@@ -328,8 +328,8 @@ importers:
         specifier: ^3.49.0
         version: 3.49.0
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.18
+        version: 3.4.18
       fflate:
         specifier: ^0.4.8
         version: 0.4.8
@@ -527,8 +527,8 @@ importers:
         specifier: workspace:^
         version: link:../types
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.18
+        version: 3.4.18
       preact:
         specifier: ^10.29.3
         version: 10.29.3
@@ -11486,8 +11486,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.13:
-    resolution: {integrity: sha512-2vmYIoqjze2d+kakP8S/nS5shfsl587kzwEjcGlTdiksUVgFHnFCsLYDVj/JNqJVOQZGSYBTmuycv0PodwmnMQ==}
+  dompurify@3.4.18:
+    resolution: {integrity: sha512-ofe3wI/uNm68HInABYFJYqQxRw1EaKAjNdrFVKqjUY+UZurvNd2L/HuQe097s/4RivWiZyP6tT7aoT8atjfhwg==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -28787,7 +28787,7 @@ snapshots:
 
   '@types/dompurify@3.2.0':
     dependencies:
-      dompurify: 3.4.13
+      dompurify: 3.4.18
 
   '@types/dotenv@8.2.3':
     dependencies:
@@ -31791,7 +31791,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.13:
+  dompurify@3.4.18:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -38401,7 +38401,7 @@ snapshots:
       '@posthog/core': 1.58.0
       '@posthog/types': 1.415.2
       core-js: 3.49.0
-      dompurify: 3.4.13
+      dompurify: 3.4.18
       fflate: 0.4.8
       preact: 10.29.3
       query-selector-shadow-dom: 1.0.1
