@@ -1445,6 +1445,33 @@ describe('$experiment_exposure', () => {
             expect(harness.events).toEqual([])
         })
 
+        it.each<[string, (harness: Harness) => unknown]>([
+            [
+                'a value override',
+                (harness) => harness.flags.overrideFeatureFlags({ flags: { [FLAG]: 'annual' }, suppressWarning: true }),
+            ],
+            ['updateFlags', (harness) => harness.flags.updateFlags({ [FLAG]: 'annual' })],
+            [
+                'a config version 1 record',
+                (harness) => harness.load(response([v4Record('condition_match', 'annual', { configVersion: 1 })])),
+            ],
+        ])(
+            'a read that was held with an assignment is dropped when %s supplies the same value by then',
+            async (_, change) => {
+                const client = createTestClient({ canCapture: false })
+                const harness = await setup({ client })
+                await harness.load(response([split()]))
+                expect(harness.flags.getFeatureFlag(FLAG)).toBe('annual')
+
+                // The value is the same, and no assignment is behind it.
+                await change(harness)
+                client.canCapture = true
+                harness.flags.sendFlagCallsPendingCapture()
+
+                expect(harness.events).toEqual([])
+            }
+        )
+
         it('capture that is turned off while the call is captured keeps no exposure key', async () => {
             const client = createTestClient()
             const capture = client.capture.bind(client)

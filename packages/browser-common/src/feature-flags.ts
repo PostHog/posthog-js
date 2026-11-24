@@ -1211,8 +1211,9 @@ export class PostHogFeatureFlags implements Extension {
                 const calledKey = this._configVersion2FlagEvents(key, flagVariants[key])?.calledKey
                 if (
                     pending.value !== String(flagVariants[key]) ||
-                    // The value is the same, and the config version 2 assignment behind it is not.
-                    (pending.calledKey && calledKey && pending.calledKey !== calledKey) ||
+                    // The value is the same, and the config version 2 assignment behind it is not, or there is
+                    // none. A read held without one is still sent when a record supplies the value by then.
+                    (pending.calledKey && pending.calledKey !== calledKey) ||
                     !isSameFlagCallContext(pending.context, this._flagCallContext())
                 ) {
                     this._flagCallsPendingCapture.delete(key)
