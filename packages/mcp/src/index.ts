@@ -12,7 +12,12 @@ import { createLogger } from './extensions/logger'
 import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
-import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionInfo,
+  instanceSessionSource,
+  newSessionId,
+} from './extensions/session'
 import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -230,6 +235,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   const event: McpEvent = {
     sessionId: trackingData.sessionId,
+    sessionSource: instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),

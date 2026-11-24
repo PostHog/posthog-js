@@ -87,7 +87,7 @@ describe('Surveys: back button', () => {
         render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
@@ -97,7 +97,7 @@ describe('Surveys: back button', () => {
         render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         const backButton = screen.getByRole('button', { name: /go to previous question/i })
@@ -117,7 +117,7 @@ describe('Surveys: back button', () => {
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
 
         const persistedState = mockedSetInProgressSurveyState.mock.calls.at(-1)![1]
@@ -154,7 +154,7 @@ describe('Surveys: back button', () => {
         render(<SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'skip to q3' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         await waitFor(() => expect(screen.getByText('Question 3')).toBeVisible())
         fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
@@ -195,11 +195,11 @@ describe('Surveys: back button', () => {
             render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
             fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
-            fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+            fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
             await waitFor(() => expect(screen.getByText('Final rating')).toBeVisible())
             mockedSendSurveyEvent.mockClear()
 
-            fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+            fireEvent.click(screen.getByRole('button', { name: /^next$/i }))
 
             await waitFor(() =>
                 expect(mockedSendSurveyEvent).toHaveBeenCalledWith(
@@ -257,12 +257,12 @@ describe('Surveys: back button', () => {
 
         // Q1: pick 'a' -> routes to Q2
         fireEvent.click(screen.getByLabelText('a'))
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
 
         // Answer Q2, advance to Q3 so a response is recorded for q2.
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'q2 answer' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         await waitFor(() => expect(screen.getByText('Question 3')).toBeVisible())
 
         // Back twice to Q1.
@@ -274,7 +274,7 @@ describe('Surveys: back button', () => {
         // Now switch answer to 'b' which routes to Q3 (skipping Q2 entirely).
         fireEvent.click(screen.getByLabelText('b'))
         mockedSendSurveyEvent.mockClear()
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
         await waitFor(() => expect(screen.getByText('Question 3')).toBeVisible())
 
         // The emitted responses should only contain Q1's answer — not the stale Q2 answer.
@@ -291,7 +291,7 @@ describe('Surveys: back button', () => {
         render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
-        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         expect(screen.getByRole('button', { name: /go to previous question/i })).toHaveTextContent('Previous')

@@ -124,6 +124,10 @@ export class Transport {
           })
           const raw = await response.text()
           operation.signal.throwIfAborted()
+          if (response.ok && method === 'DELETE') {
+            if (response.status === 204) return {}
+            throw new EvaluationAPIError({ status: response.status, code: 'invalid_response' })
+          }
           let payload: unknown
           try {
             payload = decode(raw)
