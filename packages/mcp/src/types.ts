@@ -98,7 +98,8 @@ export interface McpAnalytics {
    * has been handed to `posthog-node`, then flushes the `posthog-node` queue. Auto-captured
    * events reach `posthog.capture()` asynchronously, after the handler's response is built,
    * so on a per-request runtime (serverless or edge functions, stateless MCP servers) call
-   * this before the runtime freezes or exits. It never rejects: when `posthog.flush()`
+   * this before the runtime freezes or exits. A streamed (SSE) response is returned before
+   * its handler has run, so there call it when the stream ends. It never rejects: when `posthog.flush()`
    * does, that is logged. posthog-node 6 reports failed deliveries through
    * `posthog.on('error', ...)` instead. Resolves at once when no PostHog client was passed to `instrument()`.
    */

@@ -1,4 +1,6 @@
 import { PostHog, type EventMessage } from 'posthog-node'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -101,6 +103,31 @@ describe('McpEventSink.flush', () => {
     expect(log).toEqual(['flush'])
   })
 
+  it('flushes past a capture that rejects, and keeps no settled capture', async () => {
+    const flush = vi.fn(async () => undefined)
+    const posthog = {
+      capture: (): void => {
+        throw new Error('capture failed')
+      },
+      flush,
+    } as unknown as PostHog
+    const sink = new McpEventSink(posthog, () => {
+      throw new Error('logger failed')
+    })
+
+    const failed = sink.capture(toolCall(), { enableExceptionAutocapture: false })
+    await expect(sink.flush()).resolves.toBeUndefined()
+    await expect(failed).rejects.toThrow('logger failed')
+
+    expect(flush).toHaveBeenCalledTimes(1)
+    expect(sink['pending'].size).toBe(0)
+
+    const { posthog: working } = recordingClient()
+    const workingSink = new McpEventSink(working)
+    await workingSink.capture(toolCall(), { enableExceptionAutocapture: false })
+    expect(workingSink['pending'].size).toBe(0)
+  })
+
   it('does not reject when a capture or the posthog-node flush fails', async () => {
     const messages: string[] = []
     const posthog = {
@@ -178,6 +205,45 @@ describe('analytics.flush()', () => {
     } finally {
       await cleanup()
       await posthog.shutdown()
+    }
+  })
+
+  it.each([
+    ['a JSON response once it is returned', true],
+    ['a streamed response once its body ends', false],
+  ])('sends the tool call behind %s', async (_case, enableJsonResponse) => {
+    const { posthog, log } = recordingClient()
+    const server = new McpServer({ name: 'test', version: '1.0.0' })
+    server.registerTool('slow', {}, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      return { content: [{ type: 'text', text: 'done' }] }
+    })
+    const analytics = instrument(server, posthog)
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse,
+    })
+    await server.connect(transport)
+
+    try {
+      const response = await transport.handleRequest(
+        new Request('http://localhost/mcp', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'slow' } }),
+        })
+      )
+      if (!enableJsonResponse) {
+        // Why a streamed response has to end first: its handler has not run yet.
+        await analytics.flush()
+        expect(log.splice(0)).toEqual(['flush'])
+        await response.text()
+      }
+      await analytics.flush()
+
+      expect(log).toEqual(['capture $mcp_tool_call', 'flush'])
+    } finally {
+      await server.close()
     }
   })
 
