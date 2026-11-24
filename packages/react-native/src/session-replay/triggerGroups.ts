@@ -79,6 +79,7 @@ export function parseSessionRecordingTriggerGroups(
     const map = raw as { [key: string]: JsonType }
     const id = map['id']
     if (typeof id !== 'string' || id.length === 0) {
+      logger?.error('Session recording trigger group without an id was ignored.')
       continue
     }
     groups.push({

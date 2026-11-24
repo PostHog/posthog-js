@@ -153,6 +153,19 @@ describe('parseSessionRecordingTriggerGroups', () => {
     expect(logger.error).toHaveBeenCalledTimes(2)
   })
 
+  it('logs each group dropped for a missing id and keeps the others', () => {
+    const logger = { error: vi.fn() }
+
+    const groups = parseSessionRecordingTriggerGroups(
+      { version: 2, triggerGroups: [{ name: 'No id' }, { id: '' }, { id: 7 }, { id: 'g1', conditions: {} }] },
+      logger
+    )
+
+    expect(groups!.map((g) => g.id)).toEqual(['g1'])
+    expect(logger.error).toHaveBeenCalledTimes(3)
+    expect(logger.error).toHaveBeenCalledWith('Session recording trigger group without an id was ignored.')
+  })
+
   it('parses groups, conditions and filters from a v2 config', () => {
     const groups = parseSessionRecordingTriggerGroups({
       version: 2,
