@@ -883,7 +883,16 @@ export class SessionRecorder {
         const event = truncateLargeConsoleLogs(throttled)
 
         const idlePayload = isCustomEvent(event, 'sessionIdle')
-            ? ((event.data as { payload?: { lastActivityTimestamp: number; threshold: number } }).payload ?? null)
+            ? ((
+                  event.data as {
+                      payload?: {
+                          lastActivityTimestamp: number
+                          threshold: number
+                          sessionId?: string
+                          windowId?: string
+                      }
+                  }
+              ).payload ?? null)
             : null
         // the restart records the new session from a fresh full snapshot; this event belongs to the old recorder
         if (!idlePayload && this._updateSessionAndIdle(event)) return
@@ -905,7 +914,12 @@ export class SessionRecorder {
             return
         }
         if (event.type === EventType.FullSnapshot) this._lastFullSnapshotSessionId = this._sessionId
-        this._addToBuffer(compressed as eventWithTime, size)
+        this._addToBuffer(
+            compressed as eventWithTime,
+            size,
+            idlePayload?.sessionId ?? this._sessionId,
+            idlePayload?.windowId ?? this._windowId
+        )
     }
 
     private _trackUrlChange(): void {
@@ -941,6 +955,9 @@ export class SessionRecorder {
                     threshold: idleThreshold,
                     bufferLength: this._buffer.data.length,
                     bufferSize: this._buffer.size,
+                    // pin the marker to the session that went idle so a pending rotation cannot move it
+                    sessionId: this._sessionId,
+                    windowId: this._windowId,
                 })
                 this._flushBuffer()
             }
@@ -980,9 +997,14 @@ export class SessionRecorder {
         return false
     }
 
-    private _addToBuffer(event: eventWithTime, size: number): void {
+    private _addToBuffer(
+        event: eventWithTime,
+        size: number,
+        sessionId = this._sessionId,
+        windowId = this._windowId
+    ): void {
         const additionalBytes = 2 + this._buffer.data.length
-        const sessionChanged = this._buffer.sessionId !== this._sessionId
+        const sessionChanged = this._buffer.sessionId !== sessionId
         const distinctIdChanged = this._buffer.distinctId !== this._client.distinctId
         if (
             sessionChanged ||
@@ -995,8 +1017,8 @@ export class SessionRecorder {
             // a suppressed flush keeps the buffer. Another session's data is dropped, but data held when
             // the person changes (identify) stays, with its full snapshot, under the new person as in posthog-js
             if (sessionChanged && this._buffer.data.length) this._buffer = this._emptyBuffer()
-            this._buffer.sessionId = this._sessionId
-            this._buffer.windowId = this._windowId
+            this._buffer.sessionId = sessionId
+            this._buffer.windowId = windowId
             this._buffer.distinctId = this._client.distinctId
         }
 
