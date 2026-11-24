@@ -526,6 +526,8 @@ export class PostHog extends PostHogCore {
   private _captureShutDown = false
   // AI events emitted to listeners; debug mode logs only their name and uuid, since they carry prompts and outputs.
   private _emittedAiEvents = new WeakSet<object>()
+  // While shutdown drains, its own hold waits out resends; a background timer would send outside that drain.
+  private _captureShuttingDown = false
 
   /**
    * The project token the client was created with.
@@ -933,6 +935,7 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    this._captureShuttingDown = true
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
       this._captureResendTimer = undefined
@@ -1145,6 +1148,10 @@ export class PostHog extends PostHogCore {
     this._captureResendAt = Date.now() + waitMs
     if (this._captureResendTimer) {
       clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
+    if (this._captureShuttingDown) {
+      return
     }
     this._captureResendTimer = safeSetTimeout(() => {
       this._captureResendTimer = undefined

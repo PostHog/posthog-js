@@ -1517,8 +1517,8 @@ export abstract class PostHogCoreStateless {
 
   /**
    * The flush the SDK runs on its own, from the interval timer or the `flushAt`
-   * threshold. Separate from `flush()` so a host can hold back work that an
-   * endpoint has asked it to wait on, which an explicit flush overrides.
+   * threshold. Hosts override it when an automatic flush covers less than
+   * `flush()` does.
    */
   protected flushAutomatic(): Promise<void> {
     return this.flush()
