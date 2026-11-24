@@ -898,6 +898,8 @@ function parseSendReply(
   throw replyError(fields, status, retryAfterMs)
 }
 
+const CLOCK_SKEW_MS = 60_000
+
 function confirmedSchedule(
   fields: Record<string, unknown>,
   scheduledAtMs: number,
@@ -905,7 +907,7 @@ function confirmedSchedule(
   status: number,
   callerChoseKey: boolean
 ): string | null {
-  if (fields.status === 'queued' && fields.scheduled_at === null) {
+  if (fields.status === 'queued' && fields.scheduled_at === null && scheduledAtMs - Date.now() <= CLOCK_SKEW_MS) {
     return null
   }
   if (fields.status === 'scheduled' && timeWithOffsetToTheMillisecond(fields.scheduled_at) === scheduledAtMs) {

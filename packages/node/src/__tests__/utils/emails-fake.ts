@@ -75,6 +75,7 @@ export interface FakePostHogOptions {
   answersSchedule?: boolean
   /** How far from the requested time a PostHog schedules the email, to model one that shifts it. */
   scheduleShiftMs?: number
+  queuesScheduledSendsNow?: boolean
 }
 
 export interface QueuedAttachment {
@@ -167,6 +168,7 @@ export class FakePostHog {
       storageRedirectOrigin: '',
       answersSchedule: true,
       scheduleShiftMs: 0,
+      queuesScheduledSendsNow: false,
       ...options,
     }
   }
@@ -392,7 +394,9 @@ export class FakePostHog {
     }
     const scheduling = scheduledAtMs !== undefined && this.options.answersSchedule
     const waitsUntilMs =
-      scheduling && scheduledAtMs > Date.now() ? scheduledAtMs + this.options.scheduleShiftMs : undefined
+      scheduling && scheduledAtMs > Date.now() && !this.options.queuesScheduledSendsNow
+        ? scheduledAtMs + this.options.scheduleShiftMs
+        : undefined
     const queued = {
       id: globalThis.crypto.randomUUID(),
       ...email,
