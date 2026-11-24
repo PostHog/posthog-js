@@ -90,11 +90,7 @@ export class PostHog {
                     },
                     capture: (event, properties) => this.capture(event, properties),
                     loadConfig: () => this._send({ type: 'loadAutocaptureConfig' }),
-                    onError: (error) => {
-                        try {
-                            this._options.onError?.(error)
-                        } catch {}
-                    },
+                    onError: (error) => this._report(error),
                 },
                 typeof _options.autocapture === 'object' ? _options.autocapture : {}
             )
@@ -185,9 +181,36 @@ export class PostHog {
         }
     }
 
-    capture(event: string, properties?: Properties): Promise<void> {
-        if (this.hasOptedOutCapturing()) return Promise.resolve()
-        return this._send({ type: 'capture', event, ...(properties ? { properties } : {}) })
+    // A capture whose failure would feed back into onError doesn't report that failure, so an onError that
+    // captures can't loop while main keeps refusing requests. That covers any capture made while onError runs
+    // synchronously, and captureException(error) for an error already reported, including after an await.
+    // A different capture made after an await in onError is not covered; the README warns against it.
+    private _inOnError = false
+    private _reportedFailures = new WeakSet<object>()
+    private _report(error: unknown): void {
+        const inOnError = this._inOnError
+        this._inOnError = true
+        try {
+            const result: unknown = this._options.onError?.(error)
+            if (typeof (result as PromiseLike<unknown> | undefined)?.then === 'function') {
+                void Promise.resolve(result).catch(() => {})
+            }
+        } catch {
+        } finally {
+            this._inOnError = inOnError
+        }
+    }
+    private _reportFailure(promise: Promise<void>, quiet = this._inOnError): void {
+        void promise.catch((error: unknown) => {
+            if (quiet) return
+            if (typeof error === 'object' && error !== null) this._reportedFailures.add(error)
+            this._report(error)
+        })
+    }
+    /** Fire-and-forget: never throws or rejects. Failed requests are reported through `onError`. */
+    capture(event: string, properties?: Properties): void {
+        if (typeof event !== 'string' || this.hasOptedOutCapturing()) return
+        this._reportFailure(this._send({ type: 'capture', event, ...(properties ? { properties } : {}) }))
     }
     /**
      * Link the current distinct ID to an alias without switching identity or reloading flags.
@@ -200,12 +223,12 @@ export class PostHog {
     }
     /**
      * Capture an event-only $screen; name wins over properties.$screen_name without setting persistent screen context.
-     * Resolves after local persistence, not delivery; ignored when opted out.
+     * Fire-and-forget: never throws or rejects; ignored when opted out.
      */
-    screen(name: string, properties?: Properties): Promise<void> {
-        if (!name?.trim()) return Promise.resolve()
-        if (this.hasOptedOutCapturing()) return Promise.resolve()
-        return this._send({ type: 'screen', name, ...(properties ? { properties } : {}) })
+    screen(name: string, properties?: Properties): void {
+        if (typeof name !== 'string' || !name.trim()) return
+        if (this.hasOptedOutCapturing()) return
+        this._reportFailure(this._send({ type: 'screen', name, ...(properties ? { properties } : {}) }))
     }
     /**
      * Update the current person's $set/$set_once properties without changing identity; empty updates do nothing.
@@ -290,8 +313,10 @@ export class PostHog {
         return this._send({ type: 'flush' })
     }
 
-    captureException(error: unknown, properties?: Properties): Promise<void> {
-        return this._captureException(error, properties)
+    /** Fire-and-forget: never throws or rejects. Failed requests are reported through `onError`. */
+    captureException(error: unknown, properties?: Properties): void {
+        const reported = typeof error === 'object' && error !== null && this._reportedFailures.has(error)
+        this._reportFailure(this._captureException(error, properties), this._inOnError || reported)
     }
     private _canCaptureException(): boolean {
         return !this._disposed && !this._pendingOptOuts && !this._state?.disabled && !this.hasOptedOutCapturing()

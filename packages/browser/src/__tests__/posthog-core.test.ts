@@ -645,6 +645,55 @@ describe('posthog core', () => {
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
             })
 
+            it.each([
+                ['ScCid', 'https://www.example.com/some/path?utm_source=snapchat&ScCid=snap-click', 'snap-click'],
+                ['SsCid', 'https://www.example.com/some/path?utm_source=snapchat&SsCid=snap-click', 'snap-click'],
+                ['sccid', 'https://www.example.com/some/path?utm_source=snapchat&sccid=snap-click', 'snap-click'],
+                [
+                    'sccid over ScCid',
+                    'https://www.example.com/some/path?ScCid=from-alias&sccid=from-canonical',
+                    'from-canonical',
+                ],
+                [
+                    'an empty sccid with ScCid',
+                    'https://www.example.com/some/path?sccid=&ScCid=snap-click',
+                    'snap-click',
+                ],
+            ])('should capture the Snapchat click ID from %s as sccid', (_name, url, expected) => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue(url)
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                // assert
+                const properties = beforeSendMock.mock.calls[0][0].properties
+                expect(properties.sccid).toBe(expected)
+                expect(properties).not.toHaveProperty('ScCid')
+                expect(properties).not.toHaveProperty('SsCid')
+            })
+
+            it('should not read the ShareASale sscid param as the Snapchat click ID', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=affiliate&sscid=shareasale-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[0][0].properties.sccid).toBe(null)
+            })
+
             it('should refresh campaign params after an SPA URL change', () => {
                 // arrange
                 const token = uuidv7()

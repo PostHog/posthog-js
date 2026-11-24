@@ -2162,7 +2162,7 @@ Check if local evaluation of feature flags is ready.
 
 `boolean`
 
-true if local evaluation is ready, false otherwise
+true if flag definitions have loaded successfully and include at least one flag, false otherwise
 
 #### Example
 
@@ -2176,6 +2176,14 @@ if (client.isLocalEvaluationReady()) {
   const flag = await client.getFeatureFlag('flag-key', 'user_123')
 }
 ```
+
+#### Remarks
+
+Readiness requires at least one loaded flag definition. A successful load that returns no
+flags (for example, after every flag is deleted) does not count as ready, and readiness
+returns to `false` if a later load returns no flags. To react to every successful load,
+including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
+number of loaded flags.
 
 ### `PostHog.waitForLocalEvaluationReady`
 
@@ -2193,7 +2201,7 @@ Wait for local evaluation of feature flags to be ready.
 
 `Promise`\<`boolean`\>
 
-Promise that resolves to true if ready, false if timed out
+Promise that resolves to true if ready, false if timed out or if the next load returned no flags
 
 #### Examples
 
@@ -2211,6 +2219,13 @@ if (isReady) {
 // Wait with custom timeout
 const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
 ```
+
+#### Remarks
+
+Like isLocalEvaluationReady, this requires at least one loaded flag definition. If the
+first load after the call returns no flags, the promise resolves to `false` without waiting for
+the timeout. To react to every successful load, including empty ones, listen for the
+`localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
 
 ## Remote config
 

@@ -479,7 +479,14 @@ jobs:
 
     publish:
         name: Publish packages
-        needs: [release-context, version-bump, notify-approval-needed, recover-posthog-js-s3, gate-posthog-js-publish]
+        needs:
+            [
+                release-context,
+                version-bump,
+                notify-approval-needed,
+                recover-posthog-js-s3,
+                gate-posthog-js-publish,
+            ]
         runs-on: ubuntu-latest
         # Use `always()` to evaluate the S3 gate even if an earlier dependency failed.
         if: >-
@@ -501,6 +508,7 @@ jobs:
                     - name: '@posthog/browser'
                     - name: '@posthog/browser-common'
                     - name: '@posthog/core'
+                    - name: '@posthog/electron'
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'

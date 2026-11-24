@@ -1,5 +1,19 @@
 # posthog-react-native
 
+## 4.87.2
+
+### Patch Changes
+
+- [#5797](https://github.com/PostHog/posthog-js/pull/5797) [`7f9920a`](https://github.com/PostHog/posthog-js/commit/7f9920ae31bed45df8a8d138185e9bef5114e065) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop sending replay debug properties on events captured while session replay is off
+  (2026-11-23)
+
+## 4.87.1
+
+### Patch Changes
+
+- [#5830](https://github.com/PostHog/posthog-js/pull/5830) [`895636b`](https://github.com/PostHog/posthog-js/commit/895636b1e013f0f1ac02c446452fccd6a6204f6a) Thanks [@marandaneto](https://github.com/marandaneto)! - Only attach the queue-size debug property while the queue is backed up: `$sdk_debug_retry_queue_size` on web when requests are waiting to be retried, and `$sdk_debug_pending_queue_size` on React Native once the queue reaches `flushAt`
+  (2026-11-20)
+
 ## 4.87.0
 
 ### Minor Changes
