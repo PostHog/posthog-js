@@ -26,7 +26,10 @@ export interface Slot {
 
 /** Checks every recipient before the request, and gives each the idempotency key it goes out with. */
 export function prepareRecipients(recipients: unknown, templateForm: boolean): Slot[] {
-  if (!Array.isArray(recipients) || recipients.length === 0) {
+  // Read the length once, and each recipient by index as the array's own: an iterator, a proxy or a prototype could
+  // add, skip or reorder recipients.
+  const count: unknown = Array.isArray(recipients) ? recipients.length : undefined
+  if (!Array.isArray(recipients) || typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
     throw new EmailError({
       code: 'invalid_recipients',
       message:
@@ -34,8 +37,6 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
       field: 'recipients',
     })
   }
-  // Read the length once, and each recipient by index: an iterator could skip, add or reorder recipients.
-  const count = recipients.length
   if (count > BATCH_MAX_RECIPIENTS) {
     throw new EmailError({
       code: 'invalid_recipients',
@@ -48,7 +49,8 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
   const keys = new Map<string, number>()
   const slots: Slot[] = []
   for (let index = 0; index < count; index++) {
-    slots.push(prepareRecipient(recipients[index], index, templateForm, keys))
+    const recipient: unknown = Object.hasOwn(recipients, index) ? recipients[index] : undefined
+    slots.push(prepareRecipient(recipient, index, templateForm, keys))
   }
   return slots
 }

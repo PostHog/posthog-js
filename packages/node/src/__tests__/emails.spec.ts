@@ -1737,6 +1737,32 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
+    it('reads the length of the recipients once, so a changing length cannot pass the cap', async () => {
+      const postHog = againstPostHog()
+      const lengths = [101, 1]
+      const recipients = new Proxy(recipientsTo(101), {
+        get: (target, name, receiver) =>
+          name === 'length' ? (lengths.shift() ?? target.length) : Reflect.get(target, name, receiver),
+      })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipients))
+
+      expect(error).toMatchObject({ code: 'invalid_recipients', field: 'recipients' })
+      expect(postHog.requests.batch).toBe(0)
+    })
+
+    it('refuses a missing recipient that the array inherits a value for', async () => {
+      const postHog = againstPostHog()
+      const recipients: { to: string }[] = new Array(2)
+      recipients[0] = { to: 'ada@example.com' }
+      Object.setPrototypeOf(recipients, Object.assign(Object.create(Array.prototype), { 1: { to: 'bob@example.com' } }))
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipients))
+
+      expect(error).toMatchObject({ code: 'invalid_recipient', field: 'recipients[1]' })
+      expect(postHog.requests.batch).toBe(0)
+    })
+
     it('refuses more than 100 recipients before any request', async () => {
       const postHog = againstPostHog()
 
@@ -1819,7 +1845,7 @@ describe('emails', () => {
     it.each([
       [
         'delivery_unavailable without retryable',
-        { status: 502, code: 'delivery_unavailable', retryable: false },
+        { status: 422, code: 'delivery_unavailable', retryable: false },
         'unconfirmed',
       ],
       ['retryable with another code', { status: 429, code: 'recipient_throttled', retryable: true }, 'unconfirmed'],
