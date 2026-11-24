@@ -216,7 +216,7 @@ export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<Templ
 
 /**
  * Options for `posthog.emails.send()`: a template made in PostHog, or content from your code.
- * Options are read once per send, by property access for the fields `SendEmailOptions` declares, recipient first and category last. Other fields count only when they're own enumerable properties. Accessors that change other fields aren't supported.
+ * Declared fields of the active form (shared fields plus `templateId`/`templateData` or `templateKey` and code-send fields) are read once per send by property access, `to` first and `category` last. Cross-form and unknown-field validation inspects only own enumerable properties, so a template send ignores an inherited or non-enumerable `category`. Accessors that change other fields aren't supported.
  */
 export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 

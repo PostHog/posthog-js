@@ -1881,11 +1881,13 @@ describe('emails', () => {
       expect(postedSend().body.category).toEqual(NEWSLETTER)
     })
 
-    it('validates recipient first before category or template fields on a plain options object', async () => {
+    it('validates recipient first before reading subject, category, or template fields', async () => {
       const { data, error } = await sendUnchecked({
         category: 'not-a-category',
         templateKey: 'bad key!',
-        subject: 123,
+        get subject(): string {
+          throw new Error('subject should not be read before validating to')
+        },
         html: CODE_SEND.html,
         to: '',
       })
