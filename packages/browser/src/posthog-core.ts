@@ -335,6 +335,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
     __preview_replay_sync_fetch: true, // Preserve application stacks for recorded fetches; old cores without this option retain legacy delegation
+    __preview_replay_early_fetch_response: false, // Opt-in: changes WebKit's abort error while a body is being read
     __preview_external_dependency_versioned_paths: false,
     __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,

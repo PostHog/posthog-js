@@ -11,6 +11,11 @@ describe('config', () => {
         expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(true)
     })
 
+    it('keeps early replay fetch responses opt-in', () => {
+        expect(defaultConfig().__preview_replay_early_fetch_response).toBe(false)
+        expect(defaultConfig('2026-05-30').__preview_replay_early_fetch_response).toBe(false)
+    })
+
     describe('memory persistence without bootstrap.distinctID', () => {
         // The warning must reach customers running the default debug:false config, so it goes through
         // console.warn directly rather than logger.warn (which is silent unless debug is enabled). These

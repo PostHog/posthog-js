@@ -2756,6 +2756,17 @@ export interface PostHogConfig {
     __preview_replay_sync_fetch?: boolean
 
     /**
+     * Private preview: return a recorded fetch response to the application before its body has been captured.
+     * Without it, a response is held until Replay finishes reading its body or the read times out, which
+     * delays streamed responses. In WebKit, aborting a request while its body is being read then rejects with
+     * a `TypeError` instead of an `AbortError`. Requires `__preview_replay_sync_fetch`.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default false
+     */
+    __preview_replay_early_fetch_response?: boolean
+
+    /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
      */
     __add_tracing_headers?: string[]

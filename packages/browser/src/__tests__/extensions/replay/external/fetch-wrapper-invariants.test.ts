@@ -16,7 +16,10 @@ function expectNotToThrow(promise: Promise<Response>) {
 function setupWrappedFetch(
     downstreamFetch: typeof fetch,
     recordBody: NetworkRecordOptions['recordBody'] = true,
-    fetchOptions: { captureFetchSynchronously?: boolean } = { captureFetchSynchronously: true }
+    fetchOptions: { captureFetchSynchronously?: boolean; returnFetchResponseEarly?: boolean } = {
+        captureFetchSynchronously: true,
+    },
+    onRequests: (data: any) => void = () => {}
 ): { wrappedFetch: typeof fetch; cleanup: () => void } {
     class MockPerformanceObserver {
         static supportedEntryTypes = ['resource']
@@ -35,7 +38,7 @@ function setupWrappedFetch(
         recordBody,
         recordHeaders: true,
     } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
-    const cleanup = plugin.observer(() => {}, mockWindow, {
+    const cleanup = plugin.observer(onRequests, mockWindow, {
         recordBody,
         recordHeaders: true,
         initiatorTypes: ['fetch'],
@@ -330,6 +333,70 @@ describe('fetch wrapper', () => {
 
             expect(await response.text()).toBe('test body')
             expect(await clone.text()).toBe('test body')
+        })
+
+        describe('streamed response bodies', () => {
+            const encoder = new TextEncoder()
+            const decoder = new TextDecoder()
+
+            function setupStreamedFetch(returnFetchResponseEarly: boolean) {
+                let controller!: ReadableStreamDefaultController<Uint8Array>
+                const body = new ReadableStream<Uint8Array>({
+                    start(c) {
+                        controller = c
+                    },
+                })
+                const onRequests = vi.fn()
+                const { wrappedFetch, cleanup } = setupWrappedFetch(
+                    async () => new Response(body, { headers: { 'Content-Type': 'application/json' } }),
+                    true,
+                    { captureFetchSynchronously: true, returnFetchResponseEarly },
+                    onRequests
+                )
+                return { controller, onRequests, wrappedFetch, cleanup }
+            }
+
+            it('with early response opt-in, resolves before the body ends and still records the whole body', async () => {
+                const { controller, onRequests, wrappedFetch, cleanup } = setupStreamedFetch(true)
+                try {
+                    controller.enqueue(encoder.encode('{"fast":1}\n'))
+                    const response = await wrappedFetch('https://example.com/api/stream')
+                    const reader = response.body!.getReader()
+                    expect(decoder.decode((await reader.read()).value)).toBe('{"fast":1}\n')
+                    expect(onRequests).not.toHaveBeenCalled()
+
+                    controller.enqueue(encoder.encode('{"slow":2}\n'))
+                    controller.close()
+                    expect(decoder.decode((await reader.read()).value)).toBe('{"slow":2}\n')
+                    expect((await reader.read()).done).toBe(true)
+
+                    await vi.runAllTimersAsync()
+                    expect(onRequests).toHaveBeenCalledTimes(1)
+                    expect(onRequests.mock.calls[0][0].requests[0].responseBody).toBe('{"fast":1}\n{"slow":2}\n')
+                } finally {
+                    cleanup()
+                }
+            })
+
+            it('by default, holds the response until the body read settles', async () => {
+                const { controller, wrappedFetch, cleanup } = setupStreamedFetch(false)
+                try {
+                    controller.enqueue(encoder.encode('{"fast":1}\n'))
+                    let resolved = false
+                    const pending = wrappedFetch('https://example.com/api/stream').then((response) => {
+                        resolved = true
+                        return response
+                    })
+                    await vi.advanceTimersByTimeAsync(0)
+                    expect(resolved).toBe(false)
+
+                    controller.close()
+                    await vi.advanceTimersByTimeAsync(0)
+                    await expect(pending).resolves.toBeInstanceOf(Response)
+                } finally {
+                    cleanup()
+                }
+            })
         })
 
         // Regression test for https://github.com/PostHog/posthog-js/issues/1459
