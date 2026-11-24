@@ -1751,6 +1751,22 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
+    it('sends every recipient it counted, even when a later read of the length is shorter', async () => {
+      const postHog = againstPostHog()
+      const lengths = [2, 1]
+      const recipients = new Proxy(recipientsTo(2), {
+        get: (target, name, receiver) =>
+          name === 'length' ? (lengths.shift() ?? 1) : Reflect.get(target, name, receiver),
+      })
+
+      const { data, error } = await settle(posthog.emails.batch(WELCOME, recipients))
+
+      expect(error).toBeNull()
+      expect(data?.results.map(({ to }) => to)).toEqual(['user0@example.com', 'user1@example.com'])
+      expect(postHog.emails.map(({ to }) => to)).toEqual(['user0@example.com', 'user1@example.com'])
+      expect(postHog.requests.batch).toBe(1)
+    })
+
     it('refuses a missing recipient that the array inherits a value for', async () => {
       const postHog = againstPostHog()
       const recipients: { to: string }[] = new Array(2)
