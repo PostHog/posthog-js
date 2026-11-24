@@ -49,9 +49,8 @@ const ANALYTICS_PATH = '/i/v1/analytics/events'
 describe('React Native captureAi', () => {
   const originalFetch = (globalThis as any).window.fetch
   let requests: CaptureRequest[]
-  let respond: (
-    request: CaptureRequest
-  ) => { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>
+  type CaptureResponse = { status: number; body?: unknown; headers?: Record<string, string> }
+  let respond: (request: CaptureRequest) => CaptureResponse | Promise<CaptureResponse>
   let posthog: PostHog | undefined
   let cache: Record<string, string>
 
@@ -78,10 +77,10 @@ describe('React Native captureAi', () => {
       }
       const request = { path, headers: options.headers, body: JSON.parse(options.body) }
       requests.push(request)
-      const { status, body } = await respond(request)
+      const { status, body, headers } = await respond(request)
       return {
         status,
-        headers: { get: () => null },
+        headers: { get: (name: string) => headers?.[name.toLowerCase()] ?? null },
         json: async () => body,
         text: async () => JSON.stringify(body ?? {}),
       }
@@ -953,6 +952,106 @@ describe('React Native captureAi', () => {
 
     expect(critical).toHaveBeenCalledTimes(1)
     expect(critical).toHaveBeenCalledWith(expect.stringContaining('AI events'), { shutdownTimeoutMs: 100 })
+  })
+
+  it('keeps a fresh Retry-After from a resend that shutdown() waited for', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let attempt = 0
+    respond = (request) => {
+      if (request.path !== AI_PATH) {
+        return { status: 200, body: { results: {} } }
+      }
+      return ++attempt === 1 ? { status: 503 } : { status: 429, headers: { 'retry-after': '30' } }
+    }
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation')
+    await client.flush()
+
+    await client.shutdown(5000)
+    posthog = undefined
+    randomSpy.mockRestore()
+
+    const ai = requests.filter((request) => request.path === AI_PATH)
+    expect(ai.map((request) => request.headers['PostHog-Attempt'])).toEqual(['1', '2'])
+  })
+
+  it('waits out the resend wait of an AI request in flight when shutdown() starts', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let failures = 1
+    respond = async (request) => {
+      if (request.path === AI_PATH && failures-- > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return { status: 503 }
+      }
+      return { status: 200, body: { results: {} } }
+    }
+    const client = await newPostHog({ flushAt: 1 })
+    client.captureAi('$ai_generation')
+
+    await client.shutdown(5000)
+    posthog = undefined
+    randomSpy.mockRestore()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation'], ['$ai_generation']])
+  })
+
+  it('resends AI events the server asked to retry during shutdown()', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let attempt = 0
+    respond = (request) =>
+      request.path === AI_PATH && ++attempt === 1
+        ? {
+            status: 200,
+            body: {
+              results: {
+                [request.body.batch[0].uuid]: { result: 'ok' },
+                [request.body.batch[1].uuid]: { result: 'retry', details: 'not_persisted' },
+              },
+            },
+          }
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation')
+    client.captureAi('$ai_span')
+
+    await client.shutdown(6000)
+    posthog = undefined
+    randomSpy.mockRestore()
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation', '$ai_span'], ['$ai_span']])
+  })
+
+  describe('with storage slower than the shutdown timeout', () => {
+    const slowClient = (): { client: PostHog; critical: ReturnType<typeof vi.spyOn> } => {
+      expoFiles.readDelayMs = 60
+      const client = new PostHog('test-token', {
+        flushInterval: 0,
+        flushAt: 10,
+        preloadFeatureFlags: false,
+        captureAppLifecycleEvents: false,
+        captureAiCompression: 'none',
+        disableCompression: true,
+      })
+      return { client, critical: vi.spyOn((client as any)._logger, 'critical').mockImplementation(() => {}) }
+    }
+
+    it('reports no AI timeout when no AI event was captured', async () => {
+      const { client, critical } = slowClient()
+
+      await client.shutdown(20)
+
+      expect(critical).not.toHaveBeenCalledWith(expect.stringContaining('AI events'), expect.anything())
+    })
+
+    it('starts no AI request once the shutdown time is used up waiting for initialization', async () => {
+      const { client } = slowClient()
+      client.captureAi('$ai_generation')
+
+      await client.shutdown(20)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      expect(sent(AI_PATH)).toEqual([])
+    })
   })
 
   it('returns undefined for an AI event whose properties cannot be serialized', async () => {
