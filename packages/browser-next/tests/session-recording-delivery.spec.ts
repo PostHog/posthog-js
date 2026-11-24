@@ -293,6 +293,37 @@ describe('snapshot delivery', () => {
         expect(failures).toHaveLength(1)
     })
 
+    it('holds an upload in the shared keepalive budget while it is in flight, so it outlives the page as in posthog-js', async () => {
+        const keepalive = { remaining: KEEPALIVE_BUDGET_BYTES }
+        let respond: (() => void) | undefined
+        const { delivery, requests } = setup(
+            () =>
+                new Promise<Response>((resolve) => {
+                    respond = () => resolve(new Response('{}', { status: 200 }))
+                }),
+            { keepalive }
+        )
+
+        delivery.enqueue(message('s1'), 10)
+        await vi.waitFor(() => expect(requests).toHaveLength(1))
+
+        expect(requests[0]!.init.keepalive).toBe(true)
+        expect(keepalive.remaining).toBe(KEEPALIVE_BUDGET_BYTES - (requests[0]!.init.body as string).length)
+        respond?.()
+        await vi.waitFor(() => expect(keepalive.remaining).toBe(KEEPALIVE_BUDGET_BYTES))
+    })
+
+    it('sends an upload larger than the remaining keepalive budget without keepalive', async () => {
+        const keepalive = { remaining: 10 }
+        const { delivery, requests } = setup(() => 200, { keepalive })
+
+        delivery.enqueue(message('s1'), 10)
+        await delivery.flush()
+
+        expect(requests[0]!.init.keepalive).not.toBe(true)
+        expect(keepalive.remaining).toBe(10)
+    })
+
     it('does not send while delivery is not permitted', async () => {
         const { delivery, requests } = setup(() => 200, { canDeliver: () => false })
 
