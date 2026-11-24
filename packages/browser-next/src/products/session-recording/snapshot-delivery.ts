@@ -95,18 +95,26 @@ const post = async (
     const payload = JSON.stringify(withSentAt(messages))
     // gzip bodies are recognized by their magic bytes; posthog-js sends them the same way
     const compressed = host.gzipEnabled() ? await gzip(payload) : undefined
+    const body = compressed ?? payload
+    const bytes =
+        typeof body === 'string' ? new TextEncoder().encode(body).length : 'size' in body ? body.size : body.length
+    // as in posthog-js, every upload that fits the shared budget is keepalive, so one in flight at unload completes
+    const budget = host.runtime[4]
+    const reserved = bytes <= budget.remaining ? bytes : 0
     const controller = new AbortController()
     const abort = () => controller.abort()
     const timer = setTimeout(abort, REQUEST_TIMEOUT_MS)
     // oxlint-disable-next-line posthog-js/no-add-event-listener
     signal?.addEventListener('abort', abort)
     if (signal?.aborted) abort()
+    budget.remaining -= reserved
     try {
         const response = await fetch(endpointUrl(host), {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': compressed ? 'text/plain' : 'application/json' },
-            body: (compressed ?? payload) as BodyInit,
+            body: body as BodyInit,
+            keepalive: !!reserved,
             signal: controller.signal,
         })
         return [response.status, parseRetryAfter(response, Date.now)]
@@ -114,6 +122,7 @@ const post = async (
         // network errors and timeouts are retried
         return [0]
     } finally {
+        budget.remaining += reserved
         clearTimeout(timer)
         signal?.removeEventListener('abort', abort)
     }
