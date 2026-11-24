@@ -559,9 +559,10 @@ export class SessionRecorder {
             resyncIntervalMs: this._fullSnapshotIntervalMs(),
         })
         const plugins = this._plugins()
+        const sessionRecordingOptions = this._recordOptions()
         try {
             this._stopRrweb = recordFunction({
-                ...this._recordOptions(),
+                ...sessionRecordingOptions,
                 emit: (event) => this._onEmit(event),
                 plugins,
                 errorHandler: (_error, context) => context === 'rrweb',
@@ -577,7 +578,10 @@ export class SessionRecorder {
         }
         this._lastActivityTimestamp = Date.now()
         this._addCustomEvent('$remote_config_received', this._config)
-        this._addCustomEvent('$session_options', { activePlugins: plugins.map((plugin) => plugin.name) })
+        this._addCustomEvent('$session_options', {
+            sessionRecordingOptions,
+            activePlugins: plugins.map((plugin) => plugin.name),
+        })
         // posthog-js records its whole configuration; replay knows the API host and its own options, whose callbacks
         // the snapshot's JSON leaves out
         this._addCustomEvent('$posthog_config', {

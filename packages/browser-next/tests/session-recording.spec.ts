@@ -339,6 +339,30 @@ describe('session recording markers', () => {
             config: { apiHost: 'https://us.i.posthog.com', sessionRecording: { maskTextSelector: '.secret' } },
         })
     })
+
+    it('records the rrweb recording options in $session_options', async () => {
+        const { replay, transport: network } = await setup(
+            {},
+            { maskAllInputs: false, maskTextSelector: '.pii', captureConsoleLogs: true }
+        )
+        await started(replay)
+
+        interact()
+        await replay.flush?.()
+
+        const marker = recordedEvents(network).find(
+            (event) => event.type === 5 && (event.data as { tag: string }).tag === '$session_options'
+        )
+        expect((marker?.data as { payload: unknown } | undefined)?.payload).toMatchObject({
+            activePlugins: ['rrweb/console@1'],
+            sessionRecordingOptions: {
+                blockClass: 'ph-no-capture',
+                maskAllInputs: false,
+                maskTextSelector: '.pii',
+                maskInputOptions: { password: true },
+            },
+        })
+    })
 })
 
 describe('session recording attribution', () => {
