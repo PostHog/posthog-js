@@ -207,7 +207,9 @@ export class CaptureAiLane {
       })
       const keptEvents = new Set(kept)
       const sentEvents = new Set(batch.filter((event) => !keptEvents.has(event)))
-      this._setQueue(this._queue().filter((event) => !sentEvents.has(event)))
+      if (sentEvents.size > 0) {
+        this._setQueue(this._queue().filter((event) => !sentEvents.has(event)))
+      }
       await this._storage.waitForPersist()
 
       if (!deferral) {

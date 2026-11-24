@@ -568,4 +568,19 @@ describe('React Native captureAi', () => {
     expect(uuid).toBe('0198c0de-1234-7abc-8def-0123456789ab')
     expect(requests[0].body.batch[0].uuid).toBe(uuid)
   })
+
+  it('does not rewrite the stored AI queue when a send sends nothing', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const setItem = vi.spyOn(storage, 'setItem')
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation')
+    await client.flush()
+    const writes = setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai.json').length
+
+    await client.flush()
+    await client.flush()
+
+    expect(writes).toBeGreaterThan(0)
+    expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai.json').length).toBe(writes)
+  })
 })
