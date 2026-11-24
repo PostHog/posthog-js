@@ -937,7 +937,13 @@ export class PostHog extends PostHogCore {
       await Promise.all([
         this._logs.shutdown(logsBudgetMs),
         super._shutdown(remainingMs),
-        this.isDisabled ? Promise.resolve() : raceWithTimeout(this._aiLane.shutdown(), remainingMs),
+        this.isDisabled
+          ? Promise.resolve()
+          : // Events captured before initialization reach the lane once it completes.
+            raceWithTimeout(
+              this._initPromise.then(() => this._aiLane.shutdown()),
+              remainingMs
+            ),
       ])
     } finally {
       this._aiLane.stop()

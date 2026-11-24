@@ -513,4 +513,32 @@ describe('React Native captureAi', () => {
     expect(logged).not.toContain('private prompt')
     expect(info).toHaveBeenCalledWith('capture', { event: '$ai_generation', uuid })
   })
+
+  it('sends AI events captured before initialization when shutdown() is called before ready()', async () => {
+    const client = newPostHogWithSlowStorage({ flushAt: 10 })
+
+    client.captureAi('$ai_generation')
+    client.captureTraceFeedback('trace-1', 'great answer')
+    client.captureTraceMetric('trace-1', 'score', 1)
+    await client.shutdown()
+    posthog = undefined
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation', '$ai_feedback', '$ai_metric']])
+  })
+
+  it('sends AI events from an earlier launch when shutdown() is called before ready()', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog()
+    earlier.captureAi('$ai_generation')
+    await earlier.shutdown()
+    posthog = undefined
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+
+    const client = newPostHogWithSlowStorage()
+    await client.shutdown()
+    posthog = undefined
+
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
 })
