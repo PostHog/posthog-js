@@ -1628,14 +1628,19 @@ describe('emails', () => {
       }
     }
 
-    const stubAttachmentSendRoutes = (
-      sendReplies: Array<{ status: number; body: unknown }>
-    ): { routes: string[]; uploadedBytes: Uint8Array[]; sentBodies: Record<string, unknown>[] } => {
-      const routes: string[] = []
-      const uploadedBytes: Uint8Array[] = []
-      const sentBodies: Record<string, unknown>[] = []
-      let uploaded = false
-      const remainingSendReplies = [...sendReplies]
+    const stubAttachmentSendRoutes = (): {
+      routes: string[]
+      uploadedBytes: Uint8Array[]
+      queued: Record<string, unknown>[]
+      sendAttempts: number
+    } => {
+      const state = {
+        routes: [] as string[],
+        uploadedBytes: [] as Uint8Array[],
+        queued: [] as Record<string, unknown>[],
+        sendAttempts: 0,
+      }
+      const uploadedHashes = new Set<string>()
 
       fetch.mockImplementation(
         async (url: string, options: { method: string; headers?: Record<string, string>; body?: BodyInit | null }) => {
@@ -1674,7 +1679,7 @@ describe('emails', () => {
             if (!validGrant) {
               return fakeReply(400, { type: 'validation_error', code: 'invalid_input', detail: 'Bad upload grant.' })
             }
-            routes.push('uploads')
+            state.routes.push('uploads')
             return fakeReply(200, {
               files: [
                 {
@@ -1711,9 +1716,9 @@ describe('emails', () => {
             ) {
               return fakeReply(400, { code: 'BadDigest', message: 'Storage PUT bytes or headers mismatch.' })
             }
-            routes.push('put')
-            uploadedBytes.push(putBytes)
-            uploaded = true
+            state.routes.push('put')
+            state.uploadedBytes.push(putBytes)
+            uploadedHashes.add(HELLO_SHA256)
             return fakeReply(200, {})
           }
 
@@ -1740,20 +1745,46 @@ describe('emails', () => {
               })
             }
             const parsedBody = parseJsonObject(options.body)
-            if (!uploaded || parsedBody === null) {
+            const attachments = parsedBody?.attachments
+            const validAttachments =
+              Array.isArray(attachments) &&
+              attachments.length > 0 &&
+              attachments.every(
+                (item) =>
+                  item !== null &&
+                  typeof item === 'object' &&
+                  !Array.isArray(item) &&
+                  typeof (item as Record<string, unknown>).sha256 === 'string' &&
+                  uploadedHashes.has((item as Record<string, unknown>).sha256 as string) &&
+                  typeof (item as Record<string, unknown>).filename === 'string' &&
+                  ((item as Record<string, unknown>).filename as string).length > 0
+              )
+            if (parsedBody === null || !validAttachments) {
               return fakeReply(400, {
                 type: 'invalid_request',
                 code: 'attachment_not_uploaded',
-                detail: 'Upload before send.',
+                detail: 'Referenced attachment was not uploaded.',
+                attr: 'attachments',
               })
             }
-            routes.push('send')
-            sentBodies.push(parsedBody)
-            const next = remainingSendReplies.shift()
-            if (!next) {
-              return fakeReply(404, { type: 'invalid_request', code: 'not_found', detail: 'No send reply left.' })
+            state.routes.push('send')
+            state.sendAttempts += 1
+            const category = parsedBody.category
+            const isMarketing =
+              category !== null &&
+              typeof category === 'object' &&
+              !Array.isArray(category) &&
+              (category as Record<string, unknown>).type === 'marketing'
+            if (isMarketing) {
+              return fakeReply(400, {
+                type: 'invalid_request',
+                code: 'workflow_can_wait',
+                detail: 'Workflow can wait.',
+                attr: 'attachments',
+              })
             }
-            return fakeReply(next.status, next.body)
+            state.queued.push(parsedBody)
+            return fakeReply(202, { message_id: 'msg_1', replayed: false })
           }
 
           return fakeReply(404, {
@@ -1764,7 +1795,7 @@ describe('emails', () => {
         }
       )
 
-      return { routes, uploadedBytes, sentBodies }
+      return state
     }
 
     const sendIn = (
@@ -1838,7 +1869,7 @@ describe('emails', () => {
     })
 
     it('sends a categorized transactional email with attachments and preserves exact outbound fields', async () => {
-      const boundary = stubAttachmentSendRoutes([{ status: 202, body: { message_id: 'msg_1', replayed: false } }])
+      const boundary = stubAttachmentSendRoutes()
 
       const { data, error } = await sendIn(RECEIPTS, {
         attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
@@ -1848,7 +1879,7 @@ describe('emails', () => {
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
       expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
-      expect(boundary.sentBodies).toEqual([
+      expect(boundary.queued).toEqual([
         {
           to: CODE_SEND.to,
           template_key: CODE_SEND.templateKey,
@@ -1860,390 +1891,76 @@ describe('emails', () => {
       ])
     })
 
-    it('copies category fields from getters and drops extra properties', async () => {
+    it('copies only the four declared category fields and drops extra properties', async () => {
       replies = [accepted()]
-      class NewsletterCategory implements MessageCategory {
-        readonly type = 'marketing'
-        readonly extra = 'ignored'
-        get key(): string {
-          return 'newsletter'
-        }
-        get name(): string {
-          return 'Newsletter'
-        }
-      }
 
-      const { data, error } = await sendIn(new NewsletterCategory())
+      const { data, error } = await sendUnchecked({
+        ...CODE_SEND,
+        category: { ...NEWSLETTER, extra: 'ignored' },
+      })
 
       expect(error).toBeNull()
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
+      expect(postedSend().body.category).toEqual(NEWSLETTER)
     })
 
-    it('sends the category type it checked when a getter changes its answer', async () => {
-      replies = [accepted()]
-      let typeReads = 0
-      const shiftingCategory: MessageCategory = {
-        key: 'newsletter',
-        name: 'Newsletter',
-        get type(): MessageCategory['type'] {
-          typeReads += 1
-          return typeReads === 1 ? 'marketing' : 'transactional'
-        },
-      }
-
-      const { error } = await sendIn(shiftingCategory)
-
-      expect(error).toBeNull()
-      expect(postedSend().body.category).toEqual({ key: 'newsletter', type: 'marketing', name: 'Newsletter' })
-    })
-
-    it('returns invalid_recipient before reading code-form getters when to is empty', async () => {
-      const options: Record<string, unknown> = {
-        to: '',
-        templateKey: CODE_SEND.templateKey,
+    it('validates recipient first before category or template fields on a plain options object', async () => {
+      const { data, error } = await sendUnchecked({
+        category: 'not-a-category',
+        templateKey: 'bad key!',
+        subject: 123,
         html: CODE_SEND.html,
-      }
-      Object.defineProperty(options, 'subject', {
-        enumerable: true,
-        get() {
-          throw new Error('subject getter should not run when to is invalid')
-        },
+        to: '',
       })
-
-      const { data, error } = await sendUnchecked(options)
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_recipient', name: 'validation_error', field: 'to' })
       expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('reads an enumerable undefined templateId getter once on a code send', async () => {
+    it('allows an explicit undefined cross-form field on a plain categorized code send', async () => {
       replies = [accepted()]
-      const answers: Array<string | undefined> = [undefined, TEMPLATE_ID]
-      const options: Record<string, unknown> = { ...CODE_SEND, category: NEWSLETTER }
-      Object.defineProperty(options, 'templateId', {
-        enumerable: true,
-        get() {
-          return answers.shift()
-        },
-      })
 
-      const { data, error } = await sendUnchecked(options)
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body).toMatchObject({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
+      const { data, error } = await sendUnchecked({
+        ...CODE_SEND,
+        templateId: undefined,
         category: NEWSLETTER,
       })
-    })
-
-    it('reads to first, active-form fields next, and category last once per code send', async () => {
-      replies = [accepted()]
-      let recipient = 'original@example.com'
-      const fromAnswers = ['Sender <sender@example.com>', 'Other <other@example.com>']
-      let categoryRead = false
-      const orderedCodeProto = {
-        get templateKey(): string {
-          recipient = 'replaced@example.com'
-          orderedCode.category = NEWSLETTER
-          return CODE_SEND.templateKey
-        },
-      }
-      const orderedCode: Record<string, unknown> = Object.assign(Object.create(orderedCodeProto), {
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-      })
-      let resolvedCategory: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory | undefined
-      Object.defineProperty(orderedCode, 'category', {
-        enumerable: true,
-        configurable: true,
-        get() {
-          if (categoryRead) {
-            return TRANSACTIONAL_EMAIL_CATEGORY
-          }
-          categoryRead = true
-          return resolvedCategory
-        },
-        set(value: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory) {
-          resolvedCategory = value
-        },
-      })
-      Object.defineProperty(orderedCode, 'from', {
-        enumerable: true,
-        get() {
-          return fromAnswers.shift()
-        },
-      })
-      Object.defineProperty(orderedCode, 'to', {
-        enumerable: true,
-        get() {
-          return recipient
-        },
-      })
-
-      const { data, error } = await sendUnchecked(orderedCode)
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body).toMatchObject({
-        to: 'original@example.com',
-        template_key: CODE_SEND.templateKey,
-        from: 'Sender <sender@example.com>',
-        category: NEWSLETTER,
-      })
-    })
-
-    it.each([
-      [
-        'class getter',
-        (): Record<string, unknown> => {
-          let read = false
-          class ClassCategorySend {
-            readonly to = CODE_SEND.to
-            readonly templateKey = CODE_SEND.templateKey
-            readonly subject = CODE_SEND.subject
-            readonly html = CODE_SEND.html
-            get category(): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
-              if (read) {
-                return TRANSACTIONAL_EMAIL_CATEGORY
-              }
-              read = true
-              return NEWSLETTER
-            }
-          }
-          return new ClassCategorySend() as unknown as Record<string, unknown>
-        },
-      ],
-      [
-        'non-enumerable property',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { ...CODE_SEND }
-          Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
-          return options
-        },
-      ],
-    ])('sends category supplied by a %s on a code send', async (_source, buildOptions) => {
-      replies = [accepted()]
-
-      const { data, error } = await sendUnchecked(buildOptions())
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body).toMatchObject({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        category: NEWSLETTER,
-      })
-    })
-
-    it('preserves class-backed idempotencyKey and templateData across repeated template sends', async () => {
-      replies = [accepted(), { status: 202, body: { message_id: 'msg_1', replayed: true } }]
-      class ClassTemplateSend {
-        readonly to = 'reader@example.com'
-        readonly templateId = TEMPLATE_ID
-        get idempotencyKey(): string {
-          return 'idem-class-template-1'
-        }
-        get templateData(): Record<string, unknown> {
-          return { name: 'Ada' }
-        }
-      }
-
-      const first = await posthog.emails.send(new ClassTemplateSend())
-      const second = await posthog.emails.send(new ClassTemplateSend())
-
-      expect(first.error).toBeNull()
-      expect(first.data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(second.error).toBeNull()
-      expect(second.data).toEqual({ id: 'msg_1', replayed: true, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(2)
-      expect(postedSend(0).headers['idempotency-key']).toBe('idem-class-template-1')
-      expect(postedSend(1).headers['idempotency-key']).toBe('idem-class-template-1')
-      expect(postedSend(0).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: { name: 'Ada' },
-      })
-      expect(postedSend(1).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: { name: 'Ada' },
-      })
-    })
-
-    it('accepts a callable object carrying template send options', async () => {
-      replies = [accepted()]
-      const callableOptions = Object.assign(() => {}, {
-        to: 'reader@example.com',
-        templateId: TEMPLATE_ID,
-        templateData: { name: 'Grace' },
-      }) as unknown as Record<string, unknown>
-
-      const { data, error } = await sendUnchecked(callableOptions)
 
       expect(error).toBeNull()
       expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(postedSend().body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: { name: 'Grace' },
+        to: CODE_SEND.to,
+        template_key: CODE_SEND.templateKey,
+        subject: CODE_SEND.subject,
+        html: CODE_SEND.html,
+        category: NEWSLETTER,
       })
     })
 
     it.each([
       [
-        'an inherited templateData getter adds an enumerable category on a template send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = Object.assign(
-            Object.create({
-              get templateData(): Record<string, unknown> {
-                Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: true })
-                return { name: 'Ada' }
-              },
-            }),
-            { to: 'reader@example.com', templateId: TEMPLATE_ID }
-          )
-          return options
-        },
+        'category on a template send',
+        { to: 'reader@example.com', templateId: TEMPLATE_ID, category: TRANSACTIONAL_EMAIL_CATEGORY },
         'category',
       ],
       [
-        'an enumerable from getter makes templateData enumerable on a code send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { ...CODE_SEND }
-          Object.defineProperty(options, 'from', {
-            enumerable: true,
-            get() {
-              Object.defineProperty(options, 'templateData', { enumerable: true })
-              return 'Sender <sender@example.com>'
-            },
-          })
-          Object.defineProperty(options, 'templateData', {
-            value: { name: 'Ada' },
-            enumerable: false,
-            configurable: true,
-          })
-          return options
-        },
+        'templateData on a categorized code send',
+        { ...CODE_SEND, category: NEWSLETTER, templateData: { name: 'Ada' } },
         'templateData',
       ],
       [
-        'an enumerable subject getter makes html enumerable on a template send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { to: 'reader@example.com', templateId: TEMPLATE_ID }
-          Object.defineProperty(options, 'subject', {
-            enumerable: true,
-            get() {
-              Object.defineProperty(options, 'html', { enumerable: true })
-              return undefined
-            },
-          })
-          Object.defineProperty(options, 'html', {
-            value: '<p>Sneaky</p>',
-            enumerable: false,
-            configurable: true,
-          })
-          return options
-        },
-        'html',
+        'an unknown field on a categorized code send',
+        { ...CODE_SEND, category: NEWSLETTER, unexpected: true },
+        'unexpected',
       ],
-    ])('refuses extra fields after the read pass when %s', async (_label, buildOptions, expectedField) => {
-      replies = [accepted()]
-
-      const { data, error } = await sendUnchecked(buildOptions())
+    ])('refuses %s and sends nothing', async (_label, options, expectedField) => {
+      const { data, error } = await sendUnchecked(options)
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: expectedField })
       expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it.each([
-      [
-        'non-enumerable react on a template send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { to: 'reader@example.com', templateId: TEMPLATE_ID }
-          Object.defineProperty(options, 'react', {
-            value: { $$typeof: Symbol.for('react.element'), type: 'div', props: {} },
-            enumerable: false,
-          })
-          return options
-        },
-        'react',
-      ],
-      [
-        'inherited category on a template send',
-        (): Record<string, unknown> =>
-          Object.assign(Object.create({ category: NEWSLETTER }), {
-            to: 'reader@example.com',
-            templateId: TEMPLATE_ID,
-          }),
-        'category',
-      ],
-      [
-        'non-enumerable category on a template send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { to: 'reader@example.com', templateId: TEMPLATE_ID }
-          Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
-          return options
-        },
-        'category',
-      ],
-      [
-        'non-enumerable templateData on a code send',
-        (): Record<string, unknown> => {
-          const options: Record<string, unknown> = { ...CODE_SEND }
-          Object.defineProperty(options, 'templateData', { value: { name: 'Ada' }, enumerable: false })
-          return options
-        },
-        'templateData',
-      ],
-    ])('refuses %s and sends nothing', async (_label, buildOptions, expectedField) => {
-      replies = [accepted()]
-
-      const { data, error } = await sendUnchecked(buildOptions())
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: expectedField })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it('copies category before normalizing cc so a mutating cc proxy cannot downgrade marketing to transactional', async () => {
-      replies = [accepted()]
-      const mutableCategory: { key: string; type: 'marketing' | 'transactional'; name: string } = {
-        key: 'newsletter',
-        type: 'marketing',
-        name: 'Newsletter',
-      }
-      const mutatingCc = new Proxy<string[]>([], {
-        get(target, prop, receiver) {
-          if (prop === 'length') {
-            mutableCategory.type = 'transactional'
-          }
-          return Reflect.get(target, prop, receiver)
-        },
-      })
-
-      const { data, error } = await sendUnchecked({
-        ...CODE_SEND,
-        cc: mutatingCc,
-        category: mutableCategory,
-      })
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body.category).toEqual({
-        key: 'newsletter',
-        type: 'marketing',
-        name: 'Newsletter',
-      })
     })
 
     it.each([
@@ -2258,18 +1975,6 @@ describe('emails', () => {
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it('refuses a category on the template form and sends nothing', async () => {
-      const { data, error } = await sendUnchecked({
-        to: 'reader@example.com',
-        templateId: TEMPLATE_ID,
-        category: TRANSACTIONAL_EMAIL_CATEGORY,
-      })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: 'category' })
       expect(fetch).not.toHaveBeenCalled()
     })
 
@@ -2321,19 +2026,8 @@ describe('emails', () => {
       }
     )
 
-    it('surfaces server workflow_can_wait (400) refusal on categorized send with attachments without retrying', async () => {
-      const boundary = stubAttachmentSendRoutes([
-        {
-          status: 400,
-          body: {
-            type: 'invalid_request',
-            code: 'workflow_can_wait',
-            detail: 'Workflow can wait.',
-            attr: 'attachments',
-          },
-        },
-        { status: 202, body: { message_id: 'msg_unexpected_retry', replayed: false } },
-      ])
+    it('surfaces server workflow_can_wait (400) refusal on categorized marketing send with attachments without retrying', async () => {
+      const boundary = stubAttachmentSendRoutes()
 
       const { data, error } = await settle(
         sendIn(NEWSLETTER, {
@@ -2350,17 +2044,9 @@ describe('emails', () => {
         field: 'attachments',
       })
       expect(boundary.routes).toEqual(['uploads', 'put', 'send'])
+      expect(boundary.sendAttempts).toBe(1)
       expect(boundary.uploadedBytes).toEqual([HELLO_BYTES])
-      expect(boundary.sentBodies).toEqual([
-        {
-          to: CODE_SEND.to,
-          template_key: CODE_SEND.templateKey,
-          subject: CODE_SEND.subject,
-          html: CODE_SEND.html,
-          category: NEWSLETTER,
-          attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
-        },
-      ])
+      expect(boundary.queued).toEqual([])
     })
 
     it.each([

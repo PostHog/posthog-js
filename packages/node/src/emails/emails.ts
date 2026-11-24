@@ -484,36 +484,15 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send: Record<string, unknown> = Object.create(null)
-  const raw = isOptionsObject(options) ? options : undefined
-  const read = (name: string): unknown => {
-    const value = raw?.[name]
-    send[name] = value
-    return value
-  }
-  const to = read('to')
+  const send = readOwnOptions(options)
+  const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
-  const distinctId = read('distinctId')
-  const idempotencyKey = read('idempotencyKey')
-  const maxRetries = read('maxRetries')
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const templateId = read('templateId')
-  const templateKey = read('templateKey')
-  if ((templateId === undefined) === (templateKey === undefined)) {
-    throw new EmailError({
-      code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html, text or react.',
-    })
-  }
-  const unchecked = send as UncheckedSend
-  const { content, files } =
-    templateKey === undefined
-      ? { content: templateContent(unchecked, raw, read, distinctId), files: [] }
-      : codeContent(unchecked, raw, read, distinctId)
+  const { content, files } = contentOf(send, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -537,8 +516,28 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
   }
 }
 
-function isOptionsObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && (typeof value === 'object' || typeof value === 'function')
+function readOwnOptions(options: unknown): UncheckedSend {
+  const send: Record<string, unknown> = Object.create(null)
+  if (options === null || typeof options !== 'object') {
+    return send as UncheckedSend
+  }
+  const raw = options as Record<string, unknown>
+  const keys = Object.keys(raw)
+  if (keys.includes('to')) {
+    send.to = raw.to
+  }
+  if (typeof send.to !== 'string' || !send.to.trim()) {
+    return send as UncheckedSend
+  }
+  for (const name of keys) {
+    if (name !== 'to' && name !== 'category') {
+      send[name] = raw[name]
+    }
+  }
+  if (keys.includes('category')) {
+    send.category = raw.category
+  }
+  return send as UncheckedSend
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -583,24 +582,30 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function templateContent(
-  send: UncheckedSend,
-  raw: Record<string, unknown> | undefined,
-  read: (name: string) => unknown,
-  distinctId: string | undefined
-): Record<string, unknown> {
-  const { templateId } = send
+function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
+    })
+  }
+  return send.templateKey === undefined
+    ? { content: templateContent(send, distinctId), files: [] }
+    : codeContent(send, distinctId)
+}
+
+function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+  const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
   }
-  const templateData = read('templateData')
   if (
     templateData !== undefined &&
     (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(raw, send, read, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -608,13 +613,8 @@ function templateContent(
   }
 }
 
-function codeContent(
-  send: UncheckedSend,
-  raw: Record<string, unknown> | undefined,
-  read: (name: string) => unknown,
-  distinctId: string | undefined
-): SendContent {
-  const { templateKey } = send
+function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -622,13 +622,7 @@ function codeContent(
       'templateKey'
     )
   }
-  for (const name of Object.keys(CODE_FIELDS)) {
-    if (name !== 'templateKey') {
-      read(name)
-    }
-  }
-  refuseFieldsOutside(raw, send, read, CODE_FORM, TEMPLATE_FORM)
-  const { subject, html, text, react } = send
+  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -777,44 +771,23 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
   }
 }
 
-function refuseFieldsOutside(
-  raw: Record<string, unknown> | undefined,
-  send: UncheckedSend,
-  read: (name: string) => unknown,
-  form: SendForm,
-  otherForm: SendForm
-): void {
-  if (raw === undefined) {
+function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
+  const values = send as Record<string, unknown>
+  const field = Object.keys(values).find((name) => values[name] !== undefined && !form.fields.has(name))
+  if (field === undefined) {
     return
   }
-  for (const name of otherForm.fields) {
-    if (form.fields.has(name)) {
-      continue
-    }
-    const value = name in send ? (send as Record<string, unknown>)[name] : read(name)
-    if (value !== undefined) {
-      throw new EmailError({
-        code: 'invalid_form',
-        message: `A send with ${form.name} doesn't take ${name}, so no email was sent.`,
-        field: name,
-        why: form.why,
-        fix: `Remove ${name}, or ${otherForm.howToSend}.`,
-      })
-    }
+  const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
+  if (!otherForm.fields.has(field)) {
+    throw new EmailError({ code: 'invalid_form', message, field, fix: `Remove ${field} and send again.` })
   }
-  for (const name of Object.keys(raw)) {
-    if (form.fields.has(name) || otherForm.fields.has(name)) {
-      continue
-    }
-    if (raw[name] !== undefined) {
-      throw new EmailError({
-        code: 'invalid_form',
-        message: `A send with ${form.name} doesn't take ${name}, so no email was sent.`,
-        field: name,
-        fix: `Remove ${name} and send again.`,
-      })
-    }
-  }
+  throw new EmailError({
+    code: 'invalid_form',
+    message,
+    field,
+    why: form.why,
+    fix: `Remove ${field}, or ${otherForm.howToSend}.`,
+  })
 }
 
 function fieldSet(...groups: object[]): ReadonlySet<string> {
