@@ -1,6 +1,6 @@
-import type { EventMessage, PostHog } from 'posthog-node'
+import { PostHog, type EventMessage } from 'posthog-node'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { instrument } from '../index'
 import { McpEventSink } from '../extensions/sink'
@@ -68,24 +68,29 @@ describe('McpEventSink.flush', () => {
     expect(log).toEqual(['capture $mcp_tool_call', 'flush'])
   })
 
-  it('also waits for a capture that starts while it is waiting', async () => {
+  it('is not held open by a capture that starts while it is waiting', async () => {
     const { posthog, log } = recordingClient()
     const sink = new McpEventSink(posthog)
     const first = gatedBeforeSend()
     const second = gatedBeforeSend()
 
     void sink.capture(toolCall(), { enableExceptionAutocapture: false, beforeSend: first.beforeSend })
-    const flushed = sink.flush()
+    const firstFlush = sink.flush()
     void sink.capture(toolCall(), { enableExceptionAutocapture: false, beforeSend: second.beforeSend })
 
     first.release()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(log).toEqual(['capture $mcp_tool_call'])
+    const outcome = await Promise.race([
+      firstFlush.then(() => 'flushed'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('timed out'), 50)),
+    ])
+
+    expect(outcome).toBe('flushed')
+    expect(log).toEqual(['capture $mcp_tool_call', 'flush'])
 
     second.release()
-    await flushed
+    await sink.flush()
 
-    expect(log).toEqual(['capture $mcp_tool_call', 'capture $mcp_tool_call', 'flush'])
+    expect(log).toEqual(['capture $mcp_tool_call', 'flush', 'capture $mcp_tool_call', 'flush'])
   })
 
   it('flushes at once when nothing is pending', async () => {
@@ -140,6 +145,47 @@ describe('analytics.flush()', () => {
     } finally {
       await cleanup()
     }
+  })
+
+  it('sends a failed tool call through a real client before it resolves', async () => {
+    const fetch = vi.fn(async (_url: string, _init: any) => ({
+      status: 200,
+      text: async () => JSON.stringify({ results: {} }),
+      json: async () => ({ results: {} }),
+      headers: { get: () => null },
+    }))
+    const posthog = new PostHog('phc_test', {
+      host: 'http://localhost',
+      flushAt: 1000,
+      fetchRetryCount: 0,
+      captureCompression: 'none',
+      fetch: fetch as any,
+    })
+    const { server, client, cleanup } = await setupTestServerAndClient()
+
+    try {
+      const analytics = instrument(server, posthog, { sendInitializeEvent: false })
+      await client.request(
+        { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'missing' } } },
+        CallToolResultSchema
+      )
+      await analytics.flush()
+
+      const sent = fetch.mock.calls
+        .filter(([url]) => String(url).endsWith('/i/v1/analytics/events'))
+        .flatMap(([, init]) => JSON.parse(init.body).batch.map((event: any) => event.event))
+      expect(sent).toEqual(expect.arrayContaining(['$mcp_tool_call', '$exception']))
+    } finally {
+      await cleanup()
+      await posthog.shutdown()
+    }
+  })
+
+  it('resolves on the no-op handle of a server it could not instrument', async () => {
+    const { posthog, log } = recordingClient()
+
+    await expect(instrument({ notAServer: true }, posthog).flush()).resolves.toBeUndefined()
+    expect(log).toEqual([])
   })
 
   it('resolves when instrument() got no PostHog client', async () => {

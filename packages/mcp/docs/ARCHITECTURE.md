@@ -20,10 +20,11 @@ Resource bodies are not captured; a resource _listing_ is, because names, uris, 
 
 The public surface in `src/index.ts`:
 
-- `instrument(server, posthog, options?)` — installs the SDK on an MCP server. The `posthog-node` client is a **required positional 2nd argument**; `options` is the optional 3rd argument. Returns an `McpAnalytics` handle (exposing `.capture()`). Idempotent per server (re-calling logs and returns early).
+- `instrument(server, posthog, options?)` — installs the SDK on an MCP server. The `posthog-node` client is a **required positional 2nd argument**; `options` is the optional 3rd argument. Returns an `McpAnalytics` handle (exposing `.capture()` and `.flush()`). Idempotent per server (re-calling logs and returns early).
 - `analytics.capture({ event, properties })` — a method on the `McpAnalytics` handle returned by `instrument()` that emits a custom event onto the same pipeline. `event` is **required** and sent verbatim (a custom event is a customer event, so it is **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it.
+- `analytics.flush()` waits until every event captured so far is handed to `posthog-node`, then calls `posthog.flush()`, for runtimes that freeze or exit after each request. Never rejects.
 
-The host application supplies its own `posthog-node` client as the positional `posthog` argument (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
+The host application supplies its own `posthog-node` client as the positional `posthog` argument (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to shut down, and `analytics.flush()` flushes the host's. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
 
 `instrument()` does five things (`src/index.ts`):
 
@@ -73,7 +74,7 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
    - If `event.isError && event.error` (and `enableExceptionAutocapture !== false`): a sibling `$exception` event.
    - Each payload gets its own copy of the event's per-event `options`, plus the anonymous `process_person_profile: false` default (see §4).
 4. **`beforeSend`**: each fully-built PostHog payload (`{ event, distinct_id, properties, options }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch, so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it. Returning a nullish value drops it. A throw drops that event (and is logged). This is the seam for customer redaction or property and option tweaks. The SDK sends the options the hook returns.
-5. **Dispatch**: each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. On posthog-node 6.x.x, detected by `registerOptions`, the payload's `options` are passed as the event's `options`. posthog-node 5.x.x has no per-event options, so the SDK sends each known option the way that version reads it and drops unknown keys. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain. The SDK installs no process-signal handlers and owns no client lifecycle.
+5. **Dispatch**: each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. On posthog-node 6.x.x, detected by `registerOptions`, the payload's `options` are passed as the event's `options`. posthog-node 5.x.x has no per-event options, so the SDK sends each known option the way that version reads it and drops unknown keys. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain, or `analytics.flush()` per request. The SDK installs no process-signal handlers and owns no client lifecycle.
 
 ### Tool input field names
 

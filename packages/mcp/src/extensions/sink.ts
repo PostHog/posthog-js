@@ -128,13 +128,12 @@ export class McpEventSink {
   }
 
   /**
-   * Resolves once every capture started so far, and any started while waiting, has
-   * been handed to `posthog.capture()` or dropped. Never rejects.
+   * Resolves once every capture started so far has been handed to `posthog.capture()` or
+   * dropped. Captures that start while it waits belong to the next call, so steady traffic
+   * on a shared server can't hold it open. Never rejects.
    */
   async settled(): Promise<void> {
-    while (this.pending.size > 0) {
-      await Promise.allSettled([...this.pending])
-    }
+    await Promise.allSettled([...this.pending])
   }
 
   /** Waits for pending captures, then flushes the `posthog-node` queue. Never rejects. */

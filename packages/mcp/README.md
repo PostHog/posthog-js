@@ -81,7 +81,13 @@ await analytics.flush()
 return response
 ```
 
-`flush()` never rejects. A failed flush is logged and the events stay in the `posthog-node` queue.
+On a runtime with background work, such as Cloudflare Workers or Vercel, pass it to `waitUntil`
+so the response doesn't wait: `ctx.waitUntil(analytics.flush())`.
+
+It flushes the whole client, so events you capture on it yourself are sent too. It never rejects.
+When `posthog.flush()` does, that goes to the `logger` option. posthog-node 6.x.x reports failed
+deliveries through `posthog.on('error', ...)` instead. Which failed events are retried is up to
+`posthog-node`.
 
 ## MCP TypeScript SDK v2
 
