@@ -1199,8 +1199,27 @@ describe('evaluateFlags', () => {
       expect(flags.getFlag('control')).toBe(true)
       expect(flags.getFlag('beta-feature')).toBeUndefined()
       expect(flags.getFlag('dependent')).toBeUndefined()
-      expect(flags.unresolvedFlags['beta-feature']).toBe('missing_context')
+      expect(flags.unresolvedFlags).toEqual({
+        'beta-feature': 'missing_context',
+        dependent: 'unresolved_dependency',
+      })
       expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it('treats undefined enrollment as missing', async () => {
+      await setupWithDefinitions([betaFeature()], remoteBetaFeature(true))
+      const personProperties = { [enrollmentKey]: undefined }
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({ 'beta-feature': 'missing_context' })
+      expect(remoteFlagCalls()).toHaveLength(0)
+
+      const result = await posthog.getFeatureFlag('beta-feature', 'user-123', { personProperties })
+
+      expect(result).toBe(true)
+      expect(remoteFlagCalls()).toHaveLength(1)
     })
 
     it('falls back to /flags for missing enrollment even when the release conditions match', async () => {
@@ -1217,15 +1236,24 @@ describe('evaluateFlags', () => {
       ['opted out', { [enrollmentKey]: false }, false],
       ['without enrollment', {}, undefined],
     ])('does not read an unsupported release condition when %s', async (_, personProperties, expected) => {
-      await setupWithDefinitions([
-        betaFeature({ groups: [{ properties: [{ key: 'id', type: 'cohort', value: 123 }], rollout_percentage: 100 }] }),
-        control(),
-      ])
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await setupWithDefinitions([
+          betaFeature({
+            groups: [{ properties: [{ key: 'id', type: 'cohort', value: 123 }], rollout_percentage: 100 }],
+          }),
+          control(),
+        ])
+        expect(warnSpy.mock.calls.filter((call) => call.join(' ').includes('beta-feature'))).toEqual([])
+      } finally {
+        warnSpy.mockRestore()
+      }
 
       const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
 
       expect(flags.getFlag('control')).toBe(true)
       expect(flags.getFlag('beta-feature')).toBe(expected)
+      expect(flags.unresolvedFlags).toEqual(expected === undefined ? { 'beta-feature': 'missing_context' } : {})
       expect(remoteFlagCalls()).toHaveLength(0)
     })
 
@@ -1255,6 +1283,22 @@ describe('evaluateFlags', () => {
       })
 
       expect(result).toBe(true)
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it('does not read a missing enrollment from group properties', async () => {
+      await setupWithDefinitions([betaFeature({ aggregation_group_type_index: 0 })], remoteBetaFeature(false), {
+        group_type_mapping: { '0': 'company' },
+      })
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        groups: { company: 'acme' },
+        groupProperties: { company: { [enrollmentKey]: true } },
+      })
+
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({ 'beta-feature': 'missing_context' })
       expect(remoteFlagCalls()).toHaveLength(0)
     })
 
