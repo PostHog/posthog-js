@@ -64,27 +64,24 @@ const toPersistedConfig = (
     localSampleRate: number | undefined
 ): SessionRecordingPersistedConfig => {
     const remote = response.sessionRecording === false ? undefined : response.sessionRecording
-    const copy = remote ? (JSON.parse(JSON.stringify(remote)) as NonNullable<RemoteConfig['sessionRecording']>) : {}
-    const {
-        recordCanvas,
-        canvasFps,
-        canvasQuality,
-        networkPayloadCapture,
-        sampleRate,
-        minimumDurationMilliseconds,
-        ...rest
-    } = copy as Exclude<RemoteConfig['sessionRecording'], false | undefined>
+    const copy = remote
+        ? (JSON.parse(JSON.stringify(remote)) as Exclude<RemoteConfig['sessionRecording'], false | undefined>)
+        : undefined
     return {
-        ...rest,
+        ...copy,
         cache_timestamp: Date.now(),
         enabled: !!remote,
         networkPayloadCapture: {
             capturePerformance: response.capturePerformance as RemoteConfig['capturePerformance'],
-            ...networkPayloadCapture,
+            ...copy?.networkPayloadCapture,
         },
-        canvasRecording: { enabled: recordCanvas, fps: canvasFps, quality: canvasQuality },
-        sampleRate: validSampleRate(localSampleRate) ?? validSampleRate(sampleRate),
-        minimumDurationMilliseconds: minimumDurationMilliseconds ?? null,
+        canvasRecording: {
+            enabled: copy?.recordCanvas,
+            fps: copy?.canvasFps,
+            quality: copy?.canvasQuality,
+        },
+        sampleRate: validSampleRate(localSampleRate) ?? validSampleRate(copy?.sampleRate),
+        minimumDurationMilliseconds: copy?.minimumDurationMilliseconds ?? null,
     }
 }
 
