@@ -236,6 +236,36 @@ describe('null event properties', () => {
     expect(queued(client, 'Tracked').properties).not.toHaveProperty('gone')
   })
 
+  it('keeps a top-level null $set, $set_once and $group_set as given', () => {
+    const client = newPostHog()
+    client.capture('Reserved', { $set: null, $set_once: null, $group_set: null, gone: null })
+    const properties = queued(client, 'Reserved').properties
+    expect(properties).toMatchObject({ $set: null, $set_once: null, $group_set: null })
+    expect(properties).not.toHaveProperty('gone')
+  })
+
+  it('drops null members from fatal exceptions handed off to native', () => {
+    const client = newPostHog()
+    const uuid = '01950000-0000-7000-8000-000000000099'
+    let handedOff: any
+    ;(client as any)._captureFatalAndChooseOwner(
+      uuid,
+      (payload: any) => {
+        handedOff = payload
+        return async () => {}
+      },
+      () =>
+        client.capture(
+          '$exception',
+          { gone: null, nested: { drop: null }, items: [null, { drop: null }], $set: { email: null } } as any,
+          { uuid, _originatedFromCaptureException: true } as any
+        )
+    )
+    expect(handedOff.properties).not.toHaveProperty('gone')
+    expect(handedOff.properties).toMatchObject({ nested: {}, items: [null, {}], $set: { email: null } })
+    expect(queued(client, '$exception')).toBeUndefined()
+  })
+
   it('leaves an object with toJSON as it is', () => {
     const client = newPostHog()
     const custom = { value: null, toJSON: () => 'custom' }
