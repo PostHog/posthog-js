@@ -5,10 +5,23 @@
  *
  * @packageDocumentation
  */
-export * from './compression'
-export * from './errors'
-export * from './sender'
-export * from './serialize'
-export * from './transform'
-export * from './types'
-export * from './uuid'
+export {
+  CAPTURE_COMPRESSIONS,
+  resolveCaptureCodec,
+  webCompressor,
+  type CaptureCodec,
+  type CaptureCompression,
+  type CaptureCompressor,
+} from './compression'
+export {
+  CaptureError,
+  CaptureLossTally,
+  describeCaptureLoss,
+  type CaptureDroppedEvent,
+  type CaptureErrorParams,
+} from './errors'
+export { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks, type V1SendOptions } from './sender'
+export { serializeV1Event, wireProblem, type SerializedV1Event } from './serialize'
+export { readEventOptions } from './transform'
+export { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint, type V1EventOptions } from './types'
+export { canonicalizeUuid, eventUuidv7 } from './uuid'
