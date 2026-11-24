@@ -230,6 +230,27 @@ describe('session recording timing', () => {
             .flatMap((event) => event.properties.$snapshot_data as Array<{ type: number }>)
             .filter((event) => event.type === 2)
         expect(fullSnapshots).toHaveLength(1)
+
+        const ending = snapshotEvents(network)
+            .filter((event) => event.properties.$session_id === firstSession)
+            .flatMap((event) => event.properties.$snapshot_data as Array<{ type: number; data?: any }>)
+            .find((event) => event.type === 5 && event.data?.tag === '$session_ending')
+        expect(ending?.data?.payload).toMatchObject({
+            currentSessionId: firstSession,
+            nextSessionId: nextSession,
+            changeReason: { activityTimeout: true, noSessionId: false, sessionPastMaximumLength: false },
+        })
+        expect(ending?.data?.payload.flushed_size).toBeGreaterThan(0)
+
+        const starting = snapshotEvents(network)
+            .filter((event) => event.properties.$session_id === nextSession)
+            .flatMap((event) => event.properties.$snapshot_data as Array<{ type: number; data?: any }>)
+            .find((event) => event.type === 5 && event.data?.tag === '$session_starting')
+        expect(starting?.data?.payload).toMatchObject({
+            previousSessionId: firstSession,
+            nextSessionId: nextSession,
+            changeReason: { activityTimeout: true, noSessionId: false, sessionPastMaximumLength: false },
+        })
     })
 
     it('stays stopped when a new-session listener stops recording during rotation', async () => {

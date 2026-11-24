@@ -102,6 +102,7 @@ const toChangeReason = (reason: NewSessionReason) => ({
 type BufferedSnapshot = SnapshotBuffer & { distinctId: string }
 
 const PARKED_BUFFER_KEY = 'pendingBuffer'
+const FLUSHED_SIZE_KEY = '$sess_rec_flush_size'
 
 /** The client's tab-scoped storage, which ends with the tab, as posthog-js parks buffers in sessionStorage. */
 interface ParkingAccess {
@@ -660,15 +661,44 @@ export class SessionRecorder {
     private _onSessionRotated(session: NewSessionInfo): void {
         const holdNextEpoch = this._isIdle !== false
         const changeReason = toChangeReason(session.reason)
+        const shouldLinkSessions =
+            !changeReason.noSessionId && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
+        const oldSessionId = this._sessionId
+        const oldWindowId = this._windowId
+
+        if (shouldLinkSessions) {
+            this._addCustomEvent('$session_ending', {
+                currentSessionId: oldSessionId,
+                currentWindowId: oldWindowId,
+                nextSessionId: session.sessionId,
+                nextWindowId: session.windowId,
+                changeReason,
+                lastActivityTimestamp: this._lastActivityTimestamp,
+                flushed_size: this._currentFlushedSize(oldSessionId),
+            })
+        }
+
         this._addCustomEvent('$session_id_change', {
             sessionId: session.sessionId,
             windowId: session.windowId,
             changeReason,
         })
         // rrweb emits the marker synchronously, and processing it may already have restarted on the new session
-        if (this._sessionId === session.sessionId) return
-        this._isIdle = 'unknown'
-        this._restartForSessionChange(holdNextEpoch)
+        if (this._sessionId !== session.sessionId) {
+            this._isIdle = 'unknown'
+            this._restartForSessionChange(holdNextEpoch)
+        }
+
+        if (shouldLinkSessions) {
+            this._addCustomEvent('$session_starting', {
+                previousSessionId: oldSessionId,
+                previousWindowId: oldWindowId,
+                nextSessionId: session.sessionId,
+                nextWindowId: session.windowId,
+                changeReason,
+                lastActivityTimestamp: this._lastActivityTimestamp,
+            })
+        }
     }
 
     private _restartForSessionChange(holdNextEpoch: boolean): void {
@@ -891,6 +921,20 @@ export class SessionRecorder {
         if (!throttled) return
         const event = truncateLargeConsoleLogs(throttled)
 
+        const sessionEndingPayload = isCustomEvent(event, '$session_ending')
+            ? ((
+                  event.data as {
+                      payload?: {
+                          currentSessionId?: string
+                          currentWindowId?: string
+                          lastActivityTimestamp?: number
+                      }
+                  }
+              ).payload ?? null)
+            : null
+        const sessionStartingPayload = isCustomEvent(event, '$session_starting')
+            ? ((event.data as { payload?: { nextSessionId?: string; nextWindowId?: string } }).payload ?? null)
+            : null
         const idlePayload = isCustomEvent(event, 'sessionIdle')
             ? ((
                   event.data as {
@@ -903,11 +947,20 @@ export class SessionRecorder {
                   }
               ).payload ?? null)
             : null
-        if (!idlePayload) this._updateSessionAndIdle(event)
+
+        if (sessionEndingPayload || sessionStartingPayload) {
+            // backdate $session_ending to the old session's last activity; $session_starting keeps its live timestamp
+            if (sessionEndingPayload?.lastActivityTimestamp) {
+                event.timestamp = sessionEndingPayload.lastActivityTimestamp
+            }
+        } else if (!idlePayload) {
+            this._updateSessionAndIdle(event)
+        }
         // a new-session listener may have stopped recording during rotation
         if (!this._recording) return
 
-        if (this._isIdle === true && !idlePayload) return
+        const allowedWhileIdle = !!(idlePayload || sessionEndingPayload || sessionStartingPayload)
+        if (this._isIdle === true && !allowedWhileIdle) return
         if (idlePayload) {
             // stamp the marker when the session actually went idle, not when rrweb saw it
             event.timestamp = idlePayload.lastActivityTimestamp + idlePayload.threshold
@@ -927,8 +980,14 @@ export class SessionRecorder {
         this._addToBuffer(
             compressed as eventWithTime,
             size,
-            idlePayload?.sessionId ?? this._sessionId,
-            idlePayload?.windowId ?? this._windowId
+            sessionEndingPayload?.currentSessionId ??
+                sessionStartingPayload?.nextSessionId ??
+                idlePayload?.sessionId ??
+                this._sessionId,
+            sessionEndingPayload?.currentWindowId ??
+                sessionStartingPayload?.nextWindowId ??
+                idlePayload?.windowId ??
+                this._windowId
         )
     }
 
@@ -1102,10 +1161,16 @@ export class SessionRecorder {
             this._scheduleFlush()
             return
         }
-        // a recording must not open with lifecycle markers alone, which play back as nothing
+        // a recording must not open with lifecycle markers alone, which play back as nothing;
+        // session-linking markers are exempt so the linking chain stays intact, as in posthog-js
         if (
             this._lastFullSnapshotSessionId !== this._buffer.sessionId &&
-            this._buffer.data.every((event: eventWithTime) => event.type === EventType.Custom)
+            this._buffer.data.every(
+                (event: eventWithTime) =>
+                    event.type === EventType.Custom &&
+                    !isCustomEvent(event, '$session_ending') &&
+                    !isCustomEvent(event, '$session_starting')
+            )
         ) {
             if (this._buffer.size > MAX_SNAPSHOT_BYTES) this._buffer = this._emptyBuffer()
             return
@@ -1115,6 +1180,7 @@ export class SessionRecorder {
         this._buffer = this._emptyBuffer()
         const host = this._currentMaskedHostname()
         for (const chunk of splitBuffer(buffer)) {
+            this._trackFlushedSize(chunk.sessionId, chunk.size)
             this._delivery.enqueue(
                 {
                     uuid: createId(),
@@ -1143,6 +1209,15 @@ export class SessionRecorder {
             this._parkedBufferSize = undefined
         }
         this._strategy?.onFlushComplete()
+    }
+
+    private _currentFlushedSize(sessionId: string): number {
+        const stored = this._client.kv.get<{ sessionId?: unknown; size?: unknown }>(FLUSHED_SIZE_KEY)
+        return stored && stored.sessionId === sessionId && Number.isFinite(stored.size) ? (stored.size as number) : 0
+    }
+
+    private _trackFlushedSize(sessionId: string, size: number): void {
+        this._client.kv.set(FLUSHED_SIZE_KEY, { sessionId, size: this._currentFlushedSize(sessionId) + size })
     }
 
     private _parkingStore(): KeyValueStore | undefined {
