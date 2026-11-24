@@ -91,17 +91,21 @@ describe('session recording timing', () => {
     })
 
     it('stops sending while idle and resumes on interaction', async () => {
-        const { replay, transport: network } = await setup()
+        const { replay, posthog, transport: network } = await setup()
         await started(replay)
         interact()
         await replay.flush?.()
+        const session = posthog.session!
 
         await goIdle()
         await replay.flush?.()
-        const tags = recordedEvents(network)
-            .filter((event) => event.type === 5)
-            .map((event) => (event.data as { tag: string }).tag)
-        expect(tags).toContain('sessionIdle')
+        const idleEvent = recordedEvents(network).find(
+            (event) => event.type === 5 && (event.data as { tag: string }).tag === 'sessionIdle'
+        )
+        expect((idleEvent?.data as { payload: Record<string, unknown> } | undefined)?.payload).toMatchObject({
+            sessionId: session.sessionId,
+            windowId: session.windowId,
+        })
         const sentWhileIdle = recordedEvents(network).length
         document.body.appendChild(document.createElement('p'))
         await new Promise((resolve) => setTimeout(resolve, 0))
