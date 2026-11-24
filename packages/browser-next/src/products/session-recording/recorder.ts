@@ -74,6 +74,9 @@ const SESSION_TOUCH_INTERVAL_MS = 1000
 const MAX_SNAPSHOT_BYTES = 1024 * 1024 * 0.9
 const DEFAULT_ENDPOINT = '/s/'
 const MAX_SESSION_LENGTH = 24 * 60 * 60 * 1000
+// posthog-js's limits for custom events that wait for rrweb to record
+const MAX_QUEUED_CUSTOM_EVENTS = 10
+const QUEUED_CUSTOM_EVENT_MAX_AGE_MS = 2000
 
 const USER_INTERACTION_SOURCES: readonly number[] = [
     IncrementalSource.MouseMove,
@@ -180,6 +183,7 @@ export class SessionRecorder {
     private _parking: KeyValueStore | undefined
     private _parkedBufferSize: number | undefined
     private _parkedBufferRestored = false
+    private _queuedCustomEvents: Array<[tag: string, payload: unknown, enqueuedAt: number]> = []
 
     constructor(private readonly _host: RecorderHost) {
         this._client = _host.client
@@ -567,7 +571,10 @@ export class SessionRecorder {
             this._client.logger.error('Session recording could not start rrweb', error)
         }
         this._rrwebError = !this._stopRrweb
-        if (this._rrwebError) return
+        if (this._rrwebError) {
+            this._queuedCustomEvents = []
+            return
+        }
         this._lastActivityTimestamp = Date.now()
         this._addCustomEvent('$remote_config_received', this._config)
         this._addCustomEvent('$session_options', { activePlugins: plugins.map((plugin) => plugin.name) })
@@ -625,6 +632,7 @@ export class SessionRecorder {
         } catch (error) {
             this._client.logger.error('Session recording could not stop rrweb', error)
         }
+        this._queuedCustomEvents = []
     }
 
     private _onSessionRotated(session: SessionContext): void {
@@ -759,12 +767,28 @@ export class SessionRecorder {
         }
     }
 
-    private _addCustomEvent(tag: string, payload: unknown): void {
-        if (!this._stopRrweb) return
-        try {
-            recordFunction.addCustomEvent(tag, payload)
-        } catch (error) {
-            this._client.logger.warn('Session recording could not add a custom event', error)
+    private _addCustomEvent(tag: string, payload: unknown, enqueuedAt = Date.now()): void {
+        if (this._stopRrweb) {
+            try {
+                recordFunction.addCustomEvent(tag, payload)
+                return
+            } catch {
+                // rrweb throws until it records, which begins once its first full snapshot is taken
+            }
+        }
+        // markers from before rrweb records (a sampling decision, the first page's URL trigger or blocker) wait for
+        // its next event, as in posthog-js
+        if (this._queuedCustomEvents.length < MAX_QUEUED_CUSTOM_EVENTS) {
+            this._queuedCustomEvents.push([tag, payload, enqueuedAt])
+        } else {
+            this._client.logger.warn(`Session recording could not add the custom event ${tag}`)
+        }
+    }
+
+    private _addQueuedCustomEvents(): void {
+        for (const [tag, payload, enqueuedAt] of this._queuedCustomEvents.splice(0)) {
+            if (Date.now() - enqueuedAt <= QUEUED_CUSTOM_EVENT_MAX_AGE_MS)
+                this._addCustomEvent(tag, payload, enqueuedAt)
         }
     }
 
@@ -785,6 +809,7 @@ export class SessionRecorder {
 
     private _onEmit(rawEvent: eventWithTime): void {
         try {
+            this._addQueuedCustomEvents()
             this._processEvent(rawEvent)
         } catch (error) {
             this._client.logger.error('Session recording could not process an event', error)
