@@ -251,8 +251,12 @@ export class CaptureAiLane {
         return
       }
       const batch = await this._readBatch(queued)
+      if (this._stopped) {
+        return
+      }
       remaining -= queued.length - batch.size
       if (batch.size === 0) {
+        await this.waitForPersist()
         continue
       }
       let deferral: V1SendDeferral | undefined
@@ -307,6 +311,9 @@ export class CaptureAiLane {
   /** The batch's events as sent, each with its queued event; events whose slot can't be read are dropped from the queue. */
   private async _readBatch(queued: QueuedAiEvent[]): Promise<Map<SerializedV1Event, QueuedAiEvent>> {
     const jsons = await Promise.all(queued.map((item) => item.json ?? this._readSlot(item)))
+    if (this._stopped) {
+      return new Map()
+    }
     const batch = new Map<SerializedV1Event, QueuedAiEvent>()
     const unreadable = new Set<QueuedAiEvent>()
     queued.forEach((item, i) => {
@@ -459,6 +466,8 @@ export class CaptureAiLane {
     for (const event of previous) {
       const slot = this._slots.get(event)
       if (slot !== undefined && !kept.has(event)) {
+        // A batch being sent has already read its JSON, so a removed event's copy can go now, not after its write.
+        event.json = undefined
         this._slots.delete(event)
         freed.add(slot)
       }

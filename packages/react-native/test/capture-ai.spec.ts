@@ -408,6 +408,56 @@ describe('React Native captureAi', () => {
     expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
   })
 
+  it('removes an unreadable stored AI event from disk before flush() resolves', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache[aiSlot(0)] = cache[aiSlot(0)].slice(0, -5)
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(sent(AI_PATH)).toEqual([])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
+  })
+
+  it('sends no AI events once shutdown() times out while stored events are being read', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog({ flushAt: 10 })
+    vi.spyOn((next as any)._logger, 'critical').mockImplementation(() => {})
+    expoFiles.readDelayMs = 120
+    await next.shutdown(30)
+    posthog = undefined
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    expect(sent(AI_PATH)).toEqual([])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toHaveLength(1)
+  })
+
+  it('lets go of an evicted AI event before its slot write finishes', async () => {
+    const client = await newPostHog({ flushAt: 100, captureAiMaxQueueSize: 1 })
+    client.captureAi('$ai_generation', { index: 0 })
+    const evicted = (client as any)._aiLane._events[0]
+    expect(evicted.json).toBeDefined()
+
+    client.captureAi('$ai_generation', { index: 1 })
+
+    expect(evicted.json).toBeUndefined()
+  })
+
   it('reads stored AI events from their slots only when sending them', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog({ flushAt: 10 })
