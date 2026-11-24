@@ -262,7 +262,9 @@ export class CaptureAiLane {
       return
     }
     const jitter = 0.75 + 0.5 * Math.random()
-    const backoffMs = Math.min(1000 * 2 ** this._resendCount * jitter, MAX_RESEND_WAIT_MS)
+    // Cap before jitter so waits at the ceiling stay spread out.
+    const baseMs = Math.min(1000 * 2 ** Math.min(this._resendCount, 5), MAX_RESEND_WAIT_MS)
+    const backoffMs = Math.min(baseMs * jitter, MAX_RESEND_WAIT_MS)
     const waitMs =
       retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, MAX_RESEND_WAIT_MS))
     this._resendCount++
