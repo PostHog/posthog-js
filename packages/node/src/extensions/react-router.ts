@@ -102,7 +102,8 @@ function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): 
  * handlers see it.
  *
  * The returned handler resolves once the event is queued. On a serverless host, pass the platform's `waitUntil` as the
- * client's `waitUntil` option; on Cloudflare Workers, `ctx.waitUntil(handleError(error, args))` works too.
+ * client's `waitUntil` option. On Cloudflare Workers, create the client and the handler per request, with the request's
+ * `ctx.waitUntil`: a client kept across requests in a Workers isolate delivers only the first request's events.
  *
  * @experimental Subject to change in a minor release.
  *
