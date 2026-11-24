@@ -93,6 +93,23 @@ describe('resultProperties', () => {
     expect(toolCallProperties()).toMatchObject({ search_status: 'no_results', result_count: 0 })
   })
 
+  it("does not count the callback's time as the tool's", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const resultProperties = () => {
+        vi.setSystemTime(Date.now() + 60_000)
+        return { search_status: 'no_results' }
+      }
+
+      await callTool(createServer({ resultProperties }, async () => searchResult))
+      await flushCaptures()
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toolCallProperties()).toMatchObject({ search_status: 'no_results', $mcp_duration_ms: 0 })
+  })
+
   it('is available to beforeSend, which can drop $mcp_response without parsing it', async () => {
     const seen: Record<string, unknown>[] = []
     const server = createServer(

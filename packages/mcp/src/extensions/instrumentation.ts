@@ -267,7 +267,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
       takeCapturedError,
       result,
       resolvedEventType === MCPAnalyticsEventType.mcpToolsCall
-        ? (event) => applyResultProperties(event, data, request.params?.name, result)
+        ? (event) => applyResultProperties(event, data, result)
         : undefined
     )
   }
@@ -275,19 +275,14 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 }
 
 /** Merges the host's `resultProperties` for a returned tool result into the event's properties. */
-function applyResultProperties(
-  event: McpEvent,
-  data: MCPAnalyticsData,
-  toolName: string | undefined,
-  result: unknown
-): void {
+function applyResultProperties(event: McpEvent, data: MCPAnalyticsData, result: unknown): void {
   const callback = data.options.resultProperties
   if (!callback) {
     return
   }
   // Reading the returned value can run host code too: a getter, a proxy trap or a `then`.
   try {
-    const properties: unknown = callback(toolName ?? event.resourceName ?? '', result)
+    const properties: unknown = callback(event.resourceName ?? '', result)
     if (properties == null) {
       return
     }
@@ -558,6 +553,7 @@ function publishSuccessfulToolEvent(
   }
   const { event, requestAttribution } = preparedEvent
   try {
+    // Before any host callback runs, so its time isn't counted as the tool's.
     event.duration = Date.now() - startTime.getTime()
     let capturedError: unknown
     if (isToolResultError(result)) {

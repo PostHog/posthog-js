@@ -268,10 +268,11 @@ export interface MCPAnalyticsOptions {
    * `beforeSend`, whether or not `$mcp_response` is captured, and wins over `eventProperties`
    * on the same key. For an `isError` result it is also on the `$exception` sibling. Values
    * must be JSON-serializable and are sent as-is, without the redaction `$mcp_response` gets.
-   * Runs synchronously on the tool path, so keep it cheap. A throw, or a value that is not a
-   * plain object, is logged and adds nothing. Not called for a tool that threw, for the SDK's
-   * virtual tools, or for an unknown tool. An error result the MCP SDK builds without running
-   * the tool, e.g. for invalid arguments, counts as returned.
+   * Runs synchronously on the tool path, so keep it cheap, and treat the result as read-only:
+   * it is the object the client gets. A throw, or a value that is not a plain object, is logged
+   * and adds nothing. Not called for a tool that threw, for the SDK's virtual tools, or for an
+   * unknown tool. An error result the MCP SDK builds without running the tool, e.g. for invalid
+   * arguments, counts as returned.
    */
   resultProperties?: (toolName: string, result: unknown) => JsonRecord | null | undefined
   /**

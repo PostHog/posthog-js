@@ -364,7 +364,8 @@ instrument(server, posthog, {
 })
 ```
 
-It runs synchronously on the tool path, so keep it cheap. It is not called for a tool that threw,
+It runs synchronously on the tool path, so keep it cheap, and don't mutate the result: it is the
+object the client gets. It is not called for a tool that threw,
 for the SDK's virtual tools or for an unknown tool. An error result that the MCP SDK builds without
 running the tool, such as for invalid arguments, counts as returned. So does a throw that a framework
 turned into a result before this SDK could see it, as FastMCP does. A throw in the callback, or a
