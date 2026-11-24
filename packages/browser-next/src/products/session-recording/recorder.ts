@@ -1249,8 +1249,9 @@ export class SessionRecorder {
 
     private _parkingStore(): KeyValueStore | undefined {
         try {
+            // isolate parked buffers by project token so projects sharing a custom persistenceKey cannot cross-restore
             this._parking ??= (this._client as unknown as ParkingAccess)._state.tabKeyValueStore(
-                'replay',
+                `replay_${this._client.projectToken}`,
                 () => this._client.canCapture
             )
         } catch {
