@@ -1914,6 +1914,12 @@ export class PostHog implements PostHogInterface {
             )
         }
 
+        // Reconcile sibling-subdomain cookie identity changes before updating
+        // sessionPersistence so adopting an anonymous reset does not wipe the
+        // campaign, referrer, or search properties recorded for this event.
+        this.persistence.syncCookieProperties()
+        this._processCookieIdentityChange()
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1940,7 +1946,7 @@ export class PostHog implements PostHogInterface {
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties: this._calculateEventProperties(event_name, properties || {}, timestamp, uuid, false, true),
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2261,6 +2267,17 @@ export class PostHog implements PostHogInterface {
         uuid?: string,
         readOnly?: boolean
     ): Properties {
+        return this._calculateEventProperties(eventName, eventProperties, timestamp, uuid, readOnly, false)
+    }
+
+    private _calculateEventProperties(
+        eventName: string,
+        eventProperties: Properties,
+        timestamp?: Date,
+        uuid?: string,
+        readOnly?: boolean,
+        skipCookieSync: boolean = false
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return eventProperties
@@ -2271,8 +2288,10 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        this.persistence.syncCookieProperties()
-        this._processCookieIdentityChange()
+        if (!skipCookieSync) {
+            this.persistence.syncCookieProperties()
+            this._processCookieIdentityChange()
+        }
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
