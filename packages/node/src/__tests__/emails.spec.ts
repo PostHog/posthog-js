@@ -1705,6 +1705,38 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
+    it('reads the recipients by index up to the length it checked, whatever the array iterates', async () => {
+      const postHog = againstPostHog()
+      const recipients = [{ to: 'ada@example.com' }]
+      Object.defineProperty(recipients, Symbol.iterator, {
+        value: function* () {
+          yield* recipientsTo(101)
+        },
+      })
+
+      const { data, error } = await settle(posthog.emails.batch(WELCOME, recipients))
+
+      expect(error).toBeNull()
+      expect(data?.results.map(({ to }) => to)).toEqual(['ada@example.com'])
+      expect(postHog.emails.map(({ to }) => to)).toEqual(['ada@example.com'])
+    })
+
+    it('refuses a missing recipient that the array skips when iterated', async () => {
+      const postHog = againstPostHog()
+      const recipients: { to: string }[] = new Array(2)
+      recipients[0] = { to: 'ada@example.com' }
+      Object.defineProperty(recipients, Symbol.iterator, {
+        value: function* () {
+          yield { to: 'ada@example.com' }
+        },
+      })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipients))
+
+      expect(error).toMatchObject({ code: 'invalid_recipient', field: 'recipients[1]' })
+      expect(postHog.requests.batch).toBe(0)
+    })
+
     it('refuses more than 100 recipients before any request', async () => {
       const postHog = againstPostHog()
 
@@ -1785,21 +1817,29 @@ describe('emails', () => {
     })
 
     it.each([
-      ['delivery_unavailable without retryable', { status: 503, code: 'delivery_unavailable', retryable: false }],
-      ['retryable with another code', { status: 503, code: 'service_busy', retryable: true }],
-    ])('keeps a recipient unconfirmed when PostHog answers %s', async (_case, refusal) => {
-      const postHog = againstPostHog({ refusesRecipient: { 'ada@example.com': refusal } })
+      [
+        'delivery_unavailable without retryable',
+        { status: 502, code: 'delivery_unavailable', retryable: false },
+        'unconfirmed',
+      ],
+      ['retryable with another code', { status: 429, code: 'recipient_throttled', retryable: true }, 'unconfirmed'],
+      ['a 503 that is neither', { status: 503, code: 'recipient_rejected', retryable: false }, 'failed'],
+    ] as const)(
+      'decides a recipient by its code and retryable flag, not its status: %s',
+      async (_case, refusal, status) => {
+        const postHog = againstPostHog({ refusesRecipient: { 'ada@example.com': refusal } })
 
-      const { data } = await settle(posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }]))
+        const { data } = await settle(posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }]))
 
-      expect(data?.results).toMatchObject([
-        {
-          status: 'unconfirmed',
-          error: { code: refusal.code, fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) },
-        },
-      ])
-      expect(postHog.requests.batch).toBe(1)
-    })
+        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code } }])
+        expect(data?.results[0]).toMatchObject(
+          status === 'unconfirmed'
+            ? { error: { fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) } }
+            : { error: expect.not.objectContaining({ fix: expect.stringMatching(/same idempotencyKey/) }) }
+        )
+        expect(postHog.requests.batch).toBe(1)
+      }
+    )
 
     it('keeps recipients unconfirmed when PostHog fails the whole request with a 5xx, and sends nothing again', async () => {
       const postHog = againstPostHog()

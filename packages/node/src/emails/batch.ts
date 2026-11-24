@@ -34,87 +34,94 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
       field: 'recipients',
     })
   }
-  if (recipients.length > BATCH_MAX_RECIPIENTS) {
+  // Read the length once, and each recipient by index: an iterator could skip, add or reorder recipients.
+  const count = recipients.length
+  if (count > BATCH_MAX_RECIPIENTS) {
     throw new EmailError({
       code: 'invalid_recipients',
-      message: `A batch takes at most ${BATCH_MAX_RECIPIENTS} recipients, and this one has ${recipients.length}, so no email was sent.`,
+      message: `A batch takes at most ${BATCH_MAX_RECIPIENTS} recipients, and this one has ${count}, so no email was sent.`,
       field: 'recipients',
       why: 'A batch is one request to PostHog, which takes at most 100 recipients.',
       fix: `Split the recipients into batches of at most ${BATCH_MAX_RECIPIENTS}, and send each with emails.batch().`,
     })
   }
   const keys = new Map<string, number>()
-  // Array.from visits every position, so a hole in a sparse array is checked as a missing recipient.
-  return Array.from(recipients, (recipient: unknown, index): Slot => {
-    const at = `recipients[${index}]`
-    if (!isRecord(recipient)) {
-      throw invalid('invalid_recipient', `${at} must be an object with to, so no email was sent.`, at)
-    }
-    const unknown = Object.keys(recipient).find((name) => recipient[name] !== undefined && !RECIPIENT_FIELDS.has(name))
-    if (unknown !== undefined) {
-      throw new EmailError({
-        code: 'invalid_form',
-        message: `A batch recipient doesn't take ${unknown}, so no email was sent.`,
-        field: `${at}.${unknown}`,
-        fix: 'Give each recipient only to, distinctId, templateData and idempotencyKey, and set the rest on the batch.',
-      })
-    }
-    const { to, distinctId, templateData, idempotencyKey } = recipient
-    if (typeof to !== 'string' || !to.trim()) {
-      throw invalid('invalid_recipient', `${at}.to must be one email address as a nonempty string.`, `${at}.to`)
-    }
-    if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
-      throw invalid('invalid_distinct_id', `${at}.distinctId must be a nonempty string.`, `${at}.distinctId`)
-    }
-    if (templateData !== undefined && !templateForm) {
-      throw new EmailError({
-        code: 'invalid_form',
-        message: 'A batch with templateKey takes no templateData per recipient, so no email was sent.',
-        field: `${at}.templateData`,
-        fix: 'Remove templateData, or send a template made in PostHog with templateId.',
-      })
-    }
-    if (templateData !== undefined && !isRecord(templateData)) {
-      throw invalid('invalid_template_data', `${at}.templateData must be an object.`, `${at}.templateData`)
-    }
-    if (
-      idempotencyKey !== undefined &&
-      (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
-    ) {
-      throw invalid(
-        'invalid_idempotency_key',
-        `${at}.idempotencyKey must be 1 to 255 visible ASCII characters without spaces.`,
-        `${at}.idempotencyKey`
-      )
-    }
-    const key = idempotencyKey ?? globalThis.crypto.randomUUID()
-    const first = keys.get(key)
-    if (first !== undefined) {
-      throw new EmailError({
-        code: 'invalid_idempotency_key',
-        message: `recipients[${first}] and ${at} have the same idempotencyKey, so no email was sent.`,
-        field: `${at}.idempotencyKey`,
-        why: 'PostHog queues one email per key, so the second recipient would get no email.',
-        fix: 'Give each recipient its own key.',
-      })
-    }
-    keys.set(key, index)
-    const wire = safeJsonStringify({
-      to,
-      ...(distinctId !== undefined && { distinct_id: distinctId }),
-      ...(templateData !== undefined && { message_data: templateData }),
-      idempotency_key: key,
+  const slots: Slot[] = []
+  for (let index = 0; index < count; index++) {
+    slots.push(prepareRecipient(recipients[index], index, templateForm, keys))
+  }
+  return slots
+}
+
+function prepareRecipient(recipient: unknown, index: number, templateForm: boolean, keys: Map<string, number>): Slot {
+  const at = `recipients[${index}]`
+  if (!isRecord(recipient)) {
+    throw invalid('invalid_recipient', `${at} must be an object with to, so no email was sent.`, at)
+  }
+  const unknown = Object.keys(recipient).find((name) => recipient[name] !== undefined && !RECIPIENT_FIELDS.has(name))
+  if (unknown !== undefined) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: `A batch recipient doesn't take ${unknown}, so no email was sent.`,
+      field: `${at}.${unknown}`,
+      fix: 'Give each recipient only to, distinctId, templateData and idempotencyKey, and set the rest on the batch.',
     })
-    return {
-      index,
-      to,
-      idempotencyKey: key,
-      wire,
-      status: 'unconfirmed',
-      id: null,
-      replayed: false,
-    }
+  }
+  const { to, distinctId, templateData, idempotencyKey } = recipient
+  if (typeof to !== 'string' || !to.trim()) {
+    throw invalid('invalid_recipient', `${at}.to must be one email address as a nonempty string.`, `${at}.to`)
+  }
+  if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
+    throw invalid('invalid_distinct_id', `${at}.distinctId must be a nonempty string.`, `${at}.distinctId`)
+  }
+  if (templateData !== undefined && !templateForm) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'A batch with templateKey takes no templateData per recipient, so no email was sent.',
+      field: `${at}.templateData`,
+      fix: 'Remove templateData, or send a template made in PostHog with templateId.',
+    })
+  }
+  if (templateData !== undefined && !isRecord(templateData)) {
+    throw invalid('invalid_template_data', `${at}.templateData must be an object.`, `${at}.templateData`)
+  }
+  if (
+    idempotencyKey !== undefined &&
+    (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
+  ) {
+    throw invalid(
+      'invalid_idempotency_key',
+      `${at}.idempotencyKey must be 1 to 255 visible ASCII characters without spaces.`,
+      `${at}.idempotencyKey`
+    )
+  }
+  const key = idempotencyKey ?? globalThis.crypto.randomUUID()
+  const first = keys.get(key)
+  if (first !== undefined) {
+    throw new EmailError({
+      code: 'invalid_idempotency_key',
+      message: `recipients[${first}] and ${at} have the same idempotencyKey, so no email was sent.`,
+      field: `${at}.idempotencyKey`,
+      why: 'PostHog queues one email per key, so the second recipient would get no email.',
+      fix: 'Give each recipient its own key.',
+    })
+  }
+  keys.set(key, index)
+  const wire = safeJsonStringify({
+    to,
+    ...(distinctId !== undefined && { distinct_id: distinctId }),
+    ...(templateData !== undefined && { message_data: templateData }),
+    idempotency_key: key,
   })
+  return {
+    index,
+    to,
+    idempotencyKey: key,
+    wire,
+    status: 'unconfirmed',
+    id: null,
+    replayed: false,
+  }
 }
 
 /** The batch email and its recipients as the request body. */
