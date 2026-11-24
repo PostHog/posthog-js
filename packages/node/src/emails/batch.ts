@@ -6,13 +6,12 @@ import type { BatchEmailRecipientResult, EmailWarning } from './types'
 
 export const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const BATCH_MAX_RECIPIENTS = 100
-const BATCH_MAX_BODY_BYTES = 4 * 1024 * 1024
 const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'templateData', 'idempotencyKey'])
 
 /**
- * One recipient of a batch, and what the client knows of their email so far. A recipient becomes `unconfirmed` once
- * PostHog may have queued their email: a request for them went unanswered, PostHog said it couldn't tell, or their key
- * was still in flight. It stays so until PostHog answers `queued`, since a later refusal doesn't prove it wasn't sent.
+ * One recipient of a batch, and what PostHog's answer to the batch's one request says of their email. A recipient is
+ * `unconfirmed` when PostHog may have queued their email: the request went unanswered, PostHog said it couldn't tell,
+ * or their key was still in flight.
  */
 export interface Slot {
   readonly index: number
@@ -23,12 +22,9 @@ export interface Slot {
   id: string | null
   replayed: boolean
   error?: EmailError
-  /** Whether the next attempt sends this recipient again. */
-  open: boolean
-  maybeQueued: boolean
 }
 
-/** Checks every recipient before any request, and gives each the idempotency key its every attempt carries. */
+/** Checks every recipient before the request, and gives each the idempotency key it goes out with. */
 export function prepareRecipients(recipients: unknown, templateForm: boolean): Slot[] {
   if (!Array.isArray(recipients) || recipients.length === 0) {
     throw new EmailError({
@@ -36,6 +32,15 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
       message:
         'recipients must be a nonempty array of recipients, such as [{ to: "ada@example.com" }], so no email was sent.',
       field: 'recipients',
+    })
+  }
+  if (recipients.length > BATCH_MAX_RECIPIENTS) {
+    throw new EmailError({
+      code: 'invalid_recipients',
+      message: `A batch takes at most ${BATCH_MAX_RECIPIENTS} recipients, and this one has ${recipients.length}, so no email was sent.`,
+      field: 'recipients',
+      why: 'A batch is one request to PostHog, which takes at most 100 recipients.',
+      fix: `Split the recipients into batches of at most ${BATCH_MAX_RECIPIENTS}, and send each with emails.batch().`,
     })
   }
   const keys = new Map<string, number>()
@@ -104,71 +109,22 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
       to,
       idempotencyKey: key,
       wire,
-      status: 'not_attempted',
+      status: 'unconfirmed',
       id: null,
       replayed: false,
-      open: true,
-      maybeQueued: false,
     }
   })
 }
 
-/** The batch email as a request body for some recipients. */
-export class BatchBody {
-  private readonly head: string
-  private readonly headBytes: number
-
-  constructor(shared: Record<string, unknown>) {
-    const json = safeJsonStringify(shared)
-    this.head = `${json.slice(0, -1)}${json === '{}' ? '' : ','}"recipients":[`
-    this.headBytes = utf8Bytes(this.head) + ']}'.length
-  }
-
-  of(slots: Slot[]): string {
-    return `${this.head}${slots.map(({ wire }) => wire).join(',')}]}`
-  }
-
-  /**
-   * Splits the recipients into requests of at most 100 recipients and 4 MiB, in order. A recipient too large for any
-   * request fails here and joins no request.
-   */
-  chunks(slots: Slot[]): Slot[][] {
-    const chunks: Slot[][] = []
-    let chunk: Slot[] = []
-    let bytes = this.headBytes
-    for (const slot of slots) {
-      const slotBytes = utf8Bytes(slot.wire)
-      if (this.headBytes + slotBytes > BATCH_MAX_BODY_BYTES) {
-        settle(slot, {
-          status: 'failed',
-          error: new EmailError({
-            code: 'content_too_large',
-            message: `The email for recipients[${slot.index}] is over the 4 MiB a batch request takes, so it was not sent.`,
-            field: `recipients[${slot.index}]`,
-            fix: 'Send less templateData or content, or send this email with emails.send().',
-          }),
-        })
-        continue
-      }
-      const separator = chunk.length === 0 ? 0 : 1
-      if (chunk.length === BATCH_MAX_RECIPIENTS || bytes + separator + slotBytes > BATCH_MAX_BODY_BYTES) {
-        chunks.push(chunk)
-        chunk = []
-        bytes = this.headBytes
-      }
-      bytes += (chunk.length === 0 ? 0 : 1) + slotBytes
-      chunk.push(slot)
-    }
-    if (chunk.length > 0) {
-      chunks.push(chunk)
-    }
-    return chunks
-  }
+/** The batch email and its recipients as the request body. */
+export function batchBody(shared: Record<string, unknown>, slots: Slot[]): string {
+  const json = safeJsonStringify(shared)
+  return `${json.slice(0, -1)}${json === '{}' ? '' : ','}"recipients":[${slots.map(({ wire }) => wire).join(',')}]}`
 }
 
 /**
- * Records PostHog's answer to a request for `sent`, and returns its warnings. Throws the request's error when PostHog
- * refused the whole request or its answer can't be read.
+ * Records PostHog's answer to the batch request for `sent`, and returns its warnings. Throws the request's error when
+ * PostHog refused the whole request or its answer can't be read.
  */
 export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }: Reply): EmailWarning[] {
   const fields = replyFields(parseJson(body))
@@ -188,7 +144,9 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
     const id = text(answer.message_id)
     const error = isRecord(answer.error) ? answer.error : undefined
     if (answer.status === 'queued' && id) {
-      settle(slot, { status: 'queued', id, replayed: answer.replayed === true })
+      slot.status = 'queued'
+      slot.id = id
+      slot.replayed = answer.replayed === true
       return
     }
     if (!error) {
@@ -205,16 +163,14 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
       statusCode: typeof error.status === 'number' ? error.status : undefined,
     })
-    slot.id = id ?? slot.id
-    slot.maybeQueued ||= retryable
-    slot.status = slot.maybeQueued ? 'unconfirmed' : 'failed'
+    slot.id = id ?? null
+    slot.status = retryable ? 'unconfirmed' : 'failed'
     slot.error = refusal
-    slot.open = retryable
   })
   return warningsOf(fields)
 }
 
-/** Records a request for `sent` that failed as a whole, and whether PostHog may have queued its emails. */
+/** Records a batch request for `sent` that failed as a whole, and whether PostHog may have queued its emails. */
 export function recordFailure(sent: Slot[], error: EmailError): void {
   const maybeQueued =
     error.statusCode === undefined ||
@@ -222,12 +178,8 @@ export function recordFailure(sent: Slot[], error: EmailError): void {
     error.statusCode < 300 ||
     error.code === 'idempotency_key_in_flight'
   for (const slot of sent) {
-    if (maybeQueued) {
-      recordUnanswered(slot, error)
-    } else {
-      slot.status = slot.maybeQueued ? 'unconfirmed' : 'failed'
-      slot.error = error
-    }
+    slot.status = maybeQueued ? 'unconfirmed' : 'failed'
+    slot.error = error
   }
 }
 
@@ -240,8 +192,6 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
       return { index, to, idempotencyKey, status: 'failed', id: slot.id, error: slot.error! }
     case 'unconfirmed':
       return { index, to, idempotencyKey, status: 'unconfirmed', id: slot.id, error: withResendFix(slot.error!) }
-    default:
-      return { index, to, idempotencyKey, status: 'not_attempted' }
   }
 }
 
@@ -266,22 +216,6 @@ function withResendFix(error: EmailError): EmailError {
 function recordUnanswered(slot: Slot, error: EmailError): void {
   slot.status = 'unconfirmed'
   slot.error = error
-  slot.maybeQueued = true
-}
-
-function settle(
-  slot: Slot,
-  outcome: { status: 'queued'; id: string; replayed: boolean } | { status: 'failed'; error: EmailError }
-): void {
-  slot.status = outcome.status
-  slot.open = false
-  if (outcome.status === 'queued') {
-    slot.id = outcome.id
-    slot.replayed = outcome.replayed
-    slot.error = undefined
-  } else {
-    slot.error = outcome.error
-  }
 }
 
 function batchReplyError(
@@ -312,10 +246,4 @@ function batchReplyError(
 
 function invalid(code: string, message: string, field: string): EmailError {
   return new EmailError({ code, message, field })
-}
-
-const encoder = new TextEncoder()
-
-function utf8Bytes(value: string): number {
-  return encoder.encode(value).byteLength
 }

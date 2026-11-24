@@ -203,8 +203,8 @@ export type SendEmailResponse = { data: SendEmailResult; error: null } | { data:
 
 /** What every batch takes, whatever its form. The recipients, and what is per recipient, go in `recipients`. */
 export interface BatchEmailBase {
-  /** Overrides the client's `emailRequestMaxRetries` for each request of this batch. `0` turns retries off. */
-  maxRetries?: number
+  /** A batch sends one request and doesn't retry it. */
+  maxRetries?: never
   to?: never
   distinctId?: never
   idempotencyKey?: never
@@ -234,8 +234,9 @@ export interface BatchEmailRecipient {
   templateData?: Record<string, unknown>
   /**
    * As for `send()`, 1 to 255 visible ASCII characters, and unique within the batch. Without it, the client makes a
-   * UUID that covers its own retries. Pass a key derived from what the email is for, such as `digest:2026-11-23:user_1`,
-   * so sending the batch again queues no second email for a recipient PostHog already accepted.
+   * UUID, which the recipient's result returns. Pass a key derived from what the email is for, such as
+   * `digest:2026-11-23:user_1`, so sending the batch again queues no second email for a recipient PostHog already
+   * accepted.
    */
   idempotencyKey?: string
 }
@@ -245,13 +246,11 @@ export interface BatchEmailRecipient {
  *
  * - `queued`: PostHog queued the email.
  * - `failed`: PostHog didn't queue the email, and `error` says why.
- * - `unconfirmed`: the client can't tell whether PostHog queued the email, because a request for it went unanswered,
+ * - `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
  *   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, or its key was still in flight
- *   (`idempotency_key_in_flight`) after the retries. A later refusal doesn't change it, since the email may still be
- *   queued. `error` holds the latest answer, and `id` the message ID when PostHog named one. Send the recipient again,
- *   unchanged and with the same `idempotencyKey`, within 24 hours of the first request with that key: PostHog queues
- *   no second email for a key it has.
- * - `not_attempted`: the batch stopped before it sent this recipient.
+ *   (`idempotency_key_in_flight`). `error` holds PostHog's answer, and `id` the message ID when PostHog named one.
+ *   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
+ *   that key: PostHog queues no second email for a key it has.
  */
 export type BatchEmailRecipientResult = {
   /** The recipient's position in the `recipients` you passed. */
@@ -262,7 +261,6 @@ export type BatchEmailRecipientResult = {
 } & (
   | { status: 'queued'; id: string; replayed: boolean }
   | { status: 'failed' | 'unconfirmed'; id: string | null; error: EmailError }
-  | { status: 'not_attempted' }
 )
 
 /** What happened to each recipient of a batch, in the order you passed them. */
@@ -273,7 +271,7 @@ export interface BatchEmailResult {
 
 /**
  * What `posthog.emails.batch()` resolves to. Exactly one of `data` and `error` is set. The promise does not reject.
- * An `error` after the first request carries `error.results`.
+ * An `error` from the batch request, refused or unanswered, carries `error.results`.
  */
 export type BatchEmailResponse = { data: BatchEmailResult; error: null } | { data: null; error: EmailError }
 
@@ -364,13 +362,14 @@ export interface Emails {
   /**
    * Queue one email per recipient, from one transactional email template or one piece of content from your code.
    *
-   * The client sends the recipients 100 at a time, at most 4 MiB per request, one request after another, and retries
-   * each request with the same idempotency keys, so a retry queues no second email. Each attempt waits up to 45
-   * seconds for PostHog's answer, or longer when the client's `emailRequestTimeoutMs` is longer.
+   * A batch takes at most 100 recipients and sends them in one request, which the client doesn't retry. More than 100
+   * recipients is an error before anything is sent. PostHog refuses a batch over its size limits with
+   * `content_too_large`: split the recipients into smaller batches. The request waits up to 45 seconds for PostHog's
+   * answer, or longer when the client's `emailRequestTimeoutMs` is longer.
    *
    * Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused
-   * recipient doesn't fail the batch. When a request fails after its retries, the batch stops, and `error.results`
-   * says what happened to each recipient so far.
+   * recipient doesn't fail the batch. When PostHog refuses the whole request or doesn't answer it, `error.results`
+   * says what happened to each recipient, and an `unconfirmed` one says how to send it again safely.
    */
   batch(email: BatchEmailOptions, recipients: BatchEmailRecipient[]): Promise<BatchEmailResponse>
 

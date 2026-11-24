@@ -462,7 +462,12 @@ export class FakePostHog {
     const raw = typeof options.body === 'string' ? options.body : ''
     const bytes = new TextEncoder().encode(raw).byteLength
     if (bytes > BATCH_MAX_BODY_BYTES) {
-      throw refusal(413, 'invalid_request', 'content_too_large', null, { detail: 'The request body is over 5 MiB.' })
+      // As PostHog's batch_too_large refusal answers it.
+      throw refusal(413, 'invalid_request', 'content_too_large', null, {
+        detail: "The batch is larger than PostHog can send at once, so PostHog didn't send it.",
+        why: 'A batch send takes at most 5 MiB of request body, and the email pipeline takes a limited amount of data in one batch.',
+        fix: 'Split the recipients into smaller batches.',
+      })
     }
     if (this.options.batchUnavailable) {
       throw refusal(409, 'invalid_request', 'batch_unavailable', null, {

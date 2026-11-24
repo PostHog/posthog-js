@@ -51,9 +51,8 @@ export class EmailError extends Error {
   /** The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. */
   readonly messageId?: string
   /**
-   * Only from `emails.batch()`, once it sent a request: what happened to each recipient, in the order you passed
-   * them. Recipients after the failed request are `not_attempted`, except one too large for any request, which is
-   * `failed` with `content_too_large` from the start.
+   * Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed
+   * them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it.
    */
   readonly results?: BatchEmailRecipientResult[]
 

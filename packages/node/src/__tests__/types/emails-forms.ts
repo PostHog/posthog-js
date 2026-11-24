@@ -79,7 +79,7 @@ export const wrongCombinations: SendEmailOptions[] = [
 ]
 
 export const batchForms: BatchEmailOptions[] = [
-  { templateId, templateData: { plan: 'pro' }, maxRetries: 0 },
+  { templateId, templateData: { plan: 'pro' } },
   { templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', from: 'news@example.com', tracking: false },
   { templateKey: 'digest', subject: 'Your week', react },
   // @ts-expect-error each recipient carries its own address
@@ -90,6 +90,8 @@ export const batchForms: BatchEmailOptions[] = [
   { templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', attachments: [] },
   // @ts-expect-error a batch takes no schedule
   { templateId, scheduledAt: '2026-12-01T09:00:00Z' },
+  // @ts-expect-error a batch sends one request and retries nothing
+  { templateId, maxRetries: 0 },
 ]
 
 export const recipients: BatchEmailRecipient[] = [

@@ -16,9 +16,9 @@ import {
   refuseRenderedMessageOverLimit,
 } from './attachments'
 import {
-  BatchBody,
   IDEMPOTENCY_KEY_PATTERN,
   type Slot,
+  batchBody,
   prepareRecipients,
   recordAnswer,
   recordFailure,
@@ -62,8 +62,8 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
-/** How long each batch attempt waits for PostHog, which checks and queues up to 100 emails before it answers. */
-const BATCH_ATTEMPT_TIMEOUT_MS = 45_000
+/** How long a batch request waits for PostHog, which checks and queues up to 100 emails before it answers. */
+const BATCH_REQUEST_TIMEOUT_MS = 45_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const SCHEDULED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-](\d{2}):(\d{2}))$/
@@ -123,13 +123,14 @@ const CODE_FORM: SendForm = {
   why: 'A send with templateKey takes its content from your code.',
   howToSend: 'send content from your code with templateKey',
 }
-const BATCH_ONLY_FIELDS = { maxRetries: true }
 const SEND_ONLY_FIX = 'Remove {field}, or send each email with emails.send().'
 const PER_RECIPIENT_FIX = 'Set {field} on each recipient in recipients.'
 const BATCH_FIXES: Record<string, string> = {
   to: PER_RECIPIENT_FIX,
   distinctId: PER_RECIPIENT_FIX,
   idempotencyKey: PER_RECIPIENT_FIX,
+  maxRetries:
+    "Remove maxRetries: a batch sends one request and doesn't retry it. Send each recipient that isn't queued again, unchanged and with the same idempotencyKey.",
   scheduledAt: SEND_ONLY_FIX,
   cc: SEND_ONLY_FIX,
   bcc: SEND_ONLY_FIX,
@@ -138,14 +139,14 @@ const BATCH_FIXES: Record<string, string> = {
 const BATCH_TEMPLATE_FORM: SendForm = {
   ...TEMPLATE_FORM,
   call: 'batch',
-  fields: fieldSet(BATCH_ONLY_FIELDS, TEMPLATE_FIELDS),
+  fields: fieldSet(TEMPLATE_FIELDS),
   howToSend: 'send a batch of a template made in PostHog with templateId',
   fixes: BATCH_FIXES,
 }
 const BATCH_CODE_FORM: SendForm = {
   ...CODE_FORM,
   call: 'batch',
-  fields: new Set([...fieldSet(BATCH_ONLY_FIELDS, CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES))),
+  fields: new Set([...fieldSet(CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES))),
   howToSend: 'send a batch of content from your code with templateKey',
   fixes: BATCH_FIXES,
 }
@@ -281,10 +282,8 @@ export class EmailSender implements Emails {
 
   private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
     let slots: Slot[] = []
-    let connected = false
-    const warnings: EmailWarning[] = []
     try {
-      const prepared = prepareBatchEmail(email, this.config.maxRetries)
+      const prepared = prepareBatchEmail(email)
       slots = prepareRecipients(recipients, prepared.templateForm)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
@@ -294,60 +293,30 @@ export class EmailSender implements Emails {
         prepared.react === undefined
           ? prepared.content
           : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
-      connected = true
-      const body = new BatchBody(content)
+      if (this.hooks.isClosed()) {
+        throw new EmailError({
+          code: 'client_closed',
+          message: 'The PostHog client shut down before the batch went out, so no email was sent.',
+        })
+      }
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
-      const timeoutMs = Math.max(BATCH_ATTEMPT_TIMEOUT_MS, this.config.requestTimeoutMs)
-      for (const chunk of body.chunks(slots)) {
-        for (let attempt = 0; ; attempt++) {
-          this.stopIfClosed()
-          const sent = chunk.filter(({ open }) => open)
-          let failure: EmailError | undefined
-          try {
-            const reply = await this.request(appHost + BATCH_PATH, 'POST', headers, body.of(sent), undefined, timeoutMs)
-            addWarnings(warnings, recordAnswer(sent, reply))
-          } catch (caught) {
-            failure = asRequestError(caught)
-            recordFailure(sent, failure)
-          }
-          if (!chunk.some(({ open }) => open)) {
-            break
-          }
-          const delayMs = failure
-            ? retryDelayMs(failure, attempt, prepared.maxRetries)
-            : attempt < prepared.maxRetries
-              ? backoffMs(attempt)
-              : undefined
-          if (delayMs === undefined) {
-            if (failure) {
-              throw failure
-            }
-            break
-          }
-          this.stopIfClosed()
-          await new Promise((resolve) => setTimeout(resolve, delayMs))
-        }
+      const timeoutMs = Math.max(BATCH_REQUEST_TIMEOUT_MS, this.config.requestTimeoutMs)
+      const body = batchBody(content, slots)
+      let warnings: EmailWarning[]
+      try {
+        warnings = recordAnswer(
+          slots,
+          await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs)
+        )
+      } catch (caught) {
+        const failure = asRequestError(caught)
+        recordFailure(slots, failure)
+        return { data: null, error: withResults(failure, slots) }
       }
       this.logWarnings(warnings)
       return { data: { results: slots.map(resultOf), warnings }, error: null }
     } catch (caught) {
-      const error = asEmailError(caught, 'Sending the batch failed unexpectedly.')
-      if (!connected) {
-        return { data: null, error }
-      }
-      this.logWarnings(warnings)
-      return { data: null, error: withResults(error, slots) }
-    }
-  }
-
-  /** Ends a batch once the client shuts down, so it sends no more requests and returns what happened so far. */
-  private stopIfClosed(): void {
-    if (this.hooks.isClosed()) {
-      throw new EmailError({
-        code: 'client_closed',
-        message: 'The PostHog client shut down during the batch, so it sent no more requests.',
-        fix: "Send every recipient that isn't queued again with the same idempotencyKey: PostHog queues no second email for a key it has.",
-      })
+      return { data: null, error: asEmailError(caught, 'Sending the batch failed unexpectedly.') }
     }
   }
 
@@ -741,10 +710,11 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function prepareBatchEmail(
-  options: BatchEmailOptions,
-  defaultMaxRetries: number
-): { content: Record<string, unknown>; react?: EmailReactElement; templateForm: boolean; maxRetries: number } {
+function prepareBatchEmail(options: BatchEmailOptions): {
+  content: Record<string, unknown>
+  react?: EmailReactElement
+  templateForm: boolean
+} {
   const send: UncheckedSend = options ?? {}
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
@@ -756,15 +726,10 @@ function prepareBatchEmail(
   const content = templateForm
     ? templateContent(send, undefined, BATCH_TEMPLATE_FORM, BATCH_CODE_FORM)
     : codeContent(send, undefined, BATCH_CODE_FORM, BATCH_TEMPLATE_FORM).content
-  const { maxRetries } = send
-  if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
-    throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
-  }
   return {
     content: snapshotOf(content),
     react: isReactElement(send.react) ? send.react : undefined,
     templateForm,
-    maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
 }
 
@@ -1204,13 +1169,4 @@ function retryDelayMs(error: EmailError, attempt: number, maxRetries: number): n
 
 function backoffMs(attempt: number): number {
   return Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
-}
-
-/** Adds the warnings not yet in the list: PostHog repeats a warning about the whole batch on each request. */
-function addWarnings(warnings: EmailWarning[], more: EmailWarning[]): void {
-  for (const warning of more) {
-    if (!warnings.some(({ code, message }) => code === warning.code && message === warning.message)) {
-      warnings.push(warning)
-    }
-  }
 }
