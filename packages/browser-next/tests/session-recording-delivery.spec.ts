@@ -313,6 +313,16 @@ describe('snapshot delivery', () => {
         await vi.waitFor(() => expect(keepalive.remaining).toBe(KEEPALIVE_BUDGET_BYTES))
     })
 
+    it('cancels each upload response body, so Chromium releases the keepalive quota as posthog-js does by reading it', async () => {
+        const cancelled = vi.fn()
+        const { delivery } = setup(() => new Response(new ReadableStream({ cancel: cancelled }), { status: 200 }), {})
+
+        delivery.enqueue(message('s1'), 10)
+        await delivery.flush()
+
+        expect(cancelled).toHaveBeenCalledOnce()
+    })
+
     it('sends an upload larger than the remaining keepalive budget without keepalive', async () => {
         const keepalive = { remaining: 10 }
         const { delivery, requests } = setup(() => 200, { keepalive })

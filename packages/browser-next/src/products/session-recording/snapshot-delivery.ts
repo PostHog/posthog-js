@@ -1,6 +1,7 @@
 import { gzipText } from '@posthog/browser-common/replay/event-compression'
 import { EventBuffer } from '../analytics/admission/event-buffer'
 import { nativeGzip } from '../../platform/gzip'
+import { cancelResponseBody } from '../analytics/delivery/capture-v1'
 import { Lane } from '../analytics/delivery/lane'
 import { parseRetryAfter, retryDelay } from '../analytics/delivery/retry-delay'
 import type { RequestRuntime } from '../../platform/request'
@@ -117,7 +118,10 @@ const post = async (
             keepalive: !!reserved,
             signal: controller.signal,
         })
-        return [response.status, parseRetryAfter(response, Date.now)]
+        const result: [number, number | undefined] = [response.status, parseRetryAfter(response, Date.now)]
+        // posthog-js reads every response; an unread keepalive response keeps its bytes in Chromium's quota
+        await cancelResponseBody(response)
+        return result
     } catch {
         // network errors and timeouts are retried
         return [0]
