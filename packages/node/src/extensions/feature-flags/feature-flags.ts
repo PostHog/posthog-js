@@ -1411,10 +1411,7 @@ function getDefinitionUnresolvedReason(
 // enrollment property the flag can't be resolved locally.
 function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
   const enrollmentKey = `$feature_enrollment/${flag.key}`
-  const enrollment =
-    personProperties && Object.prototype.hasOwnProperty.call(personProperties, enrollmentKey)
-      ? personProperties[enrollmentKey]
-      : undefined
+  const enrollment = personProperties[enrollmentKey]
   // `undefined` is omitted from JSON, so /flags would read the stored enrollment.
   if (enrollment === undefined) {
     throw new InconclusiveMatchError(

@@ -1134,6 +1134,24 @@ describe('evaluateFlags', () => {
     })
 
     it.each([
+      [true, { plan: 'beta' }],
+      [false, undefined],
+    ])('resolves the payload of enrollment %s locally', async (enrollment, expected) => {
+      await setupWithDefinitions([betaFeature({ payloads: { true: '{"plan":"beta"}' } })])
+      const personProperties = { [enrollmentKey]: enrollment }
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+      expect(flags.getFlagPayload('beta-feature')).toEqual(expected)
+
+      const result = await posthog.getFeatureFlagResult('beta-feature', 'user-123', {
+        onlyEvaluateLocally: true,
+        personProperties,
+      })
+      expect(result).toMatchObject({ enabled: enrollment, payload: expected })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each([
       [true, 0, true],
       [false, 100, false],
     ])('resolves enrollment %s before a full holdout', async (enrollment, rollout, expected) => {
