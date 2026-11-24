@@ -727,6 +727,90 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
     expect(evaluator.onEvent('s2', 'purchase', undefined, undefined).newlyActivated).toBe(true)
   })
 
+  describe('screen check on a new session', () => {
+    const checkout = (properties: SessionReplayTriggerGroup['conditions']['properties'] = []) =>
+      group({ conditions: conditions({ urls: [/^checkout/], properties }) })
+
+    it('activates the screen leg for a session that starts on a matching screen', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([checkout()])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined)
+
+      expect(evaluator.checkScreenOnNewSession('s1', undefined)).toBe(false)
+      expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(false)
+
+      expect(evaluator.checkScreenOnNewSession('s2', undefined)).toBe(true)
+      expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(true)
+      expect(evaluator.getActivation()).toEqual({ sessionId: 's2', eventGroupIds: [], screenGroupIds: ['g1'] })
+      // Once per session.
+      expect(evaluator.checkScreenOnNewSession('s2', undefined)).toBe(false)
+    })
+
+    it('reports the activation from the first event of the new session', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([checkout()])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined)
+
+      expect(evaluator.onEvent('s2', 'other', undefined, undefined)).toEqual({ anyMatched: true, newlyActivated: true })
+      expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(true)
+      expect(evaluator.onEvent('s2', 'other', undefined, undefined).anyMatched).toBe(false)
+    })
+
+    it('uses the last screen, including one seen outside onEvent', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([checkout()])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined)
+      evaluator.rememberScreen('s1', '$screen', { $screen_name: 'Home' })
+      expect(evaluator.checkScreenOnNewSession('s2', undefined)).toBe(false)
+
+      evaluator.rememberScreen('s2', 'purchase', { $screen_name: 'checkout-step-1' })
+      evaluator.rememberScreen('s2', '$screen', { $screen_name: 7 })
+      expect(evaluator.checkScreenOnNewSession('s3', undefined)).toBe(false)
+
+      evaluator.rememberScreen('s3', '$screen', { $screen_name: 'checkout-step-2' })
+      expect(evaluator.checkScreenOnNewSession('s4', undefined)).toBe(true)
+    })
+
+    it('does not check a new $screen event of the new session against the screen before it', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([checkout()])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined)
+
+      expect(evaluator.onEvent('s2', '$screen', { $screen_name: 'Home' }, undefined).anyMatched).toBe(false)
+      expect(evaluator.evaluate('s2', null, undefined).shouldRecord).toBe(false)
+    })
+
+    it('applies the group-level filters like a live $screen event, with the current person properties', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([
+        checkout([{ key: 'plan', type: 'person', operator: 'exact', value: 'pro' }]),
+        group({
+          id: 'g2',
+          conditions: conditions({
+            urls: [/^checkout/],
+            properties: [{ key: '$screen_name', operator: 'exact', value: 'checkout-step-1' }],
+          }),
+        }),
+      ])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, { plan: 'pro' })
+
+      expect(evaluator.checkScreenOnNewSession('s2', { plan: 'free' })).toBe(false)
+      expect(evaluator.checkScreenOnNewSession('s3', { plan: 'pro' })).toBe(true)
+      expect(evaluator.getActivation()?.screenGroupIds).toEqual(['g1'])
+    })
+
+    it('survives clearActivation, and leaves the session of the screen event alone', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([checkout()])
+      evaluator.onEvent('s1', '$screen', { $screen_name: 'checkout-step-1' }, undefined)
+
+      evaluator.clearActivation()
+      expect(evaluator.checkScreenOnNewSession('s1', undefined)).toBe(false)
+      expect(evaluator.evaluate('s1', null, undefined).shouldRecord).toBe(false)
+      expect(evaluator.checkScreenOnNewSession('s2', undefined)).toBe(true)
+    })
+  })
+
   it('restores persisted activation only for its own session and tolerates malformed storage', () => {
     const purchase = group({ conditions: conditions({ events: [{ name: 'purchase', properties: [] }] }) })
     const evaluator = new SessionReplayTriggerGroupsEvaluator()

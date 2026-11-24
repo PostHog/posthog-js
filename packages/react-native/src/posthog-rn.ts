@@ -2360,6 +2360,7 @@ export class PostHog extends PostHogCore {
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
       )
     )
+    this._checkTriggerGroupsScreenOnNewSession(sessionId)
     const decision = this._triggerGroupsEvaluator.evaluate(
       sessionId,
       this.getKnownFeatureFlags(),
@@ -3881,16 +3882,18 @@ export class PostHog extends PostHogCore {
       this._sessionReplayEventTriggers = []
       this._sessionReplayTriggerGroups = triggerGroups
       this._triggerGroupsEvaluator.onConfig(triggerGroups)
+      const sessionId = super.getSessionId()
       // A session kept across an app restart keeps the groups it already activated, like the v1 trigger.
       this._triggerGroupsEvaluator.restoreActivation(
-        super.getSessionId(),
+        sessionId,
         this.getPersistedProperty<SessionReplayTriggerGroupsActivation>(
           PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
         )
       )
+      this._checkTriggerGroupsScreenOnNewSession(sessionId)
 
       const decision = this._triggerGroupsEvaluator.evaluate(
-        super.getSessionId(),
+        sessionId,
         this.getKnownFeatureFlags(),
         this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
       )
@@ -4294,23 +4297,28 @@ export class PostHog extends PostHogCore {
   }
 
   private _maybeActivateTriggerGroups(eventName: unknown, eventProperties: unknown): void {
-    if (this._sessionReplayTriggerGroups === null || typeof eventName !== 'string') {
+    if (typeof eventName !== 'string') {
+      return
+    }
+    // super.getSessionId() for the same reason as _maybeActivateEventTrigger: the capture path
+    // already ran rotation handling, and re-entering it from inside capture is not safe.
+    const sessionId = super.getSessionId()
+    const properties = isObject(eventProperties) ? eventProperties : undefined
+    this._triggerGroupsEvaluator.rememberScreen(sessionId, eventName, properties)
+    if (this._sessionReplayTriggerGroups === null) {
       return
     }
     // A stopped recording activates nothing until the app starts it again.
     if (this._isReplayExplicitlyStopped()) {
       return
     }
-    // super.getSessionId() for the same reason as _maybeActivateEventTrigger: the capture path
-    // already ran rotation handling, and re-entering it from inside capture is not safe.
-    const sessionId = super.getSessionId()
     if (!sessionId) {
       return
     }
     const result = this._triggerGroupsEvaluator.onEvent(
       sessionId,
       eventName,
-      isObject(eventProperties) ? eventProperties : undefined,
+      properties,
       this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
     )
     if (!result.anyMatched) {
@@ -4327,6 +4335,25 @@ export class PostHog extends PostHogCore {
       return
     }
     void this._evaluateAndStartSessionReplay()
+  }
+
+  // Runs where recording is decided for a session, with the session id read there, so the screen
+  // the app is already on counts for a session that started without a $screen event.
+  private _checkTriggerGroupsScreenOnNewSession(sessionId: string): void {
+    // A stopped recording activates nothing until the app starts it again.
+    if (!sessionId || this._isReplayExplicitlyStopped()) {
+      return
+    }
+    const newlyActivated = this._triggerGroupsEvaluator.checkScreenOnNewSession(
+      sessionId,
+      this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+    )
+    if (newlyActivated) {
+      this.setPersistedProperty(
+        PostHogPersistedProperty.SessionReplayTriggerGroupsActivation,
+        this._triggerGroupsEvaluator.getActivation()
+      )
+    }
   }
 
   private _registerTriggerGroupsDebugProperties(decision: SessionReplayTriggerGroupsDecision): void {

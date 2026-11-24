@@ -253,6 +253,130 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     expect(replay.start).toHaveBeenCalledTimes(1)
   })
 
+  describe('a new session on a screen that matches a group', () => {
+    const checkoutGroup = {
+      id: 'g1',
+      name: 'Checkout screens',
+      sampleRate: 1,
+      conditions: { matchType: 'any', urls: [{ url: '^checkout', matching: 'regex' }] },
+    }
+    const activation = (): any =>
+      posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayTriggerGroupsActivation)
+    const expireSession = (): void => {
+      posthog.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 31 * 60 * 1000)
+    }
+
+    it('keeps recording after a rotation, without a new $screen event', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      replay.isEnabled.mockImplementation(async () => true)
+      const firstSessionId = posthog.getSessionId()
+
+      expireSession()
+      const newSessionId = posthog.getSessionId()
+      expect(newSessionId).not.toEqual(firstSessionId)
+      await waitForNativePluginEvaluation(posthog)
+      await wait(50)
+
+      expect(activation()).toEqual({ sessionId: newSessionId, eventGroupIds: [], screenGroupIds: ['g1'] })
+      expect(replay.stopRecording).not.toHaveBeenCalled()
+    })
+
+    it('starts recording when the first event of the new session is not a $screen event', async () => {
+      currentSessionRecording = v2Config([
+        { ...checkoutGroup, conditions: { ...checkoutGroup.conditions, matchType: 'all', flag: 'replay-flag' } },
+      ])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await wait(50)
+      expect(replay.start).not.toHaveBeenCalled()
+
+      expireSession()
+      posthog.capture('other')
+      await wait(50)
+      expect(activation()).toEqual({ sessionId: posthog.getSessionId(), eventGroupIds: [], screenGroupIds: ['g1'] })
+
+      currentFlags = { 'replay-flag': true }
+      await posthog.reloadFeatureFlagsAsync()
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    })
+
+    it('re-arms after a rotation on a screen the app has left', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      replay.isEnabled.mockImplementation(async () => true)
+      await posthog.screen('Home')
+
+      expireSession()
+      posthog.getSessionId()
+      await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+    })
+
+    it('activates the group for the session reset() starts', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+      await warmup()
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await wait(50)
+      await posthog.screen('checkout-step-2')
+      await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+      const firstSessionId = posthog.getSessionId()
+
+      posthog.reset()
+      await waitForExpect(2000, () => expect(activation()?.screenGroupIds).toEqual(['g1']))
+      expect(activation().sessionId).toEqual(posthog.getSessionId())
+      expect(activation().sessionId).not.toEqual(firstSessionId)
+    })
+
+    it('starts a new-session startSessionRecording() on the screen seen while replay was off', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.screen('checkout-step-2')
+      await wait(50)
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      await posthog.startSessionRecording(false)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+      expect(activation()).toEqual({ sessionId: posthog.getSessionId(), eventGroupIds: [], screenGroupIds: ['g1'] })
+    })
+
+    it('does not activate on a config load in the session of the $screen event', async () => {
+      currentSessionRecording = v2Config([checkoutGroup])
+
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.screen('checkout-step-2')
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(50)
+      await waitForNativePluginEvaluation(posthog)
+
+      expect(activation()).toBeFalsy()
+      expect(replay.start).not.toHaveBeenCalled()
+    })
+  })
+
   const purchaseGroup = {
     id: 'g1',
     name: 'Purchases',

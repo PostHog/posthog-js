@@ -295,6 +295,10 @@ export class SessionReplayTriggerGroupsEvaluator {
 
   private samplingDecisions = new Map<string, StoredSamplingDecision>()
 
+  private lastScreenName: string | null = null
+  private lastScreenSessionId: string | null = null
+  private screenCheckedSessionId: string | null = null
+
   onConfig(groups: SessionReplayTriggerGroup[]): void {
     const survivingIds = new Set(groups.map((group) => group.id))
     for (const groupId of this.samplingDecisions.keys()) {
@@ -312,10 +316,11 @@ export class SessionReplayTriggerGroupsEvaluator {
     eventProperties: Record<string, unknown> | undefined,
     personProperties: Record<string, unknown> | undefined
   ): TriggerGroupsEventResult {
+    this.rememberScreen(sessionId, eventName, eventProperties)
     this.resetActivationForNewSession(sessionId)
 
-    let anyMatched = false
-    let newlyActivated = false
+    let newlyActivated = this.checkScreenOnNewSession(sessionId, personProperties)
+    let anyMatched = newlyActivated
 
     for (const group of this.groups) {
       const conditions = group.conditions
@@ -331,25 +336,52 @@ export class SessionReplayTriggerGroupsEvaluator {
         }
       }
 
-      if (eventName === SCREEN_EVENT_NAME) {
-        const screenName = eventProperties?.[SCREEN_NAME_PROPERTY]
-        const screenMatched =
-          conditions.urls.length > 0 &&
-          typeof screenName === 'string' &&
-          conditions.urls.some((regex) => regex.test(screenName)) &&
-          // The url leg checks the group-level filters without event properties.
-          matchTriggerPropertyFilters(conditions.properties, undefined, personProperties)
-        if (screenMatched) {
-          anyMatched = true
-          if (!this.screenActivatedGroupIds.has(group.id)) {
-            this.screenActivatedGroupIds.add(group.id)
-            newlyActivated = true
-          }
+      if (
+        eventName === SCREEN_EVENT_NAME &&
+        this.matchesScreenLeg(conditions, eventProperties?.[SCREEN_NAME_PROPERTY], personProperties)
+      ) {
+        anyMatched = true
+        if (!this.screenActivatedGroupIds.has(group.id)) {
+          this.screenActivatedGroupIds.add(group.id)
+          newlyActivated = true
         }
       }
     }
 
     return { anyMatched, newlyActivated }
+  }
+
+  // Takes every $screen event, also while no group is armed, so the name is never a screen the app left.
+  rememberScreen(sessionId: string, eventName: string, eventProperties: Record<string, unknown> | undefined): void {
+    const screenName = eventName === SCREEN_EVENT_NAME ? eventProperties?.[SCREEN_NAME_PROPERTY] : undefined
+    if (typeof screenName === 'string') {
+      this.lastScreenName = screenName
+      this.lastScreenSessionId = sessionId
+    }
+  }
+
+  // A session that started after the last $screen event gets none for the screen the app is already
+  // on, so the screen leg is checked against that screen, once per session. Returns whether a group
+  // newly activated. Moves activation to sessionId, so it takes the current session id only.
+  checkScreenOnNewSession(sessionId: string, personProperties: Record<string, unknown> | undefined): boolean {
+    const screenName = this.lastScreenName
+    if (screenName === null || sessionId === this.lastScreenSessionId || sessionId === this.screenCheckedSessionId) {
+      return false
+    }
+    this.screenCheckedSessionId = sessionId
+    this.resetActivationForNewSession(sessionId)
+
+    let newlyActivated = false
+    for (const group of this.groups) {
+      if (
+        !this.screenActivatedGroupIds.has(group.id) &&
+        this.matchesScreenLeg(group.conditions, screenName, personProperties)
+      ) {
+        this.screenActivatedGroupIds.add(group.id)
+        newlyActivated = true
+      }
+    }
+    return newlyActivated
   }
 
   getActivation(): SessionReplayTriggerGroupsActivation | null {
@@ -387,7 +419,8 @@ export class SessionReplayTriggerGroupsEvaluator {
   }
 
   // Read-only for activation: a caller holding a stale session id must not wipe the current
-  // session's activated groups. Only onEvent and restoreActivation move activation to a new session.
+  // session's activated groups. Only onEvent, restoreActivation and checkScreenOnNewSession move
+  // activation to a new session.
   evaluate(
     sessionId: string,
     flags: Record<string, FeatureFlagValue> | null | undefined,
@@ -513,6 +546,20 @@ export class SessionReplayTriggerGroupsEvaluator {
           : false
 
     return matches ? TriggerStatus.ACTIVATED : TriggerStatus.PENDING
+  }
+
+  private matchesScreenLeg(
+    conditions: SessionReplayTriggerConditions,
+    screenName: unknown,
+    personProperties: Record<string, unknown> | undefined
+  ): boolean {
+    return (
+      conditions.urls.length > 0 &&
+      typeof screenName === 'string' &&
+      conditions.urls.some((regex) => regex.test(screenName)) &&
+      // The url leg checks the group-level filters without event properties.
+      matchTriggerPropertyFilters(conditions.properties, undefined, personProperties)
+    )
   }
 
   private matchesEventLeg(
