@@ -180,6 +180,42 @@ describe('React Native capture v1 delivery', () => {
       (item: any) => item.message?.event
     )
 
+  const throwingErrorListener = (): void => {
+    vi.spyOn((posthog as any)._logger, 'error').mockImplementation(() => {})
+    vi.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+    posthog.on('error', (err: any) => {
+      void err.response.status
+    })
+  }
+
+  it('still sends valid events and resolves flush when an error listener throws on a local drop', async () => {
+    throwingErrorListener()
+    posthog.capture('\ud800')
+    posthog.capture('valid')
+
+    await expect(posthog.flush()).resolves.toBeUndefined()
+    expect(sentEvents()).toEqual([['valid']])
+    expect(queuedEvents()).toEqual([])
+  })
+
+  it('keeps retried events and resolves flush when an error listener throws on a partial drop', async () => {
+    throwingErrorListener()
+    respond = (request) => ({
+      status: 200,
+      body: {
+        results: {
+          [request.body.batch[0].uuid]: { result: 'drop', details: 'invalid_options' },
+          [request.body.batch[1].uuid]: { result: 'retry', details: 'not_persisted' },
+        },
+      },
+    })
+    posthog.capture('dropped')
+    posthog.capture('retried')
+
+    await expect(posthog.flush()).resolves.toBeUndefined()
+    expect(queuedEvents()).toEqual(['retried'])
+  })
+
   it('resends automatically even when the resend timer fires before the wait ends', async () => {
     const randomSpy = stubJitter()
     respond = () => ({ status: 503 })
