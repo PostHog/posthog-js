@@ -152,6 +152,68 @@ describe('session recording controls', () => {
         expect(mouseMoves).toHaveLength(0)
     })
 
+    it('drops lingering rrweb mousemove emissions even when opting back in within 500 ms', async () => {
+        const { replay, posthog, transport: network } = await setup()
+        await started(replay)
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+        typeInto(document.getElementById('name') as HTMLInputElement, 'before')
+        await replay.flush?.()
+        network.snapshots.length = 0
+
+        // rrweb's mousemove throttle timer fires after 500 ms even if capture is already opted back in
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42, clientY: 24 }))
+        posthog.optOut()
+        posthog.optIn()
+        await started(replay)
+        vi.advanceTimersByTime(600)
+        typeInto(document.getElementById('name') as HTMLInputElement, 'after')
+        await replay.flush?.()
+
+        expect(network.snapshots.length).toBeGreaterThan(0)
+        const mouseMoves = recordedEvents(network).filter(
+            (event) => event.type === 3 && (event.data as { source?: number }).source === 1
+        )
+        expect(mouseMoves).toHaveLength(0)
+    })
+
+    it('clears lazy_loading status and buffered pageviews when the recorder fails to start', async () => {
+        let attempts = 0
+        let seenLoadingPageviews = -1
+        const failing = createSessionRecording({}, async () => {
+            const actual = await import('../src/products/session-recording/recorder')
+            return {
+                ...actual,
+                createSessionRecorder: (host) =>
+                    ({
+                        isStarted: false,
+                        status: 'disabled',
+                        debugProperties: () => ({ $recording_status: 'disabled' }),
+                        start: () => {
+                            attempts += 1
+                            if (attempts === 1) throw new Error('start failed')
+                            seenLoadingPageviews = host.takeLoadingPageviews().length
+                        },
+                        stop: () => {},
+                        discard: () => {},
+                        flush: async () => {},
+                        dispose: () => {},
+                        overrideSampling: () => {},
+                        overrideLinkedFlag: () => {},
+                        overrideTrigger: () => {},
+                    }) as never,
+            }
+        })
+        const { posthog } = await setup({}, {}, { replay: failing, capturePageview: true })
+
+        await vi.waitFor(() => expect(attempts).toBe(1))
+        expect(status(posthog)).toBe('disabled')
+
+        posthog.capture('$pageview')
+        failing.startSessionRecording()
+        expect(attempts).toBe(2)
+        expect(seenLoadingPageviews).toBe(0)
+    })
+
     it('contains a recorder that fails to load', async () => {
         const failing = createSessionRecording({}, () => Promise.reject(new Error('blocked')))
         const { posthog, transport: network } = await setup({}, {}, { replay: failing })
@@ -670,15 +732,20 @@ describe('session recording teardown', () => {
     })
 
     it('delivers the final replay buffer during posthog.shutdown() even when the flush times out', async () => {
-        const { posthog, replay, transport: network } = await setup()
+        const network = holdFirstSnapshot()
+        const { posthog, replay } = await setup({}, {}, { transport: network })
         await started(replay)
         interact()
+        void replay.flush?.()
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
 
-        // shutdown(0) times out before the async flush completes and marks the client disposed before disposing extensions
+        // queue a second interaction behind the held first request so shutdown(0) times out before flush completes
+        interact()
         await posthog.shutdown(0)
 
-        await vi.waitFor(() => expect(network.snapshots).toHaveLength(1))
+        await vi.waitFor(() => expect(network.snapshots).toHaveLength(2))
         expect(replay.sessionRecordingStarted()).toBe(false)
+        network.release()
     })
 
     it('delivers nothing during posthog.shutdown() after an opt-out', async () => {

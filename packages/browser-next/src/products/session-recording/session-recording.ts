@@ -179,7 +179,12 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             client.onRemoteConfig((result) => this._onRemoteConfig(result)),
             client.onEvent((event) => {
                 if (this._earlyEvents && this._earlyEvents.length < MAX_EARLY_EVENTS) this._earlyEvents.push(event)
-                if (event.event === '$pageview' && this._status === 'lazy_loading' && !this._recorder?.isStarted) {
+                if (
+                    event.event === '$pageview' &&
+                    this._status === 'lazy_loading' &&
+                    !this._recorder?.isStarted &&
+                    this._loadingPageviews.length < MAX_EARLY_EVENTS
+                ) {
                     this._loadingPageviews.push(event)
                 }
                 // the interval starts once an event that carried the optional diagnostics is accepted
@@ -352,7 +357,9 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             return
         }
         this._status = 'lazy_loading'
+        if (this._loading) return
         void this._ensureRecorder().then((recorder) => {
+            if (this._status === 'lazy_loading') this._status = 'disabled'
             if (!recorder || !this._isRecordingEnabled() || recorder.isStarted) {
                 this._loadingPageviews.length = 0
                 return
@@ -366,6 +373,8 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             recorder.start(startReason)
         } catch (error) {
             this._client?.logger.error('Session recording could not start', error)
+        } finally {
+            if (!recorder.isStarted) this._loadingPageviews.length = 0
         }
     }
 
