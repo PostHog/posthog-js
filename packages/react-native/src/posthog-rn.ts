@@ -3364,11 +3364,12 @@ export class PostHog extends PostHogCoreBase {
       screenshotScale,
       screenshotCompressionQuality,
       screenshotColorMode,
-      iOSCaptureMethod = 'standard',
+      iOSCaptureMethod: localIOSCaptureMethod,
       sampleRate: localSampleRate,
     } = options?.sessionReplayConfig ?? {}
+    const iOSCaptureMethod = localIOSCaptureMethod === 'gpu' ? 'gpu' : 'standard'
 
-    if (iOSCaptureMethod !== 'standard' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
+    if (iOSCaptureMethod === 'gpu' && Platform.OS === 'ios' && !this._pluginVersionAtLeast(3, 0)) {
       this._logger.warn(
         `sessionReplayConfig.iOSCaptureMethod: '${iOSCaptureMethod}' requires @posthog/react-native-plugin 3.0.0 or later. ` +
           `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) captures with 'standard'.`

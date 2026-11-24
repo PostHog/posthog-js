@@ -87,8 +87,10 @@ describe('PostHog RN session replay debug properties', () => {
       fn.mockClear()
     }
     pluginMock.isEnabled.mockImplementation(async () => nativeRecording)
-    pluginMock.setup.mockImplementation(async () => {
-      nativeRecording = true
+    pluginMock.setup.mockImplementation(async (_sessionId: string, _sdkOptions: unknown, pluginConfig: any) => {
+      if (pluginConfig?.sessionReplay?.enabled) {
+        nativeRecording = true
+      }
     })
     pluginMock.startRecording.mockImplementation(async () => {
       nativeRecording = true
