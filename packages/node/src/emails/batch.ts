@@ -44,7 +44,8 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
     })
   }
   const keys = new Map<string, number>()
-  return recipients.map((recipient: unknown, index): Slot => {
+  // Array.from visits every position, so a hole in a sparse array is checked as a missing recipient.
+  return Array.from(recipients, (recipient: unknown, index): Slot => {
     const at = `recipients[${index}]`
     if (!isRecord(recipient)) {
       throw invalid('invalid_recipient', `${at} must be an object with to, so no email was sent.`, at)

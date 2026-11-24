@@ -364,7 +364,7 @@ export interface Emails {
    *
    * A batch takes at most 100 recipients and sends them in one request, which the client doesn't retry. More than 100
    * recipients is an error before anything is sent. PostHog refuses a batch over its size limits with
-   * `content_too_large`: split the recipients into smaller batches. The request waits up to 45 seconds for PostHog's
+   * `content_too_large`, and the error's `fix` says what to change. The request waits up to 45 seconds for PostHog's
    * answer, or longer when the client's `emailRequestTimeoutMs` is longer.
    *
    * Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused

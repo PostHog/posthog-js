@@ -90,6 +90,8 @@ export interface FakePostHogOptions {
   suppressed?: string[]
   /** How many batch requests answer `delivery_unavailable` for an address before PostHog queues its email. */
   unavailableFor?: Record<string, number>
+  /** A refusal PostHog answers for an address in a batch, by address. */
+  refusesRecipient?: Record<string, { status: number; code: string; retryable: boolean }>
   queuesScheduledSendsNow?: boolean
 }
 
@@ -194,6 +196,7 @@ export class FakePostHog {
       batchUnavailable: false,
       suppressed: [],
       unavailableFor: {},
+      refusesRecipient: {},
       queuesScheduledSendsNow: false,
       ...options,
     }
@@ -532,6 +535,15 @@ export class FakePostHog {
     }
     if (this.options.suppressed.includes(to)) {
       return slotError(422, 'recipient_suppressed', 'This address is on the suppression list.')
+    }
+    const refusal = this.options.refusesRecipient[to]
+    if (refusal) {
+      return slotError(
+        refusal.status,
+        refusal.code,
+        `PostHog answered ${refusal.code} for this recipient.`,
+        refusal.retryable
+      )
     }
     if ((this.options.unavailableFor[to] ?? 0) > 0) {
       this.options.unavailableFor[to] -= 1
