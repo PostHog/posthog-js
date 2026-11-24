@@ -261,7 +261,9 @@ describe('null event properties', () => {
     await client.ready()
     await client.flush()
 
-    const batchCall = (global.fetch as any).mock.calls.find(([url]: [string]) => String(url).includes('/batch/'))
+    const batchCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
+      /\/batch\/|\/i\/v1\/analytics\/events/.test(String(url))
+    )
     const sent = JSON.parse(batchCall[1].body).batch[0].properties
     expect(sent).not.toHaveProperty('test')
     expect(sent).toMatchObject({ nested: {}, items: ['1', null, {}], $set: { email: null } })
