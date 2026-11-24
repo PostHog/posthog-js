@@ -269,6 +269,7 @@
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/preact": "catalog:",
+        "ajv": "^8.18.0",
         "jsdom": "catalog:",
         "lightningcss": "^1.33.0",
         "typescript": "catalog:native",

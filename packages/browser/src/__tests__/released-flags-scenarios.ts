@@ -35,6 +35,9 @@ export type FlagSpec = {
     hasExperiment?: boolean
     failed?: boolean
     reason: Reason
+    // The reason code a server sends at v4 for a config version 2 flag. The description is the same
+    // at both versions here, so `$feature_flag_reason` does not depend on the response shape.
+    code?: string
 }
 
 const MATCHED: Reason = { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' }
@@ -93,6 +96,7 @@ export const PARITY_FLAGS: FlagSpec[] = [
         configVersion: 2,
         rule: { rule_type: 'targeted_release', rule_id: RULE_ID },
         reason: MATCHED,
+        code: 'targeting_match',
     },
     {
         key: 'v2-split',
@@ -104,8 +108,18 @@ export const PARITY_FLAGS: FlagSpec[] = [
         rule: { rule_type: 'experiment', rule_id: RULE_ID, variant_key: 'arm-b' },
         hasExperiment: true,
         reason: MATCHED,
+        code: 'experiment_split',
     },
-    { key: 'v2-false', enabled: false, variant: null, payload: null, value: false, configVersion: 2, reason: MATCHED },
+    {
+        key: 'v2-false',
+        enabled: false,
+        variant: null,
+        payload: null,
+        value: false,
+        configVersion: 2,
+        reason: MATCHED,
+        code: 'no_rule_match',
+    },
     {
         key: 'v2-null',
         enabled: false,
@@ -114,9 +128,28 @@ export const PARITY_FLAGS: FlagSpec[] = [
         value: null,
         configVersion: 2,
         reason: NOT_MATCHED,
+        code: 'no_rule_match',
     },
-    { key: 'v2-number', enabled: true, variant: null, payload: '12.5', value: 12.5, configVersion: 2, reason: MATCHED },
-    { key: 'v2-zero', enabled: true, variant: null, payload: '0', value: 0, configVersion: 2, reason: MATCHED },
+    {
+        key: 'v2-number',
+        enabled: true,
+        variant: null,
+        payload: '12.5',
+        value: 12.5,
+        configVersion: 2,
+        reason: MATCHED,
+        code: 'targeting_match',
+    },
+    {
+        key: 'v2-zero',
+        enabled: true,
+        variant: null,
+        payload: '0',
+        value: 0,
+        configVersion: 2,
+        reason: MATCHED,
+        code: 'targeting_match',
+    },
     {
         key: 'v2-object',
         enabled: true,
@@ -125,6 +158,7 @@ export const PARITY_FLAGS: FlagSpec[] = [
         value: { layout: 'compact', columns: [1, 2], beta: null },
         configVersion: 2,
         reason: MATCHED,
+        code: 'targeting_match',
     },
     {
         key: 'v2-empty-object',
@@ -134,6 +168,7 @@ export const PARITY_FLAGS: FlagSpec[] = [
         value: {},
         configVersion: 2,
         reason: MATCHED,
+        code: 'targeting_match',
     },
 ]
 
@@ -210,7 +245,7 @@ export function record(flagSpec: FlagSpec, shape: Shape): Record<string, unknown
     if (flagSpec.failed) {
         flag.failed = true
     }
-    flag.reason = flagSpec.reason
+    flag.reason = shape === 'v4' && flagSpec.code ? { ...flagSpec.reason, code: flagSpec.code } : flagSpec.reason
     flag.metadata = metadata
     return flag
 }

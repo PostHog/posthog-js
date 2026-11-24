@@ -866,19 +866,24 @@ describe('the /flags?v=4 response', () => {
             flags.getFeatureFlag('unreadable')
 
             const [failed, unreadable] = client.capturedEvents.map((event) => event.properties)
+            // The record has config version 2, so its call names the reason by its code.
             expect(failed).toMatchObject({
                 $feature_flag: 'failed',
                 $feature_flag_error: 'evaluation_failed',
-                $feature_flag_reason: 'A dependency failed',
+                $feature_flag_config_version: 2,
+                $feature_flag_reason_code: 'dependency_error',
                 $feature_flag_id: 201,
                 $feature_flag_version: 7,
             })
+            expect(failed).not.toHaveProperty('$feature_flag_reason')
             expect(failed!.$feature_flag_response).toBeUndefined()
             // The SDK read no field of the record, so it reports none, and it adds no error.
             expect(unreadable).toMatchObject({ $feature_flag: 'unreadable', $feature_flag_response: false })
             for (const name of [
                 '$feature_flag_error',
                 '$feature_flag_reason',
+                '$feature_flag_reason_code',
+                '$feature_flag_config_version',
                 '$feature_flag_id',
                 '$feature_flag_version',
             ]) {
