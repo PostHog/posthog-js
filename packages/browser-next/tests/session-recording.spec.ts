@@ -195,6 +195,18 @@ describe('session recording page URLs', () => {
 
         expect(urlMarkers(network, ['$url_changed'])).toEqual([])
     })
+
+    it('records a $pageview marker captured while the recorder is loading after opt-in', async () => {
+        const { posthog, replay, transport: network } = await setup({}, {}, { optOutByDefault: true })
+
+        posthog.optIn()
+        posthog.capture('$pageview', { $current_url: 'http://localhost:3000/' })
+        await started(replay)
+        interact()
+        await replay.flush?.()
+
+        expect(urlMarkers(network, ['$pageview'])).toEqual([['$pageview', 'http://localhost:3000/']])
+    })
 })
 
 describe('session recording debug properties', () => {

@@ -118,6 +118,8 @@ class SessionRecordingProduct implements SessionRecordingExtension {
     // events admitted before the recorder first starts, such as the initial `$pageview`, so they can still match
     // an event trigger once it loads
     private _earlyEvents: CapturedEventInfo[] | undefined = []
+    // `$pageview` events captured while the recorder is actively loading (e.g. deferred initial pageview on optIn)
+    private _loadingPageviews: CapturedEventInfo[] = []
     private _subscriptions: Disposable[] = []
 
     constructor(
@@ -177,6 +179,9 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             client.onRemoteConfig((result) => this._onRemoteConfig(result)),
             client.onEvent((event) => {
                 if (this._earlyEvents && this._earlyEvents.length < MAX_EARLY_EVENTS) this._earlyEvents.push(event)
+                if (event.event === '$pageview' && this._status === 'lazy_loading' && !this._recorder?.isStarted) {
+                    this._loadingPageviews.push(event)
+                }
                 // the interval starts once an event that carried the optional diagnostics is accepted
                 if (!this._debugPropertiesPaused && carriesOptionalDebugProperties(event.event)) {
                     this._debugPropertiesPaused = true
@@ -325,6 +330,7 @@ class SessionRecordingProduct implements SessionRecordingExtension {
 
     private _startIfEnabledOrStop(startReason?: SessionStartReason): void {
         if (!this._isRecordingEnabled()) {
+            this._loadingPageviews.length = 0
             if (this._status !== 'missing_config') this._status = 'disabled'
             this._recorder?.stop()
             return
@@ -341,15 +347,26 @@ class SessionRecordingProduct implements SessionRecordingExtension {
             if (this._status !== 'missing_config') this._status = 'awaiting_config'
             return
         }
+        if (this._recorder) {
+            this._startRecorder(this._recorder, startReason)
+            return
+        }
         this._status = 'lazy_loading'
         void this._ensureRecorder().then((recorder) => {
-            if (!recorder || !this._isRecordingEnabled() || recorder.isStarted) return
-            try {
-                recorder.start(startReason)
-            } catch (error) {
-                this._client?.logger.error('Session recording could not start', error)
+            if (!recorder || !this._isRecordingEnabled() || recorder.isStarted) {
+                this._loadingPageviews.length = 0
+                return
             }
+            this._startRecorder(recorder, startReason)
         })
+    }
+
+    private _startRecorder(recorder: SessionRecorder, startReason?: SessionStartReason): void {
+        try {
+            recorder.start(startReason)
+        } catch (error) {
+            this._client?.logger.error('Session recording could not start', error)
+        }
     }
 
     private _ensureRecorder(): Promise<SessionRecorder | undefined> {
@@ -369,12 +386,14 @@ class SessionRecordingProduct implements SessionRecordingExtension {
                         this._earlyEvents = undefined
                         return events
                     },
+                    takeLoadingPageviews: () => this._loadingPageviews.splice(0),
                     stoppedLocally: () => this._disabledLocally,
                 })
                 return this._recorder
             })
             .catch((error: unknown) => {
                 this._loading = undefined
+                this._loadingPageviews.length = 0
                 this._status = 'disabled'
                 // most often an ad blocker; make it visible on the session's events
                 this._client?.registerForSession({ [RECORDING_SCRIPT_NOT_LOADED]: true })
