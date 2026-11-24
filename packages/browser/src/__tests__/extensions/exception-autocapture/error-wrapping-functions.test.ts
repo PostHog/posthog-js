@@ -519,6 +519,43 @@ describe('error wrapping functions', () => {
             expect(con.error).toBe(original)
         })
 
+        it.each(
+            [undefined, null, 'not a function', unreachableHandler()].flatMap((original) => [
+                { name: 'browser-common', patch: posthogPatch, original },
+                { name: 'rrweb', patch: rrwebPatch, original },
+            ])
+        )('console.error: never hands a $name patch an original it cannot call (case %#)', ({ patch, original }) => {
+            setUp(console, 'error')
+            con.error = original
+            const unwrap = wrapConsoleError(captureFn)
+            const overlay = vi.fn()
+            const unpatch = patch(con, 'error', passThrough(overlay) as any)
+
+            unwrap()
+
+            expect(() => con.error('after stop')).not.toThrow()
+            expect(overlay).toHaveBeenCalledTimes(1)
+            expect(captureFn).not.toHaveBeenCalled()
+
+            unpatch()
+
+            expect(() => con.error('after both stopped')).not.toThrow()
+            expect(overlay).toHaveBeenCalledTimes(1)
+        })
+
+        it.each(targets)('$name: restores a missing handler from under another PostHog wrapper', (target) => {
+            const owner = target.owner()
+            setUp(owner, target.key)
+            owner[target.key] = null
+            const unwrapFirst = target.wrap()
+            const unwrapSecond = target.wrap()
+
+            unwrapFirst()
+            unwrapSecond()
+
+            expect(owner[target.key]).toBeNull()
+        })
+
         it('console.error: is spliced out from under logs capture', () => {
             const original = setUp(console, 'error')
             const captureConsoleLog = vi.fn()

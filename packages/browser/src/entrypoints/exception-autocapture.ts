@@ -24,6 +24,8 @@ type CaptureFn = (props: ErrorTracking.ErrorProperties) => void
 // so each of them can splice its own wrapper out from under the others.
 interface WrapperLayer {
     next: unknown
+    // Set on the layers of this file, which check `next` before every call. `patch` calls it as is.
+    checksNext?: boolean
 }
 
 const layerOf = (method: unknown): WrapperLayer | undefined =>
@@ -67,7 +69,10 @@ const restore = (owner: any, key: string, wrapper: unknown, layer: WrapperLayer)
         let current = layerOf(installed)
         while (current && visited.indexOf(current) === -1) {
             if (current.next === wrapper) {
-                current.next = layer.next
+                // Without a handler to hand over, the stopped wrapper stays as a no-op under `patch`.
+                if (current.checksNext || isReachableFunction(layer.next)) {
+                    current.next = layer.next
+                }
                 return
             }
             visited.push(current)
@@ -96,7 +101,7 @@ const wrapOnError = (captureFn: CaptureFn) => {
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
     }
-    const layer: WrapperLayer = { next: safely(() => win.onerror, undefined) }
+    const layer: WrapperLayer = { next: safely(() => win.onerror, undefined), checksNext: true }
     let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (...args: ErrorEventArgs): boolean {
@@ -128,7 +133,7 @@ const wrapUnhandledRejection = (captureFn: CaptureFn, defaultReturnValue = false
         logger.info('window not available, cannot wrap onUnhandledRejection')
     }
 
-    const layer: WrapperLayer = { next: safely(() => win.onunhandledrejection, undefined) }
+    const layer: WrapperLayer = { next: safely(() => win.onunhandledrejection, undefined), checksNext: true }
     let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (ev: PromiseRejectionEvent): boolean {
@@ -160,7 +165,7 @@ const wrapConsoleError = (captureFn: CaptureFn) => {
         logger.info('console not available, cannot wrap console.error')
     }
 
-    const layer: WrapperLayer = { next: safely(() => con.error, undefined) }
+    const layer: WrapperLayer = { next: safely(() => con.error, undefined), checksNext: true }
     let activeCaptureFn: CaptureFn | undefined = captureFn
 
     const wrapper = function (...args: any[]): void {
