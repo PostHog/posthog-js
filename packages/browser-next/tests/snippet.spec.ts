@@ -53,21 +53,10 @@ describe('snippet query configuration', () => {
 })
 
 describe('snippet installation', () => {
-    it('explicitly composes full analytics into the installer client', async () => {
+    it('creates the client from the parsed script options', async () => {
         create.mockResolvedValueOnce(client())
-        await startSnippet(url, target())
-        expect(create).toHaveBeenCalledWith(
-            expect.objectContaining({
-                extensions: [
-                    expect.objectContaining({
-                        name: 'analytics',
-                        capture: expect.any(Function),
-                        captureImmediate: expect.any(Function),
-                        identify: expect.any(Function),
-                    }),
-                ],
-            })
-        )
+        await startSnippet(url + '&flags=false', target())
+        expect(create).toHaveBeenCalledWith({ projectToken: 'phc_fixture', flags: false })
     })
 
     it('publishes only after factory readiness, with one winner across concurrent tags', async () => {

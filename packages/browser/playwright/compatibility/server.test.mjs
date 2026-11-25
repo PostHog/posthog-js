@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compatibilityServer, observations, survey } from './server.mjs'
 import { replayNetworkCases, replayNetworkHeaders, replayNetworkPath } from './replay-network.mjs'
+import { replayLinkedFlag } from './replay-cases.mjs'
+import { conversationsConfig } from './extension-cases.mjs'
 
 async function fixture(t, scenario = 'core', mode = 'snippet') {
     const folder = await mkdtemp(join(tmpdir(), 'compat-server-'))
@@ -177,4 +179,78 @@ test('compatibility behavioral projection retains original ordered ingestion bat
     assert.equal(record.path, '/e')
     assert.deepEqual(record.body, batch)
     assert.equal(server.inspect().requests[0].rawBodyBase64, Buffer.from(bytes).toString('base64'))
+})
+
+test('linked-flag replay starts with a nonmatching replay flag and keeps the readiness flag', async (t) => {
+    const { server, origin } = await fixture(t, 'replay-linked-flag')
+    server.releaseBarrier('flags')
+    const flags = async () =>
+        (await (await fetch(origin + '/flags/', { method: 'POST', body: '{}' })).json()).featureFlags
+    assert.deepEqual(await flags(), {
+        'compat-enabled': true,
+        'compat-variant': 'blue',
+        [replayLinkedFlag.flag]: replayLinkedFlag.before,
+    })
+    server.updateState({ flags: { [replayLinkedFlag.flag]: replayLinkedFlag.variant } })
+    assert.equal((await flags())[replayLinkedFlag.flag], replayLinkedFlag.variant)
+})
+
+const visitor = '00000000-0000-4000-8000-000000000001'
+const firstMessage = { message: 'Compat question', ticket_id: null, distinct_id: 'compat-visitor' }
+
+function widgetClient(origin) {
+    return async (method, route, { body, query = {}, token = conversationsConfig.token } = {}) => {
+        const url = new URL(`${origin}/api/conversations/v1/widget${route}`)
+        for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+        const response = await fetch(url, {
+            method,
+            headers: {
+                ...(body ? { 'content-type': 'application/json' } : {}),
+                ...(token === null ? {} : { 'x-conversations-token': token }),
+            },
+            body: body && JSON.stringify(body),
+        })
+        await response.json()
+        return response.status
+    }
+}
+
+test('Conversations widget routes require the widget token', async (t) => {
+    const { origin } = await fixture(t, 'conversations')
+    const request = widgetClient(origin)
+    const requests = [
+        ['POST', '/message', { body: { ...firstMessage, widget_session_id: visitor } }],
+        ['GET', '/messages/compat-ticket', { query: { widget_session_id: visitor } }],
+        ['POST', '/messages/compat-ticket/read', { body: { widget_session_id: visitor } }],
+        ['GET', '/tickets', { query: { widget_session_id: visitor } }],
+    ]
+    for (const [method, path, options] of requests) {
+        const statuses = []
+        for (const token of [conversationsConfig.token, null, 'not-the-widget-token'])
+            statuses.push(await request(method, path, { ...options, token }))
+        assert.deepEqual(statuses, [200, 403, 403], `${method} ${path}`)
+    }
+})
+
+test('Conversations widget routes require the anonymous visitor who started the ticket', async (t) => {
+    const { origin } = await fixture(t, 'conversations')
+    const request = widgetClient(origin)
+    const withoutVisitor = [
+        await request('POST', '/message', { body: firstMessage }),
+        await request('POST', '/message', {
+            body: { ...firstMessage, distinct_id: undefined, widget_session_id: visitor },
+        }),
+        await request('POST', '/message', { body: { ...firstMessage, widget_session_id: 'compat-visitor' } }),
+        await request('GET', '/messages/compat-ticket'),
+        await request('POST', '/messages/compat-ticket/read', { body: {} }),
+        await request('GET', '/tickets'),
+    ]
+    assert.deepEqual(withoutVisitor, [400, 400, 400, 400, 400, 400])
+    assert.equal(await request('POST', '/message', { body: { ...firstMessage, widget_session_id: visitor } }), 200)
+    const otherVisitor = '00000000-0000-4000-8000-000000000002'
+    const fromOtherVisitor = [
+        await request('GET', '/messages/compat-ticket', { query: { widget_session_id: otherVisitor } }),
+        await request('POST', '/messages/compat-ticket/read', { body: { widget_session_id: otherVisitor } }),
+    ]
+    assert.deepEqual(fromOtherVisitor, [403, 403])
 })

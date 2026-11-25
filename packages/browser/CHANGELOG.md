@@ -1,5 +1,37 @@
 # posthog-js
 
+## 1.454.5
+
+### Patch Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stop feature flag reloads requested from reloading listeners from recursing.
+  (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Honor `delivery: 'immediate'` from shared browser extensions as `send_instantly`.
+  (2026-11-25)
+- Updated dependencies [[`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906), [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1)]:
+  - @posthog/browser-common@0.14.0
+
+## 1.454.4
+
+### Patch Changes
+
+- [#5742](https://github.com/PostHog/posthog-js/pull/5742) [`fa50a00`](https://github.com/PostHog/posthog-js/commit/fa50a00aae4f28caa12c9dd8de2afb7f58b40c29) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording the contents of an iframe that is blocked with the block class or block selector.
+  (2026-11-24)
+
+- [#5858](https://github.com/PostHog/posthog-js/pull/5858) [`9d28601`](https://github.com/PostHog/posthog-js/commit/9d286015038da56a284b610b607af6fd2b5268e6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve campaign and referrer properties when `cookieWinsOnConflict` adopts a shared cross-subdomain cookie
+  (2026-11-24)
+
+- [#5805](https://github.com/PostHog/posthog-js/pull/5805) [`e4d5c4f`](https://github.com/PostHog/posthog-js/commit/e4d5c4f1ca64710b5bd41705bfe872aba11f2508) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Tracing headers no longer break an app's request when the distinct ID cannot be sent as a header value: the request goes out without the PostHog tracing headers, and a `fetch(Request)` keeps its body.
+  (2026-11-24)
+
+## 1.454.3
+
+### Patch Changes
+
+- [#5744](https://github.com/PostHog/posthog-js/pull/5744) [`962bf43`](https://github.com/PostHog/posthog-js/commit/962bf436da05f0382ed69d7cc380e9f92d39ede9) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording play, pause and other media events that a page dispatches on elements that are not audio or video.
+  (2026-11-24)
+
 ## 1.454.2
 
 ### Patch Changes
