@@ -1052,9 +1052,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._rrwebRestarts += 1
         logger.warn('rrweb stopped recording while replay was started, restarting it')
         const restart = () => {
-            this._stopRrwebRecorder(stopRrweb)
             this._stopRrweb = undefined
+            this._stopRrwebRecorder(stopRrweb)
             this._queuedRRWebEvents = []
+            // the stop can flush into host callbacks that stop recording, which must win over the restart
+            if (this._instance.config.disable_session_recording || this._instance.has_opted_out_capturing()) {
+                return
+            }
             this._startRecorder()
         }
         // keeps CSSOM-inserted rule sources across the restart, as the session rotation restart does
@@ -1064,7 +1068,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         } else {
             restart()
         }
-        this._tryAddCustomEvent('$replay_recorder_restarted', { reason: 'rrweb_not_recording' })
+        if (this.isStarted) {
+            this._tryAddCustomEvent('$replay_recorder_restarted', { reason: 'rrweb_not_recording' })
+        }
     }
 
     private get _fullSnapshotIntervalMillis(): number {
