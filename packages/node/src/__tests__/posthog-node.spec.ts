@@ -3620,6 +3620,7 @@ describe('PostHog Node.js', () => {
       status,
       text: () => Promise.resolve(body),
       json: () => Promise.resolve(JSON.parse(body)),
+      body: { cancel: vi.fn(() => Promise.resolve()) },
     })
 
     // Local evaluation off, so the definitions poller makes no fetch calls and emits no errors
@@ -3759,7 +3760,7 @@ describe('PostHog Node.js', () => {
       [404, '{"detail":"Not found."}'],
       [429, '{"detail":"Request was throttled."}'],
       [500, '{"detail":"Server error"}'],
-    ])('should emit an error with the status and resolve undefined for a %s response', async (status, body) => {
+    ])('should emit an error with the status code and resolve undefined for a %s response', async (status, body) => {
       const client = createRemoteConfigClient()
       mockedFetch.mockResolvedValue(remoteConfigResponse(status, body))
       const errors: unknown[] = []
@@ -3770,7 +3771,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
       expect(errors[0]).toBeInstanceOf(RemoteConfigPayloadError)
-      expect(errors[0]).toMatchObject({ status, flagKey: 'test-flag' })
+      expect(errors[0]).toMatchObject({ statusCode: status, flagKey: 'test-flag' })
     })
 
     it('should resolve undefined without an error for an empty 200 body', async () => {
@@ -3806,6 +3807,98 @@ describe('PostHog Node.js', () => {
 
       await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
       expect(errors).toEqual([networkError])
+    })
+    it('should cancel the unread body of a failure response', async () => {
+      const client = createRemoteConfigClient()
+      const response = remoteConfigResponse(404, '{"detail":"Not found."}')
+      mockedFetch.mockResolvedValue(response)
+      client.on('error', () => {})
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(response.body.cancel).toHaveBeenCalledTimes(1)
+    })
+
+    it('should resolve undefined for a failure response when nothing listens for errors', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(500, '{"detail":"Server error"}'))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+    })
+
+    it('should log a failure response once in debug mode', async () => {
+      const client = createRemoteConfigClient()
+      const logger = (client as any)._logger
+      const logSpies = ['info', 'warn', 'error'].map((level) => vi.spyOn(logger, level).mockImplementation(() => {}))
+      client.debug(true)
+      mockedFetch.mockResolvedValue(remoteConfigResponse(404, '{"detail":"Not found."}'))
+
+      await client.getRemoteConfigPayload('test-flag')
+
+      const calls = logSpies.flatMap((spy) => spy.mock.calls)
+      expect(calls).toHaveLength(1)
+      expect(JSON.stringify(calls)).toContain('test-flag')
+    })
+
+    it('should return the payload of a later call after a failure response', async () => {
+      const client = createRemoteConfigClient()
+      client.on('error', () => {})
+      mockedFetch
+        .mockResolvedValueOnce(remoteConfigResponse(401, '{"detail":"Authentication failed"}'))
+        .mockResolvedValueOnce(remoteConfigResponse(200, JSON.stringify({ a: 1 })))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toEqual({ a: 1 })
+    })
+
+    it('should resolve undefined without an error for a 204 response', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(204, ''))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toHaveLength(0)
+    })
+
+    it('should treat a 304 response as a failure', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(304, ''))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toEqual([expect.objectContaining({ statusCode: 304 })])
+    })
+
+    it('should resolve undefined without an error for a whitespace-only 200 body', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, ' \n'))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toHaveLength(0)
+    })
+
+    it('should resolve undefined and emit the error when the body cannot be read', async () => {
+      const client = createRemoteConfigClient()
+      const readError = new Error('premature close')
+      mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.reject(readError) } as any)
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toEqual([readError])
+    })
+
+    it('should resolve undefined and emit the error for a 200 body that is not JSON', async () => {
+      const client = createRemoteConfigClient()
+      mockedFetch.mockResolvedValue(remoteConfigResponse(200, '<html>'))
+      const errors: unknown[] = []
+      client.on('error', (error) => errors.push(error))
+
+      await expect(client.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(errors).toEqual([expect.any(SyntaxError)])
     })
   })
 })

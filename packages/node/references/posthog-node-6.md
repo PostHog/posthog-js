@@ -2224,7 +2224,12 @@ Get the remote config payload for a feature flag.
 
 `Promise`\<`JsonType` \| `undefined`\>
 
-Promise that resolves to the remote config payload or undefined
+Promise that resolves to:
+- the payload, when the flag has one
+- `null`, when the flag is disabled
+- `undefined`, when the flag has no payload, or the request failed. A response with a status
+  outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
+  client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
 
 #### Example
 
@@ -2239,6 +2244,43 @@ if (payload) {
 #### Throws
 
 Error if personal API key is not provided
+
+### `RemoteConfigPayloadError`
+
+PostHog answered a `getRemoteConfigPayload` request with a status outside 200 to 299.
+
+Emitted on the client's `error` event; the call itself resolves to `undefined`.
+Branch on `statusCode`, for example `404` when the flag does not exist or is not a remote
+config flag, versus `429` or `5xx` when the request should be tried again later.
+
+#### Extends
+
+- `Error`
+
+#### Constructors
+
+##### Constructor
+
+> **new RemoteConfigPayloadError**(`flagKey`, `statusCode`): `RemoteConfigPayloadError`
+
+###### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flagKey` | `string` | The key of the flag whose payload was requested. |
+| `statusCode` | `number` | The HTTP status PostHog answered with. |
+
+###### Returns
+
+`RemoteConfigPayloadError`
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="flagkey"></a> `flagKey` | `readonly` | `string` | `undefined` | The key of the flag whose payload was requested. | - |
+| <a id="name-3"></a> `name` | `public` | `string` | `'RemoteConfigPayloadError'` | - | `Error.name` |
+| <a id="statuscode-1"></a> `statusCode` | `readonly` | `number` | `undefined` | The HTTP status PostHog answered with. | - |
 
 ## SDK utils
 
@@ -4942,7 +4984,7 @@ Supports multiple formats:
 | <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
 | <a id="id"></a> `id` | `number` | - |
 | <a id="key-2"></a> `key` | `string` | - |
-| <a id="name-3"></a> `name` | `string` | - |
+| <a id="name-4"></a> `name` | `string` | - |
 | <a id="rollout_percentage-1"></a> `rollout_percentage` | `null` \| `number` | - |
 
 ### `PostHogFetchBodyBytes`

@@ -2645,8 +2645,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * - the payload, when the flag has one
    * - `null`, when the flag is disabled
    * - `undefined`, when the flag has no payload, or the request failed. A response with a status
-   *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `status` and `flagKey` on the
-   *   client's `error` event; a network error or timeout emits the underlying error there.
+   *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
+   *   client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
@@ -2665,19 +2665,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     if (response.status < 200 || response.status >= 300) {
-      const error = new RemoteConfigPayloadError(flagKey, response.status)
-      this._logger.warn(error.message)
+      // The error body is not read, so cancel it to release the connection
+      void Promise.resolve(response.body?.cancel()).catch(() => {})
+      this._events.emit('error', new RemoteConfigPayloadError(flagKey, response.status))
+      return undefined
+    }
+
+    let parsed: JsonType
+    try {
+      // A flag with no payload is answered with an empty body
+      const body = await response.text()
+      if (!body.trim()) {
+        return undefined
+      }
+      parsed = JSON.parse(body)
+    } catch (error) {
       this._events.emit('error', error)
       return undefined
     }
 
-    // A flag with no payload is answered with an empty body
-    const body = await response.text()
-    if (!body) {
-      return undefined
-    }
-
-    const parsed = JSON.parse(body)
     // The payload from the endpoint is stored as a JSON encoded string. So when we return
     // it, it's effectively double encoded. As far as we know, we should never get single-encoded
     // JSON, but we'll be defensive here just in case.

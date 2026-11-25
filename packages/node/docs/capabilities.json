@@ -2,6 +2,7 @@
   "CaptureError": "capture",
   "EmailError": "emails",
   "FeatureFlagEvaluations": "evaluate-flags",
+  "RemoteConfigPayloadError": "remote-config",
   "PostHog.alias": "alias",
   "PostHog.aliasImmediate": "alias",
   "PostHog.capture": "capture",
