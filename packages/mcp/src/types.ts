@@ -465,6 +465,8 @@ export interface Event {
   identifyActorData?: JsonRecord
   /** Resolved distinct id for the session (from `identify().distinctId`). */
   identifyActorGivenId?: string
+  /** The method of each request of an `input_required` round → `$mcp_input_request_methods`. */
+  inputRequestMethods?: string[]
   ipAddress?: string
   isError?: boolean
   listedToolNames?: string[]
@@ -926,6 +928,12 @@ export interface PreparedToolResult<TResult = unknown> {
   sessionId?: string
   /** The conversation handle to capture, if it reached the client. */
   conversationId?: string
+  /**
+   * Set when the result is an `input_required` round: the method of each of its
+   * requests, to pass to {@link PostHogMCP.captureInputRequired}. `undefined`
+   * for every other result.
+   */
+  inputRequestMethods?: string[]
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -947,6 +955,19 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
 export interface UnknownToolCaptureData extends McpCaptureCommon {
   /** The tool name the agent asked for → `$mcp_tool_name`, sanitized as free text. */
   toolName: string
+}
+
+/** Payload for {@link PostHogMCP.captureInputRequired}. Emits `$mcp_input_required`. */
+export interface InputRequiredCaptureData extends McpCaptureCommon {
+  /** The tool that asked for input → `$mcp_tool_name`. */
+  toolName: string
+  /**
+   * The method of each request in the round → `$mcp_input_request_methods`. Use
+   * {@link PreparedToolResult.inputRequestMethods}.
+   */
+  inputRequestMethods?: readonly string[]
+  /** How long this round took, in milliseconds → `$mcp_duration_ms`. */
+  durationMs?: number
 }
 
 /** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */

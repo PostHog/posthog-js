@@ -319,6 +319,7 @@ export type {
   CollectFeedbackConfig,
   InitializeCaptureData,
   InputAliasMap,
+  InputRequiredCaptureData,
   McpAnalytics,
   McpCaptureCommon,
   MCPAnalyticsContextOptions,

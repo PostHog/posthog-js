@@ -38,6 +38,7 @@ import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException, clientErrorType, httpStatus } from './exceptions'
+import { readInputRequestMethods } from './input-required'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
@@ -53,6 +54,7 @@ import {
   newSessionId,
   resolveSession,
 } from './session'
+import type { ResolvedSession } from './session'
 import {
   omitClientConversation,
   recognizeClient,
@@ -281,6 +283,22 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
       publishFailedToolEvent(server, preparedEvent, error, startTime, data.logger)
     }
     throw error
+  }
+
+  const inputRequestMethods = readInputRequestMethods(result)
+  if (inputRequestMethods !== undefined) {
+    // A round has no content to carry a minted handle, so that handle groups nothing.
+    const sessionWithoutHandle = conversation.minted
+      ? () => resolveSession(server, extra, undefined, request, client)
+      : undefined
+    publishInputRequiredEvent(server, preparedEvent, {
+      methods: inputRequestMethods,
+      startTime,
+      properties: hostProperties,
+      sessionWithoutHandle,
+      logger: data.logger,
+    })
+    return result
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
@@ -608,6 +626,57 @@ function publishUnknownToolEvent(
     )
   } catch (publishError) {
     logger(`Warning: PostHog MCP analytics failed to publish unknown tool event - ${publishError}`)
+  }
+}
+
+interface InputRequiredRound {
+  methods: string[]
+  startTime: Date
+  properties: McpEvent['properties']
+  /** Set when the call minted a handle, which the round cannot deliver. */
+  sessionWithoutHandle?: () => ResolvedSession
+  logger: LoggerFn
+}
+
+/**
+ * The tool asked the client for more input, so the call has not ended. The
+ * retry that ends it is the tool call; the round records its duration and the
+ * methods it asked for, never the requests themselves.
+ */
+function publishInputRequiredEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  round: InputRequiredRound
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  try {
+    const session = round.sessionWithoutHandle?.()
+    captureEvent(
+      server,
+      {
+        eventType: MCPAnalyticsEventType.mcpInputRequired,
+        timestamp: event.timestamp,
+        resourceName: event.resourceName,
+        sessionId: session?.sessionId ?? event.sessionId,
+        sessionSource: session?.source ?? event.sessionSource,
+        conversationId: session ? undefined : event.conversationId,
+        clientName: event.clientName,
+        clientVersion: event.clientVersion,
+        protocolVersion: event.protocolVersion,
+        clientUserAgent: event.clientUserAgent,
+        vendorClient: event.vendorClient,
+        duration: Date.now() - round.startTime.getTime(),
+        inputRequestMethods: round.methods,
+        properties: round.properties,
+      },
+      round.logger,
+      requestAttribution
+    )
+  } catch (publishError) {
+    round.logger(`Warning: PostHog MCP analytics failed to publish input required event - ${publishError}`)
   }
 }
 

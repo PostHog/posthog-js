@@ -984,6 +984,41 @@ describe('PostHogMCP', () => {
     })
   })
 
+  describe('captureInputRequired', () => {
+    it('records the round prepareToolResult reports, not a tool call', async () => {
+      const call = posthog.prepareToolCall('delete_project', {}, { sessionId: 'ses_123' })
+      const round = {
+        resultType: 'input_required',
+        inputRequests: {
+          z_confirm: { method: 'elicitation/create', params: { message: 'Delete project secret-42?' } },
+          a_roots: { method: 'roots/list' },
+        },
+      }
+      expect(posthog.prepareToolResult({ content: [] }, call).inputRequestMethods).toBeUndefined()
+      const prepared = posthog.prepareToolResult(round, call)
+      expect(prepared.inputRequestMethods).toEqual(['roots/list', 'elicitation/create'])
+
+      posthog.captureInputRequired({
+        toolName: 'delete_project',
+        inputRequestMethods: prepared.inputRequestMethods,
+        durationMs: 3,
+        sessionId: prepared.sessionId,
+      })
+      await tick()
+
+      expect(capture.getCaptures().map((c) => c.event)).toEqual([PostHogMCPAnalyticsEvent.InputRequired])
+      const p = onlyCapture(PostHogMCPAnalyticsEvent.InputRequired).properties
+      expect(p).toMatchObject({
+        [PostHogMCPAnalyticsProperty.ToolName]: 'delete_project',
+        [PostHogMCPAnalyticsProperty.InputRequestMethods]: ['roots/list', 'elicitation/create'],
+        [PostHogMCPAnalyticsProperty.DurationMs]: 3,
+        [PostHogMCPAnalyticsProperty.SessionId]: 'ses_123',
+      })
+      expect(p[PostHogMCPAnalyticsProperty.IsError]).toBeUndefined()
+      expect(JSON.stringify(p)).not.toContain('secret-42')
+    })
+  })
+
   describe('getMoreToolsResult', () => {
     it('returns a text acknowledgement for the agent', () => {
       const result = getMoreToolsResult()

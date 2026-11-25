@@ -29,6 +29,7 @@ export const PostHogMCPAnalyticsEvent = {
   /** @deprecated The SDK no longer publishes `$identify`. */
   Identify: '$identify',
   Initialize: '$mcp_initialize',
+  InputRequired: '$mcp_input_required',
   MissingCapability: '$mcp_missing_capability',
   PromptGet: '$mcp_prompt_get',
   PromptsList: '$mcp_prompts_list',
@@ -62,6 +63,7 @@ export const PostHogMCPAnalyticsProperty = {
   IsError: '$mcp_is_error',
   InputAliasesUsed: '$mcp_input_aliases_used',
   InputKeys: '$mcp_input_keys',
+  InputRequestMethods: '$mcp_input_request_methods',
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',

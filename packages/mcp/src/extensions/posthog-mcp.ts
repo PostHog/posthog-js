@@ -6,6 +6,7 @@ import type {
   CollectFeedbackOptions,
   CollectFeedbackConfig,
   InitializeCaptureData,
+  InputRequiredCaptureData,
   JsonRecord,
   MCPAnalyticsOptions,
   McpCaptureCommon,
@@ -44,6 +45,7 @@ import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException, httpStatus } from './exceptions'
 import { normalizeHeaderString } from './headers'
+import { boundInputRequestMethods, readInputRequestMethods } from './input-required'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import {
@@ -468,16 +470,19 @@ export class PostHogMCP extends PostHog {
    *
    * Use the returned session and conversation values for capture. If a new
    * handle could not reach the client, the conversation value is omitted while
-   * the derived session value is kept.
+   * the derived session value is kept. When the result is an `input_required`
+   * round, `inputRequestMethods` is set: capture it with
+   * {@link captureInputRequired} rather than {@link captureToolCall}.
    */
   prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
     const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
     const conversationId = preparedCall.conversationId
+    const inputRequestMethods = readInputRequestMethods(result)
     if (!conversationId) {
-      return { result, sessionId: preparedCall.sessionId, conversationId }
+      return { result, sessionId: preparedCall.sessionId, conversationId, inputRequestMethods }
     }
     if (!state) {
-      return { result, sessionId: preparedCall.sessionId, conversationId: undefined }
+      return { result, sessionId: preparedCall.sessionId, conversationId: undefined, inputRequestMethods }
     }
 
     let preparedResult: unknown = result
@@ -496,6 +501,7 @@ export class PostHogMCP extends PostHog {
       result: preparedResult as TResult,
       sessionId: preparedCall.sessionId,
       conversationId: state.minted && !delivered ? undefined : conversationId,
+      inputRequestMethods,
     }
   }
 
@@ -526,6 +532,20 @@ export class PostHogMCP extends PostHog {
     }
     const event = baseEvent(MCPAnalyticsEventType.mcpUnknownTool, data)
     event.resourceName = data.toolName
+    this.#emit(event)
+  }
+
+  /**
+   * Capture an `input_required` round: the tool asked the client for more input
+   * instead of returning its result. Emits `$mcp_input_required`. Use it instead
+   * of {@link captureToolCall} when {@link prepareToolResult} returns
+   * `inputRequestMethods`; the retry that completes the call is the tool call.
+   */
+  captureInputRequired(data: InputRequiredCaptureData): void {
+    const event = baseEvent(MCPAnalyticsEventType.mcpInputRequired, data)
+    event.resourceName = data.toolName
+    event.duration = data.durationMs
+    event.inputRequestMethods = boundInputRequestMethods(data.inputRequestMethods ?? [])
     this.#emit(event)
   }
 
