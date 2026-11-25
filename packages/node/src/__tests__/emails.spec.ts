@@ -2082,7 +2082,7 @@ describe('emails', () => {
       const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
 
       expect(error).toMatchObject({ code: 'batch_unavailable', statusCode: 409 })
-      expect(error?.fix).toMatch(/unchanged and with the same idempotency keys/)
+      expect(error?.fix).toMatch(/same email and recipients, unchanged, giving each recipient the idempotencyKey/)
       expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
     })
 

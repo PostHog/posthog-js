@@ -694,18 +694,18 @@ function pythonJsonBytes(value: unknown): number {
   return new TextEncoder().encode(write(value)).byteLength
 }
 
-function faultAnswer(route: Route, { status, code, message, page, retryAfter }: Exclude<Fault, string>): Answer {
+function faultAnswer(route: Route, { retryAfter, ...fault }: Exclude<Fault, string>): Answer {
+  return { ...faultBody(route, fault), retryAfter }
+}
+
+function faultBody(route: Route, { status, code, message, page }: Exclude<Fault, string>): Answer {
   if (page !== undefined) {
     return { status, text: page }
   }
   if (route === 'storage') {
     return code ? storageError(status, code, message ?? code) : { status, text: '' }
   }
-  return {
-    status,
-    body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined,
-    retryAfter,
-  }
+  return { status, body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined }
 }
 
 function refusal(status: number, type: string, code: string, attr: string | null, explained: Json): Refused {

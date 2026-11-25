@@ -206,7 +206,7 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
 }
 
 const BATCH_RESEND_FIX =
-  'PostHog may have queued these emails. Send the recipients in error.results again, unchanged and with the same idempotency keys, within 24 hours of the first request with those keys: PostHog queues no second email for a key it has.'
+  'PostHog may have queued these emails. Call emails.batch() again with the same email and recipients, unchanged, giving each recipient the idempotencyKey of its entry in error.results (matched by index), within 24 hours of the first request with those keys: PostHog queues no second email for a key it has.'
 
 const RESEND_FIX =
   'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours of the first request with that key: PostHog queues no second email for a key it has.'
