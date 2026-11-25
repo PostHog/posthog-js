@@ -250,6 +250,21 @@ export interface PostHog {
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void
 
     /**
+     * Send a group profile update without changing the user's group membership.
+     *
+     * @param groupType - The type of group (e.g., 'company', 'project')
+     * @param groupKey - The unique identifier for the group
+     * @param groupProperties - Properties to set on the group profile
+     * @param options - Optional configuration for the capture request
+     */
+    groupIdentify(
+        groupType: string,
+        groupKey: string | number,
+        groupProperties?: Properties,
+        options?: CaptureOptions
+    ): void
+
+    /**
      * Get the current groups.
      *
      * @returns A record of group types to group keys

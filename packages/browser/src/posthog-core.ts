@@ -3778,6 +3778,60 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Sends a group profile update without changing the user's group membership.
+     * Learn more about [groups](/docs/product-analytics/group-analytics)
+     *
+     * {@label Identification}
+     *
+     * @remarks
+     * Unlike {@link PostHog.group}, this does not register `$groups` on subsequent events and
+     * does not reload feature flags. Use it to write metadata about a group the current user is
+     * not necessarily a member of, or to update a group's properties without re-associating.
+     *
+     * @example
+     * ```js
+     * // update a group's properties without joining it
+     * posthog.groupIdentify('organization', 'org_12345', {
+     *     name: 'Acme Corp',
+     *     plan: 'enterprise'
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @param groupType Group type (example: 'organization')
+     * @param groupKey Group key (example: 'org::5')
+     * @param groupProperties Optional properties to set on the group profile
+     * @param options Optional configuration for the capture request
+     */
+    groupIdentify(
+        groupType: string,
+        groupKey: string | number,
+        groupProperties?: Properties,
+        options?: CaptureOptions
+    ): void {
+        const hasValidKey = (isString(groupKey) && groupKey.length > 0) || isNumber(groupKey)
+        if (!isString(groupType) || !groupType || !hasValidKey) {
+            logger.error('posthog.groupIdentify requires a group type and group key')
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.groupIdentify')) {
+            return
+        }
+
+        this.capture(
+            EVENT_GROUPIDENTIFY,
+            {
+                $group_type: groupType,
+                $group_key: groupKey,
+                $group_set: groupProperties || {},
+            },
+            options
+        )
+    }
+
+    /**
      * Resets only the group properties of the user currently logged in.
      * Learn more about [groups](/docs/product-analytics/group-analytics)
      *
