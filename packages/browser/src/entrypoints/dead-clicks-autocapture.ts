@@ -83,7 +83,7 @@ function priorLivenessDelay(
     return isNumber(lastSeenAt) ? livenessDelayInWindow(clickTimestamp - lastSeenAt, windowMs) : undefined
 }
 
-type ObservedDeadClick = DeadClickCandidate & { selectionChangedDuringGesture?: boolean }
+type ObservedDeadClick = DeadClickCandidate & { selectionChangedDuringGesture?: boolean; consentOptedOut?: boolean }
 
 type MouseSelectionGesture = {
     path: EventTarget[]
@@ -144,7 +144,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _checkClickTimer: number | undefined
     private _mouseSelection: MouseSelectionGesture | undefined
     private _mouseSelectionTimer: number | undefined
-    private _touchStart: { x: number; y: number; timestamp: number } | undefined
+    private _touchStart: { x: number; y: number; timestamp: number; consentOptedOut: boolean } | undefined
     private _deadSwipesCaptured = 0
     private _hasUnobservableSurfaces: boolean | undefined
     private _surfacesCheckedAt: number | undefined
@@ -411,10 +411,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // Only store a pre-candidate selection delay when it is already inside the suppression window,
     // so it can never feed the post-click selection timeout. Keep the candidate queued until the
     // check so it can still deduplicate another click on the same node.
-    private _queueCandidate(candidate: DeadClickCandidate): void {
+    private _queueCandidate(candidate: ObservedDeadClick, consentOptedOut?: boolean): void {
         if (!this._isCapturing()) {
             return
         }
+        candidate.consentOptedOut = isUndefined(consentOptedOut) ? this._isOptedOut() : consentOptedOut
         candidate.selectionChangedDelayMs = priorLivenessDelay(
             candidate.timestamp,
             this._lastSelectionChanged,
@@ -640,13 +641,19 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // so a multi-touch start clears any tracked origin rather than measuring against it
         const touch = touches?.length === 1 ? touches[0] : undefined
         this._touchStart =
-            touch && this._isCapturing() ? { x: touch.clientX, y: touch.clientY, timestamp: Date.now() } : undefined
+            touch && this._isCapturing()
+                ? { x: touch.clientX, y: touch.clientY, timestamp: Date.now(), consentOptedOut: this._isOptedOut() }
+                : undefined
     }
 
     private _isCapturing(): boolean {
         return isFunction(this.instance.is_capturing)
             ? this.instance.is_capturing()
             : !this.instance.has_opted_out_capturing()
+    }
+
+    private _isOptedOut(): boolean {
+        return this.instance.has_opted_out_capturing()
     }
 
     private _onTouchCancel = (): void => {
@@ -706,7 +713,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             swipeDistancePx: Math.round(Math.sqrt(distanceSq)),
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
-            this._queueCandidate(swipe)
+            this._queueCandidate(swipe, start.consentOptedOut)
         }
         this._scheduleCheck()
     }
@@ -824,6 +831,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             }
 
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
+                if (click.consentOptedOut !== this._isOptedOut()) {
+                    continue
+                }
                 const prefix = deadEventName(click)
                 if (prefix === '$dead_swipe') {
                     if (this._deadSwipesCaptured >= this._config.max_dead_swipes_per_page_load) {

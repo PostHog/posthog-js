@@ -53,6 +53,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             },
             capture: vi.fn(),
             is_capturing: () => true,
+            has_opted_out_capturing: () => false,
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -67,7 +68,12 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         it('records the touch start position and time', () => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 100 }])
 
-            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100, timestamp: 1000 })
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({
+                x: 100,
+                y: 100,
+                timestamp: 1000,
+                consentOptedOut: false,
+            })
         })
 
         it('stores a swipe candidate when the gesture is beyond the threshold', () => {
@@ -90,12 +96,28 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
-        it('does not store a swipe whose gesture spans a consent change', () => {
+        it.each([
+            [
+                'a consent change in this tab',
+                (detector: LazyLoadedDeadClicksAutocapture) => {
+                    detector.discardPending()
+                },
+            ],
+            [
+                'a consent change in another tab',
+                (_: LazyLoadedDeadClicksAutocapture, instance: PostHog) => {
+                    instance.has_opted_out_capturing = () => true
+                },
+            ],
+        ])('does not report a swipe whose gesture spans %s', (_, changeConsent) => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
-            lazyLoadedDeadClicksAutocapture.discardPending()
+            changeConsent(lazyLoadedDeadClicksAutocapture, fakeInstance)
             triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
 
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            vi.setSystemTime(4000)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
         it('does not store a candidate for a tiny movement below the threshold', () => {
@@ -367,6 +389,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
         const pushSwipeCandidate = (overrides: Partial<DeadClickCandidate> = {}) => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'touchend' } as unknown as TouchEvent,
                 timestamp: 900,
@@ -470,6 +493,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
                 const node = document.createElement('div')
                 document.body.append(node)
                 lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                    consentOptedOut: false,
                     node,
                     originalEvent: { type: 'touchend' } as unknown as TouchEvent,
                     timestamp: 900,
@@ -498,6 +522,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         it('does not limit dead clicks', () => {
             lazyLoadedDeadClicksAutocapture['_deadSwipesCaptured'] = 10
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as unknown as MouseEvent,
                 timestamp: 900,

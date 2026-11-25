@@ -155,16 +155,34 @@ describe('DeadClicksAutocapture', () => {
                 },
             ],
             [
-                'a cookieless visitor accepts',
+                'a cookieless visitor accepts and another tab rejects again',
                 'on_reject' as const,
                 (ph: PostHog) => ph.opt_out_capturing(),
-                (ph: PostHog) => ph.opt_in_capturing(),
+                (ph: PostHog) => {
+                    ph.opt_in_capturing()
+                    ph.consent.optInOut(false)
+                },
             ],
             [
-                'a visitor who accepted rejects into cookieless mode',
+                'a visitor who accepted rejects and another tab grants again',
                 'on_reject' as const,
                 (ph: PostHog) => ph.opt_in_capturing(),
+                (ph: PostHog) => {
+                    ph.opt_out_capturing()
+                    ph.consent.optInOut(true)
+                },
+            ],
+            [
+                'another tab grants consent to a cookieless visitor',
+                'on_reject' as const,
                 (ph: PostHog) => ph.opt_out_capturing(),
+                (ph: PostHog) => ph.consent.optInOut(true),
+            ],
+            [
+                'another tab rejects consent for a visitor who accepted',
+                'on_reject' as const,
+                (ph: PostHog) => ph.opt_in_capturing(),
+                (ph: PostHog) => ph.consent.optInOut(false),
             ],
         ])('reports only the click made after %s', async (_, cookielessMode, setup, transition) => {
             const beforeSend = vi.fn().mockImplementation((e) => e)
