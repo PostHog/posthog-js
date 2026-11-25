@@ -639,6 +639,8 @@ function record<T = eventWithTime>(
     stylesheetManager: stylesheetManager,
     recordCrossOriginIframes,
     wrappedEmit,
+    blockClass,
+    blockSelector,
   });
 
   /**

@@ -38,8 +38,12 @@ export interface CapturedEventInfo {
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
 export interface CaptureOptions {
-    /** Send immediately without batching, using best-effort unload-safe delivery. */
-    delivery?: 'unload'
+    /**
+     * Start delivering this event now instead of waiting for a batch. `immediate` keeps the host's normal transport,
+     * retries and queue; `unload` uses best-effort unload-safe delivery. A host that cannot honor the mode delivers
+     * the event normally.
+     */
+    delivery?: 'immediate' | 'unload'
     /** Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. */
     timestamp?: Date
     /** Override the event UUID used for de-duplication. */

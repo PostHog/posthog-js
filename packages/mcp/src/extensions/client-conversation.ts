@@ -3,7 +3,7 @@ import { readHostClientInfo, resolveClientIdentity } from './client-identity'
 import { readHeaderValue } from './headers'
 import { deterministicPrefixedId } from './ids'
 import { getRequestHeaders } from './request-headers'
-import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import { decodeSessionId, isHandshakeBound, readMcpSessionHeader } from './session-token'
 import { CLIENT_USER_AGENT_HEADER } from './transport-identity'
 
 /**
@@ -124,11 +124,7 @@ export function readRequestClientSignals(
   // handshake may be another client's, and its transport may still hold the
   // token we minted for that client, so a token binds only the request that
   // presents it.
-  const transportSession = extra?.sessionId
-  const handshakeBound =
-    headers === undefined ||
-    (transportSession !== undefined &&
-      (decodeSessionId(transportSession) === null || readMcpSessionHeader(headers) === transportSession))
+  const handshakeBound = isHandshakeBound(extra)
   return readClientSignals(
     headers,
     readHostClientInfo(server, request, extra)?.name ?? resolveClientIdentity({ request, extra })?.clientName,

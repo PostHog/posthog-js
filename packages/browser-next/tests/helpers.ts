@@ -1,17 +1,26 @@
-import { createPostHog as createCorePostHog } from '../src/composition/npm/core'
-import { createPostHog as createRootPostHog } from '../src/composition/npm'
-import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
+import { createPostHogCore } from '../src/core/posthog'
+import { createProductComposition } from '../src/composition/npm/root-composition'
+import type { AnalyticsDeliveryFactory } from '../src/products/analytics/analytics-internal'
 import type { BrowserFetch, CorePostHogOptions, PostHogOptions, RemoteConfig, StorageLike } from '../src/core/types'
 
-/** Explicit buffer-only composition for state tests that do not exercise delivery or product selection. */
-export const withBufferedAnalytics = (options: PostHogOptions): PostHogOptions => {
-    const extensions = [...(options?.extensions ?? [])]
-    if (!extensions.some((extension) => extension.name === 'analytics')) extensions.unshift(createAnalyticsExtension())
-    return { ...options, extensions }
-}
+/** Delivery that keeps admitted events in the buffer, for state tests that do not exercise delivery. */
+export const bufferedDelivery: AnalyticsDeliveryFactory = (buffer) => ({
+    flush: async () => {},
+    deliverUnload() {},
+    dispose: async () => buffer.dispose(),
+})
 
-export const createBufferedPostHog = (options: CorePostHogOptions) => createCorePostHog(withBufferedAnalytics(options))
-export const createBufferedRootPostHog = (options: PostHogOptions) => createRootPostHog(withBufferedAnalytics(options))
+/** The manually composed client without delivery. */
+export const createBufferedPostHog = (options: CorePostHogOptions) => createPostHogCore(options, bufferedDelivery)
+
+/** The root client, with its automatic products, without delivery. */
+export const createBufferedRootPostHog = async (options: PostHogOptions) => {
+    const { extensions, loaders, automatic, loadingErrors } = createProductComposition(options)
+    const client = await createPostHogCore(options, bufferedDelivery, extensions, loaders, automatic)
+    for (const [label, error] of loadingErrors.reverse())
+        client.logger.error(`Automatic ${label} loading failed`, error)
+    return client
+}
 
 export const localRemoteConfig: RemoteConfig = {
     supportedCompression: [],

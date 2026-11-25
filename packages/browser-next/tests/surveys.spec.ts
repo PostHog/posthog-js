@@ -11,6 +11,7 @@ import {
 } from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore, type RemoteConfig } from '../src/composition/npm/core'
+import { createPostHog as createDeliveringPostHog } from '../src/composition/npm'
 import { createSurveys } from '../src/products/surveys/surveys-extension'
 import { surveys } from '../src/products/surveys/surveys'
 import { generateSurveys } from '@posthog/browser-common/surveys-renderer'
@@ -49,7 +50,6 @@ const base = {
     navigator: false,
     flags: false,
     logs: false,
-    analytics: false,
     capturePageview: false,
 } as const
 const clients: IPostHog[] = []
@@ -141,7 +141,7 @@ describe('surveys', () => {
         localStorage.setItem('abandonedSurvey_survey-test', 'true')
         localStorage.setItem('unrelated', 'keep')
 
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
 
         expect(getInProgressSurveyState(definition)).toBeNull()
         expect(localStorage.getItem('inProgressSurvey_survey-test')).toBeNull()
@@ -166,7 +166,7 @@ describe('surveys', () => {
             fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
         })
         await getSurveys(client)
-        requireInstalledExtension(client.analytics).identify('person', { language: 'fr' })
+        client.identify('person', { language: 'fr' })
         expect(detectUserLanguage(context)).toBe('fr')
         expect(context.config.featureFlagEvaluation).toBe(false)
         expect(context.client!.kv.get([STORED_PERSON_PROPERTIES_KEY, '$surveys'])).toMatchObject({
@@ -174,9 +174,9 @@ describe('surveys', () => {
             '$surveys': [definition],
         })
         expect(detectUserLanguage({ ...context, config: { ...context.config, overrideLanguage: 'de' } })).toBe('de')
-        requireInstalledExtension(client.analytics).identify('person', { language: 'es' })
+        client.identify('person', { language: 'es' })
         expect(detectUserLanguage(context)).toBe('es')
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
         expect(context.client!.kv.get(STORED_PERSON_PROPERTIES_KEY)).toBeUndefined()
     })
 
@@ -391,7 +391,14 @@ describe('surveys', () => {
         const add = vi.spyOn(window, 'addEventListener')
         const remove = vi.spyOn(window, 'removeEventListener')
         const module = renderer()
-        const client = await create({ extensions: [createSurveys({}, async () => module)] })
+        // Page unload reaches surveys through analytics delivery's teardown handoff.
+        const client = await createDeliveringPostHog({
+            ...base,
+            remoteConfig: { ...remote, surveys: false },
+            fetch: false,
+            extensions: [createSurveys({}, async () => module)],
+        })
+        clients.push(client)
         const callback = vi.fn(() => {
             throw new Error('application callback')
         })
@@ -403,8 +410,9 @@ describe('surveys', () => {
         expect(manager.handlePageUnload).toHaveBeenCalledOnce()
         await client.dispose()
         expect(module.dispose).toHaveBeenCalledOnce()
-        const pagehide = add.mock.calls.find(([event]) => event === 'pagehide')![1]
-        expect(remove).toHaveBeenCalledWith('pagehide', pagehide)
+        const pagehide = add.mock.calls.filter(([event]) => event === 'pagehide').map(([, listener]) => listener)
+        expect(pagehide.length).toBeGreaterThan(0)
+        for (const listener of pagehide) expect(remove).toHaveBeenCalledWith('pagehide', listener)
         window.dispatchEvent(new Event('pagehide'))
         expect(manager.handlePageUnload).toHaveBeenCalledOnce()
     })
@@ -436,7 +444,7 @@ describe('surveys', () => {
         })
         await getSurveys(first)
         first.kv.set('unrelated', true)
-        expect(JSON.parse(storage.getItem('custom')!).extensionData.surveys.$surveys).toEqual([definition])
+        expect(JSON.parse(storage.getItem('custom')!).extensionData.core.$surveys).toEqual([definition])
         const second = await create({
             storage,
             persistenceKey: 'custom',
@@ -445,8 +453,8 @@ describe('surveys', () => {
         })
         expect(await getSurveys(second)).toEqual([definition])
         expect(fetch).toHaveBeenCalledOnce()
-        requireInstalledExtension(second.analytics).reset()
-        expect(JSON.parse(storage.getItem('custom')!).extensionData.surveys).toEqual({})
+        second.reset()
+        expect(JSON.parse(storage.getItem('custom')!).extensionData.core).toEqual({})
     })
 
     it.each(['enabled', 'disabled', 'disposed'] as const)(
@@ -517,7 +525,7 @@ describe('surveys', () => {
             fetch: async () => new Response(JSON.stringify({ surveys: [gated] })),
         })
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         requireInstalledExtension(client.featureFlags).updateFlags({ 'survey-targeting-gate': false })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
         requireInstalledExtension(client.featureFlags).updateFlags({ 'survey-targeting-gate': true })
@@ -545,9 +553,9 @@ describe('surveys', () => {
         })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
         expect(setElementSelectors.mock.calls[0][0]).toEqual(new Set(['.trigger']))
-        requireInstalledExtension(client.analytics).capture('$autocapture', { $element_selectors: ['.trigger'] })
+        client.capture('$autocapture', { $element_selectors: ['.trigger'] })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
     })
 

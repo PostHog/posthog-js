@@ -1,5 +1,25 @@
 # @posthog/browser-common
 
+## 0.14.1
+
+### Patch Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Let a browser SDK that reads the `/flags?v=4` response send the config version 2 flag events. SDKs that do not opt in send `$feature_flag_called` as before.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Let a browser SDK choose the `/flags` response version it requests and how it reads it. SDKs that do not opt in keep requesting `v=2`.
+  (2026-11-25)
+
+## 0.14.0
+
+### Minor Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add local flag property overrides, flag read controls, early-access features and `onActiveMatchingSurveysChanged` to `@posthog/browser`, and load its feature flags while capture is opted out as `posthog-js` does.
+  (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `setConfig()` and `debug()`, immediate per-event delivery, and `getPageViewId()` to `@posthog/browser`.
+  (2026-11-25)
+
 ## 0.13.1
 
 ### Patch Changes

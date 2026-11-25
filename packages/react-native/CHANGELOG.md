@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.87.3
+
+### Patch Changes
+
+- [#5808](https://github.com/PostHog/posthog-js/pull/5808) [`5dc32e4`](https://github.com/PostHog/posthog-js/commit/5dc32e4d620e4fb595e0d32cacb46a152b5499d8) Thanks [@kayahickindev](https://github.com/kayahickindev)! - `Application Opened`, `Application Backgrounded` and `Application Became Active` are still captured when `Linking.getInitialURL()` rejects.
+  (2026-11-25)
+
 ## 4.87.2
 
 ### Patch Changes

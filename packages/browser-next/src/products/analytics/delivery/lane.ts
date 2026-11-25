@@ -32,6 +32,8 @@ export class Lane<E> {
     private _driveEpoch = 0
     private _activeEpoch = 0
     private _forceTarget: number | undefined
+    /** The last event an immediate flush covered; it survives one failed drain until those events are attempted. */
+    private _immediateTarget: number | undefined
 
     constructor(
         private readonly _buffer: EventBuffer<E>,
@@ -47,6 +49,7 @@ export class Lane<E> {
             } else if (change === 'purge') {
                 this._retryBlocked = false
                 this._forceTarget = undefined
+                this._immediateTarget = undefined
                 this._clearTimer()
                 this._cancelActive()
             } else {
@@ -74,9 +77,19 @@ export class Lane<E> {
         this._schedule()
     }
 
-    flush(): Promise<void> {
+    /**
+     * Drives delivery through the events queued now. With `immediate`, one more drain is forced if an earlier batch
+     * fails before those events are attempted; behind a full batch of older events, they can still wait for the next drain.
+     */
+    flush(immediate = false): Promise<void> {
         this._buffer._expireQueue(this._buffer._now())
         const attached = this._delivery
+        const target = this._buffer._nextId
+        // An immediate target outlasts unavailability, so the next drive (such as on reconnect) reaches it.
+        if (immediate) {
+            this._immediateTarget = target
+            this._forceTarget = Math.max(this._forceTarget ?? 0, target)
+        }
         if (
             !attached ||
             (!this._buffer._activeEntries && this._buffer._queue.length === 0) ||
@@ -85,7 +98,6 @@ export class Lane<E> {
             return Promise.resolve()
         }
 
-        const target = this._buffer._nextId
         this._retryBlocked = false
         this._clearTimer()
         this._forceTarget = Math.max(this._forceTarget ?? 0, target)
@@ -202,9 +214,20 @@ export class Lane<E> {
         if (this._forceTarget !== undefined && this._settledId >= this._forceTarget) {
             this._forceTarget = undefined
         }
+        if (this._immediateTarget !== undefined && this._settledId >= this._immediateTarget) {
+            this._immediateTarget = undefined
+        }
         if (!this._drain) {
             this._resolveFlushWaiters(false)
         }
+    }
+
+    private _takeUnattemptedImmediateTarget(): number | undefined {
+        const target = this._immediateTarget
+        this._immediateTarget = undefined
+        return target !== undefined && this._buffer._queue.some((entry) => entry[0] <= target && entry[4] === 0)
+            ? target
+            : undefined
     }
 
     private _reportError(error: unknown): void {
@@ -330,7 +353,12 @@ export class Lane<E> {
             this._clearTimer()
             return
         }
-        const forced = this._forceTarget !== undefined && this._buffer._queue[0]![0] <= this._forceTarget
+        const head = this._buffer._queue[0]!
+        // A forced target restored after a failed drain waits out the retained head's cooldown on the timer.
+        const forced =
+            this._forceTarget !== undefined &&
+            head[0] <= this._forceTarget &&
+            !(this._retryBlocked && head[5] > this._buffer._now())
         if (forced || (!this._retryBlocked && this._buffer._queue.length >= this._readFlushAt(attached))) {
             this._clearTimer()
             this._beginDrive(false)
@@ -457,7 +485,7 @@ export class Lane<E> {
                         if (completionGeneration === this._buffer._generation) {
                             this._trimQueue()
                             this._retryBlocked = true
-                            this._forceTarget = undefined
+                            this._forceTarget = this._takeUnattemptedImmediateTarget()
                             this._updateSettled()
                         }
                     } else {
