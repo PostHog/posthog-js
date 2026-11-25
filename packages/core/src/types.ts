@@ -443,8 +443,14 @@ export type FeatureFlagResult = {
 }
 
 export type FeatureFlagResultOptions = {
-  /** Whether to send a $feature_flag_called event. Defaults to true. */
+  /**
+   * Whether to send a $feature_flag_called event. Defaults to true.
+   *
+   * @deprecated Use `sendFeatureFlagEvent` instead.
+   */
   sendEvent?: boolean
+  /** Whether to send a $feature_flag_called event. Takes precedence over `sendEvent`. */
+  sendFeatureFlagEvent?: boolean
 }
 
 export type IsFeatureEnabledOptions = FeatureFlagResultOptions & {
