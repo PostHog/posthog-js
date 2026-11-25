@@ -679,7 +679,8 @@ async function withRenderedReact(
   react: EmailReactElement,
   config: EmailSenderConfig
 ): Promise<Record<string, unknown>> {
-  const renderer = await (config.reactRenderer ?? loadReactRenderer())
+  await Promise.resolve()
+  const renderer = config.reactRenderer ?? (await loadReactRenderer())
   try {
     const html = await settleWithin(renderer.render(react), config.requestTimeoutMs, 'Rendering the react element')
     if (typeof html !== 'string') {
@@ -688,8 +689,11 @@ async function withRenderedReact(
     if (content.text !== undefined) {
       return { ...content, html }
     }
-    const text = renderer.toPlainText(html)
+    const text: unknown = renderer.toPlainText(html)
     if (typeof text !== 'string') {
+      if (text !== null && (typeof text === 'object' || typeof text === 'function') && 'then' in text) {
+        void Promise.resolve(text).catch(() => {})
+      }
       throw new Error('reactEmailRenderer.toPlainText must return a string.')
     }
     return { ...content, html, text }

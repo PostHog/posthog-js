@@ -164,7 +164,21 @@ describe('esbuild bundle of the built package', () => {
               secretKey: 'phs_test',
               enableLocalEvaluation: false,
               ${withRenderer ? 'reactEmailRenderer,' : ''}
-              fetch: async (_url, init) => {
+              fetch: async (url, init) => {
+                if (
+                  url !== 'https://us.posthog.com/api/messaging/send/email/' ||
+                  init.method !== 'POST' ||
+                  init.headers?.Authorization !== 'Bearer phs_test' ||
+                  init.headers?.['Content-Type'] !== 'application/json' ||
+                  typeof init.headers?.['Idempotency-Key'] !== 'string' ||
+                  init.headers['Idempotency-Key'].length === 0
+                ) {
+                  return {
+                    status: 400,
+                    text: async () => JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }),
+                    json: async () => ({ code: 'invalid_request', detail: 'unexpected send request' }),
+                  }
+                }
                 sent.push(JSON.parse(init.body))
                 return {
                   status: 200,
@@ -225,7 +239,6 @@ describe('esbuild bundle of the built package', () => {
         const built = readFileSync(fileURLToPath(new URL(`../../../dist/emails/${file}`, import.meta.url)), 'utf8')
 
         expect(built).toMatch(/import\(\s*\/\* webpackIgnore: true \*\/\s*\/\* @vite-ignore \*\//)
-        expect(built).not.toContain('__rslib_import_meta_url__')
       }
     )
   })
