@@ -14,7 +14,8 @@ const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'temp
  */
 export function fieldsOf(source: unknown, names: Iterable<string>): Record<string, unknown> {
   const object: Record<string, unknown> = Object(source ?? {})
-  const fields: Record<string, unknown> = {}
+  // Without a prototype, an own __proto__ key stays a field to refuse rather than becoming the prototype.
+  const fields: Record<string, unknown> = Object.create(null)
   for (const name of new Set([...Object.keys(object), ...names])) {
     fields[name] = object[name]
   }

@@ -2529,6 +2529,56 @@ describe('emails', () => {
       ])
     })
 
+    it('reads an own getter once too', async () => {
+      const postHog = againstPostHog()
+      let reads = 0
+      const options = Object.defineProperty(
+        { to: 'ada@example.com', templateKey: 'welcome', html: '<p>Hi</p>' },
+        'subject',
+        {
+          enumerable: true,
+          get: () => {
+            reads += 1
+            if (reads > 1) {
+              throw new Error('subject was read twice')
+            }
+            return 'Welcome'
+          },
+        }
+      )
+
+      const { error } = await settle(posthog.emails.send(options as SendEmailOptions))
+
+      expect(error).toBeNull()
+      expect(postHog.emails).toMatchObject([{ to: 'ada@example.com', subject: 'Welcome' }])
+    })
+
+    it.each([
+      [
+        'send',
+        () => posthog.emails.send(JSON.parse(`{"to":"ada@example.com","templateId":"${TEMPLATE_ID}","__proto__":{}}`)),
+      ],
+      [
+        'batch',
+        () =>
+          posthog.emails.batch(JSON.parse(`{"templateId":"${TEMPLATE_ID}","__proto__":{}}`), [
+            { to: 'ada@example.com' },
+          ]),
+      ],
+      [
+        'a batch recipient',
+        () =>
+          posthog.emails.batch({ templateId: TEMPLATE_ID }, [JSON.parse('{"to":"ada@example.com","__proto__":{}}')]),
+      ],
+    ])('refuses an own __proto__ field on %s by name', async (_name, call) => {
+      const postHog = againstPostHog()
+
+      const { error } = await settle(call())
+
+      expect(error).toMatchObject({ code: 'invalid_form', field: expect.stringMatching(/__proto__$/) })
+      expect(postHog.emails).toEqual([])
+    })
+
     it('sends a template email with each option read once', async () => {
       const postHog = againstPostHog()
 

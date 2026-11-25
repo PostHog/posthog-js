@@ -982,7 +982,8 @@ function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: Sen
   }
   const message = `A ${form.call} with ${form.name} doesn't take ${field}, so no email was sent.`
   if (!otherForm.fields.has(field)) {
-    const fix = form.fixes?.[field]?.replace('{field}', field) ?? `Remove ${field} and send again.`
+    const hint = form.fixes && Object.hasOwn(form.fixes, field) ? form.fixes[field] : undefined
+    const fix = hint?.replace('{field}', field) ?? `Remove ${field} and send again.`
     throw new EmailError({ code: 'invalid_form', message, field, fix })
   }
   throw new EmailError({
