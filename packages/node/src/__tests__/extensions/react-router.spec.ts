@@ -2,7 +2,6 @@ import { createRequestHandler, data, type ServerBuild } from 'react-router'
 import { PostHog } from '@/entrypoints/index.node'
 import { sentEvents as sentEventsFrom, v1Response } from '../utils'
 import { createReactRouterErrorHandler } from '@/extensions/react-router'
-import { captureRequestException } from '@/extensions/request-exception'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
 
@@ -105,8 +104,6 @@ describe('createReactRouterErrorHandler', () => {
     ['a thrown data() response', routeErrorResponse(503)],
     ['the router 404 for an unknown URL', routeErrorResponse(404, true)],
     ['the router 405 for a missing action', routeErrorResponse(405, true)],
-    ['a thrown Response', new Response(null, { status: 302, headers: { location: '/' } })],
-    ['a Response from another realm', { status: 500, statusText: 'Error', headers: {}, body: null }],
   ])('does not capture %s', async (_, error) => {
     posthog = createPostHog()
     await createReactRouterErrorHandler(posthog)(error, { request: new Request('https://shop.example/x') })
@@ -168,7 +165,7 @@ describe('createReactRouterErrorHandler', () => {
     expect(await sentEvents(posthog)).toEqual([])
   })
 
-  it('captures an error once per request across hooks, handler instances and captureRequestException', async () => {
+  it('captures an error once per request across hooks and handler instances', async () => {
     posthog = createPostHog()
     const request = new Request('https://shop.example/reports/forecast')
     const error = new Error('Demand forecast diverged')
@@ -176,7 +173,6 @@ describe('createReactRouterErrorHandler', () => {
 
     await createReactRouterErrorHandler(posthog)(error, { request })
     await createReactRouterErrorHandler(posthog)(error, { request })
-    await captureRequestException(posthog, error, request)
     await createReactRouterErrorHandler(posthog)(frozen, { request })
     await createReactRouterErrorHandler(posthog)(frozen, { request })
 
@@ -218,14 +214,17 @@ describe('createReactRouterErrorHandler', () => {
   })
 })
 
-describe('captureRequestException identity', () => {
+describe('createReactRouterErrorHandler identity', () => {
+  const capture = (error: Error, request: Request): Promise<void> =>
+    createReactRouterErrorHandler(posthog)(error, { request })
+
   it('links an identified visitor through the cookie when readPostHogCookie is on', async () => {
     posthog = createPostHog({ readPostHogCookie: true })
     const request = new Request('https://shop.example/reports', {
       headers: { cookie: cookieFor({ distinct_id: 'user-2', $user_state: 'identified', $sesid: liveSession('s-2') }) },
     })
 
-    await captureRequestException(posthog, new Error('Report range not supported'), request)
+    await capture(new Error('Report range not supported'), request)
     const [event] = await sentEvents(posthog)
 
     expect(event.distinct_id).toBe('user-2')
@@ -239,7 +238,7 @@ describe('captureRequestException identity', () => {
       headers: { cookie: cookieFor({ distinct_id: 'anon-1', $user_state: 'anonymous', $sesid: liveSession('s-1') }) },
     })
 
-    await captureRequestException(posthog, new Error('Report range not supported'), request)
+    await capture(new Error('Report range not supported'), request)
     const [event] = await sentEvents(posthog)
 
     expect(event.distinct_id).toBe('anon-1')
@@ -254,7 +253,7 @@ describe('captureRequestException identity', () => {
       headers: { cookie: cookieFor({ distinct_id: 'anon-1', $sesid: [old, 'stale-session', old] }) },
     })
 
-    await captureRequestException(posthog, new Error('Tenant lookup failed'), request)
+    await capture(new Error('Tenant lookup failed'), request)
     const [event] = await sentEvents(posthog)
 
     expect(event.distinct_id).toBe('anon-1')
@@ -267,14 +266,14 @@ describe('captureRequestException identity', () => {
       headers: { cookie: cookieFor({ distinct_id: 'user-3', $user_state: 'identified', $sesid: liveSession('s-3') }) },
     })
 
-    await captureRequestException(posthog, new Error('Home failed'), request)
+    await capture(new Error('Home failed'), request)
     const [event] = await sentEvents(posthog)
 
     expect(event.distinct_id).not.toBe('user-3')
     expect(event.properties.$session_id).toBeUndefined()
   })
 
-  it('takes the option first, then the active context, then the tracing headers, then the cookie', async () => {
+  it('takes the active context first, then the tracing headers, then the cookie', async () => {
     posthog = createPostHog({ readPostHogCookie: true })
     const cookie = cookieFor({ distinct_id: 'cookie-user', $user_state: 'identified', $sesid: liveSession('cookie-s') })
     const withHeaders = new Request('https://shop.example/', {
@@ -282,22 +281,16 @@ describe('captureRequestException identity', () => {
     })
     const cookieOnly = new Request('https://shop.example/', { headers: { cookie } })
 
-    await captureRequestException(posthog, new Error('a'), withHeaders, { distinctId: 'option-user' })
     await posthog.withContext({ distinctId: 'context-user', sessionId: 'context-s' }, () =>
-      captureRequestException(posthog, new Error('b'), withHeaders)
+      capture(new Error('b'), withHeaders)
     )
-    await posthog.withContext({ distinctId: 'context-user' }, () =>
-      captureRequestException(posthog, new Error('c'), withHeaders)
-    )
-    await posthog.withContext({ distinctId: 'context-user' }, () =>
-      captureRequestException(posthog, new Error('d'), cookieOnly)
-    )
-    await captureRequestException(posthog, new Error('e'), withHeaders)
-    await captureRequestException(posthog, new Error('f'), cookieOnly)
+    await posthog.withContext({ distinctId: 'context-user' }, () => capture(new Error('c'), withHeaders))
+    await posthog.withContext({ distinctId: 'context-user' }, () => capture(new Error('d'), cookieOnly))
+    await capture(new Error('e'), withHeaders)
+    await capture(new Error('f'), cookieOnly)
     const events = await sentEvents(posthog)
 
     expect(events.map((e) => [e.distinct_id, e.properties.$session_id])).toEqual([
-      ['option-user', 'header-s'],
       ['context-user', 'context-s'],
       ['context-user', 'header-s'],
       ['context-user', 'cookie-s'],
@@ -337,17 +330,16 @@ describe('captureRequestException identity', () => {
       },
     })
 
-    await captureRequestException(posthog, new Error('Payment declined'), request)
+    await capture(new Error('Payment declined'), request)
     await posthog.withContext(
       {
         distinctId: 'context-user',
         sessionId: 'context-s',
         properties: { $user_agent: 'Ctx/1.0', $ip: '203.0.113.9' },
       },
-      () => captureRequestException(posthog, new Error('Card expired'), request)
+      () => capture(new Error('Card expired'), request)
     )
-    await captureRequestException(posthog, new Error('Refund failed'), request, { distinctId: 'app-user' })
-    const [event, inContext, withOption] = await sentEvents(posthog)
+    const [event, inContext] = await sentEvents(posthog)
 
     for (const optedOut of [event, inContext]) {
       expect(['header-user', 'user-4', 'context-user']).not.toContain(optedOut.distinct_id)
@@ -356,7 +348,6 @@ describe('captureRequestException identity', () => {
       expect(optedOut.properties).not.toHaveProperty('$ip')
       expect(optedOut.properties.$current_url).toBe('https://shop.example/checkout')
     }
-    expect(withOption.distinct_id).toBe('app-user')
   })
 
   it('keeps an anonymous visitor personless over registered and context options', async () => {
@@ -366,50 +357,15 @@ describe('captureRequestException identity', () => {
       headers: { cookie: cookieFor({ distinct_id: 'anon-2', $user_state: 'anonymous', $sesid: liveSession('s-2') }) },
     })
 
-    await captureRequestException(posthog, new Error('Export timed out'), request)
+    await capture(new Error('Export timed out'), request)
     await posthog.withContext({ options: { process_person_profile: true } }, () =>
-      captureRequestException(posthog, new Error('Export quota reached'), request)
+      capture(new Error('Export quota reached'), request)
     )
     const events = await sentEvents(posthog)
 
     expect(events.map((e) => [e.distinct_id, e.properties.$process_person_profile])).toEqual([
       ['anon-2', false],
       ['anon-2', false],
-    ])
-  })
-
-  it('lets explicit properties win over the request and anonymous visitor defaults', async () => {
-    posthog = createPostHog({ readPostHogCookie: true })
-    const request = new Request('https://shop.example/reports', {
-      headers: { cookie: cookieFor({ distinct_id: 'anon-3', $user_state: 'anonymous', $sesid: liveSession('s-3') }) },
-    })
-
-    await captureRequestException(posthog, new Error('Export failed'), request, {
-      properties: { $session_id: 'explicit-session', $process_person_profile: true, $current_url: 'https://x.test/' },
-    })
-    const [event] = await sentEvents(posthog)
-
-    expect(event.properties).toMatchObject({
-      $session_id: 'explicit-session',
-      $process_person_profile: true,
-      $current_url: 'https://x.test/',
-    })
-  })
-
-  it('keeps the mechanism defaults for mechanism fields left undefined', async () => {
-    posthog = createPostHog()
-
-    await captureRequestException(posthog, new Error('Ledger sync failed'), new Request('https://shop.example/'), {
-      mechanism: { type: undefined, handled: undefined },
-    })
-    await captureRequestException(posthog, new Error('Ledger sync retried'), new Request('https://shop.example/'), {
-      mechanism: { handled: true },
-    })
-    const events = await sentEvents(posthog)
-
-    expect(events.map((e) => e.properties.$exception_list[0].mechanism)).toEqual([
-      expect.objectContaining({ type: 'middleware', handled: false }),
-      expect.objectContaining({ type: 'middleware', handled: true }),
     ])
   })
 
@@ -421,7 +377,7 @@ describe('captureRequestException identity', () => {
       },
     } as any)
 
-    await captureRequestException(posthog, new Error('Unbuildable'), new Request('https://shop.example/'))
+    await capture(new Error('Unbuildable'), new Request('https://shop.example/'))
     posthog.capture({ distinctId: 'user-5', event: 'order_placed' })
 
     expect((await sentEvents(posthog)).map((e) => e.event)).toEqual(['order_placed'])

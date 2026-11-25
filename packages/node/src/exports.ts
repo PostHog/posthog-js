@@ -1,8 +1,6 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
 export * from './extensions/fetch-request'
-export { captureRequestException } from './extensions/request-exception'
-export type { CaptureRequestExceptionOptions } from './extensions/request-exception'
 export { createReactRouterErrorHandler } from './extensions/react-router'
 export type { ReactRouterErrorArgs, ReactRouterErrorHandlerOptions } from './extensions/react-router'
 export * from './types'

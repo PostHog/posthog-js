@@ -34,20 +34,6 @@ function isRouteErrorResponse(error: unknown): error is { internal: boolean; err
   )
 }
 
-/** React Router's `isResponse`, by shape, so a `Response` from another realm or a polyfill counts too. */
-function isResponse(error: unknown): boolean {
-  if (error === null || typeof error !== 'object') {
-    return false
-  }
-  const candidate = error as Record<string, unknown>
-  return (
-    typeof candidate.status === 'number' &&
-    typeof candidate.statusText === 'string' &&
-    typeof candidate.headers === 'object' &&
-    typeof candidate.body !== 'undefined'
-  )
-}
-
 /**
  * The application error inside a route error response. A middleware that throws `data(error, init)` reaches
  * `handleError` as a route error response holding the error; the same throw from a loader arrives as the error itself.
@@ -56,9 +42,10 @@ function getApplicationError(error: unknown): unknown {
   return isRouteErrorResponse(error) && !error.internal && error.error !== undefined ? error.error : error
 }
 
-// Other route error responses are control flow: React Router's own 404 and 405, or a response the app threw.
+// The other route error responses here are React Router's own 404 and 405. A thrown `Response`, `redirect()` or `data()`
+// without an error never reaches `handleError`.
 function isExpected(error: unknown, request: Request): boolean {
-  return request.signal.aborted || isRouteErrorResponse(error) || isResponse(error)
+  return request.signal.aborted || isRouteErrorResponse(error)
 }
 
 /**
@@ -67,25 +54,17 @@ function isExpected(error: unknown, request: Request): boolean {
  * Mirrors React Router's `getNormalizedPath`. Only the origin and path are reported.
  */
 function getPageUrl(request: Request): string | undefined {
-  let url: URL
   try {
-    url = new URL(request.url)
+    const { origin, pathname: path } = new URL(request.url)
+    const pagePath = path.endsWith('/_root.data')
+      ? path.slice(0, -'/_root.data'.length) || '/'
+      : path.endsWith('/_.data')
+        ? path.slice(0, -'_.data'.length)
+        : path.replace(/\.data$/, '')
+    return pagePath === path ? undefined : `${origin}${pagePath}`
   } catch {
     return undefined
   }
-  const path = url.pathname
-  let pagePath = path
-  if (path.endsWith('/_root.data')) {
-    pagePath = path.slice(0, -'_root.data'.length)
-    if (pagePath !== '/') {
-      pagePath = pagePath.slice(0, -1)
-    }
-  } else if (path.endsWith('/_.data')) {
-    pagePath = path.slice(0, -'_.data'.length)
-  } else if (path.endsWith('.data')) {
-    pagePath = path.slice(0, -'.data'.length)
-  }
-  return pagePath === path ? undefined : `${url.origin}${pagePath}`
 }
 
 function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): void {
@@ -99,15 +78,14 @@ function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): 
 /**
  * Returns a React Router `handleError` that captures server errors (loaders, actions, middleware, resource routes,
  * server rendering) with the request's person, session and request properties. It reports the page URL even for the
- * `.data` requests of client navigations, never the query string. It skips aborted requests, thrown responses and the
- * 404 and 405 responses the router produces itself, and captures the error inside a `data(error, init)` a middleware
- * threw. The event is marked unhandled, with the `middleware` mechanism and
- * `$exception_source: 'react_router.handle_error'`.
+ * `.data` requests of client navigations, never the query string. It skips aborted requests and the 404 and 405
+ * responses the router produces itself, and captures the error inside a `data(error, init)` a middleware threw. The
+ * event is marked unhandled, with the `middleware` mechanism and `$exception_source: 'react_router.handle_error'`.
  *
- * Linking page loads to the browser's person and session reads the posthog-js cookie, which needs the client's
- * `readPostHogCookie: true`. Requests with `x-posthog-*` tracing headers link without it. An anonymous visitor's
- * exceptions carry their anonymous distinct ID and stay personless. When the visitor's consent cookie opts out, the
- * event keeps no person, session or user agent.
+ * IDs set with `withContext` (in a middleware, for example) win. Otherwise, linking page loads to the browser's person
+ * and session reads the posthog-js cookie, which needs the client's `readPostHogCookie: true`, and requests with
+ * `x-posthog-*` tracing headers link without it. An anonymous visitor's exceptions carry their anonymous distinct ID and
+ * stay personless. When the visitor's consent cookie opts out, the event keeps no person, session or user agent.
  *
  * Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
  * stream in `entry.server.tsx`; call the same handler there. An error object is captured once per request, however

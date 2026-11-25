@@ -48,10 +48,7 @@ export function getPostHogCookieReadOptions(posthog: {
 export interface PostHogTracingHeaderValues {
   sessionId?: string
   distinctId?: string
-}
-
-export interface PostHogCookieValues extends PostHogTracingHeaderValues {
-  /** The distinct ID belongs to a visitor posthog-js has not identified. */
+  /** The distinct ID is from the cookie and belongs to a visitor posthog-js has not identified. */
   anonymous?: true
 }
 
@@ -108,7 +105,7 @@ export function getPostHogCookieValues(
   sessionIdleTimeoutMs: number = COOKIE_SESSION_IDLE_TIMEOUT_MS,
   optOutCapturingByDefault: boolean = false,
   includeAnonymousDistinctId: boolean = false
-): PostHogCookieValues {
+): PostHogTracingHeaderValues {
   try {
     if (typeof cookieHeader !== 'string') {
       return {}
@@ -191,12 +188,11 @@ function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
   return Math.min(Math.max(seconds, MIN_SESSION_IDLE_TIMEOUT_SECONDS), MAX_SESSION_IDLE_TIMEOUT_SECONDS) * 1000
 }
 
-/** The cookie's ids under the client's cookie read settings. */
-export function readPostHogCookieValues(
+function readCookieValues(
   headers: IncomingHttpHeaders,
   cookie: PostHogCookieReadOptions,
-  includeAnonymousDistinctId: boolean = false
-): PostHogCookieValues {
+  includeAnonymousDistinctId: boolean
+): PostHogTracingHeaderValues {
   return getPostHogCookieValues(
     headers.cookie,
     cookie.apiKey,
@@ -207,14 +203,6 @@ export function readPostHogCookieValues(
   )
 }
 
-function readCookieValues(headers: IncomingHttpHeaders, cookie: PostHogCookieReadOptions): PostHogTracingHeaderValues {
-  const { sessionId, distinctId } = readPostHogCookieValues(headers, cookie)
-  return {
-    ...(sessionId !== undefined ? { sessionId } : {}),
-    ...(distinctId !== undefined ? { distinctId } : {}),
-  }
-}
-
 /**
  * The request's tracing ids, with the posthog-js cookie fallback when `cookie` is set. When the client's
  * `captureTracingHeaders` is `false`, the tracing headers count as absent, so only the cookie can supply ids.
@@ -222,12 +210,13 @@ function readCookieValues(headers: IncomingHttpHeaders, cookie: PostHogCookieRea
 export function readPostHogTracingHeaders(
   options: { captureTracingHeaders?: boolean },
   headers?: IncomingHttpHeaders,
-  cookie?: PostHogCookieReadOptions | null
+  cookie?: PostHogCookieReadOptions | null,
+  includeAnonymousDistinctId: boolean = false
 ): PostHogTracingHeaderValues {
   if (options.captureTracingHeaders !== false) {
-    return getPostHogTracingHeaderValues(headers, cookie)
+    return getPostHogTracingHeaderValues(headers, cookie, includeAnonymousDistinctId)
   }
-  return headers && cookie ? readCookieValues(headers, cookie) : {}
+  return headers && cookie ? readCookieValues(headers, cookie, includeAnonymousDistinctId) : {}
 }
 
 /**
@@ -236,7 +225,8 @@ export function readPostHogTracingHeaders(
  */
 export function getPostHogTracingHeaderValues(
   headers?: IncomingHttpHeaders,
-  cookie?: PostHogCookieReadOptions | null
+  cookie?: PostHogCookieReadOptions | null,
+  includeAnonymousDistinctId: boolean = false
 ): PostHogTracingHeaderValues {
   if (!headers) {
     return {}
@@ -244,13 +234,14 @@ export function getPostHogTracingHeaderValues(
 
   const headerSessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId])
   const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
-  const { sessionId, distinctId } =
+  const { sessionId, distinctId, anonymous }: PostHogTracingHeaderValues =
     headerSessionId === undefined && headerDistinctId === undefined && cookie
-      ? readCookieValues(headers, cookie)
+      ? readCookieValues(headers, cookie, includeAnonymousDistinctId)
       : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(distinctId !== undefined ? { distinctId } : {}),
+    ...(anonymous ? { anonymous } : {}),
   }
 }
