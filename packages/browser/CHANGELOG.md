@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.454.7
+
+### Patch Changes
+
+- [#5864](https://github.com/PostHog/posthog-js/pull/5864) [`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597) Thanks [@joaohenriquesfr](https://github.com/joaohenriquesfr)! - Add the private `__preview_replay_early_fetch_response` option, which stops Session Replay from holding back streamed fetch responses while it records their body. In WebKit, a request aborted while its body is being read then rejects with a `TypeError` instead of an `AbortError`.
+  (2026-11-25)
+- Updated dependencies [[`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597)]:
+  - @posthog/types@1.427.2
+
 ## 1.454.6
 
 ### Patch Changes
