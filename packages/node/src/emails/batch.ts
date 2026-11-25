@@ -19,7 +19,7 @@ export interface Slot {
   error?: EmailError
 }
 
-export function prepareRecipients(recipients: unknown, templateForm: boolean): Slot[] {
+export function prepareRecipients(recipients: unknown, templateForm: boolean, sendFields: ReadonlySet<string>): Slot[] {
   const count: unknown = Array.isArray(recipients) ? recipients.length : undefined
   if (!Array.isArray(recipients) || typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
     throw new EmailError({
@@ -42,17 +42,25 @@ export function prepareRecipients(recipients: unknown, templateForm: boolean): S
   const slots: Slot[] = []
   for (let index = 0; index < count; index++) {
     const recipient: unknown = Object.hasOwn(recipients, index) ? recipients[index] : undefined
-    slots.push(prepareRecipient(recipient, index, templateForm, keys))
+    slots.push(prepareRecipient(recipient, index, templateForm, keys, sendFields))
   }
   return slots
 }
 
-function prepareRecipient(recipient: unknown, index: number, templateForm: boolean, keys: Map<string, number>): Slot {
+function prepareRecipient(
+  recipient: unknown,
+  index: number,
+  templateForm: boolean,
+  keys: Map<string, number>,
+  sendFields: ReadonlySet<string>
+): Slot {
   const at = `recipients[${index}]`
   if (!isRecord(recipient)) {
     throw invalid('invalid_recipient', `${at} must be an object with to, so no email was sent.`, at)
   }
-  const unknown = Object.keys(recipient).find((name) => recipient[name] !== undefined && !RECIPIENT_FIELDS.has(name))
+  // A send field is read as a property, so an inherited or non-enumerable one is refused like an own one.
+  const names = new Set([...Object.keys(recipient), ...sendFields])
+  const unknown = [...names].find((name) => !RECIPIENT_FIELDS.has(name) && recipient[name] !== undefined)
   if (unknown !== undefined) {
     throw new EmailError({
       code: 'invalid_form',
@@ -163,6 +171,8 @@ export function recordAnswer(
       (error.retryable === true ||
         code === 'delivery_unavailable' ||
         code === 'idempotency_key_in_flight' ||
+        // A 409 that lost its code may be a key still in flight.
+        (text(error.code) === undefined && error.status === 409) ||
         mayHaveQueuedBefore)
     const refusal = new EmailError({
       code,

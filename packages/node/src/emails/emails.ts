@@ -287,7 +287,7 @@ export class EmailSender implements Emails {
     let slots: Slot[] = []
     try {
       const prepared = prepareBatchEmail(email, this.config.maxRetries)
-      slots = prepareRecipients(recipients, prepared.templateForm)
+      slots = prepareRecipients(recipients, prepared.templateForm, KNOWN_FIELDS)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
         'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
@@ -865,22 +865,27 @@ function codeContent(
   } else if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
-  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
+  const attachments = form.fields.has('attachments') ? send.attachments : undefined
+  const files = attachments === undefined ? [] : attachmentFiles(attachments, { html, text, subject })
   return {
     content: {
       template_key: templateKey,
       subject,
       ...(html !== undefined && { html }),
       ...(text !== undefined && { text }),
-      ...codeFormFields(send),
+      ...codeFormFields(send, form),
       ...(distinctId !== undefined && { distinct_id: distinctId }),
     },
     files,
   }
 }
 
-function codeFormFields(send: UncheckedSend): Record<string, unknown> {
-  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
+function codeFormFields(send: UncheckedSend, form: SendForm): Record<string, unknown> {
+  // A field the form doesn't take was checked as undefined, and isn't read again.
+  const read = (field: keyof UncheckedSend): unknown => (form.fields.has(field) ? send[field] : undefined)
+  const [from, replyTo, cc, bcc, captureEngagement, sensitive, tracking] = (
+    ['from', 'replyTo', 'cc', 'bcc', 'captureEngagement', 'sensitive', 'tracking'] as const
+  ).map(read)
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -976,8 +981,9 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
   // Known fields are read as properties, so an inherited or non-enumerable one is refused like an own one.
+  // Only fields the form doesn't take are read here, so a getter the form takes is read once, where it is used.
   const names = new Set([...Object.keys(send), ...KNOWN_FIELDS])
-  const field = [...names].find((name) => send[name as keyof UncheckedSend] !== undefined && !form.fields.has(name))
+  const field = [...names].find((name) => !form.fields.has(name) && send[name as keyof UncheckedSend] !== undefined)
   if (field === undefined) {
     return
   }

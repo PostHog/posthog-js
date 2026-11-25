@@ -92,7 +92,7 @@ export interface FakePostHogOptions {
   /** How many batch requests answer `delivery_unavailable` for an address before PostHog queues its email. */
   unavailableFor?: Record<string, number>
   /** A refusal PostHog answers for an address in a batch, by address. */
-  refusesRecipient?: Record<string, { status: number; code: string; retryable: boolean }>
+  refusesRecipient?: Record<string, { status: number; code?: string; retryable: boolean }>
   queuesScheduledSendsNow?: boolean
 }
 
@@ -529,7 +529,7 @@ export class FakePostHog {
     const messageId = this.keyedIds.get(key) ?? globalThis.crypto.randomUUID()
     this.keyedIds.set(key, messageId)
     const { to, distinct_id, message_data } = recipient
-    const slotError = (status: number, code: string, detail: string, retryable = false): Json => ({
+    const slotError = (status: number, code: string | undefined, detail: string, retryable = false): Json => ({
       message_id: messageId,
       error: { code, detail, status, retryable },
     })
@@ -560,7 +560,7 @@ export class FakePostHog {
       return slotError(
         refusal.status,
         refusal.code,
-        `PostHog answered ${refusal.code} for this recipient.`,
+        `PostHog answered ${refusal.code ?? refusal.status} for this recipient.`,
         refusal.retryable
       )
     }

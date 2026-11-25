@@ -1900,6 +1900,7 @@ describe('emails', () => {
         { status: 409, code: 'idempotency_key_in_flight', retryable: false },
         'unconfirmed',
       ],
+      ['a 409 without a code', { status: 409, retryable: false }, 'unconfirmed'],
       ['a 503 that is neither', { status: 503, code: 'recipient_rejected', retryable: false }, 'failed'],
     ] as const)(
       'decides a recipient by its code and retryable flag, not its status: %s',
@@ -1908,7 +1909,7 @@ describe('emails', () => {
 
         const { data } = await settle(posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }]))
 
-        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code } }])
+        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code ?? 'api_error' } }])
         expect(data?.results[0]).toMatchObject(
           status === 'unconfirmed'
             ? { error: { fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) } }
@@ -2299,6 +2300,34 @@ describe('emails', () => {
       ])
     })
 
+    it('reads an inherited field the batch takes once, and sends no copy a later read would add', async () => {
+      const postHog = againstPostHog()
+      let maxRetriesReads = 0
+      let ccReads = 0
+      const email = Object.assign(
+        Object.create({
+          get maxRetries() {
+            maxRetriesReads += 1
+            if (maxRetriesReads > 1) {
+              throw new Error('read twice')
+            }
+            return 0
+          },
+          get cc() {
+            ccReads += 1
+            return ccReads > 1 ? 'finance@example.com' : undefined
+          },
+        }),
+        WELCOME
+      )
+
+      const { data, error } = await settle(posthog.emails.batch(email, recipientsTo(1)))
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([{ status: 'queued' }])
+      expect(postHog.emails.map(({ cc }) => cc)).toEqual([[]])
+    })
+
     it('sends no batch once the client has shut down', async () => {
       const postHog = againstPostHog()
       await posthog.shutdown()
@@ -2406,6 +2435,16 @@ describe('emails', () => {
         'inherited copies',
         Object.assign(Object.create({ cc: 'finance@example.com' }), WELCOME),
         [{ to: 'a@example.com' }],
+        'invalid_form',
+      ],
+      [
+        'a recipient with inherited attachments',
+        WELCOME,
+        [
+          Object.assign(Object.create({ attachments: [{ filename: 'a.txt', content: 'YQ==' }] }), {
+            to: 'a@example.com',
+          }),
+        ],
         'invalid_form',
       ],
       ['scheduledAt', { ...WELCOME, scheduledAt: '2026-12-01T09:00:00Z' }, [{ to: 'a@example.com' }], 'invalid_form'],
