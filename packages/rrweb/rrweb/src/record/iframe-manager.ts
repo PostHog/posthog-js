@@ -1,5 +1,6 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId, isShadowRoot } from '@posthog/rrweb-snapshot';
+import dom from '@posthog/rrweb-utils';
 import type { CrossOriginIframeMessageEvent } from '../types';
 import {
   callSafely,
@@ -13,6 +14,7 @@ import type {
   blockClass,
   eventWithTime,
   eventWithoutTime,
+  mutationRecord,
   serializedNodeWithId,
   mutationCallBack,
 } from '@posthog/rrweb-types';
@@ -580,15 +582,45 @@ export class IframeManager {
     return this.releaseIfBlocked(frame as HTMLIFrameElement);
   }
 
-  // Blocking can be added after an iframe is tracked, and attribute mutations
-  // on a blocked element are not recorded, so callers check again here.
-  public releaseBlockedIframes(): void {
-    if (this.attachedIframes.size === 0 && this.iframeElementsById.size === 0)
-      return;
+  private trackedIframes(): Set<HTMLIFrameElement> {
     const tracked = new Set<HTMLIFrameElement>();
     this.attachedIframes.forEach(({ element }) => tracked.add(element));
     this.iframeElementsById.forEach((element) => tracked.add(element));
-    tracked.forEach((iframeEl) => this.releaseIfBlocked(iframeEl));
+    return tracked;
+  }
+
+  // Blocking can be added after an iframe is tracked, and attribute mutations
+  // on a blocked element are not recorded, so callers check again here.
+  public releaseBlockedIframes(): void {
+    this.trackedIframes().forEach((iframeEl) => this.releaseIfBlocked(iframeEl));
+  }
+
+  // Only an attribute change on an iframe or one of its ancestors can block
+  // it; moves are handled as removals. Checking only those iframes keeps the
+  // cost of a batch independent of how many iframes are tracked.
+  public releaseIframesBlockedBy(mutations: mutationRecord[]): void {
+    if (this.attachedIframes.size === 0 && this.iframeElementsById.size === 0)
+      return;
+    let changed: Set<Node> | undefined;
+    for (const m of mutations) {
+      if (m.type === 'attributes') (changed ??= new Set()).add(m.target);
+    }
+    if (!changed) return;
+    const targets = changed;
+    this.trackedIframes().forEach((iframeEl) => {
+      // contains() does not cross shadow roots, so continue from each host.
+      let node: Node | null = iframeEl;
+      while (node) {
+        for (const target of targets) {
+          if (dom.contains(target, node)) {
+            this.releaseIfBlocked(iframeEl);
+            return;
+          }
+        }
+        const root: Node = dom.getRootNode(node);
+        node = isShadowRoot(root) ? dom.host(root) : null;
+      }
+    });
   }
 
   private releaseIframe(iframe: HTMLIFrameElement): void {
