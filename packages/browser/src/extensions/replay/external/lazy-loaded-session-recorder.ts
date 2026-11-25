@@ -134,6 +134,8 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
+const RRWEB_NOT_RECORDING_ERROR = /^please (take full snapshot|add custom event) after start recording$/
+
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
@@ -926,7 +928,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return true
         } catch (e) {
             this._rrwebMethodFailures += 1
-            this._lastRrwebMethodError = String((e as Error | undefined)?.message ?? e).slice(0, 200)
+            const message = String((e as Error | undefined)?.message ?? e)
+            // other errors can carry page text from user masking callbacks, so only rrweb's own not-recording errors are reported
+            this._lastRrwebMethodError = RRWEB_NOT_RECORDING_ERROR.test(message) ? message : 'other'
             this._rrwebRecordingAtLastFailure = getRRWebRecord()?.isRecording?.()
             // Sometimes a race can occur where the recorder is not fully started yet
             if (this._queuedRRWebEvents.length < 10) {
@@ -1047,10 +1051,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._lastRrwebRestartAt = now
         this._rrwebRestarts += 1
         logger.warn('rrweb stopped recording while replay was started, restarting it')
-        this._stopRrwebRecorder(stopRrweb)
-        this._stopRrweb = undefined
-        this._queuedRRWebEvents = []
-        this._startRecorder()
+        const restart = () => {
+            this._stopRrwebRecorder(stopRrweb)
+            this._stopRrweb = undefined
+            this._queuedRRWebEvents = []
+            this._startRecorder()
+        }
+        // keeps CSSOM-inserted rule sources across the restart, as the session rotation restart does
+        const handoff = getRRWebRecord()?.withStyleRuleSourceHandoff
+        if (handoff) {
+            handoff(stopRrweb, restart)
+        } else {
+            restart()
+        }
         this._tryAddCustomEvent('$replay_recorder_restarted', { reason: 'rrweb_not_recording' })
     }
 
