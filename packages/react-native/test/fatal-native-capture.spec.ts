@@ -298,6 +298,18 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(true)
   })
 
+  it('tells native the JS identified state when $is_identified is registered as null', async () => {
+    posthog = await readyClient()
+    posthog.identify('user-42')
+    posthog.register({ $is_identified: null })
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    handler(new Error('identified'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$is_identified).toBe(true)
+  })
+
   it('keeps a personless JS exception personless on the native handoff', async () => {
     posthog = await readyClient({ personProfiles: 'identified_only' })
 

@@ -4458,17 +4458,26 @@ export class PostHog extends PostHogCoreBase {
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
           const nativeProperties = withoutDebugProperties(processed.properties)
-          // A missing `$process_person_profile` means PostHog processes the person. Native reads a
-          // missing one by its own person state, which knows nothing of JS identity, so it is sent
-          // explicitly.
+          // Native reads a missing `$process_person_profile` or `$is_identified` by its own person
+          // state, which knows nothing of JS identity, so both are sent explicitly. The person
+          // processing is the event's `process_person_profile` option, which wins over the property
+          // as on capture v1, else the property, else `true`, since PostHog processes the person
+          // when both are missing.
+          const eventOptions = isObject(processed.options) ? (processed.options as PostHogEventProperties) : {}
+          const properties =
+            isObject(nativeProperties) && !Array.isArray(nativeProperties)
+              ? (nativeProperties as PostHogEventProperties)
+              : undefined
           const nativePayload = {
             ...processed,
-            properties:
-              isObject(nativeProperties) &&
-              !Array.isArray(nativeProperties) &&
-              (nativeProperties as PostHogEventProperties)['$process_person_profile'] == null
-                ? { ...(nativeProperties as PostHogEventProperties), $process_person_profile: true }
-                : nativeProperties,
+            properties: properties
+              ? {
+                  ...properties,
+                  $process_person_profile:
+                    eventOptions.process_person_profile ?? properties['$process_person_profile'] ?? true,
+                  $is_identified: properties['$is_identified'] ?? this._isIdentified(),
+                }
+              : nativeProperties,
           }
           observation.nativeCapture = observation.prepareNativeCapture(
             withoutNullProperties(nativePayload) ?? nativePayload

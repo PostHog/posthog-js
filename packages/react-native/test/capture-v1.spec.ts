@@ -80,6 +80,36 @@ describe('React Native capture v1 delivery', () => {
     }
   })
 
+  it('keeps a personless event personless when before_send removes or overrides $process_person_profile', async () => {
+    await posthog.shutdown()
+    posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      disableCompression: true,
+      captureAppLifecycleEvents: false,
+      personProfiles: 'identified_only',
+      before_send: (event) => {
+        if (event?.event === 'removed') {
+          delete event.properties.$process_person_profile
+        } else if (event?.event === 'overridden') {
+          event.properties.$process_person_profile = true
+        }
+        return event
+      },
+    })
+    await posthog.ready()
+
+    posthog.capture('removed')
+    posthog.capture('overridden')
+    await posthog.flush()
+
+    const sent = requests.flatMap((request) => request.body.batch as any[])
+    for (const event of ['removed', 'overridden']) {
+      expect(sent.find((item) => item.event === event).options.process_person_profile).toBe(false)
+    }
+  })
+
   it('keeps events capture marks for retry and sends them on the next flush', async () => {
     respond = (request) => ({
       status: 200,

@@ -60,6 +60,12 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
+// The per-event `options` a caller or the SDK passed with the capture options, which capture v1 sends apart from the properties.
+const eventOptionsOf = (options?: PostHogCaptureOptions): { [key: string]: JsonType } | undefined => {
+  const eventOptions = (options as { options?: unknown } | undefined)?.options
+  return isObject(eventOptions) ? (eventOptions as { [key: string]: JsonType }) : undefined
+}
+
 // Events that identify, alias, merge or update a person or group.
 const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
 
@@ -310,18 +316,28 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
-  // 4.0. The SDK sets `$process_person_profile` only to `false`, on a personless event; PostHog processes the person
-  // when it is missing. A `null` `$process_person_profile` counts as unset; a `null` or `undefined` `$is_identified`
-  // still wins, so the event is sent without it. The legacy person state always uses the SDK's values.
-  private stampPersonState(properties: PostHogEventProperties): void {
+  // 4.0. On a personless event the SDK sets the `process_person_profile: false` capture option, unless the caller
+  // set that option, and returns the options to send the event with; PostHog processes the person when both are
+  // missing. The option is set before `before_send`, which can't undo it by editing properties. A `null`
+  // `$process_person_profile` counts as unset; a `null` or `undefined` `$is_identified` still wins, so the event is
+  // sent without it. The legacy person state always sets the SDK's values as properties.
+  private stampPersonState(
+    properties: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): PostHogCaptureOptions | undefined {
     const hasPersonProcessing = this._hasPersonProcessing()
+    let stampedOptions = options
     if (this.usesLegacyEventPersonState()) {
       properties['$process_person_profile'] = hasPersonProcessing
     } else if (properties['$process_person_profile'] == null) {
-      if (hasPersonProcessing) {
-        delete properties['$process_person_profile']
-      } else {
-        properties['$process_person_profile'] = false
+      delete properties['$process_person_profile']
+      const eventOptions = eventOptionsOf(options)
+      if (!hasPersonProcessing && eventOptions?.process_person_profile == null) {
+        const personless: PostHogCaptureOptions & { options: { [key: string]: JsonType } } = {
+          ...options,
+          options: { ...eventOptions, process_person_profile: false },
+        }
+        stampedOptions = personless
       }
     }
     if (this.usesLegacyEventPersonState() || !Object.prototype.hasOwnProperty.call(properties, '$is_identified')) {
@@ -331,6 +347,17 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     if (hasPersonProcessing) {
       this._requirePersonProcessing('capture')
     }
+    return stampedOptions
+  }
+
+  // The capture options' `options` go on the message, which capture v1 sends as the event's options.
+  protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const prepared = super.prepareMessage(message, options)
+    const eventOptions = eventOptionsOf(options)
+    if (eventOptions) {
+      prepared.options = { ...eventOptions }
+    }
+    return prepared
   }
 
   // A registered `$process_person_profile` is left off identity events: PostHog drops `$identify`, `$create_alias`
@@ -557,9 +584,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       ) {
         delete allProperties['$process_person_profile']
       }
-      this.stampPersonState(allProperties)
+      const stampedOptions = this.stampPersonState(allProperties, options)
 
-      super.captureStateless(distinctId, event, allProperties, options)
+      super.captureStateless(distinctId, event, allProperties, stampedOptions)
     })
   }
 
@@ -589,16 +616,16 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         $event_type: eventType,
         $elements: elements,
       }
-      if (!this.usesLegacyEventPersonState()) {
-        this.stampPersonState(autocaptureProperties)
-      }
+      const stampedOptions = this.usesLegacyEventPersonState()
+        ? options
+        : this.stampPersonState(autocaptureProperties, options)
       const payload = {
         distinct_id: distinctId,
         event: '$autocapture',
         properties: autocaptureProperties,
       }
 
-      this.enqueue('autocapture', payload, options)
+      this.enqueue('autocapture', payload, stampedOptions)
     })
   }
 
