@@ -17,7 +17,7 @@ import {
 import { createLogger } from './extensions/logger'
 import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
-import { canScopeRequests, currentRequestScope } from './extensions/request-scope'
+import { canScopeRequests, currentRequestScope, holdCustomEvent } from './extensions/request-scope'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import {
   deriveSessionIdFromMCPSession,
@@ -264,9 +264,10 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
         'They are sent with a session of their own and no identity. On Cloudflare Workers, enable the nodejs_compat or nodejs_als compatibility flag.'
     )
   }
+  const session = scope?.pending?.settled ?? scope
   const event: McpEvent = {
-    sessionId: scope?.sessionId ?? (unattributed ? newSessionId() : trackingData.sessionId),
-    sessionSource: scope ? scope.sessionSource : unattributed ? 'generated' : instanceSessionSource(trackingData),
+    sessionId: session?.sessionId ?? (unattributed ? newSessionId() : trackingData.sessionId),
+    sessionSource: session ? session.sessionSource : unattributed ? 'generated' : instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
@@ -276,6 +277,10 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
+  if (scope?.pending && !scope.pending.settled) {
+    holdCustomEvent(scope.pending, event, trackingData.logger)
+    return
+  }
   const attribution =
     scope?.attribution ??
     (unattributed ? withoutCaller(getSessionInfo(lowLevelServer, trackingData, event.sessionId)) : undefined)

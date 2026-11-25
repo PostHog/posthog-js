@@ -6,6 +6,49 @@ export interface RequestScope {
   sessionSource: MCPAnalyticsSessionSource | undefined
   /** Snapshot: a later request on the same session may replace the shared identity. */
   attribution: SessionInfo
+  pending?: PendingCustomEvents
+}
+
+/**
+ * Custom events captured while a call's session is a handle minted for it. That
+ * handle groups the call only once its result delivers it, so the events wait
+ * until the call settles and then take the call's own session.
+ */
+export interface PendingCustomEvents {
+  events: McpEvent[]
+  settled?: { sessionId: string | undefined; sessionSource: MCPAnalyticsSessionSource | undefined }
+  dropped?: number
+}
+
+// A call holds its custom events until it settles; beyond this many, the rest are dropped.
+export const MAX_HELD_CUSTOM_EVENTS = 1000
+
+/**
+ * Holds a custom event until its call settles, fixed as it was when captured: its
+ * top-level properties and options are copied, and its duration is the capture's.
+ */
+export function holdCustomEvent(
+  pending: PendingCustomEvents,
+  event: McpEvent,
+  logger: (message: string) => void
+): void {
+  if (pending.events.length >= MAX_HELD_CUSTOM_EVENTS) {
+    pending.dropped = (pending.dropped ?? 0) + 1
+    if (pending.dropped === 1) {
+      logger(`Warning: a tool call captured more than ${MAX_HELD_CUSTOM_EVENTS} custom events; dropping the rest`)
+    }
+    return
+  }
+  try {
+    pending.events.push({
+      ...event,
+      properties: event.properties && { ...event.properties },
+      eventOptions: event.eventOptions && { ...event.eventOptions },
+      duration: 0,
+    })
+  } catch (error) {
+    logger(`Warning: dropped a custom event whose properties could not be copied - ${error}`)
+  }
 }
 
 interface AsyncLocalStorageLike<T> {
@@ -80,7 +123,8 @@ export async function canScopeRequests(): Promise<boolean> {
 export async function runInRequestScope<R>(
   data: MCPAnalyticsData,
   prepared: { event: McpEvent; requestAttribution: SessionInfo } | null,
-  fn: () => Promise<R>
+  fn: () => Promise<R>,
+  pending?: PendingCustomEvents
 ): Promise<R> {
   const store = await requestScopes()
   const sessionId = prepared?.event.sessionId
@@ -88,7 +132,7 @@ export async function runInRequestScope<R>(
     return fn()
   }
   return store.run(
-    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution },
+    { data, sessionId, sessionSource: prepared.event.sessionSource, attribution: prepared.requestAttribution, pending },
     fn
   )
 }
