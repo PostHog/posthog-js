@@ -865,6 +865,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         // Only new cores default this private option to true. Old cores loading the
                         // unversioned recorder lack it and must retain legacy fetch delegation.
                         captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
+                        returnFetchResponseEarly: this._instance.config.__preview_replay_early_fetch_response === true,
                     })
                 )
             } else {
