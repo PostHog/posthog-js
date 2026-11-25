@@ -71,13 +71,22 @@ describe('event person state', () => {
     expect(queued(client, '$identify').properties.$process_person_profile).toBe(false)
   })
 
-  it('treats a null caller $process_person_profile and $is_identified as unset', () => {
+  it('treats a null caller $process_person_profile as unset', () => {
     const client = newPostHog({ personProfiles: 'never' })
-    client.capture('Signed Up', { $process_person_profile: null, $is_identified: null })
-    expect(queued(client, 'Signed Up').properties).toMatchObject({
-      $process_person_profile: false,
-      $is_identified: false,
-    })
+    client.capture('Signed Up', { $process_person_profile: null })
+    expect(queued(client, 'Signed Up').properties.$process_person_profile).toBe(false)
+  })
+
+  it('sends no $is_identified when the caller or a registered value is null or undefined', () => {
+    const client = newPostHog()
+    client.identify('user-123')
+    client.capture('Signed Up', { $is_identified: null })
+    client.capture('Signed In', { $is_identified: undefined })
+    client.register({ $is_identified: null })
+    client.capture('Viewed Dashboard')
+    for (const event of ['Signed Up', 'Signed In', 'Viewed Dashboard']) {
+      expect(queued(client, event).properties).not.toHaveProperty('$is_identified')
+    }
   })
 
   it('lets a registered $is_identified win over the SDK value', () => {

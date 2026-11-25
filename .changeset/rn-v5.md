@@ -28,7 +28,7 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
-- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` value counts as unset
+- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
 - **Breaking:** add `$process_person_profile` and `$is_identified` to `$autocapture` events, so anonymous autocapture follows `personProfiles: 'identified_only'` like other events
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
