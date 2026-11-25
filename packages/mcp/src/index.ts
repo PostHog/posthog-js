@@ -202,7 +202,7 @@ function buildTrackingData(
     sink,
     logger,
     sessionId: newSessionId(),
-    connection: {},
+    connection: { runningToolCalls: new Set() },
     identifiedSessions: new IdentityCache(),
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),

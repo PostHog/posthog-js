@@ -81,7 +81,8 @@ const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
 
 /** The tool calls on a one-client connection, which decide when its own id rotates. */
 export interface ConnectionClock {
-  runningToolCalls: number
+  /** By call id, so a call ends once and a call from an evicted clock ends nothing. */
+  runningToolCalls: Set<string>
   lastToolCallEnded?: number
 }
 
@@ -90,16 +91,21 @@ export interface ConnectionClock {
  * after the previous one ended, with none still running, so the connection's own
  * id rotates.
  */
-export function arriveToolCall(clock: ConnectionClock): boolean {
+export function arriveToolCall(clock: ConnectionClock, callId: string): boolean {
   const ended = clock.lastToolCallEnded
-  const rotate = clock.runningToolCalls === 0 && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
-  clock.runningToolCalls += 1
+  const rotate = clock.runningToolCalls.size === 0 && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
+  clock.runningToolCalls.add(callId)
   return rotate
 }
 
-export function endToolCall(clock: ConnectionClock): void {
-  clock.runningToolCalls = Math.max(0, clock.runningToolCalls - 1)
-  clock.lastToolCallEnded = Date.now()
+export function endToolCall(clock: ConnectionClock, callId: string): void {
+  if (clock.runningToolCalls.delete(callId)) {
+    clock.lastToolCallEnded = Date.now()
+  }
+}
+
+export function newToolCallId(): string {
+  return newPrefixedId('call')
 }
 
 export function newSessionId(): string {
@@ -245,10 +251,11 @@ export function resolveSession(
  */
 export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): () => void {
   const oneClient = data.sessionSource === 'generated' && !extra?.sessionId && !getRequestHeaders(extra)
-  if (arriveToolCall(data.connection) && oneClient) {
+  const callId = newToolCallId()
+  if (arriveToolCall(data.connection, callId) && oneClient) {
     data.sessionId = newSessionId()
   }
-  return () => endToolCall(data.connection)
+  return () => endToolCall(data.connection, callId)
 }
 
 /** The source of the session this instance holds: steps 3 and 4 of {@link resolveSession}. */

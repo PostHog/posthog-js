@@ -61,6 +61,7 @@ import {
   arriveToolCall,
   endToolCall,
   newSessionId,
+  newToolCallId,
 } from './session'
 import type { ConnectionClock, ResolvedSession } from './session'
 import {
@@ -121,7 +122,7 @@ interface PreparedConversationState {
   outputInstructions: boolean
   /** The session the call has if a minted handle never reaches the agent. */
   withoutHandle?: ResolvedSession
-  connectionKey?: string
+  connection?: { key: string; callId: string }
 }
 
 const PREPARED_CONVERSATION_STATE_KEY = '__posthogMcpConversationState'
@@ -180,7 +181,7 @@ export class PostHogMCP extends PostHog {
   readonly #enableConversationId: boolean
   readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
-  // Least recently used first, so a dispatcher that never ends its connections keeps at most MAX_CONNECTIONS.
+  // Least recently used first. At most MAX_CONNECTIONS, so a dispatcher that never ends its connections stays bounded.
   readonly #connections = new Map<string, ConnectionClock & { sessionId: string }>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
@@ -435,7 +436,8 @@ export class PostHogMCP extends PostHog {
     const conversation =
       resolvedConversation.minted && (options.sessionId || client?.handleFree) ? NO_CONVERSATION : resolvedConversation
     const conversationId = conversation.conversationId
-    const withoutHandle = this.#sessionWithoutHandle(options, true)
+    const connectionCall = options.connectionKey ? { key: options.connectionKey, callId: newToolCallId() } : undefined
+    const withoutHandle = this.#sessionWithoutHandle(options, connectionCall?.callId)
     const session: ResolvedSession | undefined = clientConversation
       ? { sessionId: deriveSessionIdFromClientConversation(clientConversation), source: 'client_metadata' }
       : conversationId
@@ -470,7 +472,7 @@ export class PostHogMCP extends PostHog {
         minted: conversation.minted,
         outputInstructions: this.#enableConversationId && !client?.handleFree && ownership?.outputInstructions === true,
         withoutHandle,
-        connectionKey: options.connectionKey,
+        connection: connectionCall,
       },
     }
     return preparedCall
@@ -488,13 +490,11 @@ export class PostHogMCP extends PostHog {
    */
   prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
     const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
-    if (state?.connectionKey) {
-      const connection = this.#connections.get(state.connectionKey)
+    if (state?.connection) {
+      const connection = this.#connections.get(state.connection.key)
       if (connection) {
-        endToolCall(connection)
+        endToolCall(connection, state.connection.callId)
       }
-      // A call ends once, however often its result is prepared.
-      state.connectionKey = undefined
     }
     const { sessionId, sessionSource, conversationId } = preparedCall
     if (!conversationId) {
@@ -536,18 +536,18 @@ export class PostHogMCP extends PostHog {
   resolveSession(
     options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>
   ): Pick<PreparedToolResult, 'sessionId' | 'sessionSource'> {
-    const session = this.#sessionWithoutHandle(options, false)
+    const session = this.#sessionWithoutHandle(options)
     return { sessionId: session?.sessionId, sessionSource: session?.source }
   }
 
   /** Rule 3 of the spec's session identity: the transport session, else the connection's own. */
   #sessionWithoutHandle(
     options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>,
-    toolCall: boolean
+    toolCallId?: string
   ): ResolvedSession | undefined {
     if (options.connectionKey) {
       const connection = this.#connection(options.connectionKey)
-      if (toolCall && arriveToolCall(connection)) {
+      if (toolCallId && arriveToolCall(connection, toolCallId)) {
         connection.sessionId = newSessionId()
       }
       if (!options.sessionId) {
@@ -560,13 +560,28 @@ export class PostHogMCP extends PostHog {
   }
 
   #connection(key: string): ConnectionClock & { sessionId: string } {
-    const connection = this.#connections.get(key) ?? { sessionId: newSessionId(), runningToolCalls: 0 }
+    const connection = this.#connections.get(key) ?? { sessionId: newSessionId(), runningToolCalls: new Set<string>() }
     this.#connections.delete(key)
     this.#connections.set(key, connection)
     if (this.#connections.size > MAX_CONNECTIONS) {
-      this.#connections.delete(this.#connections.keys().next().value!)
+      this.#evictConnection()
     }
     return connection
+  }
+
+  /** The least recently used connection with no call running, else the least recently used. */
+  #evictConnection(): void {
+    let evicted: string | undefined
+    for (const [key, connection] of this.#connections) {
+      evicted ??= key
+      if (connection.runningToolCalls.size === 0) {
+        evicted = key
+        break
+      }
+    }
+    if (evicted !== undefined) {
+      this.#connections.delete(evicted)
+    }
   }
 
   /**

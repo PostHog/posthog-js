@@ -180,6 +180,34 @@ describe('PostHogMCP step-path sessions', () => {
       expect(next.$session_id).toBe(first.$session_id)
     })
 
+    it('ends a call once, however many copies of it prepare a result', async () => {
+      const session = client.resolveSession(stdio).sessionId
+      const first = client.prepareToolCall('search_docs', {}, stdio)
+      const running = client.prepareToolCall('search_docs', {}, stdio)
+      const retry = structuredClone(first)
+      client.prepareToolResult(undelivered, first)
+      client.prepareToolResult(undelivered, retry)
+      minutes(31)
+      await call({ options: stdio, result: undelivered })
+      client.prepareToolResult(undelivered, running)
+
+      const [next] = await toolCalls()
+      expect(next.$session_id).toBe(session)
+    })
+
+    it('keeps a connection with a call running while 10,000 others come and go', async () => {
+      const session = client.resolveSession(stdio).sessionId
+      const running = client.prepareToolCall('search_docs', {}, stdio)
+      for (let i = 0; i < 10_000; i++) {
+        client.resolveSession({ connectionKey: `other-${i}` })
+      }
+      await call({ options: stdio, result: undelivered })
+      client.prepareToolResult(undelivered, running)
+
+      const [next] = await toolCalls()
+      expect(next.$session_id).toBe(session)
+    })
+
     it.each([
       { name: 'a transport session', options: { sessionId: 'mcp-transport-abc' }, source: 'transport' },
       { name: 'a connection key', options: stdio, source: 'generated' },
