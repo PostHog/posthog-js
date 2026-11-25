@@ -31,11 +31,14 @@ import type {
     BrowserNavigator,
     CaptureSummary,
     CorePostHogOptions,
+    ExplicitConsentStatus,
     IPostHog,
+    ResetOptions,
     RuntimeOptions,
     StorageLike,
 } from './types'
 import { version } from '../primitives/version'
+import type { FlagsExtension } from '../products/flags/flags-internal'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
@@ -89,6 +92,7 @@ class PostHog implements IPostHog {
     readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onNewSession: IPostHog['onNewSession']
+    readonly onSessionId: IPostHog['onSessionId']
     readonly onEvent: IPostHog['onEvent']
     readonly onIdentify: IPostHog['onIdentify']
     readonly onChangeProperties: IPostHog['onChangeProperties']
@@ -115,6 +119,10 @@ class PostHog implements IPostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     _immediateAuthority = {}
+    /** Whether work admitted before a cleared consent choice may still deliver while consent rests at its default denial. */
+    private _clearedChoiceRetainsWork = false
+    /** Consent changes raised during `reset()`, published in order once the new identity and `onReset` are done. */
+    private _heldConsentChanges: ConsentChangeInfo[] | undefined
     private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
     _disposed = false
@@ -184,13 +192,21 @@ class PostHog implements IPostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            (consent, previous) => {
-                if (consent === 'denied') {
-                    this._immediateAuthority = {}
-                    this._analytics?.purge()
-                }
-                this._consentChangePublisher.publish({ current: consent, previous })
-            }
+            (consent, previous, explicit) => {
+                // Only an explicit opt-out purges. A cleared choice (`reset()` or `clearOptInOut()`, here or in another
+                // context) affects future events only, so its return to a default denial keeps admitted work.
+                if (consent !== 'denied') {
+                    // A grant ends any pause on kept work, so redrive it instead of waiting for the next flush. A
+                    // microtask keeps the flush out of a consent read inside a delivery drive.
+                    if (this._clearedChoiceRetainsWork) void Promise.resolve().then(() => this._analytics?.flush())
+                    this._clearedChoiceRetainsWork = false
+                } else if (!explicit) this._clearedChoiceRetainsWork = true
+                else this._revokeAdmittedWork()
+                const change = { current: consent, previous }
+                if (this._heldConsentChanges) this._heldConsentChanges.push(change)
+                else this._consentChangePublisher.publish(change)
+            },
+            options.cookie
         )
         this._consentObservation = this._observeConsent(
             storage,
@@ -253,7 +269,20 @@ class PostHog implements IPostHog {
         this.onNewSession = this._analytics._newSessionPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
+        this.onSessionId = (handler) => {
+            const subscription = this._analytics._sessionIdPublisher.listener(handler)
+            const session = this._canMutate() ? this.session : undefined
+            if (session) {
+                try {
+                    handler(session)
+                } catch (error) {
+                    this.logger.error('A session ID listener failed', error)
+                }
+            }
+            return subscription
+        }
         this._registry = new ExtensionRegistry<IPostHog>(this, this.logger, loaders, () => this._canMutate())
+        if (options.bootstrap) this._analytics.bootstrap(options.bootstrap)
     }
 
     get distinctId(): string {
@@ -309,8 +338,22 @@ class PostHog implements IPostHog {
         this._analytics.identify(distinctId, set, setOnce)
     }
 
-    reset(): void {
-        this._analytics.reset()
+    reset(options?: boolean | ResetOptions): void {
+        // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
+        if (!this._canMutate()) return
+        // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
+        // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
+        // Consent listeners hear of it afterwards, so what they capture belongs to the new identity.
+        const held: ConsentChangeInfo[] = (this._heldConsentChanges = [])
+        let bootstrap: ResetOptions['bootstrap']
+        try {
+            this.clearOptInOut()
+            bootstrap = this._analytics.reset(options)
+        } finally {
+            this._heldConsentChanges = undefined
+        }
+        for (const change of held) this._consentChangePublisher.publish(change)
+        if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 
     register(properties: Record<string, unknown>): void {
@@ -403,13 +446,31 @@ class PostHog implements IPostHog {
     }
 
     optOut(): void {
-        if (!this._disposed && this._state.optOut()) {
+        if (this._disposed) {
+            return
+        }
+        // Consent is already denied after a cleared choice, so an explicit denial purges the work it kept.
+        if (this._clearedChoiceRetainsWork) this._revokeAdmittedWork()
+        if (this._state.optOut()) {
             this._dispatchConsentChange()
         }
     }
 
     hasOptedOut(): boolean {
         return this._state.consent === 'denied'
+    }
+
+    getExplicitConsentStatus(): ExplicitConsentStatus {
+        return this._state.consentChoice ?? 'pending'
+    }
+
+    clearOptInOut(): void {
+        if (this._disposed) {
+            return
+        }
+        if (this._state.clearConsent()) {
+            this._dispatchConsentChange()
+        }
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
@@ -784,7 +845,17 @@ class PostHog implements IPostHog {
     }
 
     _canDeliver(): boolean {
-        return !this._disposed && !this._blocked && !this.hasOptedOut()
+        return (
+            !this._disposed &&
+            !this._blocked &&
+            (!this.hasOptedOut() || (this._clearedChoiceRetainsWork && this._state.consentChoice === undefined))
+        )
+    }
+
+    private _revokeAdmittedWork(): void {
+        this._clearedChoiceRetainsWork = false
+        this._immediateAuthority = {}
+        this._analytics?.purge()
     }
 }
 

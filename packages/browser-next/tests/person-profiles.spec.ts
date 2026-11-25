@@ -133,6 +133,8 @@ describe('analytics person profiles', () => {
             identity
         )
         client.reset()
+        // Reset forgets the consent choice, returning to the opted-out default.
+        client.optIn()
         client.createPersonProfile()
         await client.flush()
         expect(events(requests).map(({ event }) => event)).toEqual(['after_opt_in', '$set'])
