@@ -45,7 +45,7 @@ afterEach(() => {
     vi.useRealTimers()
 })
 
-describe('v4 flags in cookie persistence', () => {
+describe('v4 flags in persistence', () => {
     it.each(['cookie', 'fallback'] as const)('compacts only v1 records with %s storage', async (storage) => {
         if (storage === 'fallback') {
             vi.spyOn(localStore, '_is_supported').mockReturnValue(false)
@@ -150,17 +150,26 @@ describe('v4 flags in cookie persistence', () => {
         await next.close()
     })
 
+    // A released version returns a stored record from its detail getters as it is, so a v1 record
+    // stored with its typed members would show them after a rollback or in another tab.
     it.each(['localStorage', 'localStorage+cookie', 'sessionStorage', 'memory'] as const)(
-        'retains the full records in %s',
+        'stores v1 records in their legacy shape in %s',
         async (persistence) => {
             const first = await startClient({ persistence }, NAME)
             await first.load(v4Response([LEGACY, SPLIT]))
-            const details = JSON.parse(JSON.stringify(first.posthog.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)))
+            const live = JSON.parse(JSON.stringify(first.posthog.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)))
+            expect(live[LEGACY.key]).toMatchObject({ value: 'treatment', metadata: { config_version: 1 } })
             await first.close()
 
             const next = await startClient({ persistence }, NAME)
-            expect(next.posthog.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)).toEqual(details)
-            expect(details[LEGACY.key]).toMatchObject({ value: 'treatment', metadata: { config_version: 1 } })
+            const stored = next.posthog.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
+            expect(stored[LEGACY.key]).toEqual(publicFlagDetail(live[LEGACY.key]))
+            expect(stored[LEGACY.key]).not.toHaveProperty('value')
+            expect(stored[SPLIT.key]).toEqual(live[SPLIT.key])
+            expect(next.requests).toEqual([])
+            expect(next.posthog.getFeatureFlag(LEGACY.key, { send_event: false })).toBe('treatment')
+            expect(next.posthog.getFeatureFlagPayload(LEGACY.key)).toEqual({ columns: 2 })
+            expect(next.posthog.getFeatureFlag(SPLIT.key, { send_event: false })).toBe(SPLIT.value)
             await next.close()
         }
     )

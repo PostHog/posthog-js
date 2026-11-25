@@ -152,10 +152,13 @@ const parseStorageValue = (value: string | null): Properties => {
     return isObject(parsed) ? parsed : {}
 }
 
-// V1 flags need only their legacy rendering across page loads. Keep the v4 details in memory,
-// but do not grow cookie-only persistence with another copy of the value and variant. V2
-// records retain their typed value and attribution so cached reads can still report exposures.
-const compactV1FlagDetailsForCookie = (props: Properties): Properties => {
+// V1 flags need only their legacy rendering across page loads: their typed value and metadata
+// repeat the legacy members, and only config version 2 records are read for flag events. Keep
+// the v4 details in memory, but store each v1 record as released versions do. An older version
+// that reads the storage (after a rollback, or in another tab) then returns no typed member from
+// its detail getters, and cookies keep their legacy footprint. V2 records retain their typed
+// value and attribution so cached reads can still report exposures.
+const compactV1FlagDetails = (props: Properties): Properties => {
     const details = props[PERSISTENCE_FEATURE_FLAG_DETAILS]
     if (!isObject(details)) {
         return props
@@ -1243,13 +1246,14 @@ export class PostHogPersistence {
                             groupProps[key] = value
                         }
                     })
+                    const storedGroupProps = compactV1FlagDetails(groupProps)
                     if (isEmptyObject(groupProps)) {
                         localStore._remove(this._groupEntryName(group))
                         this._slotState[group] = {}
-                    } else if (localStore._set(this._groupEntryName(group), groupProps)) {
+                    } else if (localStore._set(this._groupEntryName(group), storedGroupProps)) {
                         this._slotState[group] = {
                             persisted: true,
-                            fingerprint: this._entryFingerprint(groupProps, group),
+                            fingerprint: this._entryFingerprint(storedGroupProps, group),
                         }
                     }
                 })
@@ -1666,12 +1670,12 @@ export class PostHogPersistence {
             return 'skipped'
         }
 
-        // Use the actual backend, including cookie fallback when web storage is unavailable.
-        // Fingerprint the same projection we write; the live props and other stores stay intact.
+        // Every store gets v1 flag records in their legacy shape. Fingerprint the same projection
+        // we write; the live props stay intact.
         let storedProps = props
         let fingerprint: string | undefined
         try {
-            storedProps = storage === cookieStore ? compactV1FlagDetailsForCookie(props) : props
+            storedProps = compactV1FlagDetails(props)
             fingerprint = this._entryFingerprint(storedProps, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
