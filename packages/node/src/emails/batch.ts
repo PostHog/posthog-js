@@ -160,7 +160,10 @@ export function recordAnswer(
     const code = text(error.code) ?? 'api_error'
     const unconfirmed =
       code !== 'idempotency_key_reused' &&
-      (error.retryable === true || code === 'delivery_unavailable' || mayHaveQueuedBefore)
+      (error.retryable === true ||
+        code === 'delivery_unavailable' ||
+        code === 'idempotency_key_in_flight' ||
+        mayHaveQueuedBefore)
     const refusal = new EmailError({
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
@@ -190,7 +193,9 @@ export function mayHaveQueued(error: EmailError): boolean {
     error.statusCode === undefined ||
     error.statusCode >= 500 ||
     error.statusCode < 300 ||
-    error.code === 'idempotency_key_in_flight'
+    error.code === 'idempotency_key_in_flight' ||
+    // A 409 that lost its code may be a key still in flight.
+    (error.statusCode === 409 && error.code === 'api_error')
   )
 }
 

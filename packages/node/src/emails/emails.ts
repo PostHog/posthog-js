@@ -109,6 +109,7 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   text: true,
   react: true,
 }
+const KNOWN_FIELDS = fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS, CODE_FIELDS)
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
   call: 'send',
@@ -974,7 +975,9 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
+  // Known fields are read as properties, so an inherited or non-enumerable one is refused like an own one.
+  const names = new Set([...Object.keys(send), ...KNOWN_FIELDS])
+  const field = [...names].find((name) => send[name as keyof UncheckedSend] !== undefined && !form.fields.has(name))
   if (field === undefined) {
     return
   }

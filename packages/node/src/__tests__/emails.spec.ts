@@ -1895,6 +1895,11 @@ describe('emails', () => {
         'unconfirmed',
       ],
       ['retryable with another code', { status: 429, code: 'recipient_throttled', retryable: true }, 'unconfirmed'],
+      [
+        'idempotency_key_in_flight without retryable',
+        { status: 409, code: 'idempotency_key_in_flight', retryable: false },
+        'unconfirmed',
+      ],
       ['a 503 that is neither', { status: 503, code: 'recipient_rejected', retryable: false }, 'failed'],
     ] as const)(
       'decides a recipient by its code and retryable flag, not its status: %s',
@@ -2239,6 +2244,7 @@ describe('emails', () => {
 
       expect(error).toMatchObject({ code: 'batch_unavailable', statusCode: 409 })
       expect(error?.message).toMatch(/not on for this project/)
+      expect(error?.results?.map((result) => result.status)).toEqual(['failed'])
       expect(postHog.requests.batch).toBe(1)
       expect(postHog.emails).toEqual([])
     })
@@ -2274,6 +2280,23 @@ describe('emails', () => {
         { status: 'unconfirmed' },
       ])
       expect(postHog.requests.batch).toBe(1)
+    })
+
+    it.each([
+      ['without a body', { status: 409 }],
+      ['with a proxy page', { status: 409, page: '<html>Conflict</html>' }],
+    ])('keeps recipients unconfirmed after a 409 %s, since it may be a key in flight', async (_, fault) => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', fault)
+
+      const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+      expect(error).toMatchObject({ statusCode: 409 })
+      expect(error?.fix).toMatch(/Call emails\.batch\(\) again with the same email and recipients/)
+      expect(error?.results).toMatchObject([
+        { status: 'unconfirmed', error: { fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) } },
+        { status: 'unconfirmed' },
+      ])
     })
 
     it('sends no batch once the client has shut down', async () => {
@@ -2367,6 +2390,24 @@ describe('emails', () => {
         [{ to: 'a@example.com' }],
         'invalid_form',
       ],
+      [
+        'attachments that are not enumerable',
+        Object.defineProperty({ ...WELCOME }, 'attachments', { value: [{ filename: 'a.txt', content: 'YQ==' }] }),
+        [{ to: 'a@example.com' }],
+        'invalid_form',
+      ],
+      [
+        'inherited attachments',
+        Object.assign(Object.create({ attachments: [{ filename: 'a.txt', content: 'YQ==' }] }), WELCOME),
+        [{ to: 'a@example.com' }],
+        'invalid_form',
+      ],
+      [
+        'inherited copies',
+        Object.assign(Object.create({ cc: 'finance@example.com' }), WELCOME),
+        [{ to: 'a@example.com' }],
+        'invalid_form',
+      ],
       ['scheduledAt', { ...WELCOME, scheduledAt: '2026-12-01T09:00:00Z' }, [{ to: 'a@example.com' }], 'invalid_form'],
       ['maxRetries', { ...WELCOME, maxRetries: -1 }, [{ to: 'a@example.com' }], 'invalid_max_retries'],
       ['a shared recipient', { ...WELCOME, to: 'a@example.com' }, [{ to: 'a@example.com' }], 'invalid_form'],
@@ -2405,6 +2446,25 @@ describe('emails', () => {
       ["Resend's tags on a code send", { ...CODE_SEND, tags: [{ name: 'kind', value: 'welcome' }] }, 'tags'],
     ])('refuses %s before sending', async (_name, form, field) => {
       const { data, error } = await sendForm(form)
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
+      expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      [
+        'inherited template data on a code send',
+        Object.assign(Object.create({ templateData: { name: 'Jane' } }), { to: 'user@example.com', ...CODE_SEND }),
+        'templateData',
+      ],
+      [
+        'html on the template form that is not enumerable',
+        Object.defineProperty({ to: 'user@example.com', templateId: TEMPLATE_ID }, 'html', { value: '<p>Hi</p>' }),
+        'html',
+      ],
+    ])('refuses %s before sending, as it does an own field', async (_name, options, field) => {
+      const { data, error } = await posthog.emails.send(options as SendEmailOptions)
 
       expect(data).toBeNull()
       expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field })
