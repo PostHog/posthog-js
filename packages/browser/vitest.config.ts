@@ -76,6 +76,15 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/src/extension-tokens.ts'),
             },
             { find: '@posthog/browser-common/pubsub', replacement: fromRoot('../browser-common/src/pubsub.ts') },
+            { find: '@posthog/browser-common/toolbar', replacement: fromRoot('../browser-common/src/toolbar.ts') },
+            {
+                find: '@posthog/browser-common/conversations-renderer',
+                replacement: fromRoot('../browser-common/src/conversations-renderer.ts'),
+            },
+            {
+                find: /^@posthog\/browser-common\/conversations\/(.*)$/,
+                replacement: `${fromRoot('../browser-common/src/conversations')}/$1`,
+            },
             {
                 find: '@posthog/browser-common/error-tracking',
                 replacement: fromRoot('../browser-common/src/error-tracking.ts'),

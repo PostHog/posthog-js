@@ -83,5 +83,20 @@ export type {
     ExceptionAutocaptureOptions,
     ExceptionStepsOptions,
 } from '../../products/error-tracking/error-tracking-options'
+export type {
+    ToolbarOptions,
+    ToolbarConfiguration,
+    ToolbarExtension,
+    ToolbarParams,
+} from '../../products/toolbar/toolbar-options'
+
+export type {
+    ConversationsConfiguration,
+    ConversationsExtension,
+    ConversationsIdentity,
+    ConversationsOptions,
+    ConversationsTheme,
+    ConversationsUnavailableReason,
+} from '../../products/conversations/conversations-options'
 
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'

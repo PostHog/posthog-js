@@ -32,6 +32,9 @@ const surveysInput =
 const webVitalsInput = /(^|\/)(products\/web-vitals\/[^/]+|web-vitals)\.(m?js|ts)$/
 const tracingHeadersInput = /(^|\/)(products\/tracing-headers\/tracing-headers|utils\/tracing-headers)\.(m?js|ts)$/
 const errorTrackingInput = /(^|\/)(products\/error-tracking\/[^/]+|error-tracking|exception-autocapture)\.(m?js|ts)$/
+const toolbarInput = /(^|\/)(products\/toolbar\/(toolbar|toolbar-extension)|dist\/toolbar)\.(m?js|ts)$/
+const conversationsInput =
+    /(^|\/)(products\/conversations\/(conversations|conversations-extension)\.(m?js|ts)|dist\/conversations(-renderer)?[/.])/
 const productInputs = [
     flagsInput,
     autocaptureInput,
@@ -40,6 +43,8 @@ const productInputs = [
     webVitalsInput,
     tracingHeadersInput,
     errorTrackingInput,
+    toolbarInput,
+    conversationsInput,
 ]
 
 // Client modules selected by entrypoint or explicit import.
@@ -238,6 +243,8 @@ const measureRoot = async () => {
         /\/products\/web-vitals\/web-vitals\.mjs$/,
         /\/products\/tracing-headers\/tracing-headers\.mjs$/,
         /\/products\/error-tracking\/error-tracking\.mjs$/,
+        /\/products\/toolbar\/toolbar-extension\.mjs$/,
+        /\/products\/conversations\/conversations-extension\.mjs$/,
     ]) {
         assert(
             loaded.some((entryPoint) => product.test(entryPoint)),
@@ -291,6 +298,8 @@ await measureStatic('static tracing headers', 'fixtures/static-tracing-headers.t
 await measureSplit('root tracing headers', 'fixtures/root-tracing-headers.ts', { surveys: true })
 await measureSplit('static error tracking', 'fixtures/static-error-tracking.ts', { initialProducts: true })
 await measureSplit('root error tracking', 'fixtures/dynamic-error-tracking.ts', { surveys: true })
+await measureSplit('static toolbar', 'fixtures/static-toolbar.ts', { initialProducts: true })
+await measureSplit('static conversations', 'fixtures/static-conversations.ts', { initialProducts: true, surveys: true })
 
 // Negative controls: each guard must reject a real graph that crosses its boundary.
 for (const [guard, boundary, inputs, graph] of [['core', coreBoundary, staticFlagsInputs, 'static flags']]) {

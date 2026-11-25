@@ -2038,13 +2038,13 @@ posthog.unregister_for_session('current_flow')
 
 ### `PostHog.get_explicit_consent_status`
 
-> **get\_explicit\_consent\_status**(): `"pending"` \| `"granted"` \| `"denied"`
+> **get\_explicit\_consent\_status**(): `"granted"` \| `"denied"` \| `"pending"`
 
 Returns the explicit consent status of the user.
 
 #### Returns
 
-`"pending"` \| `"granted"` \| `"denied"`
+`"granted"` \| `"denied"` \| `"pending"`
 
 The current explicit consent status.
 
@@ -5272,13 +5272,13 @@ The current distinct ID
 
 ##### get\_explicit\_consent\_status()
 
-> **get\_explicit\_consent\_status**(): `"pending"` \| `"granted"` \| `"denied"`
+> **get\_explicit\_consent\_status**(): `"granted"` \| `"denied"` \| `"pending"`
 
 Get the explicit consent status.
 
 ###### Returns
 
-`"pending"` \| `"granted"` \| `"denied"`
+`"granted"` \| `"denied"` \| `"pending"`
 
 The consent status
 

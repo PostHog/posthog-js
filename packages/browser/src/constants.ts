@@ -141,7 +141,6 @@ export const EVENT_GROUPIDENTIFY = '$groupidentify'
 /* Z-INDEX HIERARCHY: tours > surveys > support */
 export const Z_INDEX_TOURS = 2147483646
 export const Z_INDEX_SURVEYS = 2147483645
-export const Z_INDEX_CONVERSATIONS = 2147483644
 
 export {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -160,4 +159,5 @@ export {
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     DOM_EVENT_VISIBILITYCHANGE,
+    Z_INDEX_CONVERSATIONS,
 } from '@posthog/browser-common/constants'
