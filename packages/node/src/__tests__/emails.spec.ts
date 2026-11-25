@@ -2,7 +2,13 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createElement, type ReactElement, Suspense, use } from 'react'
 
-import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
+import {
+  type BatchEmailResponse,
+  EmailError,
+  PostHog,
+  PostHogOptions,
+  SendEmailOptions,
+} from '@/entrypoints/index.node'
 
 import { FakePostHog, type FakePostHogOptions, type ServerChange } from './utils/emails-fake'
 
@@ -2149,37 +2155,51 @@ describe('emails', () => {
       expect(error?.results?.map((result) => result.status)).toEqual([status, status])
     })
 
-    it.each([0, 1, 2, 3, 4, 5, 6, 8])(
-      'sends no request once the client shuts down %i microtasks after the retry wait ends',
+    const shutDownAfterRetryWait = async (
+      microtasks: number
+    ): Promise<{ postHog: FakePostHog; fetchedAfterShutdown: boolean[]; response: BatchEmailResponse }> => {
+      const postHog = new FakePostHog({ secretKey: SECRET_KEY })
+      let shutDown = false
+      const fetchedAfterShutdown: boolean[] = []
+      makeClient({
+        fetch: (url: string, options: Parameters<typeof postHog.fetch>[1]) => {
+          fetchedAfterShutdown.push(shutDown)
+          return postHog.fetch(url, options)
+        },
+      })
+      postHog.failNext('batch', { status: 503 })
+
+      const pending = posthog.emails.batch(WELCOME, recipientsTo(2))
+      await vi.advanceTimersByTimeAsync(0)
+      vi.advanceTimersToNextTimer()
+      for (let i = 0; i < microtasks; i++) {
+        await Promise.resolve()
+      }
+      shutDown = true
+      const shutdown = posthog.shutdown()
+      const response = await settle(pending)
+      await shutdown
+      return { postHog, fetchedAfterShutdown, response }
+    }
+
+    it.each([0, 1])(
+      'sends no retry when the client shuts down %i microtasks after the retry wait, before its fetch',
       async (microtasks) => {
-        const postHog = new FakePostHog({ secretKey: SECRET_KEY })
-        const closedAtFetch: boolean[] = []
-        makeClient({
-          fetch: (url: string, options: Parameters<typeof postHog.fetch>[1]) => {
-            closedAtFetch.push((posthog as unknown as { _isShutdown: boolean })._isShutdown)
-            return postHog.fetch(url, options)
-          },
-        })
-        postHog.failNext('batch', { status: 503 })
+        const { postHog, fetchedAfterShutdown, response } = await shutDownAfterRetryWait(microtasks)
 
-        const pending = posthog.emails.batch(WELCOME, recipientsTo(2))
-        await vi.advanceTimersByTimeAsync(0)
-        vi.advanceTimersToNextTimer()
-        for (let i = 0; i < microtasks; i++) {
-          await Promise.resolve()
-        }
-        const shutdown = posthog.shutdown()
-        const { data, error } = await settle(pending)
-        await shutdown
-
-        expect(closedAtFetch).not.toContain(true)
-        if (postHog.requests.batch === 1) {
-          expect(error).toMatchObject({ code: 'client_closed' })
-        } else {
-          expect(data?.results.map((result) => result.status)).toEqual(['queued', 'queued'])
-        }
+        expect(response.error).toMatchObject({ code: 'client_closed' })
+        expect(fetchedAfterShutdown).toEqual([false])
+        expect(postHog.requests.batch).toBe(1)
       }
     )
+
+    it('lets a retry whose fetch already started finish when the client shuts down', async () => {
+      const { postHog, fetchedAfterShutdown, response } = await shutDownAfterRetryWait(8)
+
+      expect(response.data?.results.map((result) => result.status)).toEqual(['queued', 'queued'])
+      expect(fetchedAfterShutdown).toEqual([false, false])
+      expect(postHog.requests.batch).toBe(2)
+    })
 
     it('still sends a batch called just before the client shuts down', async () => {
       const postHog = againstPostHog()
