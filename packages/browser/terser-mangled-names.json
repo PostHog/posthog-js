@@ -467,6 +467,7 @@
         "_isRemoteConfigFresh",
         "_isRequestReady",
         "_isRestartingForSessionIdChange",
+        "_isRestartingRrweb",
         "_isResuming",
         "_isSampled",
         "_isSessionIdleAfterCrossTabRefresh",

@@ -569,6 +569,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebStartInProgress: { stopRequested: boolean; startRequested: boolean } | undefined = undefined
     private _lastRrwebRestartAt: number | undefined = undefined
     private _rrwebRestarts = 0
+    // the heal restart keeps the remote config trusted, so the replacement keeps the project's masking
+    private _isRestartingRrweb = false
     // the cost object most recently read from rrweb; each snapshot produces a fresh
     // object, so identity comparison dedupes the sync and microtask reads
     private _lastSeenSnapshotCost: SnapshotCost | undefined
@@ -1063,10 +1065,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         // keeps CSSOM-inserted rule sources across the restart, as the session rotation restart does
         const handoff = getRRWebRecord()?.withStyleRuleSourceHandoff
-        if (handoff) {
-            handoff(stopRrweb, restart)
-        } else {
-            restart()
+        this._isRestartingRrweb = true
+        try {
+            if (handoff) {
+                handoff(stopRrweb, restart)
+            } else {
+                restart()
+            }
+        } finally {
+            this._isRestartingRrweb = false
         }
         if (this.isStarted) {
             this._tryAddCustomEvent('$replay_recorder_restarted', { reason: 'rrweb_not_recording' })
@@ -1225,7 +1232,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
-        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
+        if (!this.isStarted && !this._isRestartingForSessionIdChange && !this._isRestartingRrweb) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
