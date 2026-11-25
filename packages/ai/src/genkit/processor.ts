@@ -16,7 +16,22 @@ const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 
 
 // Plugin config is part of the span input and output, so `config.apiKey` would otherwise be captured.
 const CREDENTIAL_KEYS = new Set(
-  ['apiKey', 'accessToken', 'authorization', 'clientSecret', 'headers', 'password', 'secret', 'token'].map(normalizeKey)
+  [
+    'apiKey',
+    'accessToken',
+    'refreshToken',
+    'idToken',
+    'sessionToken',
+    'authorization',
+    'clientSecret',
+    'privateKey',
+    'cookie',
+    'setCookie',
+    'headers',
+    'password',
+    'secret',
+    'token',
+  ].map(normalizeKey)
 )
 
 // Genkit plugin names that differ from the provider names the other integrations send.
