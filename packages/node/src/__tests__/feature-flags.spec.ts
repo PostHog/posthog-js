@@ -2968,6 +2968,13 @@ describe('local evaluation', () => {
         flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], { '7': { type: 'AND', values: [firstSeenFilter] } }),
       ],
       ['in a flag condition', flagTargeting([firstSeenFilter])],
+      ['with an empty type in a flag condition', flagTargeting([{ ...firstSeenFilter, type: '' }])],
+      [
+        'with an empty type in a cohort',
+        flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], {
+          '7': { type: 'AND', values: [{ ...firstSeenFilter, type: '' }] },
+        }),
+      ],
     ])('falls back to /flags instead of matching a created_at person property (%s)', async (_, localFlags) => {
       posthog = createClient(localFlags)
 

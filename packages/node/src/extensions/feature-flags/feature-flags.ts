@@ -1456,7 +1456,8 @@ function isUnsupportedPropertyGroup(
 const PROPERTY_FILTER_TYPES = new Set(['person', 'group'])
 
 function assertPropertyFilterTypeSupported(property: FlagProperty): void {
-  if (property.type && !PROPERTY_FILTER_TYPES.has(property.type)) {
+  // Only a filter without a type is a person filter. An empty type is unsupported.
+  if (property.type !== undefined && !PROPERTY_FILTER_TYPES.has(property.type)) {
     const error = new InconclusiveMatchError(
       `Can't evaluate a '${property.type}' filter on '${property.key}' locally`,
       'unsupported_definition'
