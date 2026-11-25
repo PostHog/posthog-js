@@ -96,6 +96,7 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import type { CaptureError } from './capture-v1/errors'
+import { RemoteConfigPayloadError } from './remote-config-errors'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
@@ -2676,7 +2677,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param flagKey - The feature flag key
-   * @returns Promise that resolves to the remote config payload or undefined
+   * @returns Promise that resolves to:
+   * - the payload, when the flag has one
+   * - `null`, when the flag is disabled
+   * - `undefined`, when the flag has no payload, or the request failed. A response with a status
+   *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
+   *   client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
@@ -2694,7 +2700,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return undefined
     }
 
-    const parsed = await response.json()
+    if (response.status < 200 || response.status >= 300) {
+      // The error body is not read, so cancel it to release the connection
+      void Promise.resolve(response.body?.cancel()).catch(() => {})
+      this._events.emit('error', new RemoteConfigPayloadError(flagKey, response.status))
+      return undefined
+    }
+
+    let parsed: JsonType
+    try {
+      // A flag with no payload is answered with an empty body
+      const body = await response.text()
+      if (!body.trim()) {
+        return undefined
+      }
+      parsed = JSON.parse(body)
+    } catch (error) {
+      this._events.emit('error', error)
+      return undefined
+    }
+
     // The payload from the endpoint is stored as a JSON encoded string. So when we return
     // it, it's effectively double encoded. As far as we know, we should never get single-encoded
     // JSON, but we'll be defensive here just in case.
