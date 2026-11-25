@@ -768,6 +768,10 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"false\\",
       \\"true\\"
     ],
+    \\"release_id\\": [
+      \\"undefined\\",
+      \\"string\\"
+    ],
     \\"__capturePostHogExceptions\\": [
       \\"undefined\\",
       \\"false\\",
