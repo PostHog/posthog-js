@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import RageClick from '../src/rageclick'
 
 describe('RageClick()', () => {
@@ -126,6 +127,43 @@ describe('RageClick()', () => {
             instance = new RageClick(false)
             const result = instance.isRageClick(0, 0, 0)
             expect(result).toBe(false)
+        })
+    })
+
+    describe('browser-forwarded label clicks', () => {
+        let label: HTMLLabelElement
+        let control: HTMLInputElement
+
+        beforeEach(() => {
+            instance = new RageClick(true)
+            document.body.innerHTML = ''
+            label = document.createElement('label')
+            label.htmlFor = 'rc-input'
+            control = document.createElement('input')
+            control.id = 'rc-input'
+            document.body.appendChild(label)
+            document.body.appendChild(control)
+        })
+
+        // A real label click reaches the detector twice: the genuine click on the label, then the
+        // browser's synthetic click forwarded to the label's control a moment later. Only the genuine
+        // click should count. Firefox gives the forwarded click detail 1, so it is recognised by its
+        // target (label.control), not by its detail value.
+        const labelClick = (t: number) => [
+            instance.isRageClick(5, 5, t, label),
+            instance.isRageClick(5, 5, t + 1, control),
+        ]
+
+        it('does not count the forwarded click toward a rage click', () => {
+            // Two user clicks on the label (four detector calls) must not rage click.
+            const detection = [...labelClick(10), ...labelClick(30)]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
+        it('still detects a rage click from three genuine label clicks', () => {
+            const detection = [...labelClick(10), ...labelClick(30), ...labelClick(50)]
+            // The third genuine click (fifth call) triggers; the forwarded clicks never do.
+            expect(detection).toEqual([false, false, false, false, true, false])
         })
     })
 })
