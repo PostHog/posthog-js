@@ -507,7 +507,7 @@ function record<T = eventWithTime>(
     ) {
       // we've got a user initiated event so first we need to apply
       // all DOM changes that have been buffering during paused state
-      mutationBuffers.forEach((buf) => buf.unfreeze());
+      [...mutationBuffers].forEach((buf) => buf.unfreeze());
     }
 
     if (inEmittingFrame) {
@@ -755,7 +755,7 @@ function record<T = eventWithTime>(
 
       shadowDomManager.init();
 
-      mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+      [...mutationBuffers].forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
       let node: ReturnType<typeof snapshot> = null;
       let deferredStylesheetLinks: HTMLLinkElement[] = [];
       try {
@@ -837,7 +837,7 @@ function record<T = eventWithTime>(
       // same for the FullSnapshot emit: the stop already drained the buffers
       // and reset the mirror this tail would otherwise unlock and emit against
       if (stopped) return;
-      mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+      [...mutationBuffers].forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
       canvasManager.onFullSnapshot();
 
       if (deferredStylesheetLinks.length) {
@@ -1356,7 +1356,7 @@ record.addCustomEvent = (<T>(tag: string, payload: T) => {
 }) satisfies typeof record.addCustomEvent;
 
 record.freezePage = (() => {
-  mutationBuffers.forEach((buf) => buf.freeze());
+  [...mutationBuffers].forEach((buf) => buf.freeze());
 }) satisfies typeof record.freezePage;
 
 record.takeFullSnapshot = ((isCheckout?: boolean) => {

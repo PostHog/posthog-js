@@ -331,6 +331,58 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('records a sibling iframe after a frozen page unfreezes and one iframe is blocked', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <button>click</button>
+          <iframe id="first" srcdoc="<body></body>"></iframe>
+          <iframe id="second" srcdoc="<body></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await page.evaluate(
+        async (initial, later) => {
+          const { rrweb } = window as unknown as IWindow;
+          const tick = () => new Promise((resolve) => setTimeout(resolve));
+          const docs = ['first', 'second'].map(
+            (id) =>
+              (document.getElementById(id) as HTMLIFrameElement)
+                .contentDocument!,
+          );
+          (rrweb.record as unknown as { freezePage: () => void }).freezePage();
+          docs[0].body.append(initial);
+          docs[1].body.append(later);
+          await tick();
+          document.getElementById('first')!.classList.add('rr-block');
+          await tick();
+          document.querySelector('button')!.click();
+        },
+        INITIAL_CONTENT,
+        LATER_CONTENT,
+      );
+      await waitForRAF(page);
+
+      const recorded = JSON.stringify(events);
+      expect({
+        blockedIframe: recorded.includes(INITIAL_CONTENT),
+        siblingIframe: recorded.includes(LATER_CONTENT),
+      }).toEqual({ blockedIframe: false, siblingIframe: true });
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {
