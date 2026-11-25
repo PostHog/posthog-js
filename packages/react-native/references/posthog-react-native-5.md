@@ -375,17 +375,30 @@ export function MyApp() {
 
 > **capture**(`event`, `properties?`, `options?`): `void`
 
+Captures an event.
+
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `event` | `string` |
-| `properties?` | `PostHogEventProperties` |
-| `options?` | `PostHogCaptureOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `event` | `string` | The name of the event |
+| `properties?` | `PostHogEventProperties` | Optional properties to include with the event |
+| `options?` | `PostHogCaptureOptions` | Optional capture options |
 
 #### Returns
 
 `void`
+
+#### Examples
+
+```js
+posthog.capture('signed_up', { plan: 'pro' })
+```
+
+```js
+// Tell PostHog not to create or update a person profile for this event
+posthog.capture('signed_up', { plan: 'pro' }, { options: { process_person_profile: false } })
+```
 
 ## Identify
 
@@ -529,7 +542,7 @@ flush
 
 ### `PostHog.alias`
 
-> **alias**(`alias`): `void`
+> **alias**(`alias`, `options?`): `void`
 
 Assigns an alias to the current user.
 
@@ -541,6 +554,7 @@ For example, if a distinct ID used on the frontend is not available in your back
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `alias` | `string` | The alias to assign to the current user |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$create_alias` event |
 
 #### Returns
 
@@ -641,7 +655,7 @@ Numeric values are converted to strings.
 
 ### `PostHog.captureException`
 
-> **captureException**(`error`, `additionalProperties?`, `hint?`): `void`
+> **captureException**(`error`, `additionalProperties?`, `hint?`, `options?`): `void`
 
 Capture a caught exception manually
 
@@ -660,7 +674,8 @@ Override these fields with `additionalProperties`, or remove them using `before_
 | ------ | ------ | ------ |
 | `error` | `unknown` | The error to capture |
 | `additionalProperties?` | `PostHogEventProperties` | Any additional properties to add to the error event |
-| `hint?` | `EventHint` | - |
+| `hint?` | `EventHint` | Optional details about how the error was caught |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$exception` event |
 
 #### Returns
 
@@ -1158,7 +1173,7 @@ Any actual internal use case for the session_id should be handled by the session
 
 ### `PostHog.group`
 
-> **group**(`groupType`, `groupKey`, `properties?`): `void`
+> **group**(`groupType`, `groupKey`, `properties?`, `options?`): `void`
 
 Associates the current user with a group.
 
@@ -1172,6 +1187,7 @@ This is a paid feature and is not available on the open-source or free cloud pla
 | `groupType` | `string` | The type of group (e.g. 'company', 'team') |
 | `groupKey` | `string` | The unique identifier for the group |
 | `properties?` | `PostHogEventProperties` | Optional properties to set for the group |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$groupidentify` event |
 
 #### Returns
 
@@ -1820,7 +1836,7 @@ posthog.setGroupPropertiesForFlags({'company': {'property1': 'value', property2:
 
 ### `PostHog.setPersonProperties`
 
-> **setPersonProperties**(`userPropertiesToSet?`, `userPropertiesToSetOnce?`, `reloadFeatureFlags?`): `void`
+> **setPersonProperties**(`userPropertiesToSet?`, `userPropertiesToSetOnce?`, `reloadFeatureFlags?`, `options?`): `void`
 
 Sets properties on the person profile associated with the current `distinct_id`.
 Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
@@ -1832,6 +1848,7 @@ Learn more about [identifying users](https://posthog.com/docs/product-analytics/
 | `userPropertiesToSet?` | \{\[`key`: `string`\]: `JsonType`; \} | `undefined` | Optional: An object of properties to store about the user. These properties will overwrite any existing values for the same keys. |
 | `userPropertiesToSetOnce?` | \{\[`key`: `string`\]: `JsonType`; \} | `undefined` | Optional: An object of properties to store about the user. If a property is previously set, this does not override that value. |
 | `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after setting the properties. Defaults to true. |
+| `options?` | `PostHogCaptureOptions` | `undefined` | Optional capture options for the `$set` event |
 
 #### Returns
 
@@ -2489,6 +2506,7 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
 | <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
 | <a id="event-1"></a> `event` | `string` | The name of the event |
+| <a id="options"></a> `options?` | `object` | Settings that tell PostHog how to process the event, sent apart from its properties. A hook that returns a new object keeps the event's options unless it sets `options`; `{}` clears them. |
 | <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
 | <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
 | <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
@@ -2543,6 +2561,28 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="property-mechanism-1"></a> `mechanism?` | `Partial`\<`Mechanism`\> |
 | <a id="property-skipfirstlines-1"></a> `skipFirstLines?` | `number` |
 | <a id="property-syntheticexception-1"></a> `syntheticException?` | `Error` \| `null` |
+
+### `EventOptions`
+
+> **EventOptions** = `object`
+
+Settings that tell PostHog how to process one event, sent with the event apart from its
+properties. Keys and values are sent as given, including keys this type doesn't list.
+An option wins over its legacy `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at`
+or `$product_tour_id` property.
+
+#### Indexable
+
+> \[`key`: `string`\]: `JsonType` \| `undefined`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="cookieless_mode"></a> `cookieless_mode?` | `boolean` | Whether PostHog processes this event in cookieless mode. |
+| <a id="disable_skew_correction"></a> `disable_skew_correction?` | `boolean` | Whether PostHog skips correcting this event's timestamp for client clock skew. |
+| <a id="process_person_profile"></a> `process_person_profile?` | `boolean` | Whether PostHog creates or updates a person profile for this event. |
+| <a id="product_tour_id"></a> `product_tour_id?` | `string` | The product tour this event belongs to. |
 
 ### `ExceptionStepsOptions`
 
@@ -2802,6 +2842,18 @@ Log capture types
 | <a id="navigation"></a> `navigation?` | `PostHogAutocaptureNavigationTrackerOptions` | Used for mutating the screen name and properties Only used if captureScreens is true **Default** `Default to the route name and params` |
 | <a id="nocaptureprop"></a> `noCaptureProp?` | `string` | Prop name used to prevent autocapture on an element and its children **Default** `'ph-no-capture'` |
 | <a id="propstocapture"></a> `propsToCapture?` | `string`[] | List of prop names to capture from elements **Default** `['style', 'testID', 'accessibilityLabel', 'ph-label', 'children']` |
+
+### `PostHogCaptureOptions`
+
+> **PostHogCaptureOptions** = `PostHogCaptureOptions` & `object`
+
+Options for a call that sends an event, such as `capture()`, `identify()` or `alias()`.
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `options?` | `EventOptions` | Settings that tell PostHog how to process the event. `before_send` can change them through the event's `options`. |
 
 ### `PostHogCaptureOptions`
 

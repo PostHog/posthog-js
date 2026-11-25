@@ -1024,6 +1024,11 @@ export type CaptureEvent = {
   $set_once?: PostHogEventProperties
   /** Timestamp for the event */
   timestamp?: Date
+  /**
+   * Settings that tell PostHog how to process the event, sent apart from its properties. A hook that
+   * returns a new object keeps the event's options unless it sets `options`; `{}` clears them.
+   */
+  options?: { [key: string]: JsonType | undefined }
 }
 
 /**

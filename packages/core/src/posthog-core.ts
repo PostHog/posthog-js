@@ -507,7 +507,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const setProps = userPropsObj || {}
         const setOnceProps = userPropsOnceObj || {}
         this.setPersonPropertiesForFlags({ $set: setProps, $set_once: setOnceProps }, false)
-        this.capture('$set', { $set: setProps, $set_once: setOnceProps })
+        this.capture('$set', { $set: setProps, $set_once: setOnceProps }, options)
 
         // The transition event must fire even when an identical property call was cached earlier;
         // cache only after capture so deduplication cannot suppress it.
@@ -521,7 +521,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       } else if (userPropsObj || userPropsOnceObj) {
         // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
         // and if so, send a $set event
-        this.setPersonProperties(userPropsObj, userPropsOnceObj)
+        this.setPersonProperties(userPropsObj, userPropsOnceObj, true, options)
       }
     })
   }
@@ -555,7 +555,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     })
   }
 
-  alias(alias: string): void {
+  alias(alias: string, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (!this._requirePersonProcessing('posthog.alias')) {
         return
@@ -564,7 +564,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       const distinctId = this.getDistinctId()
       const allProperties = this.enrichIdentityProperties({})
 
-      super.aliasStateless(alias, distinctId, allProperties)
+      super.aliasStateless(alias, distinctId, allProperties, options)
     })
   }
 
@@ -1689,11 +1689,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: JsonType },
     userPropertiesToSetOnce?: { [key: string]: JsonType },
-    reloadFeatureFlags = true
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
       const isSetEmpty = isNullish(userPropertiesToSet) || isEmptyObject(userPropertiesToSet)
@@ -1722,7 +1724,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         reloadFeatureFlags
       )
 
-      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }, options)
 
       this._cachedPersonProperties = hash
     })
@@ -1801,7 +1803,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * queued messages; type is a no-op, while library and library_version are only used as fallbacks
    * for the official properties.$lib and properties.$lib_version fields.
    * CaptureEvent exposes a subset matching the web SDK's
-   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
+   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp, plus options when the event has them.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
@@ -1820,6 +1822,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       $set_once: props.$set_once as PostHogEventProperties | undefined,
       // Convert timestamp to Date if it's a string (from currentISOTime())
       timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
+    }
+    if (message.options !== undefined) {
+      captureEvent.options = message.options as CaptureEvent['options']
     }
 
     const result = this._runBeforeSend(captureEvent)
@@ -1848,6 +1853,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,
+      ...(result.options !== undefined ? { options: result.options as JsonType } : {}),
     }
   }
 
