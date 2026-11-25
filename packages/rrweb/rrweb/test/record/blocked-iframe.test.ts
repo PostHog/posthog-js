@@ -165,6 +165,11 @@ describe('record a blocked iframe', () => {
       block: 'parent',
       blockingOptions: {},
     },
+    {
+      blocking: 'a selector that matches through a sibling',
+      block: 'sibling',
+      blockingOptions: { blockSelector: '.private + iframe' },
+    },
   ] as const;
 
   it.each(
@@ -189,7 +194,7 @@ describe('record a blocked iframe', () => {
         await page.goto('about:blank');
         await page.setContent(
           `<!DOCTYPE html><html><body>
-            <div id="parent"><iframe ${src}></iframe></div>
+            <div id="parent"><span id="sibling"></span><iframe ${src}></iframe></div>
           </body></html>`,
           { waitUntil: 'load' },
         );
@@ -219,6 +224,9 @@ describe('record a blocked iframe', () => {
             if (block === 'attribute') iframe.setAttribute('data-private', '');
             if (block === 'parent') {
               document.getElementById('parent')!.classList.add('rr-block');
+            }
+            if (block === 'sibling') {
+              document.getElementById('sibling')!.classList.add('private');
             }
             if (takeFullSnapshot) {
               // let the block mutation be processed before the snapshot
