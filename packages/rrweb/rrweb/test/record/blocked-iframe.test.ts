@@ -737,7 +737,8 @@ describe('record a blocked iframe', () => {
 
   it('a middle frame with a block selector does not relay its cross-origin child', async () => {
     // top (about:blank) > middle (localhost) > nested (127.0.0.1): every hop is cross-origin
-    const nestedServer = await startServer(3031);
+    // port 0 picks a free port, so this never collides with the shared server
+    const nestedServer = await startServer(0);
     const page = await browser.newPage();
     try {
       const nestedURL = getServerURL(nestedServer).replace(
