@@ -505,6 +505,25 @@ describe('captureAiGeneration', () => {
     expect(JSON.stringify(tool)).toContain('secret')
   })
 
+  class SearchConfig {
+    apiKey = 'secret'
+  }
+  const cyclicMetadata: Record<string, unknown> = {}
+  cyclicMetadata.self = cyclicMetadata
+  it.each([
+    ['class instance config', { exaAiSearch: new SearchConfig() }],
+    ['toJSON config', { exaAiSearch: { apiKey: 'secret', toJSON: () => ({ apiKey: 'secret' }) } }],
+    ['cyclic sibling', { exaAiSearch: { apiKey: 'secret' }, metadata: cyclicMetadata }],
+  ])('redacts Gemini tool credentials in unusual shapes: %s', async (_, tool) => {
+    const client = buildClient()
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, tools: [tool] })
+
+    const [capturedTool] = lastCaptureProperties(client).$ai_tools as Record<string, unknown>[]
+    expect(capturedTool.exaAiSearch).toEqual({ apiKey: '[REDACTED]' })
+    expect(JSON.stringify(capturedTool)).not.toContain('secret')
+  })
+
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
     const client = buildClient({ enableExceptionAutocapture: true })
     const error = new Error('boom')

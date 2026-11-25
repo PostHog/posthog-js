@@ -1,3 +1,4 @@
+import { toJsonSafeValue } from '@posthog/core'
 import { isObject } from './typeGuards'
 
 const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
@@ -79,15 +80,19 @@ const isGeminiTool = (tool: Record<string, unknown>): boolean =>
     .map(normalizeKey)
     .some((key) => key !== GEMINI_SCHEMA_FIELD && GEMINI_TOOL_FIELDS.has(key))
 
-/** Masks the credential keys under every field of a `@google/genai` tool except its function declarations. */
+/**
+ * Masks the credential keys under every field of a `@google/genai` tool except its function declarations.
+ * A class-based tool, such as `mcpToTool(client)`, holds a live client with its auth headers, so only a stub is kept.
+ */
 export function redactGeminiToolDefinition(tool: unknown): unknown {
   if (!isPlainObject(tool)) {
-    return tool
+    return isObject(tool) ? { type: 'callable_tool' } : tool
   }
   return Object.fromEntries(
     Object.entries(tool).map(([key, value]) => [
       key,
-      normalizeKey(key) === GEMINI_SCHEMA_FIELD ? value : redactKeys(value, GEMINI_CREDENTIAL_KEYS),
+      // Converted to plain JSON first, so class instances, `toJSON()` results and cycles are masked too.
+      normalizeKey(key) === GEMINI_SCHEMA_FIELD ? value : redactKeys(toJsonSafeValue(value), GEMINI_CREDENTIAL_KEYS),
     ])
   )
 }
