@@ -486,6 +486,10 @@ describe('captureAiGeneration', () => {
     ['parallelAiSearch apiKey', { parallelAiSearch: { apiKey: 'secret' } }],
     ['mcpServers headers', { mcpServers: [{ streamableHttpTransport: { headers: { Authorization: 'secret' } } }] }],
     ['snake_case config', { google_maps: { auth_config: { oauth_config: { access_token: 'secret' } } } }],
+    [
+      'labeled tool',
+      { name: 'docs', mcpServers: [{ streamableHttpTransport: { headers: { Authorization: 'secret' } } }] },
+    ],
   ])('redacts Gemini tool credentials: %s', async (_, tool) => {
     const client = buildClient()
     const functionTool = {
