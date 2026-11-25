@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.8.1
+
+### Patch Changes
+
+- [#5738](https://github.com/PostHog/posthog-js/pull/5738) [`12e1c48`](https://github.com/PostHog/posthog-js/commit/12e1c48966b3786d38090bce57e2d65a388ec6b5) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A conversation handle the agent never received (the tool threw, or its result had no `content` to carry it) no longer sets `$session_id`: the call keeps the session it would have had without one, as the sdk-specs MCP analytics spec requires.
+  (2026-11-25)
+
 ## 1.8.0
 
 ### Minor Changes

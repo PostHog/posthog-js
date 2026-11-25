@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.14.2
+
+### Patch Changes
+
+- [#5772](https://github.com/PostHog/posthog-js/pull/5772) [`e6b10dc`](https://github.com/PostHog/posthog-js/commit/e6b10dc87febb5f5c95a1b580eef859beb3c7f62) Thanks [@Vivek1898](https://github.com/Vivek1898)! - Stop counting the browser's forwarded click from a `<label>` as a second click, so clicking a label no longer triggers a false rage click
+  (2026-11-25)
+
 ## 0.14.1
 
 ### Patch Changes
