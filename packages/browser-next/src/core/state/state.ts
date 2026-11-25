@@ -484,6 +484,22 @@ export class BrowserState {
         }
     }
 
+    /**
+     * The session ID the next capture would use, when it is known without starting a session, for read-only
+     * consumers: the persisted session, including one adopted from another tab, while it is not expired and no
+     * reset is pending, or else a valid pending bootstrap session, which the next capture adopts. Writes nothing.
+     * The window ID is included only when this tab already has one and the session continues.
+     */
+    peekSession(now = Date.now()): { sessionId: string; windowId?: string } | undefined {
+        const { session, bootstrap, rotated } = this._nextSession(isTimestamp(now) ? now : 0)
+        if (rotated || !session) {
+            return bootstrap ? { sessionId: bootstrap[0] } : undefined
+        }
+        return this._windowId
+            ? { sessionId: session.sessionId, windowId: this._windowId }
+            : { sessionId: session.sessionId }
+    }
+
     get consent(): ConsentState {
         return this.refreshConsent()
     }
@@ -548,16 +564,9 @@ export class BrowserState {
 
     prepareSessionForEvent(now = Date.now()): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
-        const { external, session, lastActivityWriteTimestamp, adoptedAfterReset } = this._readSessionAuthority()
-
-        const pendingReason = this._pendingSessionReason
-        const expiry = sessionExpiryReason(session, safeNow)
-        const bootstrap =
-            this._bootstrapSession && safeNow - this._bootstrapSession[1] <= SESSION_MAX_LENGTH_MS
-                ? this._bootstrapSession
-                : undefined
-        const rotated = !!(pendingReason || !session || expiry || (bootstrap && bootstrap[0] !== session.sessionId))
-        const reason = adoptedAfterReset ? 'reset' : (pendingReason ?? expiry)
+        const { external, session, lastActivityWriteTimestamp, adoptedAfterReset, bootstrap, expiry, rotated } =
+            this._nextSession(safeNow)
+        const reason = adoptedAfterReset ? 'reset' : (this._pendingSessionReason ?? expiry)
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external), bootstrap)
             : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
@@ -704,6 +713,28 @@ export class BrowserState {
         }
         const state = parseState(value)
         return state ? [true, state] : [false]
+    }
+
+    /**
+     * Decides, without writing anything, whether the next capture continues the persisted session or rotates to
+     * a new one (seeded from a valid pending bootstrap). Capture and `peekSession` share it so that read-only
+     * consumers see the session the next capture uses.
+     */
+    private _nextSession(safeNow: number) {
+        const authority = this._readSessionAuthority()
+        const { session } = authority
+        const expiry = sessionExpiryReason(session, safeNow)
+        const bootstrap =
+            this._bootstrapSession && safeNow - this._bootstrapSession[1] <= SESSION_MAX_LENGTH_MS
+                ? this._bootstrapSession
+                : undefined
+        const rotated = !!(
+            this._pendingSessionReason ||
+            !session ||
+            expiry ||
+            (bootstrap && bootstrap[0] !== session.sessionId)
+        )
+        return { ...authority, expiry, bootstrap, rotated }
     }
 
     private _readSessionAuthority(): {
