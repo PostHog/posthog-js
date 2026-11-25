@@ -84,6 +84,8 @@ export interface V1CaptureSenderConfig {
   libraryVersion: string
   /** Value for the `User-Agent` header, if the runtime allows setting it. */
   userAgent?: string
+  /** Extra headers sent on every request. A header the sender sets itself always wins, whatever its case. */
+  extraHeaders?: Record<string, string>
   historicalMigration: boolean
   /** The body encoding; a body that fails to compress is sent uncompressed. */
   compression: CaptureCompression
@@ -118,6 +120,38 @@ export interface V1SendOptions {
    * as undelivered.
    */
   keepUnsent?: boolean
+  /**
+   * For an SDK with a durable queue. When set, events the server asked to resend (a retryable
+   * status or `retry` results on the last attempt) and a batch of more than one event that got a
+   * `413` are returned to the caller unreported, and this is called once with why, so the caller can
+   * wait or halve the batch before sending them again. Unsent events (`keepUnsent`) also call it.
+   */
+  onDeferred?: (deferral: V1SendDeferral) => void
+  /**
+   * The request these events were kept from, when they are exactly the events it left to send again.
+   * The send reuses its request ID and `created_at` and continues its attempt numbers.
+   */
+  retryOf?: V1RequestIdentity
+}
+
+/** A capture request's identity, which a resend of the same events keeps. */
+export interface V1RequestIdentity {
+  requestId: string
+  /** The batch's `created_at`. */
+  createdAt: string
+  /** The `PostHog-Attempt` of the request's last attempt. */
+  attempt: number
+}
+
+export interface V1SendDeferral {
+  /** Why the events were kept, such as `HTTP 404`, for logs. */
+  reason: string
+  /** The server's `Retry-After`, when the last response carried one. */
+  retryAfterMs?: number
+  /** The batch got a `413` and should be resent in smaller batches. */
+  tooLarge: boolean
+  /** The request the events were kept from, for a resend of exactly those events to pass as `retryOf`. */
+  request: V1RequestIdentity
 }
 
 interface RedirectOutcome {
@@ -173,10 +207,12 @@ export class V1CaptureSender {
       return []
     }
 
-    const { signal, keepUnsent = false } = options
-    const requestId = this.generateRequestId()
+    const { signal, keepUnsent = false, onDeferred, retryOf } = options
+    const requestId = retryOf?.requestId ?? this.generateRequestId()
     // created_at is generated once and stays stable across every retry.
-    const createdAt = new Date(this.now()).toISOString()
+    const createdAt = retryOf?.createdAt ?? new Date(this.now()).toISOString()
+    const attemptsBefore = retryOf?.attempt ?? 0
+    let lastAttempt = attemptsBefore
     const url = `${this.config.host}${this.config.path}`
     const drops: CaptureDroppedEvent[] = []
     const loss = new CaptureLossTally()
@@ -185,10 +221,16 @@ export class V1CaptureSender {
     const unsent = (cause: unknown, failure: string): T[] => {
       if (keepUnsent) {
         this.surfacePartialDrops(requestId, drops, loss)
+        onDeferred?.({ reason: failure, tooLarge: false, request: { requestId, createdAt, attempt: lastAttempt } })
         return pending
       }
       this.surfaceBatchFailure(requestId, drops, pending, cause, loss, failure)
       return []
+    }
+    const deferred = (kept: T[], deferral: Omit<V1SendDeferral, 'request'>): T[] => {
+      this.surfacePartialDrops(requestId, drops, loss)
+      onDeferred?.({ ...deferral, request: { requestId, createdAt, attempt: lastAttempt } })
+      return kept
     }
 
     // Always make one attempt, so a bad budget reports a delivery error instead of dropping the batch silently.
@@ -204,7 +246,8 @@ export class V1CaptureSender {
       let captureAttempt: V1CaptureAttempt | undefined
       let retryDelayMs: number | undefined
       try {
-        captureAttempt = await this.sendOnce(url, payload, attempt, requestId, signal)
+        lastAttempt = attemptsBefore + attempt
+        captureAttempt = await this.sendOnce(url, payload, lastAttempt, requestId, signal)
         const { response, signal: attemptSignal, redirectFailure } = captureAttempt
         const { status } = response
         if (redirectFailure !== undefined) {
@@ -214,6 +257,12 @@ export class V1CaptureSender {
           return []
         }
         if (status < 200 || status >= 300) {
+          const tooLarge = status === 413 && pending.length > 1
+          if (onDeferred && (tooLarge || (isLastAttempt && RETRYABLE_STATUSES.has(status)))) {
+            const retryAfterMs = this.parseRetryAfter(response)
+            await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
+            return deferred(pending, { reason: `HTTP ${status}`, retryAfterMs, tooLarge })
+          }
           if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
             const retryAfterMs = this.parseRetryAfter(response)
             await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
@@ -252,6 +301,13 @@ export class V1CaptureSender {
           if (retryable.length === 0) {
             this.surfacePartialDrops(requestId, drops, loss)
             return []
+          }
+          if (isLastAttempt && onDeferred) {
+            return deferred(retryable, {
+              reason: 'the server asked to retry them',
+              retryAfterMs: this.parseRetryAfter(response),
+              tooLarge: false,
+            })
           }
           if (isLastAttempt) {
             loss.add(`still marked for retry after ${maxAttempts} attempt(s) (HTTP ${status})`, retryable.length)
@@ -493,6 +549,19 @@ export class V1CaptureSender {
     }
     if (this.config.userAgent) {
       headers['User-Agent'] = this.config.userAgent
+    }
+    const extraHeaders = this.config.extraHeaders
+    if (extraHeaders) {
+      const reserved = new Set([
+        'user-agent',
+        'content-encoding',
+        ...Object.keys(headers).map((name) => name.toLowerCase()),
+      ])
+      for (const [name, value] of Object.entries(extraHeaders)) {
+        if (!reserved.has(name.toLowerCase())) {
+          headers[name] = value
+        }
+      }
     }
     return headers
   }

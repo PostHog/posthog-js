@@ -60,6 +60,9 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
+// Events that identify, alias, merge or update a person or group.
+const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
+
 /**
  * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
  * `getAllFeatureFlags()` and `updateFlags()` replace.
@@ -296,6 +299,43 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
+  /**
+   * Whether events use the posthog-js-lite / React Native 4.x person state: the SDK's `$process_person_profile` and
+   * `$is_identified` replace a registered or caller value, identity events carry a registered
+   * `$process_person_profile`, and `$autocapture` events get neither. {@link PostHogCore} keeps it for
+   * posthog-js-lite and `@posthog/electron`.
+   */
+  protected usesLegacyEventPersonState(): boolean {
+    return false
+  }
+
+  // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
+  // 4.0; a `null` one counts as unset. The legacy person state always uses the SDK's `$process_person_profile`.
+  private stampPersonState(properties: PostHogEventProperties): void {
+    const hasPersonProcessing = this._hasPersonProcessing()
+    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] == null) {
+      properties['$process_person_profile'] = hasPersonProcessing
+    }
+    if (this.usesLegacyEventPersonState() || properties['$is_identified'] == null) {
+      properties['$is_identified'] = this._isIdentified()
+    }
+    // If the event has person processing, ensure that all future events will too
+    if (hasPersonProcessing) {
+      this._requirePersonProcessing('capture')
+    }
+  }
+
+  // A registered `$process_person_profile` is left off identity events: PostHog drops `$identify`, `$create_alias`
+  // and `$groupidentify` when person processing is off, so a registered `false` would break identify, alias and
+  // group. `before_send` can still set it.
+  private enrichIdentityProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    const enriched = this.enrichProperties(properties)
+    if (!this.usesLegacyEventPersonState()) {
+      delete enriched['$process_person_profile']
+    }
+    return enriched
+  }
+
   // enrichProperties already merged the common properties under the caller's, so only fill in
   // the ones that are missing instead of overriding the caller.
   protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
@@ -431,7 +471,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       // if no $set is provided we assume all properties are $set
       const userProps = properties?.$set || properties
 
-      const allProperties = this.enrichProperties({
+      const allProperties = this.enrichIdentityProperties({
         $anon_distinct_id: this.getAnonymousId(),
         ...maybeAdd('$set', userProps),
         ...maybeAdd('$set_once', userPropsOnce),
@@ -501,16 +541,15 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const allProperties = this.enrichProperties(properties)
-
-      // Add $process_person_profile flag to event properties
-      const hasPersonProcessing = this._hasPersonProcessing()
-      allProperties['$process_person_profile'] = hasPersonProcessing
-      allProperties['$is_identified'] = this._isIdentified()
-
-      // If the event has person processing, ensure that all future events will too
-      if (hasPersonProcessing) {
-        this._requirePersonProcessing('capture')
+      // A registered `$process_person_profile` doesn't apply to identity events or person updates.
+      if (
+        !this.usesLegacyEventPersonState() &&
+        IDENTITY_EVENTS.includes(event) &&
+        properties?.['$process_person_profile'] == null
+      ) {
+        delete allProperties['$process_person_profile']
       }
+      this.stampPersonState(allProperties)
 
       super.captureStateless(distinctId, event, allProperties, options)
     })
@@ -523,7 +562,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const allProperties = this.enrichProperties({})
+      const allProperties = this.enrichIdentityProperties({})
 
       super.aliasStateless(alias, distinctId, allProperties)
     })
@@ -537,14 +576,18 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   ): void {
     this.wrap(() => {
       const distinctId = this.getDistinctId()
+      const autocaptureProperties: PostHogEventProperties = {
+        ...this.enrichProperties(properties),
+        $event_type: eventType,
+        $elements: elements,
+      }
+      if (!this.usesLegacyEventPersonState()) {
+        this.stampPersonState(autocaptureProperties)
+      }
       const payload = {
         distinct_id: distinctId,
         event: '$autocapture',
-        properties: {
-          ...this.enrichProperties(properties),
-          $event_type: eventType,
-          $elements: elements,
-        },
+        properties: autocaptureProperties,
       }
 
       this.enqueue('autocapture', payload, options)
@@ -612,7 +655,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const eventProperties = this.enrichProperties({})
+      const eventProperties = this.enrichIdentityProperties({})
       super.groupIdentifyStateless(groupType, groupKey, groupProperties, options, distinctId, eventProperties)
     })
   }
@@ -1850,6 +1893,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
 /** The PostHog client core, including the deprecated feature flag getters. */
 export abstract class PostHogCore extends PostHogCoreBase {
+  protected usesLegacyEventPersonState(): boolean {
+    return true
+  }
+
   protected usesLegacyFlagValues(): boolean {
     return true
   }

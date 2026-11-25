@@ -29,7 +29,21 @@ import {
   isObject,
   PostHogFeatureFlagDetails,
   uuidv7,
+  type SendBatchOutcome,
+  withoutNullMembers,
 } from '@posthog/core'
+import {
+  ANALYTICS_CAPTURE_ENDPOINT,
+  CaptureError,
+  type CaptureDroppedEvent,
+  V1CaptureSender,
+  canonicalizeUuid,
+  serializeV1Event,
+  wireProblem,
+  type SerializedV1Event,
+  type V1RequestIdentity,
+  type V1SendDeferral,
+} from '@posthog/core/capture-v1'
 import { Properties } from '@posthog/types'
 import {
   PostHogRNStorage,
@@ -114,6 +128,39 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
 
+// A null person or group property clears it, so these keep their nulls, as in posthog-ios 4.0.
+const NULL_PRESERVING_PROPERTY_KEYS = ['$set', '$set_once', '$group_set']
+
+// Null and undefined property members are left off the wire and the persisted queue, as native 4.0 does. This runs
+// after `before_send`, so members a hook sets to null are removed too.
+const withoutNullProperties = (message: PostHogEventProperties | null): PostHogEventProperties | null => {
+  if (!message || !isObject(message.properties)) {
+    return message
+  }
+  const properties = message.properties as PostHogEventProperties
+  // A property whose getter throws must not fail the capture, so such an event is sent unchanged.
+  try {
+    let changed = false
+    const kept: PostHogEventProperties = {}
+    for (const [key, value] of Object.entries(properties)) {
+      let next = value
+      if (!NULL_PRESERVING_PROPERTY_KEYS.includes(key)) {
+        if (value === null || value === undefined) {
+          changed = true
+          continue
+        }
+        next = withoutNullMembers(value)
+        changed = changed || next !== value
+      }
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value: next, enumerable: true, writable: true, configurable: true })
+    }
+    return changed ? { ...message, properties: kept } : message
+  } catch {
+    return message
+  }
+}
+
 const isReplayDebugEvent = (eventName: unknown): boolean =>
   typeof eventName === 'string' &&
   eventName.startsWith('$') &&
@@ -128,7 +175,8 @@ const omitProperties = (properties: JsonType, shouldOmit: (key: string) => boole
   const kept: PostHogEventProperties = {}
   for (const [key, value] of Object.entries(properties)) {
     if (!shouldOmit(key)) {
-      kept[key] = value
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value, enumerable: true, writable: true, configurable: true })
     }
   }
   return kept
@@ -186,7 +234,8 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   customStorage?: PostHogCustomStorage
 
   /**
-   * A list of headers that should be sent with requests to the PostHog API.
+   * Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets
+   * itself, such as `Authorization` and `User-Agent`, replace yours.
    */
   requestHeaders?: { [header_name: string]: string }
 
@@ -366,6 +415,9 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
+// sdk-specs event-batcher: capture v1 requests carry at most 5 MiB of event bytes.
+const CAPTURE_V1_BATCH_BYTE_TARGET = 5 * 1024 * 1024
+
 export class PostHog extends PostHogCoreBase {
   private _persistence: PostHogOptions['persistence']
   private _eventsStorage: PostHogRNStorage
@@ -440,6 +492,17 @@ export class PostHog extends PostHogCoreBase {
   private _overrideDisplayLanguage: string | null
   private _featureFlagsLoaded = false
   private _requestHeaders: { [header_name: string]: string } = {}
+  private _captureV1Sender?: V1CaptureSender
+  // Resends of events capture asked to send again: how many waits in a row, and when the next may start.
+  private _captureResendCount = 0
+  private _captureResendAt = 0
+  private _captureResendTimer?: ReturnType<typeof setTimeout>
+  // The events capture left to send again, by queued uuid in queue order, and the request they came from.
+  private _captureResend?: { uuids: string[]; request: V1RequestIdentity }
+  // Set once shutdown() returns, so a capture response that lands later schedules no resend.
+  private _captureShutDown = false
+  // While shutdown drains, its own hold waits out resends; a background timer would send outside that drain.
+  private _captureShuttingDown = false
 
   /**
    * The project token the client was created with.
@@ -490,8 +553,15 @@ export class PostHog extends PostHogCoreBase {
     if (!normalizedProjectToken) {
       console.error('You must pass your PostHog project token. The client will be disabled.')
     }
+    // Capture rejects personal API keys, so a secret key never reaches the wire.
+    const personalApiKey = normalizedProjectToken.startsWith('phx_')
+    if (personalApiKey) {
+      console.error(
+        'A personal API key ("phx_...") was passed where the project token ("phc_...") belongs. The client will be disabled.'
+      )
+    }
 
-    super(normalizedProjectToken, options)
+    super(normalizedProjectToken, personalApiKey ? { ...options, disabled: true } : options)
     this.on('featureflags', () => {
       this._featureFlagsLoaded = true
     })
@@ -832,6 +902,11 @@ export class PostHog extends PostHogCoreBase {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
+    this._captureShuttingDown = true
+    if (this._captureResendTimer) {
+      clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
     if (nativeSessionOwner === this) {
       nativeSessionOwner = undefined
     }
@@ -841,6 +916,13 @@ export class PostHog extends PostHogCoreBase {
       const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
       await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(remainingMs)])
     } finally {
+      // The final flush can schedule another resend; nothing may send after shutdown.
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
+      this._captureResendAt = 0
+      this._captureShutDown = true
       this._replayDebugBundleAcceptedAt = undefined
       this._replayDebugBundleClaimed = false
       this._errorTracking.shutdown()
@@ -873,6 +955,193 @@ export class PostHog extends PostHogCoreBase {
 
   protected getCustomHeaders(): { [key: string]: string } {
     return { ...super.getCustomHeaders(), ...this._requestHeaders }
+  }
+
+  /**
+   * Sends queued events to capture v1 (`/i/v1/analytics/events`), one attempt per flush. Events
+   * capture asks to send again, or that got no response, stay queued and are resent after a wait of
+   * 1 second doubling to 30 seconds, with jitter. The resend carries only those events, as the next
+   * attempt of the same request.
+   */
+  protected async sendBatch(batchMessages: (PostHogEventProperties | undefined)[]): Promise<void | SendBatchOutcome> {
+    const resend = this._captureResend
+    this._captureResend = undefined
+    const exactResend =
+      resend && batchMessages.length === resend.uuids.length && this._leadsWithResend(batchMessages, resend.uuids)
+    const retryOf = exactResend ? resend.request : undefined
+    const batchIndices = new Map<SerializedV1Event, number>()
+    const drops: CaptureDroppedEvent[] = []
+    for (const [index, message] of batchMessages.entries()) {
+      if (!message) {
+        continue
+      }
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      const drop = (details: string, reason: string): void => {
+        this._logger.warn(`Dropping event "${String(message.event)}": ${reason}.`)
+        drops.push({ uuid: (queuedUuid && canonicalizeUuid(queuedUuid)) ?? String(queuedUuid), details })
+      }
+      const problem = wireProblem(message)
+      if (problem) {
+        drop('invalid event', problem)
+        continue
+      }
+      let serialized: SerializedV1Event
+      try {
+        serialized = this._serializeForCapture(message)
+      } catch (error) {
+        drop('unserializable event', `it can't be serialized (${String(error)})`)
+        continue
+      }
+      batchIndices.set(serialized, index)
+    }
+    if (drops.length > 0) {
+      const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+      error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
+      this._emitCaptureError(error)
+    }
+
+    let deferral: V1SendDeferral | undefined
+    const kept = await this._getCaptureV1Sender().send([...batchIndices.keys()], {
+      keepUnsent: true,
+      onDeferred: (reason) => {
+        deferral = reason
+      },
+      retryOf,
+    })
+    if (!deferral) {
+      this._captureResendCount = 0
+      this._captureResendAt = 0
+      if (this._captureResendTimer) {
+        clearTimeout(this._captureResendTimer)
+        this._captureResendTimer = undefined
+      }
+      return
+    }
+    if (!deferral.tooLarge) {
+      this._scheduleCaptureResend(deferral.retryAfterMs)
+    }
+    this._logger.info(`Keeping ${kept.length} events to send again: ${deferral.reason}.`)
+    const keepIndices = kept
+      .map((event) => batchIndices.get(event))
+      .filter((index): index is number => index !== undefined)
+    // A halved batch starts over as new requests.
+    if (!deferral.tooLarge) {
+      const uuids = keepIndices.map((index) => batchMessages[index]?.uuid)
+      if (uuids.every((uuid): uuid is string => typeof uuid === 'string')) {
+        this._captureResend = { uuids, request: deferral.request }
+      }
+    }
+    return { keepIndices, tooLarge: deferral.tooLarge }
+  }
+
+  protected resendBatchSize(messages: (PostHogEventProperties | undefined)[]): number | undefined {
+    const resend = this._captureResend
+    return resend && this._leadsWithResend(messages, resend.uuids) ? resend.uuids.length : undefined
+  }
+
+  // Whether `messages` starts with the events left to resend, in order. Eviction or a clear breaks the match.
+  private _leadsWithResend(messages: (PostHogEventProperties | undefined)[], uuids: string[]): boolean {
+    return messages.length >= uuids.length && uuids.every((uuid, index) => messages[index]?.uuid === uuid)
+  }
+
+  protected batchByteTarget(): number {
+    return CAPTURE_V1_BATCH_BYTE_TARGET
+  }
+
+  protected batchEventBytes(message: PostHogEventProperties): number {
+    if (wireProblem(message)) {
+      return 0
+    }
+    try {
+      return this._serializeForCapture(message).bytes
+    } catch {
+      return 0
+    }
+  }
+
+  // batchEventBytes() and sendBatch() see the same message objects in one flush, so each is serialized once.
+  private _serializedForCapture = new WeakMap<PostHogEventProperties, SerializedV1Event>()
+
+  private _serializeForCapture(message: PostHogEventProperties): SerializedV1Event {
+    let serialized = this._serializedForCapture.get(message)
+    if (!serialized) {
+      const queuedUuid = typeof message.uuid === 'string' ? message.uuid : undefined
+      const uuid = (queuedUuid !== undefined ? canonicalizeUuid(queuedUuid) : undefined) ?? uuidv7()
+      serialized = serializeV1Event({ ...message, uuid })
+      this._serializedForCapture.set(message, serialized)
+    }
+    return serialized
+  }
+
+  // Holds every flush while capture waits; shutdown() waits it out when it fits in its timeout.
+  protected flushHoldMs(): number {
+    return Math.max(0, this._captureResendAt - Date.now())
+  }
+
+  private _scheduleCaptureResend(retryAfterMs: number | undefined): void {
+    if (this._captureShutDown) {
+      return
+    }
+    const maxWaitMs = 30_000
+    const jitter = 0.75 + 0.5 * Math.random()
+    // Cap before jitter so waits at the ceiling stay spread out.
+    const baseMs = Math.min(1000 * 2 ** Math.min(this._captureResendCount, 5), maxWaitMs)
+    const backoffMs = Math.min(baseMs * jitter, maxWaitMs)
+    const waitMs = retryAfterMs === undefined ? backoffMs : Math.max(backoffMs, Math.min(retryAfterMs, maxWaitMs))
+    this._captureResendCount++
+    this._captureResendAt = Date.now() + waitMs
+    if (this._captureResendTimer) {
+      clearTimeout(this._captureResendTimer)
+      this._captureResendTimer = undefined
+    }
+    if (this._captureShuttingDown) {
+      return
+    }
+    this._captureResendTimer = safeSetTimeout(() => {
+      this._captureResendTimer = undefined
+      // Timers can fire a little early, which would otherwise leave the hold in place with nothing rescheduled.
+      this._captureResendAt = 0
+      void this.flushAutomatic().catch(logFlushError)
+    }, waitMs)
+  }
+
+  // A throwing listener must not stop delivery or decide which events stay queued.
+  private _emitCaptureError(error: CaptureError): void {
+    try {
+      this._events.emit('error', error)
+    } catch (e) {
+      this._logger.error('An error listener threw:', e)
+    }
+  }
+
+  private _getCaptureV1Sender(): V1CaptureSender {
+    this._captureV1Sender ??= new V1CaptureSender(
+      {
+        host: this.host,
+        path: ANALYTICS_CAPTURE_ENDPOINT,
+        apiKey: this.projectToken,
+        libraryId: this.getLibraryId(),
+        libraryVersion: this.getLibraryVersion(),
+        userAgent: this.getCustomUserAgent() || undefined,
+        extraHeaders: this.getCustomHeaders(),
+        historicalMigration: this.historicalMigration,
+        compression: this.disableCompression ? 'none' : 'gzip',
+        requestTimeoutMs: this.requestTimeout,
+        // Resends wait between flushes instead, so a failure never holds a flush open.
+        maxRetries: 0,
+        isDebug: this.isDebug,
+      },
+      {
+        // The platform follows redirects. On react-native-web, `redirect: 'manual'` would hide a 307/308
+        // behind status 0 and the batch would be dropped.
+        fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
+        onError: (error, summary) => {
+          this._logger.warn(summary)
+          this._emitCaptureError(error)
+        },
+      }
+    )
+    return this._captureV1Sender
   }
 
   getCommonEventProperties(): PostHogEventProperties {
@@ -1150,7 +1419,8 @@ export class PostHog extends PostHogCoreBase {
    * Registers super properties that are sent with every event.
    *
    * Super properties are properties associated with events that are set once and then sent with every capture call.
-   * They persist across sessions and are stored locally.
+   * They persist across sessions and are stored locally. A registered `$process_person_profile` is left off
+   * `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events.
    *
    * {@label Capture}
    *
@@ -1372,7 +1642,10 @@ export class PostHog extends PostHogCoreBase {
    * @see flushLogs
    * @public
    *
-   * @returns Promise that resolves when the flush is complete
+   * @returns Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
+   * such as after a network error or a `503`, stay queued and are sent again after a wait; a flush
+   * during that wait resolves without sending. Events PostHog dropped, such as after a `400` or `401`,
+   * are reported on `posthog.on('error')`. The promise resolves in all these cases.
    */
   flush(): Promise<void> {
     return super.flush()
@@ -3804,6 +4077,12 @@ export class PostHog extends PostHogCoreBase {
     return recordingActive
   }
 
+  // The one null-property cleanup for enqueue(), sendImmediate() and events restored from a 4.x queue.
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    const normalized = super.normalizeMessage(message)
+    return withoutNullProperties(normalized) ?? normalized
+  }
+
   /**
    * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
    * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
@@ -3841,10 +4120,10 @@ export class PostHog extends PostHogCoreBase {
           // Native runs its own debug-property builder on the handed-off event, so the JS
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
-          observation.nativeCapture = observation.prepareNativeCapture({
-            ...processed,
-            properties: withoutDebugProperties(processed.properties),
-          })
+          const nativePayload = { ...processed, properties: withoutDebugProperties(processed.properties) }
+          observation.nativeCapture = observation.prepareNativeCapture(
+            withoutNullProperties(nativePayload) ?? nativePayload
+          )
         } catch (e) {
           this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
           observation.nativeCapture = undefined
