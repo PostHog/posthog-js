@@ -2131,6 +2131,24 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(1)
     })
 
+    it.each([
+      ['a 503, which PostHog may have queued', { status: 503 }, 'unconfirmed'],
+      ['a 429, which PostHog did not queue', { status: 429, code: 'throttled' }, 'failed'],
+    ] as const)('sends no retry once the client shuts down after %s', async (_case, fault, status) => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', fault)
+
+      const pending = posthog.emails.batch(WELCOME, recipientsTo(2))
+      await vi.advanceTimersByTimeAsync(0)
+      const shutdown = posthog.shutdown()
+      const { error } = await settle(pending)
+      await shutdown
+
+      expect(error).toMatchObject({ code: 'client_closed' })
+      expect(postHog.requests.batch).toBe(1)
+      expect(error?.results?.map((result) => result.status)).toEqual([status, status])
+    })
+
     it('says when batch sends are not on for the project yet, without a retry', async () => {
       const postHog = againstPostHog({ batchUnavailable: true })
 

@@ -158,8 +158,6 @@ export function recordAnswer(
       return
     }
     const code = text(error.code) ?? 'api_error'
-    // After an attempt PostHog may have queued, a refusal can be the retry's, not the email's; only a key that
-    // belongs to another email stays failed.
     const unconfirmed =
       code !== 'idempotency_key_reused' &&
       (error.retryable === true || code === 'delivery_unavailable' || mayHaveQueuedBefore)
@@ -185,6 +183,9 @@ export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefo
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
+  if (error.code === 'client_closed') {
+    return false
+  }
   return (
     error.statusCode === undefined ||
     error.statusCode >= 500 ||

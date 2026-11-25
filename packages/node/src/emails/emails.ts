@@ -303,21 +303,34 @@ export class EmailSender implements Emails {
       let warnings: EmailWarning[]
       let mayHaveQueuedBefore = false
       try {
-        warnings = await this.withRetries(prepared.maxRetries, async () => {
-          try {
-            return recordAnswer(
-              slots,
-              await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs),
-              mayHaveQueuedBefore
-            )
-          } catch (caught) {
-            const failure = asRequestError(caught)
-            if (mayHaveQueued(failure)) {
-              mayHaveQueuedBefore = true
-            }
-            throw failure
+        const stopAtShutdown = (): void => {
+          if (this.hooks.isClosed()) {
+            throw new EmailError({
+              code: 'client_closed',
+              message: 'The PostHog client shut down during the batch, so it sent no retry.',
+              fix: 'Send the batch again from a running client, unchanged and with the same idempotency keys.',
+            })
           }
-        })
+        }
+        warnings = await this.withRetries(
+          prepared.maxRetries,
+          async () => {
+            try {
+              return recordAnswer(
+                slots,
+                await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs),
+                mayHaveQueuedBefore
+              )
+            } catch (caught) {
+              const failure = asRequestError(caught)
+              if (mayHaveQueued(failure)) {
+                mayHaveQueuedBefore = true
+              }
+              throw failure
+            }
+          },
+          stopAtShutdown
+        )
       } catch (caught) {
         const failure = recordFailure(slots, asRequestError(caught), mayHaveQueuedBefore)
         return { data: null, error: withResults(failure, slots) }
@@ -509,7 +522,11 @@ export class EmailSender implements Emails {
     return headers
   }
 
-  private async withRetries<T>(maxRetries: number, attemptOnce: () => Promise<T>): Promise<T> {
+  private async withRetries<T>(
+    maxRetries: number,
+    attemptOnce: () => Promise<T>,
+    beforeRetry?: () => void
+  ): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       let error: EmailError
       try {
@@ -521,8 +538,10 @@ export class EmailSender implements Emails {
       if (delayMs === undefined) {
         throw error
       }
+      beforeRetry?.()
       // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
       await new Promise((resolve) => setTimeout(resolve, delayMs))
+      beforeRetry?.()
     }
   }
 
