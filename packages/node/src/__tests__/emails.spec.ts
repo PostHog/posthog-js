@@ -2250,23 +2250,48 @@ describe('emails', () => {
       expect(postHog.emails).toEqual([])
     })
 
-    it('says when the server has no batch sends', async () => {
-      againstPostHog({ batchRoute: false })
+    it('says a templateId PostHog does not have may be wrong, and never to update PostHog', async () => {
+      const postHog = againstPostHog({ templateIds: [] })
 
-      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
+      const { error } = await settle(posthog.emails.batch({ templateId: TEMPLATE_ID }, recipientsTo(2)))
 
       expect(error).toMatchObject({ code: 'not_found', statusCode: 404 })
-      expect(error?.message).toMatch(/^Batch sends are unavailable on this server/)
+      expect(error?.message).toMatch(
+        /^PostHog found no template with this ID, or batch sends aren't available for this project/
+      )
+      expect(error?.fix).toMatch(/^Check the templateId\. If it is right, send each recipient on its own/)
+      expect(error?.message).not.toMatch(/unavailable on this server/)
+      expect(error?.fix).not.toMatch(/update your PostHog/)
+      expect(error?.results?.map((result) => result.status)).toEqual(['failed', 'failed'])
+      expect(postHog.requests.batch).toBe(1)
+      expect(postHog.emails).toEqual([])
     })
 
-    it('says when a proxy without the batch route answers with a page', async () => {
-      const postHog = againstPostHog()
-      postHog.failNext('batch', { status: 404, page: '<html>Not Found</html>' })
+    it.each([
+      ['a server without the batch route', { batchRoute: false }, undefined],
+      ['a proxy page', {}, { status: 404, page: '<html>Not Found</html>' }],
+    ])('says batch sends from code are not available after a 404 from %s', async (_name, server, fault) => {
+      const postHog = againstPostHog(server)
+      if (fault) {
+        postHog.failNext('batch', fault)
+      }
 
       const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
 
       expect(error).toMatchObject({ code: 'not_found', statusCode: 404 })
-      expect(error?.message).toMatch(/^Batch sends are unavailable on this server/)
+      expect(error?.message).toMatch(/^Batch sends from code aren't available for this project/)
+      expect(error?.fix).toMatch(/^Send each recipient on its own with emails\.send\(\)/)
+      expect(error?.fix).not.toMatch(/update your PostHog/)
+      expect(error?.results?.map((result) => result.status)).toEqual(['failed'])
+    })
+
+    it('reads a 404 on a template batch from a server without the route the same way, since PostHog answers both alike', async () => {
+      againstPostHog({ batchRoute: false })
+
+      const { error } = await settle(posthog.emails.batch({ templateId: TEMPLATE_ID }, recipientsTo(1)))
+
+      expect(error).toMatchObject({ code: 'not_found', statusCode: 404 })
+      expect(error?.message).toMatch(/^PostHog found no template with this ID/)
     })
 
     it('keeps recipients unconfirmed while PostHog says their keys are still in flight', async () => {

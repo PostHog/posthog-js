@@ -142,11 +142,12 @@ export function batchBody(shared: Record<string, unknown>, slots: Slot[]): strin
 export function recordAnswer(
   sent: Slot[],
   { status, text: body, retryAfterMs }: Reply,
-  mayHaveQueuedBefore: boolean
+  mayHaveQueuedBefore: boolean,
+  templateForm: boolean
 ): EmailWarning[] {
   const fields = replyFields(parseJson(body))
   if (status < 200 || status >= 300) {
-    throw batchReplyError(fields, status, retryAfterMs)
+    throw batchReplyError(fields, status, retryAfterMs, templateForm)
   }
   const answers = Array.isArray(fields.results) ? fields.results : []
   if (answers.length !== sent.length) {
@@ -260,7 +261,8 @@ function recordUnanswered(slot: Slot, error: EmailError): void {
 function batchReplyError(
   fields: Record<string, unknown>,
   status: number,
-  retryAfterMs: number | undefined
+  retryAfterMs: number | undefined,
+  templateForm: boolean
 ): EmailError {
   const error = replyError(fields, status, retryAfterMs)
   if (error.code === 'batch_unavailable') {
@@ -272,12 +274,20 @@ function batchReplyError(
     })
   }
   if (status === 404 && error.field === undefined && (error.code === 'not_found' || error.code === 'api_error')) {
-    return new EmailError({
-      code: 'not_found',
-      statusCode: status,
-      message: 'Batch sends are unavailable on this server, so PostHog sent no email of this request.',
-      fix: 'Send each email with emails.send(), or update your PostHog.',
-    })
+    return templateForm
+      ? new EmailError({
+          code: 'not_found',
+          statusCode: status,
+          message:
+            "PostHog found no template with this ID, or batch sends aren't available for this project, so it sent no email of this request.",
+          fix: 'Check the templateId. If it is right, send each recipient on its own with emails.send() until batch sends are available for the project.',
+        })
+      : new EmailError({
+          code: 'not_found',
+          statusCode: status,
+          message: "Batch sends from code aren't available for this project, so PostHog sent no email of this request.",
+          fix: 'Send each recipient on its own with emails.send() until batch sends are available for the project.',
+        })
   }
   return error
 }

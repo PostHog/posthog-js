@@ -332,7 +332,8 @@ export class EmailSender implements Emails {
                   timeoutMs,
                   attempt > 0 ? stopAtShutdown : undefined
                 ),
-                mayHaveQueuedBefore
+                mayHaveQueuedBefore,
+                prepared.templateForm
               )
             } catch (caught) {
               const failure = asRequestError(caught)

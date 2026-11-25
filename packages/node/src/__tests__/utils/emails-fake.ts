@@ -85,6 +85,8 @@ export interface FakePostHogOptions {
   scheduleShiftMs?: number
   /** False for a PostHog without the batch route. */
   batchRoute?: boolean
+  /** The project's template IDs. A batch with any other templateId gets the route's 404, as PostHog answers it. */
+  templateIds?: string[]
   /** True for a project that isn't on the intake batch sends need yet. */
   batchUnavailable?: boolean
   /** Addresses on the project's suppression list. */
@@ -478,6 +480,10 @@ export class FakePostHog {
       })
     }
     const { recipients, ...shared } = jsonBody(options)
+    const { templateIds } = this.options
+    if (templateIds && typeof shared.template_id === 'string' && !templateIds.includes(shared.template_id)) {
+      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
+    }
     const refused = Object.keys(shared).find((field) => BATCH_REFUSED_FIELDS.has(field))
     if (refused !== undefined) {
       throw invalidField(refused, "A batch send doesn't take this field.")
