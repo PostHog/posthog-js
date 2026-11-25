@@ -146,46 +146,55 @@ describe('record a blocked iframe', () => {
     },
   );
 
-  it.each(['same-origin', 'cross-origin'] as const)(
-    'a %s iframe is recorded when the block selector is invalid',
-    async (iframeOrigin) => {
-      const recorded = await recordPageWithIframe(iframeOrigin, '', {
-        blockSelector: '[',
-      });
+  it.each([
+    { blockSelector: '[', description: 'an invalid selector' },
+    {
+      // an unknown pseudo-class also stands in for one a browser lacks
+      blockSelector: '.private, :not-a-pseudo',
+      description: 'a selector list with one unsupported part',
+    },
+  ])(
+    'does not record anything with $description',
+    async ({ blockSelector }) => {
+      const page = await browser.newPage();
+      try {
+        await page.goto('about:blank');
+        await page.setContent(
+          '<html><body><div class="private">initial-private</div></body></html>',
+        );
+        const events: eventWithTime[] = [];
+        const errors: string[] = [];
+        page.on('console', (message) => {
+          if (message.type() === 'error') errors.push(message.text());
+        });
+        await page.exposeFunction('emit', (e: eventWithTime) => {
+          events.push(e);
+        });
+        await page.addScriptTag({
+          path: path.resolve(__dirname, '../../dist/rrweb.umd.cjs'),
+        });
+        const started = await page.evaluate((blockSelector) => {
+          const { rrweb, emit } = window as unknown as IWindow;
+          return (
+            rrweb.record({ blockSelector, emit: (event) => emit?.(event) }) !==
+            undefined
+          );
+        }, blockSelector);
+        await waitForRAF(page);
 
-      expect({
-        initialContent: recorded.includes(INITIAL_CONTENT),
-        laterContent: recorded.includes(LATER_CONTENT),
-      }).toEqual({ initialContent: true, laterContent: true });
+        await page.evaluate(() => {
+          document.querySelector('.private')!.textContent = 'later-private';
+        });
+        await waitForRAF(page);
+
+        expect({
+          started,
+          events: events.length,
+          loggedError: errors.some((e) => e.includes('blockSelector')),
+        }).toEqual({ started: false, events: 0, loggedError: true });
+      } finally {
+        await page.close();
+      }
     },
   );
-
-  it('records page changes when the block selector is invalid', async () => {
-    const page = await browser.newPage();
-    try {
-      await page.goto('about:blank');
-      await page.setContent('<html><body><div id="root"></div></body></html>');
-      const events: eventWithTime[] = [];
-      await page.exposeFunction('emit', (e: eventWithTime) => {
-        events.push(e);
-      });
-      await startRecording(page.mainFrame(), { blockSelector: '[' });
-      await waitForRAF(page);
-
-      await page.evaluate(() => {
-        const root = document.getElementById('root')!;
-        root.setAttribute('data-later', 'later-attribute');
-        root.textContent = 'later-text';
-      });
-      await waitForRAF(page);
-
-      const recorded = JSON.stringify(events);
-      expect({
-        attribute: recorded.includes('later-attribute'),
-        text: recorded.includes('later-text'),
-      }).toEqual({ attribute: true, text: true });
-    } finally {
-      await page.close();
-    }
-  });
 });

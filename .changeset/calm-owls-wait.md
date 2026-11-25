@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix(replay): keep recording page changes when the block selector is invalid
+fix(replay): do not record when the block selector is invalid, instead of breaking recording after the first snapshot
