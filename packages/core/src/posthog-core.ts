@@ -152,6 +152,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const newFeatureFlagDetails = {
           ...this.getStoredFlagDetails(),
           requestError: undefined,
+          noFlagsCached: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
             ...Object.fromEntries(
@@ -952,10 +953,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a
             // signal that the server turned minimal flag-called events off.
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
             })
           }
           return undefined
@@ -1164,8 +1167,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    */
   getAllFeatureFlags(): FeatureFlagResult[] | undefined {
     const flags = this.getFeatureFlagDetails()?.flags
-    // A failed load is stored with the flags known before it, so empty flags there mean none are cached.
-    if (!flags || (this.didLatestFeatureFlagsLoadFail() && Object.keys(flags).length === 0)) {
+    if (!flags || this.getStoredFlagDetails()?.noFlagsCached) {
       return undefined
     }
     return flagDetailsToResults(

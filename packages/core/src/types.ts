@@ -547,6 +547,8 @@ export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'>
     errorsWhileComputingFlags?: boolean
     quotaLimited?: string[]
     requestError?: FeatureFlagRequestError
+    /** Set by a failed load when no load had succeeded and no flags were bootstrapped before it. */
+    noFlagsCached?: boolean
   }
 
 /**

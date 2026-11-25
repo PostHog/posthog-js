@@ -256,9 +256,9 @@ describe('PostHog RN onFeatureFlags', () => {
       expect(posthog.getAllFeatureFlags()).toBeUndefined()
     })
 
-    it('returns an empty list once a load returns no flags', async () => {
+    it('returns an empty list once a load returns no flags, also after a later load fails', async () => {
       ;(globalThis as any).window.fetch = vi.fn(async () => ({
-        status: 200,
+        status: flagsStatus,
         json: () => Promise.resolve({ featureFlags: {} }),
         text: () => Promise.resolve(''),
       }))
@@ -267,6 +267,44 @@ describe('PostHog RN onFeatureFlags', () => {
       await posthog.reloadFeatureFlagsAsync()
 
       expect(posthog.getAllFeatureFlags()).toEqual([])
+
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+
+    it('stays undefined after a restart when no load has succeeded', async () => {
+      flagsStatus = 500
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.shutdown()
+
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      flagsStatus = 200
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui', 'checkout', 'old-ui', 'empty'])
+    })
+
+    it('returns bootstrapped flags when a load fails', async () => {
+      flagsStatus = 500
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        fetchRetryCount: 0,
+        bootstrap: { featureFlags: { bootstrapped: true } },
+      })
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['bootstrapped'])
     })
 
     it('returns the loaded flags', async () => {
