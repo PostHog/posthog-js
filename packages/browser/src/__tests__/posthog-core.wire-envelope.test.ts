@@ -15,6 +15,8 @@ const fixedTimestamp = new Date('2023-11-14T22:13:20.000Z')
 
 const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[]): CaptureResult => {
     const properties = { ...event.properties }
+    delete properties.$sdk_debug_extensions_init_method
+    delete properties.$sdk_debug_extensions_init_time_ms
     const replacements: Record<string, string> = {
         $session_id: '<generated-session-id>',
         $window_id: '<generated-window-id>',
@@ -22,7 +24,6 @@ const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[])
         $initialization_time: '<initialization-time>',
         $insert_id: '<insert-id>',
         $raw_user_agent: '<user-agent>',
-        $sdk_debug_extensions_init_time_ms: '<extension-init-time>',
         $time: '<event-time>',
         $timezone: '<runtime-timezone>',
         $timezone_offset: '<runtime-timezone-offset>',
@@ -34,7 +35,6 @@ const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[])
         $initialization_time: 'string',
         $insert_id: 'string',
         $raw_user_agent: 'string',
-        $sdk_debug_extensions_init_time_ms: 'number',
         $time: 'number',
         $timezone: 'string',
         $timezone_offset: 'number',
@@ -161,7 +161,6 @@ describe('PostHog final decoded request envelopes', () => {
                     '$initialization_time',
                     '$insert_id',
                     '$raw_user_agent',
-                    '$sdk_debug_extensions_init_time_ms',
                     '$time',
                     '$timezone',
                     '$timezone_offset',

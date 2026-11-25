@@ -15,6 +15,7 @@ import snapshot, {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 } from './snapshot';
 import rebuild, {
   buildNodeWithSN,
@@ -24,6 +25,11 @@ import rebuild, {
 export * from './types';
 export * from './utils';
 export * from './snapshot-cost';
+export {
+  getInputMaskOptions,
+  isMaskedSelectedContent,
+  type SelectMaskingCache,
+} from './select-masking';
 
 export {
   snapshot,
@@ -47,4 +53,5 @@ export {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 };

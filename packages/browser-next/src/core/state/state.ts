@@ -4,7 +4,8 @@ import { createId } from '../../primitives/id'
 import { createKeyValueStore, TabValues } from './key-value-store'
 import type { NewSessionReason, StorageLike } from '../types'
 
-const FEATURE_FLAGS_EXTENSION = 'featureFlags'
+// Extensions share the client's key-value namespace, as in posthog-js persistence.
+export const CLIENT_KV_NAMESPACE = 'core'
 const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 
 export type ConsentState = 'implicit' | 'granted' | 'denied'
@@ -438,7 +439,7 @@ export class BrowserState {
 
     resetGroups(): void {
         this._state.groups = emptyRecord<string>()
-        const flagsData = this._state.extensionData[FEATURE_FLAGS_EXTENSION]
+        const flagsData = this._state.extensionData[CLIENT_KV_NAMESPACE]
         if (flagsData && STORED_GROUP_PROPERTIES_KEY in flagsData) {
             delete flagsData[STORED_GROUP_PROPERTIES_KEY]
         }

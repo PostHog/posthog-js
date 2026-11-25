@@ -1,11 +1,12 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
 import type { CrossOriginIframeMessageEvent } from '../types';
 import { callSafely, removeEventListenerSafely } from '../utils';
 import CrossOriginIframeMirror from './cross-origin-iframe-mirror';
 import { findAndRemoveIframeBuffer } from './observer';
 import { EventType, NodeType, IncrementalSource } from '@posthog/rrweb-types';
 import type {
+  blockClass,
   eventWithTime,
   eventWithoutTime,
   serializedNodeWithId,
@@ -24,11 +25,17 @@ export class IframeManager {
     new WeakMap();
   private mirror: Mirror;
   private mutationCb: mutationCallBack;
-  private wrappedEmit: (e: eventWithoutTime, isCheckout?: boolean) => void;
+  private wrappedEmit: (
+    e: eventWithoutTime,
+    isCheckout?: boolean,
+    nonInteractive?: boolean,
+  ) => void;
   private loadListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private pageHideListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private stylesheetManager: StylesheetManager;
   private recordCrossOriginIframes: boolean;
+  private blockClass: blockClass;
+  private blockSelector: string | null;
   private messageHandler: (message: MessageEvent) => void;
   // Strong Map — keys pin Windows; every entry must be deleted on detach.
   private nestedIframeListeners: Map<Window, (message: MessageEvent) => void> =
@@ -59,8 +66,16 @@ export class IframeManager {
     mutationCb: mutationCallBack;
     stylesheetManager: StylesheetManager;
     recordCrossOriginIframes: boolean;
-    wrappedEmit: (e: eventWithoutTime, isCheckout?: boolean) => void;
+    wrappedEmit: (
+      e: eventWithoutTime,
+      isCheckout?: boolean,
+      nonInteractive?: boolean,
+    ) => void;
+    blockClass: blockClass;
+    blockSelector: string | null;
   }) {
+    this.blockClass = options.blockClass;
+    this.blockSelector = options.blockSelector;
     this.mutationCb = options.mutationCb;
     this.wrappedEmit = options.wrappedEmit;
     this.stylesheetManager = options.stylesheetManager;
@@ -78,6 +93,8 @@ export class IframeManager {
   }
 
   public addIframe(iframeEl: HTMLIFrameElement): void {
+    if (_isBlockedElement(iframeEl, this.blockClass, this.blockSelector))
+      return;
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);
@@ -262,6 +279,7 @@ export class IframeManager {
       this.wrappedEmit(
         transformedEvent,
         crossOriginMessageEvent.data.isCheckout,
+        crossOriginMessageEvent.data.nonInteractive === true,
       );
   }
 

@@ -1,8 +1,5 @@
-import type { Client, CapturedEventInfo, ExtensionToken, Listener } from '@posthog/browser-common'
-import type { BrowserExtension, ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { IAnalytics } from './analytics-api'
+import type { Client, KeyValueStore } from '@posthog/browser-common'
 import type { BrowserState } from '../../core/state/state'
-import type { NewSessionInfo } from '../../core/types'
 
 import type { AnalyticsOptions } from './analytics-options'
 import type { EventBuffer } from './admission/event-buffer'
@@ -20,7 +17,6 @@ export interface AnalyticsMessage {
 
 export const MAX_ANALYTICS_BYTES = 8 * 1024 * 1024
 export const MAX_ANALYTICS_BATCH_EVENTS = 100
-export const Analytics = 'analytics' as ExtensionToken<IAnalyticsExtension>
 
 /** Browser capabilities supplied to capture delivery, independent of its queue. */
 export interface CaptureHost {
@@ -42,10 +38,10 @@ export interface AnalyticsDelivery extends LaneDelivery<AnalyticsMessage> {
     deliverImmediate(messages: readonly AnalyticsMessage[], canContinue?: () => boolean): Promise<CaptureSummary>
 }
 
-/** Loaded implementation, not a registered extension. */
+/** Delivery driver attached to the client's event buffer. A driver without an immediate path reports immediate capture as unavailable. */
 export interface AnalyticsDriver {
     flush(): Promise<void>
-    deliverImmediate: AnalyticsDelivery['deliverImmediate']
+    deliverImmediate?: AnalyticsDelivery['deliverImmediate']
     deliverUnload(messages: readonly AnalyticsMessage[]): void
     dispose(): Promise<void>
 }
@@ -63,12 +59,10 @@ export interface AnalyticsTeardownSubscription {
     dispose(): void
 }
 
-/** Core-owned state and notifications consumed by analytics operation policy. */
-export interface AnalyticsCaptureHost {
-    readonly projectToken: string
-    readonly logger: Client['logger']
-    readonly sessionKv: Client['kv']
-    readonly state: Pick<
+/** The client internals the capture pipeline reads. The client itself satisfies this. */
+export interface AnalyticsCore extends Pick<Client, 'projectToken' | 'logger' | 'kv' | 'library' | 'onRemoteConfig'> {
+    readonly canCapture: boolean
+    readonly _state: Pick<
         BrowserState,
         | 'prepare'
         | 'distinctId'
@@ -83,30 +77,11 @@ export interface AnalyticsCaptureHost {
         | 'reset'
         | 'resetGroups'
     >
-    readonly onEvent: Listener<CapturedEventInfo>
-    canCapture(): boolean
-    canMutate(): boolean
-    isDisposed(): boolean
-    authority(): object
-    publishEvent(event: CapturedEventInfo): void
-    publishNewSession(session: NewSessionInfo): void
-    publishIdentify(info: IdentifyInfo): void
-    publishChangeProperties(info: ChangePropertiesInfo): void
-    publishGroup(info: GroupInfo): void
-    publishReset(value: void): void
-    publishGroupsReset(): void
+    readonly _sessionKv: KeyValueStore
+    readonly _requestRuntime: RequestRuntime
+    readonly _disposed: boolean
+    readonly _immediateAuthority: object
+    _canMutate(): boolean
+    _canDeliver(): boolean
+    _startInitialPageview(): void
 }
-
-/** First-party analytics is one configured owner of operations, buffering and delivery. */
-export interface IAnalyticsExtension extends IAnalytics {
-    flush(reason?: 'flush' | 'shutdown'): Promise<void>
-    purge(): void
-    bindCaptureHost(host: AnalyticsCaptureHost): void
-    captureInitialPageview(): boolean
-    initialize(host: CaptureHost): void
-    start(): Promise<void>
-    onBeforeTeardown?(callback: () => void): AnalyticsTeardownSubscription
-}
-
-export const isAnalyticsExtension = (extension: BrowserExtension): extension is IAnalyticsExtension =>
-    extension.name === Analytics

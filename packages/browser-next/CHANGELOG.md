@@ -1,5 +1,21 @@
 # @posthog/browser
 
+## 0.5.0
+
+### Minor Changes
+
+- [#5786](https://github.com/PostHog/posthog-js/pull/5786) [`45ddd74`](https://github.com/PostHog/posthog-js/commit/45ddd74f9ec33cf08ed40451243db6e87a5703f1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Make the client the single extension host: analytics operations, including the group and person methods, move onto the client.
+
+  Breaking for 0.4.x users: the `@posthog/browser/analytics` export, `posthog.analytics`, the `analytics: false` option and the `IPostHogInternal` type are removed. Call `capture()`, `identify()`, `register()` and the other analytics methods on the client, configure scheduling and person profiles through the `analytics` option, and type extension hosts as `IPostHog`. Capture can no longer be left out: both entrypoints, including `/core` with only flags and root `analytics: false`, now send the initial `$pageview` (unless `capturePageview: false`) and `$feature_flag_called` on flag reads. Registered super properties, person-profile enablement and flag and survey caches persisted by 0.4.x are not carried over. See the package README's "Migrating from the analytics extension" section. (2026-11-24)
+
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+  - @posthog/types@1.427.1
+
 ## 0.4.1
 
 ### Patch Changes

@@ -259,6 +259,22 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
+    it.each([false, 0, null, '', '"quoted"'])('preserves legacy snapshot payload %j silently', async (payload) => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ decideFlags: { checkout: 'control' }, flagsPayloads: { checkout: payload } })
+      )
+
+      const flags = await posthog.evaluateFlags('user-1')
+      expect(flags.getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.only(['checkout']).getFlagPayload('checkout')).toEqual(payload)
+      expect(flags.getFlagPayload('missing')).toBeUndefined()
+      expect(flags.onlyAccessed().keys).toEqual([])
+      expect(flags.keys).toEqual(['checkout'])
+      await waitForPromises()
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('getFlagPayload returns parsed payload without firing an event', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
@@ -953,6 +969,37 @@ describe('evaluateFlags', () => {
       expect(flags.getFlag('remote-only')).toBeUndefined()
       const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
       expect(remoteFlagCalls).toHaveLength(0)
+    })
+
+    it('keeps falsy JSON payloads (0, false, "") for locally evaluated flags', async () => {
+      const flagWithPayload = (id: number, key: string, payload: string) => ({
+        id,
+        name: key,
+        key,
+        active: true,
+        filters: {
+          groups: [{ variant: null, properties: [], rollout_percentage: 100 }],
+          payloads: { true: payload },
+        },
+      })
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              flagWithPayload(1, 'zero-payload', '0'),
+              flagWithPayload(2, 'false-payload', 'false'),
+              flagWithPayload(3, 'empty-string-payload', '""'),
+            ],
+          },
+        })
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlagPayload('zero-payload')).toBe(0)
+      expect(flags.getFlagPayload('false-payload')).toBe(false)
+      expect(flags.getFlagPayload('empty-string-payload')).toBe('')
     })
 
     it('attaches $feature_flag_definitions_loaded_at on locally-evaluated $feature_flag_called events', async () => {

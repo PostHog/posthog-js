@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>PostHog Electron example</title>
+        <link rel="stylesheet" href="./styles.css" />
+        <script src="./dist/renderer.js" defer></script>
+    </head>
+    <body>
+        <main>
+            <h1>PostHog + Electron</h1>
+            <p>
+                One main-process client owns identity, consent and delivery for every window. The sandboxed renderer
+                uses only the SDK preload bridge. By default events go to a local mock receiver; see the terminal for
+                events.
+            </p>
+            <p>
+                This sample demonstrates explicit analytics and handled exceptions, not replay, native crashes or
+                autocapture.
+            </p>
+            <fieldset id="controls" disabled>
+                <legend>Try the renderer facade</legend>
+                <button id="capture">Capture renderer button</button>
+                <label>User ID <input id="user-id" value="electron-example-user" /></label>
+                <button id="identify">Identify</button>
+                <button id="reset">Reset identity</button>
+                <label>Organization <input id="group-key" value="example-org" /></label>
+                <button id="group">Set group</button>
+                <button id="register">Register example property</button>
+                <button id="unregister">Unregister example property</button>
+                <button id="opt-out">Opt out</button>
+                <button id="opt-in">Opt in</button>
+                <button id="flags">Reload and evaluate flag</button>
+                <button id="exception">Capture handled exception</button>
+                <button id="flush">Flush now</button>
+            </fieldset>
+            <h2>Shared SDK state</h2>
+            <pre id="state">Initializing…</pre>
+            <h2>Last action</h2>
+            <pre id="status" role="status">Waiting for the SDK bridge…</pre>
+        </main>
+    </body>
+</html>

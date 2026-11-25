@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.22.0
+
+### Minor Changes
+
+- [#5835](https://github.com/PostHog/posthog-js/pull/5835) [`6e58c08`](https://github.com/PostHog/posthog-js/commit/6e58c08a93903cf46a1e78ced42a90f9b9dd1c37) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Read revisions, correct scores, and update or delete accepted offline evaluation items, results, and payloads.
+  (2026-11-20)
+
+## 8.21.1
+
+### Patch Changes
+
+- [#5764](https://github.com/PostHog/posthog-js/pull/5764) [`93a47d8`](https://github.com/PostHog/posthog-js/commit/93a47d8b3c9e6f16fc9015f56c7ef1caa8ef8030) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix(ai): stop logging a parse error for streamed Anthropic tool calls that take no arguments
+  (2026-11-18)
+
 ## 8.21.0
 
 ### Minor Changes

@@ -25,9 +25,7 @@ pnpm dev
 
 ## What to try
 
-- Leave explicit installation unchecked to acquire analytics through the root resolver during initialization, then capture an event.
-- Disable automatic loading to initialize without analytics, then restart with explicit installation enabled.
-- Install analytics explicitly during initialization to verify that it satisfies delivery without a duplicate dynamic load.
+- Capture an event, then change **Flush at** or **Flush interval** and restart to see the batching change.
 - Use **Capture immediate** to bypass the queue and inspect the terminal Capture V1 persistence summary.
 - Enable gzip and send the 16 KiB event to inspect compressed delivery.
 - Dispatch offline, capture events, then dispatch online to redrive them.

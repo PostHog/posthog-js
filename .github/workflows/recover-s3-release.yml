@@ -394,7 +394,7 @@ jobs:
                   path: |
                       packages/browser/dist/*.js
                       packages/browser/dist/*.js.map
-                  retention-days: 1
+                  retention-days: 30
                   if-no-files-found: error
 
     build-toolbar:

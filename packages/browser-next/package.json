@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser",
-    "version": "0.4.1",
+    "version": "0.5.0",
     "description": "A small, extension-based PostHog client for modern browsers",
     "license": "MIT",
     "repository": {
@@ -32,11 +32,6 @@
             "types": "./dist/products/flags/flags.d.ts",
             "require": "./dist/products/flags/flags.js",
             "import": "./dist/products/flags/flags.mjs"
-        },
-        "./analytics": {
-            "types": "./dist/products/analytics/analytics.d.ts",
-            "require": "./dist/products/analytics/analytics.js",
-            "import": "./dist/products/analytics/analytics.mjs"
         },
         "./logs": {
             "types": "./dist/products/logs/logs.d.ts",

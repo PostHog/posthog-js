@@ -30,6 +30,11 @@ const DECOMPRESS = {
 
 const state = {
     client: null,
+    // With a personal_api_key, a second client without definitions answers force_remote lookups.
+    remoteClient: null,
+    // Status codes of /flags/definitions responses, in order.
+    definitionsLoads: [],
+    reloading: false,
     totalEventsCaptured: 0,
     totalEventsSent: 0,
     lastError: null,
@@ -100,18 +105,17 @@ function padProperties(properties, size, marker = '') {
 }
 
 async function discardClient() {
-    if (!state.client) {
-        return
-    }
-
-    const client = state.client
+    const clients = [state.client, state.remoteClient].filter(Boolean)
     state.client = null
+    state.remoteClient = null
 
     // Test resets should not flush queued events into the next mock-server scenario.
-    try {
-        await client.shutdown(1)
-    } catch {
-        // The next test starts with a fresh client.
+    for (const client of clients) {
+        try {
+            await client.shutdown(1)
+        } catch {
+            // The next test starts with a fresh client.
+        }
     }
 }
 
@@ -180,6 +184,8 @@ app.get('/health', (req, res) => {
             `encoding_${COMPRESSION}`,
             // Remote /flags requests send ?v=4 and read the v4 flag record.
             'flags_response_v4',
+            'feature_flags_local_evaluation_v1',
+            'feature_flag_payloads',
         ],
     })
 })
@@ -196,6 +202,7 @@ app.post('/init', async (req, res) => {
         historical_migration,
         super_properties,
         before_send,
+        personal_api_key,
     } = req.body
 
     await discardClient()
@@ -204,7 +211,7 @@ app.post('/init', async (req, res) => {
     // The SDK compresses both lanes by default; the harness flag picks this process's codec or none.
     const compression = enable_compression === undefined ? undefined : enable_compression ? COMPRESSION : 'none'
 
-    state.client = new PostHog(api_key, {
+    const options = {
         host,
         // flush_at: 1 sends on capture; default to 2 so a lone capture waits for /flush.
         flushAt: flush_at ?? 2,
@@ -224,6 +231,9 @@ app.post('/init', async (req, res) => {
             : {}),
         fetch: async (url, fetchOptions) => {
             const response = await fetch(url, fetchOptions)
+            if (String(url).includes('/flags/definitions')) {
+                state.definitionsLoads.push(response.status)
+            }
             try {
                 const events = parseEvents(fetchOptions)
                 const attempt = Number(headerValue(fetchOptions?.headers, 'posthog-attempt') ?? 1)
@@ -248,13 +258,21 @@ app.post('/init', async (req, res) => {
             }
             return response
         },
-    })
-    state.client.on('error', (error) => {
-        state.lastError = error?.message ?? String(error)
-        recordDrops(error)
-    })
-    if (super_properties) {
-        await state.client.register(super_properties)
+    }
+    // Local evaluation tests reload definitions on demand, so automatic polling is off.
+    state.client = new PostHog(
+        api_key,
+        personal_api_key ? { ...options, secretKey: personal_api_key, featureFlagsPollingInterval: null } : options
+    )
+    state.remoteClient = personal_api_key ? new PostHog(api_key, options) : null
+    for (const client of [state.client, state.remoteClient].filter(Boolean)) {
+        client.on('error', (error) => {
+            state.lastError = error?.message ?? String(error)
+            recordDrops(error)
+        })
+        if (super_properties) {
+            await client.register(super_properties)
+        }
     }
 
     res.json({ success: true })
@@ -342,8 +360,13 @@ app.post('/get_feature_flag', async (req, res) => {
         groups,
         group_properties,
         disable_geoip,
-        force_remote = true,
+        only_evaluate_locally = false,
     } = req.body || {}
+    const force_remote = req.body?.force_remote ?? !only_evaluate_locally
+
+    if (only_evaluate_locally && force_remote) {
+        return res.status(400).json({ error: 'only_evaluate_locally conflicts with force_remote' })
+    }
 
     if (!key) {
         return res.status(400).json({ error: 'key is required' })
@@ -353,7 +376,22 @@ app.post('/get_feature_flag', async (req, res) => {
     }
 
     try {
-        const value = await state.client.getFeatureFlag(key, distinct_id, {
+        if (only_evaluate_locally) {
+            const value = await state.client.getFeatureFlag(key, distinct_id, {
+                groups,
+                personProperties: person_properties,
+                groupProperties: group_properties,
+                disableGeoip: disable_geoip,
+                onlyEvaluateLocally: true,
+                sendFeatureFlagEvents: false,
+            })
+            // The local-only API returns undefined when local evaluation is inconclusive; a conclusive false is false.
+            const conclusive = value !== undefined
+            return res.json({ success: conclusive, value: conclusive ? value : null, locally_evaluated: conclusive })
+        }
+
+        const client = force_remote ? (state.remoteClient ?? state.client) : state.client
+        const value = await client.getFeatureFlag(key, distinct_id, {
             groups,
             personProperties: person_properties,
             groupProperties: group_properties,
@@ -362,12 +400,97 @@ app.post('/get_feature_flag', async (req, res) => {
         })
 
         // Flush the $feature_flag_called event so it cannot leak into the next test case.
-        await state.client.flush()
+        await client.flush()
 
         res.json({ success: true, value })
     } catch (error) {
         state.lastError = error.message
         res.status(500).json({ error: error.message })
+    }
+})
+
+app.post('/get_feature_flag_payload', async (req, res) => {
+    if (!state.client) {
+        return res.status(400).json({ error: 'SDK not initialized' })
+    }
+    const {
+        key,
+        distinct_id,
+        person_properties,
+        groups,
+        group_properties,
+        disable_geoip,
+        only_evaluate_locally = false,
+    } = req.body || {}
+    const force_remote = req.body?.force_remote ?? !only_evaluate_locally
+    if (only_evaluate_locally && force_remote) {
+        return res.status(400).json({ error: 'only_evaluate_locally conflicts with force_remote' })
+    }
+    if (!key || !distinct_id) {
+        return res.status(400).json({ error: 'key and distinct_id are required' })
+    }
+
+    try {
+        const client = force_remote ? (state.remoteClient ?? state.client) : state.client
+        const payload = await client.getFeatureFlagPayload(key, distinct_id, undefined, {
+            groups,
+            personProperties: person_properties,
+            groupProperties: group_properties,
+            disableGeoip: disable_geoip,
+            onlyEvaluateLocally: !force_remote,
+        })
+        await client.flush()
+        res.json({ success: true, value: payload ?? null })
+    } catch (error) {
+        state.lastError = error.message
+        res.status(500).json({ error: error.message })
+    }
+})
+
+app.post('/reload_feature_flag_definitions', async (req, res) => {
+    const timeoutMs = req.body?.timeout_ms ?? 5000
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) {
+        return res.status(400).json({ success: false, ready: false, error: 'Invalid timeout_ms' })
+    }
+    const client = state.client
+    if (!client || !state.remoteClient) {
+        return res.status(400).json({ success: false, ready: false, error: 'A personal_api_key is required' })
+    }
+    if (state.reloading) {
+        return res.status(409).json({ success: false, ready: false, error: 'A definitions reload is still running' })
+    }
+
+    state.reloading = true
+    // reloadFeatureFlags joins a load already in flight, so wait that out before forcing a fresh GET.
+    const reload = (async () => {
+        await client.reloadFeatureFlags()
+        const before = state.definitionsLoads.length
+        await client.reloadFeatureFlags()
+        return state.definitionsLoads.slice(before)
+    })()
+    let timer
+    const timeout = new Promise((resolve) => {
+        // The check above already rejects other values; the clamp states the bound where the timer is set.
+        timer = setTimeout(() => resolve(null), Math.min(Math.max(timeoutMs, 1), 30000))
+    })
+    try {
+        const loads = await Promise.race([reload, timeout])
+        if (loads === null) {
+            return res.status(504).json({ success: false, ready: false, error: 'Definitions reload timed out' })
+        }
+        if (state.client !== client) {
+            return res.status(409).json({ success: false, ready: false, error: 'SDK reset during reload' })
+        }
+        // The SDK swallows load failures, so readiness needs a successful fresh response.
+        if (!loads.some((status) => status === 200 || status === 304)) {
+            return res.status(502).json({ success: false, ready: false, error: 'Fresh definitions were not loaded' })
+        }
+        res.json({ success: true, ready: true })
+    } finally {
+        clearTimeout(timer)
+        reload.finally(() => {
+            state.reloading = false
+        })
     }
 })
 

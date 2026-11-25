@@ -9,9 +9,15 @@ import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
 import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
+import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
-import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionInfo,
+  instanceSessionSource,
+  newSessionId,
+} from './extensions/session'
 import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -127,6 +133,27 @@ function instrumentMutator<TServer = unknown>(
   }
 }
 
+/**
+ * Instruments every server a [FastMCP](https://github.com/punkpeye/fastmcp) app builds. FastMCP
+ * creates a low-level server per session (per request when stateless) behind a private
+ * factory, so this hooks the module's session class instead of one server. Call it before
+ * `server.start()`.
+ *
+ * @example
+ * ```ts
+ * import * as fastmcp from 'fastmcp'
+ * instrumentFastMCP(fastmcp, posthog)
+ * const server = new fastmcp.FastMCP({ name: 'my-server', version: '1.0.0' })
+ * ```
+ *
+ * @param fastmcp - The `fastmcp` module namespace.
+ * @param posthog - A `posthog-node` client you construct and own.
+ * @param options - Optional configuration, applied to every session. See `MCPAnalyticsOptions`.
+ */
+function instrumentFastMCP(fastmcp: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): void {
+  hookFastMCPSessions(fastmcp, (server) => instrument(server, posthog, options), createLogger(options.logger))
+}
+
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
@@ -208,6 +235,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   const event: McpEvent = {
     sessionId: trackingData.sessionId,
+    sessionSource: instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
@@ -231,6 +259,7 @@ export {
   encodeSessionId,
   type SessionTokenPayload,
 } from './extensions/session-token'
+export { withMcpSessionHeader } from './extensions/session-header'
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
   PostHogMCPAnalyticsEvent,
@@ -281,4 +310,4 @@ export type {
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { instrument, instrumentMutator }
+export { instrument, instrumentFastMCP, instrumentMutator }
