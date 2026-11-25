@@ -243,6 +243,46 @@ describe('PostHog RN onFeatureFlags', () => {
     })
   })
 
+  describe('getAllFeatureFlags()', () => {
+    it('returns undefined before any flags are cached', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+    })
+
+    it('returns an empty list once a load returns no flags', async () => {
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: 200,
+        json: () => Promise.resolve({ featureFlags: {} }),
+        text: () => Promise.resolve(''),
+      }))
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+
+    it('returns the loaded flags', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key, enabled }) => [key, enabled])).toEqual([
+        ['beta-ui', true],
+        ['checkout', true],
+        ['old-ui', false],
+        ['empty', false],
+      ])
+    })
+  })
+
   describe('flags whose variant is an empty string', () => {
     it('read as disabled in getFeatureFlagResult() and getAllFeatureFlags()', async () => {
       posthog = newPostHog()
@@ -253,7 +293,7 @@ describe('PostHog RN onFeatureFlags', () => {
         enabled: false,
         variant: '',
       })
-      expect(posthog.getAllFeatureFlags().find((result) => result.key === 'empty')).toMatchObject({
+      expect(posthog.getAllFeatureFlags()?.find((result) => result.key === 'empty')).toMatchObject({
         enabled: false,
       })
       expect(posthog.isFeatureEnabled('empty')).toBe(false)

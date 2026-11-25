@@ -1115,10 +1115,18 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   /**
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   *
+   * Returns `undefined` while no flags are cached, such as before the first successful load or when no
+   * flags were bootstrapped, and a list, empty when no flags apply, once they are.
    */
-  getAllFeatureFlags(): FeatureFlagResult[] {
+  getAllFeatureFlags(): FeatureFlagResult[] | undefined {
+    const flags = this.getFeatureFlagDetails()?.flags
+    // A failed load is stored with the flags known before it, so empty flags there mean none are cached.
+    if (!flags || (this.didLatestFeatureFlagsLoadFail() && Object.keys(flags).length === 0)) {
+      return undefined
+    }
     return flagDetailsToResults(
-      this.getFeatureFlagDetails()?.flags ?? {},
+      flags,
       (payload) => this.decodeFeatureFlagPayload(payload),
       (value) => this.isFlagValueEnabled(value)
     )
@@ -1850,6 +1858,15 @@ export abstract class PostHogCore extends PostHogCoreBase {
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
     return this.loadFeatureFlagsAsync(sendAnonDistinctId)
+  }
+
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s, or an empty list while none are
+   * cached. This is a synchronous read of the flags from the last load (no network request) and does not
+   * send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return super.getAllFeatureFlags() ?? []
   }
 
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {

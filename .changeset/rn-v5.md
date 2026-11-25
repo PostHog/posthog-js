@@ -18,6 +18,7 @@
 - **Breaking:** a flag whose variant is an empty string reads as disabled (`enabled: false`) in `getFeatureFlagResult()`, `getAllFeatureFlags()` and `useFeatureFlagResult()`, as it already did in `isFeatureEnabled()`, like posthog-ios and posthog-android 4.0
 - **Breaking:** leave disabled flags and flags whose variant is an empty string out of `$active_feature_flags`, like posthog-ios and posthog-android
 - **Breaking:** keep a string payload in `bootstrap.featureFlagPayloads` as a string instead of parsing it as JSON, like posthog-ios 4.0 — pass decoded values, such as `{ color: 'blue' }` instead of `'{"color":"blue"}'`
+- **Breaking:** `getAllFeatureFlags()` returns `undefined` until flags are cached by a successful load or bootstrap, instead of an empty list, like posthog-ios and posthog-android 4.0 — use `posthog.getAllFeatureFlags() ?? []` where you only iterate
 - **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
 - **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
