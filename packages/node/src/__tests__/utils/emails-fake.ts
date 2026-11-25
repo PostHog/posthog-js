@@ -480,10 +480,6 @@ export class FakePostHog {
       })
     }
     const { recipients, ...shared } = jsonBody(options)
-    const { templateIds } = this.options
-    if (templateIds && typeof shared.template_id === 'string' && !templateIds.includes(shared.template_id)) {
-      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
-    }
     const refused = Object.keys(shared).find((field) => BATCH_REFUSED_FIELDS.has(field))
     if (refused !== undefined) {
       throw invalidField(refused, "A batch send doesn't take this field.")
@@ -525,6 +521,10 @@ export class FakePostHog {
         detail:
           "Batch sends aren't available for this project yet, so PostHog didn't send any of these emails. Send each email on its own instead.",
       })
+    }
+    const { templateIds } = this.options
+    if (templateIds && typeof shared.template_id === 'string' && !templateIds.includes(shared.template_id)) {
+      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
     this.batches.push({ recipients: recipients.length, bytes })
     return { status: 200, body: { results: recipients.map((recipient: Json) => this.batchSlot(shared, recipient)) } }

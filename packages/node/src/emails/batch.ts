@@ -196,11 +196,15 @@ export function recordAnswer(
 
 export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): EmailError {
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
+  const answer =
+    mayHaveQueuedBefore && !mayHaveQueued(error)
+      ? copyError(error, { message: `${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}` })
+      : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
-    slot.error = error
+    slot.error = answer
   }
-  return unconfirmed ? withFix(error, BATCH_RESEND_FIX) : error
+  return unconfirmed ? copyError(answer, { fix: BATCH_RESEND_FIX }) : answer
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
@@ -231,17 +235,23 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
 const BATCH_RESEND_FIX =
   'PostHog may have queued these emails. Call emails.batch() again with the same email and recipients, unchanged, giving each recipient the idempotencyKey of its entry in error.results (matched by index), within 24 hours of the first request with those keys: PostHog queues no second email for a key it has.'
 
+const EARLIER_ATTEMPT_MAY_HAVE_QUEUED =
+  'An earlier attempt of this batch went unanswered, so PostHog may have queued its emails.'
+
 const RESEND_FIX =
   'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours of the first request with that key: PostHog queues no second email for a key it has.'
 
 function withResendFix(error: EmailError): EmailError {
-  return withFix(error, RESEND_FIX)
+  return copyError(error, { fix: RESEND_FIX })
 }
 
-function withFix(error: EmailError, fix: string): EmailError {
+function copyError(
+  error: EmailError,
+  { message = error.message, fix = error.fix }: { message?: string; fix?: string }
+): EmailError {
   return new EmailError({
     code: error.code,
-    message: error.message,
+    message,
     statusCode: error.statusCode,
     why: error.why,
     fix,
@@ -273,7 +283,8 @@ function batchReplyError(
       fix: 'Send each email with emails.send() until batch sends are on for the project.',
     })
   }
-  if (status === 404 && error.field === undefined && (error.code === 'not_found' || error.code === 'api_error')) {
+  const code = error.code.trim()
+  if (status === 404 && error.field === undefined && (code === '' || code === 'not_found' || code === 'api_error')) {
     return templateForm
       ? new EmailError({
           code: 'not_found',
