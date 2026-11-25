@@ -485,9 +485,6 @@ describe('WebMCP', () => {
 
     it('does not add an SDK stack to rejections that are not errors', async () => {
         const { posthog, capture } = createPostHogWithExceptionCapture()
-        vi.spyOn(posthog.exceptions, '_isPostHogException' as any).mockImplementation(
-            (list: any) => !!list[0].stacktrace
-        )
 
         register(new WebMCP(posthog), {
             name: 'string_rejection',
