@@ -147,13 +147,45 @@ describe('record a blocked iframe', () => {
   );
 
   it.each(['same-origin', 'cross-origin'] as const)(
-    'a %s iframe is in the first snapshot when the block selector is invalid',
+    'a %s iframe is recorded when the block selector is invalid',
     async (iframeOrigin) => {
       const recorded = await recordPageWithIframe(iframeOrigin, '', {
         blockSelector: '[',
       });
 
-      expect(recorded).toContain(INITIAL_CONTENT);
+      expect({
+        initialContent: recorded.includes(INITIAL_CONTENT),
+        laterContent: recorded.includes(LATER_CONTENT),
+      }).toEqual({ initialContent: true, laterContent: true });
     },
   );
+
+  it('records page changes when the block selector is invalid', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent('<html><body><div id="root"></div></body></html>');
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), { blockSelector: '[' });
+      await waitForRAF(page);
+
+      await page.evaluate(() => {
+        const root = document.getElementById('root')!;
+        root.setAttribute('data-later', 'later-attribute');
+        root.textContent = 'later-text';
+      });
+      await waitForRAF(page);
+
+      const recorded = JSON.stringify(events);
+      expect({
+        attribute: recorded.includes('later-attribute'),
+        text: recorded.includes('later-text'),
+      }).toEqual({ attribute: true, text: true });
+    } finally {
+      await page.close();
+    }
+  });
 });
