@@ -834,7 +834,10 @@ flushLogs, and shutdown drains both before terminating.
 
 `Promise`\<`void`\>
 
-Promise that resolves when the flush is complete
+Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
+such as after a network error or a `503`, stay queued and are sent again after a wait; a flush
+during that wait resolves without sending. Events PostHog dropped, such as after a `400` or `401`,
+are reported on `posthog.on('error')`. The promise resolves in all these cases.
 
 #### Example
 
@@ -3009,7 +3012,7 @@ Props for the PostHogMaskView component.
 | <a id="property-pushidentityprovider"></a> `pushIdentityProvider?` | `PostHogPushIdentityProvider` | Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`. Called with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds. | - |
 | <a id="property-rageclickconfig"></a> `rageClickConfig?` | `PostHogRageClickConfig` | Configure rage click (rage tap) detection on iOS. The native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them. Android is unaffected — posthog-android does not have native rage click detection. Requires `@posthog/react-native-plugin` version 2.7.0 or newer. | - |
 | <a id="property-remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` | `Omit.remoteConfigRequestTimeoutMs` |
-| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | A list of headers that should be sent with requests to the PostHog API. | - |
+| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets itself, such as `Authorization` and `User-Agent`, replace yours. | - |
 | <a id="property-requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` | `Omit.requestTimeout` |
 | <a id="property-sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` | `Omit.sendFeatureFlagEvent` |
 | <a id="property-sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` | `Omit.sessionExpirationTimeSeconds` |
@@ -3268,7 +3271,7 @@ Common types shared across PostHog SDKs
 | Property | Type |
 | ------ | ------ |
 | <a id="id-1"></a> `id` | `number` |
-| <a id="name"></a> `name?` | `string` |
+| <a id="name-1"></a> `name?` | `string` |
 | <a id="steps"></a> `steps?` | `ActionStepType`[] |
 
 ### `SurveyAppearance`

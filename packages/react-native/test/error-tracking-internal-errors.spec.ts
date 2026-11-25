@@ -16,8 +16,7 @@ vi.mock('../src/utils', async (importOriginal) => {
 })
 
 // Mock core's guard so handler tests can simulate "this is a network error" without
-// spinning up a real PostHog to produce a genuine instance. The guard itself is
-// verified against a real core instance in error-tracking-internal-errors.integration.spec.ts.
+// spinning up a real PostHog to produce a genuine instance.
 vi.mock('@posthog/core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@posthog/core')>()),
   isPostHogFetchNetworkError: vi.fn(),
