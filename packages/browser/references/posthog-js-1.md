@@ -8599,51 +8599,51 @@ Browser survey appearance, including browser-only placement and rendering option
 
 #### Properties
 
-| Property | Type | Description | Inherited from |
-| ------ | ------ | ------ | ------ |
-| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | `Omit.allowGoBack` |
-| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | `Omit.autoDisappear` |
-| <a id="property-backbuttontext-1"></a> `backButtonText?` | `string` | - | `Omit.backButtonText` |
-| <a id="property-backgroundcolor-1"></a> `backgroundColor?` | `string` | - | `Omit.backgroundColor` |
-| <a id="property-bordercolor-1"></a> `borderColor?` | `string` | - | `Omit.borderColor` |
-| <a id="property-boxpadding"></a> `boxPadding?` | `string` | - | - |
-| <a id="property-descriptiontextcolor"></a> ~~`descriptionTextColor?`~~ | `string` | **Deprecated** Not currently used. | - |
-| <a id="property-disableautofocus"></a> `disableAutofocus?` | `boolean` | - | - |
-| <a id="property-disabledbuttonopacity"></a> `disabledButtonOpacity?` | `string` | - | - |
-| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | `Omit.displayIntroScreen` |
-| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | `Omit.displayThankYouMessage` |
-| <a id="property-fontfamily-2"></a> `fontFamily?` | `string` | - | - |
-| <a id="property-hidecancelbutton"></a> `hideCancelButton?` | `boolean` | - | - |
-| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | `Omit.inputBackground` |
-| <a id="property-inputbackgroundcolor"></a> ~~`inputBackgroundColor?`~~ | `string` | **Deprecated** Use `inputBackground` instead. | - |
-| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | `Omit.inputTextColor` |
-| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | `Omit.introScreenButtonText` |
-| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | `Omit.introScreenDescription` |
-| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `Omit.introScreenDescriptionContentType` |
-| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | `Omit.introScreenHeader` |
-| <a id="property-maxwidth-1"></a> `maxWidth?` | `string` | - | - |
-| <a id="property-placeholder"></a> `placeholder?` | `string` | - | `Omit.placeholder` |
-| <a id="property-position-1"></a> `position?` | `SurveyPosition` | - | - |
-| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | `Omit.ratingButtonActiveColor` |
-| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | `Omit.ratingButtonColor` |
-| <a id="property-ratingbuttonhovercolor"></a> `ratingButtonHoverColor?` | `string` | - | - |
-| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | `Omit.shuffleQuestions` |
-| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | `Omit.submitButtonColor` |
-| <a id="property-submitbuttontext-1"></a> `submitButtonText?` | `string` | - | `Omit.submitButtonText` |
-| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | `Omit.submitButtonTextColor` |
-| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | `Omit.surveyPopupDelaySeconds` |
-| <a id="property-tabposition"></a> `tabPosition?` | `SurveyTabPosition` | - | - |
-| <a id="property-textcolor-1"></a> `textColor?` | `string` | - | `Omit.textColor` |
-| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | `Omit.thankYouMessageCloseButtonText` |
-| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | `Omit.thankYouMessageDescription` |
-| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `Omit.thankYouMessageDescriptionContentType` |
-| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | `Omit.thankYouMessageHeader` |
-| <a id="property-whitelabel-1"></a> `whiteLabel?` | `boolean` | - | - |
-| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | `Omit.widgetColor` |
-| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | `Omit.widgetLabel` |
-| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | `Omit.widgetSelector` |
-| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | - |
-| <a id="property-zindex-1"></a> `zIndex?` | `string` | - | - |
+| Property | Type | Description | Overrides | Inherited from |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | - | `Omit.allowGoBack` |
+| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | - | `Omit.autoDisappear` |
+| <a id="property-backbuttontext-1"></a> `backButtonText?` | `string` | - | - | `Omit.backButtonText` |
+| <a id="property-backgroundcolor-1"></a> `backgroundColor?` | `string` | - | - | `Omit.backgroundColor` |
+| <a id="property-bordercolor-1"></a> `borderColor?` | `string` | - | - | `Omit.borderColor` |
+| <a id="property-boxpadding"></a> `boxPadding?` | `string` | - | - | - |
+| <a id="property-descriptiontextcolor"></a> ~~`descriptionTextColor?`~~ | `string` | **Deprecated** Not currently used. | - | - |
+| <a id="property-disableautofocus"></a> `disableAutofocus?` | `boolean` | - | - | - |
+| <a id="property-disabledbuttonopacity"></a> `disabledButtonOpacity?` | `string` | - | - | - |
+| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | - | `Omit.displayIntroScreen` |
+| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | - | `Omit.displayThankYouMessage` |
+| <a id="property-fontfamily-2"></a> `fontFamily?` | `string` | - | `Omit.fontFamily` | - |
+| <a id="property-hidecancelbutton"></a> `hideCancelButton?` | `boolean` | - | - | - |
+| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | - | `Omit.inputBackground` |
+| <a id="property-inputbackgroundcolor"></a> ~~`inputBackgroundColor?`~~ | `string` | **Deprecated** Use `inputBackground` instead. | - | - |
+| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | - | `Omit.inputTextColor` |
+| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | - | `Omit.introScreenButtonText` |
+| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | - | `Omit.introScreenDescription` |
+| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | - | `Omit.introScreenDescriptionContentType` |
+| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | - | `Omit.introScreenHeader` |
+| <a id="property-maxwidth-1"></a> `maxWidth?` | `string` | - | - | - |
+| <a id="property-placeholder"></a> `placeholder?` | `string` | - | - | `Omit.placeholder` |
+| <a id="property-position-1"></a> `position?` | `SurveyPosition` | - | - | - |
+| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | - | `Omit.ratingButtonActiveColor` |
+| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | - | `Omit.ratingButtonColor` |
+| <a id="property-ratingbuttonhovercolor"></a> `ratingButtonHoverColor?` | `string` | - | - | - |
+| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | - | `Omit.shuffleQuestions` |
+| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | - | `Omit.submitButtonColor` |
+| <a id="property-submitbuttontext-1"></a> `submitButtonText?` | `string` | - | - | `Omit.submitButtonText` |
+| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | - | `Omit.submitButtonTextColor` |
+| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | - | `Omit.surveyPopupDelaySeconds` |
+| <a id="property-tabposition"></a> `tabPosition?` | `SurveyTabPosition` | - | - | - |
+| <a id="property-textcolor-1"></a> `textColor?` | `string` | - | - | `Omit.textColor` |
+| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | - | `Omit.thankYouMessageCloseButtonText` |
+| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | - | `Omit.thankYouMessageDescription` |
+| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | - | `Omit.thankYouMessageDescriptionContentType` |
+| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | - | `Omit.thankYouMessageHeader` |
+| <a id="property-whitelabel-1"></a> `whiteLabel?` | `boolean` | - | - | - |
+| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | - | `Omit.widgetColor` |
+| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | - | `Omit.widgetLabel` |
+| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | - | `Omit.widgetSelector` |
+| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | - | - |
+| <a id="property-zindex-1"></a> `zIndex?` | `string` | - | - | - |
 
 ### `SurveyAppearance`
 
@@ -8660,6 +8660,7 @@ Browser survey appearance, including browser-only placement and rendering option
 | <a id="bordercolor"></a> `borderColor?` | `string` |
 | <a id="displayintroscreen"></a> `displayIntroScreen?` | `boolean` |
 | <a id="displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` |
+| <a id="fontfamily"></a> `fontFamily?` | `string` |
 | <a id="inputbackground"></a> `inputBackground?` | `string` |
 | <a id="inputtextcolor"></a> `inputTextColor?` | `string` |
 | <a id="introscreenbuttontext"></a> `introScreenButtonText?` | `string` |

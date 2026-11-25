@@ -3296,40 +3296,41 @@ React Native survey appearance, including native-only text scaling options.
 
 #### Properties
 
-| Property | Type | Description | Inherited from |
-| ------ | ------ | ------ | ------ |
-| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | `SurveyAppearance.allowGoBack` |
-| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | `SurveyAppearance.autoDisappear` |
-| <a id="property-backbuttontext"></a> `backButtonText?` | `string` | - | `SurveyAppearance.backButtonText` |
-| <a id="property-backgroundcolor"></a> `backgroundColor?` | `string` | - | `SurveyAppearance.backgroundColor` |
-| <a id="property-bordercolor"></a> `borderColor?` | `string` | - | `SurveyAppearance.borderColor` |
-| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | `SurveyAppearance.displayIntroScreen` |
-| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | `SurveyAppearance.displayThankYouMessage` |
-| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | `SurveyAppearance.inputBackground` |
-| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | `SurveyAppearance.inputTextColor` |
-| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | `SurveyAppearance.introScreenButtonText` |
-| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | `SurveyAppearance.introScreenDescription` |
-| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `SurveyAppearance.introScreenDescriptionContentType` |
-| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | `SurveyAppearance.introScreenHeader` |
-| <a id="property-maxfontsizemultiplier"></a> `maxFontSizeMultiplier?` | `number` \| `Partial`\<`Record`\<`SurveyTextRole`, `number`\>\> | Caps how far survey text may grow under the OS text-size setting, as a multiple of its base size - React Native's `maxFontSizeMultiplier`, applied to every semantic `Text` and `TextInput` the survey renders. Icon-only text fallbacks do not scale because they occupy fixed-size icon boxes. Pass a number to cap every role at once, or an object to cap them separately: a survey headline can usually take more scaling than a numeral inside a rating button, and a host app that already caps its own text by role will want to match those ceilings here. `maxFontSizeMultiplier: 1.6 // or maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }` Roles left out of the object are uncapped, as they are today. Use `0` for no maximum, or a value of `1` or greater to set a cap. Other values below `1` (such as `0.8`) do not shrink text and are unsupported by React Native; depending on the platform and version, they may be ignored or rejected. Leave it unset (the default) and survey text scales without a ceiling. That is what the OS asks for, but not always what a fixed-size survey card can hold - at the largest accessibility sizes an unbounded 18pt headline renders roughly one word per line. React Native only inherits this prop through nested `Text`, so a host app cannot apply it from the outside - it has to come in here. **Default** `undefined (no ceiling)` | - |
-| <a id="property-placeholder"></a> `placeholder?` | `string` | - | `SurveyAppearance.placeholder` |
-| <a id="property-position"></a> `position?` | `SurveyPosition` | - | `SurveyAppearance.position` |
-| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | `SurveyAppearance.ratingButtonActiveColor` |
-| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | `SurveyAppearance.ratingButtonColor` |
-| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | `SurveyAppearance.shuffleQuestions` |
-| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | `SurveyAppearance.submitButtonColor` |
-| <a id="property-submitbuttontext"></a> `submitButtonText?` | `string` | - | `SurveyAppearance.submitButtonText` |
-| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | `SurveyAppearance.submitButtonTextColor` |
-| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | `SurveyAppearance.surveyPopupDelaySeconds` |
-| <a id="property-textcolor"></a> `textColor?` | `string` | - | `SurveyAppearance.textColor` |
-| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | `SurveyAppearance.thankYouMessageCloseButtonText` |
-| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | `SurveyAppearance.thankYouMessageDescription` |
-| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | `SurveyAppearance.thankYouMessageDescriptionContentType` |
-| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | `SurveyAppearance.thankYouMessageHeader` |
-| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | `SurveyAppearance.widgetColor` |
-| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | `SurveyAppearance.widgetLabel` |
-| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | `SurveyAppearance.widgetSelector` |
-| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | `SurveyAppearance.widgetType` |
+| Property | Type | Description | Overrides | Inherited from |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="property-allowgoback"></a> `allowGoBack?` | `boolean` | - | - | `SurveyAppearance.allowGoBack` |
+| <a id="property-autodisappear"></a> `autoDisappear?` | `boolean` | - | - | `SurveyAppearance.autoDisappear` |
+| <a id="property-backbuttontext"></a> `backButtonText?` | `string` | - | - | `SurveyAppearance.backButtonText` |
+| <a id="property-backgroundcolor"></a> `backgroundColor?` | `string` | - | - | `SurveyAppearance.backgroundColor` |
+| <a id="property-bordercolor"></a> `borderColor?` | `string` | - | - | `SurveyAppearance.borderColor` |
+| <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | - | `SurveyAppearance.displayIntroScreen` |
+| <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | - | `SurveyAppearance.displayThankYouMessage` |
+| <a id="property-fontfamily"></a> `fontFamily?` | `string` | Font family for survey text. Use a font bundled with the app; any other name falls back to the system font. `inherit` (the survey editor's default) or an empty value uses `defaultSurveyAppearance.fontFamily` from `PostHogSurveyProvider`, then the system font. `system-ui` always uses the system font. | `SurveyAppearance.fontFamily` | - |
+| <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | - | `SurveyAppearance.inputBackground` |
+| <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | - | `SurveyAppearance.inputTextColor` |
+| <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | - | `SurveyAppearance.introScreenButtonText` |
+| <a id="property-introscreendescription"></a> `introScreenDescription?` | `string` | - | - | `SurveyAppearance.introScreenDescription` |
+| <a id="property-introscreendescriptioncontenttype"></a> `introScreenDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | - | `SurveyAppearance.introScreenDescriptionContentType` |
+| <a id="property-introscreenheader"></a> `introScreenHeader?` | `string` | - | - | `SurveyAppearance.introScreenHeader` |
+| <a id="property-maxfontsizemultiplier"></a> `maxFontSizeMultiplier?` | `number` \| `Partial`\<`Record`\<`SurveyTextRole`, `number`\>\> | Caps how far survey text may grow under the OS text-size setting, as a multiple of its base size - React Native's `maxFontSizeMultiplier`, applied to every semantic `Text` and `TextInput` the survey renders. Icon-only text fallbacks do not scale because they occupy fixed-size icon boxes. Pass a number to cap every role at once, or an object to cap them separately: a survey headline can usually take more scaling than a numeral inside a rating button, and a host app that already caps its own text by role will want to match those ceilings here. `maxFontSizeMultiplier: 1.6 // or maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }` Roles left out of the object are uncapped, as they are today. Use `0` for no maximum, or a value of `1` or greater to set a cap. Other values below `1` (such as `0.8`) do not shrink text and are unsupported by React Native; depending on the platform and version, they may be ignored or rejected. Leave it unset (the default) and survey text scales without a ceiling. That is what the OS asks for, but not always what a fixed-size survey card can hold - at the largest accessibility sizes an unbounded 18pt headline renders roughly one word per line. React Native only inherits this prop through nested `Text`, so a host app cannot apply it from the outside - it has to come in here. **Default** `undefined (no ceiling)` | - | - |
+| <a id="property-placeholder"></a> `placeholder?` | `string` | - | - | `SurveyAppearance.placeholder` |
+| <a id="property-position"></a> `position?` | `SurveyPosition` | - | - | `SurveyAppearance.position` |
+| <a id="property-ratingbuttonactivecolor"></a> `ratingButtonActiveColor?` | `string` | - | - | `SurveyAppearance.ratingButtonActiveColor` |
+| <a id="property-ratingbuttoncolor"></a> `ratingButtonColor?` | `string` | - | - | `SurveyAppearance.ratingButtonColor` |
+| <a id="property-shufflequestions"></a> `shuffleQuestions?` | `boolean` | - | - | `SurveyAppearance.shuffleQuestions` |
+| <a id="property-submitbuttoncolor"></a> `submitButtonColor?` | `string` | - | - | `SurveyAppearance.submitButtonColor` |
+| <a id="property-submitbuttontext"></a> `submitButtonText?` | `string` | - | - | `SurveyAppearance.submitButtonText` |
+| <a id="property-submitbuttontextcolor"></a> `submitButtonTextColor?` | `string` | - | - | `SurveyAppearance.submitButtonTextColor` |
+| <a id="property-surveypopupdelayseconds"></a> `surveyPopupDelaySeconds?` | `number` | - | - | `SurveyAppearance.surveyPopupDelaySeconds` |
+| <a id="property-textcolor"></a> `textColor?` | `string` | - | - | `SurveyAppearance.textColor` |
+| <a id="property-thankyoumessageclosebuttontext"></a> `thankYouMessageCloseButtonText?` | `string` | - | - | `SurveyAppearance.thankYouMessageCloseButtonText` |
+| <a id="property-thankyoumessagedescription"></a> `thankYouMessageDescription?` | `string` | - | - | `SurveyAppearance.thankYouMessageDescription` |
+| <a id="property-thankyoumessagedescriptioncontenttype"></a> `thankYouMessageDescriptionContentType?` | `SurveyQuestionDescriptionContentType` | - | - | `SurveyAppearance.thankYouMessageDescriptionContentType` |
+| <a id="property-thankyoumessageheader"></a> `thankYouMessageHeader?` | `string` | - | - | `SurveyAppearance.thankYouMessageHeader` |
+| <a id="property-widgetcolor"></a> `widgetColor?` | `string` | - | - | `SurveyAppearance.widgetColor` |
+| <a id="property-widgetlabel"></a> `widgetLabel?` | `string` | - | - | `SurveyAppearance.widgetLabel` |
+| <a id="property-widgetselector"></a> `widgetSelector?` | `string` | - | - | `SurveyAppearance.widgetSelector` |
+| <a id="property-widgettype"></a> `widgetType?` | `SurveyWidgetType` | - | - | `SurveyAppearance.widgetType` |
 
 ### `SurveyAppearance`
 
@@ -3350,6 +3351,7 @@ React Native survey appearance, including native-only text scaling options.
 | <a id="bordercolor"></a> `borderColor?` | `string` |
 | <a id="displayintroscreen"></a> `displayIntroScreen?` | `boolean` |
 | <a id="displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` |
+| <a id="fontfamily"></a> `fontFamily?` | `string` |
 | <a id="inputbackground"></a> `inputBackground?` | `string` |
 | <a id="inputtextcolor"></a> `inputTextColor?` | `string` |
 | <a id="introscreenbuttontext"></a> `introScreenButtonText?` | `string` |
@@ -3377,12 +3379,13 @@ React Native survey appearance, including native-only text scaling options.
 
 ### `SurveyAppearanceTheme`
 
-> **SurveyAppearanceTheme** = `Omit`\<`Required`\<`SurveyAppearance`\>, `"widgetSelector"` \| `"widgetType"` \| `"widgetColor"` \| `"widgetLabel"` \| `"shuffleQuestions"` \| `"textColor"` \| `"inputTextColor"` \| `"placeholder"` \| `"maxFontSizeMultiplier"`\> & `object`
+> **SurveyAppearanceTheme** = `Omit`\<`Required`\<`SurveyAppearance`\>, `"widgetSelector"` \| `"widgetType"` \| `"widgetColor"` \| `"widgetLabel"` \| `"shuffleQuestions"` \| `"textColor"` \| `"inputTextColor"` \| `"placeholder"` \| `"maxFontSizeMultiplier"` \| `"fontFamily"`\> & `object`
 
 #### Type Declaration
 
 | Name | Type |
 | ------ | ------ |
+| `fontFamily?` | `string` |
 | `inputTextColor?` | `string` |
 | `maxFontSizeMultiplier?` | `SurveyAppearance`\[`"maxFontSizeMultiplier"`\] |
 | `placeholder?` | `string` |

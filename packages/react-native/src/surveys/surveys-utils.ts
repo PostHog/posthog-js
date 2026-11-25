@@ -109,6 +109,16 @@ export interface SurveyAppearance extends CoreSurveyAppearance {
    * @default undefined (no ceiling)
    */
   maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
+
+  /**
+   * Font family for survey text. Use a font bundled with the app; any other
+   * name falls back to the system font.
+   *
+   * `inherit` (the survey editor's default) or an empty value uses
+   * `defaultSurveyAppearance.fontFamily` from `PostHogSurveyProvider`, then the
+   * system font. `system-ui` always uses the system font.
+   */
+  fontFamily?: string
 }
 
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)

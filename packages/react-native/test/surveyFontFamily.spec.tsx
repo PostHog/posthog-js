@@ -37,8 +37,9 @@ import { QuestionHeader } from '../src/surveys/components/QuestionHeader'
 import { defaultSurveyAppearance, getFontFamily, SurveyAppearanceTheme } from '../src/surveys/surveys-utils'
 
 const fontOf = (text: string): unknown => {
-  const style = renderedTextProps.find((entry) => entry.children === text)?.style
-  const flat = Object.assign({}, ...[style].flat(Infinity).filter(Boolean))
+  const entry = renderedTextProps.find((item) => item.children === text)
+  expect(entry, `no rendered Text/TextInput with children ${JSON.stringify(text)}`).toBeDefined()
+  const flat = Object.assign({}, ...[entry!.style].flat(Infinity).filter(Boolean))
   return flat.fontFamily
 }
 
