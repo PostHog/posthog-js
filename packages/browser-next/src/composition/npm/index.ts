@@ -98,5 +98,14 @@ export type {
     ConversationsTheme,
     ConversationsUnavailableReason,
 } from '../../products/conversations/conversations-options'
+export type {
+    SessionRecordingOptions,
+    SessionRecordingConfiguration,
+} from '../../products/session-recording/session-recording-options'
+export type {
+    SessionRecordingExtension,
+    SessionRecordingOverride,
+    SessionReplayUrlOptions,
+} from '../../products/session-recording/session-recording-internal'
 
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'

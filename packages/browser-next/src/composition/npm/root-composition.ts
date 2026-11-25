@@ -10,6 +10,10 @@ import { snapshotSurveysOptions } from '../../products/surveys/surveys-options'
 import { snapshotLogsOptions } from '../../products/logs/logs-options'
 import { snapshotTracingHeadersOptions } from '../../products/tracing-headers/tracing-headers-options'
 import { snapshotConversationsOptions } from '../../products/conversations/conversations-options'
+import {
+    SESSION_RECORDING_CONFIG_KEY,
+    snapshotSessionRecordingOptions,
+} from '../../products/session-recording/session-recording-options'
 import type { BrowserExtension } from '../../core/context/browser-client'
 import type { IPostHog, PostHogOptions, RemoteConfig } from '../../core/types'
 import type { WebVitalsOptions } from '../../products/web-vitals/web-vitals-options'
@@ -220,6 +224,27 @@ const configureToolbar = (options: PostHogOptions): ProductDefinition | undefine
     }
 }
 
+const configureSessionRecording = (options: PostHogOptions): ProductDefinition | undefined => {
+    const configuration = options?.sessionRecording
+    if (configuration === false) return
+    const snapshot = snapshotSessionRecordingOptions(configuration)
+    return {
+        load: () =>
+            import('../../products/session-recording/session-recording').then(({ sessionRecording }) =>
+                sessionRecording(snapshot)
+            ),
+        activate:
+            configuration === undefined
+                ? activateFromSignals(
+                      (host) =>
+                          (host.kv.get(SESSION_RECORDING_CONFIG_KEY) as { enabled?: unknown } | undefined)?.enabled ===
+                          true,
+                      (config) => !!config.sessionRecording
+                  )
+                : undefined,
+    }
+}
+
 export const createProductComposition = (options: PostHogOptions): ProductComposition => {
     const composition: ProductComposition = {
         extensions: [...(options?.extensions ?? [])],
@@ -236,5 +261,6 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
     registerProduct(composition, 'errorTracking', 'error tracking', () => configureErrorTracking(options))
     registerProduct(composition, 'conversations', 'conversations', () => configureConversations(options))
     registerProduct(composition, 'toolbar', 'toolbar', () => configureToolbar(options))
+    registerProduct(composition, 'sessionRecording', 'session recording', () => configureSessionRecording(options))
     return composition
 }

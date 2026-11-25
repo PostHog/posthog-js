@@ -28,14 +28,13 @@ import type {
     UserProvidedTraits,
 } from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
-// oxlint-disable-next-line posthog-js/no-external-replay-imports
-import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
+import type { SessionRecordingStatus, TriggerType } from '@posthog/browser-common/replay/trigger-matching'
 import type {
     TraceparentTargets,
     TracingHeadersDistinctId,
     TracingHeadersHostnames,
 } from '../extensions/tracing-headers-types'
-import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
+import type { eventWithTime } from '@posthog/browser-common/replay/rrweb-types'
 
 /*
  * Browser-v1's contract with its lazily loaded bundles and legacy window globals.

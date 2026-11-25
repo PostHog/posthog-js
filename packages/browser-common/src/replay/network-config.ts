@@ -1,9 +1,10 @@
-import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
+import type { CapturedNetworkRequest, PostHogConfig } from '@posthog/types'
+import type { NetworkRecordOptions } from '../types/network-recording'
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
-import { convertToURL } from '@posthog/browser-common/utils/request-utils'
-import { logger } from '@posthog/browser-common/utils/logger'
-import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
-import { each } from '@posthog/browser-common/utils/general-utils'
+import { convertToURL } from '../utils/request-utils'
+import { logger } from '../utils/logger'
+import { shouldCaptureValue } from '../utils/autocapture-utils'
+import { each } from '../utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -216,11 +217,22 @@ const limitPayloadSize = (
 
     return (data) => {
         if (data?.requestBody) {
-            data.requestBody = enforcePayloadSizeLimit(data.requestBody, data.requestHeaders, limit, 'Request')
+            // a non-empty body stays a string
+            data.requestBody = enforcePayloadSizeLimit(
+                data.requestBody,
+                data.requestHeaders,
+                limit,
+                'Request'
+            ) as string
         }
 
         if (data?.responseBody) {
-            data.responseBody = enforcePayloadSizeLimit(data.responseBody, data.responseHeaders, limit, 'Response')
+            data.responseBody = enforcePayloadSizeLimit(
+                data.responseBody,
+                data.responseHeaders,
+                limit,
+                'Response'
+            ) as string
         }
 
         return data
@@ -250,8 +262,9 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
         return undefined
     }
 
-    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request')
-    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response')
+    // scrubbing keeps an absent body absent
+    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request') as string | null
+    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response') as string | null
 
     return capturedRequest
 }
@@ -268,7 +281,7 @@ export const isInitialMaskFallback = (request: CapturedNetworkRequest | undefine
  *  if someone complains then we'll add an opt-in to let them override it
  */
 export const buildNetworkRequestOptions = (
-    instanceConfig: PostHogConfig,
+    instanceConfig: Pick<PostHogConfig, 'api_host' | 'capture_performance' | 'session_recording'>,
     remoteNetworkOptions: Pick<
         NetworkRecordOptions,
         'recordHeaders' | 'recordBody' | 'recordPerformance' | 'payloadHostDenyList'
@@ -329,8 +342,10 @@ export const buildNetworkRequestOptions = (
               // Initial entries are required performance metadata, but their URL is still customer data.
               // Keep only required, non-content fields before invoking the callback because callbacks may
               // mutate their argument. In particular, do not copy customer-controlled server timing data.
+              // timing fields copied from the entry may be absent
               const requiredInitialMetadata: CapturedNetworkRequest | undefined = cleanedRequest.isInitial
-                  ? {
+                  ? // oxlint-disable-next-line typescript/consistent-type-assertions
+                    ({
                         name: '',
                         entryType: cleanedRequest.entryType,
                         startTime: cleanedRequest.startTime,
@@ -339,7 +354,7 @@ export const buildNetworkRequestOptions = (
                         timeOrigin: cleanedRequest.timeOrigin,
                         timestamp: cleanedRequest.timestamp,
                         isInitial: true,
-                    }
+                    } as CapturedNetworkRequest)
                   : undefined
               const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
 

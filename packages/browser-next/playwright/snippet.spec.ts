@@ -100,6 +100,7 @@ const allProductsDisabled = {
     errorTracking: 'false',
     toolbar: 'false',
     conversations: 'false',
+    sessionRecording: 'false',
 }
 
 test('embedded analytics delivers queued and immediate events without optional chunk requests', async ({ page }) => {

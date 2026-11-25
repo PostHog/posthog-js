@@ -7,6 +7,23 @@ module.exports = {
             filename.includes('__tests__') ||
             filename.includes('/playwright/')
 
+        // the browser-common replay modules came from src/extensions/replay/external; other packages own their boundaries
+        const isSharedReplayOwner = /[\\/]packages[\\/](browser-common|browser-next)[\\/]/.test(filename)
+
+        function isRestrictedSharedReplayImport(node) {
+            const importPath = node.source.value
+            if (isSharedReplayOwner || typeof importPath !== 'string') {
+                return false
+            }
+            if (!importPath.startsWith('@posthog/browser-common/replay/') || importPath.endsWith('/replay-constants')) {
+                return false
+            }
+            const typeOnly =
+                node.importKind === 'type' ||
+                (node.specifiers?.length > 0 && node.specifiers.every((specifier) => specifier.importKind === 'type'))
+            return !typeOnly
+        }
+
         function isRestrictedImport(importPath) {
             // Handle absolute paths with aliases
             if (importPath.startsWith('@/') || importPath.startsWith('~/')) {
@@ -26,7 +43,7 @@ module.exports = {
         return {
             ImportDeclaration(node) {
                 const importPath = node.source.value
-                if (isRestrictedImport(importPath)) {
+                if (isRestrictedImport(importPath) || isRestrictedSharedReplayImport(node)) {
                     if (!isAllowedFile) {
                         context.report({
                             node,
@@ -39,7 +56,7 @@ module.exports = {
             ImportExpression(node) {
                 if (node.source && node.source.type === 'Literal') {
                     const importPath = node.source.value
-                    if (isRestrictedImport(importPath)) {
+                    if (isRestrictedImport(importPath) || isRestrictedSharedReplayImport(node)) {
                         if (!isAllowedFile) {
                             context.report({
                                 node,

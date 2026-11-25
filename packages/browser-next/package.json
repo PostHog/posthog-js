@@ -77,6 +77,11 @@
             "types": "./dist/products/toolbar/toolbar.d.ts",
             "require": "./dist/products/toolbar/toolbar.js",
             "import": "./dist/products/toolbar/toolbar.mjs"
+        },
+        "./session-recording": {
+            "types": "./dist/products/session-recording/session-recording.d.ts",
+            "require": "./dist/products/session-recording/session-recording.js",
+            "import": "./dist/products/session-recording/session-recording.mjs"
         }
     },
     "scripts": {
@@ -86,7 +91,7 @@
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "vitest run",
-        "test:built": "node scripts/check-mixed-module-delivery.mjs",
+        "test:built": "node scripts/check-mixed-module-delivery.mjs && node scripts/check-packed-dependencies.mjs",
         "test:browser": "pnpm --filter @posthog-tooling/sdk-mock-server build && playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
@@ -107,6 +112,8 @@
         "@playwright/test": "1.52.0",
         "@posthog-tooling/sdk-mock-server": "workspace:*",
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@posthog/rrweb-plugin-console-record": "workspace:*",
+        "@posthog/rrweb-record": "workspace:*",
         "@rslib/core": "catalog:",
         "@rspack/core": "2.1.10",
         "esbuild": "^0.25.0",

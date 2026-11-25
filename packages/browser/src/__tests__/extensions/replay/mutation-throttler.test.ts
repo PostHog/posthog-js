@@ -1,12 +1,12 @@
 import type { Mock as VitestMock } from 'vitest'
-import { MutationThrottler } from '../../../extensions/replay/external/mutation-throttler'
+import { MutationThrottler } from '@posthog/browser-common/replay/mutation-throttler'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
-import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
+} from '@posthog/browser-common/replay/sessionrecording-utils'
+import type { rrwebRecord } from '@posthog/browser-common/replay/rrweb'
 import { vi } from 'vitest'
-import type { eventWithTime, mutationData } from '../../../extensions/replay/types/rrweb-types'
+import type { eventWithTime, mutationData } from '@posthog/browser-common/replay/rrweb-types'
 
 vi.useFakeTimers()
 

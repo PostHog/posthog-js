@@ -26,11 +26,16 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
     }
 }
 
+/** The client's share of the browser's 64 KiB keepalive quota at unload, as posthog-js budgets it. */
+export const KEEPALIVE_BUDGET_BYTES = Math.floor(64 * 1024 * 0.8)
+
 export type RequestRuntime = [
     hosts: { api: string; flags: string; assets: string; ui: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,
+    /** Keepalive bytes left for unload delivery, shared by analytics and replay as posthog-js shares one pool. */
+    keepalive: { remaining: number },
 ]
 
 export const sendRequest = async (

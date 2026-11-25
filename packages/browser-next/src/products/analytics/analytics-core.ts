@@ -107,10 +107,11 @@ export class Analytics {
     private _driver: AnalyticsDriver | undefined
     private _isTearingDown = false
     private readonly _registeredProperties: RegisteredProperties
-    private readonly _sessionProperties: SessionRegisteredProperties
+    readonly _sessionProperties: SessionRegisteredProperties
     private readonly _rateLimiter: ClientRateLimiter
-    private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
+    private readonly _dynamicEventProperties: Array<(event: string) => Record<string, unknown>> = []
     private readonly _teardownCallbacks = new Set<() => void>()
+    private readonly _beforeResetPublisher: Publisher<void>
     private readonly _buffer: EventBuffer<AnalyticsMessage>
     private readonly _deliveryHost: CaptureHost
 
@@ -128,6 +129,7 @@ export class Analytics {
         this._groupPublisher = new Publisher(report('A group'))
         this._groupsResetPublisher = new Publisher(report('A group reset'))
         this._resetPublisher = new Publisher(report('A reset'))
+        this._beforeResetPublisher = new Publisher(report('A reset'))
         this._personProfiles = snapshotPersonProfileMode(() => options.personProfiles)
         this._rateLimiter = new ClientRateLimiter()
         this._registeredProperties = new RegisteredProperties(_core.kv)
@@ -181,6 +183,11 @@ export class Analytics {
         }
     }
 
+    /** Runs a callback as `reset()` begins, while the previous identity, consent and extension state still apply. */
+    onBeforeReset(callback: () => void): Disposable {
+        return this._beforeResetPublisher.listener(callback)
+    }
+
     async flush(): Promise<void> {
         if (!this._disposed) await this._driver?.flush()
     }
@@ -202,6 +209,7 @@ export class Analytics {
             this._groupPublisher,
             this._groupsResetPublisher,
             this._resetPublisher,
+            this._beforeResetPublisher,
         ] as Array<Publisher<unknown>>) {
             publisher.dispose()
         }
@@ -303,7 +311,7 @@ export class Analytics {
         if (!this._acceptRateLimit(skipRateLimit)) return undefined
         // An identity another subdomain stored replaces this context's registered properties before they are read.
         this._adoptStoredIdentity()
-        const snapshot = this._snapshotProperties(properties, options)
+        const snapshot = this._snapshotProperties(event, properties, options)
         if (!snapshot) return undefined
         const candidate = this._prepareCapture(event, snapshot)
         return candidate ? this._commitCapture(candidate, immediate, personProperties) : undefined
@@ -333,13 +341,14 @@ export class Analytics {
     }
 
     private _snapshotProperties(
+        event: string,
         properties: Record<string, unknown> | null,
         options: CaptureOptions
     ): CaptureProperties | undefined {
         const dynamic: Record<string, unknown> = {}
         for (const producer of this._dynamicEventProperties.slice()) {
             try {
-                Object.assign(dynamic, producer())
+                Object.assign(dynamic, producer(event))
             } catch (error) {
                 this._core.logger.error('An event property producer failed', error)
             }
@@ -569,6 +578,13 @@ export class Analytics {
         }
     }
 
+    /** Runs the before-reset hooks while the previous identity, consent and extension state still apply. */
+    prepareReset(): void {
+        if (this._disposed || !this._core._canMutate()) return
+        this._core._state.prepare()
+        this._beforeResetPublisher.publish(undefined)
+    }
+
     /** Resets identity state and returns the bootstrap values for the new identity, if any. */
     reset(options?: boolean | ResetOptions): ResetOptions['bootstrap'] {
         // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
@@ -647,7 +663,8 @@ export class Analytics {
         return this._canUseProperties() ? this._registeredProperties.get(property) : undefined
     }
 
-    registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
+    /** Registers a producer of properties for each event, given the event name as passed to capture. */
+    registerDynamicEventProperties(producer: (event: string) => Record<string, unknown>): Disposable {
         if (this._disposed || this._core._disposed) return { dispose() {} }
         this._dynamicEventProperties.push(producer)
         let active = true

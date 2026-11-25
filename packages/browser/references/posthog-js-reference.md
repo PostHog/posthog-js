@@ -8626,7 +8626,9 @@ V2 Trigger Group - represents a single trigger group with its own conditions and
 
 ### `SessionStartReason`
 
-> **SessionStartReason** = `"sampling_overridden"` \| `"recording_initialized"` \| `"linked_flag_matched"` \| `"linked_flag_overridden"` \| *typeof* `SAMPLED` \| `"session_id_changed"` \| `"url_trigger_matched"` \| `"event_trigger_matched"`
+> **SessionStartReason** = `"sampling_overridden"` \| `"recording_initialized"` \| `"linked_flag_matched"` \| `"linked_flag_overridden"` \| `"sampled"` \| `"session_id_changed"` \| `"url_trigger_matched"` \| `"event_trigger_matched"`
+
+Why session recording started for the current session.
 
 ### `SeverityLevel`
 

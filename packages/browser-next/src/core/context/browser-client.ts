@@ -6,6 +6,7 @@ import type { SurveysExtension } from '../../products/surveys/surveys-internal'
 import type { ErrorTrackingExtension } from '../../products/error-tracking/error-tracking-internal'
 import type { ToolbarExtension } from '../../products/toolbar/toolbar-options'
 import type { ConversationsExtension } from '../../products/conversations/conversations-options'
+import type { SessionRecordingExtension } from '../../products/session-recording/session-recording-internal'
 import type { ConsentState } from '../state/state'
 
 export interface IdentifyInfo {
@@ -47,4 +48,5 @@ export interface BrowserProducts {
     errorTracking: ErrorTrackingExtension
     toolbar: ToolbarExtension
     conversations: ConversationsExtension
+    sessionRecording: SessionRecordingExtension
 }

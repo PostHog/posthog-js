@@ -87,6 +87,7 @@ export interface AnalyticsCore extends Pick<Client, 'projectToken' | 'logger' | 
     readonly _sessionKv: KeyValueStore
     readonly _requestRuntime: RequestRuntime
     readonly _disposed: boolean
+    readonly _capturePageview?: boolean
     readonly _immediateAuthority: object
     _canMutate(): boolean
     _canDeliver(): boolean

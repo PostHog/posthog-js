@@ -1,18 +1,19 @@
 import type { ApiResponse } from '@posthog/browser-common'
+import { nativeGzip } from '../../../platform/gzip'
 
 import { MAX_ANALYTICS_BATCH_EVENTS, type AnalyticsMessage } from '../analytics-internal'
 import { createId } from '../../../primitives/id'
 import { defineErrorName } from '../../../primitives/named-error'
-import type { RequestRuntime } from '../../../platform/request'
+import { KEEPALIVE_BUDGET_BYTES, type RequestRuntime } from '../../../platform/request'
 import { utf8Bytes } from '../../../primitives/utf8'
+import { parseRetryAfter, retryDelay, safeNow } from './retry-delay'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
 export const CAPTURE_V1_MAX_BATCH_EVENTS = MAX_ANALYTICS_BATCH_EVENTS
 export const CAPTURE_V1_BATCH_TARGET_BYTES = 5 * 1024 * 1024
 export const CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES = 1024
-/** Conservative share of the browser's aggregate 64 KiB keepalive body quota. */
-export const CAPTURE_V1_TEARDOWN_BUDGET_BYTES = Math.floor(64 * 1024 * 0.8)
+export const CAPTURE_V1_TEARDOWN_BUDGET_BYTES = KEEPALIVE_BUDGET_BYTES
 const DEFAULT_COMPRESSION_TIMEOUT_MS = 1_000
 
 export type CaptureV1Message = AnalyticsMessage
@@ -180,75 +181,6 @@ const partitionEvents = (
     return batches
 }
 
-let gzipCrcTable: number[] | undefined
-const gzipCrc32 = (bytes: Uint8Array): number => {
-    if (!gzipCrcTable) {
-        gzipCrcTable = Array.from({ length: 256 }, (_, value) => {
-            let crc = value
-            for (let bit = 0; bit < 8; bit++) {
-                crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1
-            }
-            return crc >>> 0
-        })
-    }
-    let crc = 0xffffffff
-    for (const byte of bytes) {
-        crc = gzipCrcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8)
-    }
-    return (crc ^ 0xffffffff) >>> 0
-}
-
-const nativeGzip = async (payload: string): Promise<Blob | undefined> => {
-    try {
-        const CompressionStreamConstructor = globalThis.CompressionStream
-        const TextEncoderConstructor = globalThis.TextEncoder
-        const ResponseConstructor = globalThis.Response
-        if (
-            typeof CompressionStreamConstructor !== 'function' ||
-            typeof TextEncoderConstructor !== 'function' ||
-            typeof ResponseConstructor !== 'function'
-        ) {
-            return undefined
-        }
-
-        const input = new TextEncoderConstructor().encode(payload)
-        const stream = new CompressionStreamConstructor('gzip')
-        const writer = stream.writable.getWriter()
-        const write = writer
-            .write(input)
-            .then(() => writer.close())
-            .catch(async (error) => {
-                try {
-                    await writer.abort(error)
-                } catch {
-                    // Preserve the original compression failure.
-                }
-                throw error
-            })
-        const compressed = await Promise.all([new ResponseConstructor(stream.readable).blob(), write]).then(
-            ([blob]) => blob
-        )
-        if (compressed.size < 18) {
-            return undefined
-        }
-        const [headerBuffer, trailerBuffer] = await Promise.all([
-            compressed.slice(0, 3).arrayBuffer(),
-            compressed.slice(compressed.size - 8).arrayBuffer(),
-        ])
-        const header = new Uint8Array(headerBuffer)
-        const trailer = new DataView(trailerBuffer)
-        return header[0] === 0x1f &&
-            header[1] === 0x8b &&
-            header[2] === 0x08 &&
-            trailer.getUint32(0, true) === gzipCrc32(input) &&
-            trailer.getUint32(4, true) === input.length >>> 0
-            ? compressed
-            : undefined
-    } catch {
-        return undefined
-    }
-}
-
 const compressWithDeadline = async (
     payload: string,
     timeoutMs: number,
@@ -296,7 +228,8 @@ const compressWithDeadline = async (
     }
 }
 
-const cancelResponseBody = async (response: Response | undefined): Promise<void> => {
+/** Releases a response the caller does not read. Chromium counts unread keepalive responses against its quota. */
+export const cancelResponseBody = async (response: Response | undefined): Promise<void> => {
     try {
         await response?.body?.cancel()
     } catch {
@@ -366,15 +299,6 @@ export const buildCaptureV1Event = (message: CaptureV1Message): CaptureV1Event =
     }
 }
 
-const safeNow = (now: () => number): number => {
-    try {
-        const value = now()
-        return Number.isFinite(value) ? value : 0
-    } catch {
-        return 0
-    }
-}
-
 const isoNow = (now: () => number): string => {
     try {
         return new Date(safeNow(now)).toISOString()
@@ -383,46 +307,8 @@ const isoNow = (now: () => number): string => {
     }
 }
 
-const parseRetryAfter = (response: Response | undefined, now: () => number): number | undefined => {
-    try {
-        const raw = response?.headers.get('Retry-After')?.trim()
-        if (!raw) {
-            return undefined
-        }
-        if (/^\d+$/.test(raw)) {
-            const milliseconds = Number(raw) * 1_000
-            return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined
-        }
-        const delay = Date.parse(raw) - safeNow(now)
-        return delay > 0 ? delay : undefined
-    } catch {
-        return undefined
-    }
-}
-
 const numberOption = (value: number | undefined, fallback: number, minimum: number): number =>
     Math.max(minimum, Number.isFinite(value) ? value! : fallback)
-
-const retryDelay = (
-    attempt: number,
-    initialDelayMs: number,
-    maxBackoffMs: number,
-    random: () => number,
-    retryAfterMs?: number
-): number => {
-    const exponential = Math.min(initialDelayMs * 2 ** (attempt - 1), maxBackoffMs)
-    let randomValue = 0.5
-    try {
-        const candidate = random()
-        if (Number.isFinite(candidate)) {
-            randomValue = Math.max(0, Math.min(1, candidate))
-        }
-    } catch {
-        // The midpoint gives an unjittered delay when randomness is unavailable.
-    }
-    const jittered = Math.min(maxBackoffMs, Math.ceil(exponential * (0.5 + randomValue)))
-    return retryAfterMs === undefined ? jittered : Math.max(jittered, Math.min(retryAfterMs, maxBackoffMs))
-}
 
 const cancellationError = (): Error => new Error('Capture V1 retry was cancelled')
 const canContinue = (check: (() => boolean) | undefined): boolean => {
