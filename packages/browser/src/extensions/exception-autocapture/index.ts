@@ -8,6 +8,7 @@ import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
+import { getExtensionLoader } from '../../utils/extension-loader'
 
 const logger = /* @__PURE__ */ createLogger('[ExceptionAutocapture]')
 
@@ -81,16 +82,12 @@ export class ExceptionObserver {
             return
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this._instance,
-            'exception-autocapture',
-            (err) => {
-                if (err) {
-                    return logger.error('failed to load script', err)
-                }
-                cb()
+        getExtensionLoader(this._instance)?.(this._instance, 'exception-autocapture', (err) => {
+            if (err) {
+                return logger.error('failed to load script', err)
             }
-        )
+            cb()
+        })
     }
 
     private _startCapturing = () => {

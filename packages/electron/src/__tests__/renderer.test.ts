@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { PostHog } from '../renderer'
 import { validateRequest, type Bridge, type State } from '../shared/protocol'
 
-function harness() {
+function harness(onError?: (error: unknown) => void) {
     let state: State = {
         revision: 1,
         flagRevision: 1,
@@ -33,7 +33,7 @@ function harness() {
             return unsubscribe
         },
     }
-    const client = new PostHog(bridge)
+    const client = new PostHog(bridge, { onError })
     return {
         client,
         bridge,
@@ -46,6 +46,115 @@ function harness() {
 }
 
 describe('renderer facade', () => {
+    it('retains the stable bridge sequence across disposal and failed requests, isolating independent bridges', async () => {
+        const onError = vi.fn()
+        const { client, bridge } = harness(onError)
+        await client.ready()
+        vi.mocked(bridge.request).mockResolvedValueOnce({ ok: false, error: 'rejected by owner' })
+        client.capture('rejected')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('rejected by owner')))
+        client.dispose()
+        const replacement = new PostHog(bridge)
+        await replacement.ready()
+        replacement.capture('after reinit')
+        await replacement.flush()
+        expect(vi.mocked(bridge.request).mock.calls.map(([request]) => request.sequence)).toEqual([1, 2, 3, 4, 5])
+        const independent = harness()
+        await independent.client.ready()
+        expect(vi.mocked(independent.bridge.request).mock.calls[0][0].sequence).toBe(1)
+        replacement.dispose()
+        independent.client.dispose()
+    })
+
+    it('never throws for malformed capture names and does not loop when onError captures a failure', async () => {
+        const onError = vi.fn((error: unknown) => created.client.captureException(error))
+        const created = harness(onError)
+        const { client } = created
+        await client.ready()
+        const before = vi.mocked(created.bridge.request).mock.calls.length
+        expect(() => Reflect.apply(client.capture, client, [undefined])).not.toThrow()
+        expect(() => Reflect.apply(client.screen, client, [42])).not.toThrow()
+        expect(vi.mocked(created.bridge.request).mock.calls).toHaveLength(before)
+        vi.mocked(created.bridge.request).mockResolvedValue({ ok: false, error: 'refused' })
+        client.capture('refused')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+        // The exception captured from onError fails too, but is not reported again.
+        await vi.waitFor(() => expect(created.bridge.request).toHaveBeenCalledTimes(before + 2))
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        expect(onError).toHaveBeenCalledOnce()
+        client.dispose()
+    })
+
+    it('does not loop when onError synchronously captures a diagnostic event', async () => {
+        const onError = vi.fn((error: unknown) => created.client.capture('sdk_error', { message: String(error) }))
+        const created = harness(onError)
+        const { client, bridge } = created
+        await client.ready()
+        const before = vi.mocked(bridge.request).mock.calls.length
+        vi.mocked(bridge.request).mockResolvedValue({ ok: false, error: 'refused' })
+        client.capture('refused')
+        await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(before + 2))
+        expect(vi.mocked(bridge.request).mock.calls.at(-1)?.[0].command).toMatchObject({ event: 'sdk_error' })
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        expect(onError).toHaveBeenCalledOnce()
+        client.dispose()
+    })
+
+    it('still reports an unrelated capture failure while an async onError is pending', async () => {
+        let finish!: () => void
+        const onError = vi.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    finish = resolve
+                })
+        )
+        const { client, bridge } = harness(onError)
+        await client.ready()
+        vi.mocked(bridge.request).mockResolvedValue({ ok: false, error: 'refused' })
+        client.capture('first')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+        client.capture('independent')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2))
+        finish()
+        client.dispose()
+    })
+
+    it('contains an onError callback that returns a thenable with a throwing then getter', async () => {
+        const onError = vi.fn(() =>
+            Object.defineProperty({}, 'then', {
+                get() {
+                    throw new Error('then getter')
+                },
+            })
+        )
+        const { client, bridge } = harness(onError)
+        await client.ready()
+        vi.mocked(bridge.request).mockResolvedValue({ ok: false, error: 'refused' })
+        client.capture('first')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+        client.capture('second')
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2))
+        client.dispose()
+    })
+
+    it('contains async onError callbacks that capture after awaiting or reject', async () => {
+        const onError = vi.fn(async (error: unknown) => {
+            await Promise.resolve()
+            created.client.captureException(error)
+            throw new Error('callback failed')
+        })
+        const created = harness(onError)
+        const { client, bridge } = created
+        await client.ready()
+        const before = vi.mocked(bridge.request).mock.calls.length
+        vi.mocked(bridge.request).mockResolvedValue({ ok: false, error: 'refused' })
+        client.capture('refused')
+        await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(before + 2))
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        expect(onError).toHaveBeenCalledOnce()
+        client.dispose()
+    })
+
     it.each(['constructor', 'toString', 'hasOwnProperty'])('treats inherited %s as a missing flag', async (key) => {
         const { client, broadcast } = harness()
         await client.ready()
@@ -137,7 +246,6 @@ describe('renderer facade', () => {
             client.dispose()
         }
     })
-
     it('coalesces repeated cached flag reads before IPC, including in-flight reads and ordinary state revisions', async () => {
         const { client, bridge, broadcast } = harness()
         await client.ready()
@@ -328,7 +436,6 @@ describe('renderer facade', () => {
             client.dispose()
         }
     )
-
     it('does not create a flag-exposure/state-subscription feedback loop', async () => {
         const { client, bridge } = harness()
         await client.ready()

@@ -1,21 +1,34 @@
-import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
-import type { IPostHogInternal } from '../../core/context/browser-client'
+import type { IPostHog } from '../../core/types'
 import type { FlagsExtension } from './flags-internal'
-import type { FlagsOptions } from './flags-options'
+import type { FeatureFlagResult, FlagsOptions, JsonType } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { FlagsOptions, FlagsCallback, FeatureFlagResult, FeatureFlagsReloadResult } from './flags-options'
+export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
+    FlagsOptions,
+    FlagsCallback,
+    FlagsReadOptions,
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+} from './flags-options'
+
+// Reads decode stored payloads once, as serialized server payloads, so store supplied values serialized.
+const serializePayloads = (payloads: Readonly<Record<string, JsonType>>): Record<string, JsonType> =>
+    Object.fromEntries(Object.entries(payloads).map(([key, payload]) => [key, JSON.stringify(payload)]))
 
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
-    const config: FeatureFlagsConfig = {
+    const config: { -readonly [Key in keyof FeatureFlagsConfig]: FeatureFlagsConfig[Key] } = {
         bootstrap: snapshot.bootstrap ?? {},
+        encodeBootstrapPayloads: true,
         remoteRequestsDisabled: false,
         featureFlagsDisabled: snapshot.featureFlagEvaluation === false,
         onlyEvaluateSurveyFeatureFlags: snapshot.onlyEvaluateSurveyFeatureFlags ?? false,
@@ -27,23 +40,27 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
         evaluationContexts: snapshot.evaluationContexts ?? [],
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
-    let client: IPostHogInternal | undefined
+    const setupBootstrap = config.bootstrap
+    let client: IPostHog | undefined
     let disposed = false
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
+    // Detached results shared by snapshots and subscriptions, so callers cannot mutate stored payloads.
+    const snapshotFlags = (): FeatureFlagResult[] =>
+        shared.getAllFeatureFlags().map((result) => ({
+            ...result,
+            // Match single reads, which report an empty-string variant as disabled.
+            enabled: result.variant === '' ? false : result.enabled,
+            payload: result.payload === undefined ? undefined : JSON.parse(JSON.stringify(result.payload)),
+        }))
 
     const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
-        bindings: { featureFlags: shared, [FeatureFlagsCommonExtension]: shared },
-        getSurveyContext: () => ({
-            remoteEvaluation: !config.featureFlagsDisabled,
-            personProperties: client?.kv.get(STORED_PERSON_PROPERTIES_KEY),
-        }),
-        setup: async (value: IPostHogInternal) => {
+        bindings: { [FeatureFlagsCommonExtension]: shared },
+        getSurveyContext: () => ({ remoteEvaluation: !config.featureFlagsDisabled }),
+        setup: async (value: IPostHog) => {
             client = value
-            await value.resolveExtension('analytics')
-            if (disposed) return
-            await shared.setup(value.sharedClient)
+            await shared.setup(value)
             if (disposed) return
             subscriptions.push(
                 value.onIdentify(({ distinctId, previousDistinctId, wasIdentified }) => {
@@ -79,6 +96,8 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             subscriptions.push(value.onEvent(() => shared.sendFlagCallsPendingCapture()))
             subscriptions.push(
                 value.onReset(() => {
+                    // Flag calls report the setup bootstrap again unless the reset supplies its own.
+                    config.bootstrap = setupBootstrap
                     shared.reset()
                     shared.reloadFeatureFlags()
                 })
@@ -86,14 +105,48 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             shared.setPersonPropertiesForFlags({ ...value.initialPersonProperties }, false)
             shared.ensureFlagsLoaded()
         },
-        getFeatureFlag: (key) => {
+        bootstrap: (bootstrap) => {
+            if (disposed) return
+            config.bootstrap = bootstrap
+            try {
+                shared.initialize()
+            } catch (error) {
+                client?.logger.error('Feature flags bootstrap failed', error)
+            }
+        },
+        getFeatureFlag: (key, options) => {
             if (disposed) return undefined
             try {
-                return shared.getFeatureFlagResult(key)
+                return shared.getFeatureFlagResult(key, {
+                    send_event: options?.sendFeatureFlagEvent ?? true,
+                    fresh: options?.fresh === true,
+                })
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
             }
+        },
+        getAllFeatureFlags: () => {
+            if (disposed) return []
+            try {
+                return snapshotFlags()
+            } catch (error) {
+                client?.logger.error('Feature flags snapshot failed', error)
+                return []
+            }
+        },
+        onReloading: (callback) => {
+            if (!disposed) {
+                try {
+                    const unsubscribe = shared.onReloading(() => {
+                        if (!disposed) callback()
+                    })
+                    return { dispose: unsubscribe }
+                } catch (error) {
+                    client?.logger.error('Feature flags reloading subscription failed', error)
+                }
+            }
+            return { dispose() {} }
         },
         reloadFeatureFlags: async () => {
             if (disposed) return { status: 'cancelled' }
@@ -108,7 +161,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             if (!disposed) {
                 try {
                     const unsubscribe = shared.onFeatureFlags((_keys, _variants, context) =>
-                        callback(shared.getAllFeatureFlags(), !!context?.errorsLoading)
+                        callback(snapshotFlags(), !!context?.errorsLoading)
                     )
                     return { dispose: unsubscribe }
                 } catch (error) {
@@ -117,10 +170,73 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             }
             return { dispose() {} }
         },
+        setPersonPropertiesForFlags: (properties, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                if (!Object.keys(properties).length) return
+                shared.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties update failed', error)
+            }
+        },
+        resetPersonPropertiesForFlags: (reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                shared.resetPersonPropertiesForFlags(reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags person properties reset failed', error)
+            }
+        },
+        setGroupPropertiesForFlags: (propertiesByGroupType, reloadFeatureFlags) => {
+            if (disposed) return
+            try {
+                if (!Object.keys(propertiesByGroupType).length) return
+                shared.setGroupPropertiesForFlags(propertiesByGroupType, reloadFeatureFlags)
+            } catch (error) {
+                client?.logger.error('Feature flags group properties update failed', error)
+            }
+        },
+        // The canonical signature reloads by default, as the mobile SDKs do; posthog-js's shared method never reloads.
+        resetGroupPropertiesForFlags: (groupType, reloadFeatureFlags = true) => {
+            if (disposed) return
+            try {
+                shared.resetGroupPropertiesForFlags(groupType)
+                if (reloadFeatureFlags) shared.reloadFeatureFlags()
+            } catch (error) {
+                client?.logger.error('Feature flags group properties reset failed', error)
+            }
+        },
+        getEarlyAccessFeatures: (callback, forceReload, stages) => {
+            if (disposed) return
+            try {
+                shared.getEarlyAccessFeatures(
+                    (features) => {
+                        if (disposed) return
+                        try {
+                            callback(features)
+                        } catch (error) {
+                            client?.logger.error('Early access feature callback failed', error)
+                        }
+                    },
+                    forceReload,
+                    stages
+                )
+            } catch (error) {
+                client?.logger.error('Early access feature listing failed', error)
+            }
+        },
+        updateEarlyAccessFeatureEnrollment: (key, isEnrolled, stage) => {
+            if (disposed) return
+            try {
+                shared.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
+            } catch (error) {
+                client?.logger.error('Early access feature enrollment failed', error)
+            }
+        },
         updateFlags: (values, payloads, settings) => {
             if (disposed) return
             try {
-                shared.updateFlags(values, payloads, settings)
+                shared.updateFlags(values, payloads && serializePayloads(payloads), settings)
             } catch (error) {
                 client?.logger.error('Feature flags update failed', error)
             }

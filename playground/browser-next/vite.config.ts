@@ -7,12 +7,6 @@ export default defineConfig({
     resolve: {
         alias: [
             {
-                find: '@posthog/browser/analytics',
-                replacement: fileURLToPath(
-                    new URL('../../packages/browser-next/src/products/analytics/analytics.ts', import.meta.url)
-                ),
-            },
-            {
                 find: '@posthog/browser',
                 replacement: fileURLToPath(
                     new URL('../../packages/browser-next/src/composition/npm/index.ts', import.meta.url)

@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.69.2
+
+### Patch Changes
+
+- [#5820](https://github.com/PostHog/posthog-js/pull/5820) [`2cdc70c`](https://github.com/PostHog/posthog-js/commit/2cdc70c2a454644cfb24bfaa11916cec42555977) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix: reduce main-thread work when validating native gzip output
+  (2026-11-19)
+- Updated dependencies [[`1016d81`](https://github.com/PostHog/posthog-js/commit/1016d81c33ba0f673d0bcc2c49a851cb0e102f52)]:
+  - @posthog/types@1.427.0
+
 ## 1.69.1
 
 ### Patch Changes

@@ -143,6 +143,37 @@ describe('lib identity', () => {
     }
   })
 
+  it.each([
+    { method: 'capture', route: '/i/v1/analytics/events', event: 'custom_event' },
+    { method: 'captureImmediate', route: '/i/v1/analytics/events', event: 'custom_event' },
+    { method: 'captureAi', route: '/i/v1/ai/events', event: '$ai_generation' },
+    { method: 'captureAiImmediate', route: '/i/v1/ai/events', event: '$ai_generation' },
+  ] as const)('PostHogMCP adds its server build to $method events', async ({ method, route, event }) => {
+    const fetch = vi.fn(async (_url: string, _init: any) => ({
+      status: 200,
+      text: async () => JSON.stringify({ results: {} }),
+      json: async () => ({ results: {} }),
+      headers: { get: () => null },
+    }))
+    const posthog = new PostHogMCP('phc_test', {
+      ...options,
+      captureCompression: 'none',
+      captureAiCompression: 'none',
+      fetch: fetch as any,
+      serverBuild: 'client-build',
+    })
+    try {
+      await posthog[method]({ distinctId: 'u', event })
+      await posthog.flush()
+
+      const sent = fetch.mock.calls.filter(([url]) => String(url).endsWith(route))
+      expect(sent).toHaveLength(1)
+      expect(JSON.parse(sent[0][1].body).batch[0].properties.$mcp_server_build).toBe('client-build')
+    } finally {
+      await posthog.shutdown()
+    }
+  })
+
   it('keeps the instrumented server build when the client has a different default', async () => {
     const beforeSend = vi.fn(() => null)
     const posthog = new PostHogMCP('phc_test', {

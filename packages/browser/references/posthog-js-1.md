@@ -3223,7 +3223,7 @@ Per-call capture overrides, mirroring the client's public capture options.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-delivery"></a> `delivery?` | `"unload"` | Send immediately without batching, using best-effort unload-safe delivery. |
+| <a id="property-delivery"></a> `delivery?` | `"immediate"` \| `"unload"` | Start delivering this event now instead of waiting for a batch. `immediate` keeps the host's normal transport, retries and queue; `unload` uses best-effort unload-safe delivery. A host that cannot honor the mode delivers the event normally. |
 | <a id="property-set"></a> `set?` | `Record`\<`string`, `unknown`\> | Person properties to set, emitted as `$set`. |
 | <a id="property-setonce"></a> `setOnce?` | `Record`\<`string`, `unknown`\> | Person properties to set if unset, emitted as `$set_once`. |
 | <a id="property-timestamp"></a> `timestamp?` | `Date` | Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. |
@@ -4005,23 +4005,24 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 
 ### `FeatureFlagsConfig`
 
-| Property | Modifier | Type |
-| ------ | ------ | ------ |
-| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` |
-| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> |
-| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> |
-| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` |
-| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` |
-| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` |
-| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] |
-| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` |
-| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] |
-| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` |
-| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` |
-| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` |
-| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` |
-| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` |
-| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` |
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` | - |
+| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> | - |
+| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> | - |
+| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` | - |
+| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` | - |
+| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` | - |
+| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Only `$feature_flag_bootstrapped_payload` reports the supplied value; `$feature_flag_payload` reports the stored JSON string, like payloads from `/flags`. |
+| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] | - |
+| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] | - |
+| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` | - |
+| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` | - |
+| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` | - |
+| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` | - |
+| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` | - |
 
 ### `FeatureFlagsConfigSource`
 
@@ -6257,7 +6258,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-logs"></a> `logs?` | `LogsConfig` | Logs-specific configuration options. **Default** `undefined` |
 | <a id="property-mask_all_element_attributes"></a> `mask_all_element_attributes` | `boolean` | Prevent autocapture from capturing any attribute names on elements. **Default** `false` |
 | <a id="property-mask_all_text"></a> `mask_all_text` | `boolean` | Prevent autocapture from capturing `textContent` on elements. **Default** `false` |
-| <a id="property-mask_personal_data_properties"></a> `mask_personal_data_properties` | `boolean` | Mask personal data properties from the current URL. This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add custom properties to mask with `custom_personal_data_properties`. **Default** `false` **See** - - Default campaign parameters that are masked by default. - - Custom list of personal data properties to mask. |
+| <a id="property-mask_personal_data_properties"></a> `mask_personal_data_properties` | `boolean` | Mask personal data properties from the current URL. This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add custom properties to mask with `custom_personal_data_properties`. **Default** `false` **See** - - Default URL parameters that are masked, including other spellings of them such as Snapchat's `ScCid`. - - Custom list of personal data properties to mask. |
 | <a id="property-metrics"></a> `metrics?` | `BrowserMetricsConfig` | Metrics-specific configuration options for the posthog.metrics API. **Default** `undefined` |
 | <a id="property-name-4"></a> `name` | `string` | The name this instance will be identified by. You don't need to set this most of the time, but can be useful if you have several Posthog instances running at the same time. **Default** `'posthog'` |
 | <a id="property-on_request_error"></a> `on_request_error?` | (`error`) => `void` | A function that is called when a request to the PostHog API fails. |
@@ -6287,6 +6288,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-request_batching"></a> `request_batching` | `boolean` | Determines whether PostHog should batch requests to the PostHog API. **Default** `true` |
 | <a id="property-request_headers"></a> `request_headers` | `object` | A list of headers that should be sent with requests to the PostHog API. **Default** `{}` |
 | <a id="property-request_queue_config"></a> `request_queue_config?` | `RequestQueueConfig` | Used to change the behavior of the request queue. This is an advanced feature and should be used with caution. |
+| <a id="property-require_subresource_integrity"></a> `require_subresource_integrity?` | `boolean` | Requires Subresource Integrity (SRI) for every extension script the SDK loads, such as recorder.js, surveys.js or web-vitals.js. When enabled, each extension loads only from the exact-version path `/static/<sdk version>/<name>.js` with `integrity` and `crossOrigin = 'anonymous'` set, using the SHA-384 hashes built into this SDK bundle. A missing hash, an integrity failure or a `prepare_external_dependency_script` hook that changes `integrity` or `crossOrigin` disables only that feature. The SDK never retries through the mutable legacy path, whatever strict\_script\_versioning says. The asset host, or a reverse proxy in front of it, must serve the scripts with CORS headers (`Access-Control-Allow-Origin`). This mode also disables site apps, overriding opt\_in\_site\_apps, including site app code preloaded by the token-specific `/array/<token>/array.js`. It refuses the toolbar and the executable `/array/<token>/config.js` remote config, which is then fetched as JSON. The guarantee covers the extension scripts this SDK instance inserts, anchored in the SDK code you already trust: an npm build, or an `array.js` you pin yourself. Because the extension hashes are part of `array.js`, pinning it with `data-core-integrity` on an exact-version `loader.js` that itself has an `integrity` attribute pins every extension too. The token-specific `/array/<token>/array.js` changes with project configuration, so it cannot be pinned: use `/static/<sdk version>/array.js`, the loader or npm instead. The guarantee does not cover an unpinned initial loader, third-party widgets such as Intercom or Crisp, or a malicious release with valid hashes. Extensions share page globals, so if another PostHog instance or any other code on the page already ran unverified extension code, this instance reuses it and the guarantee does not hold. **Default** `false` |
 | <a id="property-respect_dnt"></a> `respect_dnt` | `boolean` | Determines whether PostHog should respect the Do Not Track header when computing consent in `ConsentManager`. **See** `ConsentManager` **Default** `false` |
 | <a id="property-reuseanonymousid"></a> `reuseAnonymousId?` | `boolean` | When true, `identify()` omits `$anon_distinct_id` from the `$identify` event and the follow-up feature flag request, so PostHog does not merge the previous anonymous identity into the identified person. **Default** `false` |
 | <a id="property-rewriterequestpath"></a> `rewriteRequestPath?` | (`url`) => `URL` | Rewrites the URL used for PostHog API, feature flag, and asset requests. This is intended for customers who use a reverse proxy and need custom paths. The proxy must map the rewritten paths back to the canonical PostHog paths. UI links are not rewritten. **Example** `posthog.init('phc_...', { api_host: 'https://a.example.com', rewriteRequestPath: (url) => { if (url.pathname === '/e/') { url.pathname = '/my-events/' } else if (url.pathname === '/s/') { url.pathname = '/my-replay/' } else if (url.pathname === '/flags/') { url.pathname = '/my-flags/' } return url }, })` |
@@ -8525,6 +8527,7 @@ The server normalizes bare event name strings to this shape before sending.
 | <a id="property-recordheaders"></a> `recordHeaders?` | `boolean` | Derived from `rrweb.record` options **See** https://github.com/rrweb-io/rrweb/blob/master/guide.md **Default** `false` |
 | <a id="property-samplerate"></a> `sampleRate?` | `number` | The sample rate for session recordings, a number between 0 and 1. For example, 0.5 means roughly 50% of sessions will be recorded. When `undefined`, falls back to the remote config setting. When set, takes precedence over the remote config. **Default** `undefined` |
 | <a id="property-sampling"></a> `sampling?` | `SessionRecordingSamplingConfig` | Derived from `rrweb.record` options. Controls how often certain event types are captured within an already-recorded session, e.g. `{ mousemove: false }` stops recording mouse movement. Not to be confused with `sampleRate` below, which controls whether a session is recorded at all, or with `posthog.startSessionRecording({ sampling: true })`, which overrides that session-level sample rate. NB disabled event types no longer count as user activity for replay idle detection (`session_idle_threshold_ms`). For example, with `mousemove: false` pure mouse movement no longer keeps a session active, while clicks, scrolls, and inputs still do. **See** https://github.com/rrweb-io/rrweb/blob/master/guide.md **Default** `undefined` |
+| <a id="property-selectmaskingfn"></a> `selectMaskingFn?` | (`element`) => `"masked"` \| `"unmasked"` | Opt in to explicit select selection masking, overriding the select category setting. Masked selects use `maskInputFn` for replacement text but omit selection identity metadata. Returning original text from `maskInputFn` still records that text, even when this policy returns 'masked'. The callback is responsible for sanitizing its output. Unmasked selects retain their choices, including duplicate-valued options. Masked native `<selectedcontent>` clones are omitted. Static option labels remain visible. Pointer events are not covered: clicks on options in listbox-style selects (`multiple`, `size` > 1 or a customizable picker) still record the clicked option and position. Block selects whose choices must stay private, for example with `ph-no-capture`. Omit this option to preserve legacy `maskInputFn` behavior. Use a pure policy. It is evaluated for input events, select subtree mutations and snapshots; changes to external state take effect at the next such capture. Keep the callback reference stable. Replacing it restarts recording and discards queued old-policy data; changing its return value does not require a restart. Pending buffers are not carried across page loads with this option, because callback compatibility cannot be verified across pages. Invalid return values and exceptions resolve to masked. Recording does not start if the loaded recorder or driver does not support this option. Policy transitions also require a matching replay player. |
 | <a id="property-session_idle_threshold_ms"></a> `session_idle_threshold_ms?` | `number` | ADVANCED: Controls when session recording considers the user idle. If no replay user interaction occurs for this many milliseconds, the recorder marks the recording idle, emits a `sessionIdle` replay marker, flushes buffered replay events, and drops most subsequent replay events until user activity resumes. If activity resumes before `session_idle_timeout_seconds`, recording continues under the same `$session_id`. This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`, so this value should be lower than `session_idle_timeout_seconds * 1000`. **Default** `1000 * 60 * 5 (5 minutes)` |
 | <a id="property-slimdomoptions"></a> `slimDOMOptions?` | `true` \| `Partial`\<`SlimDOMOptions`\> \| `"all"` | Derived from `rrweb.record` options **See** https://github.com/rrweb-io/rrweb/blob/master/guide.md **Default** `{}` |
 | <a id="property-streamnetworkbody"></a> `streamNetworkBody?` | `boolean` | When recording network bodies, read them through a streaming reader that stops at the payload size limit instead of buffering the whole body and then discarding it. Bounds the memory and pre-request latency of capturing a very large body. Reads only a clone of the body, never the stream the page consumes. **Default** `false` |

@@ -77,6 +77,11 @@ app.whenReady()
                     await owner.shutdown(...args)
                     send({ id, state: owner.getState(), errors })
                     app.exit(0)
+                } else if (command === 'capture') {
+                    owner.capture(...args)
+                    // capture() returns nothing; a later mutation runs in call order and resolves after the write.
+                    await owner.unregister('__fixture_persisted__')
+                    send({ id, state: owner.getState(), errors })
                 } else {
                     const value = await owner[command](...args)
                     send({ id, value, state: owner.getState(), errors })

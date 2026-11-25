@@ -26,9 +26,14 @@ Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://gith
 4. Creates package tags and GitHub releases.
 5. Dispatches downstream dependency upgrades and reports the result in Slack.
 
-### Unreleased Electron package
+### Electron releases
 
-Keep `@posthog/electron` private while its implementation PRs are merged, exclude it from stable Changesets versioning, and leave it out of the stable npm publish matrix. Do not add Electron releases to changeset frontmatter; retain ordinary changesets for shared core/browser-common changes. Only the final, separately reviewed alpha-release PR may remove `private: true` and enable a protected manual alpha publishing path. Merging the implementation PRs must not publish Electron.
+`@posthog/electron` uses the shared [Release workflow](.github/workflows/release.yml) and its normal npm `latest` tag. The initial version is `0.1.0`. The manifest and changelog already contain this version; do not add an Electron bump to initiate the first publication. Use Changesets normally for subsequent changes. Electron does not publish CDN assets.
+
+- **First publication:** Confirm npm scope rights and trusted publishing with the npm package owner. Configure the trusted publisher for `PostHog/posthog-js`, workflow `release.yml`, like the other SDKs. The `NPM Release` environment gates the version-bump job; the shared publish job uses OIDC. If npm requires an initial bootstrap before it permits trusted publishing, an npm scope maintainer must approve the immutable source, tarball digest, and any provenance exception before publishing that artifact. Do not add a token fallback to CI.
+- **Runtime readiness:** Record native runtime and published SDK harness results for the release candidate. [Platform CI](https://github.com/PostHog/posthog-js/actions/runs/44535279519) passed nine local-tarball combinations across macOS, Windows, and Linux on Electron 41.0.2, 42.4.0, and 43.0.0. The [optional-feature lane](https://github.com/PostHog/posthog-js/actions/runs/44535279528) covered macOS/Electron 42.4.0 only. This is not evidence of signed installers, runtime behavior with registry-resolved dependencies, or published harness acceptance.
+
+Before approval, record the reviewed source, version and validation results. After publication, query npm for the exact version, integrity, and provenance; verify that the `latest` tag points to that version. If npm succeeds but a later step fails, verify the existing version rather than attempting to republish it.
 
 ### `posthog-js` S3/CDN gate
 

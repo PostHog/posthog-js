@@ -17,6 +17,7 @@ import {
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { resetSessionStorageSupported } from '../../../storage'
@@ -258,7 +259,7 @@ describe('Lazy SessionRecording', () => {
         }
     }
 
-    const addRRwebToWindow = () => {
+    const addRRwebToWindow = (selectMaskingSupport?: boolean) => {
         assignableWindow.__PosthogExtensions__.rrweb = {
             record: vi.fn(({ emit }) => {
                 _emit = emit
@@ -280,6 +281,7 @@ describe('Lazy SessionRecording', () => {
             getObserverInitFailures: vi.fn(() => undefined),
             resetSnapshotCostState: vi.fn(),
         }
+        assignableWindow.__PosthogExtensions__.rrweb.record.supportsSelectMasking = selectMaskingSupport
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
@@ -297,6 +299,7 @@ describe('Lazy SessionRecording', () => {
         assignableWindow.__PosthogExtensions__.initSessionRecording = (_ph, documentWasEverVisible) => {
             return new LazyLoadedSessionRecording(posthog, documentWasEverVisible)
         }
+        assignableWindow.__PosthogExtensions__.initSessionRecording.supportsSelectMasking = true
     }
 
     beforeEach(() => {
@@ -2383,6 +2386,54 @@ describe('Lazy SessionRecording', () => {
                     })
                 })
 
+                describe('select-policy inputs emitted without user interaction', () => {
+                    const selectInput = (timestamp: number) => ({
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: { source: 5, id: 1, text: 'redacted', isChecked: false },
+                        timestamp,
+                    })
+
+                    it.each([
+                        ['fresh start', () => startingTimestamp + 100],
+                        ['rotation-born', () => rotateExternallyWhileUnknown()],
+                    ])('retains the %s hold and stays idle-eligible', (_name, setup) => {
+                        const timestamp = setup()
+                        vi.useFakeTimers().setSystemTime(new Date(timestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        const lastActivity = lazyRecorder['_lastActivityTimestamp']
+
+                        const input = selectInput(timestamp + 100)
+                        _emit(input, false, true)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                        expect(lazyRecorder['_lastActivityTimestamp']).toEqual(lastActivity)
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                    })
+
+                    it('still releases the hold for an ordinary input', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const input = selectInput(startingTimestamp + 100)
+                        _emit(input, false)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({ $snapshot_data: expect.arrayContaining([input]) }),
+                            expect.any(Object)
+                        )
+                    })
+                })
+
                 it('does not hold a windowId-only restart (no session rotation)', () => {
                     const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                     expect(lazyRecorder['_isIdle']).toEqual('unknown')
@@ -3945,6 +3996,7 @@ describe('Lazy SessionRecording', () => {
                 maskTextFn: undefined,
                 maskInputOptions: { password: true },
                 maskInputFn: undefined,
+                selectMaskingFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
                 slimDOMOptions: {},
@@ -3955,6 +4007,69 @@ describe('Lazy SessionRecording', () => {
                 recordCrossOriginIframes: false,
                 recordAfter: 'DOMContentLoaded',
             })
+        })
+
+        it.each([undefined, false])(
+            'does not use an unsupported recorder with an explicit select policy (%s)',
+            (support) => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    addRRwebToWindow(support)
+                    callback()
+                })
+                posthog.config.session_recording.selectMaskingFn = () => 'masked'
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+            }
+        )
+
+        it('forwards the explicit select masking policy to rrweb', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            posthog.config.session_recording.selectMaskingFn = (element: HTMLSelectElement) =>
+                element.hasAttribute('data-public') ? 'unmasked' : 'masked'
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const installed = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                .selectMaskingFn!
+            const publicSelect = document.createElement('select')
+            publicSelect.setAttribute('data-public', '')
+            expect(installed(publicSelect)).toBe('unmasked')
+            expect(installed(document.createElement('select'))).toBe('masked')
+        })
+
+        it('warns once when the select masking policy throws and still fails closed', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow(true)
+                callback()
+            })
+            const policyError = new Error('policy failure')
+            posthog.config.session_recording.selectMaskingFn = () => {
+                throw policyError
+            }
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            try {
+                const recorderPolicy = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record).mock.calls[0][0]
+                    .selectMaskingFn!
+                const select = document.createElement('select')
+
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(() => recorderPolicy(select)).toThrow(policyError)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy.mock.calls[0][1]).toContain('selectMaskingFn threw')
+                expect(warnSpy.mock.calls[0][2]).toBe(policyError)
+            } finally {
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+                warnSpy.mockRestore()
+            }
         })
 
         it('removes scripts when JSON-LD capture is enabled', () => {
@@ -7480,6 +7595,64 @@ describe('Lazy SessionRecording', () => {
             return sessionStartTimestamp
         }
 
+        it('clears parked old-policy selections when a select policy is installed', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            _emit(
+                createIncrementalSnapshot({
+                    timestamp: timestamp + 200,
+                    data: { source: 5, id: 1, text: 'redacted', isChecked: false, selectedOptionIds: [2] },
+                })
+            )
+            unload()
+            expect(parkedBuffer().data).toContainEqual(
+                expect.objectContaining({ data: expect.objectContaining({ selectedOptionIds: [2] }) })
+            )
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+
+        it('does not park an opt-in buffer whose callback cannot be compared across pages', () => {
+            addRRwebToWindow(true)
+            config.session_recording.selectMaskingFn = () => 'unmasked'
+            startBelowMinimumDuration()
+            expect(sessionRecording.started).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            unload()
+
+            expect(parkedBuffer()).toBeNull()
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+
+        it('does not restore a previous page buffer under a newly configured select policy', () => {
+            addRRwebToWindow(true)
+            const timestamp = startBelowMinimumDuration()
+            unload()
+            expect(parkedBuffer().data).toHaveLength(1)
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            config.session_recording.selectMaskingFn = () => 'masked'
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
+            )
+            expect(sessionRecording.started).toBe(true)
+            expect(parkedBuffer()).toBeNull()
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: timestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            expect(shipped[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)).not.toContain(
+                timestamp + 100
+            )
+        })
+
         it('parks the buffer the minimum-duration gate is holding, instead of losing it with the page', () => {
             startBelowMinimumDuration()
 
@@ -9918,6 +10091,116 @@ describe('Lazy SessionRecording', () => {
                 'could not capture snapshot chunk - skipping it',
                 expect.any(RangeError)
             )
+        })
+    })
+
+    describe('debug properties while replay is off', () => {
+        const OFF_SHAPE = { $recording_status: 'disabled' }
+        const sessionKeys = {
+            [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+            [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: ['url'],
+        }
+        let store: Record<string, unknown>
+
+        const startRecording = (recordingConfig: Record<string, unknown> = {}) => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', ...recordingConfig } })
+            )
+        }
+
+        beforeEach(() => {
+            store = { ...sessionKeys }
+            ;(posthog as any).sessionPersistence = { get_property: (key: string) => store[key] }
+        })
+
+        it('reports only the disabled status after a mid-session stop and restores keys on re-enable', () => {
+            startRecording()
+            expect(sessionRecording.status).toBe('active')
+            expect(sessionRecording.sdkDebugProperties).toMatchObject({
+                ...sessionKeys,
+                $sdk_debug_session_start: expect.any(Number),
+            })
+
+            posthog.config.disable_session_recording = true
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeDefined()
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+
+            posthog.config.disable_session_recording = false
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+            expect(sessionRecording.sdkDebugProperties).toHaveProperty('$sdk_debug_session_start')
+        })
+
+        it('reports only the disabled status after stopSessionRecording-style config changes', () => {
+            startRecording()
+            posthog.config.disable_session_recording = true
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('reports only the disabled status when the server turns replay off mid-session', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: { enabled: true, endpoint: '/s/', cache_timestamp: Date.now() },
+            })
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.status).toBe('active')
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('restores the replay keys on the next event when the persisted remote config turns replay back on', () => {
+            const persistRemoteConfig = (enabled: boolean) =>
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: { enabled, endpoint: '/s/', cache_timestamp: Date.now() },
+                })
+            persistRemoteConfig(true)
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+
+            persistRemoteConfig(false)
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+
+            persistRemoteConfig(true)
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
+            expect(sessionRecording.sdkDebugProperties).toHaveProperty('$sdk_debug_replay_rrweb_error')
+        })
+
+        it('reports only the disabled status when opted out', () => {
+            startRecording()
+            posthog.consent.isOptedOut = () => true
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording.sdkDebugProperties).toEqual(OFF_SHAPE)
+        })
+
+        it('keeps the recorder keys when sampled out', () => {
+            startRecording({ sampleRate: '0.00' })
+
+            const debug = sessionRecording.sdkDebugProperties
+            expect(sessionRecording.status).toBe('disabled')
+            expect(debug).toMatchObject(sessionKeys)
+            expect(debug).toHaveProperty('$sdk_debug_session_start')
+            expect(debug).toHaveProperty('$sdk_debug_replay_rrweb_error')
+        })
+
+        it('keeps the full map while a trigger is pending', () => {
+            startRecording({ urlTriggers: [{ url: 'start-on-me', matching: 'regex' }] })
+
+            const debug = sessionRecording.sdkDebugProperties
+            expect(sessionRecording.status).toBe('buffering')
+            expect(debug).toMatchObject(sessionKeys)
+            expect(debug).toHaveProperty('$sdk_debug_replay_internal_buffer_length')
+        })
+
+        it('keeps persisted keys while awaiting remote config', () => {
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+
+            expect(sessionRecording.sdkDebugProperties).toMatchObject(sessionKeys)
         })
     })
 })

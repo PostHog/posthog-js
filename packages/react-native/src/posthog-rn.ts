@@ -445,7 +445,7 @@ export class PostHog extends PostHogCore {
   }
 
   /**
-   * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+   * Creates a new PostHog instance for React Native. See [`PostHogOptions`](#posthogoptions) for all configuration options.
    *
    * If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
    *
@@ -904,6 +904,13 @@ export class PostHog extends PostHogCore {
   // `undefined` when absent.
   private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
     try {
+      if (this._isSessionReplayOff()) {
+        return {
+          ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES,
+          $recording_status: 'disabled',
+          $sdk_debug_pending_queue_size: this._pendingQueueSize(),
+        }
+      }
       const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
       const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
       const platformOS = getPlatformOS()
@@ -970,10 +977,12 @@ export class PostHog extends PostHogCore {
   }
 
   // Read apart from the replay keys so a failure building those still reports the queue depth.
+  // Below flushAt the queue is ordinary batching, so the depth is only reported once it backs up.
   private _pendingQueueSize(): number | undefined {
     try {
       const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
-      return Array.isArray(queue) ? queue.length : 0
+      const depth = Array.isArray(queue) ? queue.length : 0
+      return depth > 0 && depth >= this.flushAt ? depth : undefined
     } catch {
       return undefined
     }
@@ -2032,6 +2041,33 @@ export class PostHog extends PostHogCore {
   _isEnableSessionReplay(): boolean {
     // Session replay has no macOS backend, so it is never enabled there (crash tracking still is).
     return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
+  }
+
+  // Replay is intentionally off: remotely (project setting or quota) or locally (opted out, or the
+  // app does not want it). A start/stop made by the app flips `_sessionReplayWanted`; internal
+  // stops (linked flag, sampling) leave it alone, so a recording that is merely held stays on.
+  // A running recorder is never off, so `disabled` never contradicts native: native may still be
+  // stopping after a remote off, or an automatic start may have resumed it after an app stop.
+  private _isSessionReplayOff(): boolean {
+    if (this._isNativeRecorderRunning()) {
+      return false
+    }
+    const remoteConfig = this.getPersistedProperty<{ sessionRecording?: unknown; quotaLimited?: unknown }>(
+      PostHogPersistedProperty.RemoteConfig
+    )
+    const quotaLimited = remoteConfig?.quotaLimited
+    if (
+      remoteConfig?.sessionRecording === false ||
+      (Array.isArray(quotaLimited) && quotaLimited.includes('mobile_recordings'))
+    ) {
+      return true
+    }
+    return this.optedOut || !this._sessionReplayWanted
+  }
+
+  private _isNativeRecorderRunning(): boolean {
+    const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
+    return status === 'active' || status === 'buffering'
   }
 
   private _isNativeSessionOwner(): boolean {
@@ -3773,6 +3809,7 @@ export class PostHog extends PostHogCore {
   private _claimReplayDebugBundle(message: PostHogEventProperties): boolean {
     const claimed =
       isReplayDebugEvent(message.event) &&
+      !this._isSessionReplayOff() &&
       !this._replayDebugBundleClaimed &&
       (this._replayDebugBundleAcceptedAt === undefined ||
         Date.now() - this._replayDebugBundleAcceptedAt >= REPLAY_DEBUG_PROPERTIES_INTERVAL_MS) &&
