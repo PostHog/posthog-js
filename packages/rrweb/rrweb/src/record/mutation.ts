@@ -257,6 +257,7 @@ export default class MutationBuffer {
   }
 
   public processMutations = (mutations: mutationRecord[]): void => {
+    this.iframeManager.releaseCrossOriginIframesBlockedBy(mutations);
     if (this.iframeManager.isBlockedDocument(this.doc)) return;
     mutations.forEach(this.processMutation); // adds mutations to the buffer
     this.emit(); // clears buffer if not locked/frozen

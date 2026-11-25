@@ -1,5 +1,6 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId, isShadowRoot } from '@posthog/rrweb-snapshot';
+import dom from '@posthog/rrweb-utils';
 import type { CrossOriginIframeMessageEvent } from '../types';
 import {
   callSafely,
@@ -13,6 +14,7 @@ import type {
   blockClass,
   eventWithTime,
   eventWithoutTime,
+  mutationRecord,
   serializedNodeWithId,
   mutationCallBack,
 } from '@posthog/rrweb-types';
@@ -61,6 +63,9 @@ export class IframeManager {
   // by then, but we still need the element to dispose its load listener.
   private iframeElementsById: Map<number, HTMLIFrameElement> = new Map();
   private blockedDocuments: WeakSet<Document> = new WeakSet();
+  // Cross-origin iframes whose relayed messages are forwarded. Their documents
+  // are not observed here, so a block has to be noticed from the parent page.
+  private crossOriginIframes: Set<HTMLIFrameElement> = new Set();
   // Set per element — same multi-load reasoning as loadListenerDisposers.
   private pageHideHandlers: WeakMap<
     HTMLIFrameElement,
@@ -115,6 +120,53 @@ export class IframeManager {
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);
+    if (this.recordCrossOriginIframes && this.isCrossOrigin(iframeEl))
+      this.crossOriginIframes.add(iframeEl);
+  }
+
+  private isCrossOrigin(iframeEl: HTMLIFrameElement): boolean {
+    try {
+      return !iframeEl.contentDocument;
+    } catch {
+      return true;
+    }
+  }
+
+  // A block can be added and removed before a message the child posted while
+  // blocked arrives, so delivery-time checks alone cannot catch it. Any
+  // attribute change that blocked a cross-origin iframe, even briefly, stops
+  // forwarding its messages until a full snapshot tracks it again.
+  public releaseCrossOriginIframesBlockedBy(mutations: mutationRecord[]): void {
+    if (this.crossOriginIframes.size === 0) return;
+    let targets: Set<Node> | undefined;
+    for (const m of mutations) {
+      if (m.type === 'attributes' && this.couldHaveBlocked(m))
+        (targets ??= new Set()).add(m.target);
+    }
+    if (!targets) return;
+    for (const iframeEl of [...this.crossOriginIframes]) {
+      let node: Node | null = iframeEl;
+      while (node) {
+        if (targets.has(node)) {
+          this.releaseBlockedIframe(iframeEl);
+          break;
+        }
+        const parent: Node | null = dom.parentNode(node);
+        node = parent && isShadowRoot(parent) ? dom.host(parent) : parent;
+      }
+    }
+  }
+
+  private couldHaveBlocked(m: mutationRecord): boolean {
+    // A selector can depend on any attribute, so any change may have matched.
+    if (this.blockSelector) return true;
+    if (m.attributeName !== 'class') return false;
+    const el = m.target as Element;
+    if (_isBlockedElement(el, this.blockClass, null)) return true;
+    if (!m.oldValue) return false;
+    const previous = el.ownerDocument.createElement('div');
+    previous.className = m.oldValue;
+    return _isBlockedElement(previous, this.blockClass, null);
   }
 
   public registerLoadListenerDisposer(
@@ -556,6 +608,7 @@ export class IframeManager {
         this.blockedDocuments.add(iframeEl.contentDocument);
     });
     this.blockedListener?.(iframeEl);
+    this.crossOriginIframes.delete(iframeEl);
     this.releaseIframe(iframeEl);
     this.crossOriginIframeMirror.reset(iframeEl);
     this.crossOriginIframeStyleMirror.reset(iframeEl);
@@ -627,6 +680,7 @@ export class IframeManager {
       this.crossOriginIframeMap.delete(win);
     }
     this.iframes.delete(iframe);
+    this.crossOriginIframes.delete(iframe);
 
     this.disposeLoadListeners(iframe);
     this.removePageHideListener(iframe);
@@ -717,6 +771,7 @@ export class IframeManager {
     this.pageHideHandlers = new WeakMap();
     this.attachedDocuments = new WeakMap();
     this.blockedDocuments = new WeakSet();
+    this.crossOriginIframes.clear();
     this.attachedWindows = new WeakMap();
     this.iframeElementsById = new Map();
   }

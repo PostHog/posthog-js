@@ -460,6 +460,79 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('drops a cross-origin message from an iframe that was briefly blocked before it arrived', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <div id="parent"><iframe src="${getServerURL(server)}/html/blank.html"></iframe></div>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const [topFrame, iframeFrame] = page.frames();
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(topFrame, { recordCrossOriginIframes: true });
+      // hold back the child's relayed events so one lands after the unblock
+      await iframeFrame.evaluate(() => {
+        const held: Array<[unknown, string]> = [];
+        const post = window.parent.postMessage.bind(window.parent);
+        (window as unknown as { held: typeof held }).held = held;
+        (window as unknown as { hold: boolean }).hold = false;
+        Object.defineProperty(window, 'parent', {
+          value: new Proxy(window.parent, {
+            get: (target, key) =>
+              key === 'postMessage'
+                ? (message: unknown, origin: string) =>
+                    (window as unknown as { hold: boolean }).hold
+                      ? held.push([message, origin])
+                      : post(message, origin)
+                : Reflect.get(target, key),
+          }),
+        });
+      });
+      await startRecording(iframeFrame, { recordCrossOriginIframes: true });
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await iframeFrame.evaluate(() => {
+        (window as unknown as { hold: boolean }).hold = true;
+      });
+      await topFrame.evaluate(() =>
+        document.getElementById('parent')!.classList.add('rr-block'),
+      );
+      await waitForRAF(page);
+      await appendParagraph(iframeFrame, LATER_CONTENT);
+      await waitForRAF(page);
+      await topFrame.evaluate(() =>
+        document.getElementById('parent')!.classList.remove('rr-block'),
+      );
+      await waitForRAF(page);
+      const eventsBeforeDelivery = events.length;
+      await iframeFrame.evaluate(() => {
+        const w = window as unknown as {
+          hold: boolean;
+          held: Array<[unknown, string]>;
+        };
+        w.hold = false;
+        w.held.forEach(([message, origin]) =>
+          window.parent.postMessage(message, origin),
+        );
+      });
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(
+        JSON.stringify(events.slice(eventsBeforeDelivery)),
+      ).not.toContain(LATER_CONTENT);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {

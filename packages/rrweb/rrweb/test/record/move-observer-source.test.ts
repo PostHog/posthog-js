@@ -44,7 +44,7 @@ const createOptions = (doc: Document = document): observerParam =>
     dataURLOptions: {},
     doc,
     mirror: new Mirror(),
-    iframeManager: { addIframe: vi.fn(), isBlockedDocument: vi.fn(() => false) },
+    iframeManager: { addIframe: vi.fn(), isBlockedDocument: vi.fn(() => false), releaseCrossOriginIframesBlockedBy: vi.fn() },
     stylesheetManager: {
       adoptStyleSheets: vi.fn(),
       trackLinkElement: vi.fn(),
