@@ -152,7 +152,30 @@ describe('known-absent property keys', () => {
       group_type_mapping: { '0': 'organization', '1': 'project' },
     }
 
-    it('apply to their own group type, overriding $group_key and supplied values', async () => {
+    it('override the $group_key the SDK adds to group properties', async () => {
+      setup({
+        flags: [
+          flag(
+            'group-key-flag',
+            [{ key: '$group_key', type: 'group', group_type_index: 0, operator: 'is_not_set', value: null }],
+            { aggregation_group_type_index: 0 }
+          ),
+        ],
+        group_type_mapping: { '0': 'organization' },
+      })
+
+      const groups = { organization: 'acme' }
+      expect(await posthog.getFeatureFlag('group-key-flag', 'user', { groups })).toBe(false)
+      expect(
+        await posthog.getFeatureFlag('group-key-flag', 'user', {
+          groups,
+          groupPropertyKeysKnownAbsent: { organization: ['$group_key'] },
+        })
+      ).toBe(true)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it('apply to their own group type, overriding supplied values', async () => {
       setup(groupFlags)
 
       expect(
