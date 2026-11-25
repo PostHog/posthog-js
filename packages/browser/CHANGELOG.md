@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.455.1
+
+### Patch Changes
+
+- [#5839](https://github.com/PostHog/posthog-js/pull/5839) [`c95186e`](https://github.com/PostHog/posthog-js/commit/c95186e7ca6415bfa70ddc3b371bebb49295af9e) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Stopping exception autocapture no longer removes `window.onerror`, `window.onunhandledrejection`, or `console.error` handlers installed on top of PostHog's.
+  (2026-11-25)
+
 ## 1.455.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # @posthog/mcp
 
+## 1.8.0
+
+### Minor Changes
+
+- [#5842](https://github.com/PostHog/posthog-js/pull/5842) [`8ec7e4a`](https://github.com/PostHog/posthog-js/commit/8ec7e4ad33b1e6abe31bfb406e1fd46a5397f014) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Add `analytics.flush()`, which waits until every event the server has captured so far, auto-captured ones included, is handed to `posthog-node`, then flushes the `posthog-node` queue. Await it before a per-request runtime (serverless or edge functions) freezes or exits, instead of waiting a macrotask before `posthog.shutdown()`
+  (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b), [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec), [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2)]:
+  - posthog-node@6.1.0
+
 ## 1.7.1
 
 ### Patch Changes
