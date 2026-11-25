@@ -732,7 +732,11 @@ async function loadReactRenderer(logger: Logger): Promise<EmailReactRenderer> {
       fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
       cause,
     })
-    logger.warn(`PostHog email error ${error.code}: ${error.message} ${error.fix}`)
+    try {
+      logger.warn(`PostHog email error ${error.code}: ${error.message} ${error.fix}`)
+    } catch {
+      void 0
+    }
     throw error
   }
 }

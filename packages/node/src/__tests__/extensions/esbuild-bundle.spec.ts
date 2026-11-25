@@ -2,6 +2,9 @@ import { rspack } from '@rslib/core'
 import { build, type Platform, type Plugin } from 'esbuild'
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
+import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -159,12 +162,18 @@ describe('esbuild bundle of the built package', () => {
     )
 
     it('returns missing_react_renderer in a real isolated bundle without reactEmailRenderer and renders with module or wrapper', async () => {
-      const runIsolatedSend = async (mode: 'none' | 'module' | 'wrapper') => {
+      const runIsolatedSend = async (mode: 'none' | 'none-throwing-warn' | 'module' | 'wrapper') => {
         const importLine =
           mode === 'module'
             ? "import * as reactEmailRenderer from '@react-email/render'"
             : mode === 'wrapper'
               ? "import { render, toPlainText } from '@react-email/render'\nconst reactEmailRenderer = { render: (el) => render(el, { pretty: true }), toPlainText }"
+              : ''
+        const warnSetup =
+          mode === 'none'
+            ? 'console.warn = (...args) => { warnings.push(args.map(String).join(" ")) }'
+            : mode === 'none-throwing-warn'
+              ? 'console.warn = () => { throw new Error("broken warning sink") }'
               : ''
         const contents = `
           import { createElement } from 'react'
@@ -172,44 +181,53 @@ describe('esbuild bundle of the built package', () => {
           ${importLine}
           export async function run() {
             const sent = []
-            const client = new PostHog('phc_test', {
-              host: 'https://us.i.posthog.com',
-              secretKey: 'phs_test',
-              enableLocalEvaluation: false,
-              ${mode === 'none' ? '' : 'reactEmailRenderer,'}
-              fetch: async (url, init) => {
-                if (
-                  url !== 'https://us.posthog.com/api/messaging/send/email/' ||
-                  init.method !== 'POST' ||
-                  init.headers?.Authorization !== 'Bearer phs_test' ||
-                  init.headers?.['Content-Type'] !== 'application/json' ||
-                  typeof init.headers?.['Idempotency-Key'] !== 'string' ||
-                  init.headers['Idempotency-Key'].length === 0
-                ) {
-                  return {
-                    status: 400,
-                    text: async () => JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }),
-                    json: async () => ({ code: 'invalid_request', detail: 'unexpected send request' }),
+            const warnings = []
+            const originalWarn = console.warn
+            ${warnSetup}
+            try {
+              const client = new PostHog('phc_test', {
+                host: 'https://us.i.posthog.com',
+                secretKey: 'phs_test',
+                enableLocalEvaluation: false,
+                ${mode === 'none' || mode === 'none-throwing-warn' ? '' : 'reactEmailRenderer,'}
+                fetch: async (url, init) => {
+                  if (
+                    url !== 'https://us.posthog.com/api/messaging/send/email/' ||
+                    init.method !== 'POST' ||
+                    init.headers?.Authorization !== 'Bearer phs_test' ||
+                    init.headers?.['Content-Type'] !== 'application/json' ||
+                    typeof init.headers?.['Idempotency-Key'] !== 'string' ||
+                    init.headers['Idempotency-Key'].length === 0
+                  ) {
+                    return {
+                      status: 400,
+                      text: async () => JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }),
+                      json: async () => ({ code: 'invalid_request', detail: 'unexpected send request' }),
+                    }
                   }
-                }
-                sent.push(JSON.parse(init.body))
-                return {
-                  status: 200,
-                  text: async () => JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
-                  json: async () => ({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
-                }
-              },
-            })
-            const response = await client.emails.send({
-              to: 'ada@example.com',
-              templateKey: 'welcome',
-              subject: 'Welcome',
-              react: createElement('p', null, 'Welcome, Ada'),
-            })
-            return {
-              sent,
-              data: response.data,
-              error: response.error ? { code: response.error.code, fix: response.error.fix } : null,
+                  sent.push(JSON.parse(init.body))
+                  return {
+                    status: 200,
+                    text: async () => JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
+                    json: async () => ({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
+                  }
+                },
+              })
+              ${mode === 'none' || mode === 'none-throwing-warn' ? 'client.debug(true)' : ''}
+              const response = await client.emails.send({
+                to: 'ada@example.com',
+                templateKey: 'welcome',
+                subject: 'Welcome',
+                react: createElement('p', null, 'Welcome, Ada'),
+              })
+              return {
+                sent,
+                warnings,
+                data: response.data,
+                error: response.error ? { code: response.error.code, fix: response.error.fix } : null,
+              }
+            } finally {
+              console.warn = originalWarn
             }
           }
         `
@@ -232,6 +250,19 @@ describe('esbuild bundle of the built package', () => {
       expect(withoutOpt.data).toBeNull()
       expect(withoutOpt.sent).toEqual([])
       expect(withoutOpt.error).toMatchObject({
+        code: 'missing_react_renderer',
+        fix: expect.stringContaining('reactEmailRenderer'),
+      })
+      expect(withoutOpt.warnings).toEqual([
+        expect.stringMatching(
+          /missing_react_renderer[\s\S]*reactEmailRenderer: await import\('@react-email\/render'\)/
+        ),
+      ])
+
+      const withThrowingWarn = await runIsolatedSend('none-throwing-warn')
+      expect(withThrowingWarn.data).toBeNull()
+      expect(withThrowingWarn.sent).toEqual([])
+      expect(withThrowingWarn.error).toMatchObject({
         code: 'missing_react_renderer',
         fix: expect.stringContaining('reactEmailRenderer'),
       })
@@ -258,55 +289,63 @@ describe('esbuild bundle of the built package', () => {
 
     it('exits cleanly under strict unhandled rejections when toPlainText returns a same-realm, cross-realm, or async-throwing thenable', async () => {
       const nodeEntryUrl = pathToFileURL(builtEntrypoint('index.node.mjs')).href
-      const script = `
-        import { createElement } from 'react'
-        import vm from 'node:vm'
-        import { PostHog } from ${JSON.stringify(nodeEntryUrl)}
-        let fetchCalled = false
-        const runCase = async (toPlainText) => {
-          const client = new PostHog('phc_test', {
-            host: 'https://us.i.posthog.com',
-            appHost: 'http://127.0.0.1:1',
-            secretKey: 'phs_test',
-            enableLocalEvaluation: false,
-            fetch: async () => {
-              fetchCalled = true
-              throw new Error('unexpected network request')
-            },
-            reactEmailRenderer: { render: async () => '<p>Hi</p>', toPlainText },
-          })
-          const res = await client.emails.send({
-            to: 'ada@example.com',
-            templateKey: 'welcome',
-            subject: 'Welcome',
-            react: createElement('p', null, 'Hi'),
-          })
-          return { data: res.data, code: res.error?.code ?? null }
-        }
-        const rejectingPromise = await runCase(async () => {
-          throw new Error('async plain text failure')
-        })
-        const crossRealmPromise = await runCase(() =>
-          vm.runInNewContext('Promise.reject(new Error("cross-realm failure"))')
-        )
-        const throwingThenable = await runCase(() => ({
-          async then() {
-            throw new Error('throwing thenable')
-          },
-        }))
-        console.log(JSON.stringify({ fetchCalled, rejectingPromise, crossRealmPromise, throwingThenable }))
-      `
-      const { stdout } = await execFileAsync(
-        process.execPath,
-        ['--unhandled-rejections=throw', '--input-type=module', '-e', script],
-        { cwd: packageRoot }
-      )
-      expect(JSON.parse(stdout.trim())).toEqual({
-        fetchCalled: false,
-        rejectingPromise: { data: null, code: 'react_render_failed' },
-        crossRealmPromise: { data: null, code: 'react_render_failed' },
-        throwingThenable: { data: null, code: 'react_render_failed' },
+      let receivedRequests = 0
+      const server = createServer((_req, res) => {
+        receivedRequests += 1
+        res.statusCode = 500
+        res.end('unexpected request')
       })
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const { port } = server.address() as AddressInfo
+
+      try {
+        const script = `
+          import { createElement } from 'react'
+          import vm from 'node:vm'
+          import { PostHog } from ${JSON.stringify(nodeEntryUrl)}
+          const runCase = async (toPlainText) => {
+            const client = new PostHog('phc_test', {
+              host: 'https://us.i.posthog.com',
+              appHost: ${JSON.stringify(`http://127.0.0.1:${port}`)},
+              secretKey: 'phs_test',
+              enableLocalEvaluation: false,
+              reactEmailRenderer: { render: async () => '<p>Hi</p>', toPlainText },
+            })
+            const res = await client.emails.send({
+              to: 'ada@example.com',
+              templateKey: 'welcome',
+              subject: 'Welcome',
+              react: createElement('p', null, 'Hi'),
+            })
+            return { data: res.data, code: res.error?.code ?? null }
+          }
+          const rejectingPromise = await runCase(async () => {
+            throw new Error('async plain text failure')
+          })
+          const crossRealmPromise = await runCase(() =>
+            vm.runInNewContext('Promise.reject(new Error("cross-realm failure"))')
+          )
+          const throwingThenable = await runCase(() => ({
+            async then() {
+              throw new Error('throwing thenable')
+            },
+          }))
+          console.log(JSON.stringify({ rejectingPromise, crossRealmPromise, throwingThenable }))
+        `
+        const { stdout } = await execFileAsync(
+          process.execPath,
+          ['--unhandled-rejections=throw', '--input-type=module', '-e', script],
+          { cwd: packageRoot }
+        )
+        expect(receivedRequests).toBe(0)
+        expect(JSON.parse(stdout.trim())).toEqual({
+          rejectingPromise: { data: null, code: 'react_render_failed' },
+          crossRealmPromise: { data: null, code: 'react_render_failed' },
+          throwingThenable: { data: null, code: 'react_render_failed' },
+        })
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()))
+      }
     })
 
     it.each([
@@ -376,6 +415,116 @@ describe('esbuild bundle of the built package', () => {
       },
       20_000
     )
+
+    it('passes Vite import-analysis without warnings and leaves @react-email/render out of a Vite SSR bundle unless opted in', async () => {
+      const pkgRequire = createRequire(path.join(packageRoot, 'package.json'))
+      const vitestRequire = createRequire(pkgRequire.resolve('vitest'))
+      const viteEntry = vitestRequire.resolve('vite').replace(/index\.cjs$/, 'dist/node/index.js')
+      const vite = (await import(pathToFileURL(viteEntry).href)) as {
+        createServer: (config: Record<string, unknown>) => Promise<{
+          transformRequest: (url: string, opts?: { ssr?: boolean }) => Promise<{ code: string } | null>
+          close: () => Promise<void>
+        }>
+        build: (
+          config: Record<string, unknown>
+        ) => Promise<
+          | { output?: Array<{ modules?: Record<string, unknown> }> }
+          | Array<{ output?: Array<{ modules?: Record<string, unknown> }> }>
+        >
+      }
+
+      const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'posthog-node-vite-'))
+      try {
+        mkdirSync(path.join(tmpDir, 'node_modules', '@react-email'), { recursive: true })
+        symlinkSync(packageRoot, path.join(tmpDir, 'node_modules', 'posthog-node'), 'dir')
+        symlinkSync(
+          path.join(packageRoot, 'node_modules', '@react-email', 'render'),
+          path.join(tmpDir, 'node_modules', '@react-email', 'render'),
+          'dir'
+        )
+
+        const makeLogger = (warnings: string[]) => ({
+          info() {},
+          warn(msg: string) {
+            warnings.push(String(msg))
+          },
+          warnOnce(msg: string) {
+            warnings.push(String(msg))
+          },
+          error(msg: string) {
+            warnings.push(`ERROR: ${String(msg)}`)
+          },
+          clearScreen() {},
+          hasErrorLogged() {
+            return false
+          },
+          hasWarned: false,
+        })
+
+        const analysisWarnings: string[] = []
+        const server = await vite.createServer({
+          root: tmpDir,
+          configFile: false,
+          logLevel: 'silent',
+          optimizeDeps: { noDiscovery: true, include: [] },
+          ssr: { noExternal: ['posthog-node'] },
+          server: { middlewareMode: true, ws: false, watch: null },
+          customLogger: makeLogger(analysisWarnings),
+        })
+        try {
+          const transformed = await server.transformRequest(
+            '/node_modules/posthog-node/dist/emails/react-renderer-import.mjs',
+            { ssr: true }
+          )
+          expect(transformed?.code).toContain('@vite-ignore')
+        } finally {
+          await server.close()
+        }
+        expect(analysisWarnings).toEqual([])
+
+        const runViteSsrBuild = async (name: string, contents: string) => {
+          const entry = path.join(tmpDir, `${name}.mjs`)
+          writeFileSync(entry, contents)
+          const warnings: string[] = []
+          const res = await vite.build({
+            root: tmpDir,
+            configFile: false,
+            logLevel: 'silent',
+            customLogger: makeLogger(warnings),
+            ssr: { noExternal: ['posthog-node', '@react-email/render'] },
+            build: {
+              ssr: entry,
+              outDir: path.join(tmpDir, `dist-${name}`),
+              rollupOptions: {
+                onwarn(w: { message?: string }) {
+                  warnings.push(w.message ?? String(w))
+                },
+              },
+            },
+          })
+          const outputs = (Array.isArray(res) ? res : [res]).flatMap((r) => r.output ?? [])
+          const modules = outputs.flatMap((chunk) => Object.keys(chunk.modules ?? {}))
+          return {
+            warnings,
+            hasRenderer: modules.some((m) => m.includes('@react-email/render')),
+          }
+        }
+
+        const withoutOpt = await runViteSsrBuild(
+          'no-opt',
+          `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test')\n`
+        )
+        expect(withoutOpt).toEqual({ warnings: [], hasRenderer: false })
+
+        const withOpt = await runViteSsrBuild(
+          'opt-in',
+          `import { PostHog } from 'posthog-node'\nimport * as reactEmailRenderer from '@react-email/render'\nexport const client = new PostHog('phc_test', { reactEmailRenderer })\n`
+        )
+        expect(withOpt).toEqual({ warnings: [], hasRenderer: true })
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
+    }, 20_000)
   })
 
   it.each([
