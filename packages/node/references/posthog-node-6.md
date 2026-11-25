@@ -2288,12 +2288,13 @@ periodically. Configure via the `metrics` client option.
 
 > **get** **push**(): `Push`
 
-The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+The `posthog.push` API: sends transactional push notifications from PostHog push templates, and
+reads what happened to a sent one.
 
 Needs `secretKey`, a project secret API key with the `transactional_push:write` scope. Sends go
 where `emails` sends go, `appHost` or the PostHog Cloud app host of `host`, and use
-`emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` resolves to `{ data, error }` and
-does not reject. A disabled client sends nothing and returns the error `client_disabled`. After
+`emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` and `get` resolve to `{ data, error }`
+and do not reject. A disabled client sends nothing and returns the error `client_disabled`. After
 `shutdown()`, the client sends nothing and returns the error `client_closed`.
 
 ##### Example
@@ -3713,6 +3714,13 @@ Promise that resolves when cleanup is complete, or void for sync cleanup
 > **GetEmailResponse** = \{ `data`: `EmailStatus`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
 
 What `posthog.emails.get()` resolves to. Exactly one of `data` and `error` is set.
+The promise does not reject.
+
+### `GetPushResponse`
+
+> **GetPushResponse** = \{ `data`: `PushStatus`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `PushError`; \}
+
+What `posthog.push.get()` resolves to. Exactly one of `data` and `error` is set.
 The promise does not reject.
 
 ### `GroupIdentifyMessage`
@@ -5253,9 +5261,30 @@ Common types shared across PostHog SDKs
 
 ### `Push`
 
-The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+The `posthog.push` API: sends transactional push notifications from PostHog push templates, and
+reads what happened to a sent one.
 
 #### Methods
+
+##### get()
+
+> **get**(`id`): `Promise`\<`GetPushResponse`\>
+
+Read what happened to a push notification that `send()` queued, for 30 days after the send.
+
+Resolves to `{ data, error }` and does not reject. The error code is `not_found` when no push
+notification of this project has the ID, when it is older than 30 days, or for a few seconds
+after the send. Network errors, rate limits and an unavailable service are retried.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+
+###### Returns
+
+`Promise`\<`GetPushResponse`\>
 
 ##### send()
 
@@ -5277,11 +5306,35 @@ unavailable service are retried with the same idempotency key.
 
 `Promise`\<`SendPushResponse`\>
 
+### `PushDeliveryStatus`
+
+> **PushDeliveryStatus** = `"sending"` \| `"sent"` \| `"not_sent"` \| `"failed"`
+
+What happened to a sent push notification:
+
+- `sending`: it is still going out, or PostHog hasn't recorded its outcome yet.
+- `sent`: Apple or Google accepted it for at least one of the person's devices.
+- `not_sent`: none of the person's devices got it, and `reason` says why.
+- `failed`: the send stopped with an error.
+
 ### `PushErrorName`
 
 > **PushErrorName** = `EmailErrorName`
 
 A coarse category of the failure, for code that branches on the kind of failure rather than the exact `code`.
+
+### `PushStatus`
+
+The status of a push notification that `posthog.push.send()` queued.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-createdat-1"></a> `createdAt` | `string` | When PostHog accepted the send, as an ISO 8601 timestamp. |
+| <a id="property-id-1"></a> `id` | `string` | The message ID that `send()` returned. |
+| <a id="property-reason-1"></a> `reason` | `string` \| `null` | Why a push notification was not sent or failed, such as `no_device` or `provider_error`. Null otherwise. |
+| <a id="property-status-1"></a> `status` | `string` & `object` \| `PushDeliveryStatus` | - |
 
 ### `RatingSurveyQuestion`
 
@@ -5347,7 +5400,7 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-id-1"></a> `id` | `string` | The queued email's message ID. |
+| <a id="property-id-2"></a> `id` | `string` | The queued email's message ID. |
 | <a id="property-replayed"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
 | <a id="property-warnings"></a> `warnings` | `EmailWarning`[] | - |
 
@@ -5393,7 +5446,7 @@ The queued push notification. A result means PostHog queued it, not that a devic
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-id-2"></a> `id` | `string` | The queued send's message ID. |
+| <a id="property-id-3"></a> `id` | `string` | The queued send's message ID. |
 | <a id="property-replayed-1"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
 
 ### `SendTemplateEmailOptions`
@@ -5705,7 +5758,7 @@ encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
 | <a id="property-parentspanid"></a> `parentSpanId?` | `readonly` | `string` | **`Experimental`** Absent on a root span. |
 | <a id="property-spanid-1"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
 | <a id="property-starttime"></a> `startTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
-| <a id="property-status-1"></a> `status?` | `public` | `object` | **`Experimental`** |
+| <a id="property-status-2"></a> `status?` | `public` | `object` | **`Experimental`** |
 | `status.code` | `public` | `SpanStatusCode` | - |
 | `status.message?` | `public` | `string` | - |
 | <a id="property-traceid-1"></a> `traceId` | `readonly` | `string` | **`Experimental`** Assignment to any of the three identity fields is ignored with a debug warning: rewriting ids orphans children that already shipped. |
@@ -6039,4 +6092,4 @@ Additional capture options, sent to capture v1 unchanged.
 
 | Type Parameter |
 | ------ |
-| <a id="type-parameter-t-16"></a> `T` |
+| <a id="type-parameter-t-19"></a> `T` |

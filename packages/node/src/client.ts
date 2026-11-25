@@ -1203,12 +1203,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+   * The `posthog.push` API: sends transactional push notifications from PostHog push templates, and
+   * reads what happened to a sent one.
    *
    * Needs `secretKey`, a project secret API key with the `transactional_push:write` scope. Sends go
    * where `emails` sends go, `appHost` or the PostHog Cloud app host of `host`, and use
-   * `emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` resolves to `{ data, error }` and
-   * does not reject. A disabled client sends nothing and returns the error `client_disabled`. After
+   * `emailRequestTimeoutMs` and `emailRequestMaxRetries`. `send` and `get` resolve to `{ data, error }`
+   * and do not reject. A disabled client sends nothing and returns the error `client_disabled`. After
    * `shutdown()`, the client sends nothing and returns the error `client_closed`.
    *
    * @example

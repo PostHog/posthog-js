@@ -45,7 +45,35 @@ export interface SendPushResult {
 export type SendPushResponse = { data: SendPushResult; error: null } | { data: null; error: PushError }
 
 /**
- * The `posthog.push` API: sends transactional push notifications from PostHog push templates.
+ * What happened to a sent push notification:
+ *
+ * - `sending`: it is still going out, or PostHog hasn't recorded its outcome yet.
+ * - `sent`: Apple or Google accepted it for at least one of the person's devices.
+ * - `not_sent`: none of the person's devices got it, and `reason` says why.
+ * - `failed`: the send stopped with an error.
+ */
+export type PushDeliveryStatus = 'sending' | 'sent' | 'not_sent' | 'failed'
+
+/** The status of a push notification that `posthog.push.send()` queued. */
+export interface PushStatus {
+  /** The message ID that `send()` returned. */
+  id: string
+  status: PushDeliveryStatus | (string & {})
+  /** When PostHog accepted the send, as an ISO 8601 timestamp. */
+  createdAt: string
+  /** Why a push notification was not sent or failed, such as `no_device` or `provider_error`. Null otherwise. */
+  reason: string | null
+}
+
+/**
+ * What `posthog.push.get()` resolves to. Exactly one of `data` and `error` is set.
+ * The promise does not reject.
+ */
+export type GetPushResponse = { data: PushStatus; error: null } | { data: null; error: PushError }
+
+/**
+ * The `posthog.push` API: sends transactional push notifications from PostHog push templates, and
+ * reads what happened to a sent one.
  */
 export interface Push {
   /**
@@ -56,4 +84,13 @@ export interface Push {
    * unavailable service are retried with the same idempotency key.
    */
   send(options: SendPushOptions): Promise<SendPushResponse>
+
+  /**
+   * Read what happened to a push notification that `send()` queued, for 30 days after the send.
+   *
+   * Resolves to `{ data, error }` and does not reject. The error code is `not_found` when no push
+   * notification of this project has the ID, when it is older than 30 days, or for a few seconds
+   * after the send. Network errors, rate limits and an unavailable service are retried.
+   */
+  get(id: string): Promise<GetPushResponse>
 }

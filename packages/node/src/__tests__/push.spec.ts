@@ -4,7 +4,9 @@ vi.mock('../version', () => ({ version: '1.2.3' }))
 
 const SECRET_KEY = 'phs_test_secret'
 const TEMPLATE_ID = '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b'
-const SEND_URL = 'https://us.posthog.com/api/projects/@current/messaging/send/push/'
+const SEND_URL = 'https://us.posthog.com/api/messaging/send/push/'
+const MESSAGE_ID = '019e1a2b-3c4d-7e5f-8a9b-0c1d2e3f4a5b'
+const STATUS_URL = `https://us.posthog.com/api/messaging/pushes/${MESSAGE_ID}/`
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type Reply = Error | { status: number; body?: unknown; headers?: Record<string, string> }
@@ -170,7 +172,61 @@ describe('push', () => {
 
     await send()
 
-    expect(fetch.mock.calls[0][0]).toBe('https://posthog.example.com/api/projects/@current/messaging/send/push/')
+    expect(fetch.mock.calls[0][0]).toBe('https://posthog.example.com/api/messaging/send/push/')
+  })
+
+  describe('get', () => {
+    const statusReply = (fields: Record<string, unknown> = {}): Reply => ({
+      status: 200,
+      body: {
+        id: MESSAGE_ID,
+        status: 'not_sent',
+        created_at: '2026-11-20T16:27:44.364000Z',
+        reason: 'no_device',
+        ...fields,
+      },
+    })
+
+    it('reads the status of a sent push notification from the app host', async () => {
+      replies = [{ status: 503 }, statusReply()]
+
+      const pending = posthog.push.get(MESSAGE_ID.toUpperCase())
+      await vi.runAllTimersAsync()
+
+      expect(await pending).toEqual({
+        data: {
+          id: MESSAGE_ID,
+          status: 'not_sent',
+          createdAt: '2026-11-20T16:27:44.364000Z',
+          reason: 'no_device',
+        },
+        error: null,
+      })
+      const [url, options] = fetch.mock.calls[1]
+      expect(url).toBe(STATUS_URL)
+      expect(options.method).toBe('GET')
+      expect(options.body).toBeUndefined()
+      expect(options.headers).toEqual({
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: 'application/json',
+        'User-Agent': 'posthog-node/1.2.3',
+      })
+    })
+
+    it.each([
+      ['an unknown ID', [{ status: 404, body: { code: 'not_found' } }], MESSAGE_ID, 'not_found', 1],
+      ['an ID that is not a UUID', [], 'msg_1', 'invalid_message_id', 0],
+      ['a reply without a status', [statusReply({ status: null })], MESSAGE_ID, 'api_error', 1],
+    ])('reports %s', async (_name, queued, id, code, requests) => {
+      replies = queued
+
+      const { data, error } = await posthog.push.get(id)
+
+      expect(data).toBeNull()
+      expect(error).toBeInstanceOf(PushError)
+      expect(error?.code).toBe(code)
+      expect(fetch).toHaveBeenCalledTimes(requests)
+    })
   })
 
   it('makes shutdown wait for a send in its retry backoff', async () => {

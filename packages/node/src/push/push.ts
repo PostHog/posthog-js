@@ -2,17 +2,18 @@ import { safeJsonStringify } from '@posthog/core'
 
 import type { EmailSender } from '../emails/emails'
 import { PushError, asPushError } from './errors'
-import type { Push, SendPushOptions, SendPushResponse } from './types'
+import type { GetPushResponse, Push, SendPushOptions, SendPushResponse } from './types'
 
-const SEND_PATH = '/api/projects/@current/messaging/send/push/'
+const SEND_PATH = '/api/messaging/send/push/'
+const STATUS_PATH = '/api/messaging/pushes/{messageId}/'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const MAX_DISTINCT_ID_LENGTH = 400
 const FIELDS = new Set(['templateId', 'distinctId', 'templateData', 'idempotencyKey', 'maxRetries'])
 
 /**
- * Sends one transactional push notification per call. Goes through the client's email sender, so a push
- * send gets the same app host, secret key, timeout, retries and `flush()` handling as an email send.
+ * Sends one transactional push notification per call, and reads the status of a sent one. Goes through the
+ * client's email sender, so it gets the same app host, secret key, timeout, retries and `flush()` handling.
  */
 export class PushSender implements Push {
   constructor(private readonly sender: EmailSender) {}
@@ -20,19 +21,48 @@ export class PushSender implements Push {
   async send(options: SendPushOptions): Promise<SendPushResponse> {
     try {
       const { body, idempotencyKey, maxRetries } = preparePush(options)
-      const { id, replayed } = await this.sender.queue({
+      const { data, error } = await this.sender.call({
+        method: 'POST',
         path: SEND_PATH,
         body,
         idempotencyKey,
         maxRetries,
+        sends: 'push notifications',
         nothingDone: 'no push notification was sent',
         missingSecretKey:
           'Sending push notifications needs secretKey, a project secret API key with the transactional_push:write scope.',
+        read: ({ message_id: id, replayed }) => (isText(id) ? { id, replayed: replayed === true } : undefined),
+        unreadable: 'PostHog answered without a message ID.',
+        unexpected: 'Sending the push notification failed unexpectedly.',
       })
-      return { data: { id, replayed }, error: null }
+      return error ? { data: null, error: asPushError(error) } : { data, error: null }
     } catch (error) {
       return { data: null, error: asPushError(error) }
     }
+  }
+
+  async get(id: string): Promise<GetPushResponse> {
+    if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
+      return {
+        data: null,
+        error: invalid('invalid_message_id', 'id must be the message ID that send() returned.', 'id'),
+      }
+    }
+    const { data, error } = await this.sender.call({
+      method: 'GET',
+      path: STATUS_PATH.replace('{messageId}', id.toLowerCase()),
+      sends: 'push notifications',
+      nothingDone: 'no push notification status was read',
+      missingSecretKey:
+        'Reading a push notification status needs secretKey, a project secret API key with the transactional_push:read or transactional_push:write scope.',
+      read: ({ id: messageId, status, created_at: createdAt, reason }) =>
+        isText(messageId) && isText(status) && isText(createdAt)
+          ? { id: messageId, status, createdAt, reason: isText(reason) ? reason : null }
+          : undefined,
+      unreadable: 'PostHog answered without a push notification status.',
+      unexpected: 'Reading the push notification status failed unexpectedly.',
+    })
+    return error ? { data: null, error: asPushError(error) } : { data, error: null }
   }
 }
 
@@ -91,6 +121,10 @@ function preparePush(options: SendPushOptions): {
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries,
   }
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === 'string' && value !== ''
 }
 
 function invalid(code: string, message: string, field: string): PushError {
