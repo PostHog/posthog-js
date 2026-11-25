@@ -85,7 +85,8 @@ function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): 
  * IDs set with `withContext` (in a middleware, for example) win. Otherwise, linking page loads to the browser's person
  * and session reads the posthog-js cookie, which needs the client's `readPostHogCookie: true`, and requests with
  * `x-posthog-*` tracing headers link without it. An anonymous visitor's exceptions carry their anonymous distinct ID and
- * stay personless. When the visitor's consent cookie opts out, the event keeps no person, session or user agent.
+ * stay personless. When the visitor's consent cookie opts out, the event keeps no person, session, device, user agent
+ * or IP.
  *
  * Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
  * stream in `entry.server.tsx`; call the same handler there. An error object is captured once per request, however

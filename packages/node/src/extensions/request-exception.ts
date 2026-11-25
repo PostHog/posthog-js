@@ -41,19 +41,16 @@ function claimRequestCapture(posthog: PostHogBackendClient, error: unknown, requ
   return true
 }
 
-// Context fields that describe the visitor, left out when the visitor opted out.
-const VISITOR_CONTEXT_PROPERTIES = ['$session_id', '$window_id', '$user_agent', '$ip']
+// Properties that describe the visitor. When the visitor opted out, no context or registered value fills them.
+const VISITOR_PROPERTIES = ['$session_id', '$window_id', '$device_id', '$user_agent', '$raw_user_agent', '$ip']
 
-/** The active context without the visitor's identity, session, user agent and IP. */
+/** The active context without the visitor's distinct ID and session ID. */
 function withoutVisitor(context: ContextData | undefined): ContextData | undefined {
   if (!context) {
     return undefined
   }
-  const { distinctId: _distinctId, sessionId: _sessionId, properties, ...rest } = context
-  const kept = Object.fromEntries(
-    Object.entries(properties ?? {}).filter(([key]) => !VISITOR_CONTEXT_PROPERTIES.includes(key))
-  )
-  return { ...rest, properties: kept }
+  const { distinctId: _distinctId, sessionId: _sessionId, ...rest } = context
+  return rest
 }
 
 function parseUrl(value: string): URL | undefined {
@@ -70,7 +67,8 @@ function parseUrl(value: string): URL | undefined {
  *
  * Identity, first match wins per field: the active context, the `x-posthog-*` tracing headers, then the posthog-js
  * cookie (with the client's `readPostHogCookie`), where an anonymous visitor's id keeps the event personless. When the
- * visitor's consent cookie opts out, the event keeps no person, session or user agent, even from the active context.
+ * visitor's consent cookie opts out, the event is personless and keeps no session, device, user agent or IP, even from
+ * the active context or registered properties.
  *
  * An error object is captured once per request and project, however many hooks pass it here. When the client has a
  * `waitUntil` option, the capture is handed to it, so a serverless runtime stays alive until it is queued and flushed.
@@ -96,7 +94,8 @@ export function captureRequestException(
 
     const properties: Record<string, any> = {}
     let distinctId: string | undefined
-    let personless = false
+    // An opted-out visitor gets a random distinct ID, which must not create a person.
+    let personless = optedOut
     if (!optedOut) {
       const ids = readPostHogTracingHeaders(posthog.options, Object.fromEntries(request.headers), cookieOptions, true)
       distinctId = context?.distinctId ?? ids.distinctId
@@ -118,22 +117,25 @@ export function captureRequestException(
       mechanism: { type: 'middleware', handled: false },
       syntheticException: new Error('PostHog syntheticException'),
     }
-    const queued = posthog._captureIntegrationException(error, () =>
-      ErrorTracking.buildEventMessage(
-        posthog.getErrorPropertiesBuilder(),
-        error,
-        hint,
-        distinctId,
-        properties,
-        undefined,
-        context
-      ).then((msg) => ({
-        ...msg,
-        // Added after the build, which drops `$exception_*` properties.
-        properties: { ...msg.properties, $exception_source: options.source },
-        // An event option wins over the context's and registered options.
-        ...(personless ? { options: { ...msg.options, process_person_profile: false } } : {}),
-      }))
+    const queued = posthog._captureIntegrationException(
+      error,
+      () =>
+        ErrorTracking.buildEventMessage(
+          posthog.getErrorPropertiesBuilder(),
+          error,
+          hint,
+          distinctId,
+          properties,
+          undefined,
+          context
+        ).then((msg) => ({
+          ...msg,
+          // Added after the build, which drops `$exception_*` properties.
+          properties: { ...msg.properties, $exception_source: options.source },
+          // An event option wins over the context's and registered options.
+          ...(personless ? { options: { ...msg.options, process_person_profile: false } } : {}),
+        })),
+      optedOut ? VISITOR_PROPERTIES : undefined
     )
     const waitUntil = posthog.options.waitUntil
     if (waitUntil) {

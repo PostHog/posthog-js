@@ -318,8 +318,17 @@ describe('createReactRouterErrorHandler identity', () => {
       { readPostHogCookie: { optOutCapturingByDefault: true } },
       () => undefined,
     ],
-  ])('keeps no person, session or user agent when %s', async (_, options, cookie) => {
+  ])('keeps no person, session, device, user agent or IP when %s', async (_, options, cookie) => {
     posthog = createPostHog(options)
+    posthog.register({
+      $session_id: 'registered-s',
+      $window_id: 'registered-w',
+      $device_id: 'registered-device',
+      $user_agent: 'Registered/1.0',
+      $raw_user_agent: 'Registered/1.0',
+      $ip: '203.0.113.10',
+    })
+    posthog.registerOptions({ process_person_profile: true })
     const cookieHeader = cookie()
     const request = new Request('https://shop.example/checkout', {
       headers: {
@@ -335,7 +344,13 @@ describe('createReactRouterErrorHandler identity', () => {
       {
         distinctId: 'context-user',
         sessionId: 'context-s',
-        properties: { $user_agent: 'Ctx/1.0', $ip: '203.0.113.9' },
+        properties: {
+          $window_id: 'context-w',
+          $device_id: 'context-device',
+          $user_agent: 'Ctx/1.0',
+          $raw_user_agent: 'Ctx/1.0',
+          $ip: '203.0.113.9',
+        },
       },
       () => capture(new Error('Card expired'), request)
     )
@@ -343,9 +358,10 @@ describe('createReactRouterErrorHandler identity', () => {
 
     for (const optedOut of [event, inContext]) {
       expect(['header-user', 'user-4', 'context-user']).not.toContain(optedOut.distinct_id)
-      expect(optedOut.properties).not.toHaveProperty('$session_id')
-      expect(optedOut.properties).not.toHaveProperty('$user_agent')
-      expect(optedOut.properties).not.toHaveProperty('$ip')
+      for (const key of ['$session_id', '$window_id', '$device_id', '$user_agent', '$raw_user_agent', '$ip']) {
+        expect(optedOut.properties).not.toHaveProperty(key)
+      }
+      expect(optedOut.properties.$process_person_profile).toBe(false)
       expect(optedOut.properties.$current_url).toBe('https://shop.example/checkout')
     }
   })
