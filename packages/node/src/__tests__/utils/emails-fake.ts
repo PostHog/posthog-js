@@ -61,7 +61,7 @@ const MESSAGE_TOO_LARGE_FIX =
 export type Route = 'uploads' | 'storage' | 'send' | 'batch'
 
 export type Fault =
-  | { status: number; code?: string; message?: string; page?: string }
+  | { status: number; code?: string; message?: string; page?: string; retryAfter?: string }
   | 'none'
   | 'network error'
   | 'hang'
@@ -150,6 +150,7 @@ interface Answer {
   body?: unknown
   text?: string
   location?: string
+  retryAfter?: string
 }
 
 type Json = Record<string, unknown>
@@ -257,6 +258,9 @@ export class FakePostHog {
     const headers = new Headers(answer.text === undefined ? { 'Content-Type': 'application/json' } : {})
     if (answer.location) {
       headers.set('Location', answer.location)
+    }
+    if (answer.retryAfter) {
+      headers.set('Retry-After', answer.retryAfter)
     }
     return { status: answer.status, headers, text: async () => text, json: async () => JSON.parse(text) }
   }
@@ -690,14 +694,18 @@ function pythonJsonBytes(value: unknown): number {
   return new TextEncoder().encode(write(value)).byteLength
 }
 
-function faultAnswer(route: Route, { status, code, message, page }: Exclude<Fault, string>): Answer {
+function faultAnswer(route: Route, { status, code, message, page, retryAfter }: Exclude<Fault, string>): Answer {
   if (page !== undefined) {
     return { status, text: page }
   }
   if (route === 'storage') {
     return code ? storageError(status, code, message ?? code) : { status, text: '' }
   }
-  return { status, body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined }
+  return {
+    status,
+    body: code ? { type: 'server_error', code, detail: message ?? code, attr: null } : undefined,
+    retryAfter,
+  }
 }
 
 function refusal(status: number, type: string, code: string, attr: string | null, explained: Json): Refused {

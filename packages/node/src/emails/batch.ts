@@ -161,9 +161,8 @@ export function recordAnswer(
     // After an attempt PostHog may have queued, a refusal can be the retry's, not the email's; only a key that
     // belongs to another email stays failed.
     const unconfirmed =
-      error.retryable === true ||
-      code === 'delivery_unavailable' ||
-      (mayHaveQueuedBefore && code !== 'idempotency_key_reused')
+      code !== 'idempotency_key_reused' &&
+      (error.retryable === true || code === 'delivery_unavailable' || mayHaveQueuedBefore)
     const refusal = new EmailError({
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
@@ -176,12 +175,13 @@ export function recordAnswer(
   return warningsOf(fields)
 }
 
-export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): void {
+export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): EmailError {
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = error
   }
+  return unconfirmed ? withFix(error, BATCH_RESEND_FIX) : error
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
@@ -205,16 +205,23 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
   }
 }
 
+const BATCH_RESEND_FIX =
+  'PostHog may have queued these emails. Send the recipients in error.results again, unchanged and with the same idempotency keys, within 24 hours of the first request with those keys: PostHog queues no second email for a key it has.'
+
 const RESEND_FIX =
   'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours of the first request with that key: PostHog queues no second email for a key it has.'
 
 function withResendFix(error: EmailError): EmailError {
+  return withFix(error, RESEND_FIX)
+}
+
+function withFix(error: EmailError, fix: string): EmailError {
   return new EmailError({
     code: error.code,
     message: error.message,
     statusCode: error.statusCode,
     why: error.why,
-    fix: RESEND_FIX,
+    fix,
     docsUrl: error.docsUrl,
     field: error.field,
     retryAfterMs: error.retryAfterMs,

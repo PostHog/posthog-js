@@ -2050,6 +2050,11 @@ describe('emails', () => {
     it.each([
       ['refused', { status: 422, code: 'recipient_suppressed', retryable: false }, 'unconfirmed'],
       ['keyed to another email', { status: 422, code: 'idempotency_key_reused', retryable: false }, 'failed'],
+      [
+        'keyed to another email, as retryable',
+        { status: 422, code: 'idempotency_key_reused', retryable: true },
+        'failed',
+      ],
     ] as const)('after a lost answer, decides a recipient PostHog %s on the retry', async (_case, refusal, status) => {
       const postHog = againstPostHog({ refusesRecipient: { 'ada@example.com': refusal } })
       postHog.failNext('batch', 'lost reply')
@@ -2068,6 +2073,62 @@ describe('emails', () => {
           : { error: expect.not.objectContaining({ fix: expect.stringMatching(/same idempotencyKey/) }) }
       )
       expect(postHog.requests.batch).toBe(2)
+    })
+
+    it('tells the caller to resend with the same keys when PostHog refuses the retry of a lost answer', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', 'lost reply', { status: 409, code: 'batch_unavailable' })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({ code: 'batch_unavailable', statusCode: 409 })
+      expect(error?.fix).toMatch(/unchanged and with the same idempotency keys/)
+      expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
+    })
+
+    it.each([
+      ['the client option', { emailRequestMaxRetries: 0 }, {}, 1],
+      ['a batch option', {}, { maxRetries: 1 }, 2],
+      ['a batch option over the client option', { emailRequestMaxRetries: 0 }, { maxRetries: 3 }, 4],
+    ] as const)(
+      'sends a batch PostHog keeps answering 503 as often as %s allows',
+      async (_case, client, email, requests) => {
+        const postHog = new FakePostHog({ secretKey: SECRET_KEY })
+        makeClient({ fetch: postHog.fetch, ...client })
+        postHog.failNext('batch', { status: 503 }, { status: 503 }, { status: 503 }, { status: 503 }, { status: 503 })
+
+        const { error } = await settle(posthog.emails.batch({ ...WELCOME, ...email }, recipientsTo(1)))
+
+        expect(error).toMatchObject({ statusCode: 503 })
+        expect(postHog.requests.batch).toBe(requests)
+      }
+    )
+
+    it('waits for the Retry-After of a throttled batch before it retries', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 429, code: 'throttled', retryAfter: '5' })
+
+      const pending = posthog.emails.batch(WELCOME, recipientsTo(1))
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(postHog.requests.batch).toBe(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(postHog.requests.batch).toBe(2)
+
+      expect((await pending).data?.results).toMatchObject([{ status: 'queued' }])
+    })
+
+    it('reads maxRetries once, so the value it checked is the one it uses', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 503 })
+      let reads = 0
+      const email = Object.defineProperty({ ...WELCOME }, 'maxRetries', {
+        enumerable: true,
+        get: () => (reads++ === 0 ? 0 : Number.NaN),
+      })
+
+      await settle(posthog.emails.batch(email, recipientsTo(1)))
+
+      expect(postHog.requests.batch).toBe(1)
     })
 
     it('says when batch sends are not on for the project yet, without a retry', async () => {

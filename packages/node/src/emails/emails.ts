@@ -319,8 +319,7 @@ export class EmailSender implements Emails {
           }
         })
       } catch (caught) {
-        const failure = asRequestError(caught)
-        recordFailure(slots, failure, mayHaveQueuedBefore)
+        const failure = recordFailure(slots, asRequestError(caught), mayHaveQueuedBefore)
         return { data: null, error: withResults(failure, slots) }
       }
       this.logWarnings(warnings)
@@ -730,7 +729,8 @@ function prepareBatchEmail(
   maxRetries: number
 } {
   const send: UncheckedSend = options ?? {}
-  if (send.maxRetries !== undefined && !isRetryCount(send.maxRetries)) {
+  const maxRetries = send.maxRetries
+  if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
@@ -747,7 +747,7 @@ function prepareBatchEmail(
     content: snapshotOf(content),
     react: isReactElement(send.react) ? send.react : undefined,
     templateForm,
-    maxRetries: isRetryCount(send.maxRetries) ? send.maxRetries : defaultMaxRetries,
+    maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
 }
 

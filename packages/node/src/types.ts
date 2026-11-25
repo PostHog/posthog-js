@@ -457,9 +457,9 @@ export type PostHogOptions = Omit<
    */
   emailRequestTimeoutMs?: number
   /**
-   * Number of retries for an `emails.send` after a network error, a rate limit, or an
-   * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
-   * runner already retries the send.
+   * Number of retries for an `emails.send` or `emails.batch` after a network error, a rate
+   * limit, or an unavailable service. Every retry sends the same idempotency keys. Set to 0
+   * when a job runner already retries the send.
    *
    * @default 2
    */
