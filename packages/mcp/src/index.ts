@@ -43,14 +43,15 @@ import type {
 /**
  * Instruments an MCP server so PostHog auto-captures tool calls, tool and resource listings,
  * resource reads, initialize requests, identity, and exceptions. Returns a handle whose
- * `capture()` method records custom events, so you don't pass the server around after wiring it up.
+ * `capture()` method records custom events, so you don't pass the server around after wiring it up,
+ * and whose `flush()` sends what was captured before a per-request runtime exits.
  *
  * **Idempotent per server instance.** Per-server tracking state lives in a module-level
  * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
  * on the same server reuses it rather than double-wrapping handlers.
  *
  * @param server - The MCP server to instrument (low-level `Server` or high-level `McpServer`).
- * @param posthog - A `posthog-node` client you construct and own (matching `@posthog/ai`); call `posthog.shutdown()` on exit to flush.
+ * @param posthog - A `posthog-node` client you construct and own (matching `@posthog/ai`); call `posthog.shutdown()` on exit to flush, or `analytics.flush()` per request.
  * @param options - Optional configuration. See `MCPAnalyticsOptions`.
  *
  * @example
@@ -107,7 +108,7 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
   } catch (error) {
     logger(`Warning: Failed to instrument server - ${error}`)
     // Degrade gracefully: a no-op handle so the host app keeps working.
-    return { capture: async () => undefined }
+    return { capture: async () => undefined, flush: async () => undefined }
   }
 }
 
@@ -165,6 +166,9 @@ function instrumentFastMCP(fastmcp: unknown, posthog: PostHog, options: MCPAnaly
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
+    flush: async () => {
+      await getServerTrackingData(lowLevelServer)?.sink?.flush()
+    },
   }
 }
 

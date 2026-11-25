@@ -73,6 +73,45 @@ if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
 
 Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
 
+### Flushing on per-request runtimes
+
+Auto-captured events reach `posthog.capture()` asynchronously, after the handler's response is
+built. On a runtime that freezes or exits after each request (serverless and edge functions,
+Convex HTTP actions), await `analytics.flush()` before you return. It waits until every event the
+server has captured so far is handed to `posthog-node`, then flushes the `posthog-node` queue:
+
+```ts
+const analytics = instrument(server, posthog)
+
+const response = await handleRequest(request)
+await analytics.flush()
+return response
+```
+
+On a runtime with background work, such as Cloudflare Workers or Vercel, pass it to `waitUntil`
+so the response doesn't wait: `ctx.waitUntil(analytics.flush())`.
+
+An event is captured when its handler finishes. A JSON response is complete by then, but a streamed
+(SSE) one is returned before the handler has run, so there `flush()` has nothing to wait for yet.
+Return JSON (`enableJsonResponse: true`), or flush when the stream ends:
+
+```ts
+const response = await handleRequest(request)
+if (!response.body) {
+  await analytics.flush()
+  return response
+}
+const { readable, writable } = new TransformStream()
+const sent = response.body.pipeTo(writable).catch(() => undefined) // the client may disconnect
+ctx.waitUntil(sent.then(() => analytics.flush()))
+return new Response(readable, response)
+```
+
+It flushes the whole client, so events you capture on it yourself are sent too. It never rejects.
+When `posthog.flush()` does, that goes to the `logger` option. posthog-node 6.x.x reports failed
+deliveries through `posthog.on('error', ...)` instead. Which failed events are retried is up to
+`posthog-node`.
+
 ## MCP TypeScript SDK v2
 
 `instrument()` works on both SDK majors — `@modelcontextprotocol/sdk` v1 and
