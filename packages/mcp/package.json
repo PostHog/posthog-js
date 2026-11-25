@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "1.2.3",
+  "version": "1.7.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -18,13 +18,15 @@
     "generate-version": "node ../../tooling/write-version.mjs",
     "pretest:unit": "pnpm generate-version",
     "test:unit": "vitest run",
-    "test:integration": "pnpm test:integration:sdk-v1 && pnpm test:integration:sdk-v2 && pnpm test:integration:nest-v1 && pnpm test:integration:nest-v2",
+    "test:integration": "pnpm test:integration:sdk-v1 && pnpm test:integration:sdk-v2 && pnpm test:integration:nest-v1 && pnpm test:integration:nest-v2 && pnpm test:integration:mcp-handler && pnpm test:integration:fastmcp",
     "test:integration:sdk-v1": "node harness/dual-era/matrix.mjs --major v1 && node harness/dual-era/probe-late-handlers.mjs --major v1 && node harness/dual-era/probe-pagination.mjs --major v1 && node harness/dual-era/probe-feedback.mjs --major v1 && node harness/dual-era/probe-mcp-apps.mjs --major v1",
     "test:integration:sdk-v2": "node harness/dual-era/matrix.mjs --major v2 && node harness/dual-era/probe-late-handlers.mjs --major v2 && node harness/dual-era/probe-first-call-error.mjs && node harness/dual-era/probe-shared-stateless-transport.mjs && node harness/dual-era/probe-pagination.mjs --major v2 && node harness/dual-era/probe-feedback.mjs --major v2 && node harness/dual-era/probe-mcp-apps.mjs --major v2",
     "test:integration:nest-v1": "node harness/nest-v1/verify.mjs && LEVEL=low node harness/nest-v1/verify.mjs",
     "test:integration:nest-v2": "node harness/nest-v2/verify.mjs && LEVEL=low node harness/nest-v2/verify.mjs",
+    "test:integration:mcp-handler": "node harness/frameworks/verify.mjs mcp-handler",
+    "test:integration:fastmcp": "node harness/frameworks/verify.mjs fastmcp",
     "prebuild": "pnpm generate-version",
-    "build": "rslib build",
+    "build": "rslib build && node scripts/restore-webpack-ignore.mjs",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
@@ -64,6 +66,8 @@
     "@rslib/core": "catalog:",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "catalog:",
+    "fastmcp": "4.25.0",
+    "mcp-handler": "2.3.1",
     "mcp-server-v2-0": "npm:@modelcontextprotocol/server@2.0.0",
     "posthog-node": "workspace:^",
     "reflect-metadata": "^0.2.2",
@@ -80,7 +84,7 @@
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",
     "@modelcontextprotocol/server": ">=2.0.0",
-    "posthog-node": "^5.0.0"
+    "posthog-node": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {

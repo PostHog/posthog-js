@@ -1,5 +1,72 @@
 # @posthog/mcp
 
+## 1.7.1
+
+### Patch Changes
+
+- [#5740](https://github.com/PostHog/posthog-js/pull/5740) [`11b76dc`](https://github.com/PostHog/posthog-js/commit/11b76dc7447eebeb16017d823c62dad8bfff6d9a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A stateless HTTP request that carries no session (no client conversation id, conversation handle, transport session or session token) now gets a fresh `$session_id` of its own, as the sdk-specs MCP analytics spec requires. Before, a shared HTTP instance with conversation anchoring off grouped every client's requests under the instance's id.
+
+  A custom event from `analytics.capture()` now carries the session and identity of the request it was captured in (a tool call, a tool listing or a resource request), even when requests overlap. This uses `AsyncLocalStorage`. On a runtime without it, such as Cloudflare Workers without the `nodejs_compat` or `nodejs_als` flag, custom events are sent with a session of their own and no identity, and the SDK logs one warning. Before, they could take another caller's. (2026-11-25)
+
+- [#5741](https://github.com/PostHog/posthog-js/pull/5741) [`8110b53`](https://github.com/PostHog/posthog-js/commit/8110b53d365e22f9b4bd1114421bffb7ee59076d) Thanks [@lucasheriques](https://github.com/lucasheriques)! - An HTTP request that carries no session no longer takes `$mcp_client_name`, `$mcp_client_version` or `$mcp_protocol_version` from an `initialize` handshake or another request's session token on the same instance. On a shared HTTP instance, those name whichever client came before, so such a request is now unidentified unless it identifies itself, as the sdk-specs MCP analytics spec requires.
+  (2026-11-25)
+
+## 1.7.0
+
+### Minor Changes
+
+- [#5577](https://github.com/PostHog/posthog-js/pull/5577) [`0358eb7`](https://github.com/PostHog/posthog-js/commit/0358eb7dc4c3f9c9b5a548f5c87dc6e0b154874b) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Group tool calls into sessions by the client's own conversation id in `_meta`: ChatGPT's `openai/session`, Codex's `sessionId`, and VS Code's `vscode.conversationId`, each read only from the client its `User-Agent` or client name identifies. The client's id wins over a conversation handle and a transport session. ChatGPT gets no `conversation_id` argument and no handle, so its tool schemas and results stay unchanged. Every event from `instrument()` now records which source grouped it as `$mcp_session_source`. `PostHogMCP.prepareToolList` and `prepareToolCall` take the request's `headers` (and `clientInfo`), and `captureToolCall` takes `requestMeta`.
+  (2026-11-23)
+
+## 1.6.1
+
+### Patch Changes
+
+- [#5836](https://github.com/PostHog/posthog-js/pull/5836) [`02d707e`](https://github.com/PostHog/posthog-js/commit/02d707e4898bcf5921ee8b353bd08c07b3ce58df) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogMCP` adds the configured `serverBuild` to `captureAi()` and `captureAiImmediate()` events, as it already does for `capture()` and `captureImmediate()`. With `serverBuild` set, an event whose properties cannot be read is now dropped by the client, as without `serverBuild`, instead of throwing from any of the four methods.
+  (2026-11-21)
+
+## 1.6.0
+
+### Minor Changes
+
+- [#5779](https://github.com/PostHog/posthog-js/pull/5779) [`3069723`](https://github.com/PostHog/posthog-js/commit/306972322dd4cd416b16a8b734bee16e3af51a01) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support FastMCP with `instrumentFastMCP(fastmcp, posthog, options)`. FastMCP builds a server per session (per request when stateless) behind a private factory, so this hooks the module's session class and instruments each one before it connects. FastMCP's HTTP layer drops request headers, so the adapter puts them back on `extra.requestInfo.headers` for `identify` and other callbacks.
+  (2026-11-18)
+
+## 1.5.0
+
+### Minor Changes
+
+- [#5778](https://github.com/PostHog/posthog-js/pull/5778) [`7d1b1a7`](https://github.com/PostHog/posthog-js/commit/7d1b1a719fc6606fc65105a600907ef28199a320) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support Vercel's `mcp-handler`. Call `instrument(server, posthog)` inside the `createMcpHandler` callback, and wrap the exported route in the new `withMcpSessionHeader` to keep one `$session_id` and the client's name per conversation on the `2025-11-25` protocol. mcp-handler streams the `initialize` response, so the session token is minted at the fetch layer instead of inside the server.
+  (2026-11-18)
+
+## 1.4.0
+
+### Minor Changes
+
+- [#5781](https://github.com/PostHog/posthog-js/pull/5781) [`d07d87f`](https://github.com/PostHog/posthog-js/commit/d07d87f8b1376477b7c25187d19bec9841d9a6ad) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Classify client-caused failures as `$mcp_error_type: "validation"`. A tool call whose arguments failed the tool's input schema, a call to a disabled tool, a tool that rejected its arguments with JSON-RPC `-32602`, and a read of an unknown resource now carry `validation` instead of the thrown error's type, so dashboards can tell an agent's mistake from a server bug. Output-schema failures and malformed tool results, which also use `-32602`, keep the thrown type. Every failure still sends its `$exception`, as before.
+  (2026-11-18)
+
+## 1.3.0
+
+### Minor Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Add `eventOptions` to set posthog-node per-event options on MCP events, per call or from an `instrument()` callback. `beforeSend` sees and can change them, and an explicit `process_person_profile` wins over the anonymous default.
+  (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Genkit spans and `@posthog/mcp` events with no user distinct id set the `process_person_profile: false` event option on posthog-node 6.x.x, so a registered or context `process_person_profile: true` option no longer creates a person for each trace or session. Genkit also counts an empty or whitespace-only distinct id as missing.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Accepts posthog-node 6.x.x as a peer dependency.
+  (2026-11-17)
+- Updated dependencies [[`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff)]:
+  - @posthog/core@1.69.0
+  - posthog-node@6.0.0
+
 ## 1.2.3
 
 ### Patch Changes

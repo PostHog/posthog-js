@@ -1,4 +1,5 @@
 import { createPostHog } from '../../../../browser-next/src/composition/npm'
+import { group } from '../../../../browser-next/src/products/analytics/groups'
 
 import {
     type BehaviorAdapter,
@@ -25,10 +26,6 @@ export const browserNextAdapter: BehaviorAdapter = {
             capturePageview: false,
             optOutByDefault: setup.optOutByDefault,
         })
-        const analytics = await posthog.resolveExtension('analytics')
-        if (!analytics) {
-            throw new Error('Expected an installed analytics extension')
-        }
         const ids = createGeneratedIdNormalizer()
         const rememberCurrentState = (): void => {
             ids.remember('anonymous', posthog.anonymousId)
@@ -39,26 +36,26 @@ export const browserNextAdapter: BehaviorAdapter = {
             }
         }
         rememberCurrentState()
-        const subscription = analytics.onEvent((event) => {
+        const subscription = posthog.onEvent((event) => {
             capturedEvents.push({ event: event.event, properties: copyProperties(event.properties) })
         })
 
         return {
             async capture(event, properties): Promise<void> {
-                await analytics.capture(event, properties)
+                posthog.capture(event, properties)
                 await posthog.flush()
                 rememberCurrentState()
             },
             async identify(distinctId, set, setOnce): Promise<void> {
-                await analytics.identify(distinctId, set, setOnce)
+                posthog.identify(distinctId, set, setOnce)
                 await posthog.flush()
             },
             async group(type, key, properties): Promise<void> {
-                await analytics.group(type, key, properties)
+                group(posthog, type, key, properties)
                 await posthog.flush()
             },
             reset(): void {
-                analytics.reset()
+                posthog.reset()
                 rememberCurrentState()
             },
             optIn: () => posthog.optIn(),

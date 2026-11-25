@@ -2,6 +2,9 @@ import { isObject } from './typeGuards'
 
 const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
 
+// Remote MCP tool types across providers (`mcp` for OpenAI/xAI, `mcp_server` for Google Interactions).
+const MCP_TOOL_TYPES = new Set(['mcp', 'mcp_server'])
+
 // Vercel AI SDK provider tools that configure a remote MCP server, keyed by their `id`.
 const MCP_PROVIDER_TOOL_IDS = new Set(['openai.mcp', 'xai.mcp', 'google.mcp_server'])
 
@@ -25,7 +28,7 @@ export function redactMcpToolDefinition(tool: unknown): unknown {
   if (!isObject(tool)) {
     return tool
   }
-  if (tool.type === 'mcp') {
+  if (typeof tool.type === 'string' && MCP_TOOL_TYPES.has(tool.type)) {
     return withoutMcpCredentials(tool)
   }
   if (isMcpProviderTool(tool) && isObject(tool.args)) {

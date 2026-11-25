@@ -14,10 +14,38 @@ export interface OpenAIChatStreamResult {
   usage: TokenUsage
 }
 
+interface ChatChoiceState {
+  content: string
+  refusal: string
+  toolCalls: Map<number | string, { id: string; name: string; arguments: string }>
+  lastToolCallKey?: number | string
+}
+
+function formatChoiceContent(state: ChatChoiceState): FormattedContent {
+  const content: FormattedContent = []
+  if (state.content) {
+    content.push({ type: 'text', text: state.content })
+  }
+  if (state.refusal) {
+    content.push({ type: 'refusal', refusal: state.refusal })
+  }
+  for (const toolCall of state.toolCalls.values()) {
+    if (toolCall.name) {
+      content.push({
+        type: 'function',
+        id: toolCall.id,
+        function: { name: toolCall.name, arguments: toolCall.arguments },
+      })
+    }
+  }
+  return content
+}
+
 /** Pure state accumulator for OpenAI-compatible Chat Completions chunks. */
 export class OpenAIChatStreamAccumulator {
-  private accumulatedContent = ''
-  private accumulatedRefusal = ''
+  // With `n > 1` each chunk carries the delta of one choice, named by its `index`, so the
+  // content and tool calls of each choice are kept apart.
+  private readonly choices = new Map<number, ChatChoiceState>()
   private model?: string
   private completionId?: string
   private systemFingerprint?: string
@@ -25,8 +53,6 @@ export class OpenAIChatStreamAccumulator {
   private firstTokenTime?: number
   private stopReason?: string
   private usage: TokenUsage = { webSearchCount: 0 }
-  private readonly toolCalls = new Map<number | string, { id: string; name: string; arguments: string }>()
-  private lastToolCallKey?: number | string
 
   consume(chunk: OpenAI.ChatCompletionChunk, receivedAt = Date.now()): void {
     this.model ||= chunk.model || undefined
@@ -36,46 +62,13 @@ export class OpenAIChatStreamAccumulator {
       this.serviceTier = chunk.service_tier
     }
 
-    const choice = chunk.choices?.[0]
-    if (choice?.finish_reason) {
-      this.stopReason = choice.finish_reason
-    }
-
     const webSearchCount = calculateWebSearchCount(chunk)
     if (webSearchCount > (this.usage.webSearchCount ?? 0)) {
       this.usage.webSearchCount = webSearchCount
     }
 
-    if (choice?.delta?.content) {
-      this.firstTokenTime ??= receivedAt
-      this.accumulatedContent += choice.delta.content
-    }
-
-    if (choice?.delta?.refusal) {
-      this.firstTokenTime ??= receivedAt
-      this.accumulatedRefusal += choice.delta.refusal
-    }
-
-    if (Array.isArray(choice?.delta?.tool_calls)) {
-      this.firstTokenTime ??= receivedAt
-      for (const toolCall of choice.delta.tool_calls) {
-        const key = this.toolCallKey(toolCall)
-        const current = this.toolCalls.get(key) ?? { id: '', name: '', arguments: '' }
-        if (toolCall.id) {
-          current.id = toolCall.id
-        }
-        // Custom tools stream their free-form text in `custom.input`, with no `function` object.
-        const name = toolCall.function?.name ?? toolCall.custom?.name
-        const argumentsDelta = toolCall.function?.arguments ?? toolCall.custom?.input
-        if (name) {
-          current.name = name
-        }
-        if (argumentsDelta) {
-          current.arguments += argumentsDelta
-        }
-        this.toolCalls.set(key, current)
-        this.lastToolCallKey = key
-      }
+    for (const choice of chunk.choices ?? []) {
+      this.consumeChoice(choice, receivedAt)
     }
 
     if (chunk.usage) {
@@ -91,58 +84,94 @@ export class OpenAIChatStreamAccumulator {
     }
   }
 
+  private consumeChoice(choice: OpenAI.ChatCompletionChunk.Choice, receivedAt: number): void {
+    const index = choice.index ?? 0
+    let state = this.choices.get(index)
+    if (!state) {
+      state = { content: '', refusal: '', toolCalls: new Map() }
+      this.choices.set(index, state)
+    }
+
+    // Like a non-streamed completion, the stop reason is the first choice's.
+    if (choice.finish_reason && index === 0) {
+      this.stopReason = choice.finish_reason
+    }
+
+    if (choice.delta?.content) {
+      this.firstTokenTime ??= receivedAt
+      state.content += choice.delta.content
+    }
+
+    if (choice.delta?.refusal) {
+      this.firstTokenTime ??= receivedAt
+      state.refusal += choice.delta.refusal
+    }
+
+    if (Array.isArray(choice.delta?.tool_calls)) {
+      this.firstTokenTime ??= receivedAt
+      for (const toolCall of choice.delta.tool_calls) {
+        const key = this.toolCallKey(state, toolCall)
+        const current = state.toolCalls.get(key) ?? { id: '', name: '', arguments: '' }
+        if (toolCall.id) {
+          current.id = toolCall.id
+        }
+        // Custom tools stream their free-form text in `custom.input`, with no `function` object.
+        const name = toolCall.function?.name ?? toolCall.custom?.name
+        const argumentsDelta = toolCall.function?.arguments ?? toolCall.custom?.input
+        if (name) {
+          current.name = name
+        }
+        if (argumentsDelta) {
+          current.arguments += argumentsDelta
+        }
+        state.toolCalls.set(key, current)
+        state.lastToolCallKey = key
+      }
+    }
+  }
+
   /**
    * Some OpenAI-compatible providers stream tool calls without an `index`. Match those deltas by a known
    * `id`; a new `id`, a function name, or a custom tool name opens a new call, and anything else continues
    * the latest call.
    */
-  private toolCallKey(toolCall: {
-    index?: number
-    id?: string
-    function?: { name?: string }
-    custom?: { name?: string }
-  }): number | string {
+  private toolCallKey(
+    state: ChatChoiceState,
+    toolCall: {
+      index?: number
+      id?: string
+      function?: { name?: string }
+      custom?: { name?: string }
+    }
+  ): number | string {
     if (toolCall.index !== undefined) {
       return toolCall.index
     }
     if (toolCall.id) {
-      for (const [key, existing] of this.toolCalls) {
+      for (const [key, existing] of state.toolCalls) {
         if (existing.id === toolCall.id) {
           return key
         }
       }
     }
-    if (toolCall.id || toolCall.function?.name || toolCall.custom?.name || this.lastToolCallKey === undefined) {
-      return `no-index-${this.toolCalls.size}`
+    if (toolCall.id || toolCall.function?.name || toolCall.custom?.name || state.lastToolCallKey === undefined) {
+      return `no-index-${state.toolCalls.size}`
     }
-    return this.lastToolCallKey
+    return state.lastToolCallKey
   }
 
   result(): OpenAIChatStreamResult {
-    const content: FormattedContent = []
-    if (this.accumulatedContent) {
-      content.push({ type: 'text', text: this.accumulatedContent })
-    }
-    if (this.accumulatedRefusal) {
-      content.push({ type: 'refusal', refusal: this.accumulatedRefusal })
-    }
-    for (const toolCall of this.toolCalls.values()) {
-      if (toolCall.name) {
-        content.push({
-          type: 'function',
-          id: toolCall.id,
-          function: { name: toolCall.name, arguments: toolCall.arguments },
-        })
+    // One message per choice in index order, the shape a non-streamed completion is captured with.
+    const output: FormattedMessage[] = []
+    for (const [, state] of [...this.choices].sort(([a], [b]) => a - b)) {
+      const content = formatChoiceContent(state)
+      if (content.length > 0) {
+        output.push({ role: 'assistant', content })
       }
     }
 
     return {
-      output: [
-        {
-          role: 'assistant',
-          content: content.length > 0 ? content : [{ type: 'text', text: '' }],
-        },
-      ],
+      output: output.length > 0 ? output : [{ role: 'assistant', content: [{ type: 'text', text: '' }] }],
       model: this.model,
       completionId: this.completionId,
       systemFingerprint: this.systemFingerprint,

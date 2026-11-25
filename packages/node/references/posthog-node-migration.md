@@ -31,15 +31,16 @@ Read the checklist first, then the sections that apply to you.
 
 - [ ] You set `POSTHOG_CAPTURE_MODE` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from TypeScript with positional arguments after `error` → [Fix removed APIs](#fix-removed-apis)
+- [ ] You call `enterContext()` → [Use callback-scoped context](#use-callback-scoped-context)
 - [ ] You read the result of `prepareEventMessage()` → [Fix removed APIs](#fix-removed-apis)
 - [ ] You rely on `flush()` rejecting when delivery fails → [Update error handling](#update-error-handling)
 - [ ] You listen for the `'error'` event and inspect the error's type or fields → [Update error handling](#update-error-handling)
 - [ ] You read event content from the SDK's debug log, or alert on SDK log text → [Update error handling](#update-error-handling)
 - [ ] You send AI events with `captureAi()` and tune the AI queue, timeout, or compression → [Route AI events](#route-ai-events)
 - [ ] You set `$is_server`, `$geoip_disable`, or feature flag properties on events, in context, or with `register()`, and expect the SDK's value to win → [Check property precedence](#check-property-precedence)
-- [ ] You use `sendFeatureFlags` together with a `before_send` hook that drops events or edits `groups` or `sendFeatureFlags` → [Review before_send hooks](#review-before_send-hooks)
-- [ ] Your `before_send` hook returns a new message instead of the one it gets → [Review before_send hooks](#review-before_send-hooks)
-- [ ] You turn person processing off with `registerOptions()`, `register({ $process_person_profile: false })`, or context options or properties, and expect it to apply to identify-style events, or build or rename an identify-style event in `before_send` → [Identify-style events](#identify-style-events)
+- [ ] You use `sendFeatureFlags` together with a `beforeSend` hook that drops events or edits `groups` or `sendFeatureFlags` → [Review beforeSend hooks](#review-beforesend-hooks)
+- [ ] Your `beforeSend` hook returns a new message instead of the one it gets → [Review beforeSend hooks](#review-beforesend-hooks)
+- [ ] You turn person processing off with `registerOptions()`, `register({ $process_person_profile: false })`, or context options or properties, and expect it to apply to identify-style events, or build or rename an identify-style event in `beforeSend` → [Identify-style events](#identify-style-events)
 - [ ] You send distinct IDs over 200 UTF-8 bytes → [Fix identity calls](#fix-identity-calls)
 - [ ] You set `$lib` or `$lib_version` → [Check SDK identity](#check-sdk-identity)
 - [ ] You send a `$session_id` or `$window_id` that isn't a string → [Check dropped events](#check-dropped-events)
@@ -49,9 +50,10 @@ Read the checklist first, then the sections that apply to you.
 
 **Follow ups**
 
-- [ ] You set `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at`, or `$product_tour_id` as a property → [Move to event options](#move-to-event-options)
+- [ ] You set `$process_person_profile`, `$cookieless_mode`, or `$ignore_sent_at` as a property → [Move to event options](#move-to-event-options)
 - [ ] You send `$ai_` events with `capture()` or `captureImmediate()` instead of `captureAi()` → [Send AI events with captureAi](#send-ai-events-with-captureai)
 - [ ] You call `captureException()` or `captureExceptionImmediate()` from JavaScript with positional arguments after `error` → [Move captureException arguments](#move-captureexception-arguments)
+- [ ] You configure `before_send`, `custom_blocked_useragents`, `disable_capture_url_hashes`, or `__preview_capture_bot_pageviews` → [Rename configuration options](#rename-configuration-options)
 
 ## Before you upgrade
 
@@ -135,6 +137,7 @@ List `posthog-node` in your dependencies so you choose when to move to 6.x.x.
 | `captureExceptionImmediate()` positional arguments | An options object |
 | `prepareEventMessage()` nested result              | A flat message    |
 | `fetchRetryDelay` for capture                      | Ignored           |
+| `enterContext()`                                   | `withContext()`   |
 
 6.x.x doesn't read the `POSTHOG_CAPTURE_MODE` environment variable. Capture v1 is the only path. Each client logs one warning when it is created with the variable set.
 
@@ -174,11 +177,28 @@ const { properties, options, uuid, timestamp, disableGeoip } = await posthog.pre
 // options is now the event options, such as { process_person_profile: false }
 ```
 
-The result is built in the same order as a real event, including `before_send`. It isn't exactly what is sent.
+The result is built in the same order as a real event, including `beforeSend`. It isn't exactly what is sent.
 
 `$session_id` and `$window_id` stay in `properties`. The SDK moves them only when it sends the event.
 
-`prepareEventMessage()` still rejects with `null` when `before_send` drops the event.
+`prepareEventMessage()` still rejects with `null` when `beforeSend` drops the event.
+
+### Use callback-scoped context
+
+6.x.x removes `enterContext()`. Use `withContext(data, callback, options)` to run work in an isolated async context. Return or await its result when the callback is asynchronous.
+
+```ts
+// 5.x.x
+posthog.enterContext({ distinctId: 'user_123' })
+await handleRequest()
+
+// 6.x.x
+await posthog.withContext({ distinctId: 'user_123' }, async () => {
+  await handleRequest()
+})
+```
+
+The context applies to the callback and async work it starts; the caller's context is restored when the callback returns. Nested contexts still inherit values unless you pass `{ fresh: true }`. For request-bound lifetimes, pass an abort signal and abort it when the request ends.
 
 ### Update error handling
 
@@ -224,10 +244,10 @@ The SDK retries `404`, `408`, `429`, `500`, `502`, `503`, and `504` responses an
 - **Unanswered attempts.** Queued events whose last attempt got no response, such as after a network error or a timeout, stay in the queue and are sent again on the next flush.
 - **`Immediate` methods.** An event sent with an `Immediate` method isn't kept, and `'error'` reports it in `retryExhausted`.
 
-The SDK's own logs no longer print whole events or `before_send` error messages:
+The SDK's own logs no longer print whole events or `beforeSend` error messages:
 
 - **Debug mode.** Debug mode logs event names, UUIDs, and counts instead of whole events.
-- **Hook errors.** The SDK logs a `before_send` error with the error's type, not its message.
+- **Hook errors.** The SDK logs a `beforeSend` error with the error's type, not its message.
 - **HTTP errors.** When a request fails with an HTTP error status, the `CaptureError` message and its `cause` include up to 512 characters of the server or proxy response text. Debug mode logs that error.
 - **Event values.** The failed-batch line, the invalid UUID warning, the invalid timestamp warning, and the session ID warning never include event values.
 - **Log-based alerts.** Log-based alerts that match 5.x.x log text stop matching. Listen for `'error'` instead.
@@ -278,7 +298,7 @@ The AI lane has its own settings. It doesn't read `maxQueueSize`, `requestTimeou
 Each event is built in this order. Each step fills only the properties and options the steps before it left unset, except for `$lib` and `$lib_version` (see [Check SDK identity](#check-sdk-identity)):
 
 1. The call's own `properties` and `options`, then its `groups` (merged into `$groups`) and `disableGeoip` (fills `$geoip_disable`). An identify-style event also gets its `process_person_profile` option here (see [Identify-style events](#identify-style-events)).
-2. Context `properties` and `options`, from `withContext()`, `enterContext()`, or the Express, NestJS, Hono, and `instrumentRequest` integrations.
+2. Context `properties` and `options`, from `withContext()` or the Express, NestJS, Hono, and `instrumentRequest` integrations.
 3. `register()` properties and `registerOptions()` options.
 4. Values the SDK adds:
    - `$lib` and `$lib_version`, the client's library name and version (see [Check SDK identity](#check-sdk-identity))
@@ -287,13 +307,13 @@ Each event is built in this order. Each step fills only the properties and optio
    - The `$feature/<key>` and `$active_feature_flags` properties from `flags` or `sendFeatureFlags`
    - `$trace_id` and `$span_id` from the active OpenTelemetry span on `$exception` events
    - `options.process_person_profile = false` for an event without a distinct ID
-5. `before_send`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
+5. `beforeSend`, which sees the result of steps 1 to 4 and can change or remove any of it. Nothing is added after it.
 
 A property set to `undefined` counts as unset, and one set to `null` counts as set. A `null` or `undefined` option counts as unset, so a later step can fill it.
 
 A `$lib` or `$lib_version` counts as unset unless it's a non-empty string.
 
-`$set`, `$set_once`, `$groups`, and `$group_set` fill one level deep. When the call and a later step both set one of them to an object, the later step adds only the keys the call left out.
+`$set`, `$set_once`, `$groups`, and `$group_set` fill one level deep. When the call and a later step both set one of them to an object, the later step adds only the keys the call left out. An object with its own `toJSON` is kept whole, so its `toJSON` decides what is sent.
 
 For example, `register({ $set: { plan: 'free', source: 'web' } })` and a call with `properties: { $set: { plan: 'pro' } }` send `{ plan: 'pro', source: 'web' }`. A `$set` in `register()` or a context sets those person properties on every event it reaches.
 
@@ -303,26 +323,26 @@ These changes follow from this order:
 
 - **SDK values.** A `$lib`, `$is_server`, `$geoip_disable`, or feature flag property set on the event, in context, or with `register()` now wins over the SDK's value. In 5.x.x the SDK overwrote some of them. For `$lib_version`, see [Check SDK identity](#check-sdk-identity).
 - **The `disableGeoip` setting.** `disableGeoip` still defaults to `true`, so events get `$geoip_disable: true` unless something else sets it.
-- **`$geoip_disable` properties.** A `$geoip_disable` property set on the event, in context, with `register()`, or in `before_send` now wins over the client setting. For example, `register({ $geoip_disable: false })` turns GeoIP lookup on for events.
+- **`$geoip_disable` properties.** A `$geoip_disable` property set on the event, in context, with `register()`, or in `beforeSend` now wins over the client setting. For example, `register({ $geoip_disable: false })` turns GeoIP lookup on for events. A `null` value does the same: a `null` property counts as set, so the SDK adds no `true`.
 - **The `disableGeoip` argument.** A per-call `disableGeoip` argument belongs to that event, so it wins over context and `register()`. A `$geoip_disable` in the call's own `properties` still wins over it.
 - **`disableGeoip: false`.** A per-call `disableGeoip: false` now sends `$geoip_disable: false`.
 - **Feature flag requests.** Feature flag requests still follow the `disableGeoip` client setting.
 
-### Review before_send hooks
+### Review beforeSend hooks
 
-Review your `before_send` hooks for the new event shape. Capture v1 sends processing options in an `options` object, next to `properties`.
+Review your `beforeSend` hooks for the new event shape. Capture v1 sends processing options in an `options` object, next to `properties`.
 
 A hook that returns a new message must copy `options`, or the event is sent without them. That includes the `process_person_profile: false` the SDK sets for an event without a distinct ID, so PostHog would create a person for its generated ID.
 
-- **What the hook sees.** `before_send` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties, and `options`. In 5.x.x the SDK added these properties after the hook, and events had no `options`.
+- **What the hook sees.** `beforeSend` now sees `$lib`, `$lib_version`, `$is_server`, `$geoip_disable`, feature flag properties, and `options`. In 5.x.x the SDK added these properties after the hook, and events had no `options`.
 - **Trace and session IDs.** Trace IDs and the `$session_id` from context were already set before the hook in 5.x.x.
 - **Events without a distinct ID.** The hook now sees `process_person_profile: false` in `options`.
 - **Identify-style events.** For an [identify-style event](#identify-style-events), the hook sees the event's `process_person_profile`. A hook that builds an identify-style event, or renames an event to one, gets no default and must set `options.process_person_profile` itself.
-- **Options.** To change an option in `before_send`, edit `options`. The first hook always gets an `options` object. With an array of hooks, each later hook gets what the previous one returned, which may have no `options`.
-- **Copies.** `before_send` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x.x. Class instances, such as `Date`, aren't copied.
-- **GeoIP and groups.** `$geoip_disable` and `$groups` are set before `before_send`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
-- **Hooks that throw.** A `before_send` hook that throws drops the event, as in 5.x.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. The SDK prints it with `console.error` even when `debug` is off. In 5.x.x it showed only with `debug` on.
-- **Feature flag requests.** With `sendFeatureFlags`, the `/flags` request now runs before `before_send` and uses the event's own distinct ID, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x.x.
+- **Options.** To change an option in `beforeSend`, edit `options`. The first hook always gets an `options` object. With an array of hooks, each later hook gets what the previous one returned, which may have no `options`.
+- **Copies.** `beforeSend` gets its own copy of the event's plain objects and arrays. Changing a nested value no longer changes your objects or the `register()` and context values, as it could in 5.x.x. Class instances, such as `Date`, aren't copied.
+- **GeoIP and groups.** `$geoip_disable` and `$groups` are set before `beforeSend`, so to change them, edit the properties. Changing the message's `disableGeoip` or `groups` field has no effect.
+- **Hooks that throw.** A `beforeSend` hook that throws drops the event, as in 5.x.x. The error log names the event and the error's type, not its message, which can hold the data the hook was removing. The SDK prints it with `console.error` even when `debug` is off. In 5.x.x it showed only with `debug` on.
+- **Feature flag requests.** With `sendFeatureFlags`, the `/flags` request now runs before `beforeSend` and uses the event's own distinct ID, even for an event the hook then drops. Changes the hook makes to the message's `groups` or `sendFeatureFlags` no longer reach that request, as editing those objects in place could in 5.x.x.
 - **Skipping the `/flags` request.** To avoid that request, call `evaluateFlags()` yourself and pass the snapshot as `flags`.
 
 ### Fix identity calls
@@ -349,11 +369,11 @@ With person processing off, PostHog drops `$identify`, `$create_alias`, `$merge_
 - **The default.** Otherwise the option is `true`, so person processing turned off with `registerOptions()`, context options, or a `$process_person_profile: false` property in `register()` or a context doesn't reach these events. `identify`, `alias`, and `groupIdentify` keep creating and updating persons and groups, as in 5.x.x.
 - **Personless IDs.** An event with a generated personless distinct ID keeps `process_person_profile: false`. The `$<groupType>_<groupKey>` ID `groupIdentify` falls back to isn't generated, so it gets `true`.
 - **`null` values.** A `null` option or property counts as unset.
-- **Layered properties.** Once the event has its option, the SDK removes any `$process_person_profile` property from context or `register()` before `before_send`, so the hook sees one value, and a hook that drops `options` can't bring back a layered `false`.
-- **`before_send`.** `before_send` sees the option and can change it.
-- **Event names.** The SDK checks the event name the call used. A `before_send` hook that builds an identify-style event, or renames an event to one, gets no default and must set `options.process_person_profile` itself.
+- **Layered properties.** Once the event has its option, the SDK removes any `$process_person_profile` property from context or `register()` before `beforeSend`, so the hook sees one value, and a hook that drops `options` can't bring back a layered `false`.
+- **`beforeSend`.** `beforeSend` sees the option and can change it.
+- **Event names.** The SDK checks the event name the call used. A `beforeSend` hook that builds an identify-style event, or renames an event to one, gets no default and must set `options.process_person_profile` itself.
 - **Other methods.** `setPersonProperties`, `unsetPersonProperties`, and `capture()` with one of these event names get the same default. In 5.x.x they took a `$process_person_profile` property from `register()` or a context.
-- **Keeping one personless.** To send an identify-style event without person processing, set `process_person_profile: false` on the call or in `before_send`, or turn off person processing for the project in PostHog.
+- **Keeping one personless.** To send an identify-style event without person processing, set `process_person_profile: false` on the call or in `beforeSend`, or turn off person processing for the project in PostHog.
 
 ### Check tracing headers
 
@@ -381,9 +401,9 @@ The SDK fills them after the event, context, and `register()` values, and only c
 
 An app that relays events from another PostHog SDK, such as posthog-js events with `$lib: 'web'`, now keeps their `$lib` and `$lib_version`. 5.x.x replaced them with `posthog-node` and its version.
 
-`before_send` sees the result and can change or remove either property. In 5.x.x the SDK overwrote them after `before_send`.
+`beforeSend` sees the result and can change or remove either property. In 5.x.x the SDK overwrote them after `beforeSend`.
 
-The client also sends its library name and version in the `PostHog-Sdk-Info` request header. PostHog uses the header only for an event whose `$lib` is missing, empty, or not a string, such as one whose `before_send` removed it.
+The client also sends its library name and version in the `PostHog-Sdk-Info` request header. PostHog uses the header only for an event whose `$lib` is missing, empty, or not a string, such as one whose `beforeSend` removed it.
 
 If an event's `$lib` matches the header's library and its `$lib_version` is missing, empty, or not a string, PostHog fills in `$lib_version` from the header.
 
@@ -398,8 +418,8 @@ To find MCP traffic, filter on `$mcp_*` events rather than `$lib`.
 Capture rejects a whole request when one event has a broken field. 6.x.x drops only that event before sending, so the rest of the batch is delivered.
 
 - **Invalid names.** The SDK drops an event whose name is missing, empty, or not a string and reports it through `'error'` (`details: 'invalid event'`). 5.x.x sent it, and an object name was sent as `"[object Object]"`.
-- **Invalid distinct IDs.** The SDK drops an event whose `before_send` hook leaves `distinctId` missing, `null`, or not a string the same way. 5.x.x sent it.
-- **Non-string distinct IDs.** A non-string `distinctId` you pass is now turned into a string before `before_send` runs, so the hook sees `'42'`, not `42`.
+- **Invalid distinct IDs.** The SDK drops an event whose `beforeSend` hook leaves `distinctId` missing, `null`, or not a string the same way. 5.x.x sent it.
+- **Non-string distinct IDs.** A non-string `distinctId` you pass is now turned into a string before `beforeSend` runs, so the hook sees `'42'`, not `42`.
 - **Empty distinct IDs.** A hook that sets `distinctId` to `''` still sends the event, and PostHog drops it and reports it.
 - **Malformed Unicode.** The SDK drops an event whose name, distinct ID, session ID, or window ID isn't well-formed Unicode (it has a lone surrogate) the same way.
 - **Values that throw.** The SDK drops an event with a property value that throws when the SDK reads or serializes it, such as a getter or a `toJSON` method that throws. It drops that event alone and reports it through `'error'` (`details: 'unserializable event'`).
@@ -451,8 +471,23 @@ posthog.capture({
 })
 ```
 
+TypeScript checks the known boolean options and accepts additional options with JSON values:
+
+```ts
+import type { EventOptions } from 'posthog-node'
+
+const options: EventOptions = {
+  cookieless_mode: true,
+  disable_skew_correction: false,
+  process_person_profile: false,
+  custom_option: { enabled: true },
+}
+```
+
+Use booleans for `cookieless_mode`, `disable_skew_correction`, and `process_person_profile`. Additional string-keyed options accept JSON values and are sent to capture unchanged.
+
 - **Every event.** `registerOptions(options)` (new) sets options on every event, like `register()` does for properties. `unregisterOptions(key)` removes one. Both return a promise.
-- **One context.** `withContext()` and `enterContext()` accept `options`, which apply to every event in the context.
+- **One context.** `withContext()` accepts `options`, which apply to every event in the context.
 - **Validation.** The SDK sends options as given and no longer converts their values. PostHog validates them and drops an event whose option value it can't read, which reaches `'error'` with `details: 'invalid_options'`.
 - **Boolean options.** Capture reads common forms of a boolean option value, such as the strings `"true"`, `"yes"`, `"on"`, or `"1"`, but a value it can't read drops the whole event (`invalid_options`). Pass `true` or `false`.
 - **Values that aren't an object.** The SDK logs an `options` value that isn't an object as an error and ignores it. It still sends the event.
@@ -464,7 +499,6 @@ Legacy option properties still work, but an option overrides its legacy property
 | `$process_person_profile` | `process_person_profile`  |
 | `$cookieless_mode`        | `cookieless_mode`         |
 | `$ignore_sent_at`         | `disable_skew_correction` |
-| `$product_tour_id`        | `product_tour_id`         |
 
 ### Send AI events with captureAi
 
@@ -491,7 +525,7 @@ An event with no distinct ID still has person processing turned off, whatever it
 
 `@posthog/mcp` takes per-event options as `eventOptions`, per call or from an `instrument()` callback, and passes them as the event's `options`. Its `beforeSend` hook gets them as `event.options` and can change them.
 
-On 6.x.x, an MCP event from a session with no resolved identity carries the `process_person_profile: false` option, so a client `before_send` sees the anonymous default there.
+On 6.x.x, an MCP event from a session with no resolved identity carries the `process_person_profile: false` option, so a client `beforeSend` sees the anonymous default there.
 
 As a per-event option it wins over a `registerOptions()` or context `process_person_profile`. A `process_person_profile` you set in `eventOptions` wins over the default.
 
@@ -502,3 +536,29 @@ JavaScript positional calls to `captureException()` and `captureExceptionImmedia
 The positional form logs one deprecation error per method per process. It will be removed in the next major version.
 
 Arguments after the options object are ignored, with one warning per process.
+
+### Rename configuration options
+
+SDK configuration options now use camelCase:
+
+| 5.x.x                             | 6.x.x                          |
+| --------------------------------- | ------------------------------ |
+| `before_send`                     | `beforeSend`                   |
+| `custom_blocked_useragents`       | `customBlockedUserAgents`      |
+| `disable_capture_url_hashes`      | `disableCaptureUrlHashes`      |
+| `__preview_capture_bot_pageviews` | `__previewCaptureBotPageviews` |
+
+```ts
+const posthog = new PostHog('<project_api_key>', {
+  beforeSend: (event) => (event.event === 'sensitive' ? null : event),
+  customBlockedUserAgents: ['MyCustomBot'],
+  disableCaptureUrlHashes: true,
+  __previewCaptureBotPageviews: true,
+})
+```
+
+The 5.x.x names are deprecated aliases. They still work in 6.x.x after 6.0.0, and each one logs one deprecation error per process. They will be removed in the next major version. If you set both names, the camelCase one wins.
+
+6.0.0 ignored the 5.x.x names without a warning, so a `before_send` hook didn't run there.
+
+Event options sent directly to capture, such as `process_person_profile`, and event properties such as `$session_id` keep their existing names.

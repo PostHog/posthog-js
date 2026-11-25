@@ -92,10 +92,8 @@ try {
       readdirSync(stage).find((filename) => filename.endsWith('.tgz'))
     )
   }
-  const nodeTarball = packBuiltPackage(join(packageRoot, '..', 'node'), 'node-package')
-  const packageTarball = packBuiltPackage(packageRoot, 'nuxt-package', {
-    'posthog-node': `file:${nodeTarball}`,
-  })
+  // On capture-v1, @posthog/nuxt stays on posthog-node 5 from npm, so only nuxt itself is packed.
+  const packageTarball = packBuiltPackage(packageRoot, 'nuxt-package')
   let resolveCapture
   const capture = new Promise((resolve) => {
     resolveCapture = resolve
@@ -131,6 +129,11 @@ try {
       null,
       2
     )
+  )
+  // unhead 3.5.x sets its Vite config in a configResolved hook that Vite skips under applyToEnvironment, so `nuxt build` crashes.
+  writeFileSync(
+    join(fixtureDir, 'pnpm-workspace.yaml'),
+    "overrides:\n  unhead: 3.4.3\n  '@unhead/vue': 3.4.3\n  '@unhead/bundler': 3.4.3\n"
   )
   writeFileSync(
     join(fixtureDir, 'nuxt.config.mjs'),

@@ -1,14 +1,11 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
-import { requireInstalledExtension } from './helpers'
+import { createPostHog as createDeliveringPostHog } from '../src/composition/npm/core'
 import type { Extension } from '../src/core/types'
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
-import type { IPostHogInternal } from '../src/core/context/browser-client'
+import { MemoryStorage } from './helpers'
 
-import { analytics as createAnalytics } from '../src/products/analytics/analytics'
-import { createFetch, MemoryStorage, type SentRequest } from './helpers'
-
-const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
+const analytics = { flushAt: 1, flushInterval: 0 }
 
 class TestDocument extends EventTarget {
     constructor(public visibilityState: DocumentVisibilityState) {
@@ -55,9 +52,9 @@ describe('browser-next initial pageview', () => {
         let pageviewProperties: Readonly<Record<string, unknown>> | undefined
         const extension: Extension = {
             name: 'observer',
-            setup(client: IPostHogInternal) {
+            setup(client) {
                 order.push('setup')
-                requireInstalledExtension(client.analytics).onEvent(({ event, properties }) => {
+                client.onEvent(({ event, properties }) => {
                     order.push(event)
                     if (event === '$pageview') {
                         pageviewProperties = properties
@@ -78,7 +75,7 @@ describe('browser-next initial pageview', () => {
         expect(pageviewProperties).not.toHaveProperty('title')
         expect(pageviewProperties).not.toHaveProperty('$current_url')
         expect(posthog.session!.sessionId).not.toBe('')
-        await requireInstalledExtension(posthog.analytics).capture('explicit')
+        posthog.capture('explicit')
         expect(order).toEqual(['setup', '$pageview', 'explicit'])
     })
 
@@ -109,7 +106,7 @@ describe('browser-next initial pageview', () => {
         const extension: Extension = {
             name: 'observer',
             setup(client) {
-                requireInstalledExtension(client.analytics).onEvent(({ event }) => observed.push(event))
+                client.onEvent(({ event }) => observed.push(event))
             },
         }
         const posthog = await createPostHog({
@@ -150,7 +147,7 @@ describe('browser-next initial pageview', () => {
             optOutByDefault: priorConsent ? false : true,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        posthog.onEvent(({ event }) => observed.push(event))
 
         expect(posthog.session).toBeUndefined()
         expect(observed).toEqual([])
@@ -170,7 +167,7 @@ describe('browser-next initial pageview', () => {
             fetch: false,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        posthog.onEvent(({ event }) => observed.push(event))
 
         posthog.optOut()
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(0)
@@ -197,7 +194,7 @@ describe('browser-next initial pageview', () => {
         const extension: Extension = {
             name: 'observer',
             setup(client) {
-                requireInstalledExtension(client.analytics).onEvent(({ event }) => observed.push(event))
+                client.onEvent(({ event }) => observed.push(event))
             },
         }
         Object.defineProperty(globalThis, 'document', {
@@ -231,7 +228,7 @@ describe('browser-next initial pageview', () => {
             fetch: false,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => {
+        posthog.onEvent(({ event }) => {
             observed.push(event)
             if (event === '$pageview') {
                 posthog.optIn()
@@ -269,7 +266,7 @@ describe('browser-next initial pageview', () => {
             fetch: false,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        posthog.onEvent(({ event }) => observed.push(event))
 
         expect(observed).toEqual([])
         expect(posthog.hasOptedOut()).toBe(true)
@@ -287,7 +284,7 @@ describe('browser-next initial pageview', () => {
                 {
                     name: 'observer',
                     setup(client) {
-                        requireInstalledExtension(client.analytics).onEvent(({ event }) => observed.push(event))
+                        client.onEvent(({ event }) => observed.push(event))
                     },
                 },
             ],
@@ -338,7 +335,7 @@ describe('browser-next initial pageview', () => {
             fetch: false,
         })
         const observed: string[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+        posthog.onEvent(({ event }) => observed.push(event))
 
         setDocument(second)
         first.dispatchEvent(new Event('visibilitychange'))
@@ -365,23 +362,6 @@ describe('browser-next initial pageview', () => {
         document.dispatchEvent(new Event('visibilitychange'))
 
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
-    })
-
-    it('buffers the initial pageview without configured delivery', async () => {
-        setDocument(new TestDocument('visible'))
-        const requests: SentRequest[] = []
-        const posthog = await createPostHog({
-            remoteConfig: localRemoteConfig,
-            projectToken: 'ph_test',
-            storage: false,
-            navigator: false,
-            fetch: createFetch(requests),
-        })
-
-        await posthog.flush()
-
-        expect(requests).toEqual([])
-        expect(posthog.analytics).toBeDefined()
     })
 
     it('removes a hidden-document listener during disposal', async () => {
@@ -417,18 +397,19 @@ describe('browser-next initial pageview', () => {
         const producer: Extension = {
             name: 'producer',
             async setup(client) {
-                requireInstalledExtension(client.analytics).onEvent(({ event }) => observed.push(event))
-                await requireInstalledExtension(client.analytics).capture('large', { value: 'a'.repeat(8_387_700) })
+                client.onEvent(({ event }) => observed.push(event))
+                client.capture('large', { value: 'a'.repeat(8_387_700) })
             },
         }
 
-        const posthog = await createPostHog({
+        const posthog = await createDeliveringPostHog({
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch,
-            extensions: [producer, analytics()],
+            analytics,
+            extensions: [producer],
         })
 
         expect(observed).toEqual(['large'])
@@ -442,7 +423,7 @@ describe('browser-next initial pageview', () => {
         expect(fetch).toHaveBeenCalledTimes(2)
     })
 
-    it('does not wait for configured analytics delivery to complete', async () => {
+    it('does not wait for analytics delivery to complete', async () => {
         setDocument(new TestDocument('visible'))
         let finish: ((response: Response) => void) | undefined
         const response = new Promise<Response>((resolve) => {
@@ -450,13 +431,13 @@ describe('browser-next initial pageview', () => {
         })
         const fetch = vi.fn(() => response)
 
-        const posthog = await createPostHog({
+        const posthog = await createDeliveringPostHog({
             remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch,
-            extensions: [analytics()],
+            analytics,
         })
         await Promise.resolve()
 
@@ -497,12 +478,12 @@ describe('browser-next initial pageview', () => {
                 fetch: false,
                 debug: true,
             })
-            requireInstalledExtension(posthog.analytics).onEvent(({ event }) => observed.push(event))
+            posthog.onEvent(({ event }) => observed.push(event))
             posthog.onNewSession(({ reason }) => sessions.push(reason))
-            await requireInstalledExtension(posthog.analytics).capture('ascii', { value: 'a'.repeat(4_194_304) })
+            posthog.capture('ascii', { value: 'a'.repeat(4_194_304) })
             vi.advanceTimersByTime(1_800_001)
 
-            await requireInstalledExtension(posthog.analytics).capture('private_multibyte', {
+            posthog.capture('private_multibyte', {
                 value: '😀'.repeat(2_097_152),
             })
 
@@ -513,7 +494,7 @@ describe('browser-next initial pageview', () => {
             expect(warning).toContain('bytes')
             expect(warning).not.toContain('😀')
 
-            await requireInstalledExtension(posthog.analytics).capture('after_drop')
+            posthog.capture('after_drop')
             expect(observed).toEqual(['ascii', 'after_drop'])
             expect(sessions).toEqual(['idleTimeout'])
         } finally {

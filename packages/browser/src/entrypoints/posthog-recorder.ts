@@ -30,5 +30,6 @@ assignableWindow.__PosthogExtensions__.rrweb = {
 }
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>
     new LazyLoadedSessionRecording(ph, documentWasEverVisible)
+assignableWindow.__PosthogExtensions__.initSessionRecording.supportsSelectMasking = true
 
 export default rrwebRecord

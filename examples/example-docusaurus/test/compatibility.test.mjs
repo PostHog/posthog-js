@@ -60,7 +60,9 @@ function decodeEvents(body) {
     try {
         parsed = JSON.parse(body)
     } catch {
-        parsed = { data: new URLSearchParams(body).get('data') }
+        // A form body carries the base64 batch in `data`; a beacon body is the bare base64 text, which capture
+        // decodes the same way.
+        parsed = { data: new URLSearchParams(body).get('data') ?? body }
     }
     if (typeof parsed.data === 'string') {
         parsed = JSON.parse(Buffer.from(parsed.data, 'base64').toString())
