@@ -980,10 +980,11 @@ function record<T = eventWithTime>(
           }),
         inputCb: (v, fromMutation) => {
           // A hooked value setter belongs to the realm that created the
-          // element, which can differ from the document it is in now.
+          // element, which can differ from the document it is in now. An
+          // untracked target has no node to replay onto, so it is dropped too.
           const target = mirror.getNode(v.id);
           if (
-            target?.ownerDocument &&
+            !target?.ownerDocument ||
             iframeManager.isBlockedDocument(target.ownerDocument)
           )
             return;

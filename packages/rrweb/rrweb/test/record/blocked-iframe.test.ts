@@ -338,7 +338,9 @@ describe('record a blocked iframe', () => {
     }
   });
 
-  it('does not record a value set on a parent-created input inside a blocked iframe', async () => {
+  it.each([false, true])(
+    'does not record a value set on a parent-created input inside a blocked iframe (appended after blocking: %s)',
+    async (appendAfterBlocking) => {
     const page = await browser.newPage();
     try {
       await page.goto('about:blank');
@@ -356,17 +358,25 @@ describe('record a blocked iframe', () => {
       await waitForRAF(page);
       await new Promise((resolve) => setTimeout(resolve, 100));
       // created by the parent, so it keeps the parent realm's value setter
-      await page.evaluate(() => {
-        const input = document.createElement('input');
-        document.querySelector('iframe')!.contentDocument!.body.append(input);
-      });
-      await waitForRAF(page);
+      const append = () =>
+        page.evaluate(() => {
+          const input = document.createElement('input');
+          document.querySelector('iframe')!.contentDocument!.body.append(input);
+        });
+      if (!appendAfterBlocking) {
+        await append();
+        await waitForRAF(page);
+      }
       const eventsBeforeBlocking = events.length;
 
+      await page.evaluate(() =>
+        document.querySelector('iframe')!.classList.add('rr-block'),
+      );
+      if (appendAfterBlocking) await append();
       await page.evaluate((value) => {
-        const iframe = document.querySelector('iframe')!;
-        iframe.classList.add('rr-block');
-        iframe.contentDocument!.querySelector('input')!.value = value;
+        document
+          .querySelector('iframe')!
+          .contentDocument!.querySelector('input')!.value = value;
       }, LATER_CONTENT);
       await waitForRAF(page);
 
@@ -376,7 +386,8 @@ describe('record a blocked iframe', () => {
     } finally {
       await page.close();
     }
-  });
+  },
+  );
 
   it('does not record shadow-root changes buffered in a frozen iframe that gets blocked', async () => {
     const page = await browser.newPage();
