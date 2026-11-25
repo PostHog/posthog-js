@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.454.8
+
+### Patch Changes
+
+- [#5874](https://github.com/PostHog/posthog-js/pull/5874) [`053d7a6`](https://github.com/PostHog/posthog-js/commit/053d7a66b95c4f3bfae579760be7df723f683890) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Session replay restarts its recorder when it stops taking full snapshots, and no longer starts a second recorder when it restarts during its own start.
+  (2026-11-25)
+
+- [#5862](https://github.com/PostHog/posthog-js/pull/5862) [`0023700`](https://github.com/PostHog/posthog-js/commit/0023700ed4efa941793ac8ac86fc52d7a13a9050) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Avoid crashes when XHR tracing encounters a missing or faulty `send` accessor.
+  (2026-11-25)
+
 ## 1.454.7
 
 ### Patch Changes
