@@ -497,7 +497,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         super.identifyStateless(distinctId, allProperties, options)
 
         // Update the cached person properties hash
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        this._cachedPersonProperties = this._surelyProcessesPerson(options)
+          ? getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+          : null
       } else if (shouldTransitionToIdentified) {
         // Matching id while still anonymous (e.g. a non-identified bootstrap seeded the same id):
         // upgrade to identified and emit one person-processed $set. There is no anonymous id to
@@ -511,7 +513,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
         // The transition event must fire even when an identical property call was cached earlier;
         // cache only after capture so deduplication cannot suppress it.
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        this._cachedPersonProperties = this._surelyProcessesPerson(options)
+          ? getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+          : null
 
         // The identified state itself is not part of the flags request; reload only when the
         // caller supplied properties that can affect flag evaluation.
@@ -1709,9 +1713,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const hash = getPersonPropertiesHash(this.getDistinctId(), userPropertiesToSet, userPropertiesToSetOnce)
+      const tracksHash = this._surelyProcessesPerson(options)
 
       // If exactly this $set call has been sent before, don't send it again - determine based on hash of properties
-      if (this._cachedPersonProperties === hash) {
+      if (tracksHash && this._cachedPersonProperties === hash) {
         this._logger.info(
           'A duplicate setPersonProperties call was made with the same properties. It has been ignored.'
         )
@@ -1726,8 +1731,20 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }, options)
 
-      this._cachedPersonProperties = hash
+      // An update that may be personless leaves the person unchanged, so it must not suppress the next one.
+      this._cachedPersonProperties = tracksHash ? hash : null
     })
+  }
+
+  /**
+   * Whether an update with these capture options surely processes the person: its
+   * `process_person_profile` option is missing, `null` or the Boolean `true`. Other values are not
+   * parsed, because PostHog decides how to read them.
+   */
+  private _surelyProcessesPerson(options?: PostHogCaptureOptions): boolean {
+    const eventOptions = (options as { options?: unknown } | undefined)?.options
+    const setting: unknown = isObject(eventOptions) ? eventOptions.process_person_profile : undefined
+    return isNullish(setting) || setting === true
   }
 
   /**

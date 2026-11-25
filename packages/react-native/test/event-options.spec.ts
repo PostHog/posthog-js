@@ -156,4 +156,32 @@ describe('per-event options', () => {
 
     expect(sentEvent('Signed Up').options?.cookieless_mode).toEqual(expected?.cookieless_mode)
   })
+
+  it.each<[string, unknown]>([
+    ['false', false],
+    ['a false string', 'false'],
+  ])('sends the same person properties again after a $set whose process_person_profile is %s', async (_n, value) => {
+    posthog.identify('user-1')
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false, {
+      options: { process_person_profile: value as boolean },
+    })
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+    posthog.identify('user-1', { plan: 'pro' })
+    await posthog.flush()
+
+    // Identified, so the SDK sends true when the caller passes no option; the last identify is deduplicated.
+    const settings = sent
+      .filter(({ event }) => event.event === '$set')
+      .map(({ event }) => event.options?.process_person_profile)
+    expect(settings).toEqual([true, value, true])
+  })
+
+  it('does not record the hash for an $identify sent with process_person_profile false', async () => {
+    posthog.identify('user-1', { plan: 'pro' }, { options: { process_person_profile: false } })
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+    await posthog.flush()
+
+    expect(sentEvent('$set').properties.$set).toEqual({ plan: 'pro' })
+  })
 })
