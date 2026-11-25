@@ -516,15 +516,15 @@ export class FakePostHog {
           'The content or `message_data` that a batch sends to every recipient can be at most 256 KiB. Send larger emails one at a time.',
       })
     }
+    const { templateIds } = this.options
+    if (templateIds && typeof shared.template_id === 'string' && !templateIds.includes(shared.template_id)) {
+      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
+    }
     if (this.options.batchUnavailable) {
       throw refusal(409, 'invalid_request', 'batch_unavailable', null, {
         detail:
           "Batch sends aren't available for this project yet, so PostHog didn't send any of these emails. Send each email on its own instead.",
       })
-    }
-    const { templateIds } = this.options
-    if (templateIds && typeof shared.template_id === 'string' && !templateIds.includes(shared.template_id)) {
-      return { status: 404, body: { type: 'invalid_request', code: 'not_found', detail: 'Not found.', attr: null } }
     }
     this.batches.push({ recipients: recipients.length, bytes })
     return { status: 200, body: { results: recipients.map((recipient: Json) => this.batchSlot(shared, recipient)) } }

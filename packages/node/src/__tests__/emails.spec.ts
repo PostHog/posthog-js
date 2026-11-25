@@ -2107,25 +2107,40 @@ describe('emails', () => {
     })
 
     it.each([
-      ['409 batch_unavailable', { status: 409, code: 'batch_unavailable' }],
-      ['404 not_found', { status: 404, code: 'not_found' }],
-    ])(
-      'says an earlier attempt may have queued the emails when PostHog answers the retry of a lost answer with %s',
-      async (_name, fault) => {
+      [
+        '409 batch_unavailable',
+        WELCOME,
+        { status: 409, code: 'batch_unavailable' },
+        'PostHog refused the retry of this batch: Batch sends are not on for this project yet.',
+      ],
+      [
+        '404 not_found on a code batch',
+        WELCOME,
+        { status: 404, code: 'not_found' },
+        "PostHog refused the retry of this batch: Batch sends from code aren't available for this project.",
+      ],
+      [
+        '404 not_found on a template batch',
+        { templateId: TEMPLATE_ID },
+        { status: 404, code: 'not_found' },
+        "PostHog refused the retry of this batch: PostHog found no template with this ID, or batch sends aren't available for this project.",
+      ],
+    ] as const)(
+      'says PostHog refused the retry and an earlier attempt may have queued the emails when a lost answer is followed by %s',
+      async (_name, email, fault, refusal) => {
         const postHog = againstPostHog()
         postHog.failNext('batch', 'lost reply', fault)
 
-        const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+        const { error } = await settle(posthog.emails.batch(email, recipientsTo(2)))
 
-        expect(error?.message).toMatch(
-          / An earlier attempt of this batch went unanswered, so PostHog may have queued its emails\.$/
-        )
+        const message = `${refusal} An earlier attempt of this batch went unanswered, so PostHog may have queued its emails.`
+        expect(error).toMatchObject({ statusCode: fault.status, message })
         expect(error?.fix).toMatch(/same email and recipients, unchanged, giving each recipient the idempotencyKey/)
         expect(error?.results).toMatchObject(
           [0, 1].map(() => ({
             status: 'unconfirmed',
             error: {
-              message: expect.stringMatching(/may have queued its emails\.$/),
+              message,
               fix: expect.stringMatching(
                 /^PostHog may have queued this email\. Send this recipient again, unchanged and with the same idempotencyKey/
               ),
@@ -2136,7 +2151,7 @@ describe('emails', () => {
 
         const again = await settle(
           posthog.emails.batch(
-            WELCOME,
+            email,
             recipientsTo(2).map((recipient, index) => ({
               ...recipient,
               idempotencyKey: error?.results?.[index].idempotencyKey,
@@ -2211,6 +2226,7 @@ describe('emails', () => {
       await shutdown
 
       expect(error).toMatchObject({ code: 'client_closed' })
+      expect(error?.message).not.toMatch(/refused the retry/)
       expect(postHog.requests.batch).toBe(1)
       expect(error?.results?.map((result) => result.status)).toEqual([status, status])
     })
@@ -2313,6 +2329,14 @@ describe('emails', () => {
       expect(error?.results?.map((result) => result.status)).toEqual(['failed', 'failed'])
       expect(postHog.requests.batch).toBe(1)
       expect(postHog.emails).toEqual([])
+    })
+
+    it('answers a templateId PostHog does not have with the 404 even where batch sends are off, as PostHog does', async () => {
+      againstPostHog({ templateIds: [], batchUnavailable: true })
+
+      const { error } = await settle(posthog.emails.batch({ templateId: TEMPLATE_ID }, recipientsTo(1)))
+
+      expect(error).toMatchObject({ code: 'not_found', statusCode: 404, message: NO_TEMPLATE, fix: CHECK_TEMPLATE })
     })
 
     it.each([

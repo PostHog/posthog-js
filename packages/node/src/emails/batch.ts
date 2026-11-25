@@ -147,7 +147,7 @@ export function recordAnswer(
 ): EmailWarning[] {
   const fields = replyFields(parseJson(body))
   if (status < 200 || status >= 300) {
-    throw batchReplyError(fields, status, retryAfterMs, templateForm)
+    throw batchReplyError(fields, status, retryAfterMs, templateForm, mayHaveQueuedBefore)
   }
   const answers = Array.isArray(fields.results) ? fields.results : []
   if (answers.length !== sent.length) {
@@ -198,7 +198,9 @@ export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefo
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
   const answer =
     mayHaveQueuedBefore && !mayHaveQueued(error)
-      ? copyError(error, { message: `${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}` })
+      ? copyError(error, {
+          message: `${error.statusCode === undefined ? '' : 'PostHog refused the retry of this batch: '}${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}`,
+        })
       : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
@@ -272,14 +274,16 @@ function batchReplyError(
   fields: Record<string, unknown>,
   status: number,
   retryAfterMs: number | undefined,
-  templateForm: boolean
+  templateForm: boolean,
+  mayHaveQueuedBefore: boolean
 ): EmailError {
   const error = replyError(fields, status, retryAfterMs)
+  const sentNone = mayHaveQueuedBefore ? '' : ', so PostHog sent no email of this request'
   if (error.code === 'batch_unavailable') {
     return new EmailError({
       code: error.code,
       statusCode: status,
-      message: 'Batch sends are not on for this project yet, so PostHog sent no email of this request.',
+      message: `Batch sends are not on for this project yet${sentNone}.`,
       fix: 'Send each email with emails.send() until batch sends are on for the project.',
     })
   }
@@ -289,14 +293,13 @@ function batchReplyError(
       ? new EmailError({
           code: 'not_found',
           statusCode: status,
-          message:
-            "PostHog found no template with this ID, or batch sends aren't available for this project, so it sent no email of this request.",
+          message: `PostHog found no template with this ID, or batch sends aren't available for this project${mayHaveQueuedBefore ? '' : ', so it sent no email of this request'}.`,
           fix: 'Check the templateId. If it is right, send each recipient on its own with emails.send() until batch sends are available for the project.',
         })
       : new EmailError({
           code: 'not_found',
           statusCode: status,
-          message: "Batch sends from code aren't available for this project, so PostHog sent no email of this request.",
+          message: `Batch sends from code aren't available for this project${sentNone}.`,
           fix: 'Send each recipient on its own with emails.send() until batch sends are available for the project.',
         })
   }
