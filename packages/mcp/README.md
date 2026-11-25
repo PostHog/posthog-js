@@ -447,6 +447,7 @@ posthog.captureToolCall({
   llmModel: preparedCall.llmModel,
   llmModelSource: preparedCall.llmModelSource,
   sessionId: preparedResult.sessionId,
+  sessionSource: preparedResult.sessionSource,
   conversationId: preparedResult.conversationId,
   isError: false,
 })
@@ -459,8 +460,12 @@ Pass `requestMeta` whenever the request supplies `_meta`, and `headers` (plus `c
 handshake bound to the request, if you hold one) so the SDK can recognize the client; this enables
 recognized client metadata and client conversation ids without changing the arguments sent to the
 tool. Pass the same `headers` to `prepareToolList`. Pass an existing transport or request session as
-`sessionId`. A client conversation id or a valid echoed conversation handle takes precedence. Otherwise, the existing session
-prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
+`sessionId`: a PostHog session token gives the session inside it, and any other id is hashed into a
+`ses_` id, as `instrument()` does. A client conversation id or a valid echoed conversation handle
+takes precedence. Otherwise, the existing session prevents a new handle from being minted. On a
+one-client connection such as stdio, pass a `connectionKey` you keep for the connection's lifetime
+instead: the SDK gives it a session and rotates it on the first call that arrives 30 minutes or more
+after the previous one ended. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.
 
 ### Collecting agent feedback (`send_feedback`)

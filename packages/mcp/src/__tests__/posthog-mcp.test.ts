@@ -6,7 +6,7 @@ import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extens
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
 import type { FeedbackReport, McpCaptureCommon } from '../types'
-import { deriveSessionIdFromConversation } from '../extensions/session'
+import { deriveSessionIdFromConversation, deriveSessionIdFromMCPSession } from '../extensions/session'
 import { MCP_INSTRUCTIONS_KEY } from '../extensions/output-instructions'
 import type { ContextInjectableTool } from '../extensions/context-parameters'
 import { EventCapture } from './test-utils'
@@ -804,7 +804,10 @@ describe('PostHogMCP', () => {
     it('keeps a carried session unless the client echoes a valid handle', () => {
       posthog.prepareToolList(tools)
       const carried = posthog.prepareToolCall('execute-sql', {}, { sessionId: 'ses_carried' })
-      expect(carried).toMatchObject({ sessionId: 'ses_carried', conversationId: undefined })
+      expect(carried).toMatchObject({
+        sessionId: deriveSessionIdFromMCPSession('ses_carried'),
+        conversationId: undefined,
+      })
 
       const echoed = posthog.prepareToolCall(
         'execute-sql',
@@ -900,7 +903,7 @@ describe('PostHogMCP', () => {
       expect(prepared.conversationId).toBe(preparedCall.conversationId)
     })
 
-    it('omits an undelivered minted handle from capture but keeps its session', () => {
+    it('omits an undelivered minted handle from capture and from the session', () => {
       posthog.prepareToolList(tools)
       const preparedCall = posthog.prepareToolCall('execute-sql', {})
       const toolResult = { value: 1 }
@@ -908,7 +911,7 @@ describe('PostHogMCP', () => {
 
       expect(prepared.result).toBe(toolResult)
       expect(prepared.conversationId).toBeUndefined()
-      expect(prepared.sessionId).toBe(preparedCall.sessionId)
+      expect(prepared.sessionId).toBeUndefined()
     })
 
     it('adds conversation fields to virtual tools', () => {

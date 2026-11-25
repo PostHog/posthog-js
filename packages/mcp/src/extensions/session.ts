@@ -79,6 +79,11 @@ export function isModernEraRequest(
 
 const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
 
+/** Whether a one-client connection quiet since `since` (epoch ms) rotates its id on its next tool call. */
+export function isConnectionIdle(since: number): boolean {
+  return Date.now() - since >= ROTATE_AFTER_MS
+}
+
 export function newSessionId(): string {
   return newPrefixedId('ses')
 }
@@ -105,6 +110,11 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
  * reproduce it byte for byte or the same conversation splits into two sessions
  * depending on which SDK served the call.
  */
+/** Rule 3 for a transport session id: a PostHog session token gives its `sid`, any other id is hashed. */
+export function deriveSessionIdFromTransport(transportSessionId: string): string {
+  return decodeSessionId(transportSessionId)?.sessionId ?? deriveSessionIdFromMCPSession(transportSessionId)
+}
+
 export function deriveSessionIdFromConversation(conversationId: string): string {
   return deterministicPrefixedId('ses', conversationId)
 }
@@ -219,12 +229,7 @@ export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestH
   const { connection } = data
   const ended = connection.lastToolCallEnded
   const oneClient = data.sessionSource === 'generated' && !extra?.sessionId && !getRequestHeaders(extra)
-  if (
-    oneClient &&
-    connection.runningToolCall === undefined &&
-    ended !== undefined &&
-    Date.now() - ended >= ROTATE_AFTER_MS
-  ) {
+  if (oneClient && connection.runningToolCall === undefined && ended !== undefined && isConnectionIdle(ended)) {
     data.sessionId = newSessionId()
   }
   const callId = newPrefixedId('call')
