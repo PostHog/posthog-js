@@ -1,5 +1,5 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId, isShadowRoot } from '@posthog/rrweb-snapshot';
 import dom from '@posthog/rrweb-utils';
 import type { CrossOriginIframeMessageEvent } from '../types';
 import {
@@ -132,13 +132,13 @@ export class IframeManager {
   // were produced while it was blocked.
   public releaseBlockedRelayingIframes(mutations: mutationRecord[]): void {
     if (this.relayingIframes.size === 0) return;
-    // Text changes cannot block. Without a selector, only an attribute change
-    // can add the block class; a moved iframe is serialized again anyway.
+    // Without a selector, only an attribute change can add the block class; a
+    // moved iframe is serialized again anyway. A selector can depend on any
+    // change, including text (`:empty`).
     if (
-      !mutations.some((m) =>
-        this.blockSelector
-          ? m.type !== 'characterData'
-          : m.type === 'attributes' && m.attributeName === 'class',
+      !this.blockSelector &&
+      !mutations.some(
+        (m) => m.type === 'attributes' && m.attributeName === 'class',
       )
     )
       return;
@@ -146,16 +146,14 @@ export class IframeManager {
     // that had the block class at any point counts, not only its final state.
     let blockedAtSomePoint: Node[] | undefined;
     for (const m of mutations) {
-      if (
-        m.type === 'attributes' &&
-        m.attributeName === 'class' &&
-        m.oldValue &&
-        this.classValueBlocks(m.target as Element, m.oldValue)
-      )
+      if (m.type === 'attributes' && this.oldValueBlocked(m))
         (blockedAtSomePoint ??= []).push(m.target);
     }
     for (const iframeEl of [...this.relayingIframes]) {
-      if (blockedAtSomePoint?.some((n) => dom.contains(n, iframeEl))) {
+      if (
+        blockedAtSomePoint &&
+        this.hasAncestorIn(iframeEl, new Set(blockedAtSomePoint))
+      ) {
         this.releaseBlockedIframe(iframeEl);
         continue;
       }
@@ -171,10 +169,47 @@ export class IframeManager {
     }
   }
 
-  private classValueBlocks(el: Element, value: string): boolean {
-    const probe = el.ownerDocument.createElement('div');
-    probe.className = value;
-    return _isBlockedElement(probe, this.blockClass, null);
+  // Crosses shadow hosts and same-origin frames up to the recorder's document.
+  private hasAncestorIn(iframeEl: HTMLIFrameElement, nodes: Set<Node>): boolean {
+    let node: Node | null = iframeEl;
+    while (node) {
+      if (nodes.has(node)) return true;
+      let parent: Node | null = dom.parentNode(node);
+      if (parent && isShadowRoot(parent)) parent = dom.host(parent);
+      if (!parent && node.nodeType === node.DOCUMENT_NODE && node !== document) {
+        try {
+          parent = (node as Document).defaultView?.frameElement ?? null;
+        } catch {
+          parent = null;
+        }
+      }
+      node = parent;
+    }
+    return false;
+  }
+
+  // Whether the element was blocked before this attribute change. A selector
+  // is matched against a detached copy, so only rules about the element's own
+  // attributes are reconstructed; context-dependent rules (siblings, :has,
+  // :focus-within) are caught on their final state only.
+  private oldValueBlocked(m: mutationRecord): boolean {
+    if (!m.attributeName) return false;
+    const el = m.target as Element;
+    if (m.attributeName === 'class' && m.oldValue) {
+      const probe = el.ownerDocument.createElement('div');
+      probe.className = m.oldValue;
+      if (_isBlockedElement(probe, this.blockClass, null)) return true;
+    }
+    if (!this.blockSelector) return false;
+    let probe: Element;
+    try {
+      probe = el.cloneNode(false) as Element;
+      if (m.oldValue === null) probe.removeAttribute(m.attributeName);
+      else probe.setAttribute(m.attributeName, m.oldValue);
+    } catch {
+      return false;
+    }
+    return _isBlockedElement(probe, this.blockClass, this.blockSelector);
   }
 
   public registerLoadListenerDisposer(

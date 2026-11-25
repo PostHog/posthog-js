@@ -470,6 +470,12 @@ describe('record a blocked iframe', () => {
       sameTask: true,
     },
     {
+      blocking: 'a selector match added and removed in one task',
+      blockSelector: '[data-private]',
+      fullSnapshot: false,
+      sameTask: true,
+    },
+    {
       blocking: 'a selector that matches through a sibling',
       blockSelector: '.rr-block + iframe',
       fullSnapshot: false,
@@ -492,7 +498,9 @@ describe('record a blocked iframe', () => {
         events.push(e);
       });
       const options = { blockSelector, recordCrossOriginIframes: true };
-      const blockTarget = blockSelector ? 'sibling' : 'parent';
+      const blockTarget = blockSelector?.includes('+') ? 'sibling' : 'parent';
+      const blockAttribute =
+        blockSelector === '[data-private]' ? 'data-private' : null;
       await startRecording(topFrame, options);
       // hold back the child's relayed events so one lands after the unblock
       await iframeFrame.evaluate(() => {
@@ -524,11 +532,20 @@ describe('record a blocked iframe', () => {
         // in a single mutation batch
         await appendParagraph(iframeFrame, LATER_CONTENT);
         await waitForRAF(page);
-        await topFrame.evaluate((id) => {
-          const el = document.getElementById(id)!;
-          el.classList.add('rr-block');
-          el.classList.remove('rr-block');
-        }, blockTarget);
+        await topFrame.evaluate(
+          (id, attribute) => {
+            const el = document.getElementById(id)!;
+            if (attribute) {
+              el.setAttribute(attribute, '');
+              el.removeAttribute(attribute);
+            } else {
+              el.classList.add('rr-block');
+              el.classList.remove('rr-block');
+            }
+          },
+          blockTarget,
+          blockAttribute,
+        );
       } else {
         await topFrame.evaluate(
           (id) => document.getElementById(id)!.classList.add('rr-block'),
