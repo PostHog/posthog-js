@@ -37,7 +37,7 @@ import {
   isSerializedStylesheet,
   nowTimestamp,
 } from '../utils';
-import type { recordOptions } from '../types';
+import type { observerParam, recordOptions } from '../types';
 import {
   EventType,
   type eventWithoutTime,
@@ -920,148 +920,163 @@ function record<T = eventWithTime>(
     };
 
     const observeEvents = (doc: Document) => {
-      return callbackWrapper(initObservers)(
-        {
-          mutationCb: wrappedMutationEmit,
-          mousemoveCb: (positions, source) =>
-            wrappedEmit({
+      const params: observerParam = {
+        mutationCb: wrappedMutationEmit,
+        mousemoveCb: (positions, source) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source,
+              positions,
+            },
+          }),
+        mouseInteractionCb: (d) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.MouseInteraction,
+              ...d,
+            },
+          }),
+        scrollCb: wrappedScrollEmit,
+        viewportResizeCb: (d) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.ViewportResize,
+              ...d,
+            },
+          }),
+        inputCb: (v, fromMutation) =>
+          wrappedEmit(
+            {
               type: EventType.IncrementalSnapshot,
               data: {
-                source,
-                positions,
+                source: IncrementalSource.Input,
+                ...v,
               },
-            }),
-          mouseInteractionCb: (d) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.MouseInteraction,
-                ...d,
-              },
-            }),
-          scrollCb: wrappedScrollEmit,
-          viewportResizeCb: (d) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.ViewportResize,
-                ...d,
-              },
-            }),
-          inputCb: (v, fromMutation) =>
-            wrappedEmit(
-              {
-                type: EventType.IncrementalSnapshot,
-                data: {
-                  source: IncrementalSource.Input,
-                  ...v,
-                },
-              },
-              undefined,
-              fromMutation,
-            ),
-          mediaInteractionCb: (p) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.MediaInteraction,
-                ...p,
-              },
-            }),
-          styleSheetRuleCb: (r) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.StyleSheetRule,
-                ...r,
-              },
-            }),
-          styleDeclarationCb: (r) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.StyleDeclaration,
-                ...r,
-              },
-            }),
-          canvasMutationCb: wrappedCanvasMutationEmit,
-          fontCb: (p) =>
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.Font,
-                ...p,
-              },
-            }),
-          selectionCb: (p) => {
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.Selection,
-                ...p,
-              },
-            });
-          },
-          customElementCb: (c) => {
-            wrappedEmit({
-              type: EventType.IncrementalSnapshot,
-              data: {
-                source: IncrementalSource.CustomElement,
-                ...c,
-              },
-            });
-          },
-          blockClass,
-          ignoreClass,
-          ignoreSelector,
-          maskTextClass,
-          maskTextSelector,
-          maskInputOptions,
-          inlineStylesheet,
-          sampling,
-          recordDOM,
-          recordCanvas,
-          canvasMaskingConfigured,
-          inlineImages,
-          userTriggeredOnInput,
-          collectFonts,
-          doc,
-          maskInputFn,
-          selectMaskingFn,
-          maskTextFn,
-          maskAllElementAttributes,
-          maskAttributeFn,
-          keepIframeSrcFn,
-          blockSelector,
-          slimDOMOptions,
-          dataURLOptions,
-          mirror,
-          iframeManager,
-          stylesheetManager,
-          shadowDomManager,
-          processedNodeManager,
-          canvasManager,
-          ignoreCSSAttributes,
-          attributeFilter,
-          plugins:
-            plugins
-              ?.filter((p) => p.observer)
-              ?.map((p) => ({
-                name: p.name,
-                observer: p.observer!,
-                options: p.options,
-                callback: (payload: object) =>
-                  wrappedEmit({
-                    type: EventType.Plugin,
-                    data: {
-                      plugin: p.name,
-                      payload,
-                    },
-                  }),
-              })) || [],
+            },
+            undefined,
+            fromMutation,
+          ),
+        mediaInteractionCb: (p) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.MediaInteraction,
+              ...p,
+            },
+          }),
+        styleSheetRuleCb: (r) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.StyleSheetRule,
+              ...r,
+            },
+          }),
+        styleDeclarationCb: (r) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.StyleDeclaration,
+              ...r,
+            },
+          }),
+        canvasMutationCb: wrappedCanvasMutationEmit,
+        fontCb: (p) =>
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.Font,
+              ...p,
+            },
+          }),
+        selectionCb: (p) => {
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.Selection,
+              ...p,
+            },
+          });
         },
-        hooks,
-      );
+        customElementCb: (c) => {
+          wrappedEmit({
+            type: EventType.IncrementalSnapshot,
+            data: {
+              source: IncrementalSource.CustomElement,
+              ...c,
+            },
+          });
+        },
+        blockClass,
+        ignoreClass,
+        ignoreSelector,
+        maskTextClass,
+        maskTextSelector,
+        maskInputOptions,
+        inlineStylesheet,
+        sampling,
+        recordDOM,
+        recordCanvas,
+        canvasMaskingConfigured,
+        inlineImages,
+        userTriggeredOnInput,
+        collectFonts,
+        doc,
+        maskInputFn,
+        selectMaskingFn,
+        maskTextFn,
+        maskAllElementAttributes,
+        maskAttributeFn,
+        keepIframeSrcFn,
+        blockSelector,
+        slimDOMOptions,
+        dataURLOptions,
+        mirror,
+        iframeManager,
+        stylesheetManager,
+        shadowDomManager,
+        processedNodeManager,
+        canvasManager,
+        ignoreCSSAttributes,
+        attributeFilter,
+        plugins:
+          plugins
+            ?.filter((p) => p.observer)
+            ?.map((p) => ({
+              name: p.name,
+              observer: p.observer!,
+              options: p.options,
+              callback: (payload: object) =>
+                wrappedEmit({
+                  type: EventType.Plugin,
+                  data: {
+                    plugin: p.name,
+                    payload,
+                  },
+                }),
+            })) || [],
+      };
+      if (doc !== document) {
+        for (const key of Object.keys(params) as (keyof observerParam)[]) {
+          const cb = params[key];
+          if (key.endsWith('Cb') && typeof cb === 'function') {
+            (params as Record<string, unknown>)[key] = (...args: unknown[]) => {
+              if (!iframeManager.isBlockedDocument(doc))
+                (cb as (...a: unknown[]) => void)(...args);
+            };
+          }
+        }
+        params.plugins = params.plugins.map((plugin) => ({
+          ...plugin,
+          callback: (...args: unknown[]) => {
+            if (!iframeManager.isBlockedDocument(doc)) plugin.callback(...args);
+          },
+        }));
+      }
+      return callbackWrapper(initObservers)(params, hooks);
     };
 
     const observe = (doc: Document) => {

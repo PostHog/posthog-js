@@ -566,8 +566,18 @@ export class IframeManager {
     });
   }
 
+  // Observers of an iframe's document can emit before the mutation that
+  // blocked the iframe is processed, so check the iframe's current state.
   public isBlockedDocument(doc: Document): boolean {
-    return this.blockedDocuments.has(doc);
+    if (this.blockedDocuments.has(doc)) return true;
+    let frame: Element | null = null;
+    try {
+      frame = doc.defaultView?.frameElement ?? null;
+    } catch {
+      return false;
+    }
+    if (!frame || frame.nodeName !== 'IFRAME') return false;
+    return this.releaseIfBlocked(frame as HTMLIFrameElement);
   }
 
   // Blocking can be added after an iframe is tracked, and attribute mutations

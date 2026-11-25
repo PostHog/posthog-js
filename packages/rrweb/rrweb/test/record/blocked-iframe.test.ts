@@ -253,6 +253,41 @@ describe('record a blocked iframe', () => {
     },
   );
 
+  it('a same-origin iframe does not record input in the same task it gets blocked', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<input>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      const eventsBeforeBlocking = events.length;
+
+      await page.evaluate((value) => {
+        const iframe = document.querySelector('iframe')!;
+        iframe.classList.add('rr-block');
+        const input = iframe.contentDocument!.querySelector('input')!;
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        LATER_CONTENT,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {
