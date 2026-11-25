@@ -65,6 +65,8 @@ let FeatureFlagsCommonExtension
 let surveys
 let autocapture
 let commonJsAutocapture
+let webVitals
+let commonJsWebVitals
 let commonJsSurveys
 try {
     const require = createRequire(import.meta.url)
@@ -83,6 +85,8 @@ try {
     ;({ surveys: commonJsSurveys } = require('@posthog/browser/surveys'))
     ;({ autocapture } = await import('@posthog/browser/autocapture'))
     ;({ autocapture: commonJsAutocapture } = require('@posthog/browser/autocapture'))
+    ;({ webVitals } = await import('@posthog/browser/web-vitals'))
+    ;({ webVitals: commonJsWebVitals } = require('@posthog/browser/web-vitals'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -618,3 +622,18 @@ for (const factory of [autocapture, commonJsAutocapture]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM autocapture entrypoints and SSR lifecycle passed\n')
+
+for (const factory of [webVitals, commonJsWebVitals]) {
+    const extension = factory({ enabled: true })
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [extension],
+    })
+    assert.equal(client.webVitals, extension)
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM web vitals entrypoints and SSR lifecycle passed\n')

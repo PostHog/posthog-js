@@ -101,6 +101,7 @@ class PostHog implements IPostHog {
     declare readonly logs?: BrowserProducts['logs']
     declare readonly surveys?: BrowserProducts['surveys']
     declare readonly autocapture?: BrowserProducts['autocapture']
+    declare readonly webVitals?: BrowserProducts['webVitals']
     readonly logger: Client['logger']
     readonly kv: Client['kv']
     readonly library = Object.freeze({ name: 'web', version })

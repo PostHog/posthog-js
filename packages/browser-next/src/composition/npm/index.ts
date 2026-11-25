@@ -71,4 +71,10 @@ export type {
     RageclickOptions,
 } from '../../products/autocapture/autocapture-options'
 
+export type {
+    WebVitalsOptions,
+    WebVitalsConfiguration,
+    WebVitalsMetric,
+} from '../../products/web-vitals/web-vitals-options'
+
 export type { PersonProfileMode } from '../../products/analytics/analytics-options'
