@@ -53,10 +53,12 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
   createAiStorage,
+  aiEventKey,
   createAiMemoryStorage,
 } from './storage'
 import {
   CaptureAiLane,
+  type CaptureAiEventFiles,
   CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES,
   CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE,
   CAPTURE_AI_DEFAULT_TIMEOUT_MS,
@@ -64,8 +66,7 @@ import {
 import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
-import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
-import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
+import { buildAiEventStorage, buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
@@ -374,11 +375,11 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
    * dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps
    * at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default.
    *
-   * Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is
-   * killed, older events and an event over 5 MiB are lost. With `persistence: 'memory'`, or when events
-   * are stored in AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system
-   * isn't available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself
-   * rather than a wrapper around it: a wrapper is used like file storage and holds the AI queue.
+   * With the default storage on iOS and Android, unsent AI events are stored as files in the app's
+   * cache directory, which isn't backed up, so they are sent on the next launch if the app is killed.
+   * The OS may clear that directory when the device is low on space. With `persistence: 'memory'`,
+   * `customStorage`, or where Expo's file system isn't available, unsent AI events are kept only in
+   * memory.
    *
    * @default 100
    */
@@ -480,6 +481,7 @@ export class PostHog extends PostHogCoreBase {
   private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
   private _aiStorage: PostHogRNStorage
+  private _aiEventFiles?: CaptureAiEventFiles
   private _aiLane: CaptureAiLane
   // Set while `_shutdown` runs: core's drain loop calls `flush()`, and the AI lane drains on its own there.
   private _shuttingDown = false
@@ -685,13 +687,17 @@ export class PostHog extends PostHogCoreBase {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
-      // AsyncStorage stores each key as one row: Android caps a row read near 2 MB and the whole
-      // database at 6 MB by default, so an AI queue there could break every other key's writes.
-      // A disabled client never sends, so its AI queue stays in memory too.
-      this._aiStorage =
-        this.isDisabled || theStorage === OptionalAsyncStorage
-          ? createAiMemoryStorage()
-          : createAiStorage(theStorage, this.projectToken)
+      // AI events can be megabytes, so they are stored only in Expo's cache directory, outside the
+      // app's backups. Custom storage and AsyncStorage (whose Android rows and database are
+      // size-limited) keep them in memory. A disabled client leaves stored AI events for a later enabled launch.
+      const aiEventStorage = this.isDisabled || options?.customStorage ? undefined : buildAiEventStorage()
+      if (aiEventStorage) {
+        const projectToken = this.projectToken
+        this._aiStorage = createAiStorage(aiEventStorage, projectToken)
+        this._aiEventFiles = { storage: aiEventStorage, key: (slot) => aiEventKey(projectToken, slot) }
+      } else {
+        this._aiStorage = createAiMemoryStorage()
+      }
       // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
       // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs' | 'AI events', Promise<void>]> = []
@@ -801,7 +807,7 @@ export class PostHog extends PostHogCoreBase {
       // Persist pending writes before the OS may suspend the process.
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
-      void this._aiStorage.waitForPersist()
+      void this._aiLane.waitForPersist()
 
       if (state === 'active') {
         this.getSessionId()
@@ -1020,7 +1026,7 @@ export class PostHog extends PostHogCoreBase {
       const drain = Promise.all([
         this._eventsStorage.waitForPersist(),
         this._logsStorage.waitForPersist(),
-        this._aiStorage.waitForPersist(),
+        this._aiLane.waitForPersist(),
       ])
       await raceWithTimeout(drain, remainingMs)
     }
@@ -1108,7 +1114,12 @@ export class PostHog extends PostHogCoreBase {
       batchIndices.set(serialized, index)
     }
     if (drops.length > 0) {
-      const error = new CaptureError({ endpoint: ANALYTICS_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+      const error = new CaptureError({
+        endpoint: ANALYTICS_CAPTURE_ENDPOINT,
+        requestId: '',
+        drops,
+        retryExhausted: [],
+      })
       error.message = `Dropped ${drops.length} event(s) for ${ANALYTICS_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
       this._emitCaptureError(error)
     }
@@ -1301,6 +1312,7 @@ export class PostHog extends PostHogCoreBase {
     )
     return new CaptureAiLane(
       this._aiStorage,
+      this._aiEventFiles,
       {
         // A queue smaller than flushAt would evict events before a count flush could send them.
         flushAt: Math.min(this.flushAt, maxQueueSize),
@@ -1312,7 +1324,12 @@ export class PostHog extends PostHogCoreBase {
       () => this._getCaptureAiSender(),
       this._logger,
       (drops) => {
-        const error = new CaptureError({ endpoint: AI_CAPTURE_ENDPOINT, requestId: '', drops, retryExhausted: [] })
+        const error = new CaptureError({
+          endpoint: AI_CAPTURE_ENDPOINT,
+          requestId: '',
+          drops,
+          retryExhausted: [],
+        })
         error.message = `Dropped ${drops.length} event(s) for ${AI_CAPTURE_ENDPOINT} before sending: ${[...new Set(drops.map((d) => d.details))].join(', ')}`
         this._emitCaptureError(error)
       }
@@ -4257,9 +4274,11 @@ export class PostHog extends PostHogCoreBase {
       // retries its pending start below. Otherwise disarm them so the capture hook stays inert.
       this._sessionReplayEventTriggers = this._sessionReplayWanted
         ? this._parseEventTriggers(
-            ((this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType })[
-              'eventTriggers'
-            ]
+            (
+              (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+                [key: string]: JsonType
+              }
+            )['eventTriggers']
           )
         : []
       if (restoreAppRecording) {
@@ -4615,7 +4634,10 @@ export class PostHog extends PostHogCoreBase {
         )
       }
       if (appBuild) {
-        const installProperties = { ...properties, ...maybeAdd('$react_native_version', getReactNativeVersion()) }
+        const installProperties = {
+          ...properties,
+          ...maybeAdd('$react_native_version', getReactNativeVersion()),
+        }
         if (!prevAppBuild) {
           // new app install
           this.capture('Application Installed', installProperties)

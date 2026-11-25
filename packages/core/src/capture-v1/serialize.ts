@@ -8,7 +8,8 @@ const encoder = typeof TextEncoder === 'undefined' ? undefined : new TextEncoder
 // TextEncoder where the runtime has it, as it's faster on large events. It is missing on Hermes before
 // React Native 0.74 and on JSC, so the bytes are counted by hand there. A lone surrogate counts 3 bytes,
 // the U+FFFD it becomes when encoded.
-function utf8Length(value: string): number {
+/** UTF-8 size of `value`. */
+export function utf8Length(value: string): number {
   return encoder ? encoder.encode(value).length : countUtf8Bytes(value)
 }
 

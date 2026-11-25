@@ -1,4 +1,41 @@
+// The default storage on iOS and Android: Expo's file system, backed here by `expoFiles.files`, keyed by directory + name.
+const { expoFiles } = vi.hoisted(() => ({
+  expoFiles: { files: {} as Record<string, string>, readDelayMs: 0, read: vi.fn(), write: vi.fn() },
+}))
+
+vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
+  OptionalExpoFileSystem: {
+    Paths: { document: { uri: '' }, cache: { uri: 'cache/' } },
+    File: class {
+      private readonly path: string
+      constructor(directory: { uri: string }, name: string) {
+        this.path = directory.uri + name
+      }
+      async text(): Promise<string> {
+        if (expoFiles.readDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, expoFiles.readDelayMs))
+        }
+        expoFiles.read(this.path)
+        const content = expoFiles.files[this.path]
+        if (content === undefined) {
+          throw new Error('missing file')
+        }
+        return content
+      }
+      async write(content: string): Promise<void> {
+        expoFiles.write(this.path, content)
+        expoFiles.files[this.path] = content
+      }
+    },
+  },
+}))
+vi.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({ OptionalExpoFileSystemLegacy: undefined }))
+vi.mock('../src/optional/OptionalAsyncStorage', () => ({ OptionalAsyncStorage: undefined }))
+
 import { PostHog, PostHogCustomStorage, PostHogOptions } from '../src'
+
+const AI_INDEX = 'cache/.posthog-rn-ai-test-token.json'
+const aiSlot = (slot: number): string => `cache/.posthog-rn-ai-test-token.event-${slot}`
 
 type CaptureRequest = {
   path: string
@@ -16,7 +53,6 @@ describe('React Native captureAi', () => {
   let respond: (request: CaptureRequest) => CaptureResponse | Promise<CaptureResponse>
   let posthog: PostHog | undefined
   let cache: Record<string, string>
-  let storage: PostHogCustomStorage
 
   beforeAll(() => {
     vi.useRealTimers()
@@ -29,13 +65,10 @@ describe('React Native captureAi', () => {
 
   beforeEach(() => {
     requests = []
-    cache = {}
-    storage = {
-      getItem: async (key) => cache[key] ?? null,
-      setItem: async (key, value) => {
-        cache[key] = value
-      },
-    }
+    cache = expoFiles.files = {}
+    expoFiles.readDelayMs = 0
+    expoFiles.read.mockClear()
+    expoFiles.write.mockClear()
     respond = () => ({ status: 200, body: { results: {} } })
     ;(globalThis as any).window.fetch = vi.fn(async (url: string, options: any) => {
       const path = new URL(String(url)).pathname
@@ -62,7 +95,6 @@ describe('React Native captureAi', () => {
 
   const newPostHog = async (options: PostHogOptions = {}): Promise<PostHog> => {
     posthog = new PostHog('test-token', {
-      customStorage: storage,
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -302,16 +334,197 @@ describe('React Native captureAi', () => {
     await vi.waitFor(() => expect(sent(AI_PATH)).toEqual([['$ai_generation', '$ai_generation']]))
   })
 
-  it('stores kept AI events with only their uuid, JSON and sizes', async () => {
+  it('indexes kept AI events by uuid, sizes and slot, with each event in its own slot', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const client = await newPostHog()
-    client.captureAi('$ai_generation')
+    const uuid = client.captureAi('$ai_generation')
     await client.flush()
     await client.shutdown()
     posthog = undefined
 
-    const [stored] = JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue
-    expect(Object.keys(stored).sort()).toEqual(['bytes', 'json', 'propertiesBytes', 'uuid'])
+    const [stored] = JSON.parse(cache[AI_INDEX]).content.ai_queue
+    expect(Object.keys(stored).sort()).toEqual(['bytes', 'propertiesBytes', 'slot', 'uuid'])
+    expect(cache[aiSlot(stored.slot)]).toMatch(new RegExp(`^${uuid}\\n\\{`))
+  })
+
+  it('writes each AI event once and clears its slot once it is sent', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+    const slotWrites = (): [string, string][] =>
+      expoFiles.write.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
+
+    expect(slotWrites().map(([key]) => key)).toEqual([aiSlot(0), aiSlot(1)])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    endResendWait(client)
+    await client.flush()
+
+    expect(slotWrites().slice(2)).toEqual([
+      [aiSlot(0), ''],
+      [aiSlot(1), ''],
+    ])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
+  })
+
+  it('skips a stored AI event whose slot now holds a different event', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache[aiSlot(0)] = cache[aiSlot(1)]
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
+  })
+
+  it('drops a stored AI event cut off mid-write and sends the rest', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache[aiSlot(0)] = cache[aiSlot(0)].slice(0, -5)
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
+  })
+
+  it('removes an unreadable stored AI event from disk before flush() resolves', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    cache[aiSlot(0)] = cache[aiSlot(0)].slice(0, -5)
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+
+    expect(sent(AI_PATH)).toEqual([])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toBeUndefined()
+  })
+
+  it('sends no AI events once shutdown() times out while stored events are being read', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog({ flushAt: 10 })
+    vi.spyOn((next as any)._logger, 'critical').mockImplementation(() => {})
+    expoFiles.readDelayMs = 120
+    await next.shutdown(30)
+    posthog = undefined
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    expect(sent(AI_PATH)).toEqual([])
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toHaveLength(1)
+  })
+
+  it('lets go of an evicted AI event before its slot write finishes', async () => {
+    const client = await newPostHog({ flushAt: 100, captureAiMaxQueueSize: 1 })
+    client.captureAi('$ai_generation', { index: 0 })
+    const evicted = (client as any)._aiLane._events[0]
+    expect(evicted.json).toBeDefined()
+
+    client.captureAi('$ai_generation', { index: 1 })
+
+    expect(evicted.json).toBeUndefined()
+  })
+
+  it('reads stored AI events from their slots only when sending them', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    await earlier.flush()
+    endResendWait(earlier)
+    await earlier.flush()
+    expect(expoFiles.read.mock.calls.filter(([path]) => path === aiSlot(0))).toHaveLength(1)
+    await earlier.shutdown()
+    posthog = undefined
+
+    expoFiles.read.mockClear()
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    expect(expoFiles.read.mock.calls.filter(([path]) => path.includes('.event-'))).toEqual([])
+    await next.flush()
+
+    expect(expoFiles.read.mock.calls.map(([path]) => path).filter((path) => path.includes('.event-'))).toEqual([
+      aiSlot(0),
+    ])
+    expect(sent(AI_PATH)).toEqual([['$ai_generation']])
+  })
+
+  it('writes only the newest event to a slot when a burst of captures evicts older ones', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 100, captureAiMaxQueueSize: 2 })
+    for (let index = 0; index < 20; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await (client as any)._aiLane.waitForPersist()
+    const slotWrites = expoFiles.write.mock.calls.filter(([key]) => key.includes('.event-')) as [string, string][]
+
+    expect(slotWrites.length).toBeLessThanOrEqual(4)
+    expect(slotWrites.filter(([, content]) => content === '')).toEqual([])
+    expect(
+      [cache[aiSlot(0)], cache[aiSlot(1)]].map((content) => JSON.parse(content.split('\n')[1]).properties.index).sort()
+    ).toEqual([18, 19])
+  })
+
+  it('leaves AI events stored by an earlier launch untouched when the SDK is disabled', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+    expoFiles.read.mockClear()
+    expoFiles.write.mockClear()
+
+    const errors: unknown[] = []
+    const disabled = await newPostHog({ disabled: true, captureAiMaxQueueSize: 1 })
+    disabled.on('error', (error) => errors.push(error))
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    await disabled.shutdown()
+    posthog = undefined
+
+    expect(expoFiles.read.mock.calls.filter(([path]) => path.includes('-ai-'))).toEqual([])
+    expect(expoFiles.write.mock.calls.filter(([path]) => path.includes('-ai-'))).toEqual([])
+    expect(errors).toEqual([])
+
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1])
   })
 
   it('never sends AI events stored for one project with another project token', async () => {
@@ -325,7 +538,6 @@ describe('React Native captureAi', () => {
     respond = () => ({ status: 200, body: { results: {} } })
     requests = []
     posthog = new PostHog('other-token', {
-      customStorage: storage,
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -335,35 +547,15 @@ describe('React Native captureAi', () => {
     await posthog.flush()
 
     expect(sent(AI_PATH)).toEqual([])
-    expect(JSON.parse(cache['.posthog-rn-ai-test-token.json']).content.ai_queue).toHaveLength(1)
+    expect(JSON.parse(cache[AI_INDEX]).content.ai_queue).toHaveLength(1)
   })
 
-  it('persists only the newest 5 MiB of kept AI events for the next launch', async () => {
+  it('keeps every queued AI event for the next launch, including one over 5 MiB', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
     const earlier = await newPostHog({ flushAt: 10 })
-    const twoMiB = 'x'.repeat(2 * 1024 * 1024)
-    for (const index of [0, 1, 2]) {
-      earlier.captureAi('$ai_generation', { blob: twoMiB, index })
-    }
-    await earlier.flush()
-    await earlier.shutdown()
-    posthog = undefined
-
-    respond = () => ({ status: 200, body: { results: {} } })
-    requests = []
-    const next = await newPostHog()
-    await next.flush()
-
-    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1, 2])
-  })
-
-  it('still persists smaller AI events when the newest is over 5 MiB', async () => {
-    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
-    const earlier = await newPostHog({ flushAt: 10 })
-    const warn = vi.spyOn((earlier as any)._logger, 'warn').mockImplementation(() => {})
-    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { blob: 'x'.repeat(3 * 1024 * 1024), index: 0 })
     earlier.captureAi('$ai_generation', { blob: 'x'.repeat(6 * 1024 * 1024), index: 1 })
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('on-device limit'))
+    earlier.captureAi('$ai_generation', { index: 2 })
     await earlier.flush()
     await earlier.shutdown()
     posthog = undefined
@@ -373,7 +565,26 @@ describe('React Native captureAi', () => {
     const next = await newPostHog()
     await next.flush()
 
-    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0])
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1, 2])
+  })
+
+  it('keeps the AI queue in memory, out of both stores, when customStorage is set', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const custom: Record<string, string> = {}
+    const customStorage: PostHogCustomStorage = {
+      getItem: async (key) => custom[key] ?? null,
+      setItem: async (key, value) => {
+        custom[key] = value
+      },
+    }
+    const client = await newPostHog({ customStorage })
+    client.captureAi('$ai_generation')
+    await client.flush()
+    await client.shutdown()
+    posthog = undefined
+
+    expect(Object.keys(custom).filter((key) => key.includes('-ai-'))).toEqual([])
+    expect(Object.keys(cache).filter((key) => key.startsWith('cache/'))).toEqual([])
   })
 
   it('keeps AI events from an earlier launch when flush() runs before storage has loaded', async () => {
@@ -385,11 +596,8 @@ describe('React Native captureAi', () => {
 
     respond = () => ({ status: 200, body: { results: {} } })
     requests = []
+    expoFiles.readDelayMs = 50
     posthog = new PostHog('test-token', {
-      customStorage: {
-        ...storage,
-        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
-      },
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -464,11 +672,8 @@ describe('React Native captureAi', () => {
   })
 
   const newPostHogWithSlowStorage = (options: PostHogOptions = {}): PostHog => {
+    expoFiles.readDelayMs = 50
     posthog = new PostHog('test-token', {
-      customStorage: {
-        ...storage,
-        getItem: (key) => new Promise((resolve) => setTimeout(() => resolve(cache[key] ?? null), 50)),
-      },
       flushInterval: 0,
       preloadFeatureFlags: false,
       captureAppLifecycleEvents: false,
@@ -606,7 +811,7 @@ describe('React Native captureAi', () => {
     await new Promise((resolve) => setTimeout(resolve, 150))
 
     expect(captured).toEqual([])
-    expect(cache['.posthog-rn-ai-test-token.json']).toBeUndefined()
+    expect(cache[AI_INDEX]).toBeUndefined()
   })
 
   it('returns the uuid sent on the wire when before_send sets an uppercase uuid', async () => {
@@ -628,11 +833,10 @@ describe('React Native captureAi', () => {
 
   it('does not rewrite the stored AI queue when a send sends nothing', async () => {
     respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
-    const setItem = vi.spyOn(storage, 'setItem')
     const client = await newPostHog({ flushAt: 10 })
     client.captureAi('$ai_generation')
     await client.flush()
-    const writes = setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length
+    const writes = expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length
 
     ;(client as any)._aiLane._resendAt = 0
     await client.flush()
@@ -641,7 +845,7 @@ describe('React Native captureAi', () => {
 
     expect(sent(AI_PATH)).toHaveLength(3)
     expect(writes).toBeGreaterThan(0)
-    expect(setItem.mock.calls.filter(([key]) => key === '.posthog-rn-ai-test-token.json').length).toBe(writes)
+    expect(expoFiles.write.mock.calls.filter(([key]) => key === AI_INDEX).length).toBe(writes)
   })
 
   it('halves the AI batch on 413 and sends every event', async () => {
@@ -869,15 +1073,8 @@ describe('React Native captureAi', () => {
 
   describe('with storage slower than the shutdown timeout', () => {
     const slowClient = (): { client: PostHog; critical: ReturnType<typeof vi.spyOn> } => {
-      const slowStorage: PostHogCustomStorage = {
-        getItem: async (key) => {
-          await new Promise((resolve) => setTimeout(resolve, 60))
-          return cache[key] ?? null
-        },
-        setItem: storage.setItem,
-      }
+      expoFiles.readDelayMs = 60
       const client = new PostHog('test-token', {
-        customStorage: slowStorage,
         flushInterval: 0,
         flushAt: 10,
         preloadFeatureFlags: false,
@@ -905,14 +1102,6 @@ describe('React Native captureAi', () => {
 
       expect(sent(AI_PATH)).toEqual([])
     })
-  })
-
-  it('does not read AI storage when the SDK is disabled', async () => {
-    const getItem = vi.spyOn(storage, 'getItem')
-
-    await newPostHog({ disabled: true })
-
-    expect(getItem).not.toHaveBeenCalledWith('.posthog-rn-ai-test-token.json')
   })
 
   it('returns undefined for an AI event whose properties cannot be serialized', async () => {

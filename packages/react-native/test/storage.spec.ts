@@ -4,11 +4,12 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
     readAsStringAsync: vi.fn(),
     writeAsStringAsync: vi.fn(),
     documentDirectory: '/mock-doc-dir/',
+    cacheDirectory: '/mock-cache-dir/',
   },
 }))
 
 import { PostHogRNStorage, createAiMemoryStorage, createEventsStorage } from '../src/storage'
-import { buildOptimisticAsyncStorage } from '../src/native-deps'
+import { buildAiEventStorage, buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 const mockedOptionalFileSystem = vi.mocked(OptionalExpoFileSystem, true)
@@ -61,6 +62,22 @@ describe('PostHog React Native', () => {
       await storage.preloadPromise
       expect(mockedOptionalFileSystem!.readAsStringAsync).toHaveBeenCalledTimes(1)
       expect(storage.getItem('foo')).toEqual('bar')
+    })
+
+    it('stores AI events in the legacy cache directory, which is not backed up', async () => {
+      await buildAiEventStorage()!.setItem('ai-key', 'ai-value')
+
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledWith('/mock-cache-dir/ai-key', 'ai-value')
+    })
+
+    it('has no AI event storage when the legacy cache directory is null', () => {
+      const filesystem = mockedOptionalFileSystem as any
+      filesystem.cacheDirectory = null
+      try {
+        expect(buildAiEventStorage()).toBeUndefined()
+      } finally {
+        filesystem.cacheDirectory = '/mock-cache-dir/'
+      }
     })
 
     it('should save storage to the file system', async () => {
