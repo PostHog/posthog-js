@@ -2438,6 +2438,16 @@ describe('emails', () => {
         'invalid_form',
       ],
       [
+        'a recipient with attachments that are not enumerable',
+        WELCOME,
+        [
+          Object.defineProperty({ to: 'a@example.com' }, 'attachments', {
+            value: [{ filename: 'a.txt', content: 'YQ==' }],
+          }),
+        ],
+        'invalid_form',
+      ],
+      [
         'a recipient with inherited attachments',
         WELCOME,
         [
@@ -2458,6 +2468,142 @@ describe('emails', () => {
       expect(error).toMatchObject({ code, name: 'validation_error' })
       expect(error?.results).toBeUndefined()
       expect(postHog.batches).toEqual([])
+    })
+  })
+
+  describe('options a getter answers', () => {
+    // Every field is an inherited getter that throws on a second read, so a check and the request can't see two values.
+    const readOnce = (fields: Record<string, unknown>): never => {
+      const getters = Object.entries(fields).map(([name, value]) => {
+        let read = false
+        const get = (): unknown => {
+          if (read) {
+            throw new Error(`${name} was read twice`)
+          }
+          read = true
+          return value
+        }
+        return [name, { get }]
+      })
+      return Object.create(Object.defineProperties({}, Object.fromEntries(getters))) as never
+    }
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date('2026-11-22T10:00:00Z'))
+    })
+
+    it('sends an email from code with each option read once', async () => {
+      const postHog = againstPostHog()
+
+      const { error } = await settle(
+        posthog.emails.send(
+          readOnce({
+            to: 'ada@example.com',
+            distinctId: 'ada',
+            idempotencyKey: 'welcome:ada',
+            maxRetries: 0,
+            scheduledAt: '2026-11-23T09:00:00Z',
+            templateId: undefined,
+            templateData: undefined,
+            templateKey: 'welcome',
+            subject: 'Welcome',
+            react: createElement('p', null, 'Welcome, Ada'),
+            replyTo: 'help@example.com',
+            cc: 'cc@example.com',
+            bcc: undefined,
+            captureEngagement: false,
+            attachments: [{ filename: 'hello.txt', content: Buffer.from('hello') }],
+          })
+        )
+      )
+
+      expect(error).toBeNull()
+      expect(postHog.emails).toMatchObject([
+        {
+          to: 'ada@example.com',
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          cc: ['cc@example.com'],
+          scheduledAt: '2026-11-23T09:00:00.000Z',
+          attachments: [{ filename: 'hello.txt' }],
+        },
+      ])
+    })
+
+    it('sends a template email with each option read once', async () => {
+      const postHog = againstPostHog()
+
+      const { error } = await settle(
+        posthog.emails.send(
+          readOnce({
+            to: 'ada@example.com',
+            templateId: TEMPLATE_ID,
+            templateData: { name: 'Ada' },
+            templateKey: undefined,
+            react: undefined,
+            html: undefined,
+            attachments: undefined,
+            scheduledAt: undefined,
+            maxRetries: 0,
+          })
+        )
+      )
+
+      expect(error).toBeNull()
+      expect(postHog.emails).toMatchObject([{ to: 'ada@example.com', templateId: TEMPLATE_ID }])
+      expect(postHog.emails[0].scheduledAt).toBeUndefined()
+    })
+
+    it('sends a batch from code with each option and recipient field read once', async () => {
+      const postHog = againstPostHog()
+
+      const { data, error } = await settle(
+        posthog.emails.batch(
+          readOnce({
+            templateKey: 'welcome',
+            templateId: undefined,
+            subject: 'Welcome',
+            react: createElement('p', null, 'Welcome'),
+            maxRetries: 0,
+            cc: undefined,
+            attachments: undefined,
+            scheduledAt: undefined,
+          }),
+          [
+            readOnce({
+              to: 'ada@example.com',
+              distinctId: 'ada',
+              idempotencyKey: 'welcome:ada',
+              attachments: undefined,
+            }),
+          ]
+        )
+      )
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([{ status: 'queued', idempotencyKey: 'welcome:ada' }])
+      expect(postHog.emails).toMatchObject([
+        { to: 'ada@example.com', cc: [], html: expect.stringContaining('Welcome') },
+      ])
+    })
+
+    it('sends a batch of a template with each option and recipient field read once', async () => {
+      const postHog = againstPostHog()
+
+      const { data, error } = await settle(
+        posthog.emails.batch(
+          readOnce({
+            templateId: TEMPLATE_ID,
+            templateKey: undefined,
+            templateData: { team: 'Acme' },
+            react: undefined,
+          }),
+          [readOnce({ to: 'ada@example.com', templateData: { name: 'Ada' } })]
+        )
+      )
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([{ status: 'queued' }])
+      expect(postHog.emails).toMatchObject([{ to: 'ada@example.com', templateId: TEMPLATE_ID }])
     })
   })
 

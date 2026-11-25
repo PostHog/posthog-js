@@ -19,6 +19,7 @@ import {
   IDEMPOTENCY_KEY_PATTERN,
   type Slot,
   batchBody,
+  fieldsOf,
   mayHaveQueued,
   prepareRecipients,
   recordAnswer,
@@ -648,7 +649,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send: UncheckedSend = options ?? {}
+  const send: UncheckedSend = fieldsOf(options, KNOWN_FIELDS)
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
@@ -777,7 +778,7 @@ function prepareBatchEmail(
   templateForm: boolean
   maxRetries: number
 } {
-  const send: UncheckedSend = options ?? {}
+  const send: UncheckedSend = fieldsOf(options, KNOWN_FIELDS)
   const maxRetries = send.maxRetries
   if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
@@ -865,27 +866,22 @@ function codeContent(
   } else if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
-  const attachments = form.fields.has('attachments') ? send.attachments : undefined
-  const files = attachments === undefined ? [] : attachmentFiles(attachments, { html, text, subject })
+  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
   return {
     content: {
       template_key: templateKey,
       subject,
       ...(html !== undefined && { html }),
       ...(text !== undefined && { text }),
-      ...codeFormFields(send, form),
+      ...codeFormFields(send),
       ...(distinctId !== undefined && { distinct_id: distinctId }),
     },
     files,
   }
 }
 
-function codeFormFields(send: UncheckedSend, form: SendForm): Record<string, unknown> {
-  // A field the form doesn't take was checked as undefined, and isn't read again.
-  const read = (field: keyof UncheckedSend): unknown => (form.fields.has(field) ? send[field] : undefined)
-  const [from, replyTo, cc, bcc, captureEngagement, sensitive, tracking] = (
-    ['from', 'replyTo', 'cc', 'bcc', 'captureEngagement', 'sensitive', 'tracking'] as const
-  ).map(read)
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -980,10 +976,7 @@ async function loadReactRenderer(): Promise<ReactRenderer> {
 }
 
 function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
-  // Known fields are read as properties, so an inherited or non-enumerable one is refused like an own one.
-  // Only fields the form doesn't take are read here, so a getter the form takes is read once, where it is used.
-  const names = new Set([...Object.keys(send), ...KNOWN_FIELDS])
-  const field = [...names].find((name) => !form.fields.has(name) && send[name as keyof UncheckedSend] !== undefined)
+  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
   if (field === undefined) {
     return
   }

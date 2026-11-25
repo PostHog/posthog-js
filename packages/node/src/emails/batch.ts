@@ -8,6 +8,19 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const BATCH_MAX_RECIPIENTS = 100
 const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'templateData', 'idempotencyKey'])
 
+/**
+ * Reads each own field and each named one once, inherited and non-enumerable ones included, so a check refuses what
+ * the request would carry, and a getter can't answer the check one value and the request another.
+ */
+export function fieldsOf(source: unknown, names: Iterable<string>): Record<string, unknown> {
+  const object: Record<string, unknown> = Object(source ?? {})
+  const fields: Record<string, unknown> = {}
+  for (const name of new Set([...Object.keys(object), ...names])) {
+    fields[name] = object[name]
+  }
+  return fields
+}
+
 export interface Slot {
   readonly index: number
   readonly to: string
@@ -58,9 +71,8 @@ function prepareRecipient(
   if (!isRecord(recipient)) {
     throw invalid('invalid_recipient', `${at} must be an object with to, so no email was sent.`, at)
   }
-  // A send field is read as a property, so an inherited or non-enumerable one is refused like an own one.
-  const names = new Set([...Object.keys(recipient), ...sendFields])
-  const unknown = [...names].find((name) => !RECIPIENT_FIELDS.has(name) && recipient[name] !== undefined)
+  const fields = fieldsOf(recipient, sendFields)
+  const unknown = Object.keys(fields).find((name) => fields[name] !== undefined && !RECIPIENT_FIELDS.has(name))
   if (unknown !== undefined) {
     throw new EmailError({
       code: 'invalid_form',
@@ -69,7 +81,7 @@ function prepareRecipient(
       fix: 'Give each recipient only to, distinctId, templateData and idempotencyKey, and set the rest on the batch.',
     })
   }
-  const { to, distinctId, templateData, idempotencyKey } = recipient
+  const { to, distinctId, templateData, idempotencyKey } = fields
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', `${at}.to must be one email address as a nonempty string.`, `${at}.to`)
   }
