@@ -39,8 +39,12 @@
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog
+- **Breaking:** `captureTraceFeedback()` and `captureTraceMetric()` send `$ai_feedback` and `$ai_metric` through `captureAi()` to the AI endpoint instead of the analytics endpoint
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request
 - Keep events queued when a send gets no response, a 404, 408, 429, 500, 502, 503 or 504, or a `retry` result, and send them again after a wait of 1 second doubling to 30 seconds (longer if the server's `Retry-After` asks, up to 30 seconds), with no attempt limit. `flush()` during that wait resolves without sending, and `shutdown()` waits it out when it fits in its timeout
 - Drop an event that can't be serialized, such as one with a property whose `toJSON()` throws, on its own and report it on `posthog.on('error')` with `details: 'unserializable event'`; an invalid event name or id is reported with `details: 'invalid event'`
 - Cap each capture request at 5 MiB of event bytes, starting a new request before a batch would pass it
+- Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts in the app's cache directory, which isn't backed up, when the SDK uses Expo's file system; with `persistence: 'memory'`, `customStorage` or AsyncStorage they're kept only in memory
+- Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
+- `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them

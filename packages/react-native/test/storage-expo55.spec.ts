@@ -1,14 +1,21 @@
 // Test for Expo SDK 55 where both the new File/Paths API and a working legacy subpath exist.
 // The new API should always be preferred over the legacy subpath.
 
-const { mockFileWrite, mockFileText, mockDocument, mockLegacyReadAsStringAsync, mockLegacyWriteAsStringAsync } =
-  vi.hoisted(() => ({
-    mockFileWrite: vi.fn(),
-    mockFileText: vi.fn().mockResolvedValue('stored-value'),
-    mockDocument: { uri: 'file:///mock-doc-dir/' },
-    mockLegacyReadAsStringAsync: vi.fn(),
-    mockLegacyWriteAsStringAsync: vi.fn(),
-  }))
+const {
+  mockFileWrite,
+  mockFileText,
+  mockDocument,
+  mockCache,
+  mockLegacyReadAsStringAsync,
+  mockLegacyWriteAsStringAsync,
+} = vi.hoisted(() => ({
+  mockFileWrite: vi.fn(),
+  mockFileText: vi.fn().mockResolvedValue('stored-value'),
+  mockDocument: { uri: 'file:///mock-doc-dir/' },
+  mockCache: { uri: 'file:///mock-cache-dir/' },
+  mockLegacyReadAsStringAsync: vi.fn(),
+  mockLegacyWriteAsStringAsync: vi.fn(),
+}))
 
 // Mock expo-file-system main module (SDK 55): has new File/Paths API + deprecated legacy stubs
 vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
@@ -24,6 +31,7 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
     // New API
     Paths: {
       document: mockDocument,
+      cache: mockCache,
     },
     File: vi.fn().mockImplementation((_dir: any, _key: string) => ({
       text: mockFileText,
@@ -49,7 +57,7 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
-import { buildOptimisticAsyncStorage } from '../src/native-deps'
+import { buildAiEventStorage, buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 describe('Expo SDK 55 - prefers new File API over working legacy subpath', () => {
@@ -72,6 +80,28 @@ describe('Expo SDK 55 - prefers new File API over working legacy subpath', () =>
     // Legacy methods should NOT be called
     expect(mockLegacyReadAsStringAsync).not.toHaveBeenCalled()
     expect(mockLegacyWriteAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('stores AI events in the cache directory, which is not backed up', async () => {
+    await buildAiEventStorage()!.setItem('ai-key', 'ai-value')
+
+    expect((OptionalExpoFileSystem as any).File).toHaveBeenCalledWith(mockCache, 'ai-key')
+    expect(mockLegacyWriteAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('has no AI event storage, and does not throw, when reading the cache directory throws', () => {
+    const paths = (OptionalExpoFileSystem as any).Paths
+    Object.defineProperty(paths, 'cache', {
+      configurable: true,
+      get: () => {
+        throw new Error('native module missing')
+      },
+    })
+    try {
+      expect(buildAiEventStorage()).toBeUndefined()
+    } finally {
+      Object.defineProperty(paths, 'cache', { configurable: true, writable: true, value: mockCache })
+    }
   })
 
   it('should read using new File API, not legacy', async () => {
