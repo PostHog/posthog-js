@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.455.0
+
+### Minor Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters, payloads, `onFeatureFlags` callbacks and `$feature_flag_called` events return and send the same values as before, and older posthog-js versions can still read the stored flags. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A `v=4` flag record with a field of the wrong JSON type, such as a string `metadata.version`, reads as a disabled flag without a payload. Other flags in the same response are not affected. Tests that mock `/flags` may need to match the new URL. (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3), [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3)]:
+  - @posthog/browser-common@0.14.1
+
 ## 1.454.8
 
 ### Patch Changes
