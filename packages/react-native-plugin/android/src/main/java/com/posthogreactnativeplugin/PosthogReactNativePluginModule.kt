@@ -2,6 +2,7 @@ package com.posthogreactnativeplugin
 
 import android.app.Activity
 import android.content.Intent
+import android.util.Base64
 import android.util.Log
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
@@ -27,12 +28,15 @@ import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
 import com.posthog.internal.PostHogSessionManager
+import java.io.ByteArrayOutputStream
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.zip.GZIPOutputStream
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
@@ -344,6 +348,25 @@ class PosthogReactNativePluginModule(
       logError("setOptOut", e)
     } finally {
       promise.resolve(null)
+    }
+  }
+
+  /** Gzips [payload] as UTF-8 and resolves to base64, or to null when compression fails. */
+  @ReactMethod
+  fun gzip(
+    payload: String,
+    promise: Promise,
+  ) {
+    // Capture request bodies can be megabytes, so keep compression off the shared native modules thread.
+    gzipExecutor.execute {
+      try {
+        val bytes = ByteArrayOutputStream()
+        GZIPOutputStream(bytes).use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+        promise.resolve(Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP))
+      } catch (e: Throwable) {
+        logError("gzip", e)
+        promise.resolve(null)
+      }
     }
   }
 
@@ -739,6 +762,11 @@ class PosthogReactNativePluginModule(
             null
           }
   }
+}
+
+// Shared by every module instance, so a JS reload doesn't start another thread.
+private val gzipExecutor = Executors.newSingleThreadExecutor { runnable ->
+  Thread(runnable, "PostHogGzip").apply { isDaemon = true }
 }
 
 // posthog-android computes these from its own state, which JS never syncs (the app's

@@ -53,6 +53,10 @@ RCT_EXTERN_METHOD(setAppLanguage:(NSString)language
                   withResolver:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(gzip:(NSString)payload
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  withRejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(reset:(NSString)distinctId
                  withAnonymousId:(NSString)anonymousId
                  withResolver:(RCTPromiseResolveBlock)resolve

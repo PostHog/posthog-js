@@ -1,5 +1,33 @@
 @_spi(PostHogInternal) import PostHog
 import React
+import zlib
+
+/// Gzips `data` at the default level, or returns nil when zlib fails.
+private func gzipped(_ data: Data) -> Data? {
+    var stream = z_stream()
+    // 15 window bits + 16 asks zlib for a gzip header and trailer.
+    guard deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY,
+                        ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK
+    else {
+        return nil
+    }
+    defer { deflateEnd(&stream) }
+    var output = Data(count: Int(deflateBound(&stream, uLong(data.count))))
+    let status: Int32 = data.withUnsafeBytes { input in
+        output.withUnsafeMutableBytes { out in
+            stream.next_in = UnsafeMutablePointer(mutating: input.bindMemory(to: Bytef.self).baseAddress)
+            stream.avail_in = uInt(input.count)
+            stream.next_out = out.bindMemory(to: Bytef.self).baseAddress
+            stream.avail_out = uInt(out.count)
+            return deflate(&stream, Z_FINISH)
+        }
+    }
+    guard status == Z_STREAM_END else {
+        return nil
+    }
+    output.count = Int(stream.total_out)
+    return output
+}
 
 /// Meant for internally logging PostHog related things
 private func hedgeLog(_ message: String) {
@@ -703,6 +731,16 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     ) {
         PostHogSDK.shared.setAppLanguage(language)
         resolve(nil)
+    }
+
+    @objc(gzip:withResolver:withRejecter:)
+    func gzip(
+        payload: String, resolve: @escaping RCTPromiseResolveBlock, reject _: @escaping RCTPromiseRejectBlock
+    ) {
+        // Capture request bodies can be megabytes, so keep compression off the module's queue.
+        DispatchQueue.global(qos: .utility).async {
+            resolve(gzipped(Data(payload.utf8))?.base64EncodedString())
+        }
     }
 
     @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)

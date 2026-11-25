@@ -184,6 +184,20 @@ export function setAppLanguage(language: string | null): Promise<void> {
   return PosthogReactNativePlugin.setAppLanguage(language)
 }
 
+/**
+ * Gzips `payload` (as UTF-8) off the JS thread and resolves to the result as base64.
+ * Resolves to `null` when compression fails or the native build predates this method.
+ *
+ * @internal Used by `posthog-react-native` to compress capture requests. Not part of the public API.
+ */
+export function gzip(payload: string): Promise<string | null> {
+  // An OTA-updated JS bundle can run on a native build that predates this method.
+  if (typeof PosthogReactNativePlugin.gzip !== 'function') {
+    return Promise.resolve(null)
+  }
+  return PosthogReactNativePlugin.gzip(payload).catch(() => null)
+}
+
 export function registerPushNotificationToken(deviceToken: string, appId: string | null): Promise<void> {
   return PosthogReactNativePlugin.registerPushNotificationToken(deviceToken, appId)
 }
@@ -284,6 +298,8 @@ export interface PostHogReactNativePluginModule {
 
   setAppLanguage: (language: string | null) => Promise<void>
 
+  gzip: (payload: string) => Promise<string | null>
+
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
 
   unregisterPushNotificationToken: () => Promise<void>
@@ -309,6 +325,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   markFatalExceptionHandled,
   getSessionReplayDebugProperties,
   setAppLanguage,
+  gzip,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
   setOptOut,
