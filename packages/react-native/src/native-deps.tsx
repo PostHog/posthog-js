@@ -165,7 +165,13 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
 
 type ExpoDirectory = 'document' | 'cache'
 
-const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): PostHogCustomStorage | undefined => {
+/** Storage in one of Expo's app directories, which can also delete a file and list the directory's file names. */
+export interface ExpoFileStorage extends PostHogCustomStorage {
+  removeItem: (key: string) => Promise<void>
+  keys: () => Promise<string[]>
+}
+
+const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): ExpoFileStorage | undefined => {
   const directoryUri = directory === 'document' ? filesystem.documentDirectory : filesystem.cacheDirectory
   if (directory === 'cache' && !directoryUri) {
     return undefined
@@ -185,11 +191,19 @@ const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): PostHogC
       const uri = (directoryUri || '') + key
       await filesystem.writeAsStringAsync(uri, value)
     },
+
+    async removeItem(key: string) {
+      await filesystem.deleteAsync((directoryUri || '') + key, { idempotent: true })
+    },
+
+    async keys() {
+      return await filesystem.readDirectoryAsync(directoryUri || '')
+    },
   }
 }
 
 /** Storage in one of Expo's app directories, or undefined where expo-file-system isn't available. */
-const buildExpoFileStorage = (directory: ExpoDirectory): PostHogCustomStorage | undefined => {
+const buildExpoFileStorage = (directory: ExpoDirectory): ExpoFileStorage | undefined => {
   // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
   const supportedPlatform = !isWeb() && !isMacOS()
@@ -233,6 +247,17 @@ const buildExpoFileStorage = (directory: ExpoDirectory): PostHogCustomStorage | 
             const file = new filesystem.File(directoryPath, key)
             await file.write(value)
           },
+
+          async removeItem(key: string) {
+            const file = new filesystem.File(directoryPath, key)
+            if (file.exists) {
+              file.delete()
+            }
+          },
+
+          async keys() {
+            return (directoryPath as { list: () => { name: string }[] }).list().map((entry) => entry.name)
+          },
         }
       }
     }
@@ -256,7 +281,7 @@ const buildExpoFileStorage = (directory: ExpoDirectory): PostHogCustomStorage | 
  * copies, so megabytes of unsent AI events never count against the app's backup. The OS may clear it when
  * the device is low on space. Undefined where expo-file-system isn't available.
  */
-export const buildAiEventStorage = (): PostHogCustomStorage | undefined => buildExpoFileStorage('cache')
+export const buildAiEventStorage = (): ExpoFileStorage | undefined => buildExpoFileStorage('cache')
 
 export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined => {
   // On web platform during SSR (no window), skip file storage

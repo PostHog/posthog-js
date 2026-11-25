@@ -53,7 +53,7 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
   createAiStorage,
-  aiEventKey,
+  aiEventKeyPrefix,
   createAiMemoryStorage,
 } from './storage'
 import {
@@ -694,7 +694,7 @@ export class PostHog extends PostHogCoreBase {
       if (aiEventStorage) {
         const projectToken = this.projectToken
         this._aiStorage = createAiStorage(aiEventStorage, projectToken)
-        this._aiEventFiles = { storage: aiEventStorage, key: (slot) => aiEventKey(projectToken, slot) }
+        this._aiEventFiles = { storage: aiEventStorage, prefix: aiEventKeyPrefix(projectToken) }
       } else {
         this._aiStorage = createAiMemoryStorage()
       }

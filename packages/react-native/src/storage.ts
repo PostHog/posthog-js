@@ -241,8 +241,8 @@ export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogR
 /** Named per project, so AI events queued for one project are never sent with another's token. */
 export const aiStorageKey = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.json`
 
-/** Holds the JSON of one queued AI event; the index in {@link aiStorageKey} says which slots are in use. */
-export const aiEventKey = (projectToken: string, slot: number): string => `.posthog-rn-ai-${projectToken}.event-${slot}`
+/** Starts the name of each file holding one queued AI event's JSON; the file's number follows it. */
+export const aiEventKeyPrefix = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.event-`
 
 export function createAiStorage(customStorage: PostHogCustomStorage, projectToken: string): PostHogRNStorage {
   return new PostHogRNStorage(customStorage, aiStorageKey(projectToken))

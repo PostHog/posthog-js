@@ -24,19 +24,23 @@ describe('CaptureAiLane', () => {
       },
       waitForPersist: async () => {},
     }
-    const slots: Record<string, string> = {}
-    const files = {
+    const files: Record<string, string> = {}
+    const eventFiles = {
       storage: {
-        getItem: async (key: string) => slots[key] ?? null,
+        getItem: async (key: string) => files[key] ?? null,
         setItem: async (key: string, value: string) => {
-          slots[key] = value
+          files[key] = value
         },
+        removeItem: async (key: string) => {
+          delete files[key]
+        },
+        keys: async () => Object.keys(files),
       },
-      key: (slot: number) => `slot-${slot}`,
+      prefix: 'event-',
     }
     const lane = new CaptureAiLane(
       storage as any,
-      files,
+      eventFiles,
       {
         flushAt: 100,
         maxBatchSize: 100,
@@ -66,7 +70,7 @@ describe('CaptureAiLane', () => {
     loaded()
     await wait
 
-    expect(values[PostHogPersistedProperty.AiQueue]).toEqual([expect.objectContaining({ uuid, slot: 0 })])
-    expect(slots['slot-0']).toMatch(new RegExp(`^${uuid}\\n\\{`))
+    expect(values[PostHogPersistedProperty.AiQueue]).toEqual([expect.objectContaining({ uuid, file: 0 })])
+    expect(JSON.parse(files['event-0']).uuid).toBe(uuid)
   })
 })
