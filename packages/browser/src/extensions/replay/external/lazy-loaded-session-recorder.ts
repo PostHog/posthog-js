@@ -1055,10 +1055,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.warn('rrweb stopped recording while replay was started, restarting it')
         const restart = () => {
             this._stopRrweb = undefined
-            this._stopRrwebRecorder(stopRrweb)
+            // the old recorder's teardown runs host callbacks, so a stop they request is recorded here as it is during record()
+            const teardown = { stopRequested: false, startRequested: false }
+            this._rrwebStartInProgress = teardown
+            try {
+                this._stopRrwebRecorder(stopRrweb)
+            } finally {
+                this._rrwebStartInProgress = undefined
+            }
             this._queuedRRWebEvents = []
-            // the stop can flush into host callbacks that stop recording, which must win over the restart
-            if (this._instance.config.disable_session_recording || this._instance.has_opted_out_capturing()) {
+            if (
+                (teardown.stopRequested && !teardown.startRequested) ||
+                this._instance.config.disable_session_recording ||
+                this._instance.has_opted_out_capturing()
+            ) {
                 return
             }
             this._startRecorder()
