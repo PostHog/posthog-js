@@ -247,6 +247,7 @@ Both paths need an iOS 15 or later deployment target.
 | 1.x.x | Replace `PostHog.setup(...)` with `new PostHog(token, options)` or `PostHogProvider`. `PostHogProvider` replaces `captureApplicationLifecycleEvents` and `recordScreenViews`. Remove `captureDeepLinks`, `android`, and `iOS`.                                                                             |
 | 2.x.x | Replace `await PostHog.initAsync(...)` with `new PostHog(token, options)`.                                                                                                                                                                                                                                 |
 | 3.x.x | Rename `captureNativeAppLifecycleEvents` and `autocapture={{ captureLifecycleEvents: true }}` to `captureAppLifecycleEvents`. Remove `captureMode` and `maskPhotoLibraryImages`. Call `setPersonPropertiesForFlags` and `setGroupPropertiesForFlags` in place of `personProperties` and `groupProperties`. |
+| 4.x.x | See the [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native/MIGRATION.md).                                                                                                                                                                                             |
 
 1.x.x wrapped the native iOS and Android SDKs. Later majors are written in JavaScript. On iOS, the SDK migrates the persisted distinct ID and anonymous ID. On Android, it can't load them, so call `identify` when the app loads. Anonymous Android users appear as new users.
 
