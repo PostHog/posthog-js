@@ -90,6 +90,7 @@ import {
 } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
+import { compressCaptureBody } from './compression'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 import { getExceptionContext } from './error-tracking/exception-context'
 
@@ -363,8 +364,8 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
 
   /**
    * How {@link PostHog.captureAi} request bodies are compressed, separately from
-   * `disableCompression`. `'gzip'` is used only where the runtime provides `CompressionStream`;
-   * elsewhere bodies are sent uncompressed.
+   * `disableCompression`. On iOS and Android, `'gzip'` needs `@posthog/react-native-plugin` 3.0 or newer,
+   * which gzips natively; without it, bodies are sent uncompressed.
    *
    * @default 'gzip'
    */
@@ -387,7 +388,8 @@ export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvi
 
   /**
    * Timeout, in milliseconds, of a {@link PostHog.captureAi} request. AI requests can carry several
-   * MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default.
+   * MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default. After a
+   * request times out, its events are sent again in batches half the size.
    *
    * @default 60000
    */
@@ -487,6 +489,7 @@ export class PostHog extends PostHogCoreBase {
   private _shuttingDown = false
   private _captureAiSender?: V1CaptureSender
   private _captureAiCompression: 'gzip' | 'none' = 'gzip'
+  private _analyticsCompression: 'gzip' | 'none' = 'gzip'
   private _captureAiTimeoutMs = CAPTURE_AI_DEFAULT_TIMEOUT_MS
   private _appProperties: PostHogCustomAppProperties = {}
   private _appLanguage: string | undefined
@@ -727,6 +730,8 @@ export class PostHog extends PostHogCoreBase {
       this._logsStorage = createLogsMemoryStorage()
       this._aiStorage = createAiMemoryStorage()
     }
+    // Core turns compression off where CompressionStream is missing; capture v1 gzips through the plugin there.
+    this._analyticsCompression = options?.disableCompression ? 'none' : 'gzip'
     this._aiLane = this._createCaptureAiLane(options)
     if (this.isDisabled) {
       this._aiLane.stop()
@@ -1241,7 +1246,7 @@ export class PostHog extends PostHogCoreBase {
   private _getCaptureV1Sender(): V1CaptureSender {
     this._captureV1Sender ??= this._newCaptureV1Sender(
       ANALYTICS_CAPTURE_ENDPOINT,
-      this.disableCompression ? 'none' : 'gzip',
+      this._analyticsCompression,
       this.requestTimeout
     )
     return this._captureV1Sender
@@ -1281,6 +1286,7 @@ export class PostHog extends PostHogCoreBase {
         // The platform follows redirects. On react-native-web, `redirect: 'manual'` would hide a 307/308
         // behind status 0 and the batch would be dropped.
         fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
+        compress: compressCaptureBody,
         onError: (error, summary) => {
           this._logger.warn(summary)
           this._emitCaptureError(error)

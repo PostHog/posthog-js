@@ -862,6 +862,23 @@ describe('React Native captureAi', () => {
     expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
   })
 
+  it('halves the AI batch after a request times out, so a slow network still sends every event', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) =>
+      request.path === AI_PATH && request.body.batch.length > 1
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10, captureAiRequestTimeoutMs: 20 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
+  })
+
   it('drops a single AI event the server rejects with 413', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     respond = (request) => (request.path === AI_PATH ? { status: 413 } : { status: 200, body: { results: {} } })

@@ -150,6 +150,8 @@ export interface V1SendDeferral {
   retryAfterMs?: number
   /** The batch got a `413` and should be resent in smaller batches. */
   tooLarge: boolean
+  /** The last attempt hit `requestTimeoutMs` before a response was read. */
+  timedOut?: boolean
   /** The request the events were kept from, for a resend of exactly those events to pass as `retryOf`. */
   request: V1RequestIdentity
 }
@@ -221,7 +223,13 @@ export class V1CaptureSender {
     const unsent = (cause: unknown, failure: string): T[] => {
       if (keepUnsent) {
         this.surfacePartialDrops(requestId, drops, loss)
-        onDeferred?.({ reason: failure, tooLarge: false, request: { requestId, createdAt, attempt: lastAttempt } })
+        const timedOut = cause instanceof Error && timeoutErrors.has(cause)
+        onDeferred?.({
+          reason: failure,
+          tooLarge: false,
+          ...(timedOut ? { timedOut } : {}),
+          request: { requestId, createdAt, attempt: lastAttempt },
+        })
         return pending
       }
       this.surfaceBatchFailure(requestId, drops, pending, cause, loss, failure)

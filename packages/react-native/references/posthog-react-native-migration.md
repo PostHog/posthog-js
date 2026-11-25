@@ -69,6 +69,8 @@ Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'Po
 
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
 
+With the plugin, the SDK gzips its analytics and AI requests on iOS and Android, as 4.x already did on react-native-web. Without it, those requests are sent uncompressed, as in 4.x. `disableCompression: true` turns analytics compression off.
+
 ## Removed options
 
 | 4.x                                                                                      | 5.0                                                                                                                                                                                                                                                                                                          |
@@ -203,7 +205,7 @@ AI events have their own queue and options:
 
 | Option                      | Default                                                                                                                                                                  |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `captureAiCompression`      | `'gzip'` (bodies go uncompressed where the runtime has no `CompressionStream`, such as Hermes)                                                                           |
+| `captureAiCompression`      | `'gzip'` (on iOS and Android, needs `@posthog/react-native-plugin` 3.0 or newer; without it, bodies go uncompressed)                                                     |
 | `captureAiMaxQueueSize`     | `100` events, and at most 50 MiB; the oldest are dropped first                                                                                                           |
 | `captureAiRequestTimeoutMs` | `60000`, in milliseconds. The native SDKs' `captureAiTimeout` is in seconds, so don't copy their value.                                                                  |
 | `captureAiMaxEventBytes`    | 8 MiB plus 64 KiB; a larger event is dropped and `captureAi()` returns `undefined` (before the SDK finishes initializing, it returns the UUID and drops the event later) |

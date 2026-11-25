@@ -286,6 +286,12 @@ export class CaptureAiLane {
         this._batchSize = Math.max(1, Math.floor(batch.size / 2))
         continue
       }
+      // The whole request has one deadline, so a batch too big for the network to upload in time is resent in halves.
+      if (deferral.timedOut && batch.size > 1) {
+        this._batchSize = Math.max(1, Math.floor(batch.size / 2))
+        this._scheduleResend(deferral.retryAfterMs)
+        return
+      }
       const keptInOrder = [...batch].filter(([event]) => keptEvents.has(event)).map(([, item]) => item)
       if (keptInOrder.length > 0) {
         this._resend = { events: keptInOrder, request: deferral.request }
