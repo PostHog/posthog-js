@@ -5011,6 +5011,7 @@ Supports multiple formats:
 | <a id="filters"></a> `filters?` | `object` | - |
 | `filters.aggregation_group_type_index?` | `number` | - |
 | `filters.early_exit?` | `boolean` | - |
+| `filters.feature_enrollment?` | `boolean` \| `null` | Early-access feature flag. The person's opt-in, stored in the person property `$feature_enrollment/<flag key>`, decides the flag before holdouts and release conditions. |
 | `filters.groups?` | `FeatureFlagCondition`[] | - |
 | `filters.holdout?` | \{ `exclusion_percentage`: `number`; `id`: `number`; \} \| `null` | - |
 | `filters.multivariate?` | `object` | - |
