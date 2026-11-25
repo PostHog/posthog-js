@@ -440,7 +440,10 @@ function readKnownAbsentPropertyKeys(options: {
   const personPropertyKeysKnownAbsent = options.personPropertyKeysKnownAbsent?.slice()
   const groupPropertyKeysKnownAbsent = options.groupPropertyKeysKnownAbsent
     ? Object.fromEntries(
-        Object.entries(options.groupPropertyKeysKnownAbsent).map(([groupType, keys]) => [groupType, keys.slice()])
+        Object.entries(options.groupPropertyKeysKnownAbsent)
+          // Plain JavaScript callers can pass an undefined list; skip it as the `/flags` body does.
+          .filter(([, keys]) => keys !== undefined)
+          .map(([groupType, keys]) => [groupType, keys.slice()])
       )
     : undefined
   const result: KnownAbsentPropertyKeys = {

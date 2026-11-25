@@ -841,6 +841,15 @@ describe('known-absent property keys', () => {
       })
     })
 
+    it('skips a group type whose list is undefined', async () => {
+      setup(inconclusive, { flag: 'remote' })
+
+      // Plain JavaScript callers can pass an undefined list despite the type.
+      const groupPropertyKeysKnownAbsent = { organization: undefined, project: ['tier'] } as any
+      expect(await posthog.getFeatureFlag('flag', 'user', { groupPropertyKeysKnownAbsent })).toBe('remote')
+      expect(flagsRequests()[0].group_property_keys_known_absent).toEqual({ project: ['tier'] })
+    })
+
     it('omits the fields when nothing was listed', async () => {
       setup(inconclusive, { flag: 'remote' })
 
