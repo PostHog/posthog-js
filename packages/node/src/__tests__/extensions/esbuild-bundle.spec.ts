@@ -155,19 +155,25 @@ describe('esbuild bundle of the built package', () => {
       }
     )
 
-    it('returns missing_react_renderer in a real isolated bundle without reactEmailRenderer and renders when passed', async () => {
-      const runIsolatedSend = async (withRenderer: boolean) => {
+    it('returns missing_react_renderer in a real isolated bundle without reactEmailRenderer and renders with module or wrapper', async () => {
+      const runIsolatedSend = async (mode: 'none' | 'module' | 'wrapper') => {
+        const importLine =
+          mode === 'module'
+            ? "import * as reactEmailRenderer from '@react-email/render'"
+            : mode === 'wrapper'
+              ? "import { render, toPlainText } from '@react-email/render'\nconst reactEmailRenderer = { render: (el) => render(el, { pretty: true }), toPlainText }"
+              : ''
         const contents = `
           import { createElement } from 'react'
           import { PostHog } from 'posthog-node'
-          ${withRenderer ? "import * as reactEmailRenderer from '@react-email/render'" : ''}
+          ${importLine}
           export async function run() {
             const sent = []
             const client = new PostHog('phc_test', {
               host: 'https://us.i.posthog.com',
               secretKey: 'phs_test',
               enableLocalEvaluation: false,
-              ${withRenderer ? 'reactEmailRenderer,' : ''}
+              ${mode === 'none' ? '' : 'reactEmailRenderer,'}
               fetch: async (url, init) => {
                 if (
                   url !== 'https://us.posthog.com/api/messaging/send/email/' ||
@@ -219,7 +225,7 @@ describe('esbuild bundle of the built package', () => {
         return mod.run()
       }
 
-      const withoutOpt = await runIsolatedSend(false)
+      const withoutOpt = await runIsolatedSend('none')
       expect(withoutOpt.data).toBeNull()
       expect(withoutOpt.sent).toEqual([])
       expect(withoutOpt.error).toMatchObject({
@@ -227,20 +233,31 @@ describe('esbuild bundle of the built package', () => {
         fix: expect.stringContaining('reactEmailRenderer'),
       })
 
-      const withOpt = await runIsolatedSend(true)
-      expect(withOpt.error).toBeNull()
-      expect(withOpt.sent).toEqual([
+      const withModule = await runIsolatedSend('module')
+      expect(withModule.error).toBeNull()
+      expect(withModule.sent).toEqual([
         expect.objectContaining({
           html: expect.stringContaining('<p>Welcome, Ada</p>'),
           text: 'Welcome, Ada',
         }),
       ])
+
+      const withWrapper = await runIsolatedSend('wrapper')
+      expect(withWrapper.error).toBeNull()
+      expect(withWrapper.sent).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('\n'),
+          text: 'Welcome, Ada',
+        }),
+      ])
+      expect(withWrapper.sent[0].html).toContain('<p>Welcome, Ada</p>')
     })
 
-    it('exits cleanly under strict unhandled rejections when toPlainText returns a rejecting promise or async-throwing thenable', async () => {
+    it('exits cleanly under strict unhandled rejections when toPlainText returns a same-realm, cross-realm, or async-throwing thenable', async () => {
       const nodeEntryUrl = pathToFileURL(builtEntrypoint('index.node.mjs')).href
       const script = `
         import { createElement } from 'react'
+        import vm from 'node:vm'
         import { PostHog } from ${JSON.stringify(nodeEntryUrl)}
         const runCase = async (toPlainText) => {
           const client = new PostHog('phc_test', {
@@ -260,12 +277,15 @@ describe('esbuild bundle of the built package', () => {
         const rejectingPromise = await runCase(async () => {
           throw new Error('async plain text failure')
         })
+        const crossRealmPromise = await runCase(() =>
+          vm.runInNewContext('Promise.reject(new Error("cross-realm failure"))')
+        )
         const throwingThenable = await runCase(() => ({
           async then() {
             throw new Error('throwing thenable')
           },
         }))
-        console.log(JSON.stringify({ rejectingPromise, throwingThenable }))
+        console.log(JSON.stringify({ rejectingPromise, crossRealmPromise, throwingThenable }))
       `
       const { stdout } = await execFileAsync(
         process.execPath,
@@ -274,6 +294,7 @@ describe('esbuild bundle of the built package', () => {
       )
       expect(JSON.parse(stdout.trim())).toEqual({
         rejectingPromise: { data: null, code: 'react_render_failed' },
+        crossRealmPromise: { data: null, code: 'react_render_failed' },
         throwingThenable: { data: null, code: 'react_render_failed' },
       })
     })

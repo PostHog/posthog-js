@@ -1067,9 +1067,8 @@ describe('emails', () => {
       expect(inbox).toEqual([])
     })
 
-    it('renders with a custom reactEmailRenderer wrapper without loading @react-email/render', async () => {
+    it('renders with a custom reactEmailRenderer wrapper', async () => {
       const { render, toPlainText } = await import('@react-email/render')
-      withoutRenderer()
       makeClient({
         reactEmailRenderer: {
           render: (element) => render(element, { pretty: true }),
