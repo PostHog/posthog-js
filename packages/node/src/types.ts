@@ -63,8 +63,8 @@ export type SendFeatureFlagsOptions = {
    * Person property keys you know this person doesn't have. Local evaluation treats a listed key as
    * absent even when `personProperties` has a value for it, so `is_not_set` and the negated
    * operators match and every other operator doesn't, without a `/flags` request. The list is sent
-   * to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer
-   * list throws an error and no flags are evaluated.
+   * to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; with a
+   * longer list no flags are evaluated and the event is sent without flag properties.
    */
   personPropertyKeysKnownAbsent?: string[]
   /**

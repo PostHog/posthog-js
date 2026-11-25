@@ -5269,7 +5269,7 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | <a id="grouppropertykeysknownabsent-1"></a> `groupPropertyKeysKnownAbsent?` | `Record`\<`string`, `string`[]\> | Group property keys you know each group doesn't have, by group type name. A key applies only to its own group type. Otherwise follows `personPropertyKeysKnownAbsent`, with the 1000-key limit applying to each group type's list. |
 | <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` | - |
 | <a id="personproperties-1"></a> `personProperties?` | `Properties` | - |
-| <a id="personpropertykeysknownabsent-1"></a> `personPropertyKeysKnownAbsent?` | `string`[] | Person property keys you know this person doesn't have. Local evaluation treats a listed key as absent even when `personProperties` has a value for it, so `is_not_set` and the negated operators match and every other operator doesn't, without a `/flags` request. The list is sent to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; a longer list throws an error and no flags are evaluated. |
+| <a id="personpropertykeysknownabsent-1"></a> `personPropertyKeysKnownAbsent?` | `string`[] | Person property keys you know this person doesn't have. Local evaluation treats a listed key as absent even when `personProperties` has a value for it, so `is_not_set` and the negated operators match and every other operator doesn't, without a `/flags` request. The list is sent to `/flags` when evaluation falls back to it. At most 1000 keys, counting duplicates; with a longer list no flags are evaluated and the event is sent without flag properties. |
 
 ### `SendTemplateEmailOptions`
 

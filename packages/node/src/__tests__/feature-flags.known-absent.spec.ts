@@ -1,5 +1,5 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { anyFlagsCall, apiImplementation } from './utils'
+import { anyFlagsCall, apiImplementation, sentEvents } from './utils'
 
 const mockedFetch = vi.spyOn(globalThis, 'fetch')
 
@@ -33,6 +33,7 @@ describe('known-absent property keys', () => {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       fetchRetryCount: 0,
+      disableCompression: true,
     })
   }
 
@@ -889,6 +890,40 @@ describe('known-absent property keys', () => {
     })
   })
 
+  describe('capture with sendFeatureFlags', () => {
+    it('applies the listed keys locally', async () => {
+      setup({ flags: [flag('flag', [personFilter('is_not_set', null)])] }, { flag: 'remote' })
+      await posthog.reloadFeatureFlags()
+
+      await posthog.captureImmediate({
+        distinctId: 'user',
+        event: 'local',
+        sendFeatureFlags: { personProperties: { plan: 'pro' }, personPropertyKeysKnownAbsent: ['plan'] },
+      })
+      expect(sentEvents(mockedFetch)[0].properties['$feature/flag']).toBe(true)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it('sends the listed keys to /flags when no local definitions are loaded', async () => {
+      setup({ flags: [] }, { flag: 'remote' })
+
+      await posthog.captureImmediate({
+        distinctId: 'user',
+        event: 'remote',
+        sendFeatureFlags: {
+          personPropertyKeysKnownAbsent: ['plan'],
+          groupPropertyKeysKnownAbsent: { organization: ['tier'] },
+        },
+      })
+      expect(sentEvents(mockedFetch)[0].properties['$feature/flag']).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+      expect(flagsRequests()[0]).toMatchObject({
+        person_property_keys_known_absent: ['plan'],
+        group_property_keys_known_absent: { organization: ['tier'] },
+      })
+    })
+  })
+
   describe('1000-key limit', () => {
     const keys = (count: number): string[] => Array.from({ length: count }, () => 'plan')
 
@@ -907,6 +942,23 @@ describe('known-absent property keys', () => {
       await expect(posthog.evaluateFlags('user', { personPropertyKeysKnownAbsent: keys(1001) })).rejects.toThrow()
       expect(flagsRequests()).toHaveLength(0)
     })
+
+    it.each([
+      ['person', { personPropertyKeysKnownAbsent: keys(1001) }],
+      ['group', { groupPropertyKeysKnownAbsent: { organization: keys(1001) } }],
+    ])(
+      'over the limit for %s keys, capture with sendFeatureFlags sends the event without flag properties',
+      async (_name, sendFeatureFlags) => {
+        setup({ flags: [flag('flag', [personFilter('exact', 'x', 'email')])] }, { flag: 'remote' })
+
+        await posthog.captureImmediate({ distinctId: 'user', event: 'over-limit', sendFeatureFlags })
+        const [event] = sentEvents(mockedFetch)
+        expect(event.event).toBe('over-limit')
+        expect(event.properties).not.toHaveProperty('$feature/flag')
+        expect(event.properties).not.toHaveProperty('$active_feature_flags')
+        expect(flagsRequests()).toHaveLength(0)
+      }
+    )
 
     it('rejects more keys for one group type without a request', async () => {
       setup({ flags: [flag('flag', [personFilter('exact', 'x', 'email')])] }, { flag: 'remote' })
