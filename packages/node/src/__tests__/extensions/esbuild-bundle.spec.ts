@@ -259,11 +259,17 @@ describe('esbuild bundle of the built package', () => {
         import { createElement } from 'react'
         import vm from 'node:vm'
         import { PostHog } from ${JSON.stringify(nodeEntryUrl)}
+        let fetchCalled = false
         const runCase = async (toPlainText) => {
           const client = new PostHog('phc_test', {
             host: 'https://us.i.posthog.com',
+            appHost: 'http://127.0.0.1:1',
             secretKey: 'phs_test',
             enableLocalEvaluation: false,
+            fetch: async () => {
+              fetchCalled = true
+              throw new Error('unexpected network request')
+            },
             reactEmailRenderer: { render: async () => '<p>Hi</p>', toPlainText },
           })
           const res = await client.emails.send({
@@ -285,7 +291,7 @@ describe('esbuild bundle of the built package', () => {
             throw new Error('throwing thenable')
           },
         }))
-        console.log(JSON.stringify({ rejectingPromise, crossRealmPromise, throwingThenable }))
+        console.log(JSON.stringify({ fetchCalled, rejectingPromise, crossRealmPromise, throwingThenable }))
       `
       const { stdout } = await execFileAsync(
         process.execPath,
@@ -293,6 +299,7 @@ describe('esbuild bundle of the built package', () => {
         { cwd: packageRoot }
       )
       expect(JSON.parse(stdout.trim())).toEqual({
+        fetchCalled: false,
         rejectingPromise: { data: null, code: 'react_render_failed' },
         crossRealmPromise: { data: null, code: 'react_render_failed' },
         throwingThenable: { data: null, code: 'react_render_failed' },
