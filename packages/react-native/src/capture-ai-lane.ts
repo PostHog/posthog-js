@@ -405,10 +405,13 @@ export class CaptureAiLane {
           restored.push(item)
         }
         this._nextFileId = Math.max(-1, ...indexed, ...found) + 1
-        // Files the index doesn't list were sent, evicted, or never indexed before the app was killed.
-        for (const file of found) {
-          if (!indexed.has(file)) {
-            this._removeFile(file)
+        // Files the index doesn't list were sent, evicted, or never indexed before the app was killed. Without
+        // a stored index that was read, a failed read can't be told from an empty queue, so every file is kept.
+        if (this._storage.loadedStoredContents) {
+          for (const file of found) {
+            if (!indexed.has(file)) {
+              this._removeFile(file)
+            }
           }
         }
       }

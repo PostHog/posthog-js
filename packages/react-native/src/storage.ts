@@ -30,6 +30,8 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
+  // True once stored contents were read and parsed; false when there were none or the read failed.
+  loadedStoredContents = false
   private _storageKey: string
   // Each pending persist resolves to a boolean: true if the underlying setItem
   // resolved, false if it rejected. waitForPersistSuccess() uses this to surface
@@ -201,6 +203,7 @@ export class PostHogRNStorage {
       for (const key in data) {
         this.memoryCache[key] = data[key]
       }
+      this.loadedStoredContents = !!res
     } catch (e) {
       console.warn(
         "PostHog failed to load persisted data from storage. This is likely because the storage format is. We'll reset the storage.",

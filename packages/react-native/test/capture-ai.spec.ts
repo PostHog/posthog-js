@@ -1,6 +1,13 @@
 // The default storage on iOS and Android: Expo's file system, backed here by `expoFiles.files`, keyed by directory + name.
 const { expoFiles } = vi.hoisted(() => ({
-  expoFiles: { files: {} as Record<string, string>, readDelayMs: 0, read: vi.fn(), write: vi.fn(), remove: vi.fn() },
+  expoFiles: {
+    files: {} as Record<string, string>,
+    readDelayMs: 0,
+    failingReads: new Set<string>(),
+    read: vi.fn(),
+    write: vi.fn(),
+    remove: vi.fn(),
+  },
 }))
 
 vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
@@ -26,7 +33,7 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
         }
         expoFiles.read(this.path)
         const content = expoFiles.files[this.path]
-        if (content === undefined) {
+        if (content === undefined || expoFiles.failingReads.has(this.path)) {
           throw new Error('missing file')
         }
         return content
@@ -83,6 +90,7 @@ describe('React Native captureAi', () => {
     requests = []
     cache = expoFiles.files = {}
     expoFiles.readDelayMs = 0
+    expoFiles.failingReads.clear()
     expoFiles.read.mockClear()
     expoFiles.write.mockClear()
     expoFiles.remove.mockClear()
@@ -424,7 +432,32 @@ describe('React Native captureAi', () => {
     expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([1])
   })
 
+  it('keeps stored AI event files when the stored index cannot be read at launch', async () => {
+    respond = (request) => (request.path === AI_PATH ? { status: 503 } : { status: 200, body: { results: {} } })
+    const earlier = await newPostHog({ flushAt: 10 })
+    earlier.captureAi('$ai_generation', { index: 0 })
+    earlier.captureAi('$ai_generation', { index: 1 })
+    await earlier.flush()
+    await earlier.shutdown()
+    posthog = undefined
+
+    expoFiles.failingReads.add(AI_INDEX)
+    const unreadable = await newPostHog({ flushAt: 10 })
+    await (unreadable as any)._aiLane.waitForPersist()
+    await unreadable.shutdown()
+    posthog = undefined
+    expect(expoFiles.remove).not.toHaveBeenCalled()
+
+    expoFiles.failingReads.clear()
+    respond = () => ({ status: 200, body: { results: {} } })
+    requests = []
+    const next = await newPostHog()
+    await next.flush()
+    expect(requests.flatMap((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([0, 1])
+  })
+
   it("deletes this project's AI event files that the stored index does not list at launch", async () => {
+    cache[AI_INDEX] = JSON.stringify({ version: 'v1', content: {} })
     cache[aiFile(7)] = '{"orphan":true}'
     cache['cache/.posthog-rn-ai-other-token.event-3'] = '{}'
     cache['cache/app-file'] = 'kept'
