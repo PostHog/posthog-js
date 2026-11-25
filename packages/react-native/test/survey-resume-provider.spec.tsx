@@ -109,7 +109,7 @@ function makeClient(
     },
     _onSurveysReady: async () => {},
     getSurveys: async () => surveys,
-    getFeatureFlags: () => flags,
+    getFeatureFlagDetails: () => ({ featureFlags: flags }),
     onFeatureFlags: () => () => {},
     getPersistedProperty: (key: PostHogPersistedProperty) => storage.getItem(key),
     setPersistedProperty: (key: PostHogPersistedProperty, value: unknown) => storage.setItem(key, value),
