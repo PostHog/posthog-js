@@ -388,12 +388,13 @@ function record<T = eventWithTime>(
   // parent has to judge each relayed event. A block selector's past matches
   // cannot be tracked reliably (`:focus-within`, a match that starts and ends
   // within one mutation batch), so the parent fails closed and relays nothing.
-  // Child frames keep relaying; only the parent's decision matters.
+  // This applies to every frame that receives relays, including a middle
+  // frame; a frame's own events are still forwarded to its parent.
   const inEmittingFrame = recordCrossOriginIframesOption
     ? window.parent === window
     : true;
   const recordCrossOriginIframes =
-    recordCrossOriginIframesOption && !(inEmittingFrame && blockSelector);
+    recordCrossOriginIframesOption && !blockSelector;
 
   let passEmitsToParent = false;
   if (!inEmittingFrame) {

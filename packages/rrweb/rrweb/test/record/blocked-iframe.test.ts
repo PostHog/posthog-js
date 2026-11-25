@@ -735,6 +735,57 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('a middle frame with a block selector does not relay its cross-origin child', async () => {
+    // top (about:blank) > middle (localhost) > nested (127.0.0.1): every hop is cross-origin
+    const nestedServer = await startServer(3031);
+    const page = await browser.newPage();
+    try {
+      const nestedURL = getServerURL(nestedServer).replace(
+        'localhost',
+        '127.0.0.1',
+      );
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe src="${getServerURL(server)}/html/blank.html"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const middleFrame = page.frames()[1];
+      await middleFrame.evaluate((src) => {
+        const iframe = document.createElement('iframe');
+        iframe.src = src;
+        document.body.append(iframe);
+        return new Promise((resolve) => (iframe.onload = resolve));
+      }, `${nestedURL}/html/blank.html`);
+      const nestedFrame = middleFrame.childFrames()[0];
+      await appendParagraph(middleFrame, INITIAL_CONTENT);
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), { recordCrossOriginIframes: true });
+      await startRecording(middleFrame, {
+        blockSelector: '[data-private]',
+        recordCrossOriginIframes: true,
+      });
+      await startRecording(nestedFrame, { recordCrossOriginIframes: true });
+      await waitForRAF(page);
+      await appendParagraph(nestedFrame, LATER_CONTENT);
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const recorded = JSON.stringify(events);
+      expect({
+        middleFrame: recorded.includes(INITIAL_CONTENT),
+        nestedFrame: recorded.includes(LATER_CONTENT),
+      }).toEqual({ middleFrame: true, nestedFrame: false });
+    } finally {
+      await page.close();
+      nestedServer.close();
+    }
+  });
+
   it.each([
     { blockSelector: '[', description: 'an invalid selector' },
     {
