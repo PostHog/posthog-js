@@ -8,6 +8,7 @@ const referencePaths = [
     'packages/node/references/posthog-node-6.md',
     'packages/node/references/posthog-node-reference.md',
     'packages/react-native/references/posthog-react-native-4.md',
+    'packages/react-native/references/posthog-react-native-5.md',
     'packages/react-native/references/posthog-react-native-reference.md',
 ]
 

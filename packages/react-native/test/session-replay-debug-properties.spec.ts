@@ -3,8 +3,7 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState, Platform } from 'react-native'
 import { wait, waitForNativeChain, waitForNativePluginEvaluation } from './test-utils'
 
-// The native plugin bridge, mocked with the legacy start() surface (no `setup`). The
-// getter lets a test remove the plugin altogether to model an app without it installed.
+// The native plugin bridge. The getter lets a test remove the plugin altogether to model an app without it installed.
 let nativeRecording = false
 // The native replay debug map returned by `getSessionReplayDebugProperties`; mutable so a
 // test can shape it, reset to `{}` (no integration) between tests.
@@ -20,7 +19,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 }))
 
 const pluginMock = {
-  start: vi.fn(async () => {}),
+  setup: vi.fn(async () => {}),
   startSession: vi.fn(async () => {}),
   endSession: vi.fn(async () => {}),
   isEnabled: vi.fn(async () => nativeRecording),
@@ -89,8 +88,10 @@ describe('PostHog RN session replay debug properties', () => {
       fn.mockClear()
     }
     pluginMock.isEnabled.mockImplementation(async () => nativeRecording)
-    pluginMock.start.mockImplementation(async () => {
-      nativeRecording = true
+    pluginMock.setup.mockImplementation(async (_sessionId: string, _sdkOptions: unknown, pluginConfig: any) => {
+      if (pluginConfig?.sessionReplay?.enabled) {
+        nativeRecording = true
+      }
     })
     pluginMock.startRecording.mockImplementation(async () => {
       nativeRecording = true
@@ -188,7 +189,7 @@ describe('PostHog RN session replay debug properties', () => {
     await waitForNativePluginEvaluation(w)
     await w.shutdown()
     nativeRecording = false
-    pluginMock.start.mockClear()
+    pluginMock.setup.mockClear()
   }
 
   it('Custom event carries debug properties', async () => {

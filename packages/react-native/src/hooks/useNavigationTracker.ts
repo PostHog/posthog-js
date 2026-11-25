@@ -3,17 +3,12 @@ import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNa
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
 import { useOverridablePostHog } from './utils'
-import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
   return
 }
 
-function _useNavigationTracker(
-  options?: PostHogAutocaptureNavigationTrackerOptions,
-  navigationRef?: PostHogNavigationRef,
-  client?: PostHog
-): void {
+function _useNavigationTracker(options?: PostHogAutocaptureNavigationTrackerOptions, client?: PostHog): void {
   // oxlint-disable-next-line react-hooks/rules-of-hooks -- This internal function is exported as useNavigationTracker.
   const posthog = useOverridablePostHog(client, 'useNavigationTracker')
 
@@ -23,7 +18,7 @@ function _useNavigationTracker(
   }
 
   let navigationState: any = undefined
-  let navigation: any = navigationRef
+  let navigation: any = undefined
 
   try {
     // oxlint-disable-next-line react/rules-of-hooks
@@ -35,10 +30,8 @@ function _useNavigationTracker(
   }
 
   try {
-    if (!navigation) {
-      // oxlint-disable-next-line react/rules-of-hooks
-      navigation = OptionalReactNativeNavigation.useNavigation()
-    }
+    // oxlint-disable-next-line react/rules-of-hooks
+    navigation = OptionalReactNativeNavigation.useNavigation()
   } catch (error) {
     // useNavigation hook might not be available in static navigation setups
     // Navigation tracking will be disabled in this case
@@ -51,11 +44,11 @@ function _useNavigationTracker(
     if (!navigation || !posthog) {
       return
     }
-
-    // if you create a navigation ref with createNavigationContainerRef, you need to use the current property to get the navigation object
-    let currentNavigation = navigation
-    if (navigation.current) {
-      currentNavigation = navigation.current
+    if (typeof posthog.screen !== 'function') {
+      console.error(
+        '[PostHog] useNavigationTracker received a client without screen(). Call useNavigationTracker(options, client).'
+      )
+      return
     }
 
     let currentRoute: any = undefined
@@ -64,7 +57,7 @@ function _useNavigationTracker(
     try {
       let isReady = false
       try {
-        isReady = (currentNavigation as any).isReady()
+        isReady = (navigation as any).isReady()
       } catch (error) {
         // keep compatibility with older versions of react-navigation
         isReady = true
@@ -74,7 +67,7 @@ function _useNavigationTracker(
         return
       }
 
-      currentRoute = (currentNavigation as any).getCurrentRoute()
+      currentRoute = (navigation as any).getCurrentRoute()
     } catch (error) {
       // if this happens, we're not in a navigation context, so we can't track the route
       return

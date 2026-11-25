@@ -56,15 +56,13 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
     await posthog.shutdown()
   })
 
-  // `disableRemoteConfig` is deprecated and a no-op: remote config always loads. Setting it
-  // here (alongside `disableRemoteFeatureFlags`) proves it no longer suppresses the config
-  // request and no longer routes config/surveys through the flags endpoint.
-  describe('with disableRemoteFeatureFlags and the deprecated disableRemoteConfig (now a no-op)', () => {
+  // Remote config always loads, even with remote feature flags disabled, and config/surveys
+  // never route through the flags endpoint.
+  describe('with disableRemoteFeatureFlags', () => {
     const newPostHog = (): PostHog =>
       new PostHog('test-token', {
         customStorage: mockStorage,
         flushInterval: 0,
-        disableRemoteConfig: true,
         disableRemoteFeatureFlags: true,
       })
 
@@ -116,7 +114,6 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         flushInterval: 0,
-        disableRemoteConfig: true,
         preloadFeatureFlags: false,
         disableRemoteFeatureFlags: true,
       })

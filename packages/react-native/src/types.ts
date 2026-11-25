@@ -3,15 +3,6 @@ export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToProperties?: (name: string, params: any) => Record<string, any>
 }
 
-/**
- * @deprecated
- */
-export type PostHogNavigationRef = {
-  getCurrentRoute(): any | undefined
-  isReady: () => boolean
-  current?: PostHogNavigationRef | any | undefined
-}
-
 export type PostHogRageClickConfig = {
   /**
    * Enable or disable rage click (rage tap) detection.
@@ -97,13 +88,13 @@ export type PostHogAutocaptureOptions = {
    * For @react-navigation/native v7 and above, because of a library change, you'll need to capture screens manually and disable this option.
    *  You can use the `onStateChange` callback from `NavigationContainer` to capture screens with [`PostHog.screen`](#posthogscreen).
    *  You can use the `usePostHog()` hook or your own `PostHog` instance to capture screens.
-   *  Since `captureScreens` is disabled, you don't need to pass `navigationRef`, and the navigation mutation object is ignored.
+   *  Since `captureScreens` is disabled, the navigation mutation object is ignored.
    *  See: https://reactnavigation.org/docs/screen-tracking/
    *
    * For expo-router, expo-router uses @react-navigation/native, but does not expose `NavigationContainer`, so capture screens manually and disable this option.
    *  expo-router always has access to a URL, so you can pass the URL to [`PostHog.screen`](#posthogscreen).
    *  You can use the `usePostHog()` hook or your own `PostHog` instance to capture screens.
-   *  Since `captureScreens` is disabled, you don't need to pass `navigationRef`, and the navigation mutation object is ignored.
+   *  Since `captureScreens` is disabled, the navigation mutation object is ignored.
    *  See: https://docs.expo.dev/router/reference/screen-tracking/
    *
    * @default true
@@ -116,13 +107,6 @@ export type PostHogAutocaptureOptions = {
    * @default Default to the route name and params
    */
   navigation?: PostHogAutocaptureNavigationTrackerOptions
-  /**
-   * If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref
-   * Only used for expo-router and @react-navigation/native if captureScreens is true
-   *
-   * @deprecated this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically
-   */
-  navigationRef?: PostHogNavigationRef
 }
 
 export interface PostHogCustomAppProperties {
@@ -161,8 +145,7 @@ export type PostHogSessionReplayConfig = {
    * Capture touch coordinates in session replay. Set to false to keep screenshots
    * without recording taps that could reveal sensitive input on a known keypad layout.
    * Does not change masking or `PostHogProvider` touch autocapture.
-   * Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;
-   * older plugins and `posthog-react-native-session-replay` ignore this option.
+   * Android and iOS only. Requires `@posthog/react-native-plugin`.
    * Set before constructing PostHog. Changes after initialization do not update native state.
    *
    * @default true
@@ -195,31 +178,9 @@ export type PostHogSessionReplayConfig = {
    */
   captureLog?: boolean
   /**
-   * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
-   * This is used for capturing the view as a screenshot
-   * The lower the number more snapshots will be captured but higher the performance impact
-   *
-   * @default 1000
-   * @deprecated please use throttleDelayMs instead
-   */
-  iOSdebouncerDelayMs?: number
-  /**
-   * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
-   * This is used for capturing the view as a screenshot
-   * The lower the number more snapshots will be captured but higher the performance impact
-   * Ps: it was 500ms (0.5s) by default until version 3.3.7
-   *
-   * @default 1000
-   * @deprecated please use throttleDelayMs instead
-   */
-  androidDebouncerDelayMs?: number
-  /**
    * Throttling delay used to reduce the number of snapshots captured and reduce performance impact
    * This is used for capturing the view as a wireframe or screenshot
    * The lower the number more snapshots will be captured but higher the performance impact
-   *
-   * This value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs
-   * If this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility
    *
    * @default 1000
    */
@@ -275,17 +236,20 @@ export type PostHogSessionReplayConfig = {
    */
   screenshotColorMode?: 'ARGB_8888' | 'RGB_565'
   /**
-   * Schedule screenshot image capture on a background queue.
-   * iOS only
-   * Experimental support
+   * How iOS captures each replay screenshot.
    *
-   * Warning: Enabling this option will trigger Main Thread Checker warnings and may
-   * briefly freeze the app the first time a screenshot is captured. Consider disabling
-   * Main Thread Checker in your scheme's run diagnostics when enabling this.
+   * - `'standard'`: draws the window on the main thread.
+   * - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread
+   *   steps. Content from another process, such as a web view's page, and Metal content are not captured.
+   *   A custom `CALayer` subclass that is animating, such as a playing Lottie animation, is left out of the frame.
+   *   Recording keeps roughly 25 to 30 MB more memory resident on average.
+   *   Falls back to `'standard'` when a capture can't be made this way.
    *
-   * @default false
+   * iOS only. Requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with `'standard'`.
+   *
+   * @default 'standard'
    */
-  screenshotModeBackgroundCapture?: boolean
+  iOSCaptureMethod?: 'standard' | 'gpu'
   /**
    * Session replay sample rate between 0 and 1
    * Local config has precedence over remote config when both are set.

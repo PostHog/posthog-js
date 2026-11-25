@@ -1264,9 +1264,6 @@ importers:
       metro:
         specifier: 0.83.1
         version: 0.83.1
-      posthog-react-native-session-replay:
-        specifier: ^1.6.0
-        version: 1.6.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0)
       react:
         specifier: 18.2.0
         version: 18.2.0
@@ -16431,13 +16428,6 @@ packages:
         optional: true
       rxjs:
         optional: true
-
-  posthog-react-native-session-replay@1.6.0:
-    resolution: {integrity: sha512-OCaei77mtgg7JT+TgHSCgpWeKq2XXENUOPNxGbjhXZa/aJpptOW5VsBqjtH4BPzM2c1veS1DK4/Fb/uV4Rb3cg==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-    peerDependencies:
-      react: '*'
-      react-native: '*'
 
   powershell-utils@0.1.0:
     resolution: {integrity: sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A==}
@@ -38434,11 +38424,6 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       rxjs: 7.8.2
-
-  posthog-react-native-session-replay@1.6.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0):
-    dependencies:
-      react: 18.2.0
-      react-native: 0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0)
 
   powershell-utils@0.1.0: {}
 
