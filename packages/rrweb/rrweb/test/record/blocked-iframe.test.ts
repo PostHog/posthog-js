@@ -338,6 +338,46 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('does not record a value set on a parent-created input inside a blocked iframe', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<body></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), { maskAllInputs: false });
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // created by the parent, so it keeps the parent realm's value setter
+      await page.evaluate(() => {
+        const input = document.createElement('input');
+        document.querySelector('iframe')!.contentDocument!.body.append(input);
+      });
+      await waitForRAF(page);
+      const eventsBeforeBlocking = events.length;
+
+      await page.evaluate((value) => {
+        const iframe = document.querySelector('iframe')!;
+        iframe.classList.add('rr-block');
+        iframe.contentDocument!.querySelector('input')!.value = value;
+      }, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        LATER_CONTENT,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it('does not record shadow-root changes buffered in a frozen iframe that gets blocked', async () => {
     const page = await browser.newPage();
     try {

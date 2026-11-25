@@ -978,7 +978,15 @@ function record<T = eventWithTime>(
               ...d,
             },
           }),
-        inputCb: (v, fromMutation) =>
+        inputCb: (v, fromMutation) => {
+          // A hooked value setter belongs to the realm that created the
+          // element, which can differ from the document it is in now.
+          const target = mirror.getNode(v.id);
+          if (
+            target?.ownerDocument &&
+            iframeManager.isBlockedDocument(target.ownerDocument)
+          )
+            return;
           wrappedEmit(
             {
               type: EventType.IncrementalSnapshot,
@@ -989,7 +997,8 @@ function record<T = eventWithTime>(
             },
             undefined,
             fromMutation,
-          ),
+          );
+        },
         mediaInteractionCb: (p) =>
           wrappedEmit({
             type: EventType.IncrementalSnapshot,
