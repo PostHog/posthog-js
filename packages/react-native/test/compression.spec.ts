@@ -122,6 +122,26 @@ describe('React Native capture compression without CompressionStream', () => {
     expect(request.headers['Content-Encoding']).toBeUndefined()
   })
 
+  it('sends no AI request once shutdown() times out while the plugin is still gzipping', async () => {
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {})
+    pluginGzip.mockImplementation(async (payload) => {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      return gzipSync(payload).toString('base64')
+    })
+    const client = await newPostHog()
+
+    try {
+      client.captureAi('$ai_generation')
+      await client.shutdown(30)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      expect(requests.filter((r) => r.path === AI_PATH)).toHaveLength(0)
+    } finally {
+      posthog = undefined
+      logs.mockRestore()
+    }
+  })
+
   it('decodes base64 of every length', () => {
     for (let length = 0; length < 64; length++) {
       const bytes = Uint8Array.from({ length }, (_, i) => (i * 37 + length) & 255)

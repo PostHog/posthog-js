@@ -83,6 +83,8 @@ export class CaptureAiLane {
   private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
   private _stopped = false
+  // Aborts the request in flight, including one still being compressed, when the lane stops.
+  private _sendAbort?: AbortController
   // Once shutdown starts it sends every resend itself, so no timer may send on its own.
   private _shuttingDown = false
   private _events: QueuedAiEvent[] = []
@@ -200,6 +202,7 @@ export class CaptureAiLane {
 
   stop(): void {
     this._stopped = true
+    this._sendAbort?.abort()
     this._clearFlushTimer()
     this._clearResendTimer()
     this._resendAt = 0
@@ -260,7 +263,9 @@ export class CaptureAiLane {
         continue
       }
       let deferral: V1SendDeferral | undefined
+      const sendAbort = (this._sendAbort = new AbortController())
       const kept = await this._sender().send([...batch.keys()], {
+        signal: sendAbort.signal,
         keepUnsent: true,
         // A batch missing an unreadable event is no longer the same request.
         retryOf: exactResend && batch.size === queued.length ? resend.request : undefined,
@@ -268,6 +273,7 @@ export class CaptureAiLane {
           deferral = reason
         },
       })
+      this._sendAbort = undefined
       const keptEvents = new Set(kept)
       const sentEvents = new Set([...batch].filter(([event]) => !keptEvents.has(event)).map(([, item]) => item))
       if (sentEvents.size > 0) {
