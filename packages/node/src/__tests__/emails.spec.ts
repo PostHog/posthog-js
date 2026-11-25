@@ -1090,7 +1090,6 @@ describe('emails', () => {
 
     it('renders with the @react-email/render module passed as reactEmailRenderer', async () => {
       const reactEmailRenderer = await import('@react-email/render')
-      withoutRenderer()
       makeClient({ reactEmailRenderer })
 
       const { error } = await sendReact({ react: welcome })

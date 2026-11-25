@@ -1,6 +1,9 @@
+import { rspack } from '@rslib/core'
 import { build, type Platform, type Plugin } from 'esbuild'
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -130,12 +133,12 @@ describe('esbuild bundle of the built package', () => {
     })
 
     it.each([
-      ['Cloudflare Workers', 'posthog-node', ['workerd', 'worker', 'browser']],
-      ['Cloudflare Workers edge subpath', 'posthog-node/edge', ['workerd', 'worker', 'browser']],
-      ['Convex', 'posthog-node', ['convex', 'module']],
+      ['posthog-node', 'Cloudflare Workers', ['workerd', 'worker', 'browser']],
+      ['posthog-node/edge', 'Cloudflare Workers edge subpath', ['workerd', 'worker', 'browser']],
+      ['posthog-node', 'Convex', ['convex', 'module']],
     ])(
-      'loads require("%s") bundled to ESM without dynamic require shims even with treeShaking disabled',
-      async (_runtime, specifier, conditions) => {
+      'loads require("%s") for %s bundled to ESM without dynamic require shims even with treeShaking disabled',
+      async (specifier, _runtime, conditions) => {
         const result = await build({
           stdin: {
             contents: `const { PostHog } = require(${JSON.stringify(specifier)})\nexport const library = PostHog.prototype.getLibraryId()`,
@@ -306,13 +309,72 @@ describe('esbuild bundle of the built package', () => {
       })
     })
 
-    it.each(['react-renderer-import.mjs', 'react-renderer-import.js'])(
-      'keeps the comments that tell webpack and Vite to skip the import in %s',
-      (file) => {
-        const built = readFileSync(fileURLToPath(new URL(`../../../dist/emails/${file}`, import.meta.url)), 'utf8')
+    it.each([
+      ['ESM', `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test')\n`],
+      ['CJS', `const { PostHog } = require('posthog-node')\nmodule.exports = { client: new PostHog('phc_test') }\n`],
+    ])(
+      'leaves @react-email/render out of a webpack-compatible rspack %s bundle with no warnings and bundles it on opt-in',
+      async (format, noOptCode) => {
+        const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'posthog-node-rspack-'))
+        try {
+          mkdirSync(path.join(tmpDir, 'node_modules'), { recursive: true })
+          symlinkSync(packageRoot, path.join(tmpDir, 'node_modules', 'posthog-node'), 'dir')
+          const runRspack = async (name: string, contents: string) => {
+            const entry = path.join(tmpDir, `${name}.${format === 'ESM' ? 'mjs' : 'cjs'}`)
+            writeFileSync(entry, contents)
+            const compiler = rspack({
+              mode: 'production',
+              target: 'webworker',
+              context: tmpDir,
+              entry,
+              output: { path: path.join(tmpDir, `out-${name}`), filename: 'bundle.js' },
+              performance: { hints: false },
+              resolve: {
+                conditionNames: ['workerd', 'worker', 'browser', format === 'ESM' ? 'import' : 'require', 'default'],
+                modules: [path.join(tmpDir, 'node_modules'), path.join(packageRoot, 'node_modules'), 'node_modules'],
+              },
+            })
+            const stats = await new Promise<NonNullable<Parameters<Parameters<typeof compiler.run>[0]>[1]>>(
+              (resolve, reject) => {
+                compiler.run((err, s) => {
+                  compiler.close(() => {
+                    if (err || !s) reject(err ?? new Error('missing rspack stats'))
+                    else resolve(s)
+                  })
+                })
+              }
+            )
+            const json = stats.toJson({ modules: true, warnings: true, errors: true })
+            const modules = (json.modules ?? []).map((m) => m.nameForCondition ?? m.name ?? '')
+            return {
+              errors: json.errors ?? [],
+              warnings: json.warnings ?? [],
+              hasRenderer: modules.some((m) => m.includes('@react-email/render')),
+            }
+          }
 
-        expect(built).toMatch(/import\(\s*\/\* webpackIgnore: true \*\/\s*\/\* @vite-ignore \*\//)
-      }
+          const withoutOpt = await runRspack('no-opt', noOptCode)
+          expect({
+            errors: withoutOpt.errors,
+            warnings: withoutOpt.warnings,
+            hasRenderer: withoutOpt.hasRenderer,
+          }).toEqual({ errors: [], warnings: [], hasRenderer: false })
+
+          const optInCode =
+            format === 'ESM'
+              ? `import { PostHog } from 'posthog-node'\nimport * as reactEmailRenderer from '@react-email/render'\nexport const client = new PostHog('phc_test', { reactEmailRenderer })\n`
+              : `const { PostHog } = require('posthog-node')\nconst reactEmailRenderer = require('@react-email/render')\nmodule.exports = { client: new PostHog('phc_test', { reactEmailRenderer }) }\n`
+          const withOpt = await runRspack('opt-in', optInCode)
+          expect({ errors: withOpt.errors, warnings: withOpt.warnings, hasRenderer: withOpt.hasRenderer }).toEqual({
+            errors: [],
+            warnings: [],
+            hasRenderer: true,
+          })
+        } finally {
+          rmSync(tmpDir, { recursive: true, force: true })
+        }
+      },
+      20_000
     )
   })
 
