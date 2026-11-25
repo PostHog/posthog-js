@@ -43,9 +43,13 @@ export type {
 } from '../../core/types'
 
 export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     FlagsOptions,
     FlagsConfiguration,
     FlagsCallback,
+    FlagsReadOptions,
     FeatureFlagResult,
     FeatureFlagsReloadResult,
 } from '../../products/flags/flags-options'

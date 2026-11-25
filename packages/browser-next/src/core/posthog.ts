@@ -42,6 +42,21 @@ import type { FlagsExtension } from '../products/flags/flags-internal'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
+// The request the flags extension builds to list early-access features: the project token and stage filters only.
+const EARLY_ACCESS_CATALOGUE_PATH =
+    /^\/api\/early_access_features\/\?token=[^&#]*(&stage=(concept|alpha|beta|general-availability))*&?$/
+
+// The path below the host that a request resolves to, resolved as the request sender does, so raw or percent-encoded
+// dot segments cannot pass an allowed path and reach another endpoint. Undefined when it leaves the host's path.
+const resolveRequestPath = (host: string, path: string): string | undefined => {
+    try {
+        const base = new URL(`${host}/`)
+        const { pathname } = new URL(`.${path}`, base)
+        return pathname.startsWith(base.pathname) ? pathname.slice(base.pathname.length - 1) : undefined
+    } catch {
+        return undefined
+    }
+}
 
 const normalizeHost = (host: string): string => {
     let end = host.length
@@ -474,7 +489,25 @@ class PostHog implements IPostHog {
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && !this.hasOptedOut())
+        // Untyped callers may pass null, so normalize before reading options.
+        const options = init ?? {}
+        // As in posthog-js, flags evaluate while opted out. The early-access catalogue carries no person data, so it
+        // stays available too. Capture consent gates every other request.
+        const resolvedPath = resolveRequestPath(this._requestRuntime[0][options.target ?? 'api'], path)
+        const allowedWhileOptedOut =
+            (options.target === 'flags'
+                ? resolvedPath === '/flags/'
+                : EARLY_ACCESS_CATALOGUE_PATH.test(path) &&
+                  (options.method ?? 'GET') === 'GET' &&
+                  options.body === undefined) &&
+            !options.query &&
+            !options.headers
+        return sendRequest(
+            this._requestRuntime,
+            path,
+            options,
+            () => !this._blocked && (allowedWhileOptedOut || !this.hasOptedOut())
+        )
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
