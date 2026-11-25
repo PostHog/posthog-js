@@ -331,6 +331,55 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('does not record shadow-root changes buffered in a frozen iframe that gets blocked', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <button>click</button>
+          <iframe srcdoc="<body><div id=host></div></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      await page.evaluate(() => {
+        const doc = document.querySelector('iframe')!.contentDocument!;
+        doc
+          .getElementById('host')!
+          .attachShadow({ mode: 'open' }).innerHTML = '<p>shadow</p>';
+      });
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const eventsBeforeBlocking = events.length;
+
+      await page.evaluate(async (content) => {
+        const { rrweb } = window as unknown as IWindow;
+        const tick = () => new Promise((resolve) => setTimeout(resolve));
+        const iframe = document.querySelector('iframe')!;
+        const shadow = iframe.contentDocument!.getElementById('host')!
+          .shadowRoot!;
+        (rrweb.record as unknown as { freezePage: () => void }).freezePage();
+        shadow.querySelector('p')!.textContent = content;
+        await tick();
+        iframe.classList.add('rr-block');
+        await tick();
+        document.querySelector('button')!.click();
+      }, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        LATER_CONTENT,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it('records a sibling iframe after a frozen page unfreezes and one iframe is blocked', async () => {
     const page = await browser.newPage();
     try {
