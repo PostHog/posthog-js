@@ -25,6 +25,7 @@
     }
   },
   "files": [
+    "MIGRATION.md",
     "dist/",
     "tooling/"
   ],
