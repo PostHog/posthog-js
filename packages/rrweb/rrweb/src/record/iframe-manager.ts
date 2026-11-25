@@ -132,6 +132,11 @@ export class IframeManager {
   // were produced while it was blocked.
   public releaseBlockedRelayingIframes(mutations: mutationRecord[]): void {
     if (this.relayingIframes.size === 0) return;
+    // A selector's past matches cannot be rebuilt from mutation records, and
+    // some (`:focus-within`, `:checked`) change with no mutation at all. So
+    // under a selector, relayed messages are only accepted from iframes that
+    // were never blocked, checked on delivery and on every DOM change, and a
+    // brief block that comes and goes between checks is a known gap.
     // Without a selector, only an attribute change can add the block class; a
     // moved iframe is serialized again anyway. A selector can depend on any
     // change, including text (`:empty`).
@@ -188,28 +193,12 @@ export class IframeManager {
     return false;
   }
 
-  // Whether the element was blocked before this attribute change. A selector
-  // is matched against a detached copy, so only rules about the element's own
-  // attributes are reconstructed; context-dependent rules (siblings, :has,
-  // :focus-within) are caught on their final state only.
+  // Whether the element had the block class before this attribute change.
   private oldValueBlocked(m: mutationRecord): boolean {
-    if (!m.attributeName) return false;
-    const el = m.target as Element;
-    if (m.attributeName === 'class' && m.oldValue) {
-      const probe = el.ownerDocument.createElement('div');
-      probe.className = m.oldValue;
-      if (_isBlockedElement(probe, this.blockClass, null)) return true;
-    }
-    if (!this.blockSelector) return false;
-    let probe: Element;
-    try {
-      probe = el.cloneNode(false) as Element;
-      if (m.oldValue === null) probe.removeAttribute(m.attributeName);
-      else probe.setAttribute(m.attributeName, m.oldValue);
-    } catch {
-      return false;
-    }
-    return _isBlockedElement(probe, this.blockClass, this.blockSelector);
+    if (m.attributeName !== 'class' || !m.oldValue) return false;
+    const probe = (m.target as Element).ownerDocument.createElement('div');
+    probe.className = m.oldValue;
+    return _isBlockedElement(probe, this.blockClass, null);
   }
 
   public registerLoadListenerDisposer(

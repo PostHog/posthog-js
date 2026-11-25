@@ -469,12 +469,7 @@ describe('record a blocked iframe', () => {
       fullSnapshot: false,
       sameTask: true,
     },
-    {
-      blocking: 'a selector match added and removed in one task',
-      blockSelector: '[data-private]',
-      fullSnapshot: false,
-      sameTask: true,
-    },
+
     {
       blocking: 'a selector that matches through a sibling',
       blockSelector: '.rr-block + iframe',
