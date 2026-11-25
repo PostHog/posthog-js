@@ -178,12 +178,14 @@ describe('esbuild bundle of the built package', () => {
             req.headers['idempotency-key'].length === 0
           ) {
             res.statusCode = 400
+            res.setHeader('Connection', 'close')
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }))
             return
           }
           sent.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
           res.statusCode = 200
+          res.setHeader('Connection', 'close')
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }))
         })
@@ -298,9 +300,11 @@ describe('esbuild bundle of the built package', () => {
         ])
         expect(withWrapper.sent[0].html).toContain('<p>Welcome, Ada</p>')
       } finally {
-        await new Promise<void>((resolve) => server.close(() => resolve()))
+        const closed = new Promise<void>((resolve) => server.close(() => resolve()))
+        server.closeAllConnections()
+        await closed
       }
-    })
+    }, 20_000)
 
     it('exits cleanly under strict unhandled rejections when toPlainText returns a same-realm, cross-realm, or async-throwing thenable', async () => {
       const nodeEntryUrl = pathToFileURL(builtEntrypoint('index.node.mjs')).href
@@ -359,9 +363,11 @@ describe('esbuild bundle of the built package', () => {
           throwingThenable: { data: null, code: 'react_render_failed' },
         })
       } finally {
-        await new Promise<void>((resolve) => server.close(() => resolve()))
+        const closed = new Promise<void>((resolve) => server.close(() => resolve()))
+        server.closeAllConnections()
+        await closed
       }
-    })
+    }, 20_000)
 
     it.each([
       ['ESM', `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test')\n`],
