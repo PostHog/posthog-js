@@ -1,4 +1,4 @@
-import { V7Generator } from '@posthog/core'
+import { V7Generator } from '../vendor/uuidv7'
 
 const HYPHENATED = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const HEX_32 = /^[0-9a-f]{32}$/i

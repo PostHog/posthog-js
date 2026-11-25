@@ -1,7 +1,7 @@
 import * as zlib from 'node:zlib'
 import { promisify } from 'node:util'
 
-import type { CaptureCodec, CaptureCompressor } from './capture-v1/compression'
+import type { CaptureCodec, CaptureCompressor } from '@posthog/core/capture-v1'
 
 type ZlibCompress = typeof zlib.gzip
 
