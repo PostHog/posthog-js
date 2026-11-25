@@ -63,6 +63,23 @@ describe('React Native capture v1 delivery', () => {
     createdAt: (request.body as any).created_at,
   })
 
+  it('sends person processing only as a false option, on personless events', async () => {
+    posthog.capture('anonymous')
+    posthog.identify('user-123')
+    posthog.capture('identified')
+    await posthog.flush()
+
+    const sent = requests.flatMap((request) => request.body.batch as any[])
+    const wire = (event: string) => sent.find((item) => item.event === event)
+    expect(wire('anonymous').options).toEqual({ process_person_profile: false })
+    for (const event of ['identified', '$identify']) {
+      expect(wire(event).options).not.toHaveProperty('process_person_profile')
+    }
+    for (const item of sent) {
+      expect(item.properties).not.toHaveProperty('$process_person_profile')
+    }
+  })
+
   it('keeps events capture marks for retry and sends them on the next flush', async () => {
     respond = (request) => ({
       status: 200,
