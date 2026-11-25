@@ -2550,6 +2550,26 @@ export class PostHog extends PostHogCoreBase {
   }
 
   /**
+   * Sends a `$groupidentify` event that sets properties on a group, without associating the
+   * current user's events with it. Use `group()` to do both.
+   *
+   * @public
+   *
+   * @param groupType The type of group (e.g. 'company', 'team')
+   * @param groupKey The unique identifier for the group
+   * @param groupProperties Optional properties to set for the group
+   * @param options Optional capture options for the `$groupidentify` event
+   */
+  groupIdentify(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.groupIdentify(groupType, groupKey, groupProperties, options)
+  }
+
+  /**
    * Assigns an alias to the current user.
    *
    * Sometimes, you want to assign multiple distinct IDs to a single user. This is helpful when your primary distinct ID is inaccessible.

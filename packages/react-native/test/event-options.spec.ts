@@ -83,6 +83,11 @@ describe('per-event options', () => {
     ['alias', '$create_alias', (client) => client.alias('alias-1', { options })],
     ['group', '$groupidentify', (client) => client.group('company', 'acme', { name: 'Acme' }, { options })],
     [
+      'groupIdentify',
+      '$groupidentify',
+      (client) => client.groupIdentify('company', 'acme', { name: 'Acme' }, { options }),
+    ],
+    [
       'captureException',
       '$exception',
       (client) => client.captureException(new Error('boom'), {}, undefined, { options }),

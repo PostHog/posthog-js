@@ -1231,14 +1231,17 @@ posthog.group('company', 'company_id_in_your_db', {
 
 > **groupIdentify**(`groupType`, `groupKey`, `groupProperties?`, `options?`): `void`
 
+Sends a `$groupidentify` event that sets properties on a group, without associating the
+current user's events with it. Use `group()` to do both.
+
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `groupType` | `string` |
-| `groupKey` | `string` \| `number` |
-| `groupProperties?` | `PostHogEventProperties` |
-| `options?` | `PostHogCaptureOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `groupType` | `string` | The type of group (e.g. 'company', 'team') |
+| `groupKey` | `string` \| `number` | The unique identifier for the group |
+| `groupProperties?` | `PostHogEventProperties` | Optional properties to set for the group |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$groupidentify` event |
 
 #### Returns
 

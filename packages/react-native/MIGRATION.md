@@ -183,7 +183,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 ### Per-event options
 
-Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `alias()`, `group()`, `captureException()` and `captureAi()` take them in their options argument:
+Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `alias()`, `group()`, `groupIdentify()`, `captureException()` and `captureAi()` take them in their options argument:
 
 ```ts
 // 4.x
