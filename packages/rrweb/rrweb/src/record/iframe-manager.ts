@@ -154,9 +154,19 @@ export class IframeManager {
       if (m.type === 'attributes' && this.oldValueBlocked(m))
         (blockedAtSomePoint ??= []).push(m.target);
     }
+    // An iframe added or moved in this batch may not have been under the
+    // element while it had the block class, and is serialized again anyway.
+    let moved: Set<Node> | undefined;
+    if (blockedAtSomePoint) {
+      for (const m of mutations) {
+        if (m.type === 'childList')
+          m.addedNodes.forEach((n) => (moved ??= new Set()).add(n));
+      }
+    }
     for (const iframeEl of [...this.relayingIframes]) {
       if (
         blockedAtSomePoint &&
+        !(moved && this.hasAncestorIn(iframeEl, moved)) &&
         this.hasAncestorIn(iframeEl, new Set(blockedAtSomePoint))
       ) {
         this.releaseBlockedIframe(iframeEl);

@@ -517,7 +517,11 @@ describe('record a blocked iframe', () => {
       });
       await startRecording(iframeFrame, options);
       await waitForRAF(page);
+      await appendParagraph(iframeFrame, INITIAL_CONTENT);
+      await waitForRAF(page);
       await new Promise((resolve) => setTimeout(resolve, 100));
+      // the relay works before the block
+      expect(JSON.stringify(events)).toContain(INITIAL_CONTENT);
 
       await iframeFrame.evaluate(() => {
         (window as unknown as { hold: boolean }).hold = true;
@@ -570,6 +574,14 @@ describe('record a blocked iframe', () => {
       );
       await waitForRAF(page);
       const eventsBeforeDelivery = events.length;
+      // the child did produce the private event while blocked
+      expect(
+        await iframeFrame.evaluate(() =>
+          JSON.stringify(
+            (window as unknown as { held: unknown[] }).held,
+          ),
+        ),
+      ).toContain(LATER_CONTENT);
       await iframeFrame.evaluate(() => {
         const w = window as unknown as {
           hold: boolean;
