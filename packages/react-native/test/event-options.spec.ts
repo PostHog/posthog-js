@@ -182,6 +182,42 @@ describe('per-event options', () => {
     expect(settings).toEqual([true, value, true])
   })
 
+  it.each<[string, (event: any, nthSet: number) => any, number]>([
+    [
+      'sends it again when before_send sets the option to false',
+      (event) => ({ ...event, options: { ...event.options, process_person_profile: false } }),
+      2,
+    ],
+    [
+      'sends it again when before_send sets the legacy property to false',
+      (event) => ({ ...event, properties: { ...event.properties, $process_person_profile: false } }),
+      2,
+    ],
+    [
+      'skips it when before_send sets the option to true over a false legacy property',
+      (event) => ({
+        ...event,
+        options: { ...event.options, process_person_profile: true },
+        properties: { ...event.properties, $process_person_profile: false },
+      }),
+      1,
+    ],
+    ['sends it again when before_send dropped the first one', (event, nthSet) => (nthSet === 1 ? null : event), 1],
+  ])('repeated identical $set: %s', async (_name, hook, expectedSets) => {
+    await posthog.shutdown()
+    let nthSet = 0
+    posthog = await createClient({
+      before_send: (event) => (event?.event === '$set' ? hook(event, ++nthSet) : event),
+    })
+
+    posthog.identify('user-1')
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+    posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+    await posthog.flush()
+
+    expect(sent.filter(({ event }) => event.event === '$set')).toHaveLength(expectedSets)
+  })
+
   it('does not record the hash for an $identify sent with process_person_profile false', async () => {
     posthog.identify('user-1', { plan: 'pro' }, { options: { process_person_profile: false } })
     posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
