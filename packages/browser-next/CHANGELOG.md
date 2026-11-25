@@ -1,5 +1,24 @@
 # @posthog/browser
 
+## 0.6.0
+
+### Minor Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add local flag property overrides, flag read controls, early-access features and `onActiveMatchingSurveysChanged` to `@posthog/browser`, and load its feature flags while capture is opted out as `posthog-js` does.
+  (2026-11-25)
+
+- [#5788](https://github.com/PostHog/posthog-js/pull/5788) [`18aa40f`](https://github.com/PostHog/posthog-js/commit/18aa40ff0d349086c255e0308cd2507aad6df481) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add explicit consent status and clearing, a setup `bootstrap` option, reset options with device-ID replacement and bootstrap, `onSessionId` subscriptions, and opt-in cookie persistence for cross-subdomain identity. `reset()` now also forgets the stored consent choice, as posthog-js does.
+
+  Session and window IDs are now UUIDv7, as in posthog-js. (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `setConfig()` and `debug()`, immediate per-event delivery, and `getPageViewId()` to `@posthog/browser`.
+  (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906), [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1)]:
+  - @posthog/browser-common@0.14.0
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.454.5
+
+### Patch Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stop feature flag reloads requested from reloading listeners from recursing.
+  (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Honor `delivery: 'immediate'` from shared browser extensions as `send_instantly`.
+  (2026-11-25)
+- Updated dependencies [[`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906), [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1)]:
+  - @posthog/browser-common@0.14.0
+
 ## 1.454.4
 
 ### Patch Changes
