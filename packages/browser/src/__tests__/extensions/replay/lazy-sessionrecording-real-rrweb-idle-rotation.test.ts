@@ -2,7 +2,7 @@
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 import { PostHog } from '../../../posthog-core'
 import { Property, RemoteConfig, RemoteConfigResult } from '../../../types'
-import { EventType, type eventWithTime } from '../../../extensions/replay/types/rrweb-types'
+import { EventType, IncrementalSource, type eventWithTime } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 
@@ -303,7 +303,11 @@ describe('replay recorder with the real rrweb recorder', () => {
             if (s.insideFirstReturnEmit) {
                 let fired = false
                 h.setOnEmit((e) => {
-                    if (!fired && e.type === EventType.IncrementalSnapshot && (e.data as any).source === 2) {
+                    if (
+                        !fired &&
+                        e.type === EventType.IncrementalSnapshot &&
+                        (e.data as any).source === IncrementalSource.MouseInteraction
+                    ) {
                         fired = true
                         s.insideFirstReturnEmit!(h)
                     }
@@ -366,23 +370,30 @@ describe('replay recorder with the real rrweb recorder', () => {
         const restartMarker = events.find(
             (e) => e.type === EventType.Custom && (e.data as any).tag === '$replay_recorder_restarted'
         )
+        const debug = h.lazy().sdkDebugProperties
         expect({
             isRecording: h.isRecording(),
             fullSnapshotWithinOneInterval: !!fullSnapshotAt && fullSnapshotAt - brokenAt <= FULL_SNAPSHOT_INTERVAL,
             restartMarker: !!restartMarker,
+            maxLiveRecorders: h.recorders.maxLive,
+            lateStops: h.recorders.lateStops,
             debug: {
-                restarts: h.lazy().sdkDebugProperties.$sdk_debug_replay_rrweb_restarts,
-                lastError: h.lazy().sdkDebugProperties.$sdk_debug_replay_rrweb_last_method_error,
-                recordingAtFailure: h.lazy().sdkDebugProperties.$sdk_debug_replay_rrweb_recording_at_failure,
+                restarts: debug.$sdk_debug_replay_rrweb_restarts,
+                lastError: debug.$sdk_debug_replay_rrweb_last_method_error,
+                recordingAtFailure: debug.$sdk_debug_replay_rrweb_recording_at_failure,
+                liveRecorders: debug.$sdk_debug_replay_rrweb_live_recorders,
             },
         }).toEqual({
             isRecording: true,
             fullSnapshotWithinOneInterval: true,
             restartMarker: true,
+            maxLiveRecorders: 1,
+            lateStops: 0,
             debug: {
                 restarts: 1,
                 lastError: 'please take full snapshot after start recording',
                 recordingAtFailure: false,
+                liveRecorders: 1,
             },
         })
     })

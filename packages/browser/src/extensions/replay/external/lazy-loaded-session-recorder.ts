@@ -562,8 +562,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebMethodFailures = 0
     private _lastRrwebMethodError: string | undefined = undefined
     private _rrwebRecordingAtLastFailure: boolean | undefined = undefined
-    private _rrwebRecordersStarted = 0
-    private _rrwebRecordersStopped = 0
+    private _rrwebLiveRecorders = 0
     // set while rrweb's record() runs, because it emits Meta and FullSnapshot before it returns its stop handle
     private _rrwebStartInProgress: { stopRequested: boolean; startRequested: boolean } | undefined = undefined
     private _lastRrwebRestartAt: number | undefined = undefined
@@ -928,7 +927,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         } catch (e) {
             this._rrwebMethodFailures += 1
             this._lastRrwebMethodError = String((e as Error | undefined)?.message ?? e).slice(0, 200)
-            this._rrwebRecordingAtLastFailure = getRRWeb()?.record?.isRecording?.()
+            this._rrwebRecordingAtLastFailure = getRRWebRecord()?.isRecording?.()
             // Sometimes a race can occur where the recorder is not fully started yet
             if (this._queuedRRWebEvents.length < 10) {
                 this._queuedRRWebEvents.push({
@@ -1022,20 +1021,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _tryTakeFullSnapshot(): boolean {
         const taken = this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
-        if (!taken) {
-            this._restartRrwebIfNotRecording()
+        const stopRrweb = this._stopRrweb
+        if (!taken && stopRrweb) {
+            // deferred so a restart never runs inside the old recorder's emit, whose in-flight event would land after the new snapshot
+            setTimeout(() => this._restartRrwebIfNotRecording(stopRrweb), 0)
         }
         return taken
     }
 
     // another rrweb recorder's stop clears the module-level recording flag, leaving this one emitting
     // incremental events that can never be played back, so start a fresh recorder to take a full snapshot
-    private _restartRrwebIfNotRecording(): void {
+    private _restartRrwebIfNotRecording(stopRrweb: listenerHandler): void {
         const now = Date.now()
         if (
-            !this._stopRrweb ||
+            this._stopRrweb !== stopRrweb ||
             this._rrwebStartInProgress ||
-            getRRWebRecord()?.isRecording?.() !== false ||
+            // before its first full snapshot rrweb may simply not have initialised yet
+            isUndefined(this._lastFullSnapshotSessionId) ||
+            this._rrwebAttached ||
             !['interactive', 'complete'].includes(document?.readyState ?? '') ||
             (!isUndefined(this._lastRrwebRestartAt) && now - this._lastRrwebRestartAt < FIVE_MINUTES)
         ) {
@@ -1044,12 +1047,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._lastRrwebRestartAt = now
         this._rrwebRestarts += 1
         logger.warn('rrweb stopped recording while replay was started, restarting it')
-        this._rrwebRecordersStopped += 1
-        try {
-            this._stopRrweb()
-        } catch (e) {
-            logger.warn('could not stop rrweb', e)
-        }
+        this._stopRrwebRecorder(stopRrweb)
         this._stopRrweb = undefined
         this._queuedRRWebEvents = []
         this._startRecorder()
@@ -1359,7 +1357,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy.makeSamplingDecisions(this.sessionId)
         this._startRecorder()
 
-        if (this._rrwebError) {
+        // a stop inside record()'s first emits leaves nothing to attach listeners to
+        if (this._rrwebError || !this.isStarted) {
             return
         }
 
@@ -1566,14 +1565,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._rrwebStartInProgress.startRequested = false
         }
         if (this._stopRrweb) {
-            this._rrwebRecordersStopped += 1
+            this._stopRrwebRecorder(this._stopRrweb)
         }
+        this._stopRrweb = undefined
+    }
+
+    private _stopRrwebRecorder(stopRrweb: listenerHandler): void {
+        this._rrwebLiveRecorders -= 1
         try {
-            this._stopRrweb?.()
+            stopRrweb()
         } catch (e) {
             logger.warn('could not stop rrweb', e)
         }
-        this._stopRrweb = undefined
     }
 
     private _stopAfterCompressionQueueDrains(): boolean {
@@ -2909,7 +2912,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                       $sdk_debug_replay_rrweb_method_failures: this._rrwebMethodFailures,
                       $sdk_debug_replay_rrweb_last_method_error: this._lastRrwebMethodError,
                       $sdk_debug_replay_rrweb_recording_at_failure: this._rrwebRecordingAtLastFailure,
-                      $sdk_debug_replay_rrweb_live_recorders: this._rrwebRecordersStarted - this._rrwebRecordersStopped,
+                      $sdk_debug_replay_rrweb_live_recorders: this._rrwebLiveRecorders,
                   }
                 : {}),
             ...(this._rrwebRestarts > 0 ? { $sdk_debug_replay_rrweb_restarts: this._rrwebRestarts } : {}),
@@ -3179,17 +3182,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._rrwebStartInProgress = undefined
         }
         if (stopRrweb) {
-            this._rrwebRecordersStarted += 1
+            this._rrwebLiveRecorders += 1
         }
         if (startAttempt.stopRequested) {
             // a stop or restart ran inside record()'s first emits, so apply it now that the handle exists
             if (stopRrweb) {
-                this._rrwebRecordersStopped += 1
-                try {
-                    stopRrweb()
-                } catch (e) {
-                    logger.warn('could not stop rrweb', e)
-                }
+                this._stopRrwebRecorder(stopRrweb)
             }
             if (startAttempt.startRequested) {
                 // the stop cancelled the handoff this start was bound to, and the new recorder must not inherit it
