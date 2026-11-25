@@ -13,9 +13,7 @@ const modules = (entries) =>
 const initialModules = modules(initial[0].modules)
 const requiredInitial = [
     './src/core/posthog.ts',
-    './src/products/analytics/analytics.ts',
-    './src/products/analytics/analytics-buffer.ts',
-    './src/products/analytics/analytics-extension.ts',
+    './src/products/analytics/analytics-core.ts',
     './src/products/analytics/admission/capture-properties.ts',
     './src/products/analytics/delivery/analytics-delivery.ts',
     './src/products/analytics/delivery/capture-v1.ts',
