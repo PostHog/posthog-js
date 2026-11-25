@@ -90,11 +90,14 @@ describe('PostHog.captureException context', () => {
     client.addExceptionStep('before error')
     client.captureException(new Error('boom'), properties)
     expect(exceptions(client)[0].properties).toMatchObject({
-      ...properties,
+      $expo_update_id: 'caller-id',
+      custom: true,
       $app_version: 'custom-version',
       $app_build: 'custom-build',
       $exception_steps: [expect.objectContaining({ $message: 'before error' })],
     })
+    // A caller null replaces the SDK's value and is then left off the event.
+    expect(exceptions(client)[0].properties).not.toHaveProperty('$app_state')
     expect(properties).not.toHaveProperty('$expo_channel')
   })
 

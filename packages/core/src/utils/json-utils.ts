@@ -1,5 +1,5 @@
 /** Traversal budgets and markers, shared with the OTLP attribute encoder. Not
- * public API — `utils/index.ts` re-exports `toJsonSafeValue` only. */
+ * public API — `utils/index.ts` re-exports `toJsonSafeValue` and `withoutNullMembers` only. */
 export const MAX_JSON_SAFE_VALUE_DEPTH = 20
 export const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
 export const MAX_JSON_SAFE_VALUE_NODES = 10_000
@@ -185,4 +185,67 @@ export function assignUserAttributes<T extends Record<string, any>>(
     Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
   }
   return target
+}
+
+/**
+ * Removes object members whose value is `null` or `undefined`, recursively, without touching array positions: a null
+ * array element stays `null`, and an object inside an array is replaced by its cleaned copy. Returns the input when
+ * nothing changes, and copies only the containers that change. Only plain objects without a `toJSON` method are
+ * cleaned; a value already being visited (a cycle), or nested `MAX_JSON_SAFE_VALUE_DEPTH` levels deep or more, is
+ * returned as it is.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+ */
+export function withoutNullMembers<T>(value: T): T {
+  const ancestors = new WeakSet<object>()
+  const clean = <V>(current: V, depth: number): V => {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      ancestors.has(current as object) ||
+      depth >= MAX_JSON_SAFE_VALUE_DEPTH
+    ) {
+      return current
+    }
+    if (Array.isArray(current)) {
+      ancestors.add(current)
+      try {
+        let changed = false
+        const cleaned = current.map((item) => {
+          const next = clean(item, depth + 1)
+          changed = changed || next !== item
+          return next
+        })
+        return (changed ? cleaned : current) as V
+      } finally {
+        ancestors.delete(current)
+      }
+    }
+    const prototype = Object.getPrototypeOf(current)
+    if (
+      (prototype !== Object.prototype && prototype !== null) ||
+      typeof (current as { toJSON?: unknown }).toJSON === 'function'
+    ) {
+      return current
+    }
+    ancestors.add(current as object)
+    try {
+      let changed = false
+      const cleaned: Record<string, unknown> = {}
+      for (const [key, member] of Object.entries(current as Record<string, unknown>)) {
+        if (member === null || member === undefined) {
+          changed = true
+          continue
+        }
+        const next = clean(member, depth + 1)
+        changed = changed || next !== member
+        // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+        Object.defineProperty(cleaned, key, { value: next, enumerable: true, writable: true, configurable: true })
+      }
+      return (changed ? cleaned : current) as V
+    } finally {
+      ancestors.delete(current as object)
+    }
+  }
+  return clean(value, 0)
 }

@@ -1451,7 +1451,8 @@ posthog.optOut()
 Registers super properties that are sent with every event.
 
 Super properties are properties associated with events that are set once and then sent with every capture call.
-They persist across sessions and are stored locally.
+They persist across sessions and are stored locally. A registered `$process_person_profile` is left off
+`$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events.
 
 #### Parameters
 

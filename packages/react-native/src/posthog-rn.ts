@@ -30,6 +30,7 @@ import {
   PostHogFeatureFlagDetails,
   uuidv7,
   type SendBatchOutcome,
+  withoutNullMembers,
 } from '@posthog/core'
 import {
   ANALYTICS_CAPTURE_ENDPOINT,
@@ -127,6 +128,39 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
 
+// A null person or group property clears it, so these keep their nulls, as in posthog-ios 4.0.
+const NULL_PRESERVING_PROPERTY_KEYS = ['$set', '$set_once', '$group_set']
+
+// Null and undefined property members are left off the wire and the persisted queue, as native 4.0 does. This runs
+// after `before_send`, so members a hook sets to null are removed too.
+const withoutNullProperties = (message: PostHogEventProperties | null): PostHogEventProperties | null => {
+  if (!message || !isObject(message.properties)) {
+    return message
+  }
+  const properties = message.properties as PostHogEventProperties
+  // A property whose getter throws must not fail the capture, so such an event is sent unchanged.
+  try {
+    let changed = false
+    const kept: PostHogEventProperties = {}
+    for (const [key, value] of Object.entries(properties)) {
+      let next = value
+      if (!NULL_PRESERVING_PROPERTY_KEYS.includes(key)) {
+        if (value === null || value === undefined) {
+          changed = true
+          continue
+        }
+        next = withoutNullMembers(value)
+        changed = changed || next !== value
+      }
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value: next, enumerable: true, writable: true, configurable: true })
+    }
+    return changed ? { ...message, properties: kept } : message
+  } catch {
+    return message
+  }
+}
+
 const isReplayDebugEvent = (eventName: unknown): boolean =>
   typeof eventName === 'string' &&
   eventName.startsWith('$') &&
@@ -141,7 +175,8 @@ const omitProperties = (properties: JsonType, shouldOmit: (key: string) => boole
   const kept: PostHogEventProperties = {}
   for (const [key, value] of Object.entries(properties)) {
     if (!shouldOmit(key)) {
-      kept[key] = value
+      // defineProperty, not assignment, so an own `__proto__` member is copied instead of setting the prototype.
+      Object.defineProperty(kept, key, { value, enumerable: true, writable: true, configurable: true })
     }
   }
   return kept
@@ -1384,7 +1419,8 @@ export class PostHog extends PostHogCoreBase {
    * Registers super properties that are sent with every event.
    *
    * Super properties are properties associated with events that are set once and then sent with every capture call.
-   * They persist across sessions and are stored locally.
+   * They persist across sessions and are stored locally. A registered `$process_person_profile` is left off
+   * `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once` events.
    *
    * {@label Capture}
    *
@@ -4041,6 +4077,12 @@ export class PostHog extends PostHogCoreBase {
     return recordingActive
   }
 
+  // The one null-property cleanup for enqueue(), sendImmediate() and events restored from a 4.x queue.
+  protected normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    const normalized = super.normalizeMessage(message)
+    return withoutNullProperties(normalized) ?? normalized
+  }
+
   /**
    * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
    * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
@@ -4078,10 +4120,10 @@ export class PostHog extends PostHogCoreBase {
           // Native runs its own debug-property builder on the handed-off event, so the JS
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
-          observation.nativeCapture = observation.prepareNativeCapture({
-            ...processed,
-            properties: withoutDebugProperties(processed.properties),
-          })
+          const nativePayload = { ...processed, properties: withoutDebugProperties(processed.properties) }
+          observation.nativeCapture = observation.prepareNativeCapture(
+            withoutNullProperties(nativePayload) ?? nativePayload
+          )
         } catch (e) {
           this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
           observation.nativeCapture = undefined

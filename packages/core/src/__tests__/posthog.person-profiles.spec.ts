@@ -528,4 +528,36 @@ describe('PostHog Core - Person Profiles', () => {
       })
     })
   })
+  describe('PostHogCore legacy event person state', () => {
+    it('keeps the SDK $process_person_profile and $is_identified over caller and registered values', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, personProfiles: 'never' })
+      posthog.register({ $process_person_profile: true, $is_identified: true })
+      posthog.capture('test-event', { $process_person_profile: true, $is_identified: true })
+      await waitForPromises()
+
+      const properties = parseBody(mocks.fetch.mock.calls[0]).batch[0].properties
+      expect(properties.$process_person_profile).toBe(false)
+      expect(properties.$is_identified).toBe(false)
+    })
+
+    it('sends a registered $process_person_profile on identity events', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, personProfiles: 'identified_only' })
+      posthog.register({ $process_person_profile: false })
+      posthog.identify('user-123')
+      await waitForPromises()
+
+      const identifyCall = mocks.fetch.mock.calls.find((call) => parseBody(call).batch?.[0]?.event === '$identify')
+      expect(parseBody(identifyCall).batch[0].properties.$process_person_profile).toBe(false)
+    })
+
+    it('leaves person state off $autocapture events', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, personProfiles: 'identified_only' })
+      posthog.autocapture('click', [])
+      await waitForPromises()
+
+      const properties = parseBody(mocks.fetch.mock.calls[0]).batch[0].properties
+      expect(properties).not.toHaveProperty('$process_person_profile')
+      expect(properties).not.toHaveProperty('$is_identified')
+    })
+  })
 })

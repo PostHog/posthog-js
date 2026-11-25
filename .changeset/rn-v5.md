@@ -28,6 +28,10 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
+- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` value counts as unset
+- **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
+- **Breaking:** add `$process_person_profile` and `$is_identified` to `$autocapture` events, so anonymous autocapture follows `personProfiles: 'identified_only'` like other events
+- **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
