@@ -19,7 +19,12 @@ const options = {
     },
 }
 
-async function startOnSubdomain(page: Page, context: BrowserContext, subdomain: string): Promise<void> {
+async function startOnSubdomain(
+    page: Page,
+    context: BrowserContext,
+    subdomain: string,
+    query: string = ''
+): Promise<void> {
     await start(
         {
             ...options,
@@ -27,11 +32,12 @@ async function startOnSubdomain(page: Page, context: BrowserContext, subdomain: 
                 ...options.options,
                 api_host: `https://${subdomain}.example.test`,
             },
-            url: `https://${subdomain}.example.test/playground/cypress/index.html`,
+            url: `https://${subdomain}.example.test/playground/cypress/index.html${query}`,
         },
         page,
         context
     )
+    await page.waitForFunction(() => Boolean((window as WindowWithPostHog).posthog?.__loaded))
     await page.evaluate(() => {
         const posthog = (window as WindowWithPostHog).posthog
         posthog?.persistence?.flush()
@@ -68,7 +74,7 @@ async function captureDistinctId(page: Page, event: string): Promise<string | un
 }
 
 test.beforeEach(async ({ context }) => {
-    await context.route('**/playground/cypress/index.html', (route) =>
+    await context.route(/\/playground\/cypress\/index\.html(\?|$)/, (route) =>
         route.fulfill({ path: './playground/cypress/index.html' })
     )
 })
@@ -166,4 +172,77 @@ test('a persistence-disabled subdomain does not adopt a sibling identity', async
 
     expect(await captureDistinctId(page, 'after-disabled-sibling-identify')).toBe(firstAnonymousId)
     expect(await distinctId(page)).toBe(firstAnonymousId)
+})
+
+test('preserves campaign params when a campaign link lands on an unvisited sibling subdomain mid-session', async ({
+    page,
+    context,
+}) => {
+    await startOnSubdomain(page, context, 'b')
+    await page.evaluate(() => {
+        const posthog = (window as WindowWithPostHog).posthog
+        posthog?.capture('$pageview')
+        posthog?.persistence?.flush()
+    })
+    const initialPageview = (await page.capturedEvents()).find((event) => event.event === '$pageview')
+    expect(initialPageview?.properties.distinct_id).toBeTruthy()
+    expect(initialPageview?.properties.$session_id).toBeTruthy()
+    expect(initialPageview?.properties.$device_id).toBeTruthy()
+
+    await startOnSubdomain(page, context, 'a', '?utm_source=test&utm_medium=qa&utm_campaign=xsub')
+    await page.evaluate(() => {
+        const posthog = (window as WindowWithPostHog).posthog
+        posthog?.capture('$pageview')
+        posthog?.capture('after-landing')
+    })
+
+    const landingEvents = await page.capturedEvents()
+    const landingPageview = landingEvents.find((event) => event.event === '$pageview')
+    const followUpEvent = landingEvents.find((event) => event.event === 'after-landing')
+
+    expect(landingPageview?.properties).toMatchObject({
+        distinct_id: initialPageview?.properties.distinct_id,
+        $device_id: initialPageview?.properties.$device_id,
+        $session_id: initialPageview?.properties.$session_id,
+        utm_source: 'test',
+        utm_medium: 'qa',
+        utm_campaign: 'xsub',
+    })
+    expect(followUpEvent?.properties).toMatchObject({
+        distinct_id: initialPageview?.properties.distinct_id,
+        $session_id: initialPageview?.properties.$session_id,
+        utm_source: 'test',
+        utm_medium: 'qa',
+        utm_campaign: 'xsub',
+    })
+})
+
+test('preserves campaign params when landing on a sibling subdomain after a reset', async ({ page, context }) => {
+    await startOnSubdomain(page, context, 'a')
+    await page.evaluate(() => {
+        const posthog = (window as WindowWithPostHog).posthog
+        posthog?.identify('identified-user')
+        posthog?.register_for_session({ stale_session_prop: 'old-user' })
+        posthog?.persistence?.flush()
+    })
+
+    const sibling = await context.newPage()
+    await startOnSubdomain(sibling, context, 'b')
+    await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.reset())
+    const resetAnonymousId = await distinctId(sibling)
+    expect(resetAnonymousId).toBeTruthy()
+    expect(resetAnonymousId).not.toBe('identified-user')
+    await sibling.close()
+
+    await startOnSubdomain(page, context, 'a', '?utm_source=after-reset&utm_medium=cpc&utm_campaign=brand')
+    await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('$pageview'))
+
+    const landingPageview = (await page.capturedEvents()).find((event) => event.event === '$pageview')
+    expect(landingPageview?.properties).toMatchObject({
+        distinct_id: resetAnonymousId,
+        utm_source: 'after-reset',
+        utm_medium: 'cpc',
+        utm_campaign: 'brand',
+    })
+    expect(landingPageview?.properties).not.toHaveProperty('stale_session_prop')
 })

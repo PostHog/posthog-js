@@ -3223,7 +3223,7 @@ Per-call capture overrides, mirroring the client's public capture options.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-delivery"></a> `delivery?` | `"unload"` | Send immediately without batching, using best-effort unload-safe delivery. |
+| <a id="property-delivery"></a> `delivery?` | `"immediate"` \| `"unload"` | Start delivering this event now instead of waiting for a batch. `immediate` keeps the host's normal transport, retries and queue; `unload` uses best-effort unload-safe delivery. A host that cannot honor the mode delivers the event normally. |
 | <a id="property-set"></a> `set?` | `Record`\<`string`, `unknown`\> | Person properties to set, emitted as `$set`. |
 | <a id="property-setonce"></a> `setOnce?` | `Record`\<`string`, `unknown`\> | Person properties to set if unset, emitted as `$set_once`. |
 | <a id="property-timestamp"></a> `timestamp?` | `Date` | Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. |
@@ -4005,23 +4005,24 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 
 ### `FeatureFlagsConfig`
 
-| Property | Modifier | Type |
-| ------ | ------ | ------ |
-| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` |
-| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> |
-| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> |
-| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` |
-| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` |
-| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` |
-| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] |
-| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` |
-| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] |
-| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` |
-| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` |
-| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` |
-| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` |
-| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` |
-| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` |
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` | - |
+| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> | - |
+| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> | - |
+| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` | - |
+| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` | - |
+| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` | - |
+| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Only `$feature_flag_bootstrapped_payload` reports the supplied value; `$feature_flag_payload` reports the stored JSON string, like payloads from `/flags`. |
+| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] | - |
+| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] | - |
+| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` | - |
+| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` | - |
+| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` | - |
+| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` | - |
+| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` | - |
 
 ### `FeatureFlagsConfigSource`
 
@@ -6257,7 +6258,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-logs"></a> `logs?` | `LogsConfig` | Logs-specific configuration options. **Default** `undefined` |
 | <a id="property-mask_all_element_attributes"></a> `mask_all_element_attributes` | `boolean` | Prevent autocapture from capturing any attribute names on elements. **Default** `false` |
 | <a id="property-mask_all_text"></a> `mask_all_text` | `boolean` | Prevent autocapture from capturing `textContent` on elements. **Default** `false` |
-| <a id="property-mask_personal_data_properties"></a> `mask_personal_data_properties` | `boolean` | Mask personal data properties from the current URL. This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add custom properties to mask with `custom_personal_data_properties`. **Default** `false` **See** - - Default campaign parameters that are masked by default. - - Custom list of personal data properties to mask. |
+| <a id="property-mask_personal_data_properties"></a> `mask_personal_data_properties` | `boolean` | Mask personal data properties from the current URL. This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add custom properties to mask with `custom_personal_data_properties`. **Default** `false` **See** - - Default URL parameters that are masked, including other spellings of them such as Snapchat's `ScCid`. - - Custom list of personal data properties to mask. |
 | <a id="property-metrics"></a> `metrics?` | `BrowserMetricsConfig` | Metrics-specific configuration options for the posthog.metrics API. **Default** `undefined` |
 | <a id="property-name-4"></a> `name` | `string` | The name this instance will be identified by. You don't need to set this most of the time, but can be useful if you have several Posthog instances running at the same time. **Default** `'posthog'` |
 | <a id="property-on_request_error"></a> `on_request_error?` | (`error`) => `void` | A function that is called when a request to the PostHog API fails. |

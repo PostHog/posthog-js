@@ -1,4 +1,4 @@
-import { analytics, type AnalyticsOptions } from '../src/products/analytics/analytics'
+import type { AnalyticsOptions } from '../src/core/types'
 import { BrowserState } from '../src/core/state/state'
 import { createPostHog } from '../src/composition/npm/core'
 import { createFetch, localRemoteConfig, MemoryStorage, requireInstalledExtension, type SentRequest } from './helpers'
@@ -30,10 +30,10 @@ const create = async (
         storage,
         projectToken,
         fetch: createFetch(requests),
-        extensions: [analytics({ flushInterval: 0, ...config })],
+        analytics: { flushInterval: 0, ...config },
     })
     clients.push(client)
-    return { client, product: requireInstalledExtension(client.analytics), requests }
+    return { client, requests }
 }
 afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.dispose()))
@@ -42,17 +42,17 @@ afterEach(async () => {
 
 describe('registered analytics properties', () => {
     it('merges locally without creating a session or emitting an event', async () => {
-        const { client, product, requests } = await create()
+        const { client, requests } = await create()
         const observed = vi.fn()
-        product.onEvent(observed)
-        product.register({ plan: 'free', region: 'eu' })
-        product.register({ plan: 'pro' })
-        expect(product.getProperty('plan')).toBe('pro')
-        expect(product.getProperty('region')).toBe('eu')
+        client.onEvent(observed)
+        client.register({ plan: 'free', region: 'eu' })
+        client.register({ plan: 'pro' })
+        expect(client.getProperty('plan')).toBe('pro')
+        expect(client.getProperty('region')).toBe('eu')
         expect(client.session).toBeUndefined()
         expect(requests).toHaveLength(0)
         expect(observed).not.toHaveBeenCalled()
-        product.capture('dashboard')
+        client.capture('dashboard')
         await client.flush()
         expect(events(requests)).toMatchObject([
             {
@@ -66,9 +66,9 @@ describe('registered analytics properties', () => {
     it.each(['capture', 'captureImmediate'] as const)(
         '%s lets dynamic and caller values override persistent values while protecting SDK metadata',
         async (method) => {
-            const { client, product, requests } = await create()
+            const { client, requests } = await create()
             const observed: Record<string, unknown>[] = []
-            product.onEvent(({ properties }) => observed.push(properties))
+            client.onEvent(({ properties }) => observed.push(properties))
             const incorrect = {
                 token: 'incorrect',
                 distinct_id: 'incorrect',
@@ -80,9 +80,9 @@ describe('registered analytics properties', () => {
                 $lib_version: 'incorrect',
                 $process_person_profile: true,
             }
-            product.register({ ...incorrect, plan: 'registered', region: 'eu', tier: 'registered' })
-            product.registerDynamicEventProperties(() => ({ ...incorrect, plan: 'dynamic', tier: 'dynamic' }))
-            await product[method]('dashboard', { ...incorrect, plan: 'event' })
+            client.register({ ...incorrect, plan: 'registered', region: 'eu', tier: 'registered' })
+            client.registerDynamicEventProperties(() => ({ ...incorrect, plan: 'dynamic', tier: 'dynamic' }))
+            await client[method]('dashboard', { ...incorrect, plan: 'event' })
             await client.flush()
             expect(events(requests)).toMatchObject([
                 {
@@ -110,12 +110,12 @@ describe('registered analytics properties', () => {
     )
 
     it('stamps identified processing policy over a registered false value', async () => {
-        const { client, product, requests } = await create()
+        const { client, requests } = await create()
         const observed: Record<string, unknown>[] = []
-        product.onEvent(({ properties }) => observed.push(properties))
-        product.register({ $process_person_profile: false })
-        await product.identify('user-123')
-        product.capture('identified', { $process_person_profile: false })
+        client.onEvent(({ properties }) => observed.push(properties))
+        client.register({ $process_person_profile: false })
+        client.identify('user-123')
+        client.capture('identified', { $process_person_profile: false })
         await client.flush()
         expect(events(requests)).toMatchObject([
             { event: '$identify', options: { process_person_profile: true } },
@@ -125,109 +125,109 @@ describe('registered analytics properties', () => {
     })
 
     it('registers first values once and retains existing falsy values', async () => {
-        const { product, client, requests } = await create()
-        product.register({ zero: 0, empty: '', disabled: false, nullable: null })
-        product.registerOnce({ plan: 'first', zero: 9, empty: 'changed', disabled: true, nullable: 'changed' })
-        product.registerOnce({ plan: 'second', region: 'eu' })
-        expect(product.getProperty('plan')).toBe('first')
-        expect(product.getProperty('zero')).toBe(0)
-        expect(product.getProperty('empty')).toBe('')
-        expect(product.getProperty('disabled')).toBe(false)
-        expect(product.getProperty('nullable')).toBeNull()
-        expect(product.getProperty('region')).toBe('eu')
+        const { client, requests } = await create()
+        client.register({ zero: 0, empty: '', disabled: false, nullable: null })
+        client.registerOnce({ plan: 'first', zero: 9, empty: 'changed', disabled: true, nullable: 'changed' })
+        client.registerOnce({ plan: 'second', region: 'eu' })
+        expect(client.getProperty('plan')).toBe('first')
+        expect(client.getProperty('zero')).toBe(0)
+        expect(client.getProperty('empty')).toBe('')
+        expect(client.getProperty('disabled')).toBe(false)
+        expect(client.getProperty('nullable')).toBeNull()
+        expect(client.getProperty('region')).toBe('eu')
         expect(client.session).toBeUndefined()
         expect(requests).toHaveLength(0)
-        product.capture('first_values')
+        client.capture('first_values')
         await client.flush()
         expect(events(requests)).toMatchObject([{ properties: { plan: 'first', region: 'eu', zero: 0 } }])
     })
 
     it('does not write storage for once-only registration without additions or missing-key removal', async () => {
         const storage = new MemoryStorage()
-        const { product } = await create(storage)
-        product.registerOnce({ plan: 'first' })
+        const { client } = await create(storage)
+        client.registerOnce({ plan: 'first' })
         const write = vi.spyOn(storage, 'setItem')
-        product.registerOnce({ plan: 'second' })
-        product.registerOnce({})
-        product.unregister('missing')
+        client.registerOnce({ plan: 'second' })
+        client.registerOnce({})
+        client.unregister('missing')
         expect(write).not.toHaveBeenCalled()
-        expect(product.getProperty('plan')).toBe('first')
+        expect(client.getProperty('plan')).toBe('first')
     })
 
     it('replaces the default or explicit sentinel using strict equality', async () => {
-        const { product } = await create()
-        product.register({ plan: 'None', retries: 0, stringZero: '0', nullable: null })
-        product.registerOnce({ plan: 'pro' })
-        product.registerOnce({ retries: 3, stringZero: 'changed' }, 0)
-        product.registerOnce({ nullable: 'known' }, null)
-        expect(product.getProperty('plan')).toBe('pro')
-        expect(product.getProperty('retries')).toBe(3)
-        expect(product.getProperty('stringZero')).toBe('0')
-        expect(product.getProperty('nullable')).toBe('known')
+        const { client } = await create()
+        client.register({ plan: 'None', retries: 0, stringZero: '0', nullable: null })
+        client.registerOnce({ plan: 'pro' })
+        client.registerOnce({ retries: 3, stringZero: 'changed' }, 0)
+        client.registerOnce({ nullable: 'known' }, null)
+        expect(client.getProperty('plan')).toBe('pro')
+        expect(client.getProperty('retries')).toBe(3)
+        expect(client.getProperty('stringZero')).toBe('0')
+        expect(client.getProperty('nullable')).toBe('known')
     })
 
     it('preserves once-only properties across reload and handles own prototype-named keys', async () => {
         const storage = new MemoryStorage()
         const first = await create(storage)
-        first.product.registerOnce(
+        first.client.registerOnce(
             JSON.parse('{"__proto__":{"own":true},"constructor":"application","prototype":"own","plan":"first"}')
         )
         await first.client.dispose()
         const second = await create(storage)
-        second.product.registerOnce(
+        second.client.registerOnce(
             JSON.parse('{"__proto__":"changed","constructor":"changed","prototype":"changed","plan":"second"}')
         )
-        expect(second.product.getProperty('__proto__')).toEqual({ own: true })
-        expect(second.product.getProperty('constructor')).toBe('application')
-        expect(second.product.getProperty('prototype')).toBe('own')
-        expect(second.product.getProperty('plan')).toBe('first')
-        second.product.reset()
-        second.product.registerOnce({ plan: 'after_reset' })
-        expect(second.product.getProperty('plan')).toBe('after_reset')
+        expect(second.client.getProperty('__proto__')).toEqual({ own: true })
+        expect(second.client.getProperty('constructor')).toBe('application')
+        expect(second.client.getProperty('prototype')).toBe('own')
+        expect(second.client.getProperty('plan')).toBe('first')
+        second.client.reset()
+        second.client.registerOnce({ plan: 'after_reset' })
+        expect(second.client.getProperty('plan')).toBe('after_reset')
     })
 
     it('persists updates and single-key removals across fresh instances', async () => {
         const storage = new MemoryStorage()
         const first = await create(storage)
-        first.product.register({ plan: 'pro', region: 'eu' })
-        first.product.unregister('plan')
+        first.client.register({ plan: 'pro', region: 'eu' })
+        first.client.unregister('plan')
         await first.client.dispose()
         const second = await create(storage)
-        expect(second.product.getProperty('plan')).toBeUndefined()
-        expect(second.product.getProperty('region')).toBe('eu')
-        second.product.capture('loaded')
+        expect(second.client.getProperty('plan')).toBeUndefined()
+        expect(second.client.getProperty('region')).toBe('eu')
+        second.client.capture('loaded')
         await second.client.flush()
         expect(events(second.requests)[0]?.properties.region).toBe('eu')
         expect(events(second.requests)[0]?.properties).not.toHaveProperty('plan')
     })
 
     it('snapshots registration and getter values and handles own prototype-named keys', async () => {
-        const { product } = await create()
+        const { client } = await create()
         const nested = { count: 1 }
-        product.register({ nested, '': 'empty', nullable: null })
-        product.register(JSON.parse('{"__proto__":{"own":true},"constructor":"application"}'))
+        client.register({ nested, '': 'empty', nullable: null })
+        client.register(JSON.parse('{"__proto__":{"own":true},"constructor":"application"}'))
         nested.count = 2
-        const read = product.getProperty('nested') as { count: number }
+        const read = client.getProperty('nested') as { count: number }
         expect(read).toEqual({ count: 1 })
         read.count = 3
-        expect(product.getProperty('nested')).toEqual({ count: 1 })
-        expect(product.getProperty('__proto__')).toEqual({ own: true })
-        expect(product.getProperty('constructor')).toBe('application')
-        expect(product.getProperty('toString')).toBeUndefined()
-        expect(product.getProperty('nullable')).toBeNull()
-        expect(product.getProperty('')).toBe('empty')
-        product.unregister('__proto__')
-        product.unregister('')
-        expect(product.getProperty('__proto__')).toBeUndefined()
-        expect(product.getProperty('')).toBeUndefined()
+        expect(client.getProperty('nested')).toEqual({ count: 1 })
+        expect(client.getProperty('__proto__')).toEqual({ own: true })
+        expect(client.getProperty('constructor')).toBe('application')
+        expect(client.getProperty('toString')).toBeUndefined()
+        expect(client.getProperty('nullable')).toBeNull()
+        expect(client.getProperty('')).toBe('empty')
+        client.unregister('__proto__')
+        client.unregister('')
+        expect(client.getProperty('__proto__')).toBeUndefined()
+        expect(client.getProperty('')).toBeUndefined()
         expect(({} as Record<string, unknown>).own).toBeUndefined()
     })
 
     it.each(['register', 'registerOnce'] as const)(
         'contains invalid %s inputs and serialization failures without replacing valid properties',
         async (method) => {
-            const { client, product, requests } = await create()
-            product.register({ retained: true })
+            const { client, requests } = await create()
+            client.register({ retained: true })
             const cycle: Record<string, unknown> = {}
             cycle.self = cycle
             const revoked = Proxy.revocable({ plan: 'pro' }, {})
@@ -252,18 +252,18 @@ describe('registered analytics properties', () => {
             for (const value of invalid) {
                 expect(() => {
                     // @ts-expect-error Exercise malformed values from JavaScript callers.
-                    product[method](value)
+                    client[method](value)
                 }).not.toThrow()
             }
             expect(() =>
-                product[method]({
+                client[method]({
                     get broken() {
                         throw new Error('property getter failed')
                     },
                 })
             ).not.toThrow()
-            expect(product.getProperty('retained')).toBe(true)
-            product.capture('valid')
+            expect(client.getProperty('retained')).toBe(true)
+            client.capture('valid')
             await client.flush()
             expect(events(requests)[0]?.properties.retained).toBe(true)
             expect(events(requests)[0]?.properties).not.toHaveProperty('self')
@@ -271,13 +271,13 @@ describe('registered analytics properties', () => {
     )
 
     it('keeps queued events immutable and leaves other keys when unregistering', async () => {
-        const { client, product, requests } = await create()
-        product.register({ plan: 'before', region: 'eu' })
-        product.capture('before')
-        product.register({ plan: 'after' })
-        product.unregister('region')
-        product.unregister('missing')
-        product.capture('after')
+        const { client, requests } = await create()
+        client.register({ plan: 'before', region: 'eu' })
+        client.capture('before')
+        client.register({ plan: 'after' })
+        client.unregister('region')
+        client.unregister('missing')
+        client.capture('after')
         await client.flush()
         expect(events(requests)).toMatchObject([
             { event: 'before', properties: { plan: 'before', region: 'eu' } },
@@ -287,111 +287,83 @@ describe('registered analytics properties', () => {
     })
 
     it('enriches identity operations and survives group-only cleanup but not full reset', async () => {
-        const { client, product, requests } = await create()
-        product.register({ context: 'application' })
-        product.alias('account')
-        await product.identify('member')
-        await product.group('organization', 'current')
-        product.groupIdentify('organization', 'other')
-        product.resetGroups()
-        expect(product.getProperty('context')).toBe('application')
+        const { client, requests } = await create()
+        client.register({ context: 'application' })
+        client.alias('account')
+        client.identify('member')
+        client.group('organization', 'current')
+        client.groupIdentify('organization', 'other')
+        client.resetGroups()
+        expect(client.getProperty('context')).toBe('application')
         await client.flush()
         expect(events(requests)).toHaveLength(4)
         for (const event of events(requests)) expect(event.properties.context).toBe('application')
-        product.reset()
-        expect(product.getProperty('context')).toBeUndefined()
-        product.capture('reset')
+        client.reset()
+        expect(client.getProperty('context')).toBeUndefined()
+        client.capture('reset')
         await client.flush()
         expect(events(requests).at(-1)?.properties).not.toHaveProperty('context')
     })
 
     it('allows local context changes while capture is denied and sends only after consent', async () => {
-        const { client, product, requests } = await create()
+        const { client, requests } = await create()
         client.optOut()
-        product.register({ plan: 'pro', removed: true })
-        product.unregister('removed')
-        product.capture('denied')
+        client.register({ plan: 'pro', removed: true })
+        client.unregister('removed')
+        client.capture('denied')
         await client.flush()
         expect(requests).toHaveLength(0)
-        expect(product.getProperty('plan')).toBe('pro')
+        expect(client.getProperty('plan')).toBe('pro')
         client.optIn()
-        product.capture('allowed')
+        client.capture('allowed')
         await client.flush()
         expect(events(requests)).toMatchObject([{ event: 'allowed', properties: { plan: 'pro' } }])
         expect(events(requests)).toHaveLength(1)
     })
 
-    it.each(['register', 'registerOnce'] as const)(
-        'does not persist %s when input serialization disposes the product',
-        async (method) => {
-            const storage = new MemoryStorage()
-            const first = await create(storage)
-            first.product.register({ retained: true })
-            const disposing: Promise<void>[] = []
-            first.product[method]({
-                toJSON() {
-                    disposing.push(Promise.resolve(first.product.dispose?.()))
-                    return { late: true }
-                },
-            })
-            await Promise.all(disposing)
-            const second = await create(storage)
-            expect(second.product.getProperty('retained')).toBe(true)
-            expect(second.product.getProperty('late')).toBeUndefined()
-        }
-    )
-
-    it('keeps uninstalled and retained disposed handles inert', async () => {
-        const raw = analytics()
-        expect(() => {
-            raw.register({ unused: true })
-            raw.registerOnce({ unused: true })
-            raw.unregister('unused')
-        }).not.toThrow()
-        expect(raw.getProperty('unused')).toBeUndefined()
-        await raw.dispose?.()
-        const { client, product } = await create()
-        product.register({ retained: true })
+    it('keeps registration on a disposed client inert', async () => {
+        const { client } = await create()
+        client.register({ retained: true })
         await client.dispose()
         expect(() => {
-            product.register({ after: true })
-            product.registerOnce({ after: true })
-            product.unregister('retained')
+            client.register({ after: true })
+            client.registerOnce({ after: true })
+            client.unregister('retained')
         }).not.toThrow()
-        expect(product.getProperty('retained')).toBeUndefined()
+        expect(client.getProperty('retained')).toBeUndefined()
     })
 
     it('keeps existing values when an empty registration is merged', async () => {
-        const { product } = await create()
-        product.register({})
-        expect(product.getProperty('plan')).toBeUndefined()
-        product.register({ plan: 'pro', nested: { count: 1 } })
-        product.register({})
-        product.register({ plan: 'pro' })
-        expect(product.getProperty('plan')).toBe('pro')
-        expect(product.getProperty('nested')).toEqual({ count: 1 })
+        const { client } = await create()
+        client.register({})
+        expect(client.getProperty('plan')).toBeUndefined()
+        client.register({ plan: 'pro', nested: { count: 1 } })
+        client.register({})
+        client.register({ plan: 'pro' })
+        expect(client.getProperty('plan')).toBe('pro')
+        expect(client.getProperty('nested')).toEqual({ count: 1 })
     })
 
     it('uses strict sentinel equality for booleans, empty strings and object values', async () => {
-        const { product } = await create()
+        const { client } = await create()
         const sentinel = { initial: true }
-        product.register({ disabled: false, empty: '', object: sentinel, stringFalse: 'false' })
-        product.registerOnce({ disabled: 'enabled', stringFalse: 'changed' }, false)
-        product.registerOnce({ empty: 'filled' }, '')
-        product.registerOnce({ object: 'changed' }, sentinel)
-        expect(product.getProperty('disabled')).toBe('enabled')
-        expect(product.getProperty('empty')).toBe('filled')
-        expect(product.getProperty('stringFalse')).toBe('false')
-        expect(product.getProperty('object')).toEqual({ initial: true })
+        client.register({ disabled: false, empty: '', object: sentinel, stringFalse: 'false' })
+        client.registerOnce({ disabled: 'enabled', stringFalse: 'changed' }, false)
+        client.registerOnce({ empty: 'filled' }, '')
+        client.registerOnce({ object: 'changed' }, sentinel)
+        expect(client.getProperty('disabled')).toBe('enabled')
+        expect(client.getProperty('empty')).toBe('filled')
+        expect(client.getProperty('stringFalse')).toBe('false')
+        expect(client.getProperty('object')).toEqual({ initial: true })
     })
 
     it('captures own prototype-named properties without affecting object prototypes', async () => {
-        const { client, product, requests } = await create()
-        product.register(
+        const { client, requests } = await create()
+        client.register(
             JSON.parse('{"__proto__":{"registered":true},"constructor":"registered","prototype":"registered"}')
         )
-        product.capture('registered_keys')
-        product.capture(
+        client.capture('registered_keys')
+        client.capture(
             'caller_keys',
             JSON.parse('{"__proto__":{"caller":true},"constructor":"caller","prototype":"caller"}')
         )
@@ -406,10 +378,10 @@ describe('registered analytics properties', () => {
         expect(caller['__proto__']).toEqual({ caller: true })
         expect(caller.constructor).toBe('caller')
         expect(caller.prototype).toBe('caller')
-        product.unregister('constructor')
-        product.unregister('prototype')
-        expect(product.getProperty('constructor')).toBeUndefined()
-        expect(product.getProperty('prototype')).toBeUndefined()
+        client.unregister('constructor')
+        client.unregister('prototype')
+        expect(client.getProperty('constructor')).toBeUndefined()
+        expect(client.getProperty('prototype')).toBeUndefined()
         expect(({} as Record<string, unknown>).registered).toBeUndefined()
         expect(({} as Record<string, unknown>).caller).toBeUndefined()
     })
@@ -417,7 +389,7 @@ describe('registered analytics properties', () => {
     it.each(['capture', 'captureImmediate'] as const)(
         '%s snapshots persistent, dynamic, caller and option values once before later mutations',
         async (method) => {
-            const { client, product, requests } = await create()
+            const { client, requests } = await create()
             const stored = { count: 1 }
             const dynamic = { count: 2 }
             const caller = { count: 3 }
@@ -425,11 +397,11 @@ describe('registered analytics properties', () => {
             const setOnceValue = { count: 5 }
             const toJSON = vi.fn(() => caller)
             const stamp = new Date('2025-01-02T03:04:05.000Z')
-            product.register({ stored, plan: 'persistent', tier: 'persistent', $set: { wrong: true } })
-            product.registerDynamicEventProperties(() => ({ dynamic, plan: 'dynamic', tier: 'dynamic' }))
+            client.register({ stored, plan: 'persistent', tier: 'persistent', $set: { wrong: true } })
+            client.registerDynamicEventProperties(() => ({ dynamic, plan: 'dynamic', tier: 'dynamic' }))
             const observed: Record<string, unknown>[] = []
-            product.onEvent(({ properties }) => observed.push(properties))
-            const pending = product[method](
+            client.onEvent(({ properties }) => observed.push(properties))
+            const pending = client[method](
                 'snapshot',
                 { plan: 'caller', caller: { toJSON }, $set_once: { wrong: true } },
                 {
@@ -445,8 +417,8 @@ describe('registered analytics properties', () => {
             setValue.count = 9
             setOnceValue.count = 9
             stamp.setUTCFullYear(2030)
-            product.register({ stored: { count: 9 }, plan: 'later' })
-            product.unregister('tier')
+            client.register({ stored: { count: 9 }, plan: 'later' })
+            client.unregister('tier')
             await pending
             await client.flush()
             expect(toJSON).toHaveBeenCalledTimes(1)
@@ -472,34 +444,34 @@ describe('registered analytics properties', () => {
         }
     )
 
-    it('stores the original analytics superProperties record in the Core-scoped namespace', async () => {
+    it('stores the superProperties record in the client key-value namespace', async () => {
         const storage = new MemoryStorage()
-        const { product } = await create(storage)
-        product.register({ plan: 'pro', nested: { count: 1 } })
+        const { client } = await create(storage)
+        client.register({ plan: 'pro', nested: { count: 1 } })
         const raw = requireInstalledExtension(
             storage.getItem(`ph_${options.projectToken}_posthog_browser_v2`) ?? undefined
         )
         expect(JSON.parse(raw)).toMatchObject({
-            extensionData: { analytics: { superProperties: { plan: 'pro', nested: { count: 1 } } } },
+            extensionData: { core: { superProperties: { plan: 'pro', nested: { count: 1 } } } },
         })
         const other = await create(storage, {}, 'ph_other_project')
-        expect(other.product.getProperty('plan')).toBeUndefined()
-        other.product.register({ plan: 'other' })
+        expect(other.client.getProperty('plan')).toBeUndefined()
+        other.client.register({ plan: 'other' })
         const fresh = await create(storage)
-        expect(fresh.product.getProperty('plan')).toBe('pro')
+        expect(fresh.client.getProperty('plan')).toBe('pro')
     })
 
     it('keeps local registration independent of consent and never-mode person processing', async () => {
-        const { client, product, requests } = await create(false, { personProfiles: 'never' })
+        const { client, requests } = await create(false, { personProfiles: 'never' })
         client.optOut()
-        product.registerOnce({ plan: 'pro', removed: true })
-        product.unregister('removed')
-        expect(product.getProperty('plan')).toBe('pro')
-        product.capture('denied')
+        client.registerOnce({ plan: 'pro', removed: true })
+        client.unregister('removed')
+        expect(client.getProperty('plan')).toBe('pro')
+        client.capture('denied')
         expect(client.session).toBeUndefined()
         expect(requests).toHaveLength(0)
         client.optIn()
-        product.capture('allowed')
+        client.capture('allowed')
         await client.flush()
         expect(events(requests)).toMatchObject([
             { event: 'allowed', properties: { plan: 'pro' }, options: { process_person_profile: false } },
@@ -509,69 +481,51 @@ describe('registered analytics properties', () => {
     it.each(['register', 'registerOnce'] as const)(
         '%s serializes caller values once and merges after reentrant local mutations',
         async (method) => {
-            const { product } = await create()
-            product.register({ retained: true, removed: true })
+            const { client } = await create()
+            client.register({ retained: true, removed: true })
             const toJSON = vi.fn(() => {
-                product.unregister('removed')
-                product.register({ nestedOperation: true })
+                client.unregister('removed')
+                client.register({ nestedOperation: true })
                 return { caller: { count: 1 } }
             })
-            product[method]({ toJSON })
+            client[method]({ toJSON })
             expect(toJSON).toHaveBeenCalledTimes(1)
-            expect(product.getProperty('retained')).toBe(true)
-            expect(product.getProperty('removed')).toBeUndefined()
-            expect(product.getProperty('nestedOperation')).toBe(true)
-            expect(product.getProperty('caller')).toEqual({ count: 1 })
+            expect(client.getProperty('retained')).toBe(true)
+            expect(client.getProperty('removed')).toBeUndefined()
+            expect(client.getProperty('nestedOperation')).toBe(true)
+            expect(client.getProperty('caller')).toEqual({ count: 1 })
         }
     )
 
     it.each(['register', 'registerOnce'] as const)(
         '%s does not evaluate inputs when state is unavailable and rechecks state after serialization',
         async (method) => {
-            const { product } = await create()
+            const { client } = await create()
             const prepare = vi.spyOn(BrowserState.prototype, 'prepare').mockReturnValue(false)
             const skipped = vi.fn(() => ({ skipped: true }))
-            product[method]({ toJSON: skipped })
+            client[method]({ toJSON: skipped })
             expect(skipped).not.toHaveBeenCalled()
-            expect(product.getProperty('skipped')).toBeUndefined()
+            expect(client.getProperty('skipped')).toBeUndefined()
             prepare.mockReturnValue(true)
             const toJSON = vi.fn(() => {
                 prepare.mockReturnValue(false)
                 return { late: true }
             })
-            product[method]({ toJSON })
+            client[method]({ toJSON })
             expect(toJSON).toHaveBeenCalledTimes(1)
             prepare.mockRestore()
-            expect(product.getProperty('late')).toBeUndefined()
+            expect(client.getProperty('late')).toBeUndefined()
         }
     )
-
-    it('keeps detached and copied registration operations bound to their owner', async () => {
-        const { client, product } = await create()
-        const { register, registerOnce, unregister, getProperty } = product
-        const copied = { register, registerOnce, unregister, getProperty }
-        register({ plan: 'free', removed: true })
-        copied.register({ plan: 'pro' })
-        registerOnce({ plan: 'other', region: 'eu' })
-        copied.unregister('removed')
-        expect(getProperty('plan')).toBe('pro')
-        expect(copied.getProperty('region')).toBe('eu')
-        expect(getProperty('removed')).toBeUndefined()
-        await client.dispose()
-        copied.register({ late: true })
-        copied.registerOnce({ late: true })
-        copied.unregister('plan')
-        expect(getProperty('late')).toBeUndefined()
-    })
 
     it.each(['capture', 'captureImmediate'] as const)(
         '%s ignores root caller serializer functions without discarding merged context',
         async (method) => {
-            const { client, product, requests } = await create()
-            product.register({ persistent: true })
-            product.registerDynamicEventProperties(() => ({ dynamic: true }))
+            const { client, requests } = await create()
+            client.register({ persistent: true })
+            client.registerDynamicEventProperties(() => ({ dynamic: true }))
             const toJSON = vi.fn(() => ({ custom: true }))
-            await product[method]('serialized', { caller: true, toJSON })
+            await client[method]('serialized', { caller: true, toJSON })
             await client.flush()
             expect(toJSON).not.toHaveBeenCalled()
             expect(events(requests)).toMatchObject([
@@ -582,12 +536,12 @@ describe('registered analytics properties', () => {
     )
 
     it('clears future context on full reset without rewriting queued properties', async () => {
-        const { client, product, requests } = await create()
-        product.register({ context: { account: 'before' } })
-        product.capture('before_reset')
-        product.reset()
-        expect(product.getProperty('context')).toBeUndefined()
-        product.capture('after_reset')
+        const { client, requests } = await create()
+        client.register({ context: { account: 'before' } })
+        client.capture('before_reset')
+        client.reset()
+        expect(client.getProperty('context')).toBeUndefined()
+        client.capture('after_reset')
         await client.flush()
         expect(events(requests)).toMatchObject([
             { event: 'before_reset', properties: { context: { account: 'before' } } },
@@ -601,9 +555,9 @@ describe('registered analytics properties', () => {
         async (method) => {
             const storage = new MemoryStorage()
             const first = await create(storage)
-            first.product.register({ retained: true })
+            first.client.register({ retained: true })
             const pending: Promise<void>[] = []
-            first.product[method]({
+            first.client[method]({
                 toJSON() {
                     pending.push(first.client.dispose())
                     return { late: true }
@@ -611,42 +565,42 @@ describe('registered analytics properties', () => {
             })
             await Promise.all(pending)
             const fresh = await create(storage)
-            expect(fresh.product.getProperty('retained')).toBe(true)
-            expect(fresh.product.getProperty('late')).toBeUndefined()
+            expect(fresh.client.getProperty('retained')).toBe(true)
+            expect(fresh.client.getProperty('late')).toBeUndefined()
         }
     )
 
     it.each(['capture', 'captureImmediate'] as const)(
         '%s retains its property snapshot when caller serialization changes registration',
         async (method) => {
-            const { client, product, requests } = await create()
-            product.register({ context: { count: 1 } })
+            const { client, requests } = await create()
+            client.register({ context: { count: 1 } })
             const toJSON = vi.fn(() => {
-                product.register({ context: { count: 2 } })
+                client.register({ context: { count: 2 } })
                 return { caller: true }
             })
-            await product[method]('reentrant_snapshot', { converted: { toJSON } })
+            await client[method]('reentrant_snapshot', { converted: { toJSON } })
             await client.flush()
             expect(toJSON).toHaveBeenCalledTimes(1)
             expect(events(requests)).toMatchObject([
                 { properties: { context: { count: 1 }, converted: { caller: true } } },
             ])
-            expect(product.getProperty('context')).toEqual({ count: 2 })
+            expect(client.getProperty('context')).toEqual({ count: 2 })
         }
     )
 
     it('retains local properties when persistence fails and saves them on a later update', async () => {
         const storage = new MemoryStorage()
-        const { product } = await create(storage)
+        const { client } = await create(storage)
         const write = vi.spyOn(storage, 'setItem').mockImplementation(() => {
             throw new Error('storage unavailable')
         })
-        expect(() => product.register({ first: { count: 1 } })).not.toThrow()
-        expect(product.getProperty('first')).toEqual({ count: 1 })
+        expect(() => client.register({ first: { count: 1 } })).not.toThrow()
+        expect(client.getProperty('first')).toEqual({ count: 1 })
         write.mockRestore()
-        product.register({ second: true })
+        client.register({ second: true })
         const fresh = await create(storage)
-        expect(fresh.product.getProperty('first')).toEqual({ count: 1 })
-        expect(fresh.product.getProperty('second')).toBe(true)
+        expect(fresh.client.getProperty('first')).toEqual({ count: 1 })
+        expect(fresh.client.getProperty('second')).toBe(true)
     })
 })

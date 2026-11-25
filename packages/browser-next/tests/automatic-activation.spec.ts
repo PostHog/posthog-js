@@ -11,7 +11,6 @@ const base = {
     navigator: false,
     fetch: false,
     capturePageview: false,
-    analytics: false,
     flags: false,
     logs: false,
     surveys: false,
