@@ -475,6 +475,32 @@ describe('captureAiGeneration', () => {
     expect(vercelOpenAIMcpTool.args.authorization).toBe('secret')
   })
 
+  it.each([
+    ['retrieval apiAuth', { retrieval: { externalApi: { apiAuth: { apiKeyConfig: { apiKeyString: 'secret' } } } } }],
+    [
+      'retrieval authConfig',
+      { retrieval: { externalApi: { authConfig: { oauthConfig: { accessToken: 'secret' } } } } },
+    ],
+    ['googleMaps authConfig', { googleMaps: { authConfig: { apiKey: 'secret' } } }],
+    ['exaAiSearch apiKey', { exaAiSearch: { apiKey: 'secret' } }],
+    ['parallelAiSearch apiKey', { parallelAiSearch: { apiKey: 'secret' } }],
+    ['mcpServers headers', { mcpServers: [{ streamableHttpTransport: { headers: { Authorization: 'secret' } } }] }],
+    ['snake_case config', { google_maps: { auth_config: { oauth_config: { access_token: 'secret' } } } }],
+  ])('redacts Gemini tool credentials: %s', async (_, tool) => {
+    const client = buildClient()
+    const functionTool = {
+      functionDeclarations: [{ name: 'call_api', parameters: { properties: { apiKey: { type: 'string' } } } }],
+    }
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, tools: [tool, functionTool] })
+
+    const [capturedTool, capturedFunctionTool] = lastCaptureProperties(client).$ai_tools as unknown[]
+    expect(JSON.stringify(capturedTool)).not.toContain('secret')
+    expect(Object.keys(capturedTool as object)).toEqual(Object.keys(tool))
+    expect(capturedFunctionTool).toBe(functionTool)
+    expect(JSON.stringify(tool)).toContain('secret')
+  })
+
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
     const client = buildClient({ enableExceptionAutocapture: true })
     const error = new Error('boom')
