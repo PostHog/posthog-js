@@ -458,6 +458,141 @@ describe('known-absent property keys', () => {
     expect(flagsRequests()).toHaveLength(0)
   })
 
+  describe('flag dependencies evaluate the referenced flag in its own context', () => {
+    const dependsOn = (parent: string): object => ({
+      key: parent,
+      type: 'flag',
+      value: true,
+      operator: 'flag_evaluates_to',
+      dependency_chain: [parent],
+    })
+    const orgParent = (rolloutPercentage = 100): object => ({
+      id: 1,
+      key: 'org-parent',
+      active: true,
+      filters: {
+        aggregation_group_type_index: 0,
+        groups: [
+          {
+            properties: [{ key: 'region', type: 'group', group_type_index: 0, operator: 'exact', value: 'us' }],
+            rollout_percentage: rolloutPercentage,
+          },
+        ],
+      },
+    })
+    const personChild = { ...flag('person-child', [dependsOn('org-parent')]), id: 2 }
+
+    async function evaluateLocally(distinctId: string, options: object): Promise<any> {
+      return posthog.evaluateFlags(distinctId, {
+        flagKeys: ['org-parent', 'person-child', 'person-parent', 'org-child'],
+        onlyEvaluateLocally: true,
+        ...options,
+      })
+    }
+
+    it('a person flag depending on a group flag reads the group properties', async () => {
+      setup(
+        { flags: [orgParent(), personChild], group_type_mapping: { '0': 'organization' } },
+        { 'org-parent': 'remote', 'person-child': 'remote' }
+      )
+
+      const options = {
+        groups: { organization: 'acme' },
+        personProperties: { region: 'us' },
+        groupProperties: { organization: { region: 'eu' } },
+      }
+      const result = await evaluateLocally('user', options)
+      expect(result.getFlag('org-parent')).toBe(false)
+      expect(result.getFlag('person-child')).toBe(false)
+      expect(result.unresolvedFlags).toEqual({})
+      expect(await posthog.getFeatureFlag('person-child', 'user', options)).toBe(false)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it('a group flag dependency without its group resolves to false without fallback', async () => {
+      setup(
+        { flags: [orgParent(), personChild], group_type_mapping: { '0': 'organization' } },
+        { 'org-parent': 'remote', 'person-child': 'remote' }
+      )
+
+      const options = {
+        personProperties: { region: 'us' },
+        groupPropertyKeysKnownAbsent: { organization: ['tier'] },
+      }
+      const result = await evaluateLocally('user', options)
+      expect(result.getFlag('org-parent')).toBe(false)
+      expect(result.getFlag('person-child')).toBe(false)
+      expect(result.unresolvedFlags).toEqual({})
+      expect(await posthog.getFeatureFlag('person-child', 'user', options)).toBe(false)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it.each([
+      // 'org-parent.acme' hashes into a 50% rollout and 'org-parent.beta' does not.
+      ['acme', 'beta', true],
+      ['beta', 'acme', false],
+    ])(
+      'a group flag dependency buckets by the group key %s, not the distinct id %s',
+      async (groupKey, distinctId, expected) => {
+        setup({ flags: [orgParent(50), personChild], group_type_mapping: { '0': 'organization' } })
+
+        const result = await evaluateLocally(distinctId, {
+          groups: { organization: groupKey },
+          groupProperties: { organization: { region: 'us' } },
+        })
+        expect(result.getFlag('org-parent')).toBe(expected)
+        expect(result.getFlag('person-child')).toBe(expected)
+        expect(result.unresolvedFlags).toEqual({})
+      }
+    )
+
+    it.each([
+      // 'person-parent.user' hashes into a 50% rollout and 'person-parent.acme' does not.
+      ['user', 'acme', true],
+      ['acme', 'user', false],
+    ])(
+      'a group flag depending on a person flag reads person properties and buckets by the distinct id %s',
+      async (distinctId, groupKey, expected) => {
+        setup({
+          flags: [
+            {
+              id: 1,
+              key: 'person-parent',
+              active: true,
+              filters: {
+                groups: [
+                  {
+                    properties: [{ key: 'region', type: 'person', operator: 'exact', value: 'us' }],
+                    rollout_percentage: 50,
+                  },
+                ],
+              },
+            },
+            {
+              id: 2,
+              key: 'org-child',
+              active: true,
+              filters: {
+                aggregation_group_type_index: 0,
+                groups: [{ properties: [dependsOn('person-parent')], rollout_percentage: 100 }],
+              },
+            },
+          ],
+          group_type_mapping: { '0': 'organization' },
+        })
+
+        const result = await evaluateLocally(distinctId, {
+          groups: { organization: groupKey },
+          personProperties: { region: 'us' },
+          groupProperties: { organization: { region: 'eu' } },
+        })
+        expect(result.getFlag('person-parent')).toBe(expected)
+        expect(result.getFlag('org-child')).toBe(expected)
+        expect(result.unresolvedFlags).toEqual({})
+      }
+    )
+  })
+
   describe('filter type scoping', () => {
     const cohortFlag = flag('cohort-flag', [{ key: 'id', type: 'cohort', value: 'c1', operator: 'in' }])
     const metadataFilter = (operator: string, value: unknown): object => ({
