@@ -134,6 +134,8 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
+const RRWEB_NOT_RECORDING_ERROR = /^please (take full snapshot|add custom event) after start recording$/
+
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // snapshots a timing gate still held when the page unloaded are parked under this key for the
@@ -557,6 +559,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _suppressNextFreshStartHold = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
+    // rrweb call failures per session: a recorder whose module-level recording flag was cleared keeps emitting
+    // incremental events while every full snapshot and custom event throws, which is otherwise invisible
+    private _rrwebMethodFailures = 0
+    private _lastRrwebMethodError: string | undefined = undefined
+    private _rrwebRecordingAtLastFailure: boolean | undefined = undefined
+    private _rrwebLiveRecorders = 0
+    // set while rrweb's record() runs, because it emits Meta and FullSnapshot before it returns its stop handle
+    private _rrwebStartInProgress: { stopRequested: boolean; startRequested: boolean } | undefined = undefined
+    private _lastRrwebRestartAt: number | undefined = undefined
+    private _rrwebRestarts = 0
+    // the heal restart keeps the remote config trusted, so the replacement keeps the project's masking
+    private _isRestartingRrweb = false
     // the cost object most recently read from rrweb; each snapshot produces a fresh
     // object, so identity comparison dedupes the sync and microtask reads
     private _lastSeenSnapshotCost: SnapshotCost | undefined
@@ -916,6 +930,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             queuedRRWebEvent.rrwebMethod()
             return true
         } catch (e) {
+            this._rrwebMethodFailures += 1
+            const message = String((e as Error | undefined)?.message ?? e)
+            // other errors can carry page text from user masking callbacks, so only rrweb's own not-recording errors are reported
+            this._lastRrwebMethodError = RRWEB_NOT_RECORDING_ERROR.test(message) ? message : 'other'
+            this._rrwebRecordingAtLastFailure = getRRWebRecord()?.isRecording?.()
             // Sometimes a race can occur where the recorder is not fully started yet
             if (this._queuedRRWebEvents.length < 10) {
                 this._queuedRRWebEvents.push({
@@ -1008,7 +1027,68 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
+        const taken = this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
+        const stopRrweb = this._stopRrweb
+        if (!taken && stopRrweb) {
+            // deferred so a restart never runs inside the old recorder's emit, whose in-flight event would land after the new snapshot
+            setTimeout(() => this._restartRrwebIfNotRecording(stopRrweb), 0)
+        }
+        return taken
+    }
+
+    // another rrweb recorder's stop clears the module-level recording flag, leaving this one emitting
+    // incremental events that can never be played back, so start a fresh recorder to take a full snapshot
+    private _restartRrwebIfNotRecording(stopRrweb: listenerHandler): void {
+        const now = Date.now()
+        if (
+            this._stopRrweb !== stopRrweb ||
+            this._rrwebStartInProgress ||
+            // before its first full snapshot rrweb may simply not have initialised yet
+            isUndefined(this._lastFullSnapshotSessionId) ||
+            this._rrwebAttached ||
+            !['interactive', 'complete'].includes(document?.readyState ?? '') ||
+            (!isUndefined(this._lastRrwebRestartAt) && now - this._lastRrwebRestartAt < FIVE_MINUTES)
+        ) {
+            return
+        }
+        this._lastRrwebRestartAt = now
+        this._rrwebRestarts += 1
+        logger.warn('rrweb stopped recording while replay was started, restarting it')
+        const restart = () => {
+            this._stopRrweb = undefined
+            // the old recorder's teardown runs host callbacks, so a stop they request is recorded here as it is during record()
+            const teardown = { stopRequested: false, startRequested: false }
+            this._rrwebStartInProgress = teardown
+            try {
+                this._stopRrwebRecorder(stopRrweb)
+            } finally {
+                this._rrwebStartInProgress = undefined
+            }
+            this._queuedRRWebEvents = []
+            if (
+                (teardown.stopRequested && !teardown.startRequested) ||
+                this._instance.config.disable_session_recording ||
+                this._instance.has_opted_out_capturing()
+            ) {
+                return
+            }
+            this._startRecorder()
+        }
+        // keeps CSSOM-inserted rule sources across the restart, as the session rotation restart does
+        const handoff = getRRWebRecord()?.withStyleRuleSourceHandoff
+        this._isRestartingRrweb = true
+        try {
+            if (handoff) {
+                handoff(stopRrweb, restart)
+            } else {
+                restart()
+            }
+        } finally {
+            this._isRestartingRrweb = false
+        }
+        if (this.isStarted) {
+            this._tryAddCustomEvent('$replay_recorder_restarted', { reason: 'rrweb_not_recording' })
+        }
     }
 
     private get _fullSnapshotIntervalMillis(): number {
@@ -1163,7 +1243,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
-        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
+        if (!this.isStarted && !this._isRestartingForSessionIdChange && !this._isRestartingRrweb) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
@@ -1314,7 +1394,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy.makeSamplingDecisions(this.sessionId)
         this._startRecorder()
 
-        if (this._rrwebError) {
+        // a stop inside record()'s first emits leaves nothing to attach listeners to
+        if (this._rrwebError || !this.isStarted) {
             return
         }
 
@@ -1515,12 +1596,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._jsonLdCaptureReady = false
         // rrweb's stop closure must neither abort the teardown that follows nor leave
         // _stopRrweb set, which would keep isStarted reporting a stopped recorder
+        if (this._rrwebStartInProgress) {
+            // the recorder being started has no stop handle yet, so stop it once record() returns
+            this._rrwebStartInProgress.stopRequested = true
+            this._rrwebStartInProgress.startRequested = false
+        }
+        if (this._stopRrweb) {
+            this._stopRrwebRecorder(this._stopRrweb)
+        }
+        this._stopRrweb = undefined
+    }
+
+    private _stopRrwebRecorder(stopRrweb: listenerHandler): void {
+        this._rrwebLiveRecorders -= 1
         try {
-            this._stopRrweb?.()
+            stopRrweb()
         } catch (e) {
             logger.warn('could not stop rrweb', e)
         }
-        this._stopRrweb = undefined
     }
 
     private _stopAfterCompressionQueueDrains(): boolean {
@@ -1654,10 +1747,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._throttledMutationsDropped = 0
             this._oversizedMutationsDropped = 0
             this._oversizedMutationBytesDropped = 0
+            this._rrwebMethodFailures = 0
+            this._lastRrwebMethodError = undefined
+            this._rrwebRecordingAtLastFailure = undefined
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
             if (
-                cancellation.cancelled ||
+                // a stop then start inside record()'s first emits cancels this replacement but leaves a recorder running
+                (cancellation.cancelled && !this.isStarted) ||
                 this._instance.config.disable_session_recording ||
                 this._instance.has_opted_out_capturing()
             ) {
@@ -2847,6 +2944,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: this._rrwebAttached,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
+            ...(this._rrwebMethodFailures > 0
+                ? {
+                      $sdk_debug_replay_rrweb_method_failures: this._rrwebMethodFailures,
+                      $sdk_debug_replay_rrweb_last_method_error: this._lastRrwebMethodError,
+                      $sdk_debug_replay_rrweb_recording_at_failure: this._rrwebRecordingAtLastFailure,
+                      $sdk_debug_replay_rrweb_live_recorders: this._rrwebLiveRecorders,
+                  }
+                : {}),
+            ...(this._rrwebRestarts > 0 ? { $sdk_debug_replay_rrweb_restarts: this._rrwebRestarts } : {}),
         }
     }
 
@@ -2865,6 +2971,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _startRecorder() {
         if (this._stopRrweb) {
+            return
+        }
+        if (this._rrwebStartInProgress) {
+            // a restart from inside record()'s first emits; a second record() here would orphan one recorder
+            this._rrwebStartInProgress.startRequested = this._rrwebStartInProgress.stopRequested
             return
         }
         this._rrwebStartAttempted = true
@@ -3063,43 +3174,70 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         const activePlugins = this._gatherRRWebPlugins()
         const sourceHandoff = this._styleRuleSourceHandoff
-        this._stopRrweb = rrwebRecord({
-            emit: (event, _isCheckout, nonInteractive) => {
-                if (sourceHandoff?.cancelled) {
-                    return
+        const startAttempt = { stopRequested: false, startRequested: false }
+        this._rrwebStartInProgress = startAttempt
+        let stopRrweb: listenerHandler | undefined
+        try {
+            stopRrweb = rrwebRecord({
+                emit: (event, _isCheckout, nonInteractive) => {
+                    if (sourceHandoff?.cancelled || startAttempt.stopRequested) {
+                        return
+                    }
+                    if (
+                        sourceHandoff &&
+                        this._styleRuleSourceHandoff === sourceHandoff &&
+                        (this._instance.config.disable_session_recording || this._instance.has_opted_out_capturing())
+                    ) {
+                        sourceHandoff.cancel()
+                        return
+                    }
+                    this.onRRwebEmit(event, nonInteractive)
+                },
+                plugins: activePlugins,
+                errorHandler: (error, context) => {
+                    // A host API patch shares its callback boundary with the native
+                    // operation. Preserve the application's exception semantics when
+                    // rrweb cannot reliably distinguish where that error originated.
+                    if (context !== 'rrweb') {
+                        return false
+                    }
+                    if (!this._hasLoggedRecorderCallbackError) {
+                        this._hasLoggedRecorderCallbackError = true
+                        logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                    }
+                    return true
+                },
+                ...sessionRecordingOptions,
+                // rrweb defaults to the window load event, which waits for every image, font
+                // and subframe, so a page whose load event is late or never fires records
+                // nothing. A full snapshot only needs the DOM to exist, not every resource
+                // loaded. A stylesheet still pending 5s after the snapshot keeps only its href,
+                // so replay refetches it. Set after the spread so it is not a user option.
+                recordAfter: 'DOMContentLoaded',
+            })
+        } finally {
+            this._rrwebStartInProgress = undefined
+        }
+        if (stopRrweb) {
+            this._rrwebLiveRecorders += 1
+        }
+        if (startAttempt.stopRequested) {
+            // a stop or restart ran inside record()'s first emits, so apply it now that the handle exists
+            if (stopRrweb) {
+                this._stopRrwebRecorder(stopRrweb)
+            }
+            if (startAttempt.startRequested) {
+                // the stop cancelled the handoff this start was bound to, and the new recorder must not inherit it
+                const handoff = this._styleRuleSourceHandoff
+                if (handoff?.cancelled) {
+                    this._styleRuleSourceHandoff = undefined
                 }
-                if (
-                    sourceHandoff &&
-                    this._styleRuleSourceHandoff === sourceHandoff &&
-                    (this._instance.config.disable_session_recording || this._instance.has_opted_out_capturing())
-                ) {
-                    sourceHandoff.cancel()
-                    return
-                }
-                this.onRRwebEmit(event, nonInteractive)
-            },
-            plugins: activePlugins,
-            errorHandler: (error, context) => {
-                // A host API patch shares its callback boundary with the native
-                // operation. Preserve the application's exception semantics when
-                // rrweb cannot reliably distinguish where that error originated.
-                if (context !== 'rrweb') {
-                    return false
-                }
-                if (!this._hasLoggedRecorderCallbackError) {
-                    this._hasLoggedRecorderCallbackError = true
-                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
-                }
-                return true
-            },
-            ...sessionRecordingOptions,
-            // rrweb defaults to the window load event, which waits for every image, font
-            // and subframe, so a page whose load event is late or never fires records
-            // nothing. A full snapshot only needs the DOM to exist, not every resource
-            // loaded. A stylesheet still pending 5s after the snapshot keeps only its href,
-            // so replay refetches it. Set after the spread so it is not a user option.
-            recordAfter: 'DOMContentLoaded',
-        })
+                this._startRecorder()
+                this._styleRuleSourceHandoff = handoff
+            }
+            return
+        }
+        this._stopRrweb = stopRrweb
 
         if (!this._stopRrweb) {
             this._rrwebError = true
