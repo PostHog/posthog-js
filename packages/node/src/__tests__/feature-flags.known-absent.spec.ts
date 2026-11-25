@@ -285,6 +285,83 @@ describe('known-absent property keys', () => {
         })
       ).toBe(true)
     })
+
+    describe.each([
+      ['a group flag', { aggregation_group_type_index: 0 }, {}],
+      ['a mixed group condition', {}, { aggregation_group_type_index: 0 }],
+    ])('apply to a group filter without group_type_index in %s', (_name, flagExtra, conditionExtra) => {
+      it.each([
+        ['exact', 'enterprise', false],
+        ['is_not_set', null, true],
+      ])('resolving %s locally to %s', async (operator, value, expected) => {
+        setup(
+          {
+            flags: [
+              {
+                id: 1,
+                key: 'legacy-tier',
+                active: true,
+                filters: {
+                  groups: [
+                    {
+                      properties: [{ key: 'tier', type: 'group', operator, value }],
+                      rollout_percentage: 100,
+                      ...conditionExtra,
+                    },
+                  ],
+                  ...flagExtra,
+                },
+              },
+            ],
+            group_type_mapping: { '0': 'organization', '1': 'project' },
+          },
+          { 'legacy-tier': 'remote' }
+        )
+
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['legacy-tier'],
+          onlyEvaluateLocally: true,
+          groups: { organization: 'acme' },
+          groupProperties: { organization: { tier: 'enterprise' } },
+          groupPropertyKeysKnownAbsent: { organization: ['tier'] },
+        })
+        expect(result.getFlag('legacy-tier')).toBe(expected)
+        expect(result.unresolvedFlags).toEqual({})
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('but not keys listed for another group type', async () => {
+        setup({
+          flags: [
+            {
+              id: 1,
+              key: 'legacy-tier',
+              active: true,
+              filters: {
+                groups: [
+                  {
+                    properties: [{ key: 'tier', type: 'group', operator: 'exact', value: 'enterprise' }],
+                    rollout_percentage: 100,
+                    ...conditionExtra,
+                  },
+                ],
+                ...flagExtra,
+              },
+            },
+          ],
+          group_type_mapping: { '0': 'organization', '1': 'project' },
+        })
+
+        expect(
+          await posthog.getFeatureFlag('legacy-tier', 'user', {
+            groups: { organization: 'acme' },
+            groupProperties: { organization: { tier: 'enterprise' } },
+            groupPropertyKeysKnownAbsent: { project: ['tier'] },
+          })
+        ).toBe(true)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+    })
   })
 
   it.each([

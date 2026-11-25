@@ -1488,7 +1488,8 @@ function isUnsupportedPropertyGroup(
 
 /**
  * Person keys apply only to person filters and group keys only to group filters of their own group
- * type. Other filter types, such as `person_metadata`, never resolve from a listing.
+ * type. A group filter without `group_type_index` belongs to the condition's group type. Other filter
+ * types, such as `person_metadata`, never resolve from a listing.
  */
 function knownAbsentKeysForFilter(
   property: FlagProperty & { group_type_index?: number | null },
@@ -1498,7 +1499,8 @@ function knownAbsentKeysForFilter(
   if (knownAbsentKeysGroupTypeIndex == null) {
     return property.type === 'person' ? knownAbsentKeys : undefined
   }
-  return property.type === 'group' && property.group_type_index === knownAbsentKeysGroupTypeIndex
+  return property.type === 'group' &&
+    (property.group_type_index ?? knownAbsentKeysGroupTypeIndex) === knownAbsentKeysGroupTypeIndex
     ? knownAbsentKeys
     : undefined
 }
