@@ -546,6 +546,16 @@ export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     captureExtensionExceptions?: boolean
 
     /**
+     * The release id to attach to exception events as `$release_id`, for apps that only know
+     * their release when they start, such as one build deployed unchanged to several environments.
+     * A release id injected at build time by a PostHog build plugin or posthog-cli takes precedence,
+     * and a `$release_id` passed to `captureException` or registered as a super property wins over both.
+     *
+     * @default undefined
+     */
+    release_id?: string
+
+    /**
      * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured
      *
      * @default false

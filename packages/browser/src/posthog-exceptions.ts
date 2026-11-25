@@ -181,9 +181,11 @@ export class PostHogExceptions implements Extension {
                     ? this._addBufferedExceptionSteps(properties)
                     : properties
 
-            const injectedReleaseId = ErrorTracking.getInjectedReleaseId()
-            if (injectedReleaseId) {
-                propertiesForExceptionCapture.$release_id = injectedReleaseId
+            if (!this._hasExplicitReleaseId(propertiesForExceptionCapture)) {
+                const releaseId = ErrorTracking.getInjectedReleaseId() ?? this._configuredReleaseId()
+                if (releaseId) {
+                    propertiesForExceptionCapture.$release_id = releaseId
+                }
             }
 
             try {
@@ -250,6 +252,20 @@ export class PostHogExceptions implements Extension {
 
     private _getExceptionStepsConfig(): ErrorTracking.ExceptionStepsConfig {
         return this._instance.config.error_tracking?.exception_steps ?? {}
+    }
+
+    // A $release_id set by the caller or registered as a super property wins over the SDK's own value.
+    private _hasExplicitReleaseId(properties: Properties): boolean {
+        return (
+            !isNullish(properties.$release_id) ||
+            !isNullish(this._instance.get_property('$release_id')) ||
+            !isNullish(this._instance.getSessionProperty('$release_id'))
+        )
+    }
+
+    private _configuredReleaseId(): string | undefined {
+        const releaseId = this._instance.config.error_tracking?.release_id
+        return isString(releaseId) ? releaseId.trim() || undefined : undefined
     }
 
     private _matchesSuppressionRule(exceptionList: ErrorTracking.ExceptionList): boolean {
