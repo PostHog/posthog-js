@@ -141,4 +141,71 @@ describe('PostHogMCP step-path sessions', () => {
     expect(again.$session_id).toBe(first.$session_id)
     expect(other.$session_id).not.toBe(first.$session_id)
   })
+
+  describe('on a one-client connection', () => {
+    const stdio = { connectionKey: 'stdio-1' }
+    const undelivered = { value: 1 }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+    })
+
+    const minutes = (count: number): void => {
+      vi.advanceTimersByTime(count * 60_000)
+    }
+
+    it('holds the session open while an earlier call is still running', async () => {
+      const running = client.prepareToolCall('search_docs', {}, stdio)
+      minutes(35)
+      await call({ options: stdio, result: undelivered })
+      minutes(5)
+      const ended = client.prepareToolResult(undelivered, running)
+      client.captureToolCall({ toolName: 'search_docs', ...ended })
+
+      const [during, first] = await toolCalls()
+      expect(during.$session_id).toBe(first.$session_id)
+    })
+
+    it("keeps a running call's connection when another connection arrives", async () => {
+      const running = client.prepareToolCall('search_docs', {}, stdio)
+      minutes(31)
+      await call({ options: { connectionKey: 'stdio-2' }, result: undelivered })
+      minutes(9)
+      const ended = client.prepareToolResult(undelivered, running)
+      client.captureToolCall({ toolName: 'search_docs', ...ended })
+      minutes(1)
+      await call({ options: stdio, result: undelivered })
+
+      const [, first, next] = await toolCalls()
+      expect(next.$session_id).toBe(first.$session_id)
+    })
+
+    it.each([
+      { name: 'a transport session', options: { sessionId: 'mcp-transport-abc' }, source: 'transport' },
+      { name: 'a connection key', options: stdio, source: 'generated' },
+    ])('gives initialize and listing events the tool call session for $name', async ({ options, source }) => {
+      client.captureInitialize({ ...client.resolveSession(options), clientName: 'x', clientVersion: '1' })
+      client.captureToolsList({ ...client.resolveSession(options), toolNames: ['search_docs'] })
+      await call({ options, result: undelivered })
+      await client.flush()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const sessions = ['$mcp_initialize', '$mcp_tools_list', '$mcp_tool_call'].map(
+        (event) => events.findCapturesByEvent(event)[0].properties
+      )
+      expect(new Set(sessions.map((properties) => properties.$session_id)).size).toBe(1)
+      expect(sessions.map((properties) => properties.$mcp_session_source)).toEqual([source, source, source])
+    })
+
+    it('neither rotates nor refreshes the session when resolved outside a tool call', async () => {
+      await call({ options: stdio, result: undelivered })
+      minutes(40)
+      const listed = client.resolveSession(stdio)
+      await call({ options: stdio, result: undelivered })
+
+      const [first, next] = await toolCalls()
+      expect(listed.sessionId).toBe(first.$session_id)
+      expect(next.$session_id).not.toBe(first.$session_id)
+    })
+  })
 })

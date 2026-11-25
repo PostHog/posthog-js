@@ -465,7 +465,10 @@ tool. Pass the same `headers` to `prepareToolList`. Pass an existing transport o
 takes precedence. Otherwise, the existing session prevents a new handle from being minted. On a
 one-client connection such as stdio, pass a `connectionKey` you keep for the connection's lifetime
 instead: the SDK gives it a session and rotates it on the first call that arrives 30 minutes or more
-after the previous one ended. Set `enableConversationId: false` on `PostHogMCP` to keep
+after the previous one ended. A call holds the session open until its result is prepared, so call
+`prepareToolResult` for failed calls too. For `captureInitialize`, `captureToolsList`, and other
+events outside a tool call, spread `posthog.resolveSession({ sessionId, connectionKey })` into the
+capture so they share the tool calls' session. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.
 
 ### Collecting agent feedback (`send_feedback`)

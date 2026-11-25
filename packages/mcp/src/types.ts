@@ -10,6 +10,7 @@ import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
+import type { ConnectionClock } from './extensions/session'
 
 export type JsonRecord = Record<string, unknown>
 
@@ -642,7 +643,7 @@ export interface MCPAnalyticsData {
   /** Safe logger bound to this server; a no-op when no logger was configured. */
   logger: LoggerFn
   /** Tool calls on this instance, which rotate a one-client connection's own session. */
-  connection: { runningToolCall?: string; lastToolCallEnded?: number }
+  connection: ConnectionClock
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
@@ -898,8 +899,10 @@ export interface PrepareToolCallOptions {
    * A key you keep for the lifetime of a one-client connection (such as stdio), in
    * place of a transport session. The SDK gives the connection a generated session
    * and rotates it on the first call that arrives 30 minutes or more after the
-   * previous one ended, as `instrument()` does over stdio. Pass every call's
-   * prepared value to {@link PostHogMCP.prepareToolResult}, which marks the end.
+   * previous one ended, as `instrument()` does over stdio. A call still running
+   * holds it open, so pass every call to {@link PostHogMCP.prepareToolResult},
+   * failed ones included: that marks its end. Resolve events outside a tool call
+   * with {@link PostHogMCP.resolveSession}.
    */
   connectionKey?: string
 }

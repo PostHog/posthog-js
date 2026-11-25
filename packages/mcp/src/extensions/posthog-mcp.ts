@@ -58,10 +58,11 @@ import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent
 import {
   deriveSessionIdFromConversation,
   deriveSessionIdFromTransport,
-  isConnectionIdle,
+  arriveToolCall,
+  endToolCall,
   newSessionId,
 } from './session'
-import type { ResolvedSession } from './session'
+import type { ConnectionClock, ResolvedSession } from './session'
 import {
   deriveSessionIdFromClientConversation,
   readClientConversation,
@@ -179,8 +180,8 @@ export class PostHogMCP extends PostHog {
   readonly #enableConversationId: boolean
   readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
-  // In order of last activity, so the idle ones are pruned from the front.
-  readonly #connections = new Map<string, { sessionId: string; lastSeen: number }>()
+  // Least recently used first, so a dispatcher that never ends its connections keeps at most MAX_CONNECTIONS.
+  readonly #connections = new Map<string, ConnectionClock & { sessionId: string }>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     const serverBuild = validateServerBuild(options.serverBuild)
@@ -434,7 +435,7 @@ export class PostHogMCP extends PostHog {
     const conversation =
       resolvedConversation.minted && (options.sessionId || client?.handleFree) ? NO_CONVERSATION : resolvedConversation
     const conversationId = conversation.conversationId
-    const withoutHandle = this.#sessionWithoutHandle(options)
+    const withoutHandle = this.#sessionWithoutHandle(options, true)
     const session: ResolvedSession | undefined = clientConversation
       ? { sessionId: deriveSessionIdFromClientConversation(clientConversation), source: 'client_metadata' }
       : conversationId
@@ -488,7 +489,12 @@ export class PostHogMCP extends PostHog {
   prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
     const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
     if (state?.connectionKey) {
-      this.#markConnectionActive(state.connectionKey)
+      const connection = this.#connections.get(state.connectionKey)
+      if (connection) {
+        endToolCall(connection)
+      }
+      // A call ends once, however often its result is prepared.
+      state.connectionKey = undefined
     }
     const { sessionId, sessionSource, conversationId } = preparedCall
     if (!conversationId) {
@@ -521,12 +527,31 @@ export class PostHogMCP extends PostHog {
     return { result: preparedResult as TResult, sessionId, sessionSource, conversationId }
   }
 
+  /**
+   * The session for an event outside a tool call, such as {@link captureInitialize}
+   * or {@link captureToolsList}, from the same `sessionId` or `connectionKey` you pass
+   * to {@link prepareToolCall}, so one connection's events share one session. Only
+   * tool calls rotate a connection's session, so this never does.
+   */
+  resolveSession(
+    options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>
+  ): Pick<PreparedToolResult, 'sessionId' | 'sessionSource'> {
+    const session = this.#sessionWithoutHandle(options, false)
+    return { sessionId: session?.sessionId, sessionSource: session?.source }
+  }
+
   /** Rule 3 of the spec's session identity: the transport session, else the connection's own. */
-  #sessionWithoutHandle(options: PrepareToolCallOptions): ResolvedSession | undefined {
+  #sessionWithoutHandle(
+    options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>,
+    toolCall: boolean
+  ): ResolvedSession | undefined {
     if (options.connectionKey) {
-      const connectionSession = this.#arriveOnConnection(options.connectionKey)
+      const connection = this.#connection(options.connectionKey)
+      if (toolCall && arriveToolCall(connection)) {
+        connection.sessionId = newSessionId()
+      }
       if (!options.sessionId) {
-        return { sessionId: connectionSession, source: 'generated' }
+        return { sessionId: connection.sessionId, source: 'generated' }
       }
     }
     return options.sessionId
@@ -534,29 +559,14 @@ export class PostHogMCP extends PostHog {
       : undefined
   }
 
-  /**
-   * A call's arrival counts as activity too, since a dispatcher may never prepare a
-   * failed call's result. An idle entry would rotate anyway, so dropping it keeps
-   * only live connections.
-   */
-  #arriveOnConnection(key: string): string {
-    for (const [idleKey, connection] of this.#connections) {
-      if (!isConnectionIdle(connection.lastSeen)) {
-        break
-      }
-      this.#connections.delete(idleKey)
-    }
-    const sessionId = this.#connections.get(key)?.sessionId ?? newSessionId()
-    this.#markConnectionActive(key, sessionId)
-    return sessionId
-  }
-
-  #markConnectionActive(key: string, sessionId = this.#connections.get(key)?.sessionId): void {
-    if (!sessionId) {
-      return
-    }
+  #connection(key: string): ConnectionClock & { sessionId: string } {
+    const connection = this.#connections.get(key) ?? { sessionId: newSessionId(), runningToolCalls: 0 }
     this.#connections.delete(key)
-    this.#connections.set(key, { sessionId, lastSeen: Date.now() })
+    this.#connections.set(key, connection)
+    if (this.#connections.size > MAX_CONNECTIONS) {
+      this.#connections.delete(this.#connections.keys().next().value!)
+    }
+    return connection
   }
 
   /**
@@ -674,6 +684,8 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
 }
 
 const NO_CONVERSATION = { minted: false, conversationId: undefined } as const
+
+const MAX_CONNECTIONS = 10_000
 
 function readMetaClientName(meta: JsonRecord | undefined): string | undefined {
   return meta ? resolveClientIdentity({ request: { params: { _meta: meta } } })?.clientName : undefined

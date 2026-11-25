@@ -79,9 +79,27 @@ export function isModernEraRequest(
 
 const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
 
-/** Whether a one-client connection quiet since `since` (epoch ms) rotates its id on its next tool call. */
-export function isConnectionIdle(since: number): boolean {
-  return Date.now() - since >= ROTATE_AFTER_MS
+/** The tool calls on a one-client connection, which decide when its own id rotates. */
+export interface ConnectionClock {
+  runningToolCalls: number
+  lastToolCallEnded?: number
+}
+
+/**
+ * Counts a tool call in. True when it is the first to arrive 30 minutes or more
+ * after the previous one ended, with none still running, so the connection's own
+ * id rotates.
+ */
+export function arriveToolCall(clock: ConnectionClock): boolean {
+  const ended = clock.lastToolCallEnded
+  const rotate = clock.runningToolCalls === 0 && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
+  clock.runningToolCalls += 1
+  return rotate
+}
+
+export function endToolCall(clock: ConnectionClock): void {
+  clock.runningToolCalls = Math.max(0, clock.runningToolCalls - 1)
+  clock.lastToolCallEnded = Date.now()
 }
 
 export function newSessionId(): string {
@@ -226,20 +244,11 @@ export function resolveSession(
  * Not for a shared HTTP instance, where the instance's own id is no one's session.
  */
 export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): () => void {
-  const { connection } = data
-  const ended = connection.lastToolCallEnded
   const oneClient = data.sessionSource === 'generated' && !extra?.sessionId && !getRequestHeaders(extra)
-  if (oneClient && connection.runningToolCall === undefined && ended !== undefined && isConnectionIdle(ended)) {
+  if (arriveToolCall(data.connection) && oneClient) {
     data.sessionId = newSessionId()
   }
-  const callId = newPrefixedId('call')
-  connection.runningToolCall = callId
-  return () => {
-    connection.lastToolCallEnded = Date.now()
-    if (connection.runningToolCall === callId) {
-      connection.runningToolCall = undefined
-    }
-  }
+  return () => endToolCall(data.connection)
 }
 
 /** The source of the session this instance holds: steps 3 and 4 of {@link resolveSession}. */
