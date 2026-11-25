@@ -4,29 +4,24 @@ import type { DeepReadonly } from '@posthog/browser-common'
 import { snapshotAutocaptureOptions } from '../../products/autocapture/autocapture-options'
 import { snapshotSurveysOptions } from '../../products/surveys/surveys-options'
 import { snapshotLogsOptions } from '../../products/logs/logs-options'
-import { snapshotAutomaticAnalyticsOptions } from '../../products/analytics/analytics-options'
-import type { AutomaticAnalyticsOptions } from '../../products/analytics/analytics-options'
-import type { IPostHogInternal, BrowserExtension } from '../../core/context/browser-client'
-import type { PostHogOptions, RemoteConfig } from '../../core/types'
+import type { BrowserExtension } from '../../core/context/browser-client'
+import type { IPostHog, PostHogOptions, RemoteConfig } from '../../core/types'
 import type { AutomaticExtension, ExtensionLoader } from '../../core/extensions/registry'
 
-type Activation = AutomaticExtension<IPostHogInternal>['activate']
+type Activation = AutomaticExtension<IPostHog>['activate']
 interface ProductDefinition {
-    load: ExtensionLoader<IPostHogInternal>
+    load: ExtensionLoader<IPostHog>
     activate?: Activation | undefined
 }
 interface ProductComposition {
     extensions: BrowserExtension[]
-    loaders: Record<string, ExtensionLoader<IPostHogInternal>>
-    automatic: AutomaticExtension<IPostHogInternal>[]
+    loaders: Record<string, ExtensionLoader<IPostHog>>
+    automatic: AutomaticExtension<IPostHog>[]
     loadingErrors: Array<[string, unknown]>
 }
 
 const activateFromSignals =
-    (
-        hasSaved: (host: IPostHogInternal) => boolean,
-        enabled: (config: DeepReadonly<RemoteConfig>) => boolean
-    ): Activation =>
+    (hasSaved: (host: IPostHog) => boolean, enabled: (config: DeepReadonly<RemoteConfig>) => boolean): Activation =>
     (host, acquire) => {
         let loading: ReturnType<typeof acquire> | undefined
         host.onRemoteConfig((result) => {
@@ -51,24 +46,6 @@ const registerProduct = (
     } catch (error) {
         composition.loadingErrors.push([label, error])
     }
-}
-
-const configureAnalytics = (options: PostHogOptions, composition: ProductComposition): AutomaticAnalyticsOptions => {
-    let configuration: PostHogOptions['analytics']
-    if (composition.extensions.some((extension) => extension.name === 'analytics')) configuration = false
-    else {
-        try {
-            configuration = options?.analytics
-        } catch {
-            /* Product defaults remain available. */
-        }
-    }
-    const snapshot = snapshotAutomaticAnalyticsOptions(configuration || {})
-    if (configuration !== false) {
-        composition.loaders.analytics = () =>
-            import('../../products/analytics/automatic-analytics').then(({ analytics }) => analytics(snapshot))
-    }
-    return snapshot
 }
 
 const configureFlags = (options: PostHogOptions): ProductDefinition | undefined => {
@@ -136,11 +113,6 @@ export const createProductComposition = (options: PostHogOptions): ProductCompos
         loaders: {},
         automatic: [],
         loadingErrors: [],
-    }
-    const analyticsOptions = configureAnalytics(options, composition)
-    // Acquire during startup so Core starts eager delivery before factory readiness.
-    if (analyticsOptions.load === 'eager') {
-        composition.automatic.push({ name: 'analytics', activate: (_host, acquire) => acquire() })
     }
     registerProduct(composition, 'featureFlags', 'flags', () => configureFlags(options))
     registerProduct(composition, 'logs', 'logs', () => configureLogs(options))

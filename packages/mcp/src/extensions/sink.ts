@@ -104,6 +104,9 @@ async function applyBeforeSend(
  * `@posthog/ai`).
  */
 export class McpEventSink {
+  /** Captures still in the pipeline, i.e. not yet handed to `posthog.capture()`. */
+  private readonly pending = new Set<Promise<void>>()
+
   constructor(
     private readonly posthog: PostHog,
     private readonly logger: LoggerFn = log
@@ -113,7 +116,37 @@ export class McpEventSink {
    * Errors at any stage are logged and the event is dropped, never re-thrown
    * into tool code.
    */
-  async capture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
+  capture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
+    const capture = this.processAndCapture(event, options)
+    this.pending.add(capture)
+    const settle = (): void => {
+      this.pending.delete(capture)
+    }
+    // A second handler pair, so tracking never adds an unhandled rejection of its own.
+    capture.then(settle, settle)
+    return capture
+  }
+
+  /**
+   * Resolves once every capture started so far has been handed to `posthog.capture()` or
+   * dropped. Captures that start while it waits belong to the next call, so steady traffic
+   * on a shared server can't hold it open. Never rejects.
+   */
+  async settled(): Promise<void> {
+    await Promise.allSettled([...this.pending])
+  }
+
+  /** Waits for pending captures, then flushes the `posthog-node` queue. Never rejects. */
+  async flush(): Promise<void> {
+    await this.settled()
+    try {
+      await this.posthog.flush()
+    } catch (err) {
+      this.logger(`Failed to flush PostHog events: ${err}`)
+    }
+  }
+
+  private async processAndCapture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
     const result = await processMcpEvent(event, options, this.logger)
     if (!result) {
       return

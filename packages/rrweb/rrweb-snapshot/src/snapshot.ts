@@ -1720,7 +1720,8 @@ export function serializeNodeWithId(
 
   if (
     serializedNode.type === NodeType.Element &&
-    serializedNode.tagName === 'iframe'
+    serializedNode.tagName === 'iframe' &&
+    !_isBlockedElement(n as HTMLElement, blockClass, blockSelector)
   ) {
     const iframeDisposer = onceIframeLoaded(
       n as HTMLIFrameElement,

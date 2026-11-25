@@ -152,6 +152,8 @@ describe('self-rescheduling flag refresh loop', () => {
 
   describe('gated when local evaluation is not enabled (issue #4046)', () => {
     const disabledCases: [string, () => void][] = [
+      ['no project token', () => delete process.env.POSTHOG_PROJECT_TOKEN],
+      ['blank project token', () => (process.env.POSTHOG_PROJECT_TOKEN = '   ')],
       ['no personal API key', () => delete process.env.POSTHOG_PERSONAL_API_KEY],
       [
         'key set but POSTHOG_DISABLE_LOCAL_EVALUATION=true',
@@ -199,7 +201,21 @@ describe('self-rescheduling flag refresh loop', () => {
 
       const result = await t.query(api.lib.getFlagDefinitions, {})
 
+      expect(result.disabled).toBe(false)
       expect(result.localEvalConfigured).toBe(true)
+    })
+
+    test('missing POSTHOG_PROJECT_TOKEN reports disabled=true and suppresses cached definitions', async () => {
+      const t = convexTest(schema, modules)
+      await t.action(api.lib.refreshFlagDefinitions, {})
+      expect((await t.query(api.lib.getFlagDefinitions, {})).data).not.toBeNull()
+
+      delete process.env.POSTHOG_PROJECT_TOKEN
+      const result = await t.query(api.lib.getFlagDefinitions, {})
+
+      expect(result.disabled).toBe(true)
+      expect(result.data).toBeNull()
+      expect(result.fetchedAt).toBeNull()
     })
   })
 })

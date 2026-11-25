@@ -146,12 +146,15 @@ requirements and does not require a `posthog-node` analytics client. Every netwo
 returns a Promise that resolves only after a validated server acknowledgment; there is no
 capture queue or flush step. Your application executes models and evaluators.
 
+For this example, give the project's secret API key `dataset:read`, `llm_analytics:read`, and
+`offline_evaluation_ingestion:write`. You can also pass a personal API key to `secretKey`.
+
 ```ts
 import { OfflineEvaluations, EvaluationItem } from '@posthog/ai/evaluations'
 
 const evaluations = new OfflineEvaluations({
   projectId: 123,
-  secretKey: process.env.POSTHOG_PERSONAL_API_KEY!,
+  secretKey: process.env.POSTHOG_PROJECT_SECRET_API_KEY!,
   // host: 'https://eu.posthog.com',
   // timeoutMs: 15_000,
   // maxRetries: 3, // additional attempts, only for operations safe to replay
@@ -267,7 +270,7 @@ output bounds are checked during ingestion. The SDK never evaluates formulas or 
 Use `calculate: true` without a value, payload, error, evaluator trace, or evaluation time.
 Ingestion-only keys must supply every pinned input in the same upload, including on exact retries.
 Reusing stored inputs without resubmitting them requires both `evaluation:read` and
-`llm_analytics:read`. Bulk uploads preserve caller order and keep all supplied results for a
+`llm_analytics:read` in addition to `offline_evaluation_ingestion:write`. Bulk uploads preserve caller order and keep all supplied results for a
 composite-bearing item together, including intervening results. Group each item's results together
 in large batches: an indivisible group exceeding 1,000 items/results or 5 MiB rejects the entire
 bulk call before any request is sent.
@@ -281,18 +284,22 @@ is open creates it again and counts as new usage for a reported result. Older re
 without outcomes expose `status: null` and `errorCode: null`. Save and restore calculation
 declarations with the same serialization and recovery methods as reported results.
 
-| Operation                              | Credential and scope                                                 |
-| -------------------------------------- | -------------------------------------------------------------------- |
-| Dataset reads/writes                   | Personal key: `dataset:read` / `dataset:write`                       |
-| Scorer reads/writes                    | Personal key: `llm_analytics:read` / `llm_analytics:write`           |
-| Formula validation                     | Personal key: `llm_analytics:read`                                   |
-| Experiment create/upload/complete/fail | Personal or project secret key: `offline_evaluation_ingestion:write` |
-| Experiment tags                        | Personal key: `evaluation:read` / `evaluation:write`                 |
-| Item and result revision reads         | Personal key: `evaluation:read`                                      |
-| Item, result, and payload mutations    | Personal key: `evaluation:write` and evaluation editor access        |
+| Operation                              | Required scopes                              |
+| -------------------------------------- | -------------------------------------------- |
+| Dataset reads/writes                   | `dataset:read` / `dataset:write`             |
+| Scorer reads/writes                    | `llm_analytics:read` / `llm_analytics:write` |
+| Formula validation                     | `llm_analytics:read`                         |
+| Experiment create/upload/complete/fail | `offline_evaluation_ingestion:write`         |
+| Experiment tags                        | `evaluation:read` / `evaluation:write`       |
+| Item and result revision reads         | `evaluation:read`                            |
+| Item, result, and payload mutations    | `evaluation:write`                           |
+
+These scopes apply to personal and project secret API keys. A project secret key belongs to one
+project. Personal keys also need the user's resource permissions, including evaluation editor
+access for corrections. Dataset exports require a personal API key with `dataset:read`.
 
 Reading a result revision, editing or deleting a result or its payload, and deleting an item
-also require `llm_analytics:read` and access to the affected scorers and composite inputs.
+also require `llm_analytics:read`. Personal keys need access to the affected scorers and composite inputs.
 
 Feature availability and permissions are enforced by the service. Known ingestion hosts map to
 the app API host; custom host path prefixes are preserved. Pagination exposes `nextOffset` or,
