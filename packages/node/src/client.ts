@@ -88,6 +88,7 @@ import {
   type FeatureFlagEvaluationContext,
   FeatureFlagsPoller,
   InconclusiveMatchError,
+  isUsableGroupKey,
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
@@ -4076,7 +4077,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if ((this.featureFlagsPoller?.featureFlags?.length || 0) > 0) {
         const groupsWithStringValues: Record<string, string> = {}
         for (const [key, value] of Object.entries(groups || {})) {
-          groupsWithStringValues[key] = String(value)
+          if (isUsableGroupKey(value)) {
+            groupsWithStringValues[key] = String(value)
+          }
         }
 
         return await this.getAllFlags(distinctId, {
@@ -4099,7 +4102,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if ((this.featureFlagsPoller?.featureFlags?.length || 0) > 0) {
       const groupsWithStringValues: Record<string, string> = {}
       for (const [key, value] of Object.entries(groups || {})) {
-        groupsWithStringValues[key] = String(value)
+        if (isUsableGroupKey(value)) {
+          groupsWithStringValues[key] = String(value)
+        }
       }
 
       return await this.getAllFlags(distinctId, {

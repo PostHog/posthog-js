@@ -430,7 +430,8 @@ class FeatureFlagsPoller {
         throw new InconclusiveMatchError('Flag has unknown group type index')
       }
 
-      if (!(groupName in groups)) {
+      const groupKey = usableGroupKey(groups, groupName)
+      if (groupKey === undefined) {
         this.logMsgIfDebug(() =>
           console.warn(`[FEATURE FLAGS] Can't compute group feature flag: ${flag.key} without group names passed in`)
         )
@@ -451,7 +452,7 @@ class FeatureFlagsPoller {
       const focusedGroupProperties = groupProperties[groupName]
       return await this.matchFeatureFlagProperties(
         flag,
-        groups[groupName],
+        groupKey,
         focusedGroupProperties,
         evaluationContext,
         evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
@@ -666,7 +667,8 @@ class FeatureFlagsPoller {
         if (conditionAggregation !== flagAggregation) {
           if (conditionAggregation !== null && conditionAggregation !== undefined) {
             const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
-            if (!groupName || !(groupName in groups)) {
+            const groupKey = groupName ? usableGroupKey(groups, groupName) : undefined
+            if (!groupName || groupKey === undefined) {
               this.logMsgIfDebug(() =>
                 console.debug(
                   `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
@@ -681,7 +683,7 @@ class FeatureFlagsPoller {
             effectiveProperties = groupProperties[groupName]
             effectiveKnownAbsentKeys = evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
             knownAbsentKeysGroupTypeIndex = conditionAggregation
-            effectiveBucketingValue = groups[groupName]
+            effectiveBucketingValue = groupKey
           }
         }
 
@@ -1417,6 +1419,17 @@ class FeatureFlagsPoller {
  * The unresolved reason that comes from the flag's definition alone, so it is known when
  * definitions load. Matches the reason local evaluation reports for the same cause.
  */
+/** Whether a group key counts as a key: a non-empty string or a number, as on the server. */
+export function isUsableGroupKey(groupKey: unknown): groupKey is string | number {
+  return (typeof groupKey === 'string' && groupKey !== '') || typeof groupKey === 'number'
+}
+
+/** The key of the group type, or undefined when it is omitted or unusable and so counts as no group key. */
+function usableGroupKey(groups: Record<string, unknown>, groupName: string): string | undefined {
+  const groupKey = groups[groupName]
+  return isUsableGroupKey(groupKey) ? String(groupKey) : undefined
+}
+
 function getDefinitionUnresolvedReason(
   flag: PostHogFeatureFlag,
   definitions: FlagEvaluationSnapshot

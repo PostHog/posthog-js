@@ -969,4 +969,147 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()).toHaveLength(0)
     })
   })
+
+  describe('unusable group keys count as no group key', () => {
+    const unusableGroupKeys: [string, unknown][] = [
+      ['an empty string', ''],
+      ['null', null],
+      ['undefined', undefined],
+      ['true', true],
+      ['false', false],
+      ['an array', ['acme']],
+      ['an object', { id: 'acme' }],
+    ]
+    const tierFilter = { key: 'tier', type: 'group', group_type_index: 0, operator: 'is_not_set', value: null }
+    const orgFlag = { ...flag('org-flag', [], { aggregation_group_type_index: 0 }), id: 1 }
+    const orgTierFlag = { ...flag('org-tier', [tierFilter], { aggregation_group_type_index: 0 }), id: 2 }
+    const mixedFlag = {
+      id: 3,
+      key: 'mixed',
+      active: true,
+      filters: {
+        groups: [
+          { properties: [], rollout_percentage: 100, aggregation_group_type_index: 0 },
+          { properties: [personFilter('exact')], rollout_percentage: 100 },
+        ],
+      },
+    }
+    const personChild = {
+      ...flag('person-child', [
+        { key: 'org-flag', type: 'flag', value: true, operator: 'flag_evaluates_to', dependency_chain: ['org-flag'] },
+      ]),
+      id: 4,
+    }
+    const allFlags = {
+      flags: [orgFlag, orgTierFlag, mixedFlag, personChild],
+      group_type_mapping: { '0': 'organization' },
+    }
+    const remote = { 'org-flag': 'remote', 'org-tier': 'remote', mixed: 'remote', 'person-child': 'remote' }
+
+    describe.each(unusableGroupKeys)('with %s', (_name, groupKey) => {
+      const groups = { organization: groupKey } as any
+
+      it('a group flag resolves to false locally without a /flags call', async () => {
+        setup(allFlags, remote)
+
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['org-flag', 'org-tier'],
+          groups,
+          onlyEvaluateLocally: true,
+        })
+        expect(result.getFlag('org-flag')).toBe(false)
+        expect(result.getFlag('org-tier')).toBe(false)
+        expect(result.unresolvedFlags).toEqual({})
+        expect(await posthog.getFeatureFlag('org-flag', 'user', { groups })).toBe(false)
+        expect(await posthog.getFeatureFlag('org-tier', 'user', { groups })).toBe(false)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('a mixed flag skips the group condition and the person condition decides', async () => {
+        setup(allFlags, remote)
+
+        expect(await posthog.getFeatureFlag('mixed', 'user', { groups, personProperties: { plan: 'free' } })).toBe(
+          false
+        )
+        expect(await posthog.getFeatureFlag('mixed', 'user', { groups, personProperties: { plan: 'pro' } })).toBe(true)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('a group flag dependency resolves to false', async () => {
+        setup(allFlags, remote)
+
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['person-child'],
+          groups,
+          onlyEvaluateLocally: true,
+        })
+        expect(result.getFlag('person-child')).toBe(false)
+        expect(result.unresolvedFlags).toEqual({})
+        expect(await posthog.getFeatureFlag('person-child', 'user', { groups })).toBe(false)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('does not crash bulk evaluation or capture with flags', async () => {
+        setup(allFlags, remote)
+        await posthog.reloadFeatureFlags()
+
+        const expected = { 'org-flag': false, 'org-tier': false, mixed: true, 'person-child': false }
+        const personProperties = { plan: 'pro' }
+        expect(await posthog.getAllFlags('user', { groups, personProperties })).toEqual(expected)
+        const result = await posthog.evaluateFlags('user', { groups, personProperties })
+        expect(result.unresolvedFlags).toEqual({})
+        for (const [key, value] of Object.entries(expected)) {
+          expect(result.getFlag(key)).toBe(value)
+        }
+
+        for (const onlyEvaluateLocally of [true, false]) {
+          await posthog.captureImmediate({
+            distinctId: 'user',
+            event: 'with-flags',
+            groups,
+            sendFeatureFlags: { personProperties, onlyEvaluateLocally },
+          })
+        }
+        for (const event of sentEvents(mockedFetch)) {
+          expect(event.properties['$feature/org-flag']).toBe(false)
+          expect(event.properties['$feature/mixed']).toBe(true)
+          expect(event.properties['$feature/person-child']).toBe(false)
+        }
+        expect(sentEvents(mockedFetch)).toHaveLength(2)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+    })
+
+    it.each([
+      // 'org-half.beta' and 'org-half.3' hash into a 50% rollout, 'org-half.acme' and 'org-half.7' do not.
+      ['beta', true],
+      ['acme', false],
+      [3, true],
+      [7, false],
+    ])('a usable key %j still buckets as before', async (groupKey, expected) => {
+      setup({
+        flags: [flag('org-half', [], { aggregation_group_type_index: 0 })].map((f: any) => ({
+          ...f,
+          filters: { ...f.filters, groups: [{ properties: [], rollout_percentage: 50 }] },
+        })),
+        group_type_mapping: { '0': 'organization' },
+      })
+
+      const groups = { organization: groupKey } as any
+      expect(await posthog.getFeatureFlag('org-half', 'user', { groups })).toBe(expected)
+      expect(await posthog.getFeatureFlag('org-half', 'user', { groups: { organization: String(groupKey) } })).toBe(
+        expected
+      )
+    })
+
+    it.each(['acme', 0])('a usable key %j without the needed group properties stays inconclusive', async (groupKey) => {
+      setup(allFlags, remote)
+
+      const groups = { organization: groupKey } as any
+      const result = await posthog.evaluateFlags('user', { flagKeys: ['org-tier'], groups, onlyEvaluateLocally: true })
+      expect(result.getFlag('org-tier')).toBeUndefined()
+      expect(await posthog.getFeatureFlag('org-tier', 'user', { groups })).toBe('remote')
+      expect(flagsRequests()).toHaveLength(1)
+    })
+  })
 })
