@@ -118,8 +118,8 @@ If your 4.x code read flags both in the callback and right after registering it,
 
 ### `getAllFeatureFlags`
 
-`getAllFeatureFlags()` returns `undefined` until flags are cached, like `getAllFeatureFlags()` in posthog-ios and posthog-android 4.0, which return `nil`/`null`.
-In 4.x it returned an empty list.
+`getAllFeatureFlags()` returns `undefined` until flags are cached: before the first successful load, after a first load that failed or was quota-limited, and after `reset()` until flags reload.
+In 4.x it returned an empty list in all of these cases.
 Flags are cached once a load succeeds or flags are bootstrapped; a list that is empty then means no flags apply to the user.
 
 ```ts
