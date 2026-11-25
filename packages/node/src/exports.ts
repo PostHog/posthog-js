@@ -1,6 +1,8 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
 export * from './extensions/fetch-request'
+export { createReactRouterErrorHandler } from './extensions/react-router'
+export type { ReactRouterErrorArgs, ReactRouterErrorHandlerOptions } from './extensions/react-router'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 

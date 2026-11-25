@@ -52,6 +52,7 @@ export const test = base.extend<
         const receivedBytes = new Map<string, number>()
         const sessions = new Set<Http2Session>()
         const sockets = new Set<Socket>()
+        const openStreams: { end: (chunk: string) => void }[] = []
         const server = createSecureServer({ ...certificate, allowHTTP1: true }, (request, response) => {
             response.setHeader('Access-Control-Allow-Origin', '*')
             response.setHeader('Access-Control-Allow-Headers', '*')
@@ -59,6 +60,18 @@ export const test = base.extend<
             response.setHeader('Access-Control-Allow-Private-Network', 'true')
             response.setHeader('Timing-Allow-Origin', '*')
             if (request.method === 'OPTIONS') {
+                response.writeHead(204).end()
+                return
+            }
+            // A streamed response: the first line now, the last one when the test calls /stream/release.
+            if (request.url === '/stream/open') {
+                response.writeHead(200, { 'Content-Type': 'application/json' })
+                response.write('{"fast":1}\n')
+                openStreams.push(response)
+                return
+            }
+            if (request.url === '/stream/release') {
+                for (const stream of openStreams.splice(0)) stream.end('{"slow":2}\n')
                 response.writeHead(204).end()
                 return
             }

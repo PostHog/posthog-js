@@ -1,5 +1,47 @@
 # posthog-js
 
+## 1.455.0
+
+### Minor Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters, payloads, `onFeatureFlags` callbacks and `$feature_flag_called` events return and send the same values as before, and older posthog-js versions can still read the stored flags. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A `v=4` flag record with a field of the wrong JSON type, such as a string `metadata.version`, reads as a disabled flag without a payload. Other flags in the same response are not affected. Tests that mock `/flags` may need to match the new URL. (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3), [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3)]:
+  - @posthog/browser-common@0.14.1
+
+## 1.454.8
+
+### Patch Changes
+
+- [#5874](https://github.com/PostHog/posthog-js/pull/5874) [`053d7a6`](https://github.com/PostHog/posthog-js/commit/053d7a66b95c4f3bfae579760be7df723f683890) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Session replay restarts its recorder when it stops taking full snapshots, and no longer starts a second recorder when it restarts during its own start.
+  (2026-11-25)
+
+- [#5862](https://github.com/PostHog/posthog-js/pull/5862) [`0023700`](https://github.com/PostHog/posthog-js/commit/0023700ed4efa941793ac8ac86fc52d7a13a9050) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Avoid crashes when XHR tracing encounters a missing or faulty `send` accessor.
+  (2026-11-25)
+
+## 1.454.7
+
+### Patch Changes
+
+- [#5864](https://github.com/PostHog/posthog-js/pull/5864) [`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597) Thanks [@joaohenriquesfr](https://github.com/joaohenriquesfr)! - Add the private `__preview_replay_early_fetch_response` option, which stops Session Replay from holding back streamed fetch responses while it records their body. In WebKit, a request aborted while its body is being read then rejects with a `TypeError` instead of an `AbortError`.
+  (2026-11-25)
+- Updated dependencies [[`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597)]:
+  - @posthog/types@1.427.2
+
+## 1.454.6
+
+### Patch Changes
+
+- [#5849](https://github.com/PostHog/posthog-js/pull/5849) [`b9be6b0`](https://github.com/PostHog/posthog-js/commit/b9be6b04fb7c22e8c514a8bc4d4b07070ccb147d) Thanks [@yoarajota](https://github.com/yoarajota)! - Request URLs keep query values that contain `=`, query keys without a value, and the URL fragment when the SDK adds `compression`, `retry_count` or timestamp params. A `rewriteRequestPath` URL ending in `?sig=abc==` was sent as `?sig=abc`, and `?debug` was sent as `?debug=undefined`.
+  (2026-11-25)
+
 ## 1.454.5
 
 ### Patch Changes
