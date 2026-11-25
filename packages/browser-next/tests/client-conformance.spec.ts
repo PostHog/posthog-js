@@ -1,22 +1,13 @@
 import { createBufferedPostHog as createPostHog } from './helpers'
 import { createRemoteConfigFetch } from './helpers'
-import type { Client, RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
+import type { RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
 import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 
-import type { Extension } from '../src/composition/npm/core'
 import { createFetch, type SentRequest } from './helpers'
 
 runClientConformanceSuite('browser-next', async () => {
     const requests: SentRequest[] = []
-    let client: Client | undefined
     let publishRemoteConfig: ((result: RemoteConfigResult) => void) | undefined
-    const extension: Extension = {
-        name: 'conformance',
-        setup(value) {
-            client = value.sharedClient
-        },
-        dispose() {},
-    }
     const posthog = await createPostHog({
         projectToken: 'ph_test',
         storage: false,
@@ -29,14 +20,10 @@ runClientConformanceSuite('browser-next', async () => {
             createFetch(requests)
         ),
         initialPersonProperties: { initial: true },
-        extensions: [extension],
     })
-    if (!client) {
-        throw new Error('The conformance extension did not receive a client')
-    }
 
     return {
-        client,
+        client: posthog,
         async publishRemoteConfig(result) {
             const config = posthog.getRemoteConfig()
             await Promise.resolve()

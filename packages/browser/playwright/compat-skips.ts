@@ -15,6 +15,11 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
+        range: '<1.454.4',
+        test: 'preserves campaign params when landing on a sibling subdomain after a reset',
+        reason: 'cookieWinsOnConflict capture-order fix for campaign params added in #5858',
+    },
+    {
         range: '<1.443.0',
         test: 'restyles the widget when setTheme\\(\\) is called',
         reason: 'posthog.conversations.setTheme() added with conversations theming',

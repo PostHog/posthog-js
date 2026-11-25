@@ -155,15 +155,22 @@ const addTracingHeaders = (
     }
 
     let hasAddedHeaders = false
+    // The distinct ID is set first so that, when it cannot be, none of the PostHog headers are added.
+    const currentDistinctId = getDistinctId(distinctId)
+    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
+        try {
+            headers.set(DISTINCT_ID_HEADER, currentDistinctId)
+        } catch {
+            // A distinct ID can contain characters a header value cannot (for example non-Latin-1 text). Sending
+            // only the session headers would stop a server from finding the person another way, such as the cookie.
+            return false
+        }
+        hasAddedHeaders = true
+    }
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         headers.set(SESSION_ID_HEADER, sessionId)
         headers.set(WINDOW_ID_HEADER, windowId)
-        hasAddedHeaders = true
-    }
-    const currentDistinctId = getDistinctId(distinctId)
-    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
-        headers.set(DISTINCT_ID_HEADER, currentDistinctId)
         hasAddedHeaders = true
     }
     return hasAddedHeaders
@@ -323,9 +330,18 @@ const patchFetch = (
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         const req = new Request(url, init)
-                        addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
-                        addTraceparentHeader(traceparentTargets, req.url, req.headers)
+                        // The new Request has taken the caller's body, so it is sent even when the tracing headers
+                        // cannot be prepared. They are matched against its destination, which a `url` property
+                        // override cannot change.
                         fetchArgs = [req]
+                        const tracingHeaders = new Headers()
+                        try {
+                            addTracingHeaders(hostnames, distinctId, sessionManager, req.url, tracingHeaders)
+                            tracingHeaders.forEach((value, name) => req.headers.set(name, value))
+                        } catch {
+                            // Send the request without tracing headers.
+                        }
+                        addTraceparentHeader(traceparentTargets, req.url, req.headers)
                     } else {
                         const headers = new Headers(isObjectLike(init) ? init.headers : undefined)
                         const addedTracingHeaders = addTracingHeaders(
@@ -386,10 +402,15 @@ const patchXHR = (
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
-                const headers = new Headers()
+                let headers = new Headers()
                 const requestUrl = getRequestUrl(url)
                 if (requestUrl) {
-                    addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
+                    try {
+                        addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
+                    } catch {
+                        // Do not let tracing header preparation break the host app's XHR.
+                        headers = new Headers()
+                    }
                 }
                 if (pendingTraceparents) {
                     pendingTraceparents.delete(xhr)

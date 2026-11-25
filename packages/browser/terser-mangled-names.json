@@ -65,6 +65,7 @@
         "_cachedPersonProperties",
         "_cachedTours",
         "_cachedWidgetSessionId",
+        "_calculateEventProperties",
         "_calculate_set_once_properties",
         "_callFlagsEndpoint",
         "_callLoadToolbar",
