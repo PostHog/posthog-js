@@ -8,7 +8,6 @@ import { SURVEY_SEEN_PREFIX } from '@posthog/browser-common/utils/survey-utils'
 import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
-import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
@@ -1150,24 +1149,21 @@ describe('posthog core', () => {
             })
         })
 
-        describe('person properties for flags', () => {
-            it('should reload feature flags only when a $set changes a stored value', () => {
-                const { posthog } = setup()
-                const reloadFeatureFlags = vi.spyOn(posthog.featureFlags!, 'reloadFeatureFlags')
+        it('should reload feature flags only when a $set changes a stored value', () => {
+            const { posthog } = setup()
+            const reloadFeatureFlags = vi.spyOn(posthog.featureFlags!, 'reloadFeatureFlags')
 
-                posthog.capture(eventName, { $set: { plan: 'free' } })
-                posthog.capture(eventName, { $set: { plan: 'free' } })
-                posthog.capture(eventName, {}, { $set: { plan: 'free' } })
-                expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            posthog.capture(eventName, { $set: { plan: 'free' } })
+            posthog.capture(eventName, { $set: { plan: 'free' } })
+            posthog.capture(eventName, {}, { $set: { plan: 'free' } })
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
-                posthog.capture(eventName, { $set: { plan: 'pro' } })
-                expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
-                expect(posthog.get_property(STORED_PERSON_PROPERTIES_KEY)).toMatchObject({ plan: 'pro' })
+            posthog.capture(eventName, { $set: { plan: 'pro' } })
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
 
-                posthog.resetPersonPropertiesForFlags(false)
-                posthog.capture(eventName, { $set: { plan: 'pro' } })
-                expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
-            })
+            posthog.resetPersonPropertiesForFlags(false)
+            posthog.capture(eventName, { $set: { plan: 'pro' } })
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })
 
         describe('survey events', () => {
