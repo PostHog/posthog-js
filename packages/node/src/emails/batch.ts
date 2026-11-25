@@ -8,13 +8,8 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const BATCH_MAX_RECIPIENTS = 100
 const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'templateData', 'idempotencyKey'])
 
-/**
- * Reads each own field and each named one once, inherited and non-enumerable ones included, so a check refuses what
- * the request would carry, and a getter can't answer the check one value and the request another.
- */
 export function fieldsOf(source: unknown, names: Iterable<string>): Record<string, unknown> {
   const object: Record<string, unknown> = Object(source ?? {})
-  // Without a prototype, an own __proto__ key stays a field to refuse rather than becoming the prototype.
   const fields: Record<string, unknown> = Object.create(null)
   for (const name of new Set([...Object.keys(object), ...names])) {
     fields[name] = object[name]
@@ -184,7 +179,6 @@ export function recordAnswer(
       (error.retryable === true ||
         code === 'delivery_unavailable' ||
         code === 'idempotency_key_in_flight' ||
-        // A 409 that lost its code may be a key still in flight.
         (text(error.code) === undefined && error.status === 409) ||
         mayHaveQueuedBefore)
     const refusal = new EmailError({
@@ -217,7 +211,6 @@ export function mayHaveQueued(error: EmailError): boolean {
     error.statusCode >= 500 ||
     error.statusCode < 300 ||
     error.code === 'idempotency_key_in_flight' ||
-    // A 409 that lost its code may be a key still in flight.
     (error.statusCode === 409 && error.code === 'api_error')
   )
 }

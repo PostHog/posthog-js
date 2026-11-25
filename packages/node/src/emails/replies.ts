@@ -1,7 +1,6 @@
 import { EmailError } from './errors'
 import type { EmailWarning } from './types'
 
-/** What PostHog or its file storage answered to one request. */
 export interface Reply {
   status: number
   text: string

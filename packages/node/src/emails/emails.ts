@@ -83,7 +83,6 @@ interface SendForm {
   fields: ReadonlySet<string>
   why: string
   howToSend: string
-  /** How to fix a field neither form of the call takes, by field. */
   fixes?: Record<string, string>
 }
 
