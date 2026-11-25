@@ -19,6 +19,7 @@ import {
   IDEMPOTENCY_KEY_PATTERN,
   type Slot,
   batchBody,
+  mayHaveQueued,
   prepareRecipients,
   recordAnswer,
   recordFailure,
@@ -62,7 +63,6 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
-/** How long a batch request waits for PostHog, which checks and queues up to 100 emails before it answers. */
 const BATCH_REQUEST_TIMEOUT_MS = 45_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
@@ -129,8 +129,6 @@ const BATCH_FIXES: Record<string, string> = {
   to: PER_RECIPIENT_FIX,
   distinctId: PER_RECIPIENT_FIX,
   idempotencyKey: PER_RECIPIENT_FIX,
-  maxRetries:
-    "Remove maxRetries: a batch sends one request and doesn't retry it. Send each recipient that isn't queued again, unchanged and with the same idempotencyKey.",
   scheduledAt: SEND_ONLY_FIX,
   cc: SEND_ONLY_FIX,
   bcc: SEND_ONLY_FIX,
@@ -139,14 +137,14 @@ const BATCH_FIXES: Record<string, string> = {
 const BATCH_TEMPLATE_FORM: SendForm = {
   ...TEMPLATE_FORM,
   call: 'batch',
-  fields: fieldSet(TEMPLATE_FIELDS),
+  fields: new Set([...fieldSet(TEMPLATE_FIELDS), 'maxRetries']),
   howToSend: 'send a batch of a template made in PostHog with templateId',
   fixes: BATCH_FIXES,
 }
 const BATCH_CODE_FORM: SendForm = {
   ...CODE_FORM,
   call: 'batch',
-  fields: new Set([...fieldSet(CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES))),
+  fields: new Set([...[...fieldSet(CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES)), 'maxRetries']),
   howToSend: 'send a batch of content from your code with templateKey',
   fixes: BATCH_FIXES,
 }
@@ -283,7 +281,7 @@ export class EmailSender implements Emails {
   private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
     let slots: Slot[] = []
     try {
-      const prepared = prepareBatchEmail(email)
+      const prepared = prepareBatchEmail(email, this.config.maxRetries)
       slots = prepareRecipients(recipients, prepared.templateForm)
       const { appHost, secretKey } = this.connect(
         'no email was sent',
@@ -303,14 +301,26 @@ export class EmailSender implements Emails {
       const timeoutMs = Math.max(BATCH_REQUEST_TIMEOUT_MS, this.config.requestTimeoutMs)
       const body = batchBody(content, slots)
       let warnings: EmailWarning[]
+      let mayHaveQueuedBefore = false
       try {
-        warnings = recordAnswer(
-          slots,
-          await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs)
-        )
+        warnings = await this.withRetries(prepared.maxRetries, async () => {
+          try {
+            return recordAnswer(
+              slots,
+              await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs),
+              mayHaveQueuedBefore
+            )
+          } catch (caught) {
+            const failure = asRequestError(caught)
+            if (mayHaveQueued(failure)) {
+              mayHaveQueuedBefore = true
+            }
+            throw failure
+          }
+        })
       } catch (caught) {
         const failure = asRequestError(caught)
-        recordFailure(slots, failure)
+        recordFailure(slots, failure, mayHaveQueuedBefore)
         return { data: null, error: withResults(failure, slots) }
       }
       this.logWarnings(warnings)
@@ -710,12 +720,19 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function prepareBatchEmail(options: BatchEmailOptions): {
+function prepareBatchEmail(
+  options: BatchEmailOptions,
+  defaultMaxRetries: number
+): {
   content: Record<string, unknown>
   react?: EmailReactElement
   templateForm: boolean
+  maxRetries: number
 } {
   const send: UncheckedSend = options ?? {}
+  if (send.maxRetries !== undefined && !isRetryCount(send.maxRetries)) {
+    throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
+  }
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
       code: 'invalid_form',
@@ -730,6 +747,7 @@ function prepareBatchEmail(options: BatchEmailOptions): {
     content: snapshotOf(content),
     react: isReactElement(send.react) ? send.react : undefined,
     templateForm,
+    maxRetries: isRetryCount(send.maxRetries) ? send.maxRetries : defaultMaxRetries,
   }
 }
 

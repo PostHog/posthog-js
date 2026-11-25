@@ -203,8 +203,8 @@ export type SendEmailResponse = { data: SendEmailResult; error: null } | { data:
 
 /** What every batch takes, whatever its form. The recipients, and what is per recipient, go in `recipients`. */
 export interface BatchEmailBase {
-  /** A batch sends one request and doesn't retry it. */
-  maxRetries?: never
+  /** Overrides the client's `emailRequestMaxRetries` for this batch. `0` turns retries off. */
+  maxRetries?: number
   to?: never
   distinctId?: never
   idempotencyKey?: never
@@ -247,8 +247,9 @@ export interface BatchEmailRecipient {
  * - `queued`: PostHog queued the email.
  * - `failed`: PostHog didn't queue the email, and `error` says why.
  * - `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
- *   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, or its key was still in flight
- *   (`idempotency_key_in_flight`). `error` holds PostHog's answer, and `id` the message ID when PostHog named one.
+ *   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, its key was still in flight
+ *   (`idempotency_key_in_flight`), or PostHog refused a retry of a request it may have queued. `error` holds
+ *   PostHog's answer, and `id` the message ID when PostHog named one.
  *   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
  *   that key: PostHog queues no second email for a key it has.
  */
@@ -362,12 +363,13 @@ export interface Emails {
   /**
    * Queue one email per recipient, from one transactional email template or one piece of content from your code.
    *
-   * A batch takes at most 100 recipients and sends them in one request, which the client doesn't retry. More than 100
-   * recipients is an error before anything is sent. PostHog refuses a batch over its size limits with
+   * A batch takes at most 100 recipients and sends them in one request. More than 100 recipients is an error before
+   * anything is sent. Network errors, rate limits, an in-flight idempotency key and an unavailable service are retried
+   * with the same idempotency keys, so PostHog queues each email once. PostHog refuses a batch over its size limits with
    * `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
    * so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
    * or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-   * `emails.send()`. The request waits up to 45 seconds for PostHog's answer, or longer when the client's
+   * `emails.send()`. Each attempt waits up to 45 seconds for PostHog's answer, or longer when the client's
    * `emailRequestTimeoutMs` is longer.
    *
    * Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused

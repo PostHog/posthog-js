@@ -52,7 +52,8 @@ export class EmailError extends Error {
   readonly messageId?: string
   /**
    * Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed
-   * them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it.
+   * them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as
+   * when a retry was refused after an earlier attempt went unanswered.
    */
   readonly results?: BatchEmailRecipientResult[]
 

@@ -8,11 +8,6 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const BATCH_MAX_RECIPIENTS = 100
 const RECIPIENT_FIELDS: ReadonlySet<string> = new Set(['to', 'distinctId', 'templateData', 'idempotencyKey'])
 
-/**
- * One recipient of a batch, and what PostHog's answer to the batch's one request says of their email. A recipient is
- * `unconfirmed` when PostHog may have queued their email: the request went unanswered, PostHog said it couldn't tell,
- * or their key was still in flight.
- */
 export interface Slot {
   readonly index: number
   readonly to: string
@@ -24,10 +19,7 @@ export interface Slot {
   error?: EmailError
 }
 
-/** Checks every recipient before the request, and gives each the idempotency key it goes out with. */
 export function prepareRecipients(recipients: unknown, templateForm: boolean): Slot[] {
-  // Read the length once, and each recipient by index as the array's own: an iterator, a proxy or a prototype could
-  // add, skip or reorder recipients.
   const count: unknown = Array.isArray(recipients) ? recipients.length : undefined
   if (!Array.isArray(recipients) || typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
     throw new EmailError({
@@ -126,17 +118,16 @@ function prepareRecipient(recipient: unknown, index: number, templateForm: boole
   }
 }
 
-/** The batch email and its recipients as the request body. */
 export function batchBody(shared: Record<string, unknown>, slots: Slot[]): string {
   const json = safeJsonStringify(shared)
   return `${json.slice(0, -1)}${json === '{}' ? '' : ','}"recipients":[${slots.map(({ wire }) => wire).join(',')}]}`
 }
 
-/**
- * Records PostHog's answer to the batch request for `sent`, and returns its warnings. Throws the request's error when
- * PostHog refused the whole request or its answer can't be read.
- */
-export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }: Reply): EmailWarning[] {
+export function recordAnswer(
+  sent: Slot[],
+  { status, text: body, retryAfterMs }: Reply,
+  mayHaveQueuedBefore: boolean
+): EmailWarning[] {
   const fields = replyFields(parseJson(body))
   if (status < 200 || status >= 300) {
     throw batchReplyError(fields, status, retryAfterMs)
@@ -167,30 +158,39 @@ export function recordAnswer(sent: Slot[], { status, text: body, retryAfterMs }:
       return
     }
     const code = text(error.code) ?? 'api_error'
-    const retryable = error.retryable === true || code === 'delivery_unavailable'
+    // After an attempt PostHog may have queued, a refusal can be the retry's, not the email's; only a key that
+    // belongs to another email stays failed.
+    const unconfirmed =
+      error.retryable === true ||
+      code === 'delivery_unavailable' ||
+      (mayHaveQueuedBefore && code !== 'idempotency_key_reused')
     const refusal = new EmailError({
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
       statusCode: typeof error.status === 'number' ? error.status : undefined,
     })
     slot.id = id ?? null
-    slot.status = retryable ? 'unconfirmed' : 'failed'
+    slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = refusal
   })
   return warningsOf(fields)
 }
 
-/** Records a batch request for `sent` that failed as a whole, and whether PostHog may have queued its emails. */
-export function recordFailure(sent: Slot[], error: EmailError): void {
-  const maybeQueued =
+export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): void {
+  const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
+  for (const slot of sent) {
+    slot.status = unconfirmed ? 'unconfirmed' : 'failed'
+    slot.error = error
+  }
+}
+
+export function mayHaveQueued(error: EmailError): boolean {
+  return (
     error.statusCode === undefined ||
     error.statusCode >= 500 ||
     error.statusCode < 300 ||
     error.code === 'idempotency_key_in_flight'
-  for (const slot of sent) {
-    slot.status = maybeQueued ? 'unconfirmed' : 'failed'
-    slot.error = error
-  }
+  )
 }
 
 export function resultOf(slot: Slot): BatchEmailRecipientResult {
@@ -242,7 +242,6 @@ function batchReplyError(
       fix: 'Send each email with emails.send() until batch sends are on for the project.',
     })
   }
-  // A 404 that names no field and no other code, JSON or a proxy's page, means the route is missing.
   if (status === 404 && error.field === undefined && (error.code === 'not_found' || error.code === 'api_error')) {
     return new EmailError({
       code: 'not_found',

@@ -17,6 +17,6 @@ posthog-node, the Node.js backend SDK: server-side capture, identify and local f
 - email responses: PostHog servers answer `emails.send` with a queued or scheduled message ID or an error, `emails.batch` with a result per recipient or an error for the whole request, `emails.get` with an email's status or an error, and `emails.setPreferences` with the recipient's preferences or an error
   handler: EmailSender in src/emails/emails.ts
   trust: posthog-api
-  control: none — the reply only fills the result the caller awaits; its effect is a retry of a send, bounded by maxRetries and a 30 second ceiling; a batch sends one request and retries nothing (recordAnswer in src/emails/batch.ts)
+  control: none — the reply only fills the result the caller awaits; its effect is a retry of a send, bounded by maxRetries and a 30 second ceiling; a batch retries its one request the same way, and after an attempt PostHog may have queued, a refused retry leaves its recipients unconfirmed (recordAnswer in src/emails/batch.ts)
 
 ## invariants

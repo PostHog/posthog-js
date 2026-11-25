@@ -1081,7 +1081,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="messageid"></a> `messageId?` | `readonly` | `string` | The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
-| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it. | - |
+| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as when a retry was refused after an earlier attempt went unanswered. | - |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
@@ -2811,7 +2811,7 @@ What every batch takes, whatever its form. The recipients, and what is per recip
 | ------ | ------ | ------ |
 | <a id="property-distinctid"></a> `distinctId?` | `undefined` | - |
 | <a id="property-idempotencykey"></a> `idempotencyKey?` | `undefined` | - |
-| <a id="property-maxretries"></a> `maxRetries?` | `undefined` | A batch sends one request and doesn't retry it. |
+| <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this batch. `0` turns retries off. |
 | <a id="property-scheduledat"></a> `scheduledAt?` | `undefined` | - |
 | <a id="property-to"></a> `to?` | `undefined` | - |
 
@@ -2844,8 +2844,9 @@ What happened to one recipient of a batch:
 - `queued`: PostHog queued the email.
 - `failed`: PostHog didn't queue the email, and `error` says why.
 - `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
-  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, or its key was still in flight
-  (`idempotency_key_in_flight`). `error` holds PostHog's answer, and `id` the message ID when PostHog named one.
+  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, its key was still in flight
+  (`idempotency_key_in_flight`), or PostHog refused a retry of a request it may have queued. `error` holds
+  PostHog's answer, and `id` the message ID when PostHog named one.
   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
   that key: PostHog queues no second email for a key it has.
 
@@ -3231,12 +3232,13 @@ topic preferences.
 
 Queue one email per recipient, from one transactional email template or one piece of content from your code.
 
-A batch takes at most 100 recipients and sends them in one request, which the client doesn't retry. More than 100
-recipients is an error before anything is sent. PostHog refuses a batch over its size limits with
+A batch takes at most 100 recipients and sends them in one request. More than 100 recipients is an error before
+anything is sent. Network errors, rate limits, an in-flight idempotency key and an unavailable service are retried
+with the same idempotency keys, so PostHog queues each email once. PostHog refuses a batch over its size limits with
 `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
 so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
 or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-`emails.send()`. The request waits up to 45 seconds for PostHog's answer, or longer when the client's
+`emails.send()`. Each attempt waits up to 45 seconds for PostHog's answer, or longer when the client's
 `emailRequestTimeoutMs` is longer.
 
 Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused

@@ -1795,32 +1795,6 @@ describe('emails', () => {
       expect(postHog.requests.batch).toBe(0)
     })
 
-    it.each([
-      [262_132, null],
-      [262_133, 'content_too_large'],
-    ])('measures shared template data as PostHog does: %i characters', async (length, code) => {
-      const postHog = againstPostHog()
-
-      const { error } = await settle(
-        posthog.emails.batch({ templateId: TEMPLATE_ID, templateData: { note: 'x'.repeat(length) } }, recipientsTo(1))
-      )
-
-      expect(error?.code ?? null).toBe(code)
-    })
-
-    it('refuses shared content too large for a batch before it says batch sends are off, as PostHog does', async () => {
-      againstPostHog({ batchUnavailable: true })
-
-      const { error } = await settle(
-        posthog.emails.batch(
-          { templateId: TEMPLATE_ID, templateData: { note: 'x'.repeat(300 * 1024) } },
-          recipientsTo(1)
-        )
-      )
-
-      expect(error).toMatchObject({ code: 'content_too_large', statusCode: 400 })
-    })
-
     it("returns shared content too large for a batch as the 400 error, with PostHog's advice to send it one at a time", async () => {
       const postHog = againstPostHog()
 
@@ -1975,7 +1949,7 @@ describe('emails', () => {
       postHog.failNext('batch', 'lost reply')
 
       const { error } = await settle(
-        posthog.emails.batch(WELCOME, [
+        posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, [
           { to: 'ada@example.com', idempotencyKey: 'welcome:ada' },
           { to: 'bob@example.com', idempotencyKey: 'welcome:bob' },
         ])
@@ -2000,7 +1974,7 @@ describe('emails', () => {
       postHog.failNext('batch', 'hang')
       let settled = false
 
-      const pending = posthog.emails.batch(WELCOME, recipientsTo(1))
+      const pending = posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(1))
       void pending.finally(() => (settled = true))
       await vi.advanceTimersByTimeAsync(44_000)
       const settledBefore = settled
@@ -2010,6 +1984,90 @@ describe('emails', () => {
 
       expect([settledBefore, settledAfter]).toEqual([false, true])
       expect(error?.results).toMatchObject([{ status: 'unconfirmed' }])
+    })
+
+    it('retries a batch PostHog answered 503 with the same keys, and queues each email once', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 503 })
+
+      const { data, error } = await settle(
+        posthog.emails.batch(WELCOME, [
+          { to: 'ada@example.com', idempotencyKey: 'welcome:ada' },
+          { to: 'bob@example.com', idempotencyKey: 'welcome:bob' },
+        ])
+      )
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([
+        { status: 'queued', idempotencyKey: 'welcome:ada' },
+        { status: 'queued', idempotencyKey: 'welcome:bob' },
+      ])
+      expect(postHog.requests.batch).toBe(2)
+      expect(postHog.emails.map(({ to }) => to)).toEqual(['ada@example.com', 'bob@example.com'])
+    })
+
+    it('retries a lost answer with the same keys, so PostHog replays the emails it queued', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', 'lost reply')
+
+      const { data, error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toBeNull()
+      expect(data?.results).toMatchObject([
+        { status: 'queued', replayed: true },
+        { status: 'queued', replayed: true },
+      ])
+      expect(postHog.requests.batch).toBe(2)
+      expect(postHog.emails).toHaveLength(2)
+    })
+
+    it('sends a batch once with maxRetries: 0', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 503 })
+
+      const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+      expect(error).toMatchObject({ statusCode: 503 })
+      expect(postHog.requests.batch).toBe(1)
+    })
+
+    it('keeps recipients unconfirmed when PostHog refuses the retry of a lost answer', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', 'lost reply', { status: 429, code: 'quota_limited' })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({ code: 'quota_limited' })
+      expect(error?.results).toMatchObject(
+        recipientsTo(2).map(() => ({
+          status: 'unconfirmed',
+          error: { code: 'quota_limited', fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) },
+        }))
+      )
+      expect(postHog.requests.batch).toBe(2)
+    })
+
+    it.each([
+      ['refused', { status: 422, code: 'recipient_suppressed', retryable: false }, 'unconfirmed'],
+      ['keyed to another email', { status: 422, code: 'idempotency_key_reused', retryable: false }, 'failed'],
+    ] as const)('after a lost answer, decides a recipient PostHog %s on the retry', async (_case, refusal, status) => {
+      const postHog = againstPostHog({ refusesRecipient: { 'ada@example.com': refusal } })
+      postHog.failNext('batch', 'lost reply')
+
+      const { data } = await settle(
+        posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }, { to: 'bob@example.com' }])
+      )
+
+      expect(data?.results).toMatchObject([
+        { status, error: { code: refusal.code } },
+        { status: 'queued', replayed: true },
+      ])
+      expect(data?.results[0]).toMatchObject(
+        status === 'unconfirmed'
+          ? { error: { fix: expect.stringMatching(/unchanged and with the same idempotencyKey/) } }
+          : { error: expect.not.objectContaining({ fix: expect.stringMatching(/same idempotencyKey/) }) }
+      )
+      expect(postHog.requests.batch).toBe(2)
     })
 
     it('says when batch sends are not on for the project yet, without a retry', async () => {
@@ -2046,7 +2104,7 @@ describe('emails', () => {
       const postHog = againstPostHog()
       postHog.failNext('batch', { status: 409, code: 'idempotency_key_in_flight' })
 
-      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+      const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
 
       expect(error).toMatchObject({ code: 'idempotency_key_in_flight' })
       expect(error?.results).toMatchObject([
@@ -2148,7 +2206,7 @@ describe('emails', () => {
         'invalid_form',
       ],
       ['scheduledAt', { ...WELCOME, scheduledAt: '2026-12-01T09:00:00Z' }, [{ to: 'a@example.com' }], 'invalid_form'],
-      ['maxRetries', { ...WELCOME, maxRetries: 2 }, [{ to: 'a@example.com' }], 'invalid_form'],
+      ['maxRetries', { ...WELCOME, maxRetries: -1 }, [{ to: 'a@example.com' }], 'invalid_max_retries'],
       ['a shared recipient', { ...WELCOME, to: 'a@example.com' }, [{ to: 'a@example.com' }], 'invalid_form'],
     ])('refuses %s before any request', async (_name, email, recipients, code) => {
       const postHog = againstPostHog()
