@@ -3137,6 +3137,41 @@ posthog-node needs no React types.
 | <a id="property-props"></a> `props` | `unknown` |
 | <a id="property-type"></a> `type` | `unknown` |
 
+### `EmailReactRenderer`
+
+Renders `react` sends: the `@react-email/render` module, or an object with its `render` and
+`toPlainText`.
+
+#### Methods
+
+##### render()
+
+> **render**(`element`): `Promise`\<`string`\>
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `element` | `EmailReactElement` |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### toPlainText()
+
+> **toPlainText**(`html`): `string`
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `html` | `string` |
+
+###### Returns
+
+`string`
+
 ### `Emails`
 
 The `posthog.emails` API: sends transactional email from PostHog email templates or from
@@ -5097,6 +5132,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `persistence?` | `"memory"` | - |
 | `personalApiKey?` | `string` | **Deprecated** Use `secretKey` instead. |
 | `privacyMode?` | `boolean` | Redact prompts, outputs and error details from every event that the PostHog AI integrations (`@posthog/ai`) capture with this client. Per-call privacy settings can only add redaction. Defaults to false. |
+| `reactEmailRenderer?` | `EmailReactRenderer` | Renders the `react` element of an `emails.send`. Set it when you bundle your app, such as for Cloudflare Workers or Vercel Edge: posthog-node doesn't bundle `@react-email/render`, so apps that never send `react` don't carry it. Without it, posthog-node loads `@react-email/render` from `node_modules` when a send has `react`. **Example** `const client = new PostHog('phc_...', { reactEmailRenderer: await import('@react-email/render') })` |
 | `readPostHogCookie?` | `boolean` \| \{ `optOutCapturingByDefault?`: `boolean`; `sessionIdleTimeoutSeconds?`: `number`; \} | Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has neither tracing header. Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage (its default). It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie counts as opted out. A request sent right after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls back to the cookie. To stop all request linking, also leave this option off. **Default** `false` |
 | `requestTimeout?` | `number` | Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`. **Default** `10000` |
 | `secretKey?` | `string` | Credential for fetching local feature flag definitions, decrypting remote config and sending email. Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`). Local evaluation can also use definitions from `flagDefinitionCacheProvider` without this credential. Remote config payload decryption via `getRemoteConfigPayload` still requires it. `emails.send` needs a Project Secret API Key with the `transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email. Prefer this over the deprecated `personalApiKey` option; when both are set, `secretKey` takes precedence. **Example** `const client = new PostHog('phc_...', { secretKey: 'phs_...' })` |

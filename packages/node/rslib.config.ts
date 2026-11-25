@@ -11,4 +11,12 @@ export default defineConfig({
     },
     tsconfigPath: './tsconfig.build.json',
   },
+  tools: {
+    bundlerChain: (chain) => {
+      // rslib's minifier drops the `webpackIgnore` magic comment, so leave the one file that needs it unminified.
+      chain.optimization
+        .minimizer('js')
+        .tap(([options]) => [{ ...options, exclude: /react-renderer-import\.[cm]?js$/ }])
+    },
+  },
 })

@@ -1061,10 +1061,40 @@ describe('emails', () => {
         code: 'missing_react_renderer',
         message:
           "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
         cause: expect.any(Error),
       })
       expect(inbox).toEqual([])
+    })
+
+    it('renders with the reactEmailRenderer option without loading @react-email/render', async () => {
+      withoutRenderer()
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => '<p>Rendered by the option</p>',
+          toPlainText: () => 'Rendered by the option',
+        },
+      })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: '<p>Rendered by the option</p>', text: 'Rendered by the option' }),
+      ])
+    })
+
+    it('renders with the @react-email/render module passed as reactEmailRenderer', async () => {
+      const reactEmailRenderer = await import('@react-email/render')
+      withoutRenderer()
+      makeClient({ reactEmailRenderer })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
+      ])
     })
 
     it('sends html without loading @react-email/render', async () => {

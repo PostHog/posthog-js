@@ -1,5 +1,5 @@
 import { build, type Platform, type Plugin } from 'esbuild'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url))
@@ -72,6 +72,57 @@ describe('esbuild bundle of the built package', () => {
     })
 
     expect({ errors: result.errors, warnings: result.warnings }).toEqual({ errors: [], warnings: [] })
+  })
+
+  describe('when @react-email/render is installed', () => {
+    const bundledPackages = async (contents: string, platform: Platform, conditions: string[]): Promise<string[]> => {
+      const result = await build({
+        stdin: { contents, resolveDir: packageRoot },
+        bundle: true,
+        platform,
+        format: 'esm',
+        conditions,
+        external: ['node:*'],
+        write: false,
+        metafile: true,
+        logLevel: 'silent',
+        plugins: [withoutOpenTelemetry],
+      })
+      return Object.keys(result.metafile.inputs)
+    }
+    const fromReactEmailRender = (input: string): boolean => input.includes('/@react-email/render/')
+
+    it.each([
+      ['Node', 'node' as const, []],
+      ['Cloudflare Workers', 'browser' as const, ['workerd', 'worker', 'browser']],
+    ])('leaves it out of a %s bundle that does not pass reactEmailRenderer', async (_runtime, platform, conditions) => {
+      const inputs = await bundledPackages(
+        `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test')`,
+        platform,
+        conditions
+      )
+
+      expect(inputs.filter(fromReactEmailRender)).toEqual([])
+    })
+
+    it('bundles it when the app passes it as reactEmailRenderer', async () => {
+      const inputs = await bundledPackages(
+        `import { PostHog } from 'posthog-node'\nimport * as reactEmailRenderer from '@react-email/render'\nexport const client = new PostHog('phc_test', { reactEmailRenderer })`,
+        'browser',
+        ['workerd', 'worker', 'browser']
+      )
+
+      expect(inputs.some(fromReactEmailRender)).toBe(true)
+    })
+
+    it.each(['react-renderer-import.mjs', 'react-renderer-import.js'])(
+      'keeps the comments that tell webpack and Vite to skip the import in %s',
+      (file) => {
+        const built = readFileSync(fileURLToPath(new URL(`../../../dist/emails/${file}`, import.meta.url)), 'utf8')
+
+        expect(built).toContain('import(/* webpackIgnore: true */ /* @vite-ignore */ REACT_RENDERER_PACKAGE)')
+      }
+    )
   })
 
   it.each([

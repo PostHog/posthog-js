@@ -1205,6 +1205,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           requestTimeoutMs: positiveNumberOr(this.options.emailRequestTimeoutMs, DEFAULT_EMAIL_REQUEST_TIMEOUT_MS),
           maxRetries: nonNegativeIntegerOr(this.options.emailRequestMaxRetries, DEFAULT_EMAIL_REQUEST_MAX_RETRIES),
           migratedFrom: this.options.migratedFrom,
+          reactRenderer: this.options.reactEmailRenderer,
         },
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
