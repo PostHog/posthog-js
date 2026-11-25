@@ -468,7 +468,7 @@ export type PostHogOptions = Omit<
   migratedFrom?: string
   /**
    * Renders the `react` element of an `emails.send`. Set it when you bundle your app, such as
-   * for Cloudflare Workers or Vercel Edge: posthog-node doesn't bundle `@react-email/render`,
+   * for Cloudflare Workers, Convex, or Vercel Edge: posthog-node doesn't bundle `@react-email/render`,
    * so apps that never send `react` don't carry it. Without it, posthog-node loads
    * `@react-email/render` from `node_modules` when a send has `react`.
    *

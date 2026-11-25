@@ -130,7 +130,11 @@ export interface EmailReactElement {
  * `toPlainText`.
  */
 export interface EmailReactRenderer {
-  render(element: EmailReactElement): Promise<string>
+  /**
+   * Renders a React element to HTML. Typed as `any` because `@react-email/render` takes
+   * `React.ReactNode`, which posthog-node doesn't depend on.
+   */
+  render(element: any): Promise<string>
   toPlainText(html: string): string
 }
 
@@ -148,7 +152,7 @@ export type CodeEmailForm = CodeEmailFields &
          * A React Email element. The client renders it into `html`, and into `text` when the
          * send has none. Needs the `@react-email/render` package: posthog-node loads it from
          * `node_modules` at runtime, or set the client's `reactEmailRenderer` option when you bundle
-         * your app, such as for Cloudflare Workers or Vercel Edge.
+         * your app, such as for Cloudflare Workers, Convex, or Vercel Edge.
          * The client renders the element after `send()` returns, so give each send its own
          * element and props, and don't change them while the send is pending.
          */

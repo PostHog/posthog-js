@@ -95,6 +95,8 @@ describe('esbuild bundle of the built package', () => {
     it.each([
       ['Node', 'node' as const, []],
       ['Cloudflare Workers', 'browser' as const, ['workerd', 'worker', 'browser']],
+      ['Convex', 'browser' as const, ['convex', 'module']],
+      ['Convex "use node"', 'node' as const, ['convex', 'module']],
     ])('leaves it out of a %s bundle that does not pass reactEmailRenderer', async (_runtime, platform, conditions) => {
       const inputs = await bundledPackages(
         `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test')`,
@@ -105,11 +107,15 @@ describe('esbuild bundle of the built package', () => {
       expect(inputs.filter(fromReactEmailRender)).toEqual([])
     })
 
-    it('bundles it when the app passes it as reactEmailRenderer', async () => {
+    it.each([
+      ['Cloudflare Workers', 'browser' as const, ['workerd', 'worker', 'browser']],
+      ['Convex', 'browser' as const, ['convex', 'module']],
+      ['Convex "use node"', 'node' as const, ['convex', 'module']],
+    ])('bundles it for %s when the app passes it as reactEmailRenderer', async (_runtime, platform, conditions) => {
       const inputs = await bundledPackages(
         `import { PostHog } from 'posthog-node'\nimport * as reactEmailRenderer from '@react-email/render'\nexport const client = new PostHog('phc_test', { reactEmailRenderer })`,
-        'browser',
-        ['workerd', 'worker', 'browser']
+        platform,
+        conditions
       )
 
       expect(inputs.some(fromReactEmailRender)).toBe(true)

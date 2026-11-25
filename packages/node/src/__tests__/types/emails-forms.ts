@@ -1,6 +1,13 @@
-import type { SendEmailOptions } from '../../exports'
+import * as reactEmailRender from '@react-email/render'
+import { render, toPlainText } from '@react-email/render'
+// Importing react loads @types/react so @react-email/render's React.ReactNode parameter is checked, not degraded to any.
+import { createElement, type ReactElement, type ReactNode } from 'react'
+import { PostHog as EdgePostHog } from '../../entrypoints/index.edge'
+import { PostHog } from '../../entrypoints/index.node'
+import type { EmailReactElement, EmailReactRenderer, PostHogOptions, SendEmailOptions } from '../../exports'
 
 const react = { type: 'p', props: { children: 'Reset' }, key: null }
+const jsxReact = createElement('p', null, 'Reset')
 
 const to = 'jane@example.com'
 const templateId = '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b'
@@ -34,6 +41,7 @@ export const forms: SendEmailOptions[] = [
     attachments: [{ filename: 'invite.ics', content: 'QkVHSU4=', contentType: 'text/calendar' }],
   },
   { to, templateKey: 'reset', subject: 'Reset', react },
+  { to, templateKey: 'reset', subject: 'Reset', react: jsxReact },
   { to, templateKey: 'reset', subject: 'Reset', react, text: 'Reset' },
 ]
 
@@ -73,3 +81,38 @@ export const wrongCombinations: SendEmailOptions[] = [
   // @ts-expect-error a template made in PostHog sets its own content
   { to, templateId, react },
 ]
+
+export const reactRenderers: EmailReactRenderer[] = [
+  reactEmailRender,
+  { render, toPlainText },
+  { render: (element) => render(element, { pretty: true }), toPlainText },
+  { render: async (_element: ReactElement) => '<p>Hi</p>', toPlainText: (html: string) => html },
+  { render: async (_element: ReactNode) => '<p>Hi</p>', toPlainText: (html: string) => html },
+  { render: async (_element: EmailReactElement) => '<p>Hi</p>', toPlainText: (html: string) => html },
+]
+
+export const wrongReactRenderers: EmailReactRenderer[] = [
+  // @ts-expect-error toPlainText is required
+  { render },
+  // @ts-expect-error render is required
+  { toPlainText },
+  // @ts-expect-error render must return Promise<string>
+  { render: () => '<p>Hi</p>', toPlainText },
+  // @ts-expect-error toPlainText must accept a string and return a string
+  { render, toPlainText: (html: string) => html.length },
+]
+
+export const reactRenderFn: EmailReactRenderer['render'] = render
+
+export async function reactRendererClientOptions(): Promise<PostHogOptions[]> {
+  const nodeClient = new PostHog('phc_test', { reactEmailRenderer: await import('@react-email/render') })
+  const edgeClient = new EdgePostHog('phc_test', { reactEmailRenderer: { render, toPlainText } })
+  void nodeClient
+  void edgeClient
+  return [
+    { reactEmailRenderer: reactEmailRender },
+    { reactEmailRenderer: { render, toPlainText } },
+    { reactEmailRenderer: { render: (element) => render(element, { pretty: true }), toPlainText } },
+    { reactEmailRenderer: await import('@react-email/render') },
+  ]
+}
