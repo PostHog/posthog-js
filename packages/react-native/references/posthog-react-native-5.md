@@ -555,11 +555,57 @@ posthog.alias('distinct_id')
 
 ## Capture AI
 
+### `PostHog.captureAi`
+
+> **captureAi**(`event`, `properties?`, `options?`): `string` \| `undefined`
+
+Captures an AI observability event, such as `$ai_generation`, `$ai_span`, `$ai_trace` or
+`$ai_embedding`, and sends it to PostHog's AI endpoint (`/i/v1/ai/events`), which accepts much
+larger events than PostHog.capture.
+
+Takes the same arguments as `capture()` and goes through the same `before_send`. The event is
+queued separately from other events and sent unchanged: the SDK doesn't redact or truncate
+prompts, outputs or media. An event over `captureAiMaxEventBytes` (8 MiB plus 64 KiB by default)
+is dropped. PostHog drops an event sent here whose name doesn't start with `$ai_`. `capture()`
+never sends events here, even ones named `$ai_*`.
+
+AI events use `flushAt`, `maxBatchSize` and `flushInterval` like other events, and
+`captureAiCompression`, `captureAiMaxQueueSize` and `captureAiRequestTimeoutMs` instead of the analytics
+settings. Requests carry up to about 5 MiB of events, and the SDK sends as soon as that much is
+queued. Up to 50 MiB of AI events are kept; beyond that, the oldest are dropped.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `event` | `string` | The AI event name, such as `$ai_generation` |
+| `properties?` | `PostHogEventProperties` | Properties attached only to this event |
+| `options?` | `PostHogCaptureOptions` | Same options as `capture()` |
+
+#### Returns
+
+`string` \| `undefined`
+
+The event's UUID, or `undefined` if it wasn't queued: the SDK is disabled, opted out or
+shut down, the name is empty, `before_send` dropped it, or it's over `captureAiMaxEventBytes`. Before the SDK
+finishes initializing it returns the UUID, and those checks run once initialization completes.
+
+#### Example
+
+```js
+posthog.captureAi('$ai_generation', {
+  $ai_trace_id: traceId,
+  $ai_model: 'gpt-4o',
+  $ai_provider: 'openai',
+})
+```
+
 ### `PostHog.captureTraceFeedback`
 
 > **captureTraceFeedback**(`traceId`, `userFeedback`): `void`
 
-Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+Capture written user feedback for a LLM trace, as an `$ai_feedback` event sent with
+PostHog.captureAi. Numeric values are converted to strings.
 
 #### Parameters
 
@@ -576,7 +622,8 @@ Capture written user feedback for a LLM trace. Numeric values are converted to s
 
 > **captureTraceMetric**(`traceId`, `metricName`, `metricValue`): `void`
 
-Capture a metric for a LLM trace. Numeric values are converted to strings.
+Capture a metric for a LLM trace, as an `$ai_metric` event sent with PostHog.captureAi.
+Numeric values are converted to strings.
 
 #### Parameters
 
@@ -834,7 +881,10 @@ flushLogs, and shutdown drains both before terminating.
 
 `Promise`\<`void`\>
 
-Promise that resolves when the flush is complete
+Promise that resolves when the flush is complete. Events PostHog didn't accept for now,
+such as after a network error or a `503`, stay queued and are sent again after a wait; a flush
+during that wait resolves without sending. Events PostHog dropped, such as after a `400` or `401`,
+are reported on `posthog.on('error')`. The promise resolves in all these cases.
 
 #### Example
 
@@ -2975,6 +3025,10 @@ Props for the PostHogMaskView component.
 | `bootstrap.featureFlagPayloads?` | `Record`\<`string`, `JsonType`\> | - | - |
 | `bootstrap.featureFlags?` | `Record`\<`string`, `FeatureFlagValue`\> | - | - |
 | `bootstrap.isIdentifiedId?` | `boolean` | - | - |
+| <a id="property-captureaicompression"></a> `captureAiCompression?` | `"gzip"` \| `"none"` | How PostHog.captureAi request bodies are compressed, separately from `disableCompression`. `'gzip'` is used only where the runtime provides `CompressionStream`; elsewhere bodies are sent uncompressed. **Default** `'gzip'` | - |
+| <a id="property-captureaimaxeventbytes"></a> `captureAiMaxEventBytes?` | `number` | Maximum size, in bytes, of a serialized PostHog.captureAi event. The SDK drops a larger event and `captureAi()` returns `undefined`. Use it to lower the limit: PostHog drops AI events whose properties are over 8 MiB, so a larger value, or a value of `0` or less, uses the default. **Default** `8454144 (8 MiB plus 64 KiB for the rest of the event)` | - |
+| <a id="property-captureaimaxqueuesize"></a> `captureAiMaxQueueSize?` | `number` | Maximum number of PostHog.captureAi events kept in their queue before the oldest are dropped. AI events can be megabytes, so this is lower than `maxQueueSize`. The queue also keeps at most 50 MiB of AI events, whatever this is set to. A value of `0` or less uses the default. Only the newest unsent AI events that fit in 5 MiB are stored on the device, so if the app is killed, older events and an event over 5 MiB are lost. With `persistence: 'memory'`, or when events are stored in AsyncStorage (`customStorage: AsyncStorage`, or the default where Expo's file system isn't available), unsent AI events are kept only in memory. Pass the AsyncStorage module itself rather than a wrapper around it: a wrapper is used like file storage and holds the AI queue. **Default** `100` | - |
+| <a id="property-captureairequesttimeoutms"></a> `captureAiRequestTimeoutMs?` | `number` | Timeout, in milliseconds, of a PostHog.captureAi request. AI requests can carry several MB, so this is longer than `requestTimeout`. A value of `0` or less uses the default. **Default** `60000` | - |
 | <a id="property-captureapplifecycleevents"></a> `captureAppLifecycleEvents?` | `boolean` | Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded. Application Installed and Application Updated events are not supported with persistence set to 'memory'. On by default from 4.39.0. **Default** `true` | - |
 | <a id="property-capturepushnotificationopened"></a> `capturePushNotificationOpened?` | `boolean` | Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`. Fires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call PostHog.capturePushNotificationOpened for the taps it misses. The native SDK builds and sends this event, so JS `before_send` never sees it. On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to catch a tap that cold-launches the app. Two switches gate automatic capture there, and `false` on either one means the SDK sends no `$push_notification_opened` of its own (an explicit PostHog.capturePushNotificationOpened call still captures): - This option set to `false` turns capture off when `setup()` runs and releases the launch hook, dropping the tap it was holding. The hook is still installed for the window between launch and `setup()`. - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist` (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your JS runs, and forces capture off at `setup()` even when this option is `true`. It is the same key posthog-flutter reads. Not supported on web. **Default** `true` | - |
 | <a id="property-capturepushnotificationsubscriptions"></a> `capturePushNotificationSubscriptions?` | `boolean` | Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`. Your app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to PostHog.registerPushNotificationToken yourself. Not supported on web or macOS. **Default** `true` | - |
@@ -3009,7 +3063,7 @@ Props for the PostHogMaskView component.
 | <a id="property-pushidentityprovider"></a> `pushIdentityProvider?` | `PostHogPushIdentityProvider` | Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`. Called with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds. | - |
 | <a id="property-rageclickconfig"></a> `rageClickConfig?` | `PostHogRageClickConfig` | Configure rage click (rage tap) detection on iOS. The native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them. Android is unaffected — posthog-android does not have native rage click detection. Requires `@posthog/react-native-plugin` version 2.7.0 or newer. | - |
 | <a id="property-remoteconfigrequesttimeoutms"></a> `remoteConfigRequestTimeoutMs?` | `number` | Timeout in milliseconds for remote config calls **Default** `3000` | `Omit.remoteConfigRequestTimeoutMs` |
-| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | A list of headers that should be sent with requests to the PostHog API. | - |
+| <a id="property-requestheaders"></a> `requestHeaders?` | `object` | Headers sent with requests to the PostHog API. On capture requests, headers the SDK sets itself, such as `Authorization` and `User-Agent`, replace yours. | - |
 | <a id="property-requesttimeout"></a> `requestTimeout?` | `number` | Timeout in milliseconds for any calls **Default** `10000` | `Omit.requestTimeout` |
 | <a id="property-sendfeatureflagevent"></a> `sendFeatureFlagEvent?` | `boolean` | Whether to track that `getFeatureFlag` was called (used by Experiments) In posthog-node this is also the default for reads from an `evaluateFlags()` snapshot (`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a single-flag getter, to override it for that call. **Default** `true` | `Omit.sendFeatureFlagEvent` |
 | <a id="property-sessionexpirationtimeseconds"></a> `sessionExpirationTimeSeconds?` | `number` | For Session Analysis how long before we expire a session in seconds **Default** `1800` | `Omit.sessionExpirationTimeSeconds` |
@@ -3268,7 +3322,7 @@ Common types shared across PostHog SDKs
 | Property | Type |
 | ------ | ------ |
 | <a id="id-1"></a> `id` | `number` |
-| <a id="name"></a> `name?` | `string` |
+| <a id="name-1"></a> `name?` | `string` |
 | <a id="steps"></a> `steps?` | `ActionStepType`[] |
 
 ### `SurveyAppearance`

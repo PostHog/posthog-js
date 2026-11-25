@@ -1,9 +1,7 @@
 import { PostHog } from '../src'
-import { isPostHogFetchNetworkError } from '@posthog/core'
 
-// Proves the exported instanceof guard recognizes a genuine PostHogFetchNetworkError
-// produced by core's real fetch path.
-describe('isPostHogFetchNetworkError recognizes real core errors', () => {
+// An offline flush is expected, not an application error: it must neither reject nor lose the event.
+describe('offline capture flush', () => {
   const originalFetch = (globalThis as any).window.fetch
 
   beforeAll(() => {
@@ -17,41 +15,34 @@ describe('isPostHogFetchNetworkError recognizes real core errors', () => {
     vi.useFakeTimers()
   })
 
-  it('returns true for the error core throws when fetch fails', async () => {
+  it('resolves flush() and shutdown() while offline and sends the event once back online', async () => {
     ;(globalThis as any).window.fetch = vi.fn(() => {
       throw new Error('offline')
     })
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      disableCompression: true,
+      captureAppLifecycleEvents: false,
+    })
+    await posthog.ready()
+    posthog.capture('offline event')
 
-    try {
-      const posthog = new PostHog('test-token', {
-        persistence: 'memory',
-        flushInterval: 0,
-        fetchRetryCount: 0,
-      })
-      await posthog.ready()
-      posthog.capture('event')
+    await expect(posthog.flush()).resolves.toBeUndefined()
 
-      let caught: unknown
-      try {
-        await posthog.flush()
-      } catch (err) {
-        caught = err
-      }
-      await posthog.shutdown()
+    const onlineFetch = vi.fn(async () => ({
+      status: 200,
+      text: async () => '{"results":{}}',
+      json: async () => ({ results: {} }),
+    }))
+    ;(globalThis as any).window.fetch = onlineFetch
+    await expect(posthog.shutdown()).resolves.toBeUndefined()
 
-      expect(caught).toBeDefined()
-      expect(isPostHogFetchNetworkError(caught)).toBe(true)
-      // ordinary errors must not be mistaken for network errors
-      expect(isPostHogFetchNetworkError(new Error('boom'))).toBe(false)
-      expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error while flushing PostHog',
-        expect.objectContaining({ name: 'PostHogFetchNetworkError' })
-      )
-    } finally {
-      consoleErrorSpy.mockRestore()
-    }
+    const captureCalls = onlineFetch.mock.calls.filter(([url]) => String(url).includes('/i/v1/analytics/events'))
+    expect(captureCalls).toHaveLength(1)
+    const body = JSON.parse((captureCalls[0] as any)[1].body)
+    expect(body.batch.map((event: { event: string }) => event.event)).toEqual(['offline event'])
   }, 15000)
 })
