@@ -2,6 +2,7 @@ import { PostHogPersistedProperty, safeSetTimeout, type Logger, type PostHogEven
 import {
   canonicalizeUuid,
   serializeV1Event,
+  utf8Length,
   wireProblem,
   type CaptureDroppedEvent,
   type SerializedV1Event,
@@ -10,14 +11,13 @@ import {
   type V1SendDeferral,
 } from '@posthog/core/capture-v1'
 import type { PostHogRNStorage } from './storage'
+import type { PostHogCustomStorage } from './types'
 
 /** Capture drops AI events whose properties are over 8 MiB; the whole-event measure allows 64 KiB for the rest. */
 export const CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES = 8 * 1024 * 1024 + 64 * 1024
 export const CAPTURE_AI_DEFAULT_MAX_QUEUE_SIZE = 100
 export const CAPTURE_AI_DEFAULT_TIMEOUT_MS = 60_000
 const CAPTURE_AI_MAX_QUEUE_BYTES = 50 * 1024 * 1024
-// Each change rewrites the stored queue, so only the newest events that fit in this size are kept across restarts.
-const CAPTURE_AI_MAX_PERSISTED_BYTES = 5 * 1024 * 1024
 const CAPTURE_AI_BATCH_BYTE_TARGET = 5 * 1024 * 1024
 const MAX_RESEND_WAIT_MS = 30_000
 
@@ -29,79 +29,92 @@ export interface CaptureAiLaneSettings {
   maxEventBytes: number
 }
 
-/**
- * How a queued AI event is stored across launches. It is written field by field rather than as core's
- * `SerializedV1Event`, so a change to that type can't silently drop events an earlier version queued.
- */
-interface PersistedAiEvent {
-  uuid: string
-  json: string
-  bytes: number
-  propertiesBytes: number
+/** Where queued AI events are stored across launches: each event's JSON in its own slot of `storage`. */
+export interface CaptureAiEventFiles {
+  storage: PostHogCustomStorage
+  key: (slot: number) => string
 }
 
-const toPersisted = ({ uuid, json, bytes, propertiesBytes }: SerializedV1Event): PersistedAiEvent => ({
-  uuid,
-  json,
-  bytes,
-  propertiesBytes,
-})
+/**
+ * A queued AI event's entry in the stored index; its JSON is in slot `slot`. It is written field by field
+ * rather than as core's `SerializedV1Event`, so a change to that type can't silently drop events an
+ * earlier version queued.
+ */
+interface StoredAiEvent {
+  uuid: string
+  bytes: number
+  propertiesBytes: number
+  slot: number
+}
 
-const isPersistedEvent = (item: unknown): item is PersistedAiEvent => {
+const isStoredEvent = (item: unknown): item is StoredAiEvent => {
   if (typeof item !== 'object' || item === null) {
     return false
   }
-  const { uuid, json, bytes, propertiesBytes } = item as PersistedAiEvent
+  const { uuid, bytes, propertiesBytes, slot } = item as StoredAiEvent
   return (
     typeof uuid === 'string' &&
-    typeof json === 'string' &&
     typeof bytes === 'number' &&
-    typeof propertiesBytes === 'number'
+    typeof propertiesBytes === 'number' &&
+    Number.isInteger(slot) &&
+    slot >= 0
   )
 }
+
+/** A queued event. With slots, its `json` is let go once its slot is written, and read back when its batch is sent. */
+type QueuedAiEvent = Omit<SerializedV1Event, 'json'> & { json?: string }
 
 /**
  * The `captureAi()` delivery lane: its own durable queue, flush cycle, resend wait and sender, so a
  * slow or failing AI upload never holds back analytics events, and the reverse. Events are queued
- * already serialized, so each one is serialized once.
+ * already serialized, so each one is serialized once. With `files`, each event is written once to its
+ * own slot and only a small index is rewritten on each change; only the index stays in memory, and a
+ * batch's events are read from their slots when it is sent. Without `files`, the queue is kept in memory.
  */
 export class CaptureAiLane {
-  private _chain: Promise<void> = Promise.resolve()
+  private _chain: Promise<void>
   private _automaticFlushQueued = false
   private _flushTimer?: ReturnType<typeof setTimeout>
   private _resendTimer?: ReturnType<typeof setTimeout>
   private _resendAt = 0
   private _resendCount = 0
   // The events the last request left to send again, which a resend of exactly those events sends as a retry of it.
-  private _resend?: { events: SerializedV1Event[]; request: V1RequestIdentity }
+  private _resend?: { events: QueuedAiEvent[]; request: V1RequestIdentity }
   private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
   private _stopped = false
   // Once shutdown starts it sends every resend itself, so no timer may send on its own.
   private _shuttingDown = false
-  private _events?: SerializedV1Event[]
-  private _storageLoaded = false
+  private _events: QueuedAiEvent[] = []
+  private _loaded = false
+  private readonly _loadPromise: Promise<void>
+  private _slots = new Map<QueuedAiEvent, number>()
+  // The last write to each slot, so writes to one slot land in order.
+  private _slotWrites = new Map<number, Promise<boolean>>()
+  // Content for a slot whose write hasn't started yet; a newer write replaces it, so an evicted event's JSON isn't kept.
+  private _pendingSlotContent = new Map<number, string>()
 
   constructor(
     private readonly _storage: PostHogRNStorage,
+    private readonly _files: CaptureAiEventFiles | undefined,
     private readonly _settings: CaptureAiLaneSettings,
     private readonly _sender: () => V1CaptureSender,
     private readonly _logger: Logger,
     private readonly _onLocalDrops: (drops: CaptureDroppedEvent[]) => void
   ) {
     this._batchSize = _settings.maxBatchSize
-    // Events left from an earlier launch are sent on the first timer flush.
-    const scheduleLeftovers = (): void => {
-      this._storageLoaded = true
-      if (this._queue().length > 0) {
-        this._scheduleFlush()
-      }
+    // Every drain runs after the load, so a flush before storage has loaded still sends an earlier launch's events.
+    this._loadPromise = this._load().catch((e) => this._logger.error('Loading stored AI events failed:', e))
+    this._chain = this._loadPromise
+  }
+
+  /** Resolves once storage has loaded and the stored index and every started event write have landed. Never rejects. */
+  async waitForPersist(): Promise<void> {
+    // Events captured while storage loads get their slots only once it has.
+    if (!this._loaded) {
+      await this._loadPromise
     }
-    if (_storage.preloadPromise) {
-      void _storage.preloadPromise.then(scheduleLeftovers, () => {})
-    } else {
-      scheduleLeftovers()
-    }
+    await Promise.all([this._storage.waitForPersist(), ...this._slotWrites.values()])
   }
 
   /** Queues an already built and normalized event and returns its uuid as sent; undefined when it is dropped instead. */
@@ -127,33 +140,13 @@ export class CaptureAiLane {
       this._logger.error(`Dropping AI event "${name}": it could not be serialized.`, e)
       return drop('unserializable event')
     }
-    const { maxEventBytes, maxQueueSize, flushAt } = this._settings
+    const { maxEventBytes, flushAt } = this._settings
     if (event.bytes > maxEventBytes) {
       this._logger.warn(`Dropping AI event "${name}": ${event.bytes} bytes is over the ${maxEventBytes}-byte limit.`)
       return drop('event too large')
     }
-    if (event.bytes > CAPTURE_AI_MAX_PERSISTED_BYTES) {
-      this._logger.warn(
-        `AI event "${name}" is ${event.bytes} bytes, over the ${CAPTURE_AI_MAX_PERSISTED_BYTES}-byte on-device limit, so it is lost if the app is killed before it is sent.`
-      )
-    }
 
-    const queue = [...this._queue(), event]
-    let queuedBytes = queue.reduce((total, item) => total + item.bytes, 0)
-    const evicted: CaptureDroppedEvent[] = []
-    while (queue.length > maxQueueSize || (queuedBytes > CAPTURE_AI_MAX_QUEUE_BYTES && queue.length > 1)) {
-      const oldest = queue.shift()!
-      queuedBytes -= oldest.bytes
-      evicted.push({ uuid: oldest.uuid, details: 'queue full' })
-    }
-    if (evicted.length > 0) {
-      this._logger.warn(`AI event queue is full; dropped the oldest ${evicted.length} event(s).`)
-    }
-    this._setQueue(queue)
-    if (evicted.length > 0) {
-      this._onLocalDrops(evicted)
-    }
-
+    const { queue, queuedBytes } = this._setTrimmedQueue([...this._events, event])
     if (queue.length >= flushAt || queuedBytes >= CAPTURE_AI_BATCH_BYTE_TARGET) {
       this._flushInBackground()
     } else {
@@ -178,7 +171,7 @@ export class CaptureAiLane {
     this._clearResendTimer()
     try {
       await this._chain
-      while (!this._stopped && this._queue().length > 0 && Date.now() < deadline) {
+      while (!this._stopped && this._events.length > 0 && Date.now() < deadline) {
         const holdMs = Math.max(0, this._resendAt - Date.now())
         if (holdMs > 0) {
           if (Date.now() + holdMs >= deadline) {
@@ -194,9 +187,9 @@ export class CaptureAiLane {
           this._resendAt = 0
           continue
         }
-        const queued = this._queue().length
+        const queued = this._events.length
         await this.flush()
-        if (this._queue().length >= queued) {
+        if (this._events.length >= queued) {
           return
         }
       }
@@ -243,48 +236,57 @@ export class CaptureAiLane {
     if (this._stopped || Date.now() < this._resendAt) {
       return
     }
-    let remaining = this._queue().length
+    let remaining = this._events.length
     // stop() can run while a request is in flight, when the shutdown deadline passes.
     while (remaining > 0 && !this._stopped) {
-      const queue = this._queue()
       const resend = this._resend
       this._resend = undefined
       // Eviction can break the match; then the events left go out in a new request.
       const exactResend =
         resend !== undefined &&
-        queue.length >= resend.events.length &&
-        resend.events.every((event, index) => queue[index] === event)
-      const batch = exactResend ? resend.events : this._takeBatch(queue)
-      if (batch.length === 0) {
+        this._events.length >= resend.events.length &&
+        resend.events.every((item, index) => this._events[index] === item)
+      const queued = exactResend ? resend.events : this._takeBatch(this._events)
+      if (queued.length === 0) {
         return
       }
+      const batch = await this._readBatch(queued)
+      if (this._stopped) {
+        return
+      }
+      remaining -= queued.length - batch.size
+      if (batch.size === 0) {
+        await this.waitForPersist()
+        continue
+      }
       let deferral: V1SendDeferral | undefined
-      const kept = await this._sender().send(batch, {
+      const kept = await this._sender().send([...batch.keys()], {
         keepUnsent: true,
-        retryOf: exactResend ? resend.request : undefined,
+        // A batch missing an unreadable event is no longer the same request.
+        retryOf: exactResend && batch.size === queued.length ? resend.request : undefined,
         onDeferred: (reason) => {
           deferral = reason
         },
       })
       const keptEvents = new Set(kept)
-      const sentEvents = new Set(batch.filter((event) => !keptEvents.has(event)))
+      const sentEvents = new Set([...batch].filter(([event]) => !keptEvents.has(event)).map(([, item]) => item))
       if (sentEvents.size > 0) {
-        this._setQueue(this._queue().filter((event) => !sentEvents.has(event)))
+        this._setQueue(this._events.filter((event) => !sentEvents.has(event)))
       }
-      await this._storage.waitForPersist()
+      await this.waitForPersist()
 
       if (!deferral) {
         this._resendCount = 0
         this._resendAt = 0
         this._clearResendTimer()
-        remaining -= batch.length
+        remaining -= batch.size
         continue
       }
       if (deferral.tooLarge) {
-        this._batchSize = Math.max(1, Math.floor(batch.length / 2))
+        this._batchSize = Math.max(1, Math.floor(batch.size / 2))
         continue
       }
-      const keptInOrder = batch.filter((event) => keptEvents.has(event))
+      const keptInOrder = [...batch].filter(([event]) => keptEvents.has(event)).map(([, item]) => item)
       if (keptInOrder.length > 0) {
         this._resend = { events: keptInOrder, request: deferral.request }
       }
@@ -293,8 +295,8 @@ export class CaptureAiLane {
     }
   }
 
-  private _takeBatch(queue: SerializedV1Event[]): SerializedV1Event[] {
-    const batch: SerializedV1Event[] = []
+  private _takeBatch(queue: QueuedAiEvent[]): QueuedAiEvent[] {
+    const batch: QueuedAiEvent[] = []
     let bytes = 0
     for (const event of queue) {
       if (batch.length >= this._batchSize || (batch.length > 0 && bytes + event.bytes > CAPTURE_AI_BATCH_BYTE_TARGET)) {
@@ -302,6 +304,29 @@ export class CaptureAiLane {
       }
       batch.push(event)
       bytes += event.bytes
+    }
+    return batch
+  }
+
+  /** The batch's events as sent, each with its queued event; events whose slot can't be read are dropped from the queue. */
+  private async _readBatch(queued: QueuedAiEvent[]): Promise<Map<SerializedV1Event, QueuedAiEvent>> {
+    const jsons = await Promise.all(queued.map((item) => item.json ?? this._readSlot(item)))
+    if (this._stopped) {
+      return new Map()
+    }
+    const batch = new Map<SerializedV1Event, QueuedAiEvent>()
+    const unreadable = new Set<QueuedAiEvent>()
+    queued.forEach((item, i) => {
+      const json = jsons[i]
+      if (json === undefined) {
+        unreadable.add(item)
+      } else {
+        batch.set({ uuid: item.uuid, json, bytes: item.bytes, propertiesBytes: item.propertiesBytes }, item)
+      }
+    })
+    if (unreadable.size > 0) {
+      this._logger.warn(`Dropping ${unreadable.size} stored AI event(s) that could not be read back.`)
+      this._setQueue(this._events.filter((item) => !unreadable.has(item)))
     }
     return batch
   }
@@ -354,46 +379,164 @@ export class CaptureAiLane {
     }, waitMs)
   }
 
-  private _queue(): SerializedV1Event[] {
-    if (this._events) {
-      return this._events
-    }
-    const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
-    const events = Array.isArray(stored) ? stored.filter(isPersistedEvent).map(this._fromPersisted) : []
-    // Until storage has loaded, a read sees nothing yet; caching it would lose an earlier launch's events.
-    if (this._storageLoaded) {
-      this._events = events
-    }
-    return events
-  }
-
-  // Reads before storage has loaded aren't cached, so the same stored item must map to the same event each time.
-  private _restored = new WeakMap<PersistedAiEvent, SerializedV1Event>()
-
-  private _fromPersisted = (item: PersistedAiEvent): SerializedV1Event => {
-    let event = this._restored.get(item)
-    if (!event) {
-      event = toPersisted(item)
-      this._restored.set(item, event)
-    }
-    return event
-  }
-
-  private _setQueue(queue: SerializedV1Event[]): void {
-    this._events = queue
-    // Newest first, skipping an event that doesn't fit so it never costs the smaller ones before it their place.
-    const persisted: PersistedAiEvent[] = []
-    let bytes = 0
-    for (let index = queue.length - 1; index >= 0; index--) {
-      if (bytes + queue[index].bytes <= CAPTURE_AI_MAX_PERSISTED_BYTES) {
-        persisted.push(toPersisted(queue[index]))
-        bytes += queue[index].bytes
+  private async _load(): Promise<void> {
+    const restored: QueuedAiEvent[] = []
+    try {
+      if (this._files) {
+        await this._storage.preloadPromise?.catch(() => {})
+        // Stopped before storage loaded: leave the stored queue as it is for a later launch.
+        if (this._stopped) {
+          return
+        }
+        const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
+        const entries = Array.isArray(stored) ? stored.filter(isStoredEvent) : []
+        for (const { uuid, bytes, propertiesBytes, slot } of entries) {
+          const item: QueuedAiEvent = { uuid, bytes, propertiesBytes }
+          this._slots.set(item, slot)
+          restored.push(item)
+        }
+      }
+    } finally {
+      this._loaded = true
+      // Events captured while storage loaded go after the earlier launch's, and get their slots now.
+      if (!this._stopped && (restored.length > 0 || this._events.length > 0)) {
+        this._events = [...restored, ...this._events]
+        this._setTrimmedQueue([...this._events])
+      }
+      if (this._events.length > 0) {
+        this._scheduleFlush()
       }
     }
-    if (persisted.length > 0) {
-      this._storage.setItem(PostHogPersistedProperty.AiQueue, persisted.reverse())
+  }
+
+  /**
+   * The event's JSON from its slot, or undefined when the slot now holds another event or was cut off
+   * mid-write. A slot starts with its event's uuid, and the JSON must be the size the index recorded.
+   */
+  private async _readSlot(item: QueuedAiEvent): Promise<string | undefined> {
+    const slot = this._slots.get(item)
+    if (!this._files || slot === undefined) {
+      return undefined
+    }
+    let content: string | null = null
+    try {
+      content = await this._files.storage.getItem(this._files.key(slot))
+    } catch (e) {
+      this._logger.error('Reading a stored AI event failed:', e)
+    }
+    const prefix = `${item.uuid}\n`
+    if (typeof content !== 'string' || !content.startsWith(prefix)) {
+      return undefined
+    }
+    const json = content.slice(prefix.length)
+    return utf8Length(json) === item.bytes ? json : undefined
+  }
+
+  /** Drops the oldest events beyond the queue's count and byte caps, then stores what is left. */
+  private _setTrimmedQueue(queue: QueuedAiEvent[]): { queue: QueuedAiEvent[]; queuedBytes: number } {
+    let queuedBytes = queue.reduce((total, item) => total + item.bytes, 0)
+    const evicted: CaptureDroppedEvent[] = []
+    while (
+      queue.length > this._settings.maxQueueSize ||
+      (queuedBytes > CAPTURE_AI_MAX_QUEUE_BYTES && queue.length > 1)
+    ) {
+      const oldest = queue.shift()!
+      queuedBytes -= oldest.bytes
+      evicted.push({ uuid: oldest.uuid, details: 'queue full' })
+    }
+    if (evicted.length > 0) {
+      this._logger.warn(`AI event queue is full; dropped the oldest ${evicted.length} event(s).`)
+    }
+    this._setQueue(queue)
+    if (evicted.length > 0) {
+      this._onLocalDrops(evicted)
+    }
+    return { queue, queuedBytes }
+  }
+
+  private _setQueue(queue: QueuedAiEvent[]): void {
+    const previous = this._events
+    this._events = queue
+    // Until storage has loaded, slots in use are unknown; _load stores these events once it has.
+    if (!this._files || !this._loaded) {
+      return
+    }
+    const kept = new Set(queue)
+    const freed = new Set<number>()
+    for (const event of previous) {
+      const slot = this._slots.get(event)
+      if (slot !== undefined && !kept.has(event)) {
+        // A batch being sent has already read its JSON, so a removed event's copy can go now, not after its write.
+        event.json = undefined
+        this._slots.delete(event)
+        freed.add(slot)
+      }
+    }
+    const used = new Set(this._slots.values())
+    let free = 0
+    for (const event of queue) {
+      if (!this._slots.has(event)) {
+        while (used.has(free)) {
+          free++
+        }
+        used.add(free)
+        freed.delete(free)
+        this._slots.set(event, free)
+        // Only events captured this launch are without a slot, and they still hold their JSON.
+        void this._writeSlot(free, `${event.uuid}\n${event.json!}`).then((stored) => {
+          if (stored) {
+            event.json = undefined
+          }
+        })
+      }
+    }
+    // A freed slot that a new event took is overwritten by it, so only the rest are cleared.
+    for (const slot of freed) {
+      void this._writeSlot(slot, '')
+    }
+    if (queue.length > 0) {
+      const index: StoredAiEvent[] = queue.map(({ uuid, bytes, propertiesBytes }, i) => ({
+        uuid,
+        bytes,
+        propertiesBytes,
+        slot: this._slots.get(queue[i])!,
+      }))
+      this._storage.setItem(PostHogPersistedProperty.AiQueue, index)
     } else {
       this._storage.removeItem(PostHogPersistedProperty.AiQueue)
     }
+  }
+
+  /**
+   * Resolves true once `content`, or newer content for the slot, is in the slot, or false when the write
+   * failed. Writes queued behind a running one are merged, so only the newest content is written.
+   */
+  private _writeSlot(slot: number, content: string): Promise<boolean> {
+    const files = this._files!
+    const queued = this._pendingSlotContent.has(slot)
+    this._pendingSlotContent.set(slot, content)
+    if (queued) {
+      return this._slotWrites.get(slot)!
+    }
+    const write = (this._slotWrites.get(slot) ?? Promise.resolve(true))
+      .then(() => {
+        const latest = this._pendingSlotContent.get(slot)!
+        this._pendingSlotContent.delete(slot)
+        return files.storage.setItem(files.key(slot), latest)
+      })
+      .then(
+        () => true,
+        (e) => {
+          this._logger.error('Storing an AI event failed:', e)
+          return false
+        }
+      )
+    this._slotWrites.set(slot, write)
+    void write.then(() => {
+      if (this._slotWrites.get(slot) === write) {
+        this._slotWrites.delete(slot)
+      }
+    })
+    return write
   }
 }
