@@ -13,6 +13,7 @@ const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
+  [MCPAnalyticsEventType.mcpInputRequired]: PostHogMCPAnalyticsEvent.InputRequired,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,
   [MCPAnalyticsEventType.mcpPromptsList]: PostHogMCPAnalyticsEvent.PromptsList,
   [MCPAnalyticsEventType.mcpResourcesList]: PostHogMCPAnalyticsEvent.ResourcesList,
@@ -121,9 +122,17 @@ function withOptions(options: EventOptions | undefined): Pick<PostHogCaptureEven
 }
 
 function addCommonEventProperties(event: Event, properties: Record<string, unknown>): void {
+  const isInputRequired = event.eventType === MCPAnalyticsEventType.mcpInputRequired
+  if (isInputRequired) {
+    properties[PostHogMCPAnalyticsProperty.InputRequestMethods] = event.inputRequestMethods ?? []
+  }
   if (event.resourceName) {
-    properties[PostHogMCPAnalyticsProperty.ResourceName] = event.resourceName
+    // A round is not a tool call, so it names the tool without `$mcp_resource_name`.
+    if (!isInputRequired) {
+      properties[PostHogMCPAnalyticsProperty.ResourceName] = event.resourceName
+    }
     if (
+      isInputRequired ||
       event.eventType === MCPAnalyticsEventType.mcpToolsCall ||
       event.eventType === MCPAnalyticsEventType.mcpUnknownTool
     ) {

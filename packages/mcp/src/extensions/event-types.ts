@@ -15,6 +15,7 @@ export const MCPAnalyticsEventType = {
   mcpFeedback: 'mcp:feedback',
   mcpMissingCapability: 'mcp:missing_capability',
   mcpInitialize: 'mcp:initialize',
+  mcpInputRequired: 'mcp:input_required',
   mcpPromptsGet: 'mcp:prompts/get',
   mcpPromptsList: 'mcp:prompts/list',
   mcpResourcesList: 'mcp:resources/list',

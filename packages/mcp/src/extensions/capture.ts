@@ -79,6 +79,7 @@ export function captureEvent(
     toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,
+    inputRequestMethods: eventInput.inputRequestMethods,
     parameters: eventInput.parameters,
     response: eventInput.response,
     userIntent: eventInput.userIntent,

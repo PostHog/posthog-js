@@ -103,6 +103,32 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
   request. A fetch-style handler can mint the token outside the server instead: wrap it in
   `withMcpSessionHeader`, as in the [Vercel `mcp-handler`](#vercel-mcp-handler) setup below.
 
+### Tools that ask for more input
+
+A tool can return `inputRequired(...)` to ask the client for input, such as a confirmation, before
+it runs. On `2026-07-28` the client gets that round and retries the call with the answers. The
+retry is the tool call, so `instrument()` records the round as `$mcp_input_required` instead of
+`$mcp_tool_call`. The round event has `$mcp_tool_name`, `$mcp_duration_ms`, and
+`$mcp_input_request_methods`, the method of each request ordered by key. It never captures the
+requests, the answers, or `requestState`.
+
+On `2025-11-25` the MCP SDK answers the round itself and runs the tool again in the same request,
+so the whole exchange is one `$mcp_tool_call`.
+
+A custom dispatcher reads the methods from `prepareToolResult()`:
+
+```ts
+const preparedCall = posthog.prepareToolCall(name, rawArgs, { originalTool })
+const prepared = posthog.prepareToolResult(await runTool(name, preparedCall.args), preparedCall)
+const capture = { toolName: name, durationMs, sessionId: prepared.sessionId, conversationId: prepared.conversationId }
+if (prepared.inputRequestMethods) {
+  posthog.captureInputRequired({ ...capture, inputRequestMethods: prepared.inputRequestMethods })
+} else {
+  posthog.captureToolCall({ ...capture, intent: preparedCall.intent })
+}
+return prepared.result
+```
+
 ### Vercel `mcp-handler`
 
 [`mcp-handler`](https://github.com/vercel/mcp-handler) builds a fresh `McpServer` for every request
