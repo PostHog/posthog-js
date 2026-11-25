@@ -28,6 +28,7 @@ for (const scenario of ['same session', 'logout', 'logout with pageleave']) {
             const firstPageIdentities: string[] = []
             let secondPageIdentity: string | undefined
             let unavailable = true
+            let closing = false
             const decodeErrors: string[] = []
             async function receive(request: IncomingMessage) {
                 request.setEncoding('utf8')
@@ -65,6 +66,7 @@ for (const scenario of ['same session', 'logout', 'logout with pageleave']) {
                     void receive(request)
                         .then(() => response.writeHead(unavailable ? 503 : 200).end('{}'))
                         .catch((error) => {
+                            if (closing) return
                             decodeErrors.push(String(error))
                             response.writeHead(400).end()
                         })
@@ -125,12 +127,13 @@ for (const scenario of ['same session', 'logout', 'logout with pageleave']) {
                     await expect.poll(() => recovered, { timeout: 15000 }).toEqual([originalUuid])
                 }
                 expect(new Set(firstPageIdentities)).toEqual(new Set([identities.before]))
+                expect(decodeErrors).toEqual([])
             } finally {
+                closing = true
                 const closed = once(server, 'close')
                 server.close()
                 server.closeAllConnections()
                 await closed
-                expect(decodeErrors).toEqual([])
             }
         }
     )

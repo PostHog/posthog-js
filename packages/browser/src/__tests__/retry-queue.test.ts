@@ -78,7 +78,7 @@ describe('RetryQueue', () => {
     }
 
     describe('replay retry across a reload', () => {
-        function sendSnapshot(uuid: string, windowId = 'tab') {
+        function sendSnapshot(uuid: string, windowId = 'tab', snapshotData?: unknown[]) {
             retryQueue.retriableRequest({
                 batchKey: 'recordings',
                 batchGroup: 'session-' + windowId,
@@ -92,6 +92,7 @@ describe('RetryQueue', () => {
                             distinct_id: 'user',
                             $session_id: 'session',
                             $window_id: windowId,
+                            $snapshot_data: snapshotData,
                         },
                     },
                 ],
@@ -194,7 +195,7 @@ describe('RetryQueue', () => {
             }
         )
 
-        it.each(['reset', 'deferred bootstrap', 'expired session'])(
+        it.each(['reset', 'deferred bootstrap', 'expired session', 'idle timeout'])(
             'does not rotate a session on reload after %s',
             async (scenario) => {
                 const ph = await createPosthogInstance(undefined, { before_send: undefined })
@@ -218,6 +219,7 @@ describe('RetryQueue', () => {
                     ph.onSessionId(changed)
                     const bootstrapId = uuidv7()
                     if (scenario === 'expired session') vi.setSystemTime(Date.now() + 25 * 3600_000)
+                    else if (scenario === 'idle timeout') vi.setSystemTime(Date.now() + 31 * 60_000)
                     else if (scenario === 'deferred bootstrap') ph.reset({ bootstrap: { sessionID: bootstrapId } })
                     else ph.reset()
                     changed.mockClear()
@@ -228,6 +230,11 @@ describe('RetryQueue', () => {
                     expect(changed).not.toHaveBeenCalled()
                     expect(ph.persistence!.props.$sesid).toEqual(previous)
                     expect(ph._retryQueue?.length).toBe(1)
+                    ph._retryQueue!.unload()
+                    expect(mockTransport.mock.lastCall?.[0]).toMatchObject({
+                        transport: 'sendBeacon',
+                        data: [{ uuid: 'old-page' }],
+                    })
                     if (scenario === 'deferred bootstrap')
                         expect(ph.sessionManager!.checkAndGetSessionAndWindowId().sessionId).toBe(bootstrapId)
                 } finally {
@@ -305,6 +312,23 @@ describe('RetryQueue', () => {
             } finally {
                 remove.mockRestore()
             }
+        })
+
+        it('removes an expired handoff at startup before replay sends a request', () => {
+            failAndLeave('reload')
+            expect(window.sessionStorage.length).toBe(1)
+            vi.setSystemTime(Date.now() + 31 * 60_000)
+            retryQueue = new RetryQueue(mockPosthog as unknown as PostHog)
+            expect(window.sessionStorage.length).toBe(0)
+        })
+
+        it('keeps later batches on the beacon path if the first matching batch exceeds the cap', () => {
+            mockTransport.mockImplementation(({ callback }) => callback?.({ statusCode: 503 }))
+            sendSnapshot('full', 'tab', [{ type: 2, data: 'a'.repeat(256 * 1024) }])
+            sendSnapshot('incremental', 'tab', [{ type: 3, data: {} }])
+            window.dispatchEvent(Object.assign(new Event('pageswap'), { activation: { navigationType: 'reload' } }))
+            expect(window.sessionStorage.length).toBe(0)
+            expect(retryQueue.length).toBe(2)
         })
 
         it('discards an expired handoff', () => {

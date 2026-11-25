@@ -112,8 +112,9 @@ export class RetryQueue {
                 )
             ) {
                 this._queue.splice(i, 1)
-                return
             }
+            // Later batches can depend on a full snapshot in this batch.
+            return
         }
     }
 
@@ -196,6 +197,11 @@ export class RetryQueue {
             config.session_recording?.selectMaskingFn
         ) {
             this.clearStoredReplayHandoff()
+        } else if (config.cookieless_mode !== COOKIELESS_ALWAYS && config.persistence !== 'memory') {
+            const saved = sessionStore._parse(this._replayHandoffKey)
+            if (isNumber(saved?.savedAt) && Date.now() - saved.savedAt > thirtyMinutes) {
+                this.clearStoredReplayHandoff()
+            }
         }
         this.resume()
     }

@@ -289,8 +289,7 @@ export class SessionIdManager {
     // `max` because either view can be ahead: the throttle holds in-memory
     // ahead of persisted, and a sibling tab can hold persisted ahead of a
     // frozen in-memory.
-    private _freshestActivityTimestamp(): number {
-        const [persistedActivity] = this._getSessionId()
+    private _freshestActivityTimestamp(persistedActivity = this._getSessionId()[0]): number {
         const persisted = isPositiveNumber(persistedActivity) ? persistedActivity : 0
         const inMemory = isPositiveNumber(this._sessionActivityTimestamp) ? this._sessionActivityTimestamp : 0
         return Math.max(persisted, inMemory)
@@ -321,6 +320,7 @@ export class SessionIdManager {
     // An unloading page must never start a session or notify recording listeners.
     peekSessionAndWindowId(): { sessionId: string; windowId: string } | undefined {
         const session = this._persistence.props[SESSION_ID]
+        const now = Date.now()
         if (
             this._config.cookieless_mode === COOKIELESS_ALWAYS ||
             this._pendingBootstrapSession ||
@@ -329,7 +329,8 @@ export class SessionIdManager {
             !isArray(session) ||
             session[1] !== this._sessionId ||
             !isPositiveNumber(this._sessionStartTimestamp) ||
-            Math.abs(Date.now() - this._sessionStartTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+            Math.abs(now - this._sessionStartTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS ||
+            this._sessionHasBeenIdleTooLong(now, this._freshestActivityTimestamp(session[0] ?? 0))
         ) {
             return undefined
         }
