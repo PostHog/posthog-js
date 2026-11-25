@@ -691,8 +691,8 @@ async function withRenderedReact(
     }
     const text: unknown = renderer.toPlainText(html)
     if (typeof text !== 'string') {
-      if (text !== null && (typeof text === 'object' || typeof text === 'function') && 'then' in text) {
-        void Promise.resolve(text).catch(() => {})
+      if (text instanceof Promise) {
+        void text.catch(() => {})
       }
       throw new Error('reactEmailRenderer.toPlainText must return a string.')
     }

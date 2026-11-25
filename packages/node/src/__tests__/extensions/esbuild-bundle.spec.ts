@@ -1,6 +1,10 @@
 import { build, type Platform, type Plugin } from 'esbuild'
+import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url))
 
@@ -231,6 +235,47 @@ describe('esbuild bundle of the built package', () => {
           text: 'Welcome, Ada',
         }),
       ])
+    })
+
+    it('exits cleanly under strict unhandled rejections when toPlainText returns a rejecting promise or async-throwing thenable', async () => {
+      const nodeEntryUrl = pathToFileURL(builtEntrypoint('index.node.mjs')).href
+      const script = `
+        import { createElement } from 'react'
+        import { PostHog } from ${JSON.stringify(nodeEntryUrl)}
+        const runCase = async (toPlainText) => {
+          const client = new PostHog('phc_test', {
+            host: 'https://us.i.posthog.com',
+            secretKey: 'phs_test',
+            enableLocalEvaluation: false,
+            reactEmailRenderer: { render: async () => '<p>Hi</p>', toPlainText },
+          })
+          const res = await client.emails.send({
+            to: 'ada@example.com',
+            templateKey: 'welcome',
+            subject: 'Welcome',
+            react: createElement('p', null, 'Hi'),
+          })
+          return { data: res.data, code: res.error?.code ?? null }
+        }
+        const rejectingPromise = await runCase(async () => {
+          throw new Error('async plain text failure')
+        })
+        const throwingThenable = await runCase(() => ({
+          async then() {
+            throw new Error('throwing thenable')
+          },
+        }))
+        console.log(JSON.stringify({ rejectingPromise, throwingThenable }))
+      `
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        ['--unhandled-rejections=throw', '--input-type=module', '-e', script],
+        { cwd: packageRoot }
+      )
+      expect(JSON.parse(stdout.trim())).toEqual({
+        rejectingPromise: { data: null, code: 'react_render_failed' },
+        throwingThenable: { data: null, code: 'react_render_failed' },
+      })
     })
 
     it.each(['react-renderer-import.mjs', 'react-renderer-import.js'])(

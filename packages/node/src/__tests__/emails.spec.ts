@@ -1159,49 +1159,24 @@ describe('emails', () => {
       expect(inbox).toEqual([])
     })
 
-    it('renders with a thenable reactEmailRenderer object without awaiting its then property', async () => {
+    it('renders with a thenable reactEmailRenderer object without invoking its then method', async () => {
       const { render, toPlainText } = await import('@react-email/render')
-      const thenSpy = vi.fn()
       makeClient({
         reactEmailRenderer: {
           render,
           toPlainText,
-          then: thenSpy,
+          then() {
+            throw new Error('renderer object must not be awaited')
+          },
         } as unknown as Parameters<typeof makeClient>[0]['reactEmailRenderer'],
       })
 
       const { error } = await sendReact({ react: welcome })
 
       expect(error).toBeNull()
-      expect(thenSpy).not.toHaveBeenCalled()
       expect(inbox).toEqual([
         expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
       ])
-    })
-
-    it('reports react_render_failed without an unhandled rejection when toPlainText returns a rejected promise', async () => {
-      const unhandled = vi.fn()
-      process.on('unhandledRejection', unhandled)
-      try {
-        makeClient({
-          reactEmailRenderer: {
-            render: async () => '<p>Welcome, Ada</p>',
-            toPlainText: (async () => {
-              throw new Error('async plain text failure')
-            }) as unknown as (html: string) => string,
-          },
-        })
-
-        const { data, error } = await sendReact({ react: welcome })
-        await Promise.resolve()
-
-        expect(data).toBeNull()
-        expect(error?.code).toBe('react_render_failed')
-        expect(unhandled).not.toHaveBeenCalled()
-        expect(inbox).toEqual([])
-      } finally {
-        process.off('unhandledRejection', unhandled)
-      }
     })
 
     it('sends html without loading @react-email/render', async () => {
