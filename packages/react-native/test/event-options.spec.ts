@@ -184,4 +184,11 @@ describe('per-event options', () => {
 
     expect(sentEvent('$set').properties.$set).toEqual({ plan: 'pro' })
   })
+
+  it('repairs a lone surrogate in an option rather than sending a batch capture rejects', async () => {
+    posthog.capture('Signed Up', {}, { options: { custom_flag: 'a\ud800b' } })
+    await posthog.flush()
+
+    expect(sentEvent('Signed Up').options).toMatchObject({ custom_flag: 'a\ufffdb' })
+  })
 })
