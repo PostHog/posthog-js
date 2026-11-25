@@ -6,7 +6,7 @@ export * from './browser-utils'
 export * from './bucketed-rate-limiter'
 // Named rather than `export *`: the budgets, markers and `sanitizeString` are
 // shared with the OTLP encoder but are not public API.
-export { toJsonSafeValue } from './json-utils'
+export { toJsonSafeValue, withoutNullMembers } from './json-utils'
 export { parseRetryAfterMs } from './retry-after'
 export * from './number-utils'
 export * from './string-utils'
