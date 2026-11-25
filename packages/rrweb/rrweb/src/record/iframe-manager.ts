@@ -528,6 +528,8 @@ export class IframeManager {
         isBlockedIncludingShadowHosts(el, this.blockClass, this.blockSelector)
       )
         return true;
+      // The page embedding this recorder is not part of its recording.
+      if (el.ownerDocument === document) break;
       try {
         el = el.ownerDocument.defaultView?.frameElement ?? null;
       } catch {
@@ -571,6 +573,7 @@ export class IframeManager {
   // released before it can emit. This avoids rescanning tracked iframes on
   // every mutation batch of the parent page.
   public isBlockedDocument(doc: Document): boolean {
+    if (doc === document) return false;
     if (this.blockedDocuments.has(doc)) return true;
     let frame: Element | null = null;
     try {

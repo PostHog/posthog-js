@@ -296,6 +296,41 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it("a recorder inside a same-origin iframe records its own changes when the parent blocks that iframe", async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe class="rr-block" srcdoc="<p>${INITIAL_CONTENT}</p>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const iframeFrame = page.frames()[1];
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await iframeFrame.addScriptTag({
+        path: path.resolve(__dirname, '../../dist/rrweb.umd.cjs'),
+      });
+      // records the iframe on its own, the way an embedded page with its own SDK would
+      await iframeFrame.evaluate(() => {
+        const { rrweb } = window as unknown as IWindow;
+        const { emit } = window.parent as unknown as IWindow;
+        rrweb.record({ emit: (event) => emit?.(event) });
+      });
+      await waitForRAF(page);
+
+      await appendParagraph(iframeFrame, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events)).toContain(LATER_CONTENT);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {

@@ -349,7 +349,8 @@ function isBlockedIncludingAncestors(
       return true;
     let parent: Node | null = dom.parentNode(node);
     if (parent && isShadowRoot(parent)) parent = dom.host(parent);
-    if (!parent && node.nodeType === node.DOCUMENT_NODE) {
+    // The page embedding this recorder is not part of its recording.
+    if (!parent && node.nodeType === node.DOCUMENT_NODE && node !== document) {
       try {
         parent = (node as Document).defaultView?.frameElement ?? null;
       } catch {
