@@ -365,7 +365,7 @@ export interface Emails {
    *
    * A batch takes at most 100 recipients and sends them in one request. More than 100 recipients is an error before
    * anything is sent. Network errors, rate limits, an in-flight idempotency key and an unavailable service are retried
-   * with the same idempotency keys, so a retry queues no second email. Once the client shuts down, the batch sends no retry and ends with `client_closed`. PostHog refuses a batch over its size limits with
+   * with the same idempotency keys, so a retry queues no second email. When the client shuts down, a batch waiting to retry ends at once with `client_closed` and sends no retry. A request already sent runs to its answer or its timeout, which can outlast the shutdown deadline, so pass your own `idempotencyKey` for each recipient when the process may exit mid-batch. PostHog refuses a batch over its size limits with
    * `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
    * so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
    * or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with

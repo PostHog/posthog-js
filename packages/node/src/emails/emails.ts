@@ -200,6 +200,7 @@ export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
+  private readonly retryWaitsToEndAtShutdown = new Set<() => void>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -233,6 +234,9 @@ export class EmailSender implements Emails {
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
+    for (const endWait of this.retryWaitsToEndAtShutdown) {
+      endWait()
+    }
     while (this.inFlight.size > 0) {
       await Promise.all(this.inFlight)
     }
@@ -314,11 +318,19 @@ export class EmailSender implements Emails {
         }
         warnings = await this.withRetries(
           prepared.maxRetries,
-          async () => {
+          async (attempt) => {
             try {
               return recordAnswer(
                 slots,
-                await this.request(appHost + BATCH_PATH, 'POST', headers, body, undefined, timeoutMs),
+                await this.request(
+                  appHost + BATCH_PATH,
+                  'POST',
+                  headers,
+                  body,
+                  undefined,
+                  timeoutMs,
+                  attempt > 0 ? stopAtShutdown : undefined
+                ),
                 mayHaveQueuedBefore
               )
             } catch (caught) {
@@ -524,13 +536,13 @@ export class EmailSender implements Emails {
 
   private async withRetries<T>(
     maxRetries: number,
-    attemptOnce: () => Promise<T>,
-    beforeRetry?: () => void
+    attemptOnce: (attempt: number) => Promise<T>,
+    stopAtShutdown?: () => void
   ): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       let error: EmailError
       try {
-        return await attemptOnce()
+        return await attemptOnce(attempt)
       } catch (caught) {
         error = asRequestError(caught)
       }
@@ -538,11 +550,26 @@ export class EmailSender implements Emails {
       if (delayMs === undefined) {
         throw error
       }
-      beforeRetry?.()
-      // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-      beforeRetry?.()
+      if (stopAtShutdown) {
+        stopAtShutdown()
+        await this.waitUnlessShutdown(delayMs)
+      } else {
+        // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
     }
+  }
+
+  private waitUnlessShutdown(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const end = (): void => {
+        clearTimeout(timer)
+        this.retryWaitsToEndAtShutdown.delete(end)
+        resolve()
+      }
+      const timer = setTimeout(end, delayMs)
+      this.retryWaitsToEndAtShutdown.add(end)
+    })
   }
 
   private async request(
@@ -551,7 +578,8 @@ export class EmailSender implements Emails {
     headers: Record<string, string>,
     body?: string | Uint8Array<ArrayBuffer>,
     redirect?: 'manual',
-    timeoutMs = this.config.requestTimeoutMs
+    timeoutMs = this.config.requestTimeoutMs,
+    beforeFetch?: () => void
   ): Promise<Reply> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout>
@@ -566,15 +594,16 @@ export class EmailSender implements Emails {
         controller.abort(timeoutError)
       }, timeoutMs)
     })
-    const fetchPromise = Promise.resolve().then(() =>
-      this.hooks.fetch(url, {
+    const fetchPromise = Promise.resolve().then(() => {
+      beforeFetch?.()
+      return this.hooks.fetch(url, {
         method,
         headers,
         ...(body === undefined ? {} : { body }),
         ...(redirect ? { redirect } : {}),
         signal: controller.signal,
       })
-    )
+    })
     void fetchPromise
       .then((lateResponse) => {
         if (controller.signal.aborted) {

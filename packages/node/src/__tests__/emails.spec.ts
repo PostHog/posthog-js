@@ -2149,6 +2149,37 @@ describe('emails', () => {
       expect(error?.results?.map((result) => result.status)).toEqual([status, status])
     })
 
+    it('still sends a batch called just before the client shuts down', async () => {
+      const postHog = againstPostHog()
+
+      const pending = posthog.emails.batch(WELCOME, recipientsTo(2))
+      const shutdown = posthog.shutdown()
+      const { data, error } = await settle(pending)
+      await shutdown
+
+      expect(error).toBeNull()
+      expect(data?.results.map((result) => result.status)).toEqual(['queued', 'queued'])
+      expect(postHog.requests.batch).toBe(1)
+    })
+
+    it('ends a batch waiting to retry as soon as the client shuts down, within a short shutdown deadline', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 503 })
+      let settled = false
+
+      const pending = posthog.emails.batch(WELCOME, recipientsTo(2)).finally(() => (settled = true))
+      await vi.advanceTimersByTimeAsync(0)
+      const shutdown = posthog.shutdown(20)
+      await vi.advanceTimersByTimeAsync(20)
+      await shutdown
+
+      expect(settled).toBe(true)
+      const { error } = await pending
+      expect(error).toMatchObject({ code: 'client_closed' })
+      expect(error?.results?.map((result) => result.status)).toEqual(['unconfirmed', 'unconfirmed'])
+      expect(postHog.requests.batch).toBe(1)
+    })
+
     it('says when batch sends are not on for the project yet, without a retry', async () => {
       const postHog = againstPostHog({ batchUnavailable: true })
 
