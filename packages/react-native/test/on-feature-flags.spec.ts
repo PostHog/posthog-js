@@ -292,6 +292,28 @@ describe('PostHog RN onFeatureFlags', () => {
       expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui', 'checkout', 'old-ui', 'empty'])
     })
 
+    it('returns undefined after a quota-limited first load, and keeps the list after a later one', async () => {
+      let quotaLimited = true
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: 200,
+        json: () =>
+          Promise.resolve(quotaLimited ? { quotaLimited: ['feature_flags'] } : { featureFlags: { 'beta-ui': true } }),
+        text: () => Promise.resolve(''),
+      }))
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      quotaLimited = false
+      await posthog.reloadFeatureFlagsAsync()
+      quotaLimited = true
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui'])
+    })
+
     it('returns bootstrapped flags when a load fails', async () => {
       flagsStatus = 500
       posthog = new PostHog('test-token', {

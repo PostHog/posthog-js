@@ -968,10 +968,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
             })
           }
           this._logger.warn(
