@@ -162,129 +162,144 @@ describe('esbuild bundle of the built package', () => {
     )
 
     it('returns missing_react_renderer in a real isolated bundle without reactEmailRenderer and renders with module or wrapper', async () => {
-      const runIsolatedSend = async (mode: 'none' | 'none-throwing-warn' | 'module' | 'wrapper') => {
-        const importLine =
-          mode === 'module'
-            ? "import * as reactEmailRenderer from '@react-email/render'"
-            : mode === 'wrapper'
-              ? "import { render, toPlainText } from '@react-email/render'\nconst reactEmailRenderer = { render: (el) => render(el, { pretty: true }), toPlainText }"
-              : ''
-        const warnSetup =
-          mode === 'none'
-            ? 'console.warn = (...args) => { warnings.push(args.map(String).join(" ")) }'
-            : mode === 'none-throwing-warn'
-              ? 'console.warn = () => { throw new Error("broken warning sink") }'
-              : ''
-        const contents = `
-          import { createElement } from 'react'
-          import { PostHog } from 'posthog-node'
-          ${importLine}
-          export async function run() {
-            const sent = []
-            const warnings = []
-            const originalWarn = console.warn
-            ${warnSetup}
-            try {
-              const client = new PostHog('phc_test', {
-                host: 'https://us.i.posthog.com',
-                secretKey: 'phs_test',
-                enableLocalEvaluation: false,
-                ${mode === 'none' || mode === 'none-throwing-warn' ? '' : 'reactEmailRenderer,'}
-                fetch: async (url, init) => {
-                  if (
-                    url !== 'https://us.posthog.com/api/messaging/send/email/' ||
-                    init.method !== 'POST' ||
-                    init.headers?.Authorization !== 'Bearer phs_test' ||
-                    init.headers?.['Content-Type'] !== 'application/json' ||
-                    typeof init.headers?.['Idempotency-Key'] !== 'string' ||
-                    init.headers['Idempotency-Key'].length === 0
-                  ) {
-                    return {
-                      status: 400,
-                      text: async () => JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }),
-                      json: async () => ({ code: 'invalid_request', detail: 'unexpected send request' }),
-                    }
-                  }
-                  sent.push(JSON.parse(init.body))
-                  return {
-                    status: 200,
-                    text: async () => JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
-                    json: async () => ({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
-                  }
-                },
-              })
-              ${mode === 'none' || mode === 'none-throwing-warn' ? 'client.debug(true)' : ''}
-              const response = await client.emails.send({
-                to: 'ada@example.com',
-                templateKey: 'welcome',
-                subject: 'Welcome',
-                react: createElement('p', null, 'Welcome, Ada'),
-              })
-              return {
-                sent,
-                warnings,
-                data: response.data,
-                error: response.error ? { code: response.error.code, fix: response.error.fix } : null,
-              }
-            } finally {
-              console.warn = originalWarn
-            }
+      const requests: Array<{ method?: string; url?: string }> = []
+      const sent: Array<{ html: string; text: string }> = []
+      const server = createServer((req, res) => {
+        requests.push({ method: req.method, url: req.url })
+        const chunks: Buffer[] = []
+        req.on('data', (chunk: Buffer) => chunks.push(chunk))
+        req.on('end', () => {
+          if (
+            req.url !== '/api/messaging/send/email/' ||
+            req.method !== 'POST' ||
+            req.headers.authorization !== 'Bearer phs_test' ||
+            req.headers['content-type'] !== 'application/json' ||
+            typeof req.headers['idempotency-key'] !== 'string' ||
+            req.headers['idempotency-key'].length === 0
+          ) {
+            res.statusCode = 400
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ code: 'invalid_request', detail: 'unexpected send request' }))
+            return
           }
-        `
-        const result = await build({
-          stdin: { contents, resolveDir: packageRoot },
-          bundle: true,
-          platform: 'browser',
-          format: 'esm',
-          conditions: ['workerd', 'worker', 'browser'],
-          external: ['node:*'],
-          write: false,
-          logLevel: 'silent',
+          sent.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }))
         })
-        const bundle = Buffer.from(result.outputFiles[0].text).toString('base64')
-        const mod = await import(`data:text/javascript;base64,${bundle}`)
-        return mod.run()
+      })
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const { port } = server.address() as AddressInfo
+
+      try {
+        const runIsolatedSend = async (mode: 'none' | 'none-throwing-warn' | 'module' | 'wrapper') => {
+          requests.length = 0
+          sent.length = 0
+          const importLine =
+            mode === 'module'
+              ? "import * as reactEmailRenderer from '@react-email/render'"
+              : mode === 'wrapper'
+                ? "import { render, toPlainText } from '@react-email/render'\nconst reactEmailRenderer = { render: (el) => render(el, { pretty: true }), toPlainText }"
+                : ''
+          const warnSetup =
+            mode === 'none'
+              ? 'console.warn = (...args) => { warnings.push(args.map(String).join(" ")) }'
+              : mode === 'none-throwing-warn'
+                ? 'console.warn = () => { throw new Error("broken warning sink") }'
+                : ''
+          const contents = `
+            import { createElement } from 'react'
+            import { PostHog } from 'posthog-node'
+            ${importLine}
+            export async function run() {
+              const warnings = []
+              const originalWarn = console.warn
+              ${warnSetup}
+              try {
+                const client = new PostHog('phc_test', {
+                  host: 'https://us.i.posthog.com',
+                  appHost: ${JSON.stringify(`http://127.0.0.1:${port}`)},
+                  secretKey: 'phs_test',
+                  enableLocalEvaluation: false,
+                  ${mode === 'none' || mode === 'none-throwing-warn' ? '' : 'reactEmailRenderer,'}
+                })
+                ${mode === 'none' || mode === 'none-throwing-warn' ? 'client.debug(true)' : ''}
+                const response = await client.emails.send({
+                  to: 'ada@example.com',
+                  templateKey: 'welcome',
+                  subject: 'Welcome',
+                  react: createElement('p', null, 'Welcome, Ada'),
+                })
+                return {
+                  warnings,
+                  data: response.data,
+                  error: response.error ? { code: response.error.code, fix: response.error.fix } : null,
+                }
+              } finally {
+                console.warn = originalWarn
+              }
+            }
+          `
+          const result = await build({
+            stdin: { contents, resolveDir: packageRoot },
+            bundle: true,
+            platform: 'browser',
+            format: 'esm',
+            conditions: ['workerd', 'worker', 'browser'],
+            external: ['node:*'],
+            write: false,
+            logLevel: 'silent',
+          })
+          const bundle = Buffer.from(result.outputFiles[0].text).toString('base64')
+          const mod = await import(`data:text/javascript;base64,${bundle}`)
+          const outcome = await mod.run()
+          return { ...outcome, requests: [...requests], sent: [...sent] }
+        }
+
+        const withoutOpt = await runIsolatedSend('none')
+        expect(withoutOpt.data).toBeNull()
+        expect(withoutOpt.requests).toEqual([])
+        expect(withoutOpt.error).toMatchObject({
+          code: 'missing_react_renderer',
+          fix: expect.stringContaining('reactEmailRenderer'),
+        })
+        expect(withoutOpt.warnings).toEqual([
+          expect.stringMatching(
+            /missing_react_renderer[\s\S]*reactEmailRenderer: await import\('@react-email\/render'\)/
+          ),
+        ])
+
+        const withThrowingWarn = await runIsolatedSend('none-throwing-warn')
+        expect(withThrowingWarn.data).toBeNull()
+        expect(withThrowingWarn.requests).toEqual([])
+        expect(withThrowingWarn.error).toMatchObject({
+          code: 'missing_react_renderer',
+          fix: expect.stringContaining('reactEmailRenderer'),
+        })
+
+        const withModule = await runIsolatedSend('module')
+        expect(withModule.error).toBeNull()
+        expect(withModule.requests).toHaveLength(1)
+        expect(withModule.sent).toEqual([
+          expect.objectContaining({
+            html: expect.stringContaining('<p>Welcome, Ada</p>'),
+            text: 'Welcome, Ada',
+          }),
+        ])
+
+        const withWrapper = await runIsolatedSend('wrapper')
+        expect(withWrapper.error).toBeNull()
+        expect(withWrapper.requests).toHaveLength(1)
+        expect(withWrapper.sent).toEqual([
+          expect.objectContaining({
+            html: expect.stringContaining('\n'),
+            text: 'Welcome, Ada',
+          }),
+        ])
+        expect(withWrapper.sent[0].html).toContain('<p>Welcome, Ada</p>')
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()))
       }
-
-      const withoutOpt = await runIsolatedSend('none')
-      expect(withoutOpt.data).toBeNull()
-      expect(withoutOpt.sent).toEqual([])
-      expect(withoutOpt.error).toMatchObject({
-        code: 'missing_react_renderer',
-        fix: expect.stringContaining('reactEmailRenderer'),
-      })
-      expect(withoutOpt.warnings).toEqual([
-        expect.stringMatching(
-          /missing_react_renderer[\s\S]*reactEmailRenderer: await import\('@react-email\/render'\)/
-        ),
-      ])
-
-      const withThrowingWarn = await runIsolatedSend('none-throwing-warn')
-      expect(withThrowingWarn.data).toBeNull()
-      expect(withThrowingWarn.sent).toEqual([])
-      expect(withThrowingWarn.error).toMatchObject({
-        code: 'missing_react_renderer',
-        fix: expect.stringContaining('reactEmailRenderer'),
-      })
-
-      const withModule = await runIsolatedSend('module')
-      expect(withModule.error).toBeNull()
-      expect(withModule.sent).toEqual([
-        expect.objectContaining({
-          html: expect.stringContaining('<p>Welcome, Ada</p>'),
-          text: 'Welcome, Ada',
-        }),
-      ])
-
-      const withWrapper = await runIsolatedSend('wrapper')
-      expect(withWrapper.error).toBeNull()
-      expect(withWrapper.sent).toEqual([
-        expect.objectContaining({
-          html: expect.stringContaining('\n'),
-          text: 'Welcome, Ada',
-        }),
-      ])
-      expect(withWrapper.sent[0].html).toContain('<p>Welcome, Ada</p>')
     })
 
     it('exits cleanly under strict unhandled rejections when toPlainText returns a same-realm, cross-realm, or async-throwing thenable', async () => {
@@ -422,7 +437,7 @@ describe('esbuild bundle of the built package', () => {
       const viteEntry = vitestRequire.resolve('vite').replace(/index\.cjs$/, 'dist/node/index.js')
       const vite = (await import(pathToFileURL(viteEntry).href)) as {
         createServer: (config: Record<string, unknown>) => Promise<{
-          transformRequest: (url: string, opts?: { ssr?: boolean }) => Promise<{ code: string } | null>
+          ssrLoadModule: (url: string) => Promise<Record<string, unknown>>
           close: () => Promise<void>
         }>
         build: (
@@ -462,6 +477,10 @@ describe('esbuild bundle of the built package', () => {
         })
 
         const analysisWarnings: string[] = []
+        writeFileSync(
+          path.join(tmpDir, 'ssr-entry.mjs'),
+          `import { PostHog } from 'posthog-node'\nexport const client = new PostHog('phc_test', { enableLocalEvaluation: false })\n`
+        )
         const server = await vite.createServer({
           root: tmpDir,
           configFile: false,
@@ -472,11 +491,8 @@ describe('esbuild bundle of the built package', () => {
           customLogger: makeLogger(analysisWarnings),
         })
         try {
-          const transformed = await server.transformRequest(
-            '/node_modules/posthog-node/dist/emails/react-renderer-import.mjs',
-            { ssr: true }
-          )
-          expect(transformed?.code).toContain('@vite-ignore')
+          const loaded = await server.ssrLoadModule('/ssr-entry.mjs')
+          expect(loaded.client).toBeDefined()
         } finally {
           await server.close()
         }
