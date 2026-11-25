@@ -53,7 +53,7 @@ describe('event person state', () => {
     const client = newPostHog()
     client.register({ $process_person_profile: false })
     client.setPersonProperties({ plan: 'pro' })
-    expect(queued(client, '$set').properties.$process_person_profile).toBe(true)
+    expect(queued(client, '$set').properties).not.toHaveProperty('$process_person_profile')
   })
 
   it('leaves a registered personless setting off identity events captured directly', () => {
@@ -61,7 +61,7 @@ describe('event person state', () => {
     client.register({ $process_person_profile: false })
     for (const event of ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']) {
       client.capture(event, { distinct_id: 'user-123' })
-      expect(queued(client, event).properties.$process_person_profile).toBe(true)
+      expect(queued(client, event).properties).not.toHaveProperty('$process_person_profile')
     }
   })
 
@@ -75,6 +75,18 @@ describe('event person state', () => {
     const client = newPostHog({ personProfiles: 'never' })
     client.capture('Signed Up', { $process_person_profile: null })
     expect(queued(client, 'Signed Up').properties.$process_person_profile).toBe(false)
+  })
+
+  it('sends $process_person_profile only as false, on personless events', () => {
+    const client = newPostHog({ personProfiles: 'identified_only' })
+    client.capture('Viewed Dashboard')
+    expect(queued(client, 'Viewed Dashboard').properties.$process_person_profile).toBe(false)
+    client.identify('user-123')
+    client.capture('Signed Up')
+    client.capture('Signed In', { $process_person_profile: null })
+    for (const event of ['Signed Up', 'Signed In', '$identify']) {
+      expect(queued(client, event).properties).not.toHaveProperty('$process_person_profile')
+    }
   })
 
   it('sends no $is_identified when the caller or a registered value is null or undefined', () => {
@@ -130,10 +142,8 @@ describe('event person state', () => {
     })
     client.identify('user-123')
     client.autocapture('click', [])
-    expect(queued(client, '$autocapture').properties).toMatchObject({
-      $process_person_profile: true,
-      $is_identified: true,
-    })
+    expect(queued(client, '$autocapture').properties.$is_identified).toBe(true)
+    expect(queued(client, '$autocapture').properties).not.toHaveProperty('$process_person_profile')
   })
 })
 

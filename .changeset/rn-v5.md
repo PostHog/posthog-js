@@ -30,7 +30,8 @@
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
 - **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
-- **Breaking:** add `$process_person_profile` and `$is_identified` to `$autocapture` events, so anonymous autocapture follows `personProfiles: 'identified_only'` like other events
+- **Breaking:** send `$process_person_profile` only as `false`, on events that don't process the person, as posthog-ios and posthog-android 4.0 do; events that process the person no longer carry `$process_person_profile: true`, so a `before_send` hook or an insight that checks for `true` should check that it isn't `false` instead
+- **Breaking:** add `$is_identified`, and `$process_person_profile: false` for anonymous users under `personProfiles: 'identified_only'`, to `$autocapture` events, so anonymous autocapture follows the policy like other events
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request

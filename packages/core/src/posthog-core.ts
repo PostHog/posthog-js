@@ -310,12 +310,19 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
-  // 4.0. A `null` `$process_person_profile` counts as unset; a `null` or `undefined` `$is_identified` still wins, so
-  // the event is sent without it. The legacy person state always uses the SDK's values.
+  // 4.0. The SDK sets `$process_person_profile` only to `false`, on a personless event; PostHog processes the person
+  // when it is missing. A `null` `$process_person_profile` counts as unset; a `null` or `undefined` `$is_identified`
+  // still wins, so the event is sent without it. The legacy person state always uses the SDK's values.
   private stampPersonState(properties: PostHogEventProperties): void {
     const hasPersonProcessing = this._hasPersonProcessing()
-    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] == null) {
+    if (this.usesLegacyEventPersonState()) {
       properties['$process_person_profile'] = hasPersonProcessing
+    } else if (properties['$process_person_profile'] == null) {
+      if (hasPersonProcessing) {
+        delete properties['$process_person_profile']
+      } else {
+        properties['$process_person_profile'] = false
+      }
     }
     if (this.usesLegacyEventPersonState() || !Object.prototype.hasOwnProperty.call(properties, '$is_identified')) {
       properties['$is_identified'] = this._isIdentified()

@@ -3883,7 +3883,19 @@ export class PostHog extends PostHogCoreBase {
           // Native runs its own debug-property builder on the handed-off event, so the JS
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
-          const nativePayload = { ...processed, properties: withoutDebugProperties(processed.properties) }
+          const nativeProperties = withoutDebugProperties(processed.properties)
+          // A missing `$process_person_profile` means PostHog processes the person. Native reads a
+          // missing one by its own person state, which knows nothing of JS identity, so it is sent
+          // explicitly.
+          const nativePayload = {
+            ...processed,
+            properties:
+              isObject(nativeProperties) &&
+              !Array.isArray(nativeProperties) &&
+              (nativeProperties as PostHogEventProperties)['$process_person_profile'] == null
+                ? { ...(nativeProperties as PostHogEventProperties), $process_person_profile: true }
+                : nativeProperties,
+          }
           observation.nativeCapture = observation.prepareNativeCapture(
             withoutNullProperties(nativePayload) ?? nativePayload
           )
