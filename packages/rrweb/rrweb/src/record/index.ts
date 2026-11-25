@@ -404,6 +404,20 @@ function record<T = eventWithTime>(
   if (inEmittingFrame && !emit) {
     throw new Error('emit function is required');
   }
+  // The browser rejects a whole selector list if any part is invalid or
+  // unsupported, which would silently record everything it should block.
+  if (blockSelector) {
+    try {
+      document.createDocumentFragment().querySelector(blockSelector);
+    } catch (error) {
+      console.error(
+        `rrweb: not recording because blockSelector "${blockSelector}" is not a valid selector in this browser`,
+        error,
+      );
+      unregisterErrorHandler();
+      return undefined;
+    }
+  }
   if (!inEmittingFrame && !passEmitsToParent) {
     return () => {
       /* no-op since in this case we don't need to record anything from this frame in particular */
