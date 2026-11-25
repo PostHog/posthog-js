@@ -1,4 +1,5 @@
 import { OpenAIChatStreamAccumulator, OpenAIResponsesStreamAccumulator } from '../src/openai/stream-accumulators'
+import { formatResponseOpenAI } from '../src/utils'
 
 describe('OpenAI-compatible stream accumulators', () => {
   // Separate from the accumulation test below because the setup is the absence
@@ -123,6 +124,81 @@ describe('OpenAI-compatible stream accumulators', () => {
         rawUsage,
       },
     })
+  })
+
+  // With n > 1, OpenAI streams each choice's deltas in its own chunks, named by `choices[].index`.
+  test('chat keeps the choices of an n > 1 stream apart, in the non-streaming shape', () => {
+    const accumulator = new OpenAIChatStreamAccumulator()
+    const chunk = (index: number, delta: object, finishReason: string | null = null) =>
+      ({
+        id: 'chatcmpl-n2',
+        model: 'gpt-4o',
+        object: 'chat.completion.chunk',
+        created: 1,
+        choices: [{ index, finish_reason: finishReason, logprobs: null, delta }],
+      }) as any
+    accumulator.consume(chunk(0, { role: 'assistant', content: 'Hello' }), 100)
+    accumulator.consume(chunk(1, { role: 'assistant', content: 'Bonjour' }), 110)
+    accumulator.consume(chunk(0, { content: ' world' }), 120)
+    accumulator.consume(
+      chunk(1, {
+        tool_calls: [{ index: 0, id: 'call-b', type: 'function', function: { name: 'translate', arguments: '{' } }],
+      }),
+      130
+    )
+    accumulator.consume(
+      chunk(0, {
+        tool_calls: [{ index: 0, id: 'call-a', type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+      }),
+      140
+    )
+    accumulator.consume(chunk(1, { tool_calls: [{ index: 0, function: { arguments: '}' } }] }), 150)
+    accumulator.consume(chunk(0, {}, 'tool_calls'), 160)
+    accumulator.consume(chunk(1, {}, 'length'), 170)
+
+    const result = accumulator.result()
+    const nonStreamed = formatResponseOpenAI({
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'tool_calls',
+          message: {
+            role: 'assistant',
+            content: 'Hello world',
+            tool_calls: [{ id: 'call-a', type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+          },
+        },
+        {
+          index: 1,
+          finish_reason: 'length',
+          message: {
+            role: 'assistant',
+            content: 'Bonjour',
+            tool_calls: [{ id: 'call-b', type: 'function', function: { name: 'translate', arguments: '{}' } }],
+          },
+        },
+      ],
+    })
+    expect(result.output).toEqual(nonStreamed)
+    expect(result.output).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Hello world' },
+          { type: 'function', id: 'call-a', function: { name: 'lookup', arguments: '{}' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Bonjour' },
+          { type: 'function', id: 'call-b', function: { name: 'translate', arguments: '{}' } },
+        ],
+      },
+    ])
+    // Like a non-streamed completion, the stop reason is the first choice's.
+    expect(result.stopReason).toBe('tool_calls')
+    expect(result.firstTokenTime).toBe(100)
   })
 
   describe('chat tool calls without an index', () => {

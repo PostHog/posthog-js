@@ -761,7 +761,9 @@ export class PostHogFeatureFlags implements Extension {
             const featureFlagPayloads = Object.keys(bootstrapPayloads)
                 .filter((key) => featureFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
-                    res[key] = bootstrapPayloads[key]
+                    res[key] = config.encodeBootstrapPayloads
+                        ? JSON.stringify(bootstrapPayloads[key])
+                        : bootstrapPayloads[key]
                     return res
                 }, {})
 
@@ -992,7 +994,13 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
-        // Notify browser-v1 facade listeners before the debounced request starts.
+        // Debounce multiple calls on the same tick
+        this._reloadDebouncer = setTimeout(() => {
+            this._callFlagsEndpoint()
+        }, 5)
+
+        // Notify listeners before the debounced request starts. The debounce is already installed,
+        // so a reload requested from a listener joins this request instead of notifying again.
         this._reloadingHandlers.slice().forEach((handler) => {
             try {
                 handler()
@@ -1000,11 +1008,6 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.error('Error while running feature flags reloading callback', error)
             }
         })
-
-        // Debounce multiple calls on the same tick
-        this._reloadDebouncer = setTimeout(() => {
-            this._callFlagsEndpoint()
-        }, 5)
     }
 
     /** Await the next requested evaluation, rather than cached or locally injected flag changes. */

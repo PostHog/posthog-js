@@ -1179,14 +1179,22 @@ export class PostHogPersistence {
             const previousUserState = localEntryBeforeMerge?.[USER_STATE] ?? USER_STATE_ANONYMOUS
             const nextDistinctId = entry[DISTINCT_ID]
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
+            const sessionEntryBeforeMerge = sessionStore._parse(this._name)
+            const hasPreviousLocalIdentity =
+                !isUndefined(previousDistinctId) ||
+                !isUndefined(localEntryBeforeMerge?.[USER_STATE]) ||
+                (!!sessionEntryBeforeMerge && !isEmptyObject(sessionEntryBeforeMerge))
             if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
-                this._cookieIdentityChangePending = true
-                if (!this._disabled) {
-                    sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                if (hasPreviousLocalIdentity) {
+                    this._cookieIdentityChangePending = true
+                    if (!this._disabled) {
+                        sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                    }
                 }
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
                 const siblingReset =
+                    hasPreviousLocalIdentity &&
                     nextUserState === USER_STATE_ANONYMOUS &&
                     (previousUserState === USER_STATE_IDENTIFIED ||
                         cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS ||
@@ -1743,6 +1751,7 @@ export class PostHogPersistence {
     clear(): void {
         this.remove()
         this.props = {}
+        this._campaign_params_url = undefined
     }
 
     /**
