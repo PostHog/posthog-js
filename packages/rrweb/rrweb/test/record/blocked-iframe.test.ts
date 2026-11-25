@@ -464,13 +464,19 @@ describe('record a blocked iframe', () => {
     { blocking: 'a blocked parent', blockSelector: undefined, fullSnapshot: false },
     { blocking: 'a blocked parent', blockSelector: undefined, fullSnapshot: true },
     {
+      blocking: 'a block added and removed in one task',
+      blockSelector: undefined,
+      fullSnapshot: false,
+      sameTask: true,
+    },
+    {
       blocking: 'a selector that matches through a sibling',
       blockSelector: '.rr-block + iframe',
       fullSnapshot: false,
     },
   ])(
     'drops a cross-origin message from an iframe briefly blocked by $blocking before it arrived (full snapshot: $fullSnapshot)',
-    async ({ blockSelector, fullSnapshot }) => {
+    async ({ blockSelector, fullSnapshot, sameTask }) => {
     const page = await browser.newPage();
     try {
       await page.goto('about:blank');
@@ -513,12 +519,24 @@ describe('record a blocked iframe', () => {
       await iframeFrame.evaluate(() => {
         (window as unknown as { hold: boolean }).hold = true;
       });
-      await topFrame.evaluate(
-        (id) => document.getElementById(id)!.classList.add('rr-block'),
-        blockTarget,
-      );
-      await waitForRAF(page);
-      await appendParagraph(iframeFrame, LATER_CONTENT);
+      if (sameTask) {
+        // the child posts while blocked; the parent observes add and remove
+        // in a single mutation batch
+        await appendParagraph(iframeFrame, LATER_CONTENT);
+        await waitForRAF(page);
+        await topFrame.evaluate((id) => {
+          const el = document.getElementById(id)!;
+          el.classList.add('rr-block');
+          el.classList.remove('rr-block');
+        }, blockTarget);
+      } else {
+        await topFrame.evaluate(
+          (id) => document.getElementById(id)!.classList.add('rr-block'),
+          blockTarget,
+        );
+        await waitForRAF(page);
+        await appendParagraph(iframeFrame, LATER_CONTENT);
+      }
       await waitForRAF(page);
       await topFrame.evaluate(
         (id, fullSnapshot) => {

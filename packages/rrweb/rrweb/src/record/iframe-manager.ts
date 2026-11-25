@@ -1,5 +1,6 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
 import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
+import dom from '@posthog/rrweb-utils';
 import type { CrossOriginIframeMessageEvent } from '../types';
 import {
   callSafely,
@@ -141,7 +142,23 @@ export class IframeManager {
       )
     )
       return;
+    // A batch can hold a class being added and removed again, so an element
+    // that had the block class at any point counts, not only its final state.
+    let blockedAtSomePoint: Node[] | undefined;
+    for (const m of mutations) {
+      if (
+        m.type === 'attributes' &&
+        m.attributeName === 'class' &&
+        m.oldValue &&
+        this.classValueBlocks(m.target as Element, m.oldValue)
+      )
+        (blockedAtSomePoint ??= []).push(m.target);
+    }
     for (const iframeEl of [...this.relayingIframes]) {
+      if (blockedAtSomePoint?.some((n) => dom.contains(n, iframeEl))) {
+        this.releaseBlockedIframe(iframeEl);
+        continue;
+      }
       let sameOrigin = false;
       try {
         sameOrigin = Boolean(iframeEl.contentDocument);
@@ -150,10 +167,14 @@ export class IframeManager {
       }
       // A same-origin document is observed directly and checked per event.
       if (sameOrigin || !this.isIframeBlocked(iframeEl)) continue;
-      if (iframeEl.contentWindow)
-        this.blockedRelayWindows.add(iframeEl.contentWindow);
       this.releaseBlockedIframe(iframeEl);
     }
+  }
+
+  private classValueBlocks(el: Element, value: string): boolean {
+    const probe = el.ownerDocument.createElement('div');
+    probe.className = value;
+    return _isBlockedElement(probe, this.blockClass, null);
   }
 
   public registerLoadListenerDisposer(
@@ -596,7 +617,8 @@ export class IframeManager {
         this.blockedDocuments.add(iframeEl.contentDocument);
     });
     this.blockedListener?.(iframeEl);
-    this.relayingIframes.delete(iframeEl);
+    if (this.relayingIframes.delete(iframeEl) && iframeEl.contentWindow)
+      this.blockedRelayWindows.add(iframeEl.contentWindow);
     this.releaseIframe(iframeEl);
     this.crossOriginIframeMirror.reset(iframeEl);
     this.crossOriginIframeStyleMirror.reset(iframeEl);
