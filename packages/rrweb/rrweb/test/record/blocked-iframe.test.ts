@@ -383,6 +383,83 @@ describe('record a blocked iframe', () => {
     }
   });
 
+  it('does not record a stylesheet adopted by a same-origin iframe in the same task it gets blocked', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<body></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const eventsBeforeBlocking = events.length;
+
+      await page.evaluate((content) => {
+        const iframe = document.querySelector('iframe')!;
+        iframe.classList.add('rr-block');
+        const doc = iframe.contentDocument!;
+        const sheet = new (doc.defaultView as typeof window).CSSStyleSheet();
+        sheet.replaceSync(`body::after { content: "${content}"; }`);
+        doc.adoptedStyleSheets = [sheet];
+      }, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        LATER_CONTENT,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not record a stylesheet that finishes loading in a same-origin iframe after it gets blocked', async () => {
+    const page = await browser.newPage();
+    try {
+      // the iframe must share the stylesheet's origin so its rules are readable
+      await page.goto(`${getServerURL(server)}/html/blank.html`);
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<body></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const eventsBeforeBlocking = events.length;
+
+      // the test server answers after 100ms, so the link loads after the block
+      await page.evaluate((href) => {
+        const iframe = document.querySelector('iframe')!;
+        const link = iframe.contentDocument!.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        iframe.contentDocument!.head.append(link);
+        setTimeout(() => iframe.classList.add('rr-block'), 20);
+      }, `${getServerURL(server)}/html/css-variable-padding.css`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForRAF(page);
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        'rgb(1, 2, 3)',
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {

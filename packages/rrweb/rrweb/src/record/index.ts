@@ -656,6 +656,10 @@ function record<T = eventWithTime>(
     blockClass,
     blockSelector,
   });
+  stylesheetManager.setBlockedDocumentCheck(
+    (doc) => iframeManager.isBlockedDocument(doc),
+    (id) => mirror.getNode(id),
+  );
 
   /**
    * Exposes mirror to the plugins
