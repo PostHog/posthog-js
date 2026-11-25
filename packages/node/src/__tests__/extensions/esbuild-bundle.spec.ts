@@ -88,7 +88,11 @@ describe('esbuild bundle of the built package', () => {
         logLevel: 'silent',
         plugins: [withoutOpenTelemetry],
       })
-      return Object.keys(result.metafile.inputs)
+      return Object.values(result.metafile.outputs).flatMap((output) =>
+        Object.entries(output.inputs)
+          .filter(([, meta]) => meta.bytesInOutput > 0)
+          .map(([input]) => input)
+      )
     }
     const fromReactEmailRender = (input: string): boolean => input.includes('/@react-email/render/')
 
@@ -121,12 +125,107 @@ describe('esbuild bundle of the built package', () => {
       expect(inputs.some(fromReactEmailRender)).toBe(true)
     })
 
+    it.each([
+      ['Cloudflare Workers', 'posthog-node', ['workerd', 'worker', 'browser']],
+      ['Cloudflare Workers edge subpath', 'posthog-node/edge', ['workerd', 'worker', 'browser']],
+      ['Convex', 'posthog-node', ['convex', 'module']],
+    ])(
+      'loads require("%s") bundled to ESM without dynamic require shims even with treeShaking disabled',
+      async (_runtime, specifier, conditions) => {
+        const result = await build({
+          stdin: {
+            contents: `const { PostHog } = require(${JSON.stringify(specifier)})\nexport const library = PostHog.prototype.getLibraryId()`,
+            resolveDir: packageRoot,
+          },
+          bundle: true,
+          platform: 'browser',
+          format: 'esm',
+          conditions,
+          treeShaking: false,
+          write: false,
+          logLevel: 'silent',
+        })
+        const bundle = Buffer.from(result.outputFiles[0].text).toString('base64')
+        const { library } = await import(`data:text/javascript;base64,${bundle}`)
+        expect(library).toBe('posthog-edge')
+      }
+    )
+
+    it('returns missing_react_renderer in a real isolated bundle without reactEmailRenderer and renders when passed', async () => {
+      const runIsolatedSend = async (withRenderer: boolean) => {
+        const contents = `
+          import { createElement } from 'react'
+          import { PostHog } from 'posthog-node'
+          ${withRenderer ? "import * as reactEmailRenderer from '@react-email/render'" : ''}
+          export async function run() {
+            const sent = []
+            const client = new PostHog('phc_test', {
+              host: 'https://us.i.posthog.com',
+              secretKey: 'phs_test',
+              enableLocalEvaluation: false,
+              ${withRenderer ? 'reactEmailRenderer,' : ''}
+              fetch: async (_url, init) => {
+                sent.push(JSON.parse(init.body))
+                return {
+                  status: 200,
+                  text: async () => JSON.stringify({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
+                  json: async () => ({ message_id: '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b', replayed: false, warnings: [] }),
+                }
+              },
+            })
+            const response = await client.emails.send({
+              to: 'ada@example.com',
+              templateKey: 'welcome',
+              subject: 'Welcome',
+              react: createElement('p', null, 'Welcome, Ada'),
+            })
+            return {
+              sent,
+              data: response.data,
+              error: response.error ? { code: response.error.code, fix: response.error.fix } : null,
+            }
+          }
+        `
+        const result = await build({
+          stdin: { contents, resolveDir: packageRoot },
+          bundle: true,
+          platform: 'browser',
+          format: 'esm',
+          conditions: ['workerd', 'worker', 'browser'],
+          external: ['node:*'],
+          write: false,
+          logLevel: 'silent',
+        })
+        const bundle = Buffer.from(result.outputFiles[0].text).toString('base64')
+        const mod = await import(`data:text/javascript;base64,${bundle}`)
+        return mod.run()
+      }
+
+      const withoutOpt = await runIsolatedSend(false)
+      expect(withoutOpt.data).toBeNull()
+      expect(withoutOpt.sent).toEqual([])
+      expect(withoutOpt.error).toMatchObject({
+        code: 'missing_react_renderer',
+        fix: expect.stringContaining('reactEmailRenderer'),
+      })
+
+      const withOpt = await runIsolatedSend(true)
+      expect(withOpt.error).toBeNull()
+      expect(withOpt.sent).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('<p>Welcome, Ada</p>'),
+          text: 'Welcome, Ada',
+        }),
+      ])
+    })
+
     it.each(['react-renderer-import.mjs', 'react-renderer-import.js'])(
       'keeps the comments that tell webpack and Vite to skip the import in %s',
       (file) => {
         const built = readFileSync(fileURLToPath(new URL(`../../../dist/emails/${file}`, import.meta.url)), 'utf8')
 
-        expect(built).toContain('import(/* webpackIgnore: true */ /* @vite-ignore */ REACT_RENDERER_PACKAGE)')
+        expect(built).toMatch(/import\(\s*\/\* webpackIgnore: true \*\/\s*\/\* @vite-ignore \*\//)
+        expect(built).not.toContain('__rslib_import_meta_url__')
       }
     )
   })

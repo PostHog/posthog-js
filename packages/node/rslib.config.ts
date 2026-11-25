@@ -1,9 +1,11 @@
 import { defineConfig } from '@rslib/core'
 
+const REACT_RENDERER_IMPORT_FILE = /react-renderer-import\.[cm]?js$/
+
 export default defineConfig({
   lib: [
     { format: 'esm', syntax: 'es2023', dts: true, bundle: false },
-    { format: 'cjs', syntax: 'es2023', dts: true, bundle: false },
+    { format: 'cjs', syntax: 'es2023', dts: true, bundle: false, shims: { cjs: { 'import.meta.url': false } } },
   ],
   source: {
     entry: {
@@ -13,10 +15,7 @@ export default defineConfig({
   },
   tools: {
     bundlerChain: (chain) => {
-      // rslib's minifier drops the `webpackIgnore` magic comment, so leave the one file that needs it unminified.
-      chain.optimization
-        .minimizer('js')
-        .tap(([options]) => [{ ...options, exclude: /react-renderer-import\.[cm]?js$/ }])
+      chain.optimization.minimizer('js').tap(([options]) => [{ ...options, exclude: REACT_RENDERER_IMPORT_FILE }])
     },
   },
 })

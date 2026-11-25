@@ -1,6 +1,5 @@
 import * as reactEmailRender from '@react-email/render'
 import { render, toPlainText } from '@react-email/render'
-// Importing react loads @types/react so @react-email/render's React.ReactNode parameter is checked, not degraded to any.
 import { createElement, type ReactElement, type ReactNode } from 'react'
 import { PostHog as EdgePostHog } from '../../entrypoints/index.edge'
 import { PostHog } from '../../entrypoints/index.node'

@@ -1067,12 +1067,13 @@ describe('emails', () => {
       expect(inbox).toEqual([])
     })
 
-    it('renders with the reactEmailRenderer option without loading @react-email/render', async () => {
+    it('renders with a custom reactEmailRenderer wrapper without loading @react-email/render', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
       withoutRenderer()
       makeClient({
         reactEmailRenderer: {
-          render: async () => '<p>Rendered by the option</p>',
-          toPlainText: () => 'Rendered by the option',
+          render: (element) => render(element, { pretty: true }),
+          toPlainText,
         },
       })
 
@@ -1080,8 +1081,12 @@ describe('emails', () => {
 
       expect(error).toBeNull()
       expect(inbox).toEqual([
-        expect.objectContaining({ html: '<p>Rendered by the option</p>', text: 'Rendered by the option' }),
+        expect.objectContaining({
+          html: expect.stringContaining('\n'),
+          text: 'Welcome, Ada',
+        }),
       ])
+      expect(inbox[0].html).toContain('<p>Welcome, Ada</p>')
     })
 
     it('renders with the @react-email/render module passed as reactEmailRenderer', async () => {
@@ -1095,6 +1100,63 @@ describe('emails', () => {
       expect(inbox).toEqual([
         expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
       ])
+    })
+
+    it('renders with reactEmailRenderer after send() returns, not synchronously', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      let renderedSynchronously = false
+      makeClient({
+        reactEmailRenderer: {
+          render: (element) => {
+            renderedSynchronously = true
+            return render(element)
+          },
+          toPlainText,
+        },
+      })
+
+      const pending = sendReact({ react: welcome })
+      expect(renderedSynchronously).toBe(false)
+
+      const { error } = await pending
+      expect(error).toBeNull()
+      expect(renderedSynchronously).toBe(true)
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.render resolves to a non-string even with text supplied', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => undefined as unknown as string,
+          toPlainText: (html) => html,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome, text: 'Fallback text' })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.toPlainText returns a non-string', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => '<p>Welcome, Ada</p>',
+          toPlainText: () => undefined as unknown as string,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
     })
 
     it('sends html without loading @react-email/render', async () => {
