@@ -2,9 +2,9 @@ import type { Logger, PostHogEventProperties } from '@posthog/core'
 
 import { CaptureLane, type CaptureLaneConfig } from '@/capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES } from '@/capture-lane/limits'
-import { CaptureError } from '@/capture-v1/errors'
-import type { V1SendOptions } from '@/capture-v1/sender'
-import { type SerializedV1Event, serializeV1Event } from '@/capture-v1/serialize'
+import { CaptureError } from '@posthog/core/capture-v1'
+import type { V1SendOptions } from '@posthog/core/capture-v1'
+import { type SerializedV1Event, serializeV1Event } from '@posthog/core/capture-v1'
 
 type SendBehavior = (events: SerializedV1Event[], options: V1SendOptions) => Promise<SerializedV1Event[]>
 

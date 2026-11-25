@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.22.0
+
+### Minor Changes
+
+- [#5835](https://github.com/PostHog/posthog-js/pull/5835) [`6e58c08`](https://github.com/PostHog/posthog-js/commit/6e58c08a93903cf46a1e78ced42a90f9b9dd1c37) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Read revisions, correct scores, and update or delete accepted offline evaluation items, results, and payloads.
+  (2026-11-20)
+
 ## 8.21.1
 
 ### Patch Changes

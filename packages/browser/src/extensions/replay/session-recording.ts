@@ -104,6 +104,9 @@ export class SessionRecording implements Extension {
     }
 
     get status(): SessionRecordingStatus {
+        if (this.isReplayOff) {
+            return DISABLED
+        }
         if (this._recordingStatus === AWAITING_CONFIG || this._recordingStatus === MISSING_CONFIG) {
             return this._recordingStatus
         }
@@ -154,6 +157,16 @@ export class SessionRecording implements Extension {
         const enabled_client_side = !this._config.disable_session_recording
         const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
+    }
+
+    // Not `!_isRecordingEnabled`: missing remote config means awaiting config, not off.
+    /** @internal */
+    get isReplayOff(): boolean {
+        return (
+            !!this._config.disable_session_recording ||
+            this._instance.consent.isOptedOut() ||
+            this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled === false
+        )
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
@@ -539,6 +552,9 @@ export class SessionRecording implements Extension {
      * when looking at the event feed for a session
      */
     get sdkDebugProperties(): Properties {
+        if (this.isReplayOff) {
+            return { $recording_status: DISABLED }
+        }
         const properties: Properties = {}
         for (const key of SESSION_DEBUG_PROPERTY_KEYS) {
             const value = this._instance.sessionPersistence?.get_property(key)

@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.87.1",
+  "version": "4.87.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -25,6 +25,7 @@
     }
   },
   "files": [
+    "MIGRATION.md",
     "dist/",
     "tooling/"
   ],

@@ -1,4 +1,4 @@
-import { gzipCompress, isGzipSupported } from '@posthog/core'
+import { gzipCompress, isGzipSupported } from '../gzip'
 
 export const CAPTURE_COMPRESSIONS = ['none', 'gzip', 'deflate', 'zstd'] as const
 

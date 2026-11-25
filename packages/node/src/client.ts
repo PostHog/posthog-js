@@ -93,15 +93,15 @@ import ErrorTracking from './extensions/error-tracking'
 import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
-import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
-import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
-import type { CaptureError } from './capture-v1/errors'
+import { V1CaptureSender, type V1CaptureSenderConfig } from '@posthog/core/capture-v1'
+import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from '@posthog/core/capture-v1'
+import type { CaptureError } from '@posthog/core/capture-v1'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
-import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from './capture-v1/compression'
-import { canonicalizeUuid, eventUuidv7 } from './capture-v1/uuid'
-import { readEventOptions } from './capture-v1/transform'
+import { type CaptureCompressor, resolveCaptureCodec, webCompressor } from '@posthog/core/capture-v1'
+import { canonicalizeUuid, eventUuidv7 } from '@posthog/core/capture-v1'
+import { readEventOptions } from '@posthog/core/capture-v1'
 import {
   dropIdentifyStyleLegacyPersonProfile,
   fillIdentifyStylePersonProfile,
@@ -2003,9 +2003,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    * ```
    *
+   * @remarks
+   * Readiness requires at least one loaded flag definition. A successful load that returns no
+   * flags (for example, after every flag is deleted) does not count as ready, and readiness
+   * returns to `false` if a later load returns no flags. To react to every successful load,
+   * including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
+   * number of loaded flags.
+   *
    * {@label Feature flags}
    *
-   * @returns true if local evaluation is ready, false otherwise
+   * @returns true if flag definitions have loaded successfully and include at least one flag, false otherwise
    */
   isLocalEvaluationReady(): boolean {
     return this.featureFlagsPoller?.isLocalEvaluationReady() ?? false
@@ -2078,10 +2085,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
    * ```
    *
+   * @remarks
+   * Like {@link isLocalEvaluationReady}, this requires at least one loaded flag definition. If the
+   * first load after the call returns no flags, the promise resolves to `false` without waiting for
+   * the timeout. To react to every successful load, including empty ones, listen for the
+   * `localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
+   *
    * {@label Feature flags}
    *
    * @param timeoutMs - Timeout in milliseconds (default: 30000)
-   * @returns Promise that resolves to true if ready, false if timed out
+   * @returns Promise that resolves to true if ready, false if timed out or if the next load returned no flags
    */
   async waitForLocalEvaluationReady(timeoutMs: number = THIRTY_SECONDS): Promise<boolean> {
     if (this.isLocalEvaluationReady()) {
