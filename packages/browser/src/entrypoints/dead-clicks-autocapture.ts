@@ -286,6 +286,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._touchStart = undefined
     }
 
+    discardPending(): void {
+        clearTimeout(this._checkClickTimer)
+        this._checkClickTimer = undefined
+        this._clicks = []
+        this._touchStart = undefined
+    }
+
     private _onMutation(mutations: MutationRecord[]): void {
         // every scan in this batch reads the DOM as it is now, so a node an earlier scan visited
         // needs no scan of its own

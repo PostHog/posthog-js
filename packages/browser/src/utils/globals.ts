@@ -247,6 +247,7 @@ export interface LazyLoadedSessionRecordingInterface {
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+    discardPending?: () => void
 }
 
 export interface LazyLoadedConversationsInterface {

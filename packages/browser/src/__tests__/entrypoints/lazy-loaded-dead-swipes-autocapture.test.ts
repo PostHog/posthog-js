@@ -90,6 +90,14 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
+        it('does not store a swipe whose gesture spans a consent change', () => {
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+            lazyLoadedDeadClicksAutocapture.discardPending()
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
         it('does not store a candidate for a tiny movement below the threshold', () => {
             triggerSwipe(document.body, { x: 100, y: 100 }, { x: 110, y: 105 })
 

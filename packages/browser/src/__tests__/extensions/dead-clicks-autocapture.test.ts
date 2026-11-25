@@ -6,6 +6,7 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from '../../extensions/dead-clicks-autocapture'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
+import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
 
 describe('DeadClicksAutocapture', () => {
     let mockStart: VitestMock
@@ -118,6 +119,74 @@ describe('DeadClicksAutocapture', () => {
 
         expect(mockStop).toHaveBeenCalled()
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeUndefined()
+    })
+
+    it('does not throw on consent changes when the lazy bundle has no discardPending', async () => {
+        const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
+
+        expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture?.discardPending).toBeUndefined()
+        expect(() => {
+            instance.opt_out_capturing()
+            instance.opt_in_capturing()
+        }).not.toThrow()
+    })
+
+    describe('consent transitions', () => {
+        beforeEach(() => {
+            vi.useFakeTimers()
+            assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph, config) =>
+                new LazyLoadedDeadClicksAutocapture(ph, config)
+        })
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        const click = () => document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        it.each([
+            [
+                'capturing turns off and another tab grants consent again',
+                undefined,
+                () => {},
+                (ph: PostHog) => {
+                    ph.opt_out_capturing()
+                    ph.consent.optInOut(true)
+                },
+            ],
+            [
+                'a cookieless visitor accepts',
+                'on_reject' as const,
+                (ph: PostHog) => ph.opt_out_capturing(),
+                (ph: PostHog) => ph.opt_in_capturing(),
+            ],
+            [
+                'a visitor who accepted rejects into cookieless mode',
+                'on_reject' as const,
+                (ph: PostHog) => ph.opt_in_capturing(),
+                (ph: PostHog) => ph.opt_out_capturing(),
+            ],
+        ])('reports only the click made after %s', async (_, cookielessMode, setup, transition) => {
+            const beforeSend = vi.fn().mockImplementation((e) => e)
+            const instance = await createPosthogInstance(uuidv7(), {
+                capture_dead_clicks: true,
+                capture_pageview: false,
+                cookieless_mode: cookielessMode,
+                before_send: beforeSend,
+            })
+            setup(instance)
+
+            click()
+            vi.advanceTimersByTime(100)
+            transition(instance)
+            vi.advanceTimersByTime(1000)
+            const secondClickAt = Date.now()
+            click()
+            vi.advanceTimersByTime(5000)
+
+            const deadClicks = beforeSend.mock.calls.filter(([e]) => e.event === '$dead_click')
+            expect(deadClicks.map(([e]) => e.properties.$dead_click_event_timestamp)).toEqual([secondClickAt])
+        })
     })
 
     describe('config', () => {

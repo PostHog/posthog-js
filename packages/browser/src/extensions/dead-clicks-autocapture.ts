@@ -121,4 +121,8 @@ export class DeadClicksAutocapture implements Extension {
             logger.info(`stopping...`)
         }
     }
+
+    discardPending(): void {
+        this._lazyLoadedDeadClicksAutocapture?.discardPending?.()
+    }
 }
