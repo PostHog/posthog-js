@@ -134,6 +134,15 @@
                   }
                 : false,
         capture_dead_clicks: lab.scenario === 'dead-clicks',
+        ...(lab.scenario === 'exceptions'
+            ? {
+                  capture_exceptions: {
+                      capture_unhandled_errors: true,
+                      capture_unhandled_rejections: true,
+                      capture_console_errors: true,
+                  },
+              }
+            : {}),
         enable_heatmaps: false,
         ...(lab.scenario === 'heatmaps' ? { capture_heatmaps: { flush_interval_milliseconds: 1000 } } : {}),
         ...(['rage-clicks', 'heatmaps'].includes(lab.scenario) ? { rageclick: true } : {}),

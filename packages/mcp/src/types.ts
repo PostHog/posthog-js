@@ -91,6 +91,12 @@ export interface McpAnalytics {
    * verbatim (a customer event, so it is not `$`-prefixed). Resolves once the event
    * has been processed. Use for domain-specific actions that aren't auto-captured
    * (user feedback, workflow milestones, etc).
+   *
+   * Captured while a request is handled, the event carries that request's session and
+   * identity. That needs `AsyncLocalStorage` (Node, Bun, Deno, Vercel Edge, Cloudflare
+   * Workers with `nodejs_compat` or `nodejs_als`). Without it, nothing tells requests
+   * apart, so the event gets a session of its own and no identity rather than another
+   * caller's, and the SDK logs one warning.
    */
   capture(eventData: CaptureEventData): Promise<void>
 }
@@ -142,8 +148,9 @@ export interface MCPAnalyticsOptions {
    * instances.
    *
    * On by default, and fully inert when disabled: no parameter is injected, no schema is
-   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
-   * before (the request's own session id, else this instance's).
+   * touched, no prompt-back is appended, and `$session_id` comes from the request's own
+   * session, else a one-client connection's (stdio), else a fresh one for each stateless
+   * HTTP request that carries none.
    */
   enableConversationId?: boolean
   /**
@@ -357,6 +364,8 @@ export interface MCPAnalyticsModelOptions {
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
+/** Which source grouped the call into its `$session_id`, first match wins. */
+export type MCPAnalyticsSessionSource = 'conversation' | 'transport' | 'client_metadata' | 'generated'
 
 export type ToolCallback =
   | ((
@@ -475,6 +484,7 @@ export interface Event {
   serverName?: string
   serverVersion?: string
   sessionId: string
+  sessionSource?: MCPAnalyticsSessionSource
   timestamp: Date
   toolCategory?: string
   toolDescription?: string
@@ -630,6 +640,9 @@ export interface MCPAnalyticsData {
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
   toolInputSchemas: BoundedCache<Map<string, unknown>>
+  /** From `cacheToolListing`: outside the LRU, so other sessions' listings never evict it. */
+  seededToolInputSchemas?: Map<string, unknown>
+  warnedUnattributedCustomEvents?: boolean
 }
 
 export interface CaptureEventData {
@@ -742,6 +755,12 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
   response?: unknown
+  /**
+   * The `tools/call` request's `_meta`. With the {@link McpCaptureCommon.clientUserAgent}
+   * or `_meta` client name that recognizes the client, its conversation id (such
+   * as ChatGPT's `openai/session`) sets `$session_id` in place of `sessionId`.
+   */
+  requestMeta?: JsonRecord
   /** Wall-clock duration → `$mcp_duration_ms`. */
   durationMs?: number
   /** Whether the call failed → `$mcp_is_error`. */
@@ -819,6 +838,12 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
    */
   collectFeedback?: boolean
+  /**
+   * The `tools/list` request's HTTP headers. A client recognized by its
+   * `User-Agent` as naming its conversation in `_meta` (ChatGPT) gets no
+   * `conversation_id` argument.
+   */
+  headers?: Record<string, unknown>
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
@@ -831,12 +856,22 @@ export interface PrepareToolCallOptions {
    * by that name is dispatched normally instead of being flagged as feedback.
    */
   originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
-  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata and conversation ids. */
   requestMeta?: JsonRecord
   /**
-   * A session id carried by the request or transport. A valid echoed
-   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
-   * from minting a second session handle.
+   * The request's HTTP headers. Their `User-Agent` recognizes clients that name
+   * their conversation in `_meta`, such as ChatGPT's `openai/session`.
+   */
+  headers?: Record<string, unknown>
+  /**
+   * The `initialize` `clientInfo`, when you hold one bound to this request's
+   * transport session. Recognizes a client over stdio, which has no `User-Agent`.
+   */
+  clientInfo?: { name?: string; version?: string }
+  /**
+   * A session id carried by the request or transport. A client conversation id
+   * or a valid echoed `conversation_id` takes precedence. Otherwise this value
+   * prevents the SDK from minting a second session handle.
    */
   sessionId?: string
 }

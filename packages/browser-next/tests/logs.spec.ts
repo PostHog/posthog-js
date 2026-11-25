@@ -1,5 +1,4 @@
 import { requireInstalledExtension } from './helpers'
-import type { Client } from '@posthog/browser-common'
 import { createBufferedRootPostHog as createPostHog } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { logs } from '../src/products/logs/logs'
@@ -20,7 +19,6 @@ const defaults = {
     storage: false,
     navigator: false,
     flags: false,
-    analytics: false,
     capturePageview: false,
 } as const
 const remoteConfig = {
@@ -187,7 +185,7 @@ describe('logs', () => {
             config.serviceName = 'mutated'
             config.resourceAttributes!.region = 'changed'
             const captured = vi.fn()
-            requireInstalledExtension(client.analytics).onEvent(captured)
+            client.onEvent(captured)
             getLogs(client).captureLog({ body: 'hello', level: 'warn', attributes: { custom: 1 } })
             await getLogs(client).flush()
             expect(beforeSend).toHaveBeenCalledOnce()
@@ -271,7 +269,7 @@ describe('logs', () => {
         await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
         getLogs(client).captureLog({ body: 'before reset' })
-        requireInstalledExtension(client.analytics).reset()
+        client.reset()
         await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
         getLogs(client).captureLog({ body: 'fresh' })
@@ -294,8 +292,8 @@ describe('logs', () => {
             await getLogs(client).flush()
             expect(fetch).toHaveBeenCalledOnce()
             const captured = vi.fn()
-            requireInstalledExtension(client.analytics).onEvent(captured)
-            requireInstalledExtension(client.analytics).capture('analytics works')
+            client.onEvent(captured)
+            client.capture('analytics works')
             expect(captured).toHaveBeenCalledOnce()
             await client.shutdown(0)
             const count = fetch.mock.calls.length
@@ -364,23 +362,11 @@ describe('logs', () => {
     })
 
     it('allows consented requests during shutdown without treating shutdown as a transport gate', async () => {
-        let ordinary!: Client
         const fetch = vi.fn(async (_url: RequestInfo | URL) => new Response('{}'))
-        const client = await create({
-            fetch,
-            extensions: [
-                {
-                    name: 'ordinary',
-                    setup: (value) => {
-                        ordinary = value.sharedClient
-                    },
-                },
-            ],
-        })
+        const client = await create({ fetch })
         getLogs(client).captureLog({ body: 'before closing' })
         const closing = client.shutdown(10)
         expect((await client.sendRequest('/ordinary')).statusCode).toBe(200)
-        expect((await ordinary.sendRequest('/ordinary')).statusCode).toBe(200)
         await closing
         expect(fetch.mock.calls.some(([url]) => String(url).includes('/i/v1/logs'))).toBe(true)
         expect(vi.getTimerCount()).toBe(0)
@@ -565,7 +551,7 @@ describe('logs', () => {
         })
         requireInstalledExtension(client.featureFlags).updateFlags({ enabled: true, disabled: false, variant: 'a' })
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         getLogs(client).captureLog({ body: 'flags' })
         await getLogs(client).flush()
         expect(captured).not.toHaveBeenCalled()
@@ -600,7 +586,7 @@ describe('logs', () => {
         await getLogs(client).flush()
         expect(client.session).toBeUndefined()
         expect(records(bodies[0]!)[0]?.attributes?.some(({ key }) => key === 'sessionStartTimestamp')).toBe(false)
-        requireInstalledExtension(client.analytics).capture('admitted')
+        client.capture('admitted')
         const session = client.session
         vi.setSystemTime(1_700_000_000_100)
         getLogs(client).captureLog({ body: 'with session' })

@@ -258,6 +258,7 @@ export class BrowserClientAdapter implements Client {
             $set: options.set as Properties | undefined,
             $set_once: options.setOnce as Properties | undefined,
             ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
+            ...(options.delivery === 'immediate' ? { send_instantly: true } : {}),
         }
         return this._notRateLimited(this.instance.capture(event as EventName, properties, captureOptions))
     }

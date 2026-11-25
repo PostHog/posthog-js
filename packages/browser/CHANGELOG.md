@@ -1,5 +1,115 @@
 # posthog-js
 
+## 1.455.0
+
+### Minor Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters, payloads, `onFeatureFlags` callbacks and `$feature_flag_called` events return and send the same values as before, and older posthog-js versions can still read the stored flags. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A `v=4` flag record with a field of the wrong JSON type, such as a string `metadata.version`, reads as a disabled flag without a payload. Other flags in the same response are not affected. Tests that mock `/flags` may need to match the new URL. (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3), [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3)]:
+  - @posthog/browser-common@0.14.1
+
+## 1.454.8
+
+### Patch Changes
+
+- [#5874](https://github.com/PostHog/posthog-js/pull/5874) [`053d7a6`](https://github.com/PostHog/posthog-js/commit/053d7a66b95c4f3bfae579760be7df723f683890) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Session replay restarts its recorder when it stops taking full snapshots, and no longer starts a second recorder when it restarts during its own start.
+  (2026-11-25)
+
+- [#5862](https://github.com/PostHog/posthog-js/pull/5862) [`0023700`](https://github.com/PostHog/posthog-js/commit/0023700ed4efa941793ac8ac86fc52d7a13a9050) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Avoid crashes when XHR tracing encounters a missing or faulty `send` accessor.
+  (2026-11-25)
+
+## 1.454.7
+
+### Patch Changes
+
+- [#5864](https://github.com/PostHog/posthog-js/pull/5864) [`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597) Thanks [@joaohenriquesfr](https://github.com/joaohenriquesfr)! - Add the private `__preview_replay_early_fetch_response` option, which stops Session Replay from holding back streamed fetch responses while it records their body. In WebKit, a request aborted while its body is being read then rejects with a `TypeError` instead of an `AbortError`.
+  (2026-11-25)
+- Updated dependencies [[`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597)]:
+  - @posthog/types@1.427.2
+
+## 1.454.6
+
+### Patch Changes
+
+- [#5849](https://github.com/PostHog/posthog-js/pull/5849) [`b9be6b0`](https://github.com/PostHog/posthog-js/commit/b9be6b04fb7c22e8c514a8bc4d4b07070ccb147d) Thanks [@yoarajota](https://github.com/yoarajota)! - Request URLs keep query values that contain `=`, query keys without a value, and the URL fragment when the SDK adds `compression`, `retry_count` or timestamp params. A `rewriteRequestPath` URL ending in `?sig=abc==` was sent as `?sig=abc`, and `?debug` was sent as `?debug=undefined`.
+  (2026-11-25)
+
+## 1.454.5
+
+### Patch Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stop feature flag reloads requested from reloading listeners from recursing.
+  (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Honor `delivery: 'immediate'` from shared browser extensions as `send_instantly`.
+  (2026-11-25)
+- Updated dependencies [[`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906), [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1)]:
+  - @posthog/browser-common@0.14.0
+
+## 1.454.4
+
+### Patch Changes
+
+- [#5742](https://github.com/PostHog/posthog-js/pull/5742) [`fa50a00`](https://github.com/PostHog/posthog-js/commit/fa50a00aae4f28caa12c9dd8de2afb7f58b40c29) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording the contents of an iframe that is blocked with the block class or block selector.
+  (2026-11-24)
+
+- [#5858](https://github.com/PostHog/posthog-js/pull/5858) [`9d28601`](https://github.com/PostHog/posthog-js/commit/9d286015038da56a284b610b607af6fd2b5268e6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve campaign and referrer properties when `cookieWinsOnConflict` adopts a shared cross-subdomain cookie
+  (2026-11-24)
+
+- [#5805](https://github.com/PostHog/posthog-js/pull/5805) [`e4d5c4f`](https://github.com/PostHog/posthog-js/commit/e4d5c4f1ca64710b5bd41705bfe872aba11f2508) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Tracing headers no longer break an app's request when the distinct ID cannot be sent as a header value: the request goes out without the PostHog tracing headers, and a `fetch(Request)` keeps its body.
+  (2026-11-24)
+
+## 1.454.3
+
+### Patch Changes
+
+- [#5744](https://github.com/PostHog/posthog-js/pull/5744) [`962bf43`](https://github.com/PostHog/posthog-js/commit/962bf436da05f0382ed69d7cc380e9f92d39ede9) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop session replay recording play, pause and other media events that a page dispatches on elements that are not audio or video.
+  (2026-11-24)
+
+## 1.454.2
+
+### Patch Changes
+
+- [#5857](https://github.com/PostHog/posthog-js/pull/5857) [`2f8247d`](https://github.com/PostHog/posthog-js/commit/2f8247d2dcb40bab0495d390b953768f1e1f32bb) Thanks [@slshults](https://github.com/slshults)! - Updated DOMPurify from 3.4.13 to 3.4.18.
+  (2026-11-23)
+- Updated dependencies [[`2f8247d`](https://github.com/PostHog/posthog-js/commit/2f8247d2dcb40bab0495d390b953768f1e1f32bb)]:
+  - @posthog/browser-common@0.13.1
+
+## 1.454.1
+
+### Patch Changes
+
+- [#5833](https://github.com/PostHog/posthog-js/pull/5833) [`8140a3a`](https://github.com/PostHog/posthog-js/commit/8140a3af766a512fd3d3ba5cec5efe8c6e406516) Thanks [@jakesciotto](https://github.com/jakesciotto)! - Stop heatmaps and dead clicks from sending interactions that happened while capturing was off, such as clicks before the visitor consented.
+  (2026-11-23)
+
+## 1.454.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/browser-common@0.13.0
+  - @posthog/types@1.427.1
+
+## 1.453.3
+
+### Patch Changes
+
+- [#5797](https://github.com/PostHog/posthog-js/pull/5797) [`7f9920a`](https://github.com/PostHog/posthog-js/commit/7f9920ae31bed45df8a8d138185e9bef5114e065) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop sending replay debug properties on events captured while session replay is off
+  (2026-11-23)
+
 ## 1.453.2
 
 ### Patch Changes

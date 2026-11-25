@@ -1,5 +1,30 @@
 # @posthog/mcp
 
+## 1.7.1
+
+### Patch Changes
+
+- [#5740](https://github.com/PostHog/posthog-js/pull/5740) [`11b76dc`](https://github.com/PostHog/posthog-js/commit/11b76dc7447eebeb16017d823c62dad8bfff6d9a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A stateless HTTP request that carries no session (no client conversation id, conversation handle, transport session or session token) now gets a fresh `$session_id` of its own, as the sdk-specs MCP analytics spec requires. Before, a shared HTTP instance with conversation anchoring off grouped every client's requests under the instance's id.
+
+  A custom event from `analytics.capture()` now carries the session and identity of the request it was captured in (a tool call, a tool listing or a resource request), even when requests overlap. This uses `AsyncLocalStorage`. On a runtime without it, such as Cloudflare Workers without the `nodejs_compat` or `nodejs_als` flag, custom events are sent with a session of their own and no identity, and the SDK logs one warning. Before, they could take another caller's. (2026-11-25)
+
+- [#5741](https://github.com/PostHog/posthog-js/pull/5741) [`8110b53`](https://github.com/PostHog/posthog-js/commit/8110b53d365e22f9b4bd1114421bffb7ee59076d) Thanks [@lucasheriques](https://github.com/lucasheriques)! - An HTTP request that carries no session no longer takes `$mcp_client_name`, `$mcp_client_version` or `$mcp_protocol_version` from an `initialize` handshake or another request's session token on the same instance. On a shared HTTP instance, those name whichever client came before, so such a request is now unidentified unless it identifies itself, as the sdk-specs MCP analytics spec requires.
+  (2026-11-25)
+
+## 1.7.0
+
+### Minor Changes
+
+- [#5577](https://github.com/PostHog/posthog-js/pull/5577) [`0358eb7`](https://github.com/PostHog/posthog-js/commit/0358eb7dc4c3f9c9b5a548f5c87dc6e0b154874b) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Group tool calls into sessions by the client's own conversation id in `_meta`: ChatGPT's `openai/session`, Codex's `sessionId`, and VS Code's `vscode.conversationId`, each read only from the client its `User-Agent` or client name identifies. The client's id wins over a conversation handle and a transport session. ChatGPT gets no `conversation_id` argument and no handle, so its tool schemas and results stay unchanged. Every event from `instrument()` now records which source grouped it as `$mcp_session_source`. `PostHogMCP.prepareToolList` and `prepareToolCall` take the request's `headers` (and `clientInfo`), and `captureToolCall` takes `requestMeta`.
+  (2026-11-23)
+
+## 1.6.1
+
+### Patch Changes
+
+- [#5836](https://github.com/PostHog/posthog-js/pull/5836) [`02d707e`](https://github.com/PostHog/posthog-js/commit/02d707e4898bcf5921ee8b353bd08c07b3ce58df) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `PostHogMCP` adds the configured `serverBuild` to `captureAi()` and `captureAiImmediate()` events, as it already does for `capture()` and `captureImmediate()`. With `serverBuild` set, an event whose properties cannot be read is now dropped by the client, as without `serverBuild`, instead of throwing from any of the four methods.
+  (2026-11-21)
+
 ## 1.6.0
 
 ### Minor Changes

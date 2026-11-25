@@ -7,12 +7,24 @@ import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import {
+  BoundedCache,
+  IdentityCache,
+  getServerTrackingData,
+  setServerTrackingData,
+  withIdentity,
+} from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
+import { canScopeRequests, currentRequestScope } from './extensions/request-scope'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
-import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionInfo,
+  instanceSessionSource,
+  newSessionId,
+} from './extensions/session'
 import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -25,6 +37,7 @@ import type {
   MCPAnalyticsOptions,
   MCPServerLike,
   McpEvent,
+  SessionInfo,
 } from './types'
 
 /**
@@ -218,6 +231,16 @@ function setupTrackedServer(
   }
 }
 
+/** What the server knows about itself, with nothing of whichever caller last touched shared state. */
+function withoutCaller(sessionInfo: SessionInfo): SessionInfo {
+  return {
+    ...withIdentity(sessionInfo, undefined),
+    clientName: undefined,
+    clientVersion: undefined,
+    protocolVersion: undefined,
+  }
+}
+
 async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: CaptureEventData): Promise<void> {
   if (!eventData || typeof eventData.event !== 'string' || eventData.event.length === 0) {
     throw new Error('`capture` requires an `event` name, e.g. analytics.capture({ event: "feedback_submitted" })')
@@ -228,8 +251,18 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     return
   }
 
+  const scope = currentRequestScope(trackingData)
+  const unattributed = !scope && !(await canScopeRequests())
+  if (unattributed && !trackingData.warnedUnattributedCustomEvents) {
+    trackingData.warnedUnattributedCustomEvents = true
+    trackingData.logger(
+      'Warning: this runtime has no AsyncLocalStorage, so custom events cannot be tied to the request that captured them. ' +
+        'They are sent with a session of their own and no identity. On Cloudflare Workers, enable the nodejs_compat or nodejs_als compatibility flag.'
+    )
+  }
   const event: McpEvent = {
-    sessionId: trackingData.sessionId,
+    sessionId: scope?.sessionId ?? (unattributed ? newSessionId() : trackingData.sessionId),
+    sessionSource: scope ? scope.sessionSource : unattributed ? 'generated' : instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
@@ -239,8 +272,11 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
-  await captureEvent(lowLevelServer, event, trackingData.logger)
-  trackingData.logger(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
+  const attribution =
+    scope?.attribution ??
+    (unattributed ? withoutCaller(getSessionInfo(lowLevelServer, trackingData, event.sessionId)) : undefined)
+  await captureEvent(lowLevelServer, event, trackingData.logger, attribution)
+  trackingData.logger(`Captured event "${eventData.event}" for session ${event.sessionId}`)
 }
 
 export { deriveSessionIdFromMCPSession, newSessionId }
