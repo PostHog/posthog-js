@@ -578,7 +578,7 @@ export class IframeManager {
     } catch {
       return false;
     }
-    if (!frame || frame.nodeName !== 'IFRAME') return false;
+    if (!frame || frame.localName !== 'iframe') return false;
     return this.releaseIfBlocked(frame as HTMLIFrameElement);
   }
 
