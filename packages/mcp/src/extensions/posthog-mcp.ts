@@ -215,14 +215,14 @@ export class PostHogMCP extends PostHog {
   /** Waits for MCP captures still in the pipeline, then flushes like `posthog-node`. */
   override async flush(): Promise<void> {
     await this.#sink.settled()
-    return super.flush()
+    await super.flush()
   }
 
   /** Waits for MCP captures still in the pipeline, then shuts down within the same time budget. */
-  override async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+  override async shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     const deadline = Date.now() + shutdownTimeoutMs
     await raceWithTimeout(this.#sink.settled(), shutdownTimeoutMs)
-    return super._shutdown(Math.max(0, deadline - Date.now()))
+    await super.shutdown(Math.max(0, deadline - Date.now()))
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
