@@ -14,12 +14,13 @@ import {
 export const normalizeFlagsResponse = (
   flagsResponse:
     | PartialWithRequired<PostHogV2FlagsResponse, 'flags'>
-    | PartialWithRequired<PostHogV1FlagsResponse, 'featureFlags' | 'featureFlagPayloads'>
+    | PartialWithRequired<PostHogV1FlagsResponse, 'featureFlags' | 'featureFlagPayloads'>,
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFeatureFlagsResponse => {
   if ('flags' in flagsResponse) {
     // Convert v2 format to v1 format
     const featureFlags = getFlagValuesFromFlags(flagsResponse.flags)
-    const featureFlagPayloads = getPayloadsFromFlags(flagsResponse.flags)
+    const featureFlagPayloads = getPayloadsFromFlags(flagsResponse.flags, decodePayload)
 
     return {
       ...flagsResponse,
@@ -30,7 +31,7 @@ export const normalizeFlagsResponse = (
     // Convert v1 format to v2 format
     const featureFlags = flagsResponse.featureFlags ?? {}
     const featureFlagPayloads = Object.fromEntries(
-      Object.entries(flagsResponse.featureFlagPayloads || {}).map(([k, v]) => [k, parsePayload(v)])
+      Object.entries(flagsResponse.featureFlagPayloads || {}).map(([k, v]) => [k, decodePayload(v)])
     )
 
     const flags = Object.fromEntries(
@@ -87,7 +88,8 @@ export const getFlagValuesFromFlags = (flags: PostHogFlagsResponse['flags']): Po
  * @returns The payloads
  */
 export const getPayloadsFromFlags = (
-  flags: PostHogFlagsResponse['flags']
+  flags: PostHogFlagsResponse['flags'],
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFlagsResponse['featureFlagPayloads'] => {
   const safeFlags = flags ?? {}
   return Object.fromEntries(
@@ -98,7 +100,7 @@ export const getPayloadsFromFlags = (
       })
       .map((flag) => {
         const payload = safeFlags[flag].metadata?.payload as string
-        return [flag, payload ? parsePayload(payload) : undefined]
+        return [flag, payload ? decodePayload(payload) : undefined]
       })
   )
 }
@@ -131,7 +133,8 @@ export const parsePayload = (response: any): any => {
  */
 export const createFlagsResponseFromFlagsAndPayloads = (
   featureFlags: PostHogV1FlagsResponse['featureFlags'],
-  featureFlagPayloads: PostHogV1FlagsResponse['featureFlagPayloads']
+  featureFlagPayloads: PostHogV1FlagsResponse['featureFlagPayloads'],
+  decodePayload: (payload: any) => any = parsePayload
 ): PostHogFeatureFlagsResponse => {
   // If a feature flag payload key is not in the feature flags, we treat it as true feature flag.
   const allKeys = [...new Set([...Object.keys(featureFlags ?? {}), ...Object.keys(featureFlagPayloads ?? {})])]
@@ -144,7 +147,7 @@ export const createFlagsResponseFromFlagsAndPayloads = (
     featureFlagPayloads: featureFlagPayloads ?? {},
   }
 
-  return normalizeFlagsResponse(flagDetails as PostHogV1FlagsResponse)
+  return normalizeFlagsResponse(flagDetails as PostHogV1FlagsResponse, decodePayload)
 }
 
 export const updateFlagValue = (flag: FeatureFlagDetail, value: FeatureFlagValue): FeatureFlagDetail => {
@@ -162,11 +165,20 @@ export function getEnabledFromValue(value: FeatureFlagValue): boolean {
   return typeof value === 'string' ? true : value
 }
 
+/** Whether a flag value is on: `true`, or a variant that isn't an empty string. */
+export function isEnabledFlagValue(value: FeatureFlagValue | undefined): boolean {
+  return value === true || (typeof value === 'string' && value !== '')
+}
+
 export function getVariantFromValue(value: FeatureFlagValue): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
+export const flagDetailsToResults = (
+  flagDetails: Record<string, FeatureFlagDetail>,
+  decodePayload: (payload: any) => JsonType = parsePayload,
+  isEnabled: (value: FeatureFlagValue) => boolean = getEnabledFromValue
+): FeatureFlagResult[] => {
   return Object.values(flagDetails)
     .filter((detail) => !detail.failed)
     .map((detail) => {
@@ -174,9 +186,9 @@ export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDeta
       const rawPayload = detail.metadata?.payload
       return {
         key: detail.key,
-        enabled: getEnabledFromValue(value),
+        enabled: isEnabled(value),
         variant: getVariantFromValue(value),
-        payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
+        payload: rawPayload !== undefined ? decodePayload(rawPayload) : null,
       }
     })
 }

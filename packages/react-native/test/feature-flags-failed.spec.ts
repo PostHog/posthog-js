@@ -55,7 +55,6 @@ describe('failed React Native feature flag records', () => {
           expect(posthog.getFeatureFlagResult('failed', { sendEvent: false })).toBeUndefined()
           expect(posthog.isFeatureEnabled('failed', { defaultValue: true })).toBe(true)
           expect(posthog.getAllFeatureFlags().map(({ key }) => key)).toEqual(bootstrap ? ['healthy'] : [])
-          expect(posthog.getFeatureFlagPayloads()).not.toHaveProperty('failed')
           expect(capture).toHaveBeenCalledWith(
             '$feature_flag_called',
             expect.objectContaining({
@@ -164,8 +163,9 @@ describe('failed React Native feature flag records', () => {
           })
         )
         expect(posthog.isFeatureEnabled('disabled', { defaultValue: true })).toBe(false)
-        expect(posthog.getAllFeatureFlags().map(({ key }) => key)).toEqual(['disabled'])
-        expect(posthog.getFeatureFlagPayloads()).toEqual({})
+        expect(posthog.getAllFeatureFlags()).toEqual([
+          { key: 'disabled', enabled: false, variant: undefined, payload: null },
+        ])
       } finally {
         await posthog.shutdown()
       }

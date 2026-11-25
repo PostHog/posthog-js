@@ -1,6 +1,7 @@
 export {
   getFeatureFlagValue,
   getEnabledFromValue,
+  isEnabledFlagValue,
   getVariantFromValue,
   parsePayload,
   flagDetailsToResults,
