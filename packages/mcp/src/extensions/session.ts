@@ -77,6 +77,8 @@ export function isModernEraRequest(
   return REVISION_SHAPE.test(version) && version >= MODERN_PROTOCOL_REVISION
 }
 
+const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
+
 export function newSessionId(): string {
   return newPrefixedId('ses')
 }
@@ -110,7 +112,6 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
 export interface ResolvedSession {
   sessionId: string
   source: MCPAnalyticsSessionSource
-  fromHost?: true
 }
 
 function readHostSessionId(
@@ -161,22 +162,17 @@ export function resolveSession(
   }
 
   // 0. The host said which session this request belongs to (`options.sessionId`).
-  // It is a host-side session id, so its source is `transport`.
   const hostSessionId = request ? readHostSessionId(data, request, extra) : undefined
   if (hostSessionId) {
     applyTokenClientIdentity(data, extra)
-    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport', fromHost: true }
+    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'host' }
   }
 
   const clientConversation = client?.conversation
   // 0, 1 and 2 belong to this one request, so they are never persisted: that would
-  // leak one chat's session onto a concurrent chat's `tools/list`. 1 and 2 still
-  // count as activity on the connection (see `touchConnectionSession`). On an
-  // instance that never processed `initialize`, the request's token is still the
-  // only source of client identity, so it is applied either way.
-  if (clientConversation || conversationId) {
-    touchConnectionSession(server, data, extra)
-  }
+  // leak one chat's session onto a concurrent chat's `tools/list`. On an instance
+  // that never processed `initialize`, the request's token is still the only
+  // source of client identity, so it is applied either way.
   if (clientConversation) {
     applyTokenClientIdentity(data, extra)
     return { sessionId: deriveSessionIdFromClientConversation(clientConversation), source: 'client_metadata' }
@@ -196,36 +192,38 @@ export function resolveSession(
     return { sessionId: newSessionId(), source: 'generated' }
   }
 
-  const sessionId = carriedSessionId ?? getSessionIdFromMemory(data)
-
   // 3 and 4 are connection-scoped, so their result is remembered for the next
   // request on this instance.
-  data.sessionId = sessionId
-  data.lastActivity = new Date()
-  setServerTrackingData(server, data)
-  return { sessionId, source: instanceSessionSource(data) }
+  if (carriedSessionId) {
+    data.sessionId = carriedSessionId
+    setServerTrackingData(server, data)
+  }
+  return { sessionId: data.sessionId, source: instanceSessionSource(data) }
 }
 
 /**
- * A one-client connection's id rotates on the first tool call that arrives 30
- * minutes or more after the previous one, whichever source grouped that call. So
- * a call grouped by the client or the agent still rotates a stale id and resets
- * the clock, or a later call without either would rotate early.
+ * Marks a tool call's arrival on this instance and returns the mark for its end.
+ * A one-client connection (stdio) rotates its own id on the first tool call that
+ * arrives 30 minutes or more after the previous one ended, whichever source groups
+ * that call, because a desktop app can keep one process alive across many chats.
+ * Only tool calls count: a client polling listings must not keep a chat open.
+ * Token and transport ids live as long as the client replays them, so they
+ * never rotate: that would split a session that is still alive.
  *
- * Only for a one-client connection (stdio): on a shared HTTP instance, keeping
- * the instance's own session alive would group unrelated clients' requests.
+ * Not for a shared HTTP instance, where the instance's own id is no one's session.
  */
-function touchConnectionSession(
-  server: MCPServerLike,
-  data: MCPAnalyticsData,
-  extra?: CompatibleRequestHandlerExtra
-): void {
-  if (data.sessionSource !== 'generated' || extra?.sessionId || getRequestHeaders(extra)) {
-    return
+export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): () => void {
+  const { connection } = data
+  const ended = connection.lastToolCallEnded
+  const oneClient = data.sessionSource === 'generated' && !extra?.sessionId && !getRequestHeaders(extra)
+  if (oneClient && connection.runningToolCalls === 0 && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS) {
+    data.sessionId = newSessionId()
   }
-  data.sessionId = getSessionIdFromMemory(data)
-  data.lastActivity = new Date()
-  setServerTrackingData(server, data)
+  connection.runningToolCalls += 1
+  return () => {
+    connection.runningToolCalls -= 1
+    connection.lastToolCallEnded = Date.now()
+  }
 }
 
 /** The source of the session this instance holds: steps 3 and 4 of {@link resolveSession}. */
@@ -282,24 +280,6 @@ function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequ
   }
 
   return undefined
-}
-
-/**
- * 4. The request carried nothing, so keep the id this instance already holds —
- * minted once at `instrument()`. This is what groups a stdio server's calls,
- * where there is no header and no transport session to read.
- *
- * Only self-generated ids roll over on inactivity. Token and transport ids live
- * as long as the client replays them, so regenerating one would split a session
- * that is still very much alive.
- */
-function getSessionIdFromMemory(data: MCPAnalyticsData): string {
-  const timeoutMs = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
-  const isStale = Date.now() - data.lastActivity.getTime() > timeoutMs
-  if (data.sessionSource === 'generated' && isStale) {
-    return newSessionId()
-  }
-  return data.sessionId
 }
 
 /**

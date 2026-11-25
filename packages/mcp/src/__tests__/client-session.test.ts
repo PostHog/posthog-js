@@ -144,12 +144,12 @@ describe('client conversation ids', () => {
     await callOnFreshPod({
       userAgent: CHATGPT,
       meta: { 'openai/session': CHATGPT_ID },
-      options: { sessionId: () => 'host-session' },
+      options: { enableConversationId: false, sessionId: () => 'tenant-42' },
     })
 
     const [call] = toolCalls()
-    expect(call.$session_id).not.toBe(CHATGPT_SESSION)
-    expect(call.$mcp_session_source).toBe('transport')
+    expect(call.$session_id).toBe('ses_49f24de273ad14bdc3c6e16273c81fd9')
+    expect(call.$mcp_session_source).toBe('host')
   })
 
   it('strips the handle it ignores before the handler runs', async () => {

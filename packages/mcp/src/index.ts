@@ -202,7 +202,7 @@ function buildTrackingData(
     sink,
     logger,
     sessionId: newSessionId(),
-    lastActivity: new Date(),
+    connection: { runningToolCalls: 0 },
     identifiedSessions: new IdentityCache(),
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
@@ -278,8 +278,11 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
   if (scope?.pending && !scope.pending.settled) {
-    holdCustomEvent(scope.pending, event, trackingData.logger)
-    return
+    if (holdCustomEvent(scope.pending, event, trackingData.logger)) {
+      return
+    }
+    event.sessionId = scope.pending.overflow.sessionId
+    event.sessionSource = scope.pending.overflow.source
   }
   const attribution =
     scope?.attribution ??

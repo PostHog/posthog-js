@@ -195,63 +195,6 @@ describe('Session ID Management', () => {
     })
   })
 
-  describe('Session Timeout Behavior', () => {
-    it('should NOT apply timeout to MCP-derived sessions', async () => {
-      const eventCapture = new EventCapture()
-      await eventCapture.start()
-      const mcpSessionId = 'mcp-session-persistent'
-
-      instrument(server, fakePostHog())
-
-      const lowLevelServer = server.server
-
-      // Get MCP-derived session ID
-      const extra = { sessionId: mcpSessionId }
-      const sessionId1 = resolveSession(lowLevelServer, extra).sessionId
-
-      // Manually set lastActivity to simulate timeout (31 minutes ago)
-      const data = getServerTrackingData(lowLevelServer)
-      if (data) {
-        data.lastActivity = new Date(Date.now() - 31 * 60 * 1000)
-      }
-
-      // Get session ID again with same MCP sessionId
-      const sessionId2 = resolveSession(lowLevelServer, extra).sessionId
-
-      // Should still be the same (no timeout for MCP sessions)
-      expect(sessionId2).toBe(sessionId1)
-
-      await eventCapture.stop()
-    })
-
-    it('should apply timeout to PostHog MCP analytics-generated sessions', async () => {
-      const eventCapture = new EventCapture()
-      await eventCapture.start()
-
-      instrument(server, fakePostHog())
-
-      const lowLevelServer = server.server
-
-      // Get PostHog MCP analytics-generated session ID
-      const sessionId1 = resolveSession(lowLevelServer).sessionId
-
-      // Manually set lastActivity to simulate timeout (31 minutes ago)
-      const data = getServerTrackingData(lowLevelServer)
-      if (data) {
-        data.lastActivity = new Date(Date.now() - 31 * 60 * 1000)
-      }
-
-      // Get session ID again without MCP sessionId
-      const sessionId2 = resolveSession(lowLevelServer).sessionId
-
-      // Should be different (timeout occurred)
-      expect(sessionId2).not.toBe(sessionId1)
-      expect(sessionId2).toMatch(SESSION_ID_PATTERN)
-
-      await eventCapture.stop()
-    })
-  })
-
   describe('Self-encoded session token resolution', () => {
     const tokenPayload = { sessionId: 'ses_0199f41e7a2e', clientName: 'TokenClient', clientVersion: '9.9.9' }
 
@@ -315,23 +258,6 @@ describe('Session ID Management', () => {
 
       expect(second).toBe(first)
       expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('token')
-    })
-
-    it('does NOT apply the inactivity rollover to token-derived sessions', () => {
-      instrument(server, fakePostHog())
-      const lowLevelServer = server.server
-
-      const token = encodeSessionId(tokenPayload)
-      const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: token } } }
-      const first = resolveSession(lowLevelServer, extra).sessionId
-
-      const data = getServerTrackingData(lowLevelServer)
-      if (data) {
-        data.lastActivity = new Date(Date.now() - 31 * 60 * 1000)
-      }
-
-      expect(resolveSession(lowLevelServer, extra).sessionId).toBe(first)
-      expect(resolveSession(lowLevelServer).sessionId).toBe(first)
     })
   })
 

@@ -376,7 +376,7 @@ export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
 /** Which source grouped the call into its `$session_id`, first match wins. */
-export type MCPAnalyticsSessionSource = 'conversation' | 'transport' | 'client_metadata' | 'generated'
+export type MCPAnalyticsSessionSource = 'host' | 'conversation' | 'transport' | 'client_metadata' | 'generated'
 
 export type ToolCallback =
   | ((
@@ -641,7 +641,8 @@ export interface MCPAnalyticsData {
   identifiedSessions: IdentityCache
   /** Safe logger bound to this server; a no-op when no logger was configured. */
   logger: LoggerFn
-  lastActivity: Date
+  /** Tool calls on this instance, which rotate a one-client connection's own session. */
+  connection: { runningToolCalls: number; lastToolCallEnded?: number }
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo

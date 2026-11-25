@@ -562,13 +562,22 @@ describe('a custom event captured on a minted handle', () => {
     expect(capture.findCapturesByEvent('progress').map((e) => e.properties.step)).toEqual([0, 1])
   })
 
-  it('holds at most its bound of custom events per call', async () => {
+  it('sends custom events past its bound at once, with the session the call has without its handle', async () => {
+    let sentDuringTheCall = 0
     await callMintingTool(async (analytics) => {
       for (let i = 0; i < MAX_HELD_CUSTOM_EVENTS + 5; i++) {
         await analytics.capture({ event: 'tick' })
       }
+      sentDuringTheCall = capture.findCapturesByEvent('tick').length
     })
 
-    expect(capture.findCapturesByEvent('tick')).toHaveLength(MAX_HELD_CUSTOM_EVENTS)
+    const [call] = capture.findCapturesByEvent('$mcp_tool_call')
+    const ticks = capture.findCapturesByEvent('tick')
+    expect(sentDuringTheCall).toBe(5)
+    expect(ticks).toHaveLength(MAX_HELD_CUSTOM_EVENTS + 5)
+    const overflow = ticks.slice(0, 5)
+    expect(new Set(overflow.map((e) => e.properties.$mcp_session_source))).toEqual(new Set(['generated']))
+    expect(overflow[0].properties.$session_id).not.toBe(call.properties.$session_id)
+    expect(new Set(ticks.slice(5).map((e) => e.properties.$session_id))).toEqual(new Set([call.properties.$session_id]))
   })
 })
