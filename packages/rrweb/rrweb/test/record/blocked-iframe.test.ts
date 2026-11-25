@@ -460,13 +460,23 @@ describe('record a blocked iframe', () => {
     }
   });
 
-  it('drops a cross-origin message from an iframe that was briefly blocked before it arrived', async () => {
+  it.each([
+    { blocking: 'a blocked parent', blockSelector: undefined, fullSnapshot: false },
+    { blocking: 'a blocked parent', blockSelector: undefined, fullSnapshot: true },
+    {
+      blocking: 'a selector that matches through a sibling',
+      blockSelector: '.rr-block + iframe',
+      fullSnapshot: false,
+    },
+  ])(
+    'drops a cross-origin message from an iframe briefly blocked by $blocking before it arrived (full snapshot: $fullSnapshot)',
+    async ({ blockSelector, fullSnapshot }) => {
     const page = await browser.newPage();
     try {
       await page.goto('about:blank');
       await page.setContent(
         `<!DOCTYPE html><html><body>
-          <div id="parent"><iframe src="${getServerURL(server)}/html/blank.html"></iframe></div>
+          <div id="parent"><span id="sibling"></span><iframe src="${getServerURL(server)}/html/blank.html"></iframe></div>
         </body></html>`,
         { waitUntil: 'load' },
       );
@@ -475,7 +485,9 @@ describe('record a blocked iframe', () => {
       await page.exposeFunction('emit', (e: eventWithTime) => {
         events.push(e);
       });
-      await startRecording(topFrame, { recordCrossOriginIframes: true });
+      const options = { blockSelector, recordCrossOriginIframes: true };
+      const blockTarget = blockSelector ? 'sibling' : 'parent';
+      await startRecording(topFrame, options);
       // hold back the child's relayed events so one lands after the unblock
       await iframeFrame.evaluate(() => {
         const held: Array<[unknown, string]> = [];
@@ -494,21 +506,37 @@ describe('record a blocked iframe', () => {
           }),
         });
       });
-      await startRecording(iframeFrame, { recordCrossOriginIframes: true });
+      await startRecording(iframeFrame, options);
       await waitForRAF(page);
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       await iframeFrame.evaluate(() => {
         (window as unknown as { hold: boolean }).hold = true;
       });
-      await topFrame.evaluate(() =>
-        document.getElementById('parent')!.classList.add('rr-block'),
+      await topFrame.evaluate(
+        (id) => document.getElementById(id)!.classList.add('rr-block'),
+        blockTarget,
       );
       await waitForRAF(page);
       await appendParagraph(iframeFrame, LATER_CONTENT);
       await waitForRAF(page);
-      await topFrame.evaluate(() =>
-        document.getElementById('parent')!.classList.remove('rr-block'),
+      await topFrame.evaluate(
+        (id, fullSnapshot) => {
+          document.getElementById(id)!.classList.remove('rr-block');
+          if (fullSnapshot) {
+            // let the unblock mutation be processed before the snapshot
+            return new Promise<void>((resolve) =>
+              setTimeout(() => {
+                (window as unknown as IWindow).rrweb.record.takeFullSnapshot(
+                  true,
+                );
+                resolve();
+              }),
+            );
+          }
+        },
+        blockTarget,
+        fullSnapshot,
       );
       await waitForRAF(page);
       const eventsBeforeDelivery = events.length;
@@ -531,7 +559,8 @@ describe('record a blocked iframe', () => {
     } finally {
       await page.close();
     }
-  });
+  },
+  );
 
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();

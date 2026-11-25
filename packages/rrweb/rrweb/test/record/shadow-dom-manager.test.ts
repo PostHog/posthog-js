@@ -54,7 +54,7 @@ describe('ShadowDomManager', () => {
         recordCanvas: false,
         keepIframeSrcFn: () => false,
         slimDOMOptions: {},
-        iframeManager: { addIframe: vi.fn(), isBlockedDocument: vi.fn(() => false), releaseCrossOriginIframesBlockedBy: vi.fn() } as any,
+        iframeManager: { addIframe: vi.fn(), isBlockedDocument: vi.fn(() => false), releaseBlockedRelayingIframes: vi.fn() } as any,
         stylesheetManager: {
           adoptStyleSheets: vi.fn(),
         } as any,
