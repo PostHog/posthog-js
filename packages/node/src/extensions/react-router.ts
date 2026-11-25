@@ -13,12 +13,15 @@ export interface ReactRouterErrorHandlerOptions<A extends ReactRouterErrorArgs =
    * (`console.error`, skipping aborted requests).
    */
   handleError?: (error: unknown, args: A) => void
-  /** Return `false` to skip capturing an error the handler would otherwise capture. */
+  /**
+   * Return `false` to skip capturing an error the handler would otherwise capture. It receives the error to capture:
+   * for a `data(error, init)` a middleware threw, the `error` inside.
+   */
   shouldCapture?: (error: unknown, args: A) => boolean
 }
 
 /** React Router's `isRouteErrorResponse`: a thrown `data()`/`Response`, or a 404, 405 the router produced itself. */
-function isRouteErrorResponse(error: unknown): error is { error?: unknown } {
+function isRouteErrorResponse(error: unknown): error is { internal: boolean; error?: unknown } {
   if (error === null || typeof error !== 'object') {
     return false
   }
@@ -45,7 +48,15 @@ function isResponse(error: unknown): boolean {
   )
 }
 
-// Route error responses are control flow: React Router passes only its own 404 and 405 here, never one the app threw.
+/**
+ * The application error inside a route error response. A middleware that throws `data(error, init)` reaches
+ * `handleError` as a route error response holding the error; the same throw from a loader arrives as the error itself.
+ */
+function getApplicationError(error: unknown): unknown {
+  return isRouteErrorResponse(error) && !error.internal && error.error !== undefined ? error.error : error
+}
+
+// Other route error responses are control flow: React Router's own 404 and 405, or a response the app threw.
 function isExpected(error: unknown, request: Request): boolean {
   return request.signal.aborted || isRouteErrorResponse(error) || isResponse(error)
 }
@@ -89,7 +100,8 @@ function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): 
  * Returns a React Router `handleError` that captures server errors (loaders, actions, middleware, resource routes,
  * server rendering) with the request's person, session and request properties. It reports the page URL even for the
  * `.data` requests of client navigations, never the query string. It skips aborted requests, thrown responses and the
- * 404 and 405 responses the router produces itself. The event is marked unhandled, with the `middleware` mechanism and
+ * 404 and 405 responses the router produces itself, and captures the error inside a `data(error, init)` a middleware
+ * threw. The event is marked unhandled, with the `middleware` mechanism and
  * `$exception_source: 'react_router.handle_error'`.
  *
  * Linking page loads to the browser's person and session reads the posthog-js cookie, which needs the client's
@@ -98,8 +110,8 @@ function logLikeReactRouter(error: unknown, { request }: ReactRouterErrorArgs): 
  * event keeps no person, session or user agent.
  *
  * Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
- * stream in `entry.server.tsx`; call the same handler there. An error object is captured once, however many hooks or
- * handlers see it.
+ * stream in `entry.server.tsx`; call the same handler there. An error object is captured once per request, however
+ * many hooks or handlers see it.
  *
  * The returned handler resolves once the event is queued. On a serverless host, pass the platform's `waitUntil` as the
  * client's `waitUntil` option. On Cloudflare Workers, create the client and the handler per request, with the request's
@@ -130,8 +142,9 @@ export function createReactRouterErrorHandler<A extends ReactRouterErrorArgs = R
   return (error, args) => {
     let captured: Promise<void> = Promise.resolve()
     try {
-      if (!isExpected(error, args.request) && options.shouldCapture?.(error, args) !== false) {
-        captured = captureRequestException(posthog, error, args.request, {
+      const applicationError = getApplicationError(error)
+      if (!isExpected(applicationError, args.request) && options.shouldCapture?.(applicationError, args) !== false) {
+        captured = captureRequestException(posthog, applicationError, args.request, {
           url: getPageUrl(args.request),
           source: 'react_router.handle_error',
         })

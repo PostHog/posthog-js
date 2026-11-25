@@ -173,10 +173,9 @@ export function isPostHogCookieOptedOut(
   optOutCapturingByDefault: boolean = false
 ): boolean {
   try {
-    return (
-      typeof cookieHeader === 'string' &&
-      isOptedOutByCookie(readCookieStore(cookieHeader), apiKey, optOutCapturingByDefault)
-    )
+    // A request without a Cookie header has no consent cookie either.
+    const header = typeof cookieHeader === 'string' ? cookieHeader : ''
+    return isOptedOutByCookie(readCookieStore(header), apiKey, optOutCapturingByDefault)
   } catch {
     return false
   }

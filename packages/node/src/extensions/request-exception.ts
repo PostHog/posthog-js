@@ -1,6 +1,7 @@
 import ErrorTracking from './error-tracking'
 import type { PostHogBackendClient } from '../client'
 import type { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import type { ContextData } from './context/types'
 import {
   addProperty,
   getPostHogCookieReadOptions,
@@ -19,7 +20,7 @@ export interface CaptureRequestExceptionOptions {
   url?: string
   /** The person to link. Used even when the visitor opted out, because the app chose it. */
   distinctId?: string
-  /** Extra event properties. They cannot override the `$exception_*` properties. */
+  /** Extra event properties. They win over the request's, but cannot override the `$exception_*` properties. */
   properties?: Record<string, any>
   /** How the error reached the framework. Defaults to `{ type: 'middleware', handled: false }`. */
   mechanism?: { type?: string; handled?: boolean }
@@ -30,33 +31,54 @@ export interface CaptureRequestExceptionOptions {
 interface RequestExceptionContext {
   distinctId?: string
   properties: Record<string, any>
+  /** The distinct ID is an anonymous visitor's, from the cookie. */
+  personless: boolean
+  optedOut: boolean
 }
 
-// Errors captured here that could not carry the marker (frozen objects).
-const capturedUnmarkable = new WeakSet<object>()
+// The errors captured per request and project. Hooks that see one error for one request capture it once; a later
+// request that throws the same object (a cached rejected promise, for example) is a new occurrence.
+const capturedByRequest = new WeakMap<Request, Map<string, WeakSet<object>>>()
 
-/** Whether a PostHog integration already captured this error object. */
-function wasCapturedByPostHog(error: unknown): boolean {
-  return (
-    ErrorTracking.isPreviouslyCapturedError(error) ||
-    (typeof error === 'object' && error !== null && capturedUnmarkable.has(error))
+/** Records the capture, and returns false when this error was already captured for this request and project. */
+function claimRequestCapture(posthog: PostHogBackendClient, error: unknown, request: Request): boolean {
+  if (ErrorTracking.isPreviouslyCapturedError(error)) {
+    return false
+  }
+  if ((typeof error !== 'object' || error === null) && typeof error !== 'function') {
+    return true
+  }
+  const destination = `${posthog.apiKey}@${posthog.host}`
+  let byDestination = capturedByRequest.get(request)
+  if (!byDestination) {
+    byDestination = new Map()
+    capturedByRequest.set(request, byDestination)
+  }
+  let captured = byDestination.get(destination)
+  if (!captured) {
+    captured = new WeakSet()
+    byDestination.set(destination, captured)
+  }
+  if (captured.has(error)) {
+    return false
+  }
+  captured.add(error)
+  return true
+}
+
+// Context fields that describe the visitor, left out when the visitor opted out.
+const VISITOR_CONTEXT_PROPERTIES = ['$session_id', '$window_id', '$user_agent', '$ip']
+
+/** The active context without the visitor's identity, session, user agent and IP. */
+function withoutVisitor(context: ContextData | undefined): ContextData | undefined {
+  if (!context) {
+    return undefined
+  }
+  const { distinctId: _distinctId, sessionId: _sessionId, properties, ...rest } = context
+  const kept = Object.fromEntries(
+    Object.entries(properties ?? {}).filter(([key]) => !VISITOR_CONTEXT_PROPERTIES.includes(key))
   )
-}
-
-function markCaptured(error: unknown): void {
-  if (typeof error !== 'object' || error === null) {
-    return
-  }
-  try {
-    Object.defineProperty(error, '__posthog_previously_captured_error', {
-      value: true,
-      enumerable: false,
-      configurable: true,
-      writable: true,
-    })
-  } catch {
-    capturedUnmarkable.add(error)
-  }
+  return { ...rest, properties: kept }
 }
 
 function headerValue(headers: Headers, name: string): string | undefined {
@@ -74,11 +96,11 @@ function parseUrl(value: string): URL | undefined {
 /**
  * The person, session and request properties for an exception raised while handling a fetch API `Request`.
  *
- * Identity, first match wins per field: the `distinctId` option, the `x-posthog-*` tracing headers, the active
- * context (ids set by `withContext` or a PostHog middleware), then the posthog-js cookie. The cookie is read only when
- * the client's `readPostHogCookie` option is on and the request has no tracing header; an anonymous cookie id is used
- * too, with `$process_person_profile: false`. When the visitor's consent cookie opts out, only the `distinctId` option
- * is used, and the session and user agent are left out.
+ * Identity, first match wins per field: the `distinctId` option, the active context (ids set by `withContext` or a
+ * PostHog middleware), the `x-posthog-*` tracing headers, then the posthog-js cookie. The cookie is read only when the
+ * client's `readPostHogCookie` option is on and the request has no tracing header; an anonymous cookie id is used too,
+ * and the event stays personless. When the visitor's consent cookie opts out, only the `distinctId` option is used, and
+ * the session and user agent are left out.
  */
 function getRequestExceptionContext(
   posthog: PostHogBackendClient,
@@ -95,6 +117,7 @@ function getRequestExceptionContext(
 
   const properties: Record<string, any> = {}
   let distinctId = options.distinctId
+  let personless = false
   if (!optedOut) {
     const readHeaders = posthog.options.captureTracingHeaders !== false
     const header = {
@@ -107,13 +130,15 @@ function getRequestExceptionContext(
       cookieOptions && header.distinctId === undefined && header.sessionId === undefined && cookieHeader
         ? readPostHogCookieValues({ cookie: cookieHeader }, cookieOptions, true)
         : {}
-    const cookieDistinctId = context?.distinctId === undefined ? cookie.distinctId : undefined
-    distinctId ??= header.distinctId ?? context?.distinctId ?? cookieDistinctId
-    if (distinctId !== undefined && distinctId === cookieDistinctId && cookie.anonymous) {
-      // An anonymous visitor stays personless, as posthog-js keeps them with `person_profiles: 'identified_only'`.
-      properties.$process_person_profile = false
+    if (distinctId === undefined) {
+      distinctId = context?.distinctId ?? header.distinctId
+      if (distinctId === undefined && cookie.distinctId !== undefined) {
+        distinctId = cookie.distinctId
+        // An anonymous visitor stays personless, as posthog-js keeps them with `person_profiles: 'identified_only'`.
+        personless = cookie.anonymous === true
+      }
     }
-    addProperty(properties, '$session_id', header.sessionId ?? context?.sessionId ?? cookie.sessionId)
+    addProperty(properties, '$session_id', context?.sessionId ?? header.sessionId ?? cookie.sessionId)
     addProperty(properties, '$user_agent', request.headers.get('user-agent') ?? undefined)
   }
 
@@ -126,7 +151,7 @@ function getRequestExceptionContext(
     url ? normalizeRequestPath(url.pathname, posthog.options.disableCaptureUrlHashes === true) : undefined
   )
 
-  return { ...(distinctId !== undefined ? { distinctId } : {}), properties }
+  return { ...(distinctId !== undefined ? { distinctId } : {}), properties, personless, optedOut }
 }
 
 /**
@@ -135,13 +160,14 @@ function getRequestExceptionContext(
  * session and request properties, and is marked unhandled with the `middleware` mechanism unless `options` say
  * otherwise. The query string is never sent.
  *
- * Identity, first match wins: the `distinctId` option, the `x-posthog-*` tracing headers, the active context, then the
+ * Identity, first match wins: the `distinctId` option, the active context, the `x-posthog-*` tracing headers, then the
  * posthog-js cookie. Linking page loads, which carry only the cookie, needs the client's `readPostHogCookie: true`.
- * When the visitor's consent cookie opts out, the event keeps no person, session or user agent.
+ * When the visitor's consent cookie opts out, the event keeps no person, session or user agent, even from the active
+ * context. Properties in `options` win over the request's.
  *
- * An error object is captured once: after capture it is marked, and later calls (and other PostHog integrations that
- * check the mark) skip it. `posthog.captureException` does not mark errors, so capturing one there and then rethrowing
- * it into the framework captures it twice.
+ * An error object is captured once per request and project, however many hooks pass it here. A later request that
+ * throws the same object is captured again. Capturing an error with `posthog.captureException` and then rethrowing it
+ * into the framework captures it twice.
  *
  * The returned promise resolves once the event is queued. When the client has a `waitUntil` option, the capture is
  * handed to it, so a serverless runtime stays alive until it is queued and flushed.
@@ -165,26 +191,32 @@ export function captureRequestException(
   options: CaptureRequestExceptionOptions = {}
 ): Promise<void> {
   try {
-    if (wasCapturedByPostHog(error)) {
+    if (!claimRequestCapture(posthog, error, request)) {
       return Promise.resolve()
     }
-    markCaptured(error)
-    const { distinctId, properties } = getRequestExceptionContext(posthog, request, options)
+    const { distinctId, properties, personless, optedOut } = getRequestExceptionContext(posthog, request, options)
     const hint: CoreErrorTracking.EventHint = {
-      mechanism: { type: 'middleware', handled: false, ...options.mechanism },
+      mechanism: { type: options.mechanism?.type ?? 'middleware', handled: options.mechanism?.handled ?? false },
       syntheticException: new Error('PostHog syntheticException'),
     }
     const source = options.source
+    const context = optedOut ? withoutVisitor(posthog.getContext()) : posthog.getContext()
+    // An event option beats context and registered options; an explicit `$process_person_profile` property wins.
+    const keepPersonless = personless && options.properties?.$process_person_profile === undefined
     const queued = posthog._captureIntegrationException(error, () =>
       ErrorTracking.buildEventMessage(
         posthog.getErrorPropertiesBuilder(),
         error,
         hint,
         distinctId,
-        { ...options.properties, ...properties },
+        { ...properties, ...options.properties },
         undefined,
-        posthog.getContext()
-      ).then((msg) => (source ? { ...msg, properties: { ...msg.properties, $exception_source: source } } : msg))
+        context
+      ).then((msg) => ({
+        ...msg,
+        ...(source ? { properties: { ...msg.properties, $exception_source: source } } : {}),
+        ...(keepPersonless ? { options: { ...msg.options, process_person_profile: false } } : {}),
+      }))
     )
     const waitUntil = posthog.options.waitUntil
     if (waitUntil) {

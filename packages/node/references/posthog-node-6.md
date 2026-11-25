@@ -928,13 +928,14 @@ receives the request (SvelteKit, Astro or TanStack Start, for example). The even
 session and request properties, and is marked unhandled with the `middleware` mechanism unless `options` say
 otherwise. The query string is never sent.
 
-Identity, first match wins: the `distinctId` option, the `x-posthog-*` tracing headers, the active context, then the
+Identity, first match wins: the `distinctId` option, the active context, the `x-posthog-*` tracing headers, then the
 posthog-js cookie. Linking page loads, which carry only the cookie, needs the client's `readPostHogCookie: true`.
-When the visitor's consent cookie opts out, the event keeps no person, session or user agent.
+When the visitor's consent cookie opts out, the event keeps no person, session or user agent, even from the active
+context. Properties in `options` win over the request's.
 
-An error object is captured once: after capture it is marked, and later calls (and other PostHog integrations that
-check the mark) skip it. `posthog.captureException` does not mark errors, so capturing one there and then rethrowing
-it into the framework captures it twice.
+An error object is captured once per request and project, however many hooks pass it here. A later request that
+throws the same object is captured again. Capturing an error with `posthog.captureException` and then rethrowing it
+into the framework captures it twice.
 
 The returned promise resolves once the event is queued. When the client has a `waitUntil` option, the capture is
 handed to it, so a serverless runtime stays alive until it is queued and flushed.
@@ -974,7 +975,8 @@ export const handleError: HandleServerError = async ({ error, event, status }) =
 Returns a React Router `handleError` that captures server errors (loaders, actions, middleware, resource routes,
 server rendering) with the request's person, session and request properties. It reports the page URL even for the
 `.data` requests of client navigations, never the query string. It skips aborted requests, thrown responses and the
-404 and 405 responses the router produces itself. The event is marked unhandled, with the `middleware` mechanism and
+404 and 405 responses the router produces itself, and captures the error inside a `data(error, init)` a middleware
+threw. The event is marked unhandled, with the `middleware` mechanism and
 `$exception_source: 'react_router.handle_error'`.
 
 Linking page loads to the browser's person and session reads the posthog-js cookie, which needs the client's
@@ -983,8 +985,8 @@ exceptions carry their anonymous distinct ID and stay personless. When the visit
 event keeps no person, session or user agent.
 
 Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
-stream in `entry.server.tsx`; call the same handler there. An error object is captured once, however many hooks or
-handlers see it.
+stream in `entry.server.tsx`; call the same handler there. An error object is captured once per request, however
+many hooks or handlers see it.
 
 The returned handler resolves once the event is queued. On a serverless host, pass the platform's `waitUntil` as the
 client's `waitUntil` option. On Cloudflare Workers, create the client and the handler per request, with the request's
@@ -3117,7 +3119,7 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 | <a id="property-mechanism"></a> `mechanism?` | `object` | How the error reached the framework. Defaults to `{ type: 'middleware', handled: false }`. |
 | `mechanism.handled?` | `boolean` | - |
 | `mechanism.type?` | `string` | - |
-| <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Extra event properties. They cannot override the `$exception_*` properties. |
+| <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Extra event properties. They win over the request's, but cannot override the `$exception_*` properties. |
 | <a id="property-source"></a> `source?` | `string` | `$exception_source`, as lowercase `<technology>.<hook>`, for example `sveltekit.handle_error`. |
 | <a id="property-url"></a> `url?` | `string` | The page URL to report instead of `request.url`, for frameworks whose error hook receives an internal request (a data endpoint, for example). Only its origin and path are sent. |
 
@@ -5331,7 +5333,7 @@ The part of React Router's `handleError` arguments the handler reads, so `react-
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-handleerror"></a> `handleError?` | (`error`, `args`) => `void` | Your own `handleError`, called for every error after the capture decision, captured or not. Exporting `handleError` replaces React Router's own logging; without this option the handler logs the way React Router does (`console.error`, skipping aborted requests). |
-| <a id="property-shouldcapture"></a> `shouldCapture?` | (`error`, `args`) => `boolean` | Return `false` to skip capturing an error the handler would otherwise capture. |
+| <a id="property-shouldcapture"></a> `shouldCapture?` | (`error`, `args`) => `boolean` | Return `false` to skip capturing an error the handler would otherwise capture. It receives the error to capture: for a `data(error, init)` a middleware threw, the `error` inside. |
 
 ### `ResponseBasedBranching`
 

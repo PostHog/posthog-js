@@ -28,12 +28,12 @@ const cookieFor = (state: Record<string, unknown>): string =>
 
 const liveSession = (id: string): [number, string, number] => [Date.now(), id, Date.now()]
 
-const routeErrorResponse = (status: number, internal = false): object => ({
+const routeErrorResponse = (status: number, internal = false, error?: Error): object => ({
   status,
   statusText: 'Error',
   internal,
-  data: 'Not found',
-  ...(internal ? { error: new Error(`No route matches URL "/x"`) } : {}),
+  data: error ? error.toString() : 'Not found',
+  ...(internal ? { error: new Error(`No route matches URL "/x"`) } : error ? { error } : {}),
 })
 
 let posthog: PostHog
@@ -114,6 +114,20 @@ describe('createReactRouterErrorHandler', () => {
     expect(await sentEvents(posthog)).toEqual([])
   })
 
+  it('captures the error inside a data() response a middleware threw, and passes it to shouldCapture', async () => {
+    posthog = createPostHog()
+    const error = new Error('Inventory service unavailable')
+    const shouldCapture = vi.fn(() => true)
+
+    await createReactRouterErrorHandler(posthog, { shouldCapture })(routeErrorResponse(503, false, error), {
+      request: new Request('https://shop.example/x'),
+    })
+    const [event] = await sentEvents(posthog)
+
+    expect(shouldCapture).toHaveBeenCalledWith(error, expect.anything())
+    expect(event.properties.$exception_list[0].value).toBe('Inventory service unavailable')
+  })
+
   it('does not capture or log errors of an aborted request', async () => {
     posthog = createPostHog()
     const controller = new AbortController()
@@ -154,7 +168,7 @@ describe('createReactRouterErrorHandler', () => {
     expect(await sentEvents(posthog)).toEqual([])
   })
 
-  it('captures an error once across hooks, handler instances and captureRequestException', async () => {
+  it('captures an error once per request across hooks, handler instances and captureRequestException', async () => {
     posthog = createPostHog()
     const request = new Request('https://shop.example/reports/forecast')
     const error = new Error('Demand forecast diverged')
@@ -168,6 +182,25 @@ describe('createReactRouterErrorHandler', () => {
 
     expect(await sentEvents(posthog)).toHaveLength(2)
     expect(Object.keys(error)).not.toContain('__posthog_previously_captured_error')
+  })
+
+  it('captures the same error object again for a later request and for another project', async () => {
+    posthog = createPostHog()
+    const otherProject = createPostHog({ host: 'http://other.example' })
+    // A cached rejected promise hands every request the same error.
+    const error = new Error('Warehouse connection refused')
+    const first = new Request('https://shop.example/a')
+
+    await createReactRouterErrorHandler(posthog)(error, { request: first })
+    await createReactRouterErrorHandler(otherProject)(error, { request: first })
+    await createReactRouterErrorHandler(posthog)(error, { request: new Request('https://shop.example/b') })
+    await otherProject.shutdown()
+    await posthog.shutdown()
+    const hosts = mockedFetch.mock.calls.flatMap(([url, init]: any) =>
+      sentEventsFrom({ mock: { calls: [[url, init]] } } as any).map(() => new URL(url).host)
+    )
+
+    expect(hosts.sort()).toEqual(['example.com', 'example.com', 'other.example'])
   })
 
   it('resolves once the event is queued and hands the capture to waitUntil', async () => {
@@ -241,7 +274,7 @@ describe('captureRequestException identity', () => {
     expect(event.properties.$session_id).toBeUndefined()
   })
 
-  it('takes the option first, then the tracing headers, then the active context, then the cookie', async () => {
+  it('takes the option first, then the active context, then the tracing headers, then the cookie', async () => {
     posthog = createPostHog({ readPostHogCookie: true })
     const cookie = cookieFor({ distinct_id: 'cookie-user', $user_state: 'identified', $sesid: liveSession('cookie-s') })
     const withHeaders = new Request('https://shop.example/', {
@@ -254,46 +287,130 @@ describe('captureRequestException identity', () => {
       captureRequestException(posthog, new Error('b'), withHeaders)
     )
     await posthog.withContext({ distinctId: 'context-user' }, () =>
-      captureRequestException(posthog, new Error('c'), cookieOnly)
+      captureRequestException(posthog, new Error('c'), withHeaders)
     )
-    await captureRequestException(posthog, new Error('d'), cookieOnly)
+    await posthog.withContext({ distinctId: 'context-user' }, () =>
+      captureRequestException(posthog, new Error('d'), cookieOnly)
+    )
+    await captureRequestException(posthog, new Error('e'), withHeaders)
+    await captureRequestException(posthog, new Error('f'), cookieOnly)
     const events = await sentEvents(posthog)
 
     expect(events.map((e) => [e.distinct_id, e.properties.$session_id])).toEqual([
       ['option-user', 'header-s'],
-      ['header-user', 'header-s'],
+      ['context-user', 'context-s'],
+      ['context-user', 'header-s'],
       ['context-user', 'cookie-s'],
+      ['header-user', 'header-s'],
       ['cookie-user', 'cookie-s'],
     ])
   })
 
+  const identifiedCookie = (): string =>
+    cookieFor({ distinct_id: 'user-4', $user_state: 'identified', $sesid: liveSession('s-4') })
+
   it.each([
-    ['the consent cookie opts out', { readPostHogCookie: true }, '; __ph_opt_in_out_TEST_API_KEY=0'],
+    [
+      'the consent cookie opts out',
+      { readPostHogCookie: true },
+      () => `${identifiedCookie()}; __ph_opt_in_out_TEST_API_KEY=0`,
+    ],
     [
       'opt-out is the default and the visitor never opted in',
       { readPostHogCookie: { optOutCapturingByDefault: true } },
-      '',
+      identifiedCookie,
     ],
-  ])('keeps no person, session or user agent when %s', async (_, options, consent) => {
+    [
+      'opt-out is the default and the request has no Cookie header',
+      { readPostHogCookie: { optOutCapturingByDefault: true } },
+      () => undefined,
+    ],
+  ])('keeps no person, session or user agent when %s', async (_, options, cookie) => {
     posthog = createPostHog(options)
+    const cookieHeader = cookie()
     const request = new Request('https://shop.example/checkout', {
       headers: {
         'x-posthog-distinct-id': 'header-user',
         'x-posthog-session-id': 'header-s',
         'user-agent': 'TestAgent/1.0',
-        cookie: cookieFor({ distinct_id: 'user-4', $user_state: 'identified', $sesid: liveSession('s-4') }) + consent,
+        ...(cookieHeader !== undefined ? { cookie: cookieHeader } : {}),
       },
     })
 
     await captureRequestException(posthog, new Error('Payment declined'), request)
+    await posthog.withContext(
+      {
+        distinctId: 'context-user',
+        sessionId: 'context-s',
+        properties: { $user_agent: 'Ctx/1.0', $ip: '203.0.113.9' },
+      },
+      () => captureRequestException(posthog, new Error('Card expired'), request)
+    )
     await captureRequestException(posthog, new Error('Refund failed'), request, { distinctId: 'app-user' })
-    const [event, withOption] = await sentEvents(posthog)
+    const [event, inContext, withOption] = await sentEvents(posthog)
 
-    expect(['header-user', 'user-4']).not.toContain(event.distinct_id)
-    expect(event.properties).not.toHaveProperty('$session_id')
-    expect(event.properties).not.toHaveProperty('$user_agent')
-    expect(event.properties.$current_url).toBe('https://shop.example/checkout')
+    for (const optedOut of [event, inContext]) {
+      expect(['header-user', 'user-4', 'context-user']).not.toContain(optedOut.distinct_id)
+      expect(optedOut.properties).not.toHaveProperty('$session_id')
+      expect(optedOut.properties).not.toHaveProperty('$user_agent')
+      expect(optedOut.properties).not.toHaveProperty('$ip')
+      expect(optedOut.properties.$current_url).toBe('https://shop.example/checkout')
+    }
     expect(withOption.distinct_id).toBe('app-user')
+  })
+
+  it('keeps an anonymous visitor personless over registered and context options', async () => {
+    posthog = createPostHog({ readPostHogCookie: true })
+    posthog.registerOptions({ process_person_profile: true })
+    const request = new Request('https://shop.example/reports', {
+      headers: { cookie: cookieFor({ distinct_id: 'anon-2', $user_state: 'anonymous', $sesid: liveSession('s-2') }) },
+    })
+
+    await captureRequestException(posthog, new Error('Export timed out'), request)
+    await posthog.withContext({ options: { process_person_profile: true } }, () =>
+      captureRequestException(posthog, new Error('Export quota reached'), request)
+    )
+    const events = await sentEvents(posthog)
+
+    expect(events.map((e) => [e.distinct_id, e.properties.$process_person_profile])).toEqual([
+      ['anon-2', false],
+      ['anon-2', false],
+    ])
+  })
+
+  it('lets explicit properties win over the request and anonymous visitor defaults', async () => {
+    posthog = createPostHog({ readPostHogCookie: true })
+    const request = new Request('https://shop.example/reports', {
+      headers: { cookie: cookieFor({ distinct_id: 'anon-3', $user_state: 'anonymous', $sesid: liveSession('s-3') }) },
+    })
+
+    await captureRequestException(posthog, new Error('Export failed'), request, {
+      properties: { $session_id: 'explicit-session', $process_person_profile: true, $current_url: 'https://x.test/' },
+    })
+    const [event] = await sentEvents(posthog)
+
+    expect(event.properties).toMatchObject({
+      $session_id: 'explicit-session',
+      $process_person_profile: true,
+      $current_url: 'https://x.test/',
+    })
+  })
+
+  it('keeps the mechanism defaults for mechanism fields left undefined', async () => {
+    posthog = createPostHog()
+
+    await captureRequestException(posthog, new Error('Ledger sync failed'), new Request('https://shop.example/'), {
+      mechanism: { type: undefined, handled: undefined },
+    })
+    await captureRequestException(posthog, new Error('Ledger sync retried'), new Request('https://shop.example/'), {
+      mechanism: { handled: true },
+    })
+    const events = await sentEvents(posthog)
+
+    expect(events.map((e) => e.properties.$exception_list[0].mechanism)).toEqual([
+      expect.objectContaining({ type: 'middleware', handled: false }),
+      expect.objectContaining({ type: 'middleware', handled: true }),
+    ])
   })
 
   it('keeps flushing other events when building an exception event fails', async () => {
@@ -326,7 +443,10 @@ describe('createReactRouterErrorHandler in React Router 7 request handling', () 
     hasErrorBoundary: id === 'root',
   })
 
-  const buildWith = (handleError: ServerBuild['entry']['module']['handleError']): ServerBuild => {
+  const buildWith = (
+    handleError: ServerBuild['entry']['module']['handleError'],
+    middleware?: (() => unknown)[]
+  ): ServerBuild => {
     const component = (): null => null
     return {
       entry: {
@@ -336,7 +456,16 @@ describe('createReactRouterErrorHandler in React Router 7 request handling', () 
         },
       },
       routes: {
-        root: { id: 'root', path: '', module: { default: component, ErrorBoundary: component, loader: () => null } },
+        root: {
+          id: 'root',
+          path: '',
+          module: {
+            default: component,
+            ErrorBoundary: component,
+            loader: () => null,
+            ...(middleware && { middleware }),
+          },
+        },
         'routes/home': {
           id: 'routes/home',
           parentId: 'root',
@@ -386,7 +515,7 @@ describe('createReactRouterErrorHandler in React Router 7 request handling', () 
       },
       publicPath: '/',
       assetsBuildDirectory: 'build/client',
-      future: {},
+      future: middleware ? { v8_middleware: true } : {},
       ssr: true,
       isSpaMode: false,
       prerender: [],
@@ -425,6 +554,38 @@ describe('createReactRouterErrorHandler in React Router 7 request handling', () 
     const handler = createRequestHandler(buildWith(createReactRouterErrorHandler(posthog)), 'production')
 
     await handler(new Request(`https://shop.example${path}`))
+
+    expect(await sentEvents(posthog)).toEqual([])
+  })
+
+  it.each([
+    ['a document request', '/products/SKU-1'],
+    ['a data request', '/products/SKU-1.data'],
+  ])('captures the error inside a data() response a middleware threw, for %s', async (_, path) => {
+    posthog = createPostHog()
+    const middleware = [
+      (): never => {
+        throw data(new Error('Session store unavailable'), { status: 503 })
+      },
+    ]
+    const handler = createRequestHandler(buildWith(createReactRouterErrorHandler(posthog), middleware), 'production')
+
+    await handler(new Request(`https://shop.example${path}`))
+    const events = await sentEvents(posthog)
+
+    expect(events.map((e) => e.properties.$exception_list[0].value)).toEqual(['Session store unavailable'])
+  })
+
+  it('does not capture a data() response without an error that a middleware threw', async () => {
+    posthog = createPostHog()
+    const middleware = [
+      (): never => {
+        throw data('Region blocked', { status: 403 })
+      },
+    ]
+    const handler = createRequestHandler(buildWith(createReactRouterErrorHandler(posthog), middleware), 'production')
+
+    await handler(new Request('https://shop.example/products/SKU-1'))
 
     expect(await sentEvents(posthog)).toEqual([])
   })

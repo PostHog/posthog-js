@@ -236,6 +236,8 @@ describe('tracing headers', () => {
       ['an opt-in', '__ph_opt_in_out_token=1', false, false],
       ['no consent cookie when opt-out is the default', '', true, true],
       ['an opt-in when opt-out is the default', '__ph_opt_in_out_token=1', true, false],
+      ['no Cookie header', undefined, false, false],
+      ['no Cookie header when opt-out is the default', undefined, true, true],
     ])('reports the consent cookie as opted out with %s', (_, cookie, byDefault, expected) => {
       expect(isPostHogCookieOptedOut(cookie, 'token', byDefault)).toBe(expected)
     })
