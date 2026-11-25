@@ -20,17 +20,23 @@ const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 
 const CREDENTIAL_KEY_SUFFIXES = [
   'token',
   'secret',
+  'secrets',
   'secretkey',
   'password',
+  'passwords',
+  'passwd',
   'apikey',
+  'apikeys',
   'privatekey',
   'accesskey',
+  'authorization',
   'cookie',
   'cookies',
+  'credential',
   'credentials',
 ]
-// Exact names whose values hold credentials under other names, such as `x-api-key` inside `headers`.
-const CREDENTIAL_KEYS = new Set(['authorization', 'headers'])
+// `headers` is masked whole, since it holds credentials under other names, such as `x-api-key`.
+const CREDENTIAL_KEYS = new Set(['headers'])
 
 const isCredentialKey = (key: string): boolean =>
   CREDENTIAL_KEYS.has(key) || CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))

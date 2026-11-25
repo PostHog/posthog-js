@@ -35,17 +35,23 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return prototype === Object.prototype || prototype === null
 }
 
+// Deeper values are dropped rather than walked, so nested input cannot overflow the stack.
+const MAX_REDACT_DEPTH = 64
+
 /**
  * Replaces the value of every key that `isCredentialKey` accepts (normalized) with `[REDACTED]`, through plain
  * objects, arrays and JSON strings. Class instances, such as the MCP client inside an `mcpToTool()` tool, are
  * returned as they are.
  */
-export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean): unknown {
+export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean, depth = 0): unknown {
+  if (depth > MAX_REDACT_DEPTH) {
+    return '[Truncated]'
+  }
   if (typeof value === 'string') {
-    return redactJsonString(value, isCredentialKey)
+    return redactJsonString(value, isCredentialKey, depth)
   }
   if (Array.isArray(value)) {
-    return value.map((item) => redactKeys(item, isCredentialKey))
+    return value.map((item) => redactKeys(item, isCredentialKey, depth + 1))
   }
   if (!isPlainObject(value)) {
     return value
@@ -53,26 +59,32 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey),
+      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey, depth + 1),
     ])
   )
 }
 
+// The name before each `":` or `\":`, so keys of JSON nested in a JSON string are seen too.
+const JSON_KEY_NAME = /([\w-]+)\\*"\s*:/g
+
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean): string {
+// The raw text is checked for credential keys before parsing, because `JSON.parse` keeps only the last of
+// duplicate keys, and text without any keeps its formatting.
+function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
   const trimmed = value.trimStart()
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
     return value
   }
+  if (!Array.from(trimmed.matchAll(JSON_KEY_NAME), ([, key]) => normalizeKey(key)).some(isCredentialKey)) {
+    return value
+  }
   let parsed: unknown
   try {
-    parsed = JSON.parse(value)
+    parsed = JSON.parse(trimmed)
   } catch {
     return value
   }
-  const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey))
-  // Keeps the original formatting when nothing was masked.
-  return redacted === JSON.stringify(parsed) ? value : redacted
+  return JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these

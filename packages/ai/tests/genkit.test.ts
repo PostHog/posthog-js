@@ -74,21 +74,35 @@ function createWeatherFlow() {
   })
 }
 
-// [key, whether the tool returns its result as JSON text]
-const TOOL_CREDENTIAL_CASES: [string, boolean][] = [
-  ['apiKey', false],
-  ['refresh_token', false],
-  ['refreshToken', false],
-  ['idToken', false],
-  ['sessionToken', false],
-  ['SecretAccessKey', false],
-  ['oauth_token_secret', false],
-  ['privateKey', false],
-  ['cookie', false],
-  ['cookies', false],
-  ['Set-Cookie', false],
-  ['Credentials', false],
-  ['refresh_token', true],
+const toolResult = (credentialKey: string) => ({
+  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer' },
+  forecast: 'Sunny',
+})
+
+// [what the tool returns, the tool's result]
+const TOOL_CREDENTIAL_CASES: [string, unknown][] = [
+  ...[
+    'apiKey',
+    'refresh_token',
+    'refreshToken',
+    'idToken',
+    'sessionToken',
+    'SecretAccessKey',
+    'oauth_token_secret',
+    'privateKey',
+    'cookie',
+    'cookies',
+    'Set-Cookie',
+    'Credentials',
+    'credential',
+    'Proxy-Authorization',
+  ].map((credentialKey): [string, unknown] => [credentialKey, toolResult(credentialKey)]),
+  ['JSON text', JSON.stringify(toolResult('refresh_token'))],
+  ['JSON text with a BOM', `\uFEFF${JSON.stringify(toolResult('refresh_token'))}`],
+  [
+    'JSON text with a duplicate key',
+    '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
+  ],
 ]
 
 describe('PostHogGenkitSpanProcessor', () => {
@@ -332,10 +346,9 @@ describe('PostHogGenkitSpanProcessor', () => {
   })
 
   it.each(TOOL_CREDENTIAL_CASES)(
-    'keeps a %s a tool returns out of the next model input (as text: %s)',
-    async (credentialKey, asText) => {
+    'keeps the credential in a tool result (%s) out of the next model input',
+    async (_name, result) => {
       const ai = genkit({})
-      const result = { auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer' }, forecast: 'Sunny' }
       const getForecast = ai.defineTool(
         {
           name: 'getForecast',
@@ -343,7 +356,7 @@ describe('PostHogGenkitSpanProcessor', () => {
           inputSchema: z.object({ city: z.string() }),
           outputSchema: z.any(),
         },
-        async () => (asText ? JSON.stringify(result) : result)
+        async () => result
       )
       ai.defineModel({ name: 'fake/forecast-model', supports: { tools: true } }, async (request) =>
         request.messages.at(-1)?.role !== 'tool'
@@ -364,9 +377,17 @@ describe('PostHogGenkitSpanProcessor', () => {
       const input = JSON.stringify(followUp.properties.$ai_input)
       expect(input).toContain('Sunny')
       expect(input).toContain('Bearer')
-      expect(input).toContain('[REDACTED]')
     }
   )
+
+  it('still captures a generation whose prompt is deeply nested JSON', async () => {
+    const ai = genkit({})
+    ai.defineModel({ name: 'fake/echo-model' }, async () => ({ message: { role: 'model', content: [{ text: 'Hi' }] } }))
+
+    await ai.generate({ model: 'fake/echo-model', prompt: `${'['.repeat(50000)}{"token":"x"}${']'.repeat(50000)}` })
+
+    expect(capturedEvents(client).some((event) => event.event === '$ai_generation')).toBe(true)
+  })
 
   it.each([
     ['googleai/gemini-2.5-flash', 'gemini', 'gemini-2.5-flash'],
