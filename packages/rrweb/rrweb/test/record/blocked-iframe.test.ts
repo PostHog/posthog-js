@@ -12,9 +12,11 @@ import {
 
 interface IWindow extends Window {
   rrweb: {
-    record: (
+    record: ((
       options: recordOptions<eventWithTime>,
-    ) => listenerHandler | undefined;
+    ) => listenerHandler | undefined) & {
+      takeFullSnapshot: (isCheckout?: boolean) => void;
+    };
   };
   emit?: (e: eventWithTime) => undefined;
 }
@@ -24,6 +26,7 @@ type BlockingOptions = Pick<recordOptions<eventWithTime>, 'blockSelector'>;
 
 const INITIAL_CONTENT = 'initial-iframe-content';
 const LATER_CONTENT = 'later-iframe-content';
+const NAVIGATED_CONTENT = 'navigated-iframe-content';
 
 describe('record a blocked iframe', () => {
   let browser: puppeteer.Browser;
@@ -145,6 +148,148 @@ describe('record a blocked iframe', () => {
       }).toEqual({ initialContent: isRecorded, laterContent: isRecorded });
     },
   );
+
+  const blockLaterCases = [
+    {
+      blocking: 'the block class',
+      block: 'class',
+      blockingOptions: {},
+    },
+    {
+      blocking: 'the block selector',
+      block: 'attribute',
+      blockingOptions: { blockSelector: '[data-private]' },
+    },
+    {
+      blocking: 'a blocked parent',
+      block: 'parent',
+      blockingOptions: {},
+    },
+  ] as const;
+
+  it.each(
+    (['same-origin', 'cross-origin'] as const).flatMap((iframeOrigin) =>
+      blockLaterCases.flatMap((blockCase) =>
+        [false, true].map((takeFullSnapshot) => ({
+          iframeOrigin,
+          takeFullSnapshot,
+          ...blockCase,
+        })),
+      ),
+    ),
+  )(
+    'a $iframeOrigin iframe that gets $blocking stops being recorded (full snapshot: $takeFullSnapshot)',
+    async ({ iframeOrigin, block, blockingOptions, takeFullSnapshot }) => {
+      const isCrossOrigin = iframeOrigin === 'cross-origin';
+      const src = isCrossOrigin
+        ? `src="${getServerURL(server)}/html/blank.html"`
+        : '';
+      const page = await browser.newPage();
+      try {
+        await page.goto('about:blank');
+        await page.setContent(
+          `<!DOCTYPE html><html><body>
+            <div id="parent"><iframe ${src}></iframe></div>
+          </body></html>`,
+          { waitUntil: 'load' },
+        );
+        const [topFrame, iframeFrame] = page.frames();
+        await appendParagraph(iframeFrame, INITIAL_CONTENT);
+
+        const events: eventWithTime[] = [];
+        await page.exposeFunction('emit', (e: eventWithTime) => {
+          events.push(e);
+        });
+        const options = {
+          ...blockingOptions,
+          recordCrossOriginIframes: isCrossOrigin,
+        };
+        await startRecording(topFrame, options);
+        if (isCrossOrigin) {
+          await startRecording(iframeFrame, options);
+        }
+        await waitForRAF(page);
+        expect(JSON.stringify(events)).toContain(INITIAL_CONTENT);
+        const eventsBeforeBlocking = events.length;
+
+        await topFrame.evaluate(
+          (block, takeFullSnapshot) => {
+            const iframe = document.querySelector('iframe')!;
+            if (block === 'class') iframe.classList.add('rr-block');
+            if (block === 'attribute') iframe.setAttribute('data-private', '');
+            if (block === 'parent') {
+              document.getElementById('parent')!.classList.add('rr-block');
+            }
+            if (takeFullSnapshot) {
+              // let the block mutation be processed before the snapshot
+              return new Promise<void>((resolve) =>
+                setTimeout(() => {
+                  (
+                    window as unknown as IWindow
+                  ).rrweb.record.takeFullSnapshot(true);
+                  resolve();
+                }),
+              );
+            }
+          },
+          block,
+          takeFullSnapshot,
+        );
+        await waitForRAF(page);
+
+        await appendParagraph(iframeFrame, LATER_CONTENT);
+        await waitForRAF(page);
+
+        const recordedAfterBlocking = JSON.stringify(
+          events.slice(eventsBeforeBlocking),
+        );
+        expect({
+          initialContent: recordedAfterBlocking.includes(INITIAL_CONTENT),
+          laterContent: recordedAfterBlocking.includes(LATER_CONTENT),
+        }).toEqual({ initialContent: false, laterContent: false });
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
+  it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<p>${INITIAL_CONTENT}</p>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      expect(JSON.stringify(events)).toContain(INITIAL_CONTENT);
+      const eventsBeforeBlocking = events.length;
+
+      await page.evaluate(async (content) => {
+        const iframe = document.querySelector('iframe')!;
+        iframe.classList.add('rr-block');
+        await new Promise<void>((resolve) => {
+          iframe.addEventListener('load', () => resolve(), { once: true });
+          iframe.srcdoc = `<p>${content}</p>`;
+        });
+      }, NAVIGATED_CONTENT);
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(JSON.stringify(events.slice(eventsBeforeBlocking))).not.toContain(
+        NAVIGATED_CONTENT,
+      );
+    } finally {
+      await page.close();
+    }
+  });
 
   it.each(['same-origin', 'cross-origin'] as const)(
     'a %s iframe is recorded when the block selector is invalid',

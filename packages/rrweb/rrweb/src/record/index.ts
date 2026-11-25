@@ -1147,6 +1147,17 @@ function record<T = eventWithTime>(
     };
     iframeManager.addLoadListener(loadListener);
 
+    iframeManager.addBlockedListener((iframeEl) => {
+      const pendingCleanup = pendingIframeCleanups.get(iframeEl);
+      if (pendingCleanup) {
+        pendingIframeCleanups.delete(iframeEl);
+        callSafely(pendingCleanup);
+        const idx = handlers.indexOf(pendingCleanup);
+        if (idx !== -1) handlers.splice(idx, 1);
+      }
+      runAndDetachIframeCleanup?.(mirror.getId(iframeEl));
+    });
+
     iframeManager.addPageHideListener((iframeEl) => {
       const iframeId = mirror.getId(iframeEl);
       runAndDetachIframeCleanup?.(iframeId);

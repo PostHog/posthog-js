@@ -257,6 +257,9 @@ export default class MutationBuffer {
   }
 
   public processMutations = (mutations: mutationRecord[]): void => {
+    // Mutations that block a tracked iframe are not recorded, so check here.
+    this.iframeManager.releaseBlockedIframes();
+    if (this.iframeManager.isBlockedDocument(this.doc)) return;
     mutations.forEach(this.processMutation); // adds mutations to the buffer
     this.emit(); // clears buffer if not locked/frozen
   };
