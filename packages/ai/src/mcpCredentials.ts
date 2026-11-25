@@ -64,27 +64,43 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   )
 }
 
-// The name before each `":` or `\":`, so keys of JSON nested in a JSON string are seen too.
-const JSON_KEY_NAME = /([\w-]+)\\*"\s*:/g
+// Each key string in raw JSON text. Starting at a quote with a bounded length keeps the scan linear.
+const JSON_KEY = /"((?:[^"\\]|\\.){1,256})"\s*:/g
+
+// `JSON.parse` keeps only the last of duplicate keys, so the raw text is scanned for credential keys too.
+function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  for (const [, rawKey] of text.matchAll(JSON_KEY)) {
+    let key = rawKey
+    try {
+      key = JSON.parse(`"${rawKey}"`)
+    } catch {
+      // Not a valid JSON string, so it is checked as written.
+    }
+    if (isCredentialKey(normalizeKey(key))) {
+      return true
+    }
+  }
+  return false
+}
 
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-// The raw text is checked for credential keys before parsing, because `JSON.parse` keeps only the last of
-// duplicate keys, and text without any keeps its formatting.
+// Text without credentials is returned as written, so its formatting and large numbers survive.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
   const trimmed = value.trimStart()
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
     return value
   }
-  if (!Array.from(trimmed.matchAll(JSON_KEY_NAME), ([, key]) => normalizeKey(key)).some(isCredentialKey)) {
-    return value
-  }
+  const namesCredential = namesCredentialKey(trimmed, isCredentialKey)
   let parsed: unknown
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    return value
+    // JSON lines or truncated JSON cannot be masked field by field, so it fails closed.
+    return namesCredential ? '[REDACTED]' : value
   }
-  return JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
+  const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
+  // A credential inside a nested JSON string only shows up once the outer text is parsed.
+  return namesCredential || redacted !== JSON.stringify(parsed) ? redacted : value
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these

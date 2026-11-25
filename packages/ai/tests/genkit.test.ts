@@ -79,8 +79,8 @@ const toolResult = (credentialKey: string) => ({
   forecast: 'Sunny',
 })
 
-// [what the tool returns, the tool's result]
-const TOOL_CREDENTIAL_CASES: [string, unknown][] = [
+// [what the tool returns, the tool's result, whether the rest of the result survives]
+const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ...[
     'apiKey',
     'refresh_token',
@@ -99,6 +99,15 @@ const TOOL_CREDENTIAL_CASES: [string, unknown][] = [
   ].map((credentialKey): [string, unknown] => [credentialKey, toolResult(credentialKey)]),
   ['JSON text', JSON.stringify(toolResult('refresh_token'))],
   ['JSON text with a BOM', `\uFEFF${JSON.stringify(toolResult('refresh_token'))}`],
+  [
+    'JSON text with an escaped key',
+    '{"auth":{"refresh_tok\\u0065n":"tool-secret","token_type":"Bearer"},"forecast":"Sunny"}',
+  ],
+  [
+    'JSON text with an escaped duplicate key',
+    '{"auth":{"refresh_tok\\u0065n":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
+  ],
+  ['JSON lines', `{"forecast":"Sunny","token_type":"Bearer"}\n{"refresh_token":"tool-secret"}`, false],
   [
     'JSON text with a duplicate key',
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
@@ -347,7 +356,7 @@ describe('PostHogGenkitSpanProcessor', () => {
 
   it.each(TOOL_CREDENTIAL_CASES)(
     'keeps the credential in a tool result (%s) out of the next model input',
-    async (_name, result) => {
+    async (_name, result, keepsContent = true) => {
       const ai = genkit({})
       const getForecast = ai.defineTool(
         {
@@ -375,8 +384,10 @@ describe('PostHogGenkitSpanProcessor', () => {
       expect(JSON.stringify(events)).not.toContain('tool-secret')
       const followUp = events.filter((event) => event.event === '$ai_generation').at(-1)
       const input = JSON.stringify(followUp.properties.$ai_input)
-      expect(input).toContain('Sunny')
-      expect(input).toContain('Bearer')
+      if (keepsContent) {
+        expect(input).toContain('Sunny')
+        expect(input).toContain('Bearer')
+      }
     }
   )
 
