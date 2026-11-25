@@ -74,6 +74,23 @@ function createWeatherFlow() {
   })
 }
 
+// [key, whether the tool returns its result as JSON text]
+const TOOL_CREDENTIAL_CASES: [string, boolean][] = [
+  ['apiKey', false],
+  ['refresh_token', false],
+  ['refreshToken', false],
+  ['idToken', false],
+  ['sessionToken', false],
+  ['SecretAccessKey', false],
+  ['oauth_token_secret', false],
+  ['privateKey', false],
+  ['cookie', false],
+  ['cookies', false],
+  ['Set-Cookie', false],
+  ['Credentials', false],
+  ['refresh_token', true],
+]
+
 describe('PostHogGenkitSpanProcessor', () => {
   let client: any
 
@@ -314,18 +331,19 @@ describe('PostHogGenkitSpanProcessor', () => {
     expect(generate.properties.$ai_output_state.request.config).toEqual({ temperature: 0.2, apiKey: '[REDACTED]' })
   })
 
-  it.each(['apiKey', 'refresh_token', 'refreshToken', 'idToken', 'sessionToken', 'privateKey', 'cookie', 'Set-Cookie'])(
-    'keeps a %s a tool returns out of the next model input',
-    async (credentialKey) => {
+  it.each(TOOL_CREDENTIAL_CASES)(
+    'keeps a %s a tool returns out of the next model input (as text: %s)',
+    async (credentialKey, asText) => {
       const ai = genkit({})
+      const result = { auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer' }, forecast: 'Sunny' }
       const getForecast = ai.defineTool(
         {
           name: 'getForecast',
           description: 'Get the forecast',
           inputSchema: z.object({ city: z.string() }),
-          outputSchema: z.object({ auth: z.object({ [credentialKey]: z.string() }), forecast: z.string() }),
+          outputSchema: z.any(),
         },
-        async () => ({ auth: { [credentialKey]: 'tool-secret' }, forecast: 'Sunny' })
+        async () => (asText ? JSON.stringify(result) : result)
       )
       ai.defineModel({ name: 'fake/forecast-model', supports: { tools: true } }, async (request) =>
         request.messages.at(-1)?.role !== 'tool'
@@ -345,6 +363,7 @@ describe('PostHogGenkitSpanProcessor', () => {
       const followUp = events.filter((event) => event.event === '$ai_generation').at(-1)
       const input = JSON.stringify(followUp.properties.$ai_input)
       expect(input).toContain('Sunny')
+      expect(input).toContain('Bearer')
       expect(input).toContain('[REDACTED]')
     }
   )

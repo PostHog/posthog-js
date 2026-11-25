@@ -36,12 +36,16 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 }
 
 /**
- * Replaces the value of every key in `keys` (normalized) with `[REDACTED]`, through plain objects and arrays.
- * Class instances, such as the MCP client inside an `mcpToTool()` tool, are returned as they are.
+ * Replaces the value of every key that `isCredentialKey` accepts (normalized) with `[REDACTED]`, through plain
+ * objects, arrays and JSON strings. Class instances, such as the MCP client inside an `mcpToTool()` tool, are
+ * returned as they are.
  */
-export function redactKeys(value: unknown, keys: ReadonlySet<string>): unknown {
+export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean): unknown {
+  if (typeof value === 'string') {
+    return redactJsonString(value, isCredentialKey)
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => redactKeys(item, keys))
+    return value.map((item) => redactKeys(item, isCredentialKey))
   }
   if (!isPlainObject(value)) {
     return value
@@ -49,9 +53,26 @@ export function redactKeys(value: unknown, keys: ReadonlySet<string>): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      keys.has(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, keys),
+      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey),
     ])
   )
+}
+
+// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
+function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean): string {
+  const trimmed = value.trimStart()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return value
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return value
+  }
+  const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey))
+  // Keeps the original formatting when nothing was masked.
+  return redacted === JSON.stringify(parsed) ? value : redacted
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
@@ -95,7 +116,9 @@ export function redactGeminiToolDefinition(tool: unknown): unknown {
     Object.entries(tool).map(([key, value]) => [
       key,
       // Converted to plain JSON first, so class instances, `toJSON()` results and cycles are masked too.
-      normalizeKey(key) === GEMINI_SCHEMA_FIELD ? value : redactKeys(toJsonSafeValue(value), GEMINI_CREDENTIAL_KEYS),
+      normalizeKey(key) === GEMINI_SCHEMA_FIELD
+        ? value
+        : redactKeys(toJsonSafeValue(value), (key) => GEMINI_CREDENTIAL_KEYS.has(key)),
     ])
   )
 }

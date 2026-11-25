@@ -5,7 +5,7 @@ import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiE
 import { captureAiGeneration } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
 import { formatToolResult } from '../toolResult'
-import { normalizeKey, redactKeys } from '../mcpCredentials'
+import { redactKeys } from '../mcpCredentials'
 import type { FormattedMessage } from '../types'
 import { AIEvent, MAX_OUTPUT_SIZE, formatInlineDataBlock, isPrivacyModeEnabled } from '../utils'
 
@@ -14,25 +14,26 @@ const SPAN_STATUS_ERROR = 2
 
 const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 'stopSequences']
 
-// Plugin config is part of the span input and output, so `config.apiKey` would otherwise be captured.
-const CREDENTIAL_KEYS = new Set(
-  [
-    'apiKey',
-    'accessToken',
-    'refreshToken',
-    'idToken',
-    'sessionToken',
-    'authorization',
-    'clientSecret',
-    'privateKey',
-    'cookie',
-    'setCookie',
-    'headers',
-    'password',
-    'secret',
-    'token',
-  ].map(normalizeKey)
-)
+// Plugin config, tool results and model messages can all carry credentials. Matching the end of the
+// normalized key masks `refresh_token`, `SecretAccessKey` and `Set-Cookie` but leaves `maxOutputTokens` and
+// `token_type` alone.
+const CREDENTIAL_KEY_SUFFIXES = [
+  'token',
+  'secret',
+  'secretkey',
+  'password',
+  'apikey',
+  'privatekey',
+  'accesskey',
+  'cookie',
+  'cookies',
+  'credentials',
+]
+// Exact names whose values hold credentials under other names, such as `x-api-key` inside `headers`.
+const CREDENTIAL_KEYS = new Set(['authorization', 'headers'])
+
+const isCredentialKey = (key: string): boolean =>
+  CREDENTIAL_KEYS.has(key) || CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
 
 // Genkit plugin names that differ from the provider names the other integrations send.
 const PROVIDER_NAMES = new Map([
@@ -325,7 +326,7 @@ export class PostHogGenkitSpanProcessor {
     if (isPrivacyModeEnabled(this._client, this._privacyMode)) {
       return null
     }
-    return formatToolResult(redactKeys(parseAttribute(span, key), CREDENTIAL_KEYS), this._client, MAX_OUTPUT_SIZE)
+    return formatToolResult(redactKeys(parseAttribute(span, key), isCredentialKey), this._client, MAX_OUTPUT_SIZE)
   }
 
   private _formatMessages(messages: GenkitMessage[]): FormattedMessage[] {
@@ -334,7 +335,7 @@ export class PostHogGenkitSpanProcessor {
       content: (message.content ?? []).map((part) => formatPart(part, this._client)),
     }))
     // Redacts credentials (tool results reach the model as messages), base64 media and long strings.
-    return formatToolResult(redactKeys(formatted, CREDENTIAL_KEYS), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
+    return formatToolResult(redactKeys(formatted, isCredentialKey), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
   }
 }
 
