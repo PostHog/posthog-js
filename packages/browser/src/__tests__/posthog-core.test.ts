@@ -8,6 +8,7 @@ import { SURVEY_SEEN_PREFIX } from '@posthog/browser-common/utils/survey-utils'
 import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
+import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
@@ -1123,6 +1124,49 @@ describe('posthog core', () => {
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
                 expect(beforeSendMock.mock.calls[1][0].$set?.$fbp).toBeUndefined()
+            })
+
+            it('should reload feature flags once while $fbp waits for delivery', () => {
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                const reloadFeatureFlags = vi.spyOn(posthog.featureFlags!, 'reloadFeatureFlags')
+                setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
+
+                posthog.capture('$pageview')
+                posthog.capture('custom_event')
+                posthog.capture('$pageleave')
+
+                expect(beforeSendMock.mock.calls.map((call) => call[0].$set.$fbp)).toEqual([
+                    'fb.1.1699999000000.1234567890',
+                    'fb.1.1699999000000.1234567890',
+                    'fb.1.1699999000000.1234567890',
+                ])
+                expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            })
+        })
+
+        describe('person properties for flags', () => {
+            it('should reload feature flags only when a $set changes a stored value', () => {
+                const { posthog } = setup()
+                const reloadFeatureFlags = vi.spyOn(posthog.featureFlags!, 'reloadFeatureFlags')
+
+                posthog.capture(eventName, { $set: { plan: 'free' } })
+                posthog.capture(eventName, { $set: { plan: 'free' } })
+                posthog.capture(eventName, {}, { $set: { plan: 'free' } })
+                expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+                posthog.capture(eventName, { $set: { plan: 'pro' } })
+                expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+                expect(posthog.get_property(STORED_PERSON_PROPERTIES_KEY)).toMatchObject({ plan: 'pro' })
+
+                posthog.resetPersonPropertiesForFlags(false)
+                posthog.capture(eventName, { $set: { plan: 'pro' } })
+                expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
         })
 

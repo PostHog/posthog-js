@@ -28,6 +28,7 @@ import {
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SESSION_RECORDING_REMOTE_CONFIG,
+    STORED_PERSON_PROPERTIES_KEY,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -2091,7 +2092,10 @@ export class PostHog implements PostHogInterface {
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
         // This doesn't handle $set_once, because posthog-people doesn't either
         const finalSet = { ...data.properties['$set'], ...data['$set'] }
-        if (!isEmptyObject(finalSet)) {
+        // Reload flags only when the $set changes a stored value. A $set that repeats on every
+        // event, such as a pending $fbc or $fbp, must not reload flags on every event.
+        const storedPersonProperties = this.persistence.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
+        if (Object.keys(finalSet).some((key) => storedPersonProperties[key] !== finalSet[key])) {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
