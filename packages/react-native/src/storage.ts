@@ -222,6 +222,9 @@ export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
 
     super(storage, storageKey)
   }
+
+  // The memory cache is the only copy, so serializing it would only hold a second one in memory.
+  persist(): void {}
 }
 
 // Factory functions that bind the storage instance to the correct SDK-internal
@@ -235,10 +238,21 @@ export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogR
   return new PostHogRNStorage(customStorage, LOGS_STORAGE_FILE)
 }
 
+/** Named per project, so AI events queued for one project are never sent with another's token. */
+export const aiStorageKey = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.json`
+
+export function createAiStorage(customStorage: PostHogCustomStorage, projectToken: string): PostHogRNStorage {
+  return new PostHogRNStorage(customStorage, aiStorageKey(projectToken))
+}
+
 export function createEventsMemoryStorage(): PostHogRNStorage {
   return new PostHogRNSyncMemoryStorage(EVENTS_STORAGE_FILE)
 }
 
 export function createLogsMemoryStorage(): PostHogRNStorage {
   return new PostHogRNSyncMemoryStorage(LOGS_STORAGE_FILE)
+}
+
+export function createAiMemoryStorage(): PostHogRNStorage {
+  return new PostHogRNSyncMemoryStorage('.posthog-rn-ai.json')
 }
