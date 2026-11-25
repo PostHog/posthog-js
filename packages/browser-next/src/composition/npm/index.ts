@@ -33,6 +33,7 @@ export type {
     IPostHog,
     PostHogOptions,
     RemoteConfig,
+    RuntimeOptions,
     SendRequestInit,
     SessionContext,
     StorageLike,
