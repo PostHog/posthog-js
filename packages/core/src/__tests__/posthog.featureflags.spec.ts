@@ -1402,6 +1402,28 @@ describe('PostHog Feature Flags v4', () => {
           expect(mocks.fetch).toHaveBeenCalledTimes(1)
         })
 
+        it.each([
+          [
+            'getFeatureFlagResult',
+            () => posthog.getFeatureFlagResult('feature-1', { sendFeatureFlagEvent: false })?.enabled,
+          ],
+          ['getFeatureFlag', () => posthog.getFeatureFlag('feature-1', { sendFeatureFlagEvent: false })],
+          ['isFeatureEnabled', () => posthog.isFeatureEnabled('feature-1', { sendFeatureFlagEvent: false })],
+          [
+            'isFeatureEnabled with a default',
+            () => posthog.isFeatureEnabled('feature-1', { sendFeatureFlagEvent: false, defaultValue: false }),
+          ],
+          [
+            'getFeatureFlag, where sendFeatureFlagEvent wins over sendEvent',
+            () => posthog.getFeatureFlag('feature-1', { sendFeatureFlagEvent: false, sendEvent: true }),
+          ],
+        ] as const)('should NOT send event from %s when sendFeatureFlagEvent: false', async (_, callFn) => {
+          expect(callFn()).toEqual(true)
+          await waitForPromises()
+          // Only the flags fetch call, no event capture
+          expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        })
+
         it('should NOT send duplicate events for the same flag key', async () => {
           posthog.getFeatureFlagResult('feature-1')
           await waitForPromises()

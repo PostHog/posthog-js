@@ -101,11 +101,16 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
 
       expect(posthog.getFeatureFlag('local-flag')).toEqual(true)
       expect(posthog.getFeatureFlag('variant-flag')).toEqual('variant-a')
-      expect(posthog.getFeatureFlagPayload('variant-flag')).toEqual({ tier: 1 })
+      expect(posthog.getFeatureFlagResult('variant-flag', { sendFeatureFlagEvent: false })?.payload).toEqual({
+        tier: 1,
+      })
 
       // reload is a no-op resolving with the locally supplied flags
-      const flags = await posthog.reloadFeatureFlagsAsync()
-      expect(flags).toEqual({ 'local-flag': true, 'variant-flag': 'variant-a' })
+      await expect(posthog.reloadFeatureFlagsAsync()).resolves.toEqual({
+        flags: ['local-flag', 'variant-flag'],
+        variants: { 'local-flag': true, 'variant-flag': 'variant-a' },
+        errorsLoading: false,
+      })
 
       await posthog.shutdown()
       ;((globalThis as any).window.fetch as vi.Mock).mockClear()
@@ -121,7 +126,9 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       await wait(50)
 
       expect(posthog.getFeatureFlag('local-flag')).toEqual(true)
-      expect(posthog.getFeatureFlagPayload('variant-flag')).toEqual({ tier: 1 })
+      expect(posthog.getFeatureFlagResult('variant-flag', { sendFeatureFlagEvent: false })?.payload).toEqual({
+        tier: 1,
+      })
       expect(flagsCalls()).toHaveLength(0)
     })
   })
