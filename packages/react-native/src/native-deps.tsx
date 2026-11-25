@@ -166,7 +166,7 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
 type ExpoDirectory = 'document' | 'cache'
 
 /** Storage in one of Expo's app directories, which can also delete a file and list the directory's file names. */
-export interface ExpoFileStorage extends PostHogCustomStorage {
+export type ExpoFileStorage = PostHogCustomStorage & {
   removeItem: (key: string) => Promise<void>
   keys: () => Promise<string[]>
 }
