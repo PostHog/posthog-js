@@ -2149,6 +2149,38 @@ describe('emails', () => {
       expect(error?.results?.map((result) => result.status)).toEqual([status, status])
     })
 
+    it.each([0, 1, 2, 3, 4, 5, 6, 8])(
+      'sends no request once the client shuts down %i microtasks after the retry wait ends',
+      async (microtasks) => {
+        const postHog = new FakePostHog({ secretKey: SECRET_KEY })
+        const closedAtFetch: boolean[] = []
+        makeClient({
+          fetch: (url: string, options: Parameters<typeof postHog.fetch>[1]) => {
+            closedAtFetch.push((posthog as unknown as { _isShutdown: boolean })._isShutdown)
+            return postHog.fetch(url, options)
+          },
+        })
+        postHog.failNext('batch', { status: 503 })
+
+        const pending = posthog.emails.batch(WELCOME, recipientsTo(2))
+        await vi.advanceTimersByTimeAsync(0)
+        vi.advanceTimersToNextTimer()
+        for (let i = 0; i < microtasks; i++) {
+          await Promise.resolve()
+        }
+        const shutdown = posthog.shutdown()
+        const { data, error } = await settle(pending)
+        await shutdown
+
+        expect(closedAtFetch).not.toContain(true)
+        if (postHog.requests.batch === 1) {
+          expect(error).toMatchObject({ code: 'client_closed' })
+        } else {
+          expect(data?.results.map((result) => result.status)).toEqual(['queued', 'queued'])
+        }
+      }
+    )
+
     it('still sends a batch called just before the client shuts down', async () => {
       const postHog = againstPostHog()
 
