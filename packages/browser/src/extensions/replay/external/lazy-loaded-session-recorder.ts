@@ -95,7 +95,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { MASKED, PERSONAL_DATA_URL_PARAMS } from '@posthog/browser-common/utils/event-utils'
 import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
 const BASE_ENDPOINT = '/s/'
@@ -882,7 +882,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskReplayUrl(url: string, forceStripHash: boolean = false): string | undefined {
         const href = forceStripHash ? stripUrlHash(url) : this._stripUrlHash(url)
         const paramsToMask = this._instance.config.mask_personal_data_properties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
+            ? [...PERSONAL_DATA_URL_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
             : []
 
         return this._maskUrl(maskQueryParams(href, paramsToMask, MASKED))

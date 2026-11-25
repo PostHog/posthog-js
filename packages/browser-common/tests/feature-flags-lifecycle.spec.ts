@@ -419,6 +419,29 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('joins a reload requested from a reloading handler to the starting request', async () => {
+        const client = createFlagsClient()
+        const sendRequest = vi
+            .spyOn(client, 'sendRequest')
+            .mockResolvedValue({ statusCode: 200, json: { featureFlags: { test: true } } })
+        const featureFlags = new SharedFeatureFlags({ get: () => createConfig() })
+        featureFlags.setup(client)
+        const nested: Promise<unknown>[] = []
+        const handler = vi.fn(() => {
+            nested.push(featureFlags.reloadFeatureFlagsAsync())
+        })
+        featureFlags.onReloading(handler)
+
+        const outer = featureFlags.reloadFeatureFlagsAsync()
+        await vi.advanceTimersByTimeAsync(5)
+
+        expect(await outer).toEqual({ status: 'loaded' })
+        expect(await Promise.all(nested)).toEqual([{ status: 'loaded' }])
+        expect(handler).toHaveBeenCalledTimes(1)
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+        featureFlags.dispose()
+    })
+
     it('logs feature flag request failures through the scoped logger', async () => {
         const client = createFlagsClient()
         const clientError = vi.spyOn(client.logger, 'error').mockImplementation(() => {})

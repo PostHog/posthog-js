@@ -1,8 +1,6 @@
-import type { Client, DeepReadonly, Extension, ExtensionToken, Listener } from '@posthog/browser-common'
-import type { IAnalytics } from '../../products/analytics/analytics-api'
-import type { IAnalyticsExtension } from '../../products/analytics/analytics-internal'
+import type { DeepReadonly, Extension } from '@posthog/browser-common'
+import type { IPostHog } from '../types'
 import type { FeatureFlags } from '../../products/flags/flags-token'
-import type { FlagsExtension } from '../../products/flags/flags-internal'
 import type { LogsExtension } from '../../products/logs/logs-internal'
 import type { SurveysExtension } from '../../products/surveys/surveys-internal'
 import type { ConsentState } from '../state/state'
@@ -34,48 +32,12 @@ export interface ConsentChangeInfo {
     readonly previous: ConsentState
 }
 
-export type BrowserExtension = Extension<IPostHogInternal>
+/** The shared extension contract, hosted by the browser client itself. */
+export type BrowserExtension = Extension<IPostHog>
 
 export interface BrowserProducts {
-    analytics: IAnalytics
     featureFlags: FeatureFlags
     logs: LogsExtension
     surveys: SurveysExtension
     autocapture: BrowserExtension & { setElementSelectors(selectors: Set<string>): void }
-}
-
-export interface InternalBrowserProducts extends BrowserProducts {
-    analytics: IAnalyticsExtension
-    featureFlags: FlagsExtension
-}
-
-export type BrowserExtensionAccess<Products extends BrowserProducts = BrowserProducts> = Readonly<Partial<Products>> & {
-    resolveExtension<T extends BrowserExtension>(token: ExtensionToken<T>): Promise<T | undefined>
-    resolveExtension<Name extends keyof Products>(name: Name): Promise<Products[Name] | undefined>
-    resolveExtension<T extends BrowserExtension = BrowserExtension>(name: string): Promise<T | undefined>
-}
-
-/** Shared Core capabilities, without application administration or product controls. */
-export interface ICoreCapabilities extends Omit<
-    Client,
-    'getExtension' | 'capture' | 'registerDynamicEventProperties' | 'isRateLimited' | 'onEvent'
-> {
-    /** Fires when consent changes, including changes observed from another tab. Does not replay. */
-    readonly onConsentChange: Listener<ConsentChangeInfo>
-    /** Fires after identification, independently of capture consent. Does not replay. */
-    readonly onIdentify: Listener<IdentifyInfo>
-    /** Fires after group membership or property updates, independently of capture consent. Does not replay. */
-    readonly onGroup: Listener<GroupInfo>
-    /** Fires after group-only reset clears local membership. Does not replay. */
-    readonly onGroupsReset: Listener<void>
-    /** Fires after local identity and persisted extension state are reset. Does not replay. */
-    readonly onReset: Listener<void>
-}
-
-/** SDK-internal scoped view; shared implementations receive a separate Client adapter. */
-export interface IPostHogInternal extends ICoreCapabilities, BrowserExtensionAccess<InternalBrowserProducts> {
-    readonly sharedClient: Client
-    /** Local person-property changes, independently of capture consent. Does not replay. */
-    readonly onChangeProperties: Listener<ChangePropertiesInfo>
-    readonly onEvent: Client['onEvent']
 }
