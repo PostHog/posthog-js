@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.22.1
+
+### Patch Changes
+
+- [#5860](https://github.com/PostHog/posthog-js/pull/5860) [`4288b33`](https://github.com/PostHog/posthog-js/commit/4288b33c33107a949657f6c6d316f34a4fe94734) Thanks [@utsxvrai](https://github.com/utsxvrai)! - Keep the choices of an `n > 1` streamed OpenAI chat completion apart in `$ai_output_choices`, one message per choice as non-streamed calls already do, and take `$ai_stop_reason` from the first choice.
+  (2026-11-25)
+
 ## 8.22.0
 
 ### Minor Changes

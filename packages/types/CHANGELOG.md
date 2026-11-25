@@ -1,5 +1,19 @@
 # @posthog/types
 
+## 1.427.2
+
+### Patch Changes
+
+- [#5864](https://github.com/PostHog/posthog-js/pull/5864) [`b3ce2a8`](https://github.com/PostHog/posthog-js/commit/b3ce2a8abc3b980cdcbfe82daec6daae6cf38597) Thanks [@joaohenriquesfr](https://github.com/joaohenriquesfr)! - Add the private `__preview_replay_early_fetch_response` option, which stops Session Replay from holding back streamed fetch responses while it records their body. In WebKit, a request aborted while its body is being read then rejects with a `TypeError` instead of an `AbortError`.
+  (2026-11-25)
+
+## 1.427.1
+
+### Patch Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
 ## 1.427.0
 
 ### Minor Changes

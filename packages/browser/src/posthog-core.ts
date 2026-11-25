@@ -1914,6 +1914,12 @@ export class PostHog implements PostHogInterface {
             )
         }
 
+        // Reconcile sibling-subdomain cookie identity changes before updating
+        // sessionPersistence so adopting an anonymous reset does not wipe the
+        // campaign, referrer, or search properties recorded for this event.
+        this.persistence.syncCookieProperties()
+        this._processCookieIdentityChange()
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1940,7 +1946,7 @@ export class PostHog implements PostHogInterface {
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties: this._calculateEventProperties(event_name, properties || {}, timestamp, uuid, false, true),
         }
 
         // A config version 2 flag event never carries some properties, and the flags extension names
@@ -2284,6 +2290,17 @@ export class PostHog implements PostHogInterface {
         uuid?: string,
         readOnly?: boolean
     ): Properties {
+        return this._calculateEventProperties(eventName, eventProperties, timestamp, uuid, readOnly, false)
+    }
+
+    private _calculateEventProperties(
+        eventName: string,
+        eventProperties: Properties,
+        timestamp?: Date,
+        uuid?: string,
+        readOnly?: boolean,
+        skipCookieSync: boolean = false
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return eventProperties
@@ -2294,8 +2311,10 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        this.persistence.syncCookieProperties()
-        this._processCookieIdentityChange()
+        if (!skipCookieSync) {
+            this.persistence.syncCookieProperties()
+            this._processCookieIdentityChange()
+        }
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
@@ -4963,6 +4982,7 @@ export class PostHog implements PostHogInterface {
         // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
+            this.heatmaps?.discardPending()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {
@@ -5057,6 +5077,8 @@ export class PostHog implements PostHogInterface {
             // Consent granted in another tab leaves this tab holding the cookieless sentinel, and no $opt_in capture
             // will heal it below. Adopt the shared identity before re-enabling persistence saves the stale one over it.
             this._syncCookielessIdentity()
+        } else {
+            this.heatmaps?.discardPending()
         }
 
         this.consent.optInOut(true)
@@ -5129,6 +5151,7 @@ export class PostHog implements PostHogInterface {
         const sessionRecording = this.sessionRecording
         // Identity changes must not let queued recorder work flush under the cookieless identity.
         sessionRecording?.dispose({ discardBufferedEvents: true })
+        this.heatmaps?.discardPending()
 
         if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
             this._reset(true, true)

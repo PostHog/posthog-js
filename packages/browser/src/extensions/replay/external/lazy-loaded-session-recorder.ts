@@ -95,7 +95,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { MASKED, PERSONAL_DATA_URL_PARAMS } from '@posthog/browser-common/utils/event-utils'
 import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
 const BASE_ENDPOINT = '/s/'
@@ -865,6 +865,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         // Only new cores default this private option to true. Old cores loading the
                         // unversioned recorder lack it and must retain legacy fetch delegation.
                         captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
+                        returnFetchResponseEarly: this._instance.config.__preview_replay_early_fetch_response === true,
                     })
                 )
             } else {
@@ -882,7 +883,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskReplayUrl(url: string, forceStripHash: boolean = false): string | undefined {
         const href = forceStripHash ? stripUrlHash(url) : this._stripUrlHash(url)
         const paramsToMask = this._instance.config.mask_personal_data_properties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
+            ? [...PERSONAL_DATA_URL_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
             : []
 
         return this._maskUrl(maskQueryParams(href, paramsToMask, MASKED))
