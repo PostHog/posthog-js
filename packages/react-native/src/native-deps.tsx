@@ -163,11 +163,17 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
   return null
 }
 
-const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
+type ExpoDirectory = 'document' | 'cache'
+
+const buildLegacyStorage = (filesystem: any, directory: ExpoDirectory): PostHogCustomStorage | undefined => {
+  const directoryUri = directory === 'document' ? filesystem.documentDirectory : filesystem.cacheDirectory
+  if (directory === 'cache' && !directoryUri) {
+    return undefined
+  }
   return {
     async getItem(key: string) {
       try {
-        const uri = (filesystem.documentDirectory || '') + key
+        const uri = (directoryUri || '') + key
         const stringContent = await filesystem.readAsStringAsync(uri)
         return stringContent
       } catch (e) {
@@ -176,19 +182,14 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
     },
 
     async setItem(key: string, value: string) {
-      const uri = (filesystem.documentDirectory || '') + key
+      const uri = (directoryUri || '') + key
       await filesystem.writeAsStringAsync(uri, value)
     },
   }
 }
 
-export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined => {
-  // On web platform during SSR (no window), skip file storage
-  // The caller will fall back to memory storage
-  if (isWeb() && typeof (GLOBAL_OBJ as any)?.window === 'undefined') {
-    return undefined
-  }
-
+/** Storage in one of Expo's app directories, or undefined where expo-file-system isn't available. */
+const buildExpoFileStorage = (directory: ExpoDirectory): PostHogCustomStorage | undefined => {
   // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
   const supportedPlatform = !isWeb() && !isMacOS()
@@ -206,12 +207,21 @@ export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined 
       const filesystem = OptionalExpoFileSystem as any
 
       if (filesystem.Paths && filesystem.File) {
+        let directoryPath: unknown
+        try {
+          directoryPath = filesystem.Paths[directory]
+        } catch {
+          return undefined
+        }
+        if (!directoryPath) {
+          return undefined
+        }
         return {
           async getItem(key: string) {
             try {
               // File constructor accepts Directory instances and joins path segments
               // See https://docs.expo.dev/versions/latest/sdk/filesystem/
-              const file = new filesystem.File(filesystem.Paths.document, key)
+              const file = new filesystem.File(directoryPath, key)
               const stringContent = await file.text()
               return stringContent
             } catch (e) {
@@ -220,7 +230,7 @@ export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined 
           },
 
           async setItem(key: string, value: string) {
-            const file = new filesystem.File(filesystem.Paths.document, key)
+            const file = new filesystem.File(directoryPath, key)
             await file.write(value)
           },
         }
@@ -234,9 +244,30 @@ export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined 
     const legacyModule = (OptionalExpoFileSystemLegacy || OptionalExpoFileSystem) as any
     try {
       if (legacyModule && typeof legacyModule.readAsStringAsync === 'function') {
-        return buildLegacyStorage(legacyModule)
+        return buildLegacyStorage(legacyModule, directory)
       }
     } catch (e) {}
+  }
+  return undefined
+}
+
+/**
+ * Storage for the `captureAi()` queue: Expo's cache directory, which neither iCloud nor Android Auto Backup
+ * copies, so megabytes of unsent AI events never count against the app's backup. The OS may clear it when
+ * the device is low on space. Undefined where expo-file-system isn't available.
+ */
+export const buildAiEventStorage = (): PostHogCustomStorage | undefined => buildExpoFileStorage('cache')
+
+export const buildOptimisticAsyncStorage = (): PostHogCustomStorage | undefined => {
+  // On web platform during SSR (no window), skip file storage
+  // The caller will fall back to memory storage
+  if (isWeb() && typeof (GLOBAL_OBJ as any)?.window === 'undefined') {
+    return undefined
+  }
+
+  const fileStorage = buildExpoFileStorage('document')
+  if (fileStorage) {
+    return fileStorage
   }
 
   if (OptionalAsyncStorage) {
