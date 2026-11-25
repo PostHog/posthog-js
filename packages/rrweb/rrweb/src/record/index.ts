@@ -361,7 +361,7 @@ function record<T = eventWithTime>(
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
-    recordCrossOriginIframes = false,
+    recordCrossOriginIframes: recordCrossOriginIframesOption = false,
     recordAfter = options.recordAfter === 'DOMContentLoaded'
       ? options.recordAfter
       : 'load',
@@ -384,9 +384,16 @@ function record<T = eventWithTime>(
     ..._dataURLOptions,
   };
 
-  const inEmittingFrame = recordCrossOriginIframes
+  // A cross-origin child cannot see whether the parent blocks it, so the
+  // parent has to judge each relayed event. A block selector's past matches
+  // cannot be tracked reliably (`:focus-within`, a match that starts and ends
+  // within one mutation batch), so the parent fails closed and relays nothing.
+  // Child frames keep relaying; only the parent's decision matters.
+  const inEmittingFrame = recordCrossOriginIframesOption
     ? window.parent === window
     : true;
+  const recordCrossOriginIframes =
+    recordCrossOriginIframesOption && !(inEmittingFrame && blockSelector);
 
   let passEmitsToParent = false;
   if (!inEmittingFrame) {
@@ -417,6 +424,11 @@ function record<T = eventWithTime>(
       unregisterErrorHandler();
       return undefined;
     }
+  }
+  if (recordCrossOriginIframes !== recordCrossOriginIframesOption) {
+    console.warn(
+      'rrweb: cross-origin iframes are not recorded because a blockSelector is set',
+    );
   }
   if (!inEmittingFrame && !passEmitsToParent) {
     return () => {

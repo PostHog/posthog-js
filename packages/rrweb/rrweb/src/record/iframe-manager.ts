@@ -129,19 +129,13 @@ export class IframeManager {
   // events at any time, so a message can arrive after a block has already been
   // removed. Once a relaying iframe is seen blocked, its window's messages are
   // dropped for the rest of the recording, since nothing can tell which ones
-  // were produced while it was blocked.
+  // were produced while it was blocked. Relaying is off under a block
+  // selector (see record()), so only the block class has to be tracked here.
   public releaseBlockedRelayingIframes(mutations: mutationRecord[]): void {
     if (this.relayingIframes.size === 0) return;
-    // A selector's past matches cannot be rebuilt from mutation records, and
-    // some (`:focus-within`, `:checked`) change with no mutation at all. So
-    // under a selector, relayed messages are only accepted from iframes that
-    // were never blocked, checked on delivery and on every DOM change, and a
-    // brief block that comes and goes between checks is a known gap.
-    // Without a selector, only an attribute change can add the block class; a
-    // moved iframe is serialized again anyway. A selector can depend on any
-    // change, including text (`:empty`).
+    // Only a class change can add the block class; a moved iframe is
+    // serialized again anyway.
     if (
-      !this.blockSelector &&
       !mutations.some(
         (m) => m.type === 'attributes' && m.attributeName === 'class',
       )
