@@ -200,7 +200,7 @@ export class EmailSender implements Emails {
       const content =
         prepared.react === undefined
           ? prepared.content
-          : await withRenderedReact(prepared.content, prepared.react, this.config)
+          : await withRenderedReact(prepared.content, prepared.react, this.config, this.hooks.logger)
       if (prepared.react !== undefined) {
         refuseRenderedMessageOverLimit(prepared.files, content)
       }
@@ -677,10 +677,11 @@ function isReactElement(value: unknown): value is EmailReactElement {
 async function withRenderedReact(
   content: Record<string, unknown>,
   react: EmailReactElement,
-  config: EmailSenderConfig
+  config: EmailSenderConfig,
+  logger: Logger
 ): Promise<Record<string, unknown>> {
   await Promise.resolve()
-  const renderer = config.reactRenderer ?? (await loadReactRenderer())
+  const renderer = config.reactRenderer ?? (await loadReactRenderer(logger))
   try {
     const html = await settleWithin(renderer.render(react), config.requestTimeoutMs, 'Rendering the react element')
     if (typeof html !== 'string') {
@@ -720,17 +721,19 @@ async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string
   }
 }
 
-async function loadReactRenderer(): Promise<EmailReactRenderer> {
+async function loadReactRenderer(logger: Logger): Promise<EmailReactRenderer> {
   try {
     return await importReactRenderer()
   } catch (cause) {
-    throw new EmailError({
+    const error = new EmailError({
       code: 'missing_react_renderer',
       message:
         "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
       fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
       cause,
     })
+    logger.warn(`PostHog email error ${error.code}: ${error.message} ${error.fix}`)
+    throw error
   }
 }
 

@@ -1053,18 +1053,31 @@ describe('emails', () => {
 
     it('asks to install @react-email/render when it does not load, and sends nothing', async () => {
       withoutRenderer()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      makeClient()
+      posthog.debug(true)
 
-      const { data, error } = await sendReact({ react: welcome })
+      try {
+        const { data, error } = await sendReact({ react: welcome })
 
-      expect(data).toBeNull()
-      expect(error).toMatchObject({
-        code: 'missing_react_renderer',
-        message:
-          "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-        fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
-        cause: expect.any(Error),
-      })
-      expect(inbox).toEqual([])
+        expect(data).toBeNull()
+        expect(error).toMatchObject({
+          code: 'missing_react_renderer',
+          message:
+            "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
+          fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
+          cause: expect.any(Error),
+        })
+        expect(warn).toHaveBeenCalledWith(
+          '[PostHog]',
+          expect.stringMatching(
+            /missing_react_renderer[\s\S]*reactEmailRenderer: await import\('@react-email\/render'\)/
+          )
+        )
+        expect(inbox).toEqual([])
+      } finally {
+        warn.mockRestore()
+      }
     })
 
     it('renders with a custom reactEmailRenderer wrapper', async () => {
