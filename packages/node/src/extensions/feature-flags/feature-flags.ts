@@ -437,15 +437,12 @@ class FeatureFlagsPoller {
         throw new InconclusiveMatchError('Flag has unknown group type index')
       }
 
+      // Without a usable key, matchFeatureFlagProperties skips each group condition, and conditions
+      // with their own person aggregation still run.
       const groupKey = usableGroupKey(groups, groupName)
-      if (groupKey === undefined) {
-        this.logMsgIfDebug(() =>
-          console.warn(`[FEATURE FLAGS] Can't compute group feature flag: ${flag.key} without group names passed in`)
-        )
-        return false
-      }
 
       if (
+        groupKey !== undefined &&
         flag.bucketing_identifier === 'device_id' &&
         (personProperties?.$device_id === undefined ||
           personProperties?.$device_id === null ||
@@ -459,7 +456,7 @@ class FeatureFlagsPoller {
       const focusedGroupProperties = groupProperties[groupName]
       return await this.matchFeatureFlagProperties(
         flag,
-        groupKey,
+        groupKey ?? '',
         focusedGroupProperties,
         evaluationContext,
         evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
@@ -501,6 +498,14 @@ class FeatureFlagsPoller {
       return distinctId
     }
 
+    return this.getPersonBucketingValue(flag, distinctId, properties)
+  }
+
+  private getPersonBucketingValue(
+    flag: PostHogFeatureFlag,
+    distinctId: string,
+    properties: Record<string, any>
+  ): string | undefined {
     if (flag.bucketing_identifier === 'device_id') {
       const deviceId = properties?.$device_id
       if (deviceId === undefined || deviceId === null || deviceId === '') {
@@ -637,6 +642,20 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+    const flagAggregation = flagFilters.aggregation_group_type_index
+    const { distinctId, groups, groupProperties, personProperties } = evaluationContext
+
+    // The server hashes an empty identifier for the holdout of a group flag without a usable key,
+    // so only the server can tell whether that holdout excludes this flag.
+    if (flagAggregation != undefined && holdoutCanExclude(flagFilters.holdout)) {
+      const flagGroupName = evaluationContext.definitions!.groupTypeMapping[String(flagAggregation)]
+      if (!flagGroupName || usableGroupKey(groups, flagGroupName) === undefined) {
+        throw new InconclusiveMatchError(
+          `Can't compute the holdout of group feature flag ${flag.key} without a group key`,
+          'missing_context'
+        )
+      }
+    }
 
     // Holdouts are resolved before the release conditions, so a held-out value is excluded
     // from the flag's targeting rather than being bucketed into a variant.
@@ -646,9 +665,7 @@ class FeatureFlagsPoller {
     }
 
     const flagConditions = flagFilters.groups || []
-    const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
-    const { groups, groupProperties } = evaluationContext
     let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
     let regexError: InconclusiveMatchError | undefined
     const deferredRegexValues = new Set<FeatureFlagValue>()
@@ -657,32 +674,28 @@ class FeatureFlagsPoller {
     for (const condition of flagConditions) {
       let effectiveBucketingValue = bucketingValue
       try {
-        // Per-condition aggregation overrides only when the condition explicitly
-        // sets its own aggregation_group_type_index (mixed targeting).
-        // When absent, use the properties/bucketing already resolved by the caller.
-        const conditionAggregation =
-          condition.aggregation_group_type_index !== undefined
-            ? condition.aggregation_group_type_index
-            : flagAggregation
+        // A condition uses its own aggregation_group_type_index when it sets one (an explicit null
+        // is person aggregation), else the flag's. When it matches the flag's, use the
+        // properties/bucketing already resolved by the caller.
+        const conditionAggregation = conditionAggregationOf(condition, flagAggregation)
 
         let effectiveProperties = properties
         let effectiveKnownAbsentKeys = knownAbsentKeys
-        let knownAbsentKeysGroupTypeIndex = flagAggregation
+        let knownAbsentKeysGroupTypeIndex: number | null | undefined = flagAggregation
 
-        // Mixed-override path: condition-level aggregation differs from flag-level.
-        // This assumes flag-level aggregation is null/undefined for mixed flags.
-        if (conditionAggregation !== flagAggregation) {
-          if (conditionAggregation !== null && conditionAggregation !== undefined) {
-            const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
-            const groupKey = groupName ? usableGroupKey(groups, groupName) : undefined
-            if (!groupName || groupKey === undefined) {
-              this.logMsgIfDebug(() =>
-                console.debug(
-                  `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
-                )
+        if (conditionAggregation != undefined) {
+          // Each group condition needs a usable key for its own group type, else it is skipped.
+          const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
+          const groupKey = groupName ? usableGroupKey(groups, groupName) : undefined
+          if (!groupName || groupKey === undefined) {
+            this.logMsgIfDebug(() =>
+              console.debug(
+                `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
               )
-              continue
-            }
+            )
+            continue
+          }
+          if (conditionAggregation !== flagAggregation) {
             if (!(groupName in groupProperties)) {
               inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
               continue
@@ -692,6 +705,17 @@ class FeatureFlagsPoller {
             knownAbsentKeysGroupTypeIndex = conditionAggregation
             effectiveBucketingValue = groupKey
           }
+        } else if (flagAggregation != undefined) {
+          // A person condition in a group flag reads person properties and buckets as a person flag.
+          const personBucketingValue = this.getPersonBucketingValue(flag, distinctId, personProperties)
+          if (personBucketingValue === undefined) {
+            inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
+            continue
+          }
+          effectiveProperties = personProperties
+          effectiveKnownAbsentKeys = evaluationContext.personPropertyKeysKnownAbsent
+          knownAbsentKeysGroupTypeIndex = null
+          effectiveBucketingValue = personBucketingValue
         }
 
         const matchResult = await this.isConditionMatch(
@@ -814,7 +838,7 @@ class FeatureFlagsPoller {
             // Cohorts are person-scoped, so group known-absent keys must not apply to a cohort in a
             // group condition. That cohort still reads the group properties, as before known absence.
             const isGroupCondition =
-              flag.filters?.aggregation_group_type_index != null || condition.aggregation_group_type_index != null
+              conditionAggregationOf(condition, flag.filters?.aggregation_group_type_index) != null
             matches = await matchCohort(
               prop,
               properties,
@@ -1435,6 +1459,23 @@ export function isUsableGroupKey(groupKey: unknown): groupKey is string | number
 function usableGroupKey(groups: Record<string, unknown>, groupName: string): string | undefined {
   const groupKey = groups[groupName]
   return isUsableGroupKey(groupKey) ? String(groupKey) : undefined
+}
+
+/** The condition's own aggregation when it sets one (null is person aggregation), else the flag's. */
+function conditionAggregationOf(
+  condition: FeatureFlagCondition,
+  flagAggregation: number | null | undefined
+): number | null | undefined {
+  return condition.aggregation_group_type_index !== undefined ? condition.aggregation_group_type_index : flagAggregation
+}
+
+/** Whether getHoldoutVariant could return a holdout variant for some bucketing value. */
+function holdoutCanExclude(holdout: { id: number; exclusion_percentage: number } | null | undefined): boolean {
+  if (holdout == null || holdout.id == null || holdout.exclusion_percentage == null) {
+    return false
+  }
+  const percentage = Number(holdout.exclusion_percentage)
+  return Number.isFinite(percentage) && percentage > 0
 }
 
 function getDefinitionUnresolvedReason(

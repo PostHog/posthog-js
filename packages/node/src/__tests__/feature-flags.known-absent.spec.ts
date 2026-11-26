@@ -1112,4 +1112,188 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()).toHaveLength(1)
     })
   })
+
+  describe('group conditions without a usable key are skipped per condition', () => {
+    const proFilter = personFilter('exact', ['pro'])
+    // Group-aggregated flag whose only condition is a person condition (explicit null aggregation).
+    const orgPersonFlag = {
+      id: 10,
+      key: 'org-person',
+      active: true,
+      filters: {
+        aggregation_group_type_index: 0,
+        groups: [{ properties: [proFilter], rollout_percentage: 100, aggregation_group_type_index: null }],
+      },
+    }
+    // Group-aggregated flag: an inherited group condition first, then a person condition.
+    const orgMixedFlag = {
+      id: 11,
+      key: 'org-mixed',
+      active: true,
+      filters: {
+        aggregation_group_type_index: 0,
+        groups: [
+          { properties: [], rollout_percentage: 100 },
+          { properties: [proFilter], rollout_percentage: 100, aggregation_group_type_index: null },
+        ],
+      },
+    }
+    const orgOnlyFlag = { ...flag('org-only', [], { aggregation_group_type_index: 0 }), id: 12 }
+    const dependsOnOrgPerson = {
+      ...flag('depends-on-org-person', [
+        {
+          key: 'org-person',
+          type: 'flag',
+          value: true,
+          operator: 'flag_evaluates_to',
+          dependency_chain: ['org-person'],
+        },
+      ]),
+      id: 13,
+    }
+    const holdoutFlag = (key: string, id: number, exclusionPercentage: number): object => ({
+      id,
+      key,
+      active: true,
+      filters: {
+        aggregation_group_type_index: 0,
+        holdout: { id: 727, exclusion_percentage: exclusionPercentage },
+        groups: [{ properties: [], rollout_percentage: 100 }],
+      },
+    })
+    const allFlags = {
+      flags: [
+        orgPersonFlag,
+        orgMixedFlag,
+        orgOnlyFlag,
+        dependsOnOrgPerson,
+        holdoutFlag('org-holdout', 14, 50),
+        holdoutFlag('org-holdout-zero', 15, 0),
+      ],
+      group_type_mapping: { '0': 'organization' },
+    }
+    const remote = {
+      'org-person': 'remote',
+      'org-mixed': 'remote',
+      'org-only': 'remote',
+      'depends-on-org-person': 'remote',
+      'org-holdout': 'remote',
+      'org-holdout-zero': 'remote',
+    }
+    const noKeyGroups: [string, Record<string, unknown>][] = [
+      ['no organization group', {}],
+      ['an empty organization key', { organization: '' }],
+    ]
+
+    describe.each(noKeyGroups)('with %s', (_name, groups) => {
+      it.each([
+        ['pro', true],
+        ['free', false],
+      ])('a person condition in a group flag decides for plan %s', async (plan, expected) => {
+        setup(allFlags, remote)
+        const personProperties = { plan }
+
+        expect(await posthog.getFeatureFlag('org-person', 'user', { groups, personProperties })).toBe(expected)
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['org-person'],
+          groups,
+          personProperties,
+          onlyEvaluateLocally: true,
+        })
+        expect(result.getFlag('org-person')).toBe(expected)
+        expect(result.unresolvedFlags).toEqual({})
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it.each([
+        ['pro', true],
+        ['free', false],
+      ])('a dependency on that flag resolves for plan %s', async (plan, expected) => {
+        setup(allFlags, remote)
+        const personProperties = { plan }
+
+        expect(await posthog.getFeatureFlag('depends-on-org-person', 'user', { groups, personProperties })).toBe(
+          expected
+        )
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['depends-on-org-person'],
+          groups,
+          personProperties,
+          onlyEvaluateLocally: true,
+        })
+        expect(result.getFlag('depends-on-org-person')).toBe(expected)
+        expect(result.unresolvedFlags).toEqual({})
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it.each([
+        ['pro', true],
+        ['free', false],
+      ])('a skipped group condition lets the later person condition decide for plan %s', async (plan, expected) => {
+        setup(allFlags, remote)
+
+        expect(await posthog.getFeatureFlag('org-mixed', 'user', { groups, personProperties: { plan } })).toBe(expected)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('a group flag with only group conditions stays false', async () => {
+        setup(allFlags, remote)
+
+        expect(await posthog.getFeatureFlag('org-only', 'user', { groups })).toBe(false)
+        expect(await posthog.getFeatureFlag('org-holdout-zero', 'user', { groups })).toBe(false)
+        expect(flagsRequests()).toHaveLength(0)
+      })
+
+      it('a group flag with a holdout is missing_context', async () => {
+        setup(allFlags, remote)
+
+        const result = await posthog.evaluateFlags('user', {
+          flagKeys: ['org-holdout'],
+          groups,
+          onlyEvaluateLocally: true,
+        })
+        expect(result.getFlag('org-holdout')).toBeUndefined()
+        expect(result.unresolvedFlags).toEqual({ 'org-holdout': 'missing_context' })
+        expect(await posthog.getFeatureFlag('org-holdout', 'user', { groups, onlyEvaluateLocally: true })).toBe(
+          undefined
+        )
+        expect(flagsRequests()).toHaveLength(0)
+        expect(await posthog.getFeatureFlag('org-holdout', 'user', { groups })).toBe('remote')
+        expect(flagsRequests()).toHaveLength(1)
+      })
+    })
+
+    it('a person condition in a group flag reads person properties when the key is usable', async () => {
+      setup(allFlags, remote)
+
+      const groups = { organization: 'acme' }
+      const groupProperties = { organization: { plan: 'free' } }
+      expect(
+        await posthog.getFeatureFlag('org-person', 'user', {
+          groups,
+          groupProperties,
+          personProperties: { plan: 'pro' },
+        })
+      ).toBe(true)
+      expect(
+        await posthog.getFeatureFlag('org-person', 'user', {
+          groups,
+          groupProperties: { organization: { plan: 'pro' } },
+          personProperties: { plan: 'free' },
+        })
+      ).toBe(false)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it.each([
+      // 'holdout-d' hashes inside a 50% holdout, 'holdout-acme' does not.
+      ['d', 'holdout-727'],
+      ['acme', true],
+    ])('a group flag with a holdout and usable key %j is unchanged', async (groupKey, expected) => {
+      setup(allFlags, remote)
+
+      expect(await posthog.getFeatureFlag('org-holdout', 'user', { groups: { organization: groupKey } })).toBe(expected)
+      expect(flagsRequests()).toHaveLength(0)
+    })
+  })
 })
