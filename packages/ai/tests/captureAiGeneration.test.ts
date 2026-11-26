@@ -501,6 +501,10 @@ describe('captureAiGeneration', () => {
     ['exaAiSearch apiKey', { exaAiSearch: { apiKey: 'secret' } }],
     ['parallelAiSearch apiKey', { parallelAiSearch: { apiKey: 'secret' } }],
     ['mcpServers headers', { mcpServers: [{ streamableHttpTransport: { headers: { Authorization: 'secret' } } }] }],
+    [
+      'mcpServers url query',
+      { mcpServers: [{ streamableHttpTransport: { url: 'https://mcp.example.com/mcp?api_key=secret' } }] },
+    ],
     ['snake_case config', { google_maps: { auth_config: { oauth_config: { access_token: 'secret' } } } }],
     [
       'labeled tool',

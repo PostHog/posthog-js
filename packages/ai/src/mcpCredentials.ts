@@ -24,8 +24,8 @@ const withoutMcpCredentials = (config: Record<string, unknown>): Record<string, 
   return redacted
 }
 
-// Keys are compared in lower case without `-` and `_`, so camelCase and snake_case configs both match.
-export const normalizeKey = (key: string): string => key.toLowerCase().replace(/[-_]/g, '')
+// Keys are compared in lower case without `-`, `_` or whitespace, so camelCase and snake_case configs both match.
+export const normalizeKey = (key: string): string => key.toLowerCase().replace(/[-_\s]/g, '')
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (!isObject(value)) {
@@ -35,13 +35,23 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return prototype === Object.prototype || prototype === null
 }
 
+// Deeper values are dropped rather than walked, so nested input cannot overflow the stack.
+const MAX_REDACT_DEPTH = 64
+
 /**
- * Replaces the value of every key in `keys` (normalized) with `[REDACTED]`, through plain objects and arrays.
- * Class instances, such as the MCP client inside an `mcpToTool()` tool, are returned as they are.
+ * Replaces the value of every key that `isCredentialKey` accepts (normalized) with `[REDACTED]`, through plain
+ * objects, arrays and JSON strings. Other strings that name a credential key or form field are replaced whole, and values nested deeper than 64 levels become
+ * `[Truncated]`. Class instances, such as the MCP client inside an `mcpToTool()` tool, are returned as they are.
  */
-export function redactKeys(value: unknown, keys: ReadonlySet<string>): unknown {
+export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean, depth = 0): unknown {
+  if (depth > MAX_REDACT_DEPTH) {
+    return '[Truncated]'
+  }
+  if (typeof value === 'string') {
+    return redactJsonString(value, isCredentialKey, depth)
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => redactKeys(item, keys))
+    return value.map((item) => redactKeys(item, isCredentialKey, depth + 1))
   }
   if (!isPlainObject(value)) {
     return value
@@ -49,9 +59,56 @@ export function redactKeys(value: unknown, keys: ReadonlySet<string>): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      keys.has(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, keys),
+      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey, depth + 1),
     ])
   )
+}
+
+// A quoted name before a colon, at any nesting level (`"key":`, `\\"key\\":`, `'key':`), or a form field or URL query
+// parameter (`access_token=`, `?access_token=`, `#access_token=`). Names exclude quotes, backslashes and separators, so
+// each pattern reads every character a bounded number of times.
+const QUOTED_KEY = /["']([^"'\\\s:]{1,128})\\*["']\s*:/g
+const FORM_FIELD = /(?:^|[?&#;\s'"])([^&=?#;\s'"]+)=/g
+
+function namesCredential(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  for (const pattern of [QUOTED_KEY, FORM_FIELD]) {
+    for (const [, name] of text.matchAll(pattern)) {
+      if (isCredentialKey(normalizeKey(name))) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string. JSON text is
+// masked field by field and re-serialized when either the structural pass or the raw scan finds a credential: the raw
+// scan sees an earlier duplicate key that `JSON.parse` drops, and the structural pass sees keys the raw scan cannot
+// decode. Other text that names one, such as JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is
+// replaced whole. Text where neither finds one is returned as written.
+function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
+  const namesOne = namesCredential(value, isCredentialKey)
+  const trimmed = value.trim()
+  if (/^[[{"]/.test(trimmed)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      return namesOne ? '[REDACTED]' : value
+    }
+    const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
+    return namesOne || !serializesTo(parsed, redacted) ? redacted : value
+  }
+  return namesOne ? '[REDACTED]' : value
+}
+
+// False when the value is too deep to serialize, so text is never returned unchecked.
+function serializesTo(value: unknown, json: string): boolean {
+  try {
+    return JSON.stringify(value) === json
+  } catch {
+    return false
+  }
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
@@ -95,7 +152,9 @@ export function redactGeminiToolDefinition(tool: unknown): unknown {
     Object.entries(tool).map(([key, value]) => [
       key,
       // Converted to plain JSON first, so class instances, `toJSON()` results and cycles are masked too.
-      normalizeKey(key) === GEMINI_SCHEMA_FIELD ? value : redactKeys(toJsonSafeValue(value), GEMINI_CREDENTIAL_KEYS),
+      normalizeKey(key) === GEMINI_SCHEMA_FIELD
+        ? value
+        : redactKeys(toJsonSafeValue(value), (key) => GEMINI_CREDENTIAL_KEYS.has(key)),
     ])
   )
 }
