@@ -9,6 +9,27 @@ const DEFAULT_THRESHOLD_PX = 30
 const DEFAULT_TIMEOUT_MS = 1000
 const DEFAULT_CLICK_COUNT = 3
 
+const MAX_LABEL_SEARCH_DEPTH = 1000
+// The native getter: a form exposes a control named "parentElement" as a property of that name.
+const parentElementGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement')?.get
+
+// closest('label') without closest(), which IE11 lacks. The target may be a non-Element, for
+// example the document when a click is dispatched on it.
+function findLabel(target: EventTarget | null): HTMLLabelElement | null {
+    if (!parentElementGetter || !(target instanceof Element)) {
+        return null
+    }
+    let el: Element | null = target
+    for (let depth = 0; el && depth < MAX_LABEL_SEARCH_DEPTH; depth++) {
+        // localName, unlike tagName, is lowercase in XHTML documents too
+        if (el.localName === 'label') {
+            return el as HTMLLabelElement
+        }
+        el = parentElementGetter.call(el) as Element | null
+    }
+    return null
+}
+
 export default class RageClick {
     clicks: { x: number; y: number; timestamp: number }[]
     lastTarget: EventTarget | null
@@ -43,19 +64,7 @@ export default class RageClick {
         // by its target instead: the control of the <label> the previous click landed in, dispatched
         // a few milliseconds later. Counting it would double-count a single user click and could
         // trigger a false rage click, so drop it without recording it.
-        // The target may be a non-Element (e.g. document, when a click is dispatched on it). Walk the
-        // parents instead of calling closest(), which IE11 lacks.
-        let previousLabel: HTMLLabelElement | null = null
-        for (
-            let el: Element | null = this.lastTarget instanceof Element ? this.lastTarget : null;
-            el;
-            el = el.parentElement
-        ) {
-            if (el.tagName === 'LABEL') {
-                previousLabel = el as HTMLLabelElement
-                break
-            }
-        }
+        const previousLabel = findLabel(this.lastTarget)
         const isForwardedLabelClick =
             !!previousLabel && !!target && previousLabel.control === target && timestamp - this.lastTimestamp < 50
         this.lastTarget = target ?? null

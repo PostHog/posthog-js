@@ -179,6 +179,38 @@ describe('RageClick()', () => {
             }
         })
 
+        it('does not hang on a form whose control shadows parentElement', () => {
+            const form = document.createElement('form')
+            const shadowing = document.createElement('input')
+            shadowing.name = 'parentElement'
+            const button = document.createElement('button')
+            form.append(shadowing, button)
+            document.body.appendChild(form)
+            // browsers expose a named form control as a form property; jsdom does not
+            Object.defineProperty(form, 'parentElement', { get: () => shadowing })
+            Object.defineProperty(form, 'parentNode', { get: () => shadowing })
+            const detection = [instance.isRageClick(5, 5, 10, button), instance.isRageClick(5, 5, 11, control)]
+            expect(detection).toEqual([false, false])
+        })
+
+        it('recognises a label in an XHTML document', () => {
+            const doc = document.implementation.createDocument('http://www.w3.org/1999/xhtml', 'html', null)
+            const body = doc.createElementNS('http://www.w3.org/1999/xhtml', 'body')
+            doc.documentElement.appendChild(body)
+            const xhtmlLabel = doc.createElementNS('http://www.w3.org/1999/xhtml', 'label') as HTMLLabelElement
+            const xhtmlControl = doc.createElementNS('http://www.w3.org/1999/xhtml', 'input') as HTMLInputElement
+            xhtmlControl.id = 'x-input'
+            xhtmlLabel.htmlFor = 'x-input'
+            body.append(xhtmlLabel, xhtmlControl)
+            const detection = [
+                instance.isRageClick(5, 5, 10, xhtmlLabel),
+                instance.isRageClick(5, 5, 11, xhtmlControl),
+                instance.isRageClick(5, 5, 30, xhtmlLabel),
+                instance.isRageClick(5, 5, 31, xhtmlControl),
+            ]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
         it('still detects a rage click from three genuine label clicks', () => {
             const detection = [...labelClick(10), ...labelClick(30), ...labelClick(50)]
             // The third genuine click (fifth call) triggers; the forwarded clicks never do.
