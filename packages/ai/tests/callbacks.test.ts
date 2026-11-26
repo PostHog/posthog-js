@@ -2013,6 +2013,16 @@ describe('LangChainCallbackHandler', () => {
       expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
     })
 
+    it('does not pair a larger aggregate token total with one generation cache breakdown', () => {
+      const properties = runClaudeViaOpenAI({
+        tokenUsage: { promptTokens: 20000, completionTokens: 200, totalTokens: 20200 },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(20000)
+      expect(properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
     it('leaves the cache reporting flag unset for cache-exclusive raw usage', () => {
       const properties = runClaudeViaOpenAI(
         { usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 500 } },

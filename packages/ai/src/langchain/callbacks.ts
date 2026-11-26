@@ -1082,7 +1082,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
           key !== 'usage' &&
           generationCount === 1 &&
           llmUsage.input_token_details == null &&
-          normalizedGenerationUsage?.input_token_details != null
+          normalizedGenerationUsage?.input_token_details != null &&
+          (llmUsage.promptTokens ?? llmUsage.input_tokens) === normalizedGenerationUsage.input_tokens
             ? { ...llmUsage, input_token_details: normalizedGenerationUsage.input_token_details }
             : llmUsage
         return this._parseUsageModel(usageWithCacheDetails, provider, model, key !== 'usage', llmUsage)
