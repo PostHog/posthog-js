@@ -2019,6 +2019,26 @@ describe('LangChainCallbackHandler', () => {
       expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
     })
 
+    it('keeps the generation cache breakdown when snake_case tokenUsage totals match', () => {
+      const properties = runClaudeViaOpenAI({
+        tokenUsage: { prompt_tokens: 10000, completion_tokens: 100, total_tokens: 10100 },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    it('reports raw OpenAI-shaped usage as cache-inclusive', () => {
+      const properties = runClaudeViaOpenAI({
+        usage: { prompt_tokens: 10000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 9000 } },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
     it('does not pair batched token totals with one prompt cache breakdown', () => {
       const runId = 'run_claude_proxy_batch'
       handler.handleLLMStart(

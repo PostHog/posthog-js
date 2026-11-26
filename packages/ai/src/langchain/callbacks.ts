@@ -998,7 +998,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     // would get its cache reads billed twice unless we declare the convention explicitly.
     if (
       !isAnthropic &&
-      inputIncludesCacheTokens &&
+      // OpenAI's `prompt_tokens` always includes cached tokens, even when passed through as raw usage.
+      (inputIncludesCacheTokens || usage.prompt_tokens != null) &&
       cacheTokens > 0 &&
       parsedUsage.input >= cacheTokens &&
       provider &&
@@ -1085,7 +1086,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
           generationCount === 1 &&
           llmUsage.input_token_details == null &&
           normalizedGenerationUsage?.input_token_details != null &&
-          (llmUsage.promptTokens ?? llmUsage.input_tokens) === normalizedGenerationUsage.input_tokens
+          (llmUsage.promptTokens ?? llmUsage.prompt_tokens ?? llmUsage.input_tokens) ===
+            normalizedGenerationUsage.input_tokens
             ? { ...llmUsage, input_token_details: normalizedGenerationUsage.input_token_details }
             : llmUsage
         return this._parseUsageModel(usageWithCacheDetails, provider, model, key !== 'usage', llmUsage)
