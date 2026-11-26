@@ -532,6 +532,37 @@ describe('PostHog React Native', () => {
         })
       })
     })
+
+    it('should still track app open, background and foreground when the initial url cannot be read', async () => {
+      const getInitialURL = Linking.getInitialURL
+      Linking.getInitialURL = vi.fn(() => Promise.reject(new Error('Could not get the initial URL')))
+      try {
+        const onCapture = vi.fn()
+        posthog = new PostHog('1', {
+          customStorage: mockStorage,
+          captureAppLifecycleEvents: true,
+          customAppProperties: {
+            $app_build: '1',
+            $app_version: '1.0.0',
+          },
+        })
+        posthog.on('capture', onCapture)
+
+        await waitForExpect(200, () => {
+          expect(onCapture.mock.calls.map(([e]) => e.event)).toEqual(['Application Installed', 'Application Opened'])
+        })
+        expect(onCapture.mock.calls[1][0].properties).not.toHaveProperty('url')
+
+        const cb: (state: AppStateStatus) => void = (AppState.addEventListener as vi.Mock).mock.calls[1][1]
+        cb('background')
+
+        await waitForExpect(200, () => {
+          expect(onCapture.mock.calls[2][0]).toMatchObject({ event: 'Application Backgrounded' })
+        })
+      } finally {
+        Linking.getInitialURL = getInitialURL
+      }
+    })
   })
 
   describe('async initialization', () => {
