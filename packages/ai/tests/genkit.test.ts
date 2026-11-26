@@ -146,6 +146,12 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     false,
   ],
   ['malformed JSON text with an escaped form feed before the colon', '{"refresh_token"\\f:"tool-secret"}', false],
+  [
+    'prose with double-encoded JSON and an escaped colon',
+    { body: `Response: ${JSON.stringify('{"refresh_token"\\u003a"tool-secret"}')}` },
+    false,
+  ],
+  ['a form-encoded token response', 'access_token=tool-secret&refresh_token=tool-secret&token_type=bearer', false],
   ['Python-style text', "{'refresh_token': 'tool-secret', 'token_type': 'Bearer'}", false],
   ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
   [

@@ -124,7 +124,11 @@ function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string
   // Some serializers write the quotes and colon of embedded JSON as `\\u0022` and `\\u003a`.
   const text = raw.replace(/\\u00(22|3a)/gi, (_escape, hex: string) => (hex === '22' ? '"' : ':'))
   for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
+    // A colon written as `\\u003a` one level down keeps a backslash in front once decoded.
     let close = colon - 1
+    while (close >= 0 && text[close] === '\\') {
+      close--
+    }
     while (close >= 0) {
       const next = isSeparator(text[close]) ? close - 1 : beforeEscapedSeparator(text, close)
       if (next === close) {
@@ -148,12 +152,24 @@ function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string
   return false
 }
 
+const FORM_ENCODED = /^[\w.-]+=[^&\s]*(?:&[\w.-]+=[^&\s]*)*$/
+
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
 // JSON text is masked field by field and re-serialized even when nothing changed, since `JSON.parse` keeps only the
 // last of duplicate keys and an earlier one can hold a credential. Text that names a credential key but does not
 // parse, such as JSON lines, truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
   const trimmed = value.trim()
+  // A form-encoded body, such as an OAuth token response, is masked field by field.
+  if (FORM_ENCODED.test(trimmed)) {
+    return trimmed
+      .split('&')
+      .map((pair) => {
+        const key = pair.slice(0, pair.indexOf('='))
+        return isCredentialKey(normalizeKey(key)) ? `${key}=[REDACTED]` : pair
+      })
+      .join('&')
+  }
   if (/^[[{"]/.test(trimmed)) {
     try {
       return JSON.stringify(redactKeys(JSON.parse(trimmed), isCredentialKey, depth + 1))
