@@ -1911,6 +1911,16 @@ describe('emails', () => {
       ],
       ['a 409 without a code', { status: 409, retryable: false }, 'unconfirmed'],
       ['a 409 with another code', { status: 409, code: 'conflict', retryable: false }, 'unconfirmed'],
+      [
+        'a 409 idempotency_key_reused',
+        { status: 409, code: 'idempotency_key_reused', retryable: false },
+        'unconfirmed',
+      ],
+      [
+        'a 409 batch_unavailable marked retryable',
+        { status: 409, code: 'batch_unavailable', retryable: true },
+        'failed',
+      ],
       ['a 503 that is neither', { status: 503, code: 'recipient_rejected', retryable: false }, 'failed'],
     ] as const)(
       'decides a recipient by its code and retryable flag, not its status: %s',
@@ -2215,6 +2225,16 @@ describe('emails', () => {
         'keyed to another email, as retryable',
         { status: 422, code: 'idempotency_key_reused', retryable: true },
         'failed',
+      ],
+      [
+        'refused with 409 batch_unavailable',
+        { status: 409, code: 'batch_unavailable', retryable: false },
+        'unconfirmed',
+      ],
+      [
+        'refused with 409 idempotency_key_reused',
+        { status: 409, code: 'idempotency_key_reused', retryable: false },
+        'unconfirmed',
       ],
     ] as const)('after a lost answer, decides a recipient PostHog %s on the retry', async (_case, refusal, status) => {
       const postHog = againstPostHog({ refusesRecipient: { 'ada@example.com': refusal } })

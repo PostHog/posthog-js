@@ -452,7 +452,8 @@ export type PostHogOptions = Omit<
   appHost?: string
   /**
    * Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request,
-   * so raise it when large files upload slowly.
+   * so raise it when large files upload slowly. `shutdown()` doesn't wait past its own timeout for a request still
+   * in flight, so keep this below the shutdown timeout, 30 seconds by default.
    *
    * @default 15000
    */

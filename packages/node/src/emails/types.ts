@@ -369,7 +369,9 @@ export interface Emails {
    * `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
    * so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
    * or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-   * `emails.send()`. Each attempt waits for PostHog's answer as long as a send does: the client's
+   * `emails.send()`. That advice holds for `failed` recipients only: when an earlier attempt went unanswered, the
+   * recipients are `unconfirmed`, so send them again with the same `idempotencyKey`s, not split or one at a time
+   * with new keys, and read each recipient's result. Each attempt waits for PostHog's answer as long as a send does: the client's
    * `emailRequestTimeoutMs`, 15 seconds by default.
    *
    * Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused

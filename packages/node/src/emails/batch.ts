@@ -175,13 +175,15 @@ export function recordAnswer(
       return
     }
     const code = text(error.code) ?? 'api_error'
+    // A 409 is decided by its code alone: only batch_unavailable says PostHog queued nothing for this recipient.
     const unconfirmed =
-      code !== 'idempotency_key_reused' &&
-      (error.retryable === true ||
-        code === 'delivery_unavailable' ||
-        code === 'idempotency_key_in_flight' ||
-        (error.status === 409 && code !== 'batch_unavailable') ||
-        mayHaveQueuedBefore)
+      error.status === 409
+        ? code !== 'batch_unavailable' || mayHaveQueuedBefore
+        : code !== 'idempotency_key_reused' &&
+          (error.retryable === true ||
+            code === 'delivery_unavailable' ||
+            code === 'idempotency_key_in_flight' ||
+            mayHaveQueuedBefore)
     const refusal = new EmailError({
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,

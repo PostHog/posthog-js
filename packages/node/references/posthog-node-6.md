@@ -3357,7 +3357,9 @@ with the same idempotency keys, so a retry queues no second email. When the clie
 `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
 so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
 or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-`emails.send()`. Each attempt waits for PostHog's answer as long as a send does: the client's
+`emails.send()`. That advice holds for `failed` recipients only: when an earlier attempt went unanswered, the
+recipients are `unconfirmed`, so send them again with the same `idempotencyKey`s, not split or one at a time
+with new keys, and read each recipient's result. Each attempt waits for PostHog's answer as long as a send does: the client's
 `emailRequestTimeoutMs`, 15 seconds by default.
 
 Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused
@@ -5306,7 +5308,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
 | `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` or `emails.batch` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency keys. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request, so raise it when large files upload slowly. `shutdown()` doesn't wait past its own timeout for a request still in flight, so keep this below the shutdown timeout, 30 seconds by default. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |
