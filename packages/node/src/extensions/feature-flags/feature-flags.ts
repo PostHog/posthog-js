@@ -418,8 +418,12 @@ class FeatureFlagsPoller {
     const flagFilters = flag.filters || {}
 
     // Enrollment is a person property, so it is read from the person properties on
-    // group-aggregated flags too.
-    if (flagFilters.feature_enrollment === true) {
+    // group-aggregated flags too. A listed enrollment key means not enrolled, even over a
+    // supplied value, so evaluation continues through holdouts and release conditions.
+    if (
+      flagFilters.feature_enrollment === true &&
+      !evaluationContext.personPropertyKeysKnownAbsent?.has(featureEnrollmentKey(flag))
+    ) {
       return matchFeatureEnrollment(flag, personProperties)
     }
 
@@ -1507,8 +1511,12 @@ function getDefinitionUnresolvedReason(
 // An early-access feature flag returns the person's enrollment at once: `true` or `"true"` means
 // enrolled, and any other value that was passed, `null` included, means opted out. Without the
 // enrollment property the flag can't be resolved locally.
+function featureEnrollmentKey(flag: PostHogFeatureFlag): string {
+  return `$feature_enrollment/${flag.key}`
+}
+
 function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
-  const enrollmentKey = `$feature_enrollment/${flag.key}`
+  const enrollmentKey = featureEnrollmentKey(flag)
   const enrollment = personProperties[enrollmentKey]
   // `undefined` is omitted from JSON, so /flags would read the stored enrollment.
   if (enrollment === undefined) {

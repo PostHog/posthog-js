@@ -1302,4 +1302,63 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()).toHaveLength(0)
     })
   })
+
+  describe('a listed feature enrollment key', () => {
+    // sdk-specs local-feature-flag-evaluator: a listed `$feature_enrollment/<flag key>` means the person
+    // is not enrolled, wins over a supplied value, and evaluation continues through release conditions.
+    const enrollmentKey = '$feature_enrollment/beta-feature'
+    const betaFeature = (rolloutPercentage: number, extra: object = {}): object => ({
+      id: 1,
+      key: 'beta-feature',
+      active: true,
+      filters: {
+        feature_enrollment: true,
+        groups: [{ properties: [], rollout_percentage: rolloutPercentage }],
+        ...extra,
+      },
+    })
+
+    it.each([
+      [0, undefined, false],
+      [0, true, false],
+      [0, 'true', false],
+      [100, undefined, true],
+      [100, false, true],
+    ])(
+      'continues through release conditions (rollout %i, supplied %p)',
+      async (rolloutPercentage, enrollment, expected) => {
+        setup({ flags: [betaFeature(rolloutPercentage)] }, { 'beta-feature': 'remote' })
+
+        expect(
+          await posthog.getFeatureFlag('beta-feature', 'user', {
+            personProperties: enrollment === undefined ? {} : { [enrollmentKey]: enrollment },
+            personPropertyKeysKnownAbsent: [enrollmentKey],
+          })
+        ).toBe(expected)
+        expect(flagsRequests()).toHaveLength(0)
+      }
+    )
+
+    it('continues through a holdout', async () => {
+      setup(
+        {
+          flags: [
+            betaFeature(100, {
+              holdout: { id: 727, exclusion_percentage: 100 },
+              multivariate: { variants: [{ key: 'test', rollout_percentage: 100 }] },
+            }),
+          ],
+        },
+        { 'beta-feature': 'remote' }
+      )
+
+      expect(
+        await posthog.getFeatureFlag('beta-feature', 'user', {
+          personProperties: { [enrollmentKey]: true },
+          personPropertyKeysKnownAbsent: [enrollmentKey],
+        })
+      ).toBe('holdout-727')
+      expect(flagsRequests()).toHaveLength(0)
+    })
+  })
 })
