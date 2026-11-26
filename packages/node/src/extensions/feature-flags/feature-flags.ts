@@ -795,6 +795,7 @@ class FeatureFlagsPoller {
           } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
+            assertPropertyFilterTypeSupported(prop)
             assertFeatureFlagFilterSupported(prop)
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
             continue
@@ -985,7 +986,7 @@ class FeatureFlagsPoller {
         : `Evaluating these flags falls back to a server request when evaluation reaches that part.`
       console.warn(
         `[PostHog] You are using local evaluation but ${unsupportedDefinitionFlags.length} flag(s) use something ` +
-          `local evaluation does not support, such as a static cohort, an unknown operator, ` +
+          `local evaluation does not support, such as a static cohort, an unknown operator or filter type, ` +
           `or a missing or circular flag dependency ` +
           `(reason: unsupported_definition): ${unsupportedDefinitionFlags.join(', ')}. ` +
           `${consequence} To evaluate them locally, change these flags in PostHog or upgrade posthog-node.`
@@ -1440,6 +1441,7 @@ function isUnsupportedProperty(
   }
   if (property.type !== 'cohort') {
     try {
+      assertPropertyFilterTypeSupported(property)
       assertFeatureFlagFilterSupported(property)
       return false
     } catch (e) {
@@ -1472,12 +1474,29 @@ function isUnsupportedPropertyGroup(
   )
 }
 
+// Filter types matched against the person or group properties the caller passes. Cohort and
+// flag filters have their own matching. Any other type, such as `person_metadata` (a value the
+// server reads from the persons table, not from person properties), can't be evaluated locally:
+// matching it against a caller property of the same key could disagree with /flags. A missing,
+// null, or empty type is a person filter.
+const PROPERTY_FILTER_TYPES = new Set<string | null | undefined>([undefined, null, '', 'person', 'group'])
+
+function assertPropertyFilterTypeSupported(property: FlagProperty): void {
+  if (!PROPERTY_FILTER_TYPES.has(property.type)) {
+    throw new InconclusiveMatchError(
+      `Can't evaluate a '${property.type}' filter on '${property.key}' locally`,
+      'unsupported_definition'
+    )
+  }
+}
+
 function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   warnFunction?: (msg: string) => void,
   propertyMatchingVersion?: number
 ): boolean {
+  assertPropertyFilterTypeSupported(property)
   return matchFeatureFlagProperty(property, propertyValues, { warnFunction, propertyMatchingVersion })
 }
 
