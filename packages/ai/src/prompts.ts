@@ -588,7 +588,7 @@ export class Prompts {
         if (response.status === 403) {
           throw new Error(
             `[PostHog Prompts] Access denied for ${reference}. ` +
-              'Check that your personalApiKey has the correct permissions and the LLM prompts feature is enabled.'
+              'Check that the key in personalApiKey has the llm_prompt:read scope and the LLM prompts feature is enabled.'
           )
         }
         throw new PromptFetchError(
@@ -645,7 +645,7 @@ export class Prompts {
       if (response.status === 403) {
         throw new Error(
           `[PostHog Prompts] Access denied for prompt ${promptReference}. ` +
-            'Check that your personalApiKey has the correct permissions and the LLM prompts feature is enabled.'
+            'Check that the key in personalApiKey has the llm_prompt:read scope and the LLM prompts feature is enabled.'
         )
       }
 
