@@ -1,5 +1,5 @@
 import { Linking, AppState } from 'react-native'
-import { PostHog } from '../src'
+import { PostHog, PostHogPersistedProperty } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
@@ -187,6 +187,11 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
 
     mockPlugin.captureFatalException = undefined as any
     posthog = await readyClient({ enableSessionReplay: true })
+    // Native replay starts once a replay config is known, and the start is confirmed with native.
+    ;(OptionalReactNativePlugin as any).isEnabled.mockResolvedValue(true)
+    posthog.setPersistedProperty(PostHogPersistedProperty.SessionReplay, { endpoint: '/s/' })
+    await (posthog as any)._evaluateAndStartSessionReplay()
+    ;(OptionalReactNativePlugin as any).isEnabled.mockResolvedValue(false)
     const enqueued = observeEnqueuedExceptions(posthog)
 
     handler(new Error('js-fallback-keeps-keys'), true)

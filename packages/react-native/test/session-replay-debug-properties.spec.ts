@@ -1549,8 +1549,8 @@ describe('PostHog RN session replay debug properties', () => {
 
     it('a replay-named key the SDK does not own stays on an off event', async () => {
       const client = await readyClient({ enableSessionReplay: false })
-      const { properties } = captureOne(client, '$screen', { $sdk_debug_replay_trigger_groups_count: 3 })
-      expect(properties.$sdk_debug_replay_trigger_groups_count).toBe(3)
+      const { properties } = captureOne(client, '$screen', { $sdk_debug_replay_app_note: 3 })
+      expect(properties.$sdk_debug_replay_app_note).toBe(3)
     })
 
     it('turning replay back on restores the normal shape on the next event', async () => {
