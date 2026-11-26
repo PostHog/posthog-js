@@ -708,6 +708,44 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
   })
 
+  it('should parse snake_case tokenUsage from ChatWatsonx', async () => {
+    const runId = 'run_watsonx_snake_case_usage'
+    handler.handleLLMStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'ibm', 'ChatWatsonx'], kwargs: {} },
+      ['Hello'],
+      runId,
+      undefined,
+      {},
+      undefined,
+      { ls_model_name: 'ibm/granite-3-8b-instruct', ls_provider: 'watsonx' }
+    )
+
+    const generation: ChatGeneration = {
+      text: 'Hi',
+      message: new AIMessage({
+        content: 'Hi',
+        usage_metadata: { input_tokens: 1200, output_tokens: 80, total_tokens: 1280 },
+      }),
+    }
+    // @langchain/ibm passes the watsonx TextChatUsage object through as llmOutput.tokenUsage
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: { prompt_tokens: 1200, completion_tokens: 80, total_tokens: 1280 },
+          model_name: 'ibm/granite-3-8b-instruct',
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(1200)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(80)
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+  })
+
   it('should not subtract for OpenAI even when cache_read_tokens >= input_tokens', async () => {
     const serialized = {
       lc: 1,
