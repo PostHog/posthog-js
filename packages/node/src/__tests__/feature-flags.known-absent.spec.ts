@@ -653,21 +653,27 @@ describe('known-absent property keys', () => {
       expect(flagsRequests()).toHaveLength(2)
     })
 
-    it('a listed person_metadata key resolves from a supplied value, as when it is not listed', async () => {
-      const filter = metadataFilter('is_date_before', '2025-01-01T10:00:00Z')
-      setup({
-        flags: [flag('flag', [filter]), cohortFlag],
-        cohorts: { c1: { type: 'AND', values: [filter] } },
-      })
+    it.each([[[]], [['created_at']]])(
+      'a person_metadata key with a supplied value falls back to the server whether or not it is listed (%j)',
+      async (personPropertyKeysKnownAbsent) => {
+        const filter = metadataFilter('is_date_before', '2025-01-01T10:00:00Z')
+        setup(
+          {
+            flags: [flag('flag', [filter]), cohortFlag],
+            cohorts: { c1: { type: 'AND', values: [filter] } },
+          },
+          { flag: 'remote', 'cohort-flag': 'remote' }
+        )
 
-      const options = {
-        personProperties: { created_at: '2020-01-01T10:00:00Z' },
-        personPropertyKeysKnownAbsent: ['created_at'],
+        const options = {
+          personProperties: { created_at: '2020-01-01T10:00:00Z' },
+          personPropertyKeysKnownAbsent,
+        }
+        expect(await posthog.getFeatureFlag('flag', 'user', options)).toBe('remote')
+        expect(await posthog.getFeatureFlag('cohort-flag', 'user', options)).toBe('remote')
+        expect(flagsRequests()).toHaveLength(2)
       }
-      expect(await posthog.getFeatureFlag('flag', 'user', options)).toBe(true)
-      expect(await posthog.getFeatureFlag('cohort-flag', 'user', options)).toBe(true)
-      expect(flagsRequests()).toHaveLength(0)
-    })
+    )
 
     it('a person listing does not apply to a group filter in a person condition', async () => {
       setup(
