@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "1.6.1",
+  "version": "1.8.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -26,7 +26,7 @@
     "test:integration:mcp-handler": "node harness/frameworks/verify.mjs mcp-handler",
     "test:integration:fastmcp": "node harness/frameworks/verify.mjs fastmcp",
     "prebuild": "pnpm generate-version",
-    "build": "rslib build",
+    "build": "rslib build && node scripts/restore-webpack-ignore.mjs",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"

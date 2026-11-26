@@ -26,6 +26,24 @@ it.each([
     headers: { Authorization: 'Bearer test-secret' },
   })
 })
+it('sends the configured project secret key on management requests', async () => {
+  const page = { count: 0, next: null, previous: null, results: [] }
+  const fetch = mockFetch()
+    .mockResolvedValueOnce(reply(page))
+    .mockResolvedValueOnce(reply(page))
+    .mockResolvedValueOnce(reply({ id: ID, tags: ['ci'] }))
+  const evaluations = client({ secretKey: 'phs_example_only' })
+  await evaluations.datasets.list()
+  await evaluations.scorers.list()
+  await evaluations.resumeExperiment(ID).setTags(['ci'])
+  expect(
+    fetch.mock.calls.map(([url, init]) => [init.method, new URL(url).pathname, init.headers.Authorization])
+  ).toEqual([
+    ['GET', '/api/projects/123/datasets/', 'Bearer phs_example_only'],
+    ['GET', '/api/projects/123/llm_analytics/score_definitions/', 'Bearer phs_example_only'],
+    ['PATCH', `/api/projects/123/ai_observability/offline_experiments/${ID}/`, 'Bearer phs_example_only'],
+  ])
+})
 it.each([
   { projectId: 0 },
   { projectId: 1.5 },

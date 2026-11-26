@@ -1,35 +1,67 @@
 import type {
+    AnalyticsOptions,
+    CaptureSummary,
+    Disposable,
     Extension,
     IPostHog,
-    IPostHogInternal,
     NewSessionInfo,
     NewSessionReason,
     PersonProfileMode,
+    PostHogOptions,
 } from '@posthog/browser'
-import type { PersonProfileMode as CorePersonProfileMode } from '@posthog/browser/core'
-import { analytics, type PersonProfileMode as AnalyticsPersonProfileMode } from '@posthog/browser/analytics'
-import type { Extension as SharedExtension, ExtensionToken } from '@posthog/browser-common'
+import type {
+    CorePostHogOptions,
+    IPostHog as CorePostHog,
+    PersonProfileMode as CorePersonProfileMode,
+} from '@posthog/browser/core'
+import type { Client, Extension as SharedExtension, ExtensionToken } from '@posthog/browser-common'
 
 const personProfiles: PersonProfileMode = 'identified_only'
 const corePersonProfiles: CorePersonProfileMode = personProfiles
-const analyticsPersonProfiles: AnalyticsPersonProfileMode = corePersonProfiles
-export const personAnalytics = analytics({ personProfiles: analyticsPersonProfiles })
+export const analyticsOptions: AnalyticsOptions = { personProfiles: corePersonProfiles, flushAt: 10, flushInterval: 0 }
+export const rootOptions: PostHogOptions = { projectToken: 'ph_test', analytics: analyticsOptions, flags: false }
+export const coreOptions: CorePostHogOptions = { projectToken: 'ph_test', analytics: analyticsOptions }
+// @ts-expect-error Analytics is part of the client and cannot be disabled.
+export const disabledAnalytics: PostHogOptions = { projectToken: 'ph_test', analytics: false }
+// @ts-expect-error Optional products are configured through the root entry or explicit extensions.
+export const coreFlags: CorePostHogOptions = { projectToken: 'ph_test', flags: {} }
 
 export const sessionReason = (session: NewSessionInfo): NewSessionReason => session.reason
 
 export const clientExtension: Extension = {
     name: 'client-extension',
-    async setup(client) {
-        await client.resolveExtension('analytics')
-        client.analytics?.capture('extension setup')
+    setup(client) {
+        const host: IPostHog = client
+        host.capture('extension setup')
+        host.identify('person')
+    },
+}
+
+// The README lifecycle-notification example.
+let identitySubscription: Disposable | undefined
+export const identityObserver = {
+    name: 'identity-observer',
+    setup(client: IPostHog) {
+        identitySubscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
+            void [previousDistinctId, distinctId]
+        })
+    },
+    dispose() {
+        identitySubscription?.dispose()
     },
 }
 
 export const sharedClientExtension: SharedExtension = {
     name: 'shared-client-extension',
     setup(client) {
-        client.capture('extension setup')
+        const host: Client = client
+        host.capture('extension setup')
     },
+}
+
+export const sharedExtensionOptions: CorePostHogOptions = {
+    projectToken: 'ph_test',
+    extensions: [clientExtension, sharedClientExtension, identityObserver],
 }
 
 interface CustomExtensionHost {
@@ -49,81 +81,66 @@ interface CustomExtension extends Extension {
 }
 const CustomExtension = 'custom' as ExtensionToken<CustomExtension>
 
-export const publicProductViews = async (posthog: IPostHog, internal: IPostHogInternal): Promise<void> => {
-    const acquired = await posthog.resolveExtension('analytics')
-    acquired?.capture('acquired')
-    posthog.analytics?.capture('event')
-    posthog.analytics?.captureImmediate('immediate')
-    posthog.analytics?.identify('person')
-    posthog.analytics?.group('company', 'company-123')
-    posthog.analytics?.alias('account-123')
-    posthog.analytics?.groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-uuid', timestamp: new Date() })
-    posthog.analytics?.resetGroups()
-    acquired?.alias('account-456')
-    acquired?.groupIdentify('organization', 'external')
-    acquired?.resetGroups()
-    internal.analytics?.alias('internal-account')
-    internal.analytics?.groupIdentify('organization', 42)
-    internal.analytics?.resetGroups()
-    const groupsReset = posthog.onGroupsReset(() => {})
-    const internalGroupsReset = internal.onGroupsReset(() => {})
-    groupsReset.dispose()
-    internalGroupsReset.dispose()
-    const propertiesChanged = internal.onChangeProperties(({ set, setOnce, unset }) => {
-        const name: unknown = set?.name ?? setOnce?.name
-        const removed: readonly string[] | undefined = unset
-        void [name, removed]
-    })
-    propertiesChanged.dispose()
-    // @ts-expect-error Property notifications belong to the scoped product host.
-    posthog.onChangeProperties(() => {})
-    // @ts-expect-error Alias targets are strings.
-    posthog.analytics?.alias(42)
-    // @ts-expect-error Group keys are strings or numbers.
-    posthog.analytics?.groupIdentify('organization', true)
-    posthog.analytics?.createPersonProfile()
-    posthog.analytics?.setPersonProperties({ plan: 'paid' }, { initial: true })
-    posthog.analytics?.setPersonProperties(undefined, { initial: true })
-    posthog.analytics?.unsetPersonProperties('plan')
-    posthog.analytics?.unsetPersonProperties(['plan', 'initial'] as const)
-    posthog.analytics?.setInternalOrTestUser()
-    posthog.analytics?.register({ plan: 'paid', nested: { count: 1 } })
-    posthog.analytics?.registerOnce({ acquisitionSource: 'website' })
-    posthog.analytics?.registerOnce({ region: 'eu' }, null)
-    posthog.analytics?.unregister('plan')
-    const registered: unknown = posthog.analytics?.getProperty('nested')
-    const acquiredProperty: unknown = acquired?.getProperty('region')
-    acquired?.register({ source: 'acquired' })
-    acquired?.registerOnce({ initial: true }, false)
-    acquired?.unregister('source')
-    internal.analytics?.register({ source: 'internal' })
-    internal.analytics?.registerOnce({ initial: true })
-    internal.analytics?.unregister('source')
-    const internalProperty: unknown = internal.analytics?.getProperty('initial')
-    acquired?.registerForSession({ flow: 'checkout' })
-    acquired?.unregisterForSession('flow')
-    posthog.analytics?.registerForSession({ step: 1 })
-    posthog.analytics?.unregisterForSession('step')
-    internal.analytics?.registerForSession({ source: 'internal' })
-    internal.analytics?.unregisterForSession('source')
+export const entrypointClients = (core: CorePostHog): IPostHog[] => [core]
+
+export const publicClient = async (posthog: IPostHog): Promise<void> => {
+    const admitted: boolean = posthog.capture('event', { plan: 'paid' }, { uuid: 'event-uuid', timestamp: new Date() })
+    const summary: CaptureSummary = await posthog.captureImmediate('immediate')
+    void [admitted, summary.allPersisted]
+    posthog.identify('person', { name: 'Person' }, { initial: true })
+    posthog.reset()
+    posthog.register({ plan: 'paid', nested: { count: 1 } })
+    posthog.registerOnce({ acquisitionSource: 'website' })
+    posthog.registerOnce({ region: 'eu' }, null)
+    posthog.unregister('plan')
+    posthog.registerForSession({ step: 1 })
+    posthog.unregisterForSession('step')
     // @ts-expect-error Session property keys are strings.
-    acquired?.unregisterForSession(42)
+    posthog.unregisterForSession(42)
+    const registered: unknown = posthog.getProperty('nested')
     void registered
-    void acquiredProperty
-    void internalProperty
     // @ts-expect-error Registered values require narrowing before assigning a concrete type.
-    const plan: string = acquired?.getProperty('plan')
+    const plan: string = posthog.getProperty('plan')
     void plan
-    posthog.analytics?.reset()
-    const custom = await posthog.resolveExtension(CustomExtension)
-    const value: string | undefined = custom?.read()
+    posthog.registerDynamicEventProperties(() => ({ page: 'home' })).dispose()
+
+    posthog.group('company', 'company-123', { name: 'Company' })
+    posthog.groupIdentify('organization', 0, { plan: 'paid' }, { uuid: 'group-uuid', timestamp: new Date() })
+    posthog.groupIdentify('organization', 'external')
+    // @ts-expect-error Group keys are strings or numbers.
+    posthog.groupIdentify('organization', true)
+    posthog.resetGroups()
+    posthog.alias('account-123')
+    // @ts-expect-error Alias targets are strings.
+    posthog.alias(42)
+    posthog.createPersonProfile()
+    posthog.setPersonProperties({ plan: 'paid' }, { initial: true })
+    posthog.setPersonProperties(undefined, { initial: true })
+    posthog.unsetPersonProperties('plan')
+    posthog.unsetPersonProperties(['plan', 'initial'] as const)
+    posthog.setInternalOrTestUser()
+
+    const subscriptions = [
+        posthog.onEvent(({ event, properties }) => void [event, properties]),
+        posthog.onIdentify(({ distinctId, previousDistinctId }) => void [distinctId, previousDistinctId]),
+        posthog.onChangeProperties(({ set, setOnce, unset }) => {
+            const name: unknown = set?.name ?? setOnce?.name
+            const removed: readonly string[] | undefined = unset
+            void [name, removed]
+        }),
+        posthog.onGroup(({ type, key, changed }) => void [type, key, changed]),
+        posthog.onGroupsReset(() => {}),
+        posthog.onReset(() => {}),
+        posthog.onNewSession(({ sessionId, reason }) => void [sessionId, reason]),
+        posthog.onConsentChange(({ current, previous }) => void [current, previous]),
+    ]
+    for (const subscription of subscriptions) subscription.dispose()
+
+    const custom = posthog.getExtension(CustomExtension)
+    const resolved = await posthog.resolveExtension(CustomExtension)
+    const value: string | undefined = custom?.read() ?? resolved?.read()
     void value
-    // @ts-expect-error Analytics capture belongs to its product namespace.
-    posthog.capture('event')
-    // @ts-expect-error Shared implementation lookup is not an application capability.
-    posthog.getExtension('custom')
-    // @ts-expect-error Internal delivery coordination is not an application control.
-    posthog.analytics?.purge()
-    internal.analytics?.purge()
-    internal.sharedClient.capture('shared event')
+    posthog.featureFlags?.getFeatureFlag('flag')
+    // @ts-expect-error Analytics is part of the client, not a product namespace.
+    void posthog.analytics
 }

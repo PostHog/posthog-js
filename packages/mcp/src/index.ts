@@ -7,12 +7,24 @@ import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import {
+  BoundedCache,
+  IdentityCache,
+  getServerTrackingData,
+  setServerTrackingData,
+  withIdentity,
+} from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { hookFastMCPSessions } from './extensions/fastmcp'
 import { captureEvent } from './extensions/capture'
+import { canScopeRequests, currentRequestScope, holdCustomEvent } from './extensions/request-scope'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
-import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionInfo,
+  instanceSessionSource,
+  newSessionId,
+} from './extensions/session'
 import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -25,19 +37,21 @@ import type {
   MCPAnalyticsOptions,
   MCPServerLike,
   McpEvent,
+  SessionInfo,
 } from './types'
 
 /**
  * Instruments an MCP server so PostHog auto-captures tool calls, tool and resource listings,
  * resource reads, initialize requests, identity, and exceptions. Returns a handle whose
- * `capture()` method records custom events, so you don't pass the server around after wiring it up.
+ * `capture()` method records custom events, so you don't pass the server around after wiring it up,
+ * and whose `flush()` sends what was captured before a per-request runtime exits.
  *
  * **Idempotent per server instance.** Per-server tracking state lives in a module-level
  * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
  * on the same server reuses it rather than double-wrapping handlers.
  *
  * @param server - The MCP server to instrument (low-level `Server` or high-level `McpServer`).
- * @param posthog - A `posthog-node` client you construct and own (matching `@posthog/ai`); call `posthog.shutdown()` on exit to flush.
+ * @param posthog - A `posthog-node` client you construct and own (matching `@posthog/ai`); call `posthog.shutdown()` on exit to flush, or `analytics.flush()` per request.
  * @param options - Optional configuration. See `MCPAnalyticsOptions`.
  *
  * @example
@@ -94,7 +108,7 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
   } catch (error) {
     logger(`Warning: Failed to instrument server - ${error}`)
     // Degrade gracefully: a no-op handle so the host app keeps working.
-    return { capture: async () => undefined }
+    return { capture: async () => undefined, flush: async () => undefined }
   }
 }
 
@@ -152,6 +166,9 @@ function instrumentFastMCP(fastmcp: unknown, posthog: PostHog, options: MCPAnaly
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
+    flush: async () => {
+      await getServerTrackingData(lowLevelServer)?.sink?.flush()
+    },
   }
 }
 
@@ -218,6 +235,16 @@ function setupTrackedServer(
   }
 }
 
+/** What the server knows about itself, with nothing of whichever caller last touched shared state. */
+function withoutCaller(sessionInfo: SessionInfo): SessionInfo {
+  return {
+    ...withIdentity(sessionInfo, undefined),
+    clientName: undefined,
+    clientVersion: undefined,
+    protocolVersion: undefined,
+  }
+}
+
 async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: CaptureEventData): Promise<void> {
   if (!eventData || typeof eventData.event !== 'string' || eventData.event.length === 0) {
     throw new Error('`capture` requires an `event` name, e.g. analytics.capture({ event: "feedback_submitted" })')
@@ -228,8 +255,19 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     return
   }
 
+  const scope = currentRequestScope(trackingData)
+  const unattributed = !scope && !(await canScopeRequests())
+  if (unattributed && !trackingData.warnedUnattributedCustomEvents) {
+    trackingData.warnedUnattributedCustomEvents = true
+    trackingData.logger(
+      'Warning: this runtime has no AsyncLocalStorage, so custom events cannot be tied to the request that captured them. ' +
+        'They are sent with a session of their own and no identity. On Cloudflare Workers, enable the nodejs_compat or nodejs_als compatibility flag.'
+    )
+  }
+  const session = scope?.pending?.settled ?? scope
   const event: McpEvent = {
-    sessionId: trackingData.sessionId,
+    sessionId: session?.sessionId ?? (unattributed ? newSessionId() : trackingData.sessionId),
+    sessionSource: session ? session.sessionSource : unattributed ? 'generated' : instanceSessionSource(trackingData),
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
@@ -239,8 +277,15 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
-  await captureEvent(lowLevelServer, event, trackingData.logger)
-  trackingData.logger(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
+  if (scope?.pending && !scope.pending.settled) {
+    holdCustomEvent(scope.pending, event, trackingData.logger)
+    return
+  }
+  const attribution =
+    scope?.attribution ??
+    (unattributed ? withoutCaller(getSessionInfo(lowLevelServer, trackingData, event.sessionId)) : undefined)
+  await captureEvent(lowLevelServer, event, trackingData.logger, attribution)
+  trackingData.logger(`Captured event "${eventData.event}" for session ${event.sessionId}`)
 }
 
 export { deriveSessionIdFromMCPSession, newSessionId }

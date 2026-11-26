@@ -412,6 +412,13 @@ class FeatureFlagsPoller {
     }
 
     const flagFilters = flag.filters || {}
+
+    // Enrollment is a person property, so it is read from the person properties on
+    // group-aggregated flags too.
+    if (flagFilters.feature_enrollment === true) {
+      return matchFeatureEnrollment(flag, personProperties)
+    }
+
     const aggregation_group_type_index = flagFilters.aggregation_group_type_index
 
     if (aggregation_group_type_index != undefined) {
@@ -1039,6 +1046,8 @@ class FeatureFlagsPoller {
   /**
    * Returns true if the feature flags poller has loaded successfully at least once and has more than 0 feature flags.
    * This is useful to check if local evaluation is ready before calling getFeatureFlag.
+   * A successful load with no flags does not count as ready; the `localEvaluationFlagsLoaded` event
+   * fires for every successful load and reports the flag count.
    */
   isLocalEvaluationReady(): boolean {
     return (this.loadedSuccessfullyOnce ?? false) && (this.featureFlags?.length ?? 0) > 0
@@ -1385,6 +1394,10 @@ function getDefinitionUnresolvedReason(
     return 'experience_continuity'
   }
   const flagFilters = flag.filters || {}
+  // Enrollment decides the flag before the group aggregation and release conditions are read.
+  if (flagFilters.feature_enrollment === true) {
+    return undefined
+  }
   const aggregation = flagFilters.aggregation_group_type_index
   if (aggregation != undefined && !definitions.groupTypeMapping[String(aggregation)]) {
     return 'unsupported_definition'
@@ -1393,6 +1406,22 @@ function getDefinitionUnresolvedReason(
     (condition.properties || []).some((property) => isUnsupportedProperty(property, definitions, new Set()))
   )
   return usesUnsupportedProperty ? 'unsupported_definition' : undefined
+}
+
+// An early-access feature flag returns the person's enrollment at once: `true` or `"true"` means
+// enrolled, and any other value that was passed, `null` included, means opted out. Without the
+// enrollment property the flag can't be resolved locally.
+function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
+  const enrollmentKey = `$feature_enrollment/${flag.key}`
+  const enrollment = personProperties[enrollmentKey]
+  // `undefined` is omitted from JSON, so /flags would read the stored enrollment.
+  if (enrollment === undefined) {
+    throw new InconclusiveMatchError(
+      `Flag has feature enrollment and '${enrollmentKey}' was not passed`,
+      'missing_context'
+    )
+  }
+  return enrollment === true || enrollment === 'true'
 }
 
 function isUnsupportedProperty(

@@ -9,14 +9,14 @@ import {
     shouldCaptureRageclick,
 } from '@posthog/browser-common/utils/autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isNumber, isNullish, isEmptyObject, isObject, stripUrlHash } from '@posthog/core'
+import { isNumber, isNullish, isEmptyObject, isObject, isUndefined, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
+import { PERSONAL_DATA_URL_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -75,6 +75,8 @@ export class Heatmaps implements Extension {
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
     private _buffer: HeatmapEventBuffer
+    private _mouseMoveCapturing = false
+    private _consentChangedAt = 0
     private _flushInterval: ReturnType<typeof setInterval> | null = null
     private _deadClicksCapture: DeadClicksAutocapture | undefined
     private _onClickHandler: ((e: Event) => void) | undefined
@@ -157,10 +159,17 @@ export class Heatmaps implements Extension {
         return buffer
     }
 
+    public discardPending(): void {
+        this._consentChangedAt = Date.now()
+        clearTimeout(this._mouseMoveTimeout)
+        this._mouseMoveTimeout = undefined
+        this.getAndClearBuffer()
+    }
+
     private _onDeadClick(click: DeadClickCandidate): void {
         // heatmaps only plots click coordinates; this also rejects swipe candidates (never
         // expected on this path), since a swipe's TouchEvent has no clientX/clientY
-        if (!isValidMouseEvent(click.originalEvent)) {
+        if (!isValidMouseEvent(click.originalEvent) || click.timestamp <= this._consentChangedAt) {
             return
         }
         this._onClick(click.originalEvent, 'deadclick')
@@ -226,6 +235,7 @@ export class Heatmaps implements Extension {
         }
 
         clearTimeout(this._mouseMoveTimeout)
+        this._mouseMoveTimeout = undefined
 
         this._deadClicksCapture?.stop()
 
@@ -252,14 +262,14 @@ export class Heatmaps implements Extension {
     }
 
     private _onClick(e: MouseEvent, type: string = 'click'): void {
-        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e) || !this.instance.is_capturing()) {
             return
         }
 
         const properties = this._getProperties(e, type)
 
         if (
-            this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime()) &&
+            this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime(), getEventTarget(e)) &&
             shouldCaptureRageclick(getEventTarget(e), this.instance.config.rageclick)
         ) {
             this._capture({
@@ -276,10 +286,17 @@ export class Heatmaps implements Extension {
             return
         }
 
+        if (isUndefined(this._mouseMoveTimeout)) {
+            this._mouseMoveCapturing = this.instance.is_capturing()
+        }
+
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
-            this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
+            this._mouseMoveTimeout = undefined
+            if (this._mouseMoveCapturing && this.instance.is_capturing()) {
+                this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
+            }
         }, 500)
     }
 
@@ -295,7 +312,7 @@ export class Heatmaps implements Extension {
         const customPersonalDataProperties = this._config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+            ? [...PERSONAL_DATA_URL_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
         const url = maskQueryParams(href, paramsToMask, MASKED)

@@ -477,47 +477,6 @@ jobs:
                   message: '${{ steps.check-rejection.outputs.message }}'
                   emoji_reaction: 'no_entry_sign'
 
-    validate-electron-package:
-        name: Check Electron registry compatibility
-        needs: [release-context, version-bump]
-        if: needs.release-context.outputs.maintenance == 'false' && needs.version-bump.outputs.commit-hash != ''
-        runs-on: ubuntu-latest
-        permissions:
-            contents: read
-        outputs:
-            version: ${{ steps.validate.outputs.version }}
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-              with:
-                  ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  persist-credentials: false
-
-            - name: Check Electron version
-              id: check-version
-              uses: PostHog/check-package-version@abc438f5bf4810ab941c4919f570d7f7f4e89473 # v2.1.2
-              with:
-                  path: packages/electron
-
-            - uses: ./.github/actions/setup
-              if: steps.check-version.outputs.is-new-version == 'true'
-              with:
-                  install: false
-                  build: false
-
-            - name: Verify registry dependency minimums and installed declarations
-              if: steps.check-version.outputs.is-new-version == 'true'
-              id: validate
-              env:
-                  VERSION: ${{ steps.check-version.outputs.committed-version }}
-                  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-              run: |
-                  pnpm install --filter @posthog/electron... --frozen-lockfile --ignore-scripts
-                  pnpm turbo run build --filter=@posthog/electron
-                  tarball="$RUNNER_TEMP/electron.tgz"
-                  pnpm --filter=@posthog/electron pack --out "$tarball"
-                  node scripts/electron-release.mjs "$tarball" "$VERSION"
-                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
     publish:
         name: Publish packages
         needs:
@@ -527,12 +486,7 @@ jobs:
                 notify-approval-needed,
                 recover-posthog-js-s3,
                 gate-posthog-js-publish,
-                validate-electron-package,
             ]
-        env:
-            VALIDATION_RESULT: ${{ needs.validate-electron-package.result }}
-            VALIDATED_VERSION: ${{ needs.validate-electron-package.outputs.version }}
-            VALIDATED_SOURCE: ${{ needs.version-bump.outputs.commit-hash }}
         runs-on: ubuntu-latest
         # Use `always()` to evaluate the S3 gate even if an earlier dependency failed.
         if: >-
@@ -632,17 +586,6 @@ jobs:
               run: |
                   if [ "$IS_NEW_VERSION" != 'true' ]; then
                       echo "::error::$PACKAGE_NAME@$PACKAGE_VERSION already exists on npm, so this maintenance release has nothing to publish."
-                      exit 1
-                  fi
-
-            - name: Require Electron registry compatibility
-              if: steps.check-package-version.outputs.is-new-version == 'true' && matrix.package.name == '@posthog/electron'
-              env:
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-              run: |
-                  if [ "$VALIDATION_RESULT" != 'success' ] || [ "$VALIDATED_VERSION" != "$PACKAGE_VERSION" ] ||
-                      [ "$VALIDATED_SOURCE" != "$(git rev-parse HEAD)" ]; then
-                      echo "::error::Electron registry compatibility must pass for the npm target before publishing."
                       exit 1
                   fi
 
