@@ -1919,6 +1919,81 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
   })
+
+  describe('Claude served through an OpenAI-compatible proxy', () => {
+    const runClaudeViaOpenAI = (llmOutput: Record<string, any>, provider = 'openai'): Record<string, any> => {
+      const runId = `run_claude_proxy_${provider}`
+      handler.handleLLMStart(
+        { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'], kwargs: {} },
+        ['hello'],
+        runId,
+        undefined,
+        { invocation_params: {} },
+        undefined,
+        { ls_model_name: 'claude-sonnet-4-5', ls_provider: provider }
+      )
+      const message = new AIMessage({
+        content: 'hi',
+        usage_metadata: {
+          input_tokens: 10000,
+          output_tokens: 100,
+          total_tokens: 10100,
+          input_token_details: { cache_read: 9000 },
+        },
+      })
+      const generation: ChatGeneration = { text: 'hi', message }
+      handler.handleLLMEnd({ generations: [[generation]], llmOutput }, runId)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      return captureCall[0].properties
+    }
+
+    it.each([
+      ['invoke', { tokenUsage: { promptTokens: 10000, completionTokens: 100, totalTokens: 10100 } }],
+      ['streaming', {}],
+    ])('reports cache reads as included in input tokens on %s', (_label, llmOutput) => {
+      const properties = runClaudeViaOpenAI(llmOutput)
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    it('leaves the cache reporting flag unset for providers with unknown token conventions', () => {
+      const properties = runClaudeViaOpenAI({}, 'some-custom-provider')
+
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+  })
+
+  it('leaves the cache reporting flag unset for Anthropic, whose input tokens are already cache-exclusive', () => {
+    const runId = 'run_anthropic_cache_flag'
+    handler.handleLLMStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'], kwargs: {} },
+      ['hello'],
+      runId,
+      undefined,
+      { invocation_params: {} },
+      undefined,
+      { ls_model_name: 'claude-sonnet-4-5', ls_provider: 'anthropic' }
+    )
+    const message = new AIMessage({
+      content: 'hi',
+      usage_metadata: {
+        input_tokens: 10000,
+        output_tokens: 100,
+        total_tokens: 10100,
+        input_token_details: { cache_read: 9000 },
+      },
+    })
+    const generation: ChatGeneration = { text: 'hi', message }
+    handler.handleLLMEnd({ generations: [[generation]], llmOutput: {} }, runId)
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(1000)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(9000)
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+  })
 })
 
 describe('LangChainCallbackHandler span naming', () => {
