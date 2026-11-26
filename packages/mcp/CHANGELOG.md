@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 1.8.2
+
+### Patch Changes
+
+- [#5889](https://github.com/PostHog/posthog-js/pull/5889) [`c8f17c6`](https://github.com/PostHog/posthog-js/commit/c8f17c663aef32f1e7b15dd6e19a8f4c830631ee) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `PostHogMCP.flush()` and `shutdown()` now wait for MCP captures still in the pipeline before flushing, within the shutdown deadline, instead of relying on the pipeline finishing first.
+  (2026-11-26)
+
 ## 1.8.1
 
 ### Patch Changes
