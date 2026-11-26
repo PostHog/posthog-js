@@ -40,7 +40,8 @@ export interface AnalyticsDelivery extends LaneDelivery<AnalyticsMessage> {
 
 /** Delivery driver attached to the client's event buffer. A driver without an immediate path reports immediate capture as unavailable. */
 export interface AnalyticsDriver {
-    flush(): Promise<void>
+    /** With `immediate`, one more drain is forced if an earlier batch fails before the events queued now are attempted. */
+    flush(immediate?: boolean): Promise<void>
     deliverImmediate?: AnalyticsDelivery['deliverImmediate']
     deliverUnload(messages: readonly AnalyticsMessage[]): void
     dispose(): Promise<void>
@@ -76,6 +77,11 @@ export interface AnalyticsCore extends Pick<Client, 'projectToken' | 'logger' | 
         | 'group'
         | 'reset'
         | 'resetGroups'
+        | 'session'
+        | 'generated'
+        | 'bootstrapIdentity'
+        | 'bootstrapSession'
+        | 'adoptStoredIdentity'
     >
     readonly _sessionKv: KeyValueStore
     readonly _requestRuntime: RequestRuntime

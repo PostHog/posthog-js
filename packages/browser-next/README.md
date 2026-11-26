@@ -198,7 +198,9 @@ subscription?.dispose()
 
 `FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `resolveExtension(FeatureFlagsExtension)` resolves to undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
-Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+Pass `getFeatureFlag(key, { sendFeatureFlagEvent: false })` for a read without an exposure event. Omitted or undefined `sendFeatureFlagEvent` defaults to sending. `getAllFeatureFlags()` returns a synchronous snapshot of all known structured results, including disabled flags and payloads, without exposure events. Changing the snapshot or its JSON payloads does not change stored flags.
+
+`getFeatureFlag(key, { fresh: true })` returns undefined unless the latest flag request in this instance succeeded, ignoring bootstrap and persisted values before then, as in `posthog-js`. Use it to avoid briefly showing a feature that has since been disabled. The `fresh` option does not itself force or await a reload; ordinary stale-cache auto-refresh still applies. Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
 
 ```ts
 if (featureFlags) {
@@ -211,6 +213,8 @@ if (featureFlags) {
 
 The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled or unavailable), or `cancelled` (reset or disposal). It does not reject on request failures. Calls made before a request starts share that evaluation; calls during an active request wait for a follow-up evaluation. Cached values and `updateFlags()` do not complete a reload. `onFeatureFlags` remains a subscription to value changes, separate from reload completion.
 
+`onReloading(callback)` observes automatic and explicit reload starts, before the debounced request. It does not replay an earlier start. A reload requested from the callback joins the starting request. Its returned `Disposable` stops that subscription; disposing the client stops all reload notifications.
+
 For static inclusion, import the factory explicitly and pass the same configuration:
 
 ```ts
@@ -221,6 +225,27 @@ const posthog = await createPostHog({
     extensions: [flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
 })
 ```
+
+Use the local property controls when evaluation needs context that has not reached ingestion yet:
+
+```ts
+posthog.featureFlags?.setPersonPropertiesForFlags({ plan: 'pro' })
+posthog.featureFlags?.setGroupPropertiesForFlags({ organization: { employees: 25 } }, false)
+await posthog.featureFlags?.reloadFeatureFlags()
+posthog.featureFlags?.resetPersonPropertiesForFlags(false)
+posthog.featureFlags?.resetGroupPropertiesForFlags('organization')
+```
+
+Setters merge properties, including within each group type. Setters and resets reload by default; pass `false` to defer evaluation. Group reset clears one group type, or all group overrides when called without a group type. These controls do not identify a person, associate group membership, update profiles, or emit analytics. Local changes and flag evaluation requests remain available when capture is denied, as in `posthog-js`. Overrides use the client's configured persistence, survive recreation when storage is enabled, and clear on `reset()`. Disposed flags instances ignore these calls.
+
+Early-access controls are also available on `posthog.featureFlags`:
+
+```ts
+posthog.featureFlags?.getEarlyAccessFeatures((features) => console.log(features), true, ['beta'])
+posthog.featureFlags?.updateEarlyAccessFeatureEnrollment('new-onboarding', true, 'beta')
+```
+
+`getEarlyAccessFeatures(callback, forceReload?, stages?)` reuses cached definitions unless forced. Stage filters apply to requests, not an existing cache; force a reload when changing stages. As in `posthog-js`, any response with a JSON body replaces the cached definitions and reaches the callback, even when the request failed. Listing does not carry person data, so it is also requested while capture is opted out, matching `posthog-js`. Enrollment updates the stored flag value and person evaluation context immediately (active bootstrap values still take precedence until flags reload, as in `posthog-js`), then captures `$feature_enrollment_update` through ordinary consent gating. The optional stage and cached feature name are included in that event. Listing callbacks are isolated from application exceptions and stop after disposal. `EarlyAccessFeature`, `EarlyAccessFeatureCallback`, and `EarlyAccessFeatureStage` types are exported from the root and `/flags` entrypoints.
 
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
@@ -300,7 +325,9 @@ feedback?.getSurveys((surveys, context) => {
 const eligibility = await feedback?.canRenderSurvey('feedback')
 ```
 
-The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
+The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display.
+
+`onActiveMatchingSurveysChanged(callback)` loads surveys for manual use and returns a disposable subscription to the active matching set. It delivers the current set once loaded, then changes after event and action triggers, cancellation, captured `$pageview` events, survey display, dismissal and responses, feature-flag updates, definition refreshes and reset. Unchanged results are not delivered again. URL conditions are re-evaluated on captured pageviews, so capture `$pageview` after client-side navigation. Selector, device and wait-period conditions are checked on those updates rather than by observing the DOM or time. While surveys are unavailable the callback receives `([], { isLoaded: false })`, with an `error` when a load attempt fails; the subscription remains for later updates. Captured `survey dismissed` and `survey sent` events with a `$survey_id` mark that survey as seen, including events from an application's own survey UI. Capture consent still gates rendering and responses.
 
 Use `surveys: false` to omit automatic inclusion. An explicitly supplied instance takes precedence, including over `false`. Importing the factory below includes orchestration only; rendering, styles, and HTML sanitization still load dynamically when needed. Importing the entrypoint or constructing the extension does not access browser globals.
 
@@ -340,21 +367,29 @@ if (summary.error) {
 }
 ```
 
-Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery resolve with `summary.error` and `allPersisted: false`, retaining any known partial outcomes. These failures do not reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`. An observed consent denial permanently cancels pending immediate dispatch and retries, even if the user opts in again; already-dispatched requests may finish.
+Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery resolve with `summary.error` and `allPersisted: false`, retaining any known partial outcomes. These failures do not reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`. An explicit opt-out cancels pending immediate dispatch and retries, even if the user opts in again; a cleared choice (`reset()` or `clearOptInOut()`) does not. Already-dispatched requests may finish.
 
 `captureImmediate()` is available on both entrypoints because delivery is part of the client. The manual core captures even without supplied extensions: it sends the initial `$pageview` unless `capturePageview: false`, and an installed flags extension sends `$feature_flag_called` the first time each flag value is read.
 
-Capture V1 delivery sends FIFO batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
+Capture V1 delivery sends FIFO batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()`, shutdown, and `capture(event, properties, { delivery: 'immediate' })` bypass both thresholds. A `delivery: 'immediate'` capture stays in the lane with normal retries and unload handoff, and starts a drain now that sends queued events with it. Prefer it over `capture()` followed by `flush()` when the event must not wait behind a full offline backlog or, with `flushInterval: 0`, behind a failed older batch: if an older batch exhausts its retries before the event is attempted, the lane makes one more drain instead of waiting for another trigger. `{ delivery: 'unload' }` sends the event through best-effort keepalive Fetch and does not confirm persistence. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, `delivery: 'immediate'` capture, or explicit flush rather than hot-looping or being discarded.
+
+`posthog.setConfig({ debug, analytics: { personProfiles } })` changes only these options on a running client; other options are fixed at creation. `posthog.debug()` and `posthog.debug(false)` toggle diagnostic logs at runtime and are not persisted across page loads.
 
 Both factories start one JSON remote-config request during initialization, without waiting for it before capture or factory completion. `remoteConfig` supplies an inline result instead of making a request. The default loader uses Fetch and `GET /array/{projectToken}/config`. Recognized PostHog US/EU hosts resolve to the corresponding assets host; custom hosts retain their configured base, including path prefixes. Loading is independent of capture consent. `fetch: false` disables built-in loading. Failure or the default 10-second `remoteConfigTimeoutMs` publishes `{ ok: false }` once, with no automatic retry; shutdown cancels the wait and suppresses late publication.
 
 When remote configuration advertises gzip, eligible normal batches use native `CompressionStream`; delivery remains uncompressed while configuration is unresolved or compression is unavailable, invalid, stalled, or larger than the JSON body. While offline, finalized events remain admitted and avoid network attempts until an `online` notification. On `pagehide`, or `unload` where `pagehide` is unavailable, queued analytics receive one synchronous uncompressed handoff through headered keepalive Fetch under one conservative aggregate body budget. Beacon remains disabled until Capture V1 supports the required metadata without request headers.
 
-One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Navigation tracking, URL/title enrichment, and page-leave capture remain optional product behavior.
+One initial `$pageview` is admitted through the same queue after configured extensions install. Set `capturePageview: false` to disable it. Events captured after a `$pageview` in the same session carry its UUID as `$pageview_id`, and `posthog.getPageViewId()` returns it. Navigation tracking, URL/title enrichment, and page-leave capture remain optional product behavior.
 
-Consent is stored separately from identity under `__ph_opt_in_out_<project-token>`. Use `consentPersistenceName` to supply a shared key verbatim. The client reads established `1`/`true`/`yes` and `0`/`false`/`no` values, including raw boolean and numeric compatibility values, and writes `1` or `0`. Configured extensions still initialize under prior denial. Identity, key-value persistence, and remote configuration remain available, while analytics capture and request transmission are consent-gated.
+Consent is stored separately from identity under `__ph_opt_in_out_<project-token>`. Use `consentPersistenceName` to supply a shared key verbatim. The client reads established `1`/`true`/`yes` and `0`/`false`/`no` values, including raw boolean and numeric compatibility values, and writes `1` or `0`. Configured extensions still initialize under prior denial. Identity, key-value persistence, remote configuration, feature flag evaluation and the early-access listing remain available, as in `posthog-js`, while analytics capture and other request transmission are consent-gated.
 
-Session and window IDs are created on the first successfully admitted capture. Rejected work does not create or advance them. Idle timeout, maximum length, and reset rotate both IDs. Same-origin tabs share the active session while retaining distinct window IDs; ordinary reloads preserve the window ID and copied tab storage receives a new one. Session rotation is activity-driven and starts no core timer.
+`posthog.getExplicitConsentStatus()` returns `'granted'`, `'denied'`, or `'pending'` when the user has not chosen, independently of `optOutByDefault`. `posthog.clearOptInOut()` forgets the stored choice and returns consent to the configured default. `reset()` also forgets the stored choice, as posthog-js does: a user who opted out is captured again after a logout reset unless the app calls `optOut()` again, and with `optOutByDefault` capture stops after `reset()` until the app calls `optIn()` again. Neither call discards analytics events captured before it, in this or another tab; they are still delivered.
+
+Session and window IDs are created on the first successfully admitted capture. Rejected work does not create or advance them. Idle timeout, maximum length, and reset rotate both IDs. Same-origin tabs share the active session while retaining distinct window IDs; ordinary reloads preserve the window ID and copied tab storage receives a new one. Session rotation is activity-driven and starts no core timer. Session and window IDs are UUIDv7, as in posthog-js. `posthog.onSessionId(({ sessionId, windowId }) => …)` reports the current session without creating one, then every change; dispose the returned subscription to stop.
+
+`reset()` starts a new anonymous identity and session and keeps the device ID. Pass `reset(true)` or `reset({ resetDeviceId: true })` to also replace the device ID, and `reset({ bootstrap: { distinctId, isIdentifiedId, sessionId } })` to seed the new identity and next session. The setup `bootstrap` option accepts the same values. A stored identity takes precedence, except that an identified bootstrap ID identifies a stored anonymous user, as in posthog-js. Use `bootstrap.sessionId` to continue a UUIDv7 session ID passed from another domain.
+
+Identity and session state live in the configured storage only. To share them across subdomains, and with posthog-js through its `ph_<project-token>_posthog` cookie, pass `cookie: cookiePersistence()` from `@posthog/browser/persistence/cookie`. The cookie is opt-in, uses `SameSite=Lax`, is `Secure` on HTTPS pages, and accepts `crossSubdomain`, `secure`, `expirationDays`, and `name` options. Consent stays in the configured storage.
 
 A compact in-memory token bucket admits 10 events per second with a burst of 100 and emits a bypassed aggregate ingestion warning when a runaway loop first reaches the limit. `shutdown(timeoutMs)` stops new work, makes one bounded normal flush attempt, removes timers and lifecycle listeners, and is idempotent. `dispose()` uses the same shutdown path.
 

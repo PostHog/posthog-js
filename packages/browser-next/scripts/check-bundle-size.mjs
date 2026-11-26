@@ -37,6 +37,7 @@ const durableDeliveryInputs = [
     /(^|\/)capture-v1\.(m?js|ts)$/,
 ]
 const rootCompositionInput = /(^|\/)root-composition\.(m?js|ts)$/
+const cookiePersistenceInput = /(^|\/)persistence\/cookie\.(m?js|ts)$/
 
 const buildOptions = {
     absWorkingDir: packageRoot,
@@ -93,7 +94,7 @@ const assertBoundary = (name, inputs, { required = [], forbidden = [] }) => {
 }
 
 // Initial graphs of /core and the root entry hold the client only: no optional product or heavy dependency.
-const clientOnly = [...productInputs, coreInput, surveyUiInput, surveyRenderingInput]
+const clientOnly = [...productInputs, cookiePersistenceInput, coreInput, surveyUiInput, surveyRenderingInput]
 const coreBoundary = {
     required: [analyticsCoreInput, ...durableDeliveryInputs],
     forbidden: [...clientOnly, rootCompositionInput],
@@ -246,6 +247,10 @@ if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
 await measureStatic('core minimal', 'fixtures/minimal.ts', coreBoundary)
 await measureStatic('core', 'fixtures/core.ts', coreBoundary)
 await measureRoot()
+await measureStatic('core with cookie persistence', 'fixtures/cookie-persistence.ts', {
+    required: [cookiePersistenceInput, ...durableDeliveryInputs],
+    forbidden: [...productInputs, coreInput, surveyUiInput, rootCompositionInput],
+})
 const staticFlagsInputs = await measureStatic('static flags', 'fixtures/static-flags.ts', undefined, {
     allowProducts: true,
 })

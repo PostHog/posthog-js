@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser",
-    "version": "0.5.0",
+    "version": "0.6.1",
     "description": "A small, extension-based PostHog client for modern browsers",
     "license": "MIT",
     "repository": {
@@ -47,6 +47,11 @@
             "types": "./dist/products/autocapture/autocapture.d.ts",
             "require": "./dist/products/autocapture/autocapture.js",
             "import": "./dist/products/autocapture/autocapture.mjs"
+        },
+        "./persistence/cookie": {
+            "types": "./dist/persistence/cookie.d.ts",
+            "require": "./dist/persistence/cookie.js",
+            "import": "./dist/persistence/cookie.mjs"
         }
     },
     "scripts": {

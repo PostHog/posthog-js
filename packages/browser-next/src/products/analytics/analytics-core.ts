@@ -1,4 +1,4 @@
-import type { CaptureOptions, CapturedEventInfo, Disposable } from '@posthog/browser-common'
+import type { CaptureOptions, CapturedEventInfo, Disposable, SessionContext } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 import {
     MAX_ANALYTICS_BATCH_EVENTS,
@@ -11,7 +11,8 @@ import {
     type CaptureHost,
 } from './analytics-internal'
 import type { ChangePropertiesInfo, GroupInfo, IdentifyInfo } from '../../core/context/browser-client'
-import type { NewSessionInfo, CaptureSummary } from '../../core/types'
+import type { BootstrapOptions, NewSessionInfo, CaptureSummary, ResetOptions } from '../../core/types'
+import { readBootstrapSession } from '../../core/state/state'
 import type { AnalyticsOptions, PersonProfileMode } from './analytics-options'
 import { EventBuffer } from './admission/event-buffer'
 import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './admission/capture-summary'
@@ -63,6 +64,16 @@ const eventTimestamp = (timestamp: Date | undefined): string => {
     }
 }
 
+/** Snapshots JSON options so later caller mutations and hostile getters cannot affect identity operations. */
+const snapshotOptions = <T extends object>(options: T | undefined): Partial<T> => {
+    try {
+        const snapshot: unknown = JSON.parse(JSON.stringify(options ?? {}))
+        return typeof snapshot === 'object' && snapshot !== null ? (snapshot as Partial<T>) : {}
+    } catch {
+        return {}
+    }
+}
+
 interface PersonPropertiesAdmission {
     readonly signature: string | undefined
 }
@@ -81,14 +92,17 @@ interface PreparedCapture {
 export class Analytics {
     readonly _eventPublisher: Publisher<CapturedEventInfo>
     readonly _newSessionPublisher: Publisher<NewSessionInfo>
+    readonly _sessionIdPublisher: Publisher<SessionContext>
     readonly _identifyPublisher: Publisher<IdentifyInfo>
     readonly _changePropertiesPublisher: Publisher<ChangePropertiesInfo>
     readonly _groupPublisher: Publisher<GroupInfo>
     readonly _groupsResetPublisher: Publisher<void>
     readonly _resetPublisher: Publisher<void>
-    readonly _personProfiles: PersonProfileMode
+    _personProfiles: PersonProfileMode
     _disposed = false
     _lastPersonProperties: string | undefined
+    /** The last admitted `$pageview` UUID and the session it belongs to. */
+    _pageview: [id: string, sessionId: string] | undefined
 
     private _driver: AnalyticsDriver | undefined
     private _isTearingDown = false
@@ -108,6 +122,7 @@ export class Analytics {
         const report = (label: string) => (error: unknown) => _core.logger.error(`${label} listener failed`, error)
         this._eventPublisher = new Publisher(report('An event'))
         this._newSessionPublisher = new Publisher(report('A session'))
+        this._sessionIdPublisher = new Publisher(report('A session ID'))
         this._identifyPublisher = new Publisher(report('An identify'))
         this._changePropertiesPublisher = new Publisher(report('A person-property'))
         this._groupPublisher = new Publisher(report('A group'))
@@ -181,6 +196,7 @@ export class Analytics {
         for (const publisher of [
             this._eventPublisher,
             this._newSessionPublisher,
+            this._sessionIdPublisher,
             this._identifyPublisher,
             this._changePropertiesPublisher,
             this._groupPublisher,
@@ -218,8 +234,10 @@ export class Analytics {
     }
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): boolean {
+        let delivery: CaptureOptions['delivery']
         try {
-            if (options.delivery === 'unload' && !this._isTearingDown) {
+            delivery = options.delivery
+            if (delivery === 'unload' && !this._isTearingDown) {
                 const authority = this._core._immediateAuthority
                 const message = this._admitCapture(event, properties, options, false, true)
                 if (message && !this._disposed && this._core._immediateAuthority === authority) {
@@ -231,7 +249,13 @@ export class Analytics {
             this._core.logger.error('Unload capture failed', error)
             return true
         }
-        return this._capture(event, properties, options) || !this._rateLimiter.limited
+        if (!this._capture(event, properties, options)) return !this._rateLimiter.limited
+        // Immediate events stay buffered, keeping retries and the teardown handoff, but start delivery now.
+        // During teardown, the handoff that is already running delivers them.
+        if (delivery === 'immediate' && !this._isTearingDown) {
+            this._driver?.flush(true).catch(this._deliveryHost.reportFailure)
+        }
+        return true
     }
 
     async captureImmediate(
@@ -277,6 +301,8 @@ export class Analytics {
     ): AnalyticsMessage | undefined {
         if (!isNonEmptyString(event) || this._disposed || !this._core.canCapture) return undefined
         if (!this._acceptRateLimit(skipRateLimit)) return undefined
+        // An identity another subdomain stored replaces this context's registered properties before they are read.
+        this._adoptStoredIdentity()
         const snapshot = this._snapshotProperties(properties, options)
         if (!snapshot) return undefined
         const candidate = this._prepareCapture(event, snapshot)
@@ -334,6 +360,16 @@ export class Analytics {
         const session = preparedSession.context
         const distinctId = state.distinctId
         const groups = state.groups
+        const uuid = snapshot.uuid ?? createId()
+        const activePageviewId = this._pageviewIdFor(session.sessionId)
+        const isPageview = event === '$pageview'
+        const pageviewId = isPageview ? uuid : activePageviewId
+        // Registered and caller values replace these for the event only; the tracked pageview stays the SDK's.
+        // A caller key set to null or undefined is still set: the event omits it rather than taking the default.
+        const defaults: Record<string, string> = {}
+        if (pageviewId && !snapshot.overrides.has('$pageview_id')) defaults.$pageview_id = pageviewId
+        if (activePageviewId && (isPageview || event === '$pageleave') && !snapshot.overrides.has('$prev_pageview_id'))
+            defaults.$prev_pageview_id = activePageviewId
         const metadata = {
             token: this._core.projectToken,
             distinct_id: distinctId,
@@ -346,17 +382,20 @@ export class Analytics {
             $process_person_profile: processPersonProfile,
         }
         const message: AnalyticsMessage = {
-            uuid: snapshot.uuid ?? createId(),
+            uuid,
             event,
             distinct_id: distinctId,
-            properties: { ...snapshot.message, ...metadata },
+            properties: { ...defaults, ...snapshot.message, ...metadata },
             timestamp: eventTimestamp(snapshot.timestamp),
         }
         try {
             let bytes = utf8Bytes(JSON.stringify(message))
             if (bytes > MAX_ANALYTICS_BYTES) {
                 const minimum = utf8Bytes(
-                    JSON.stringify({ ...message, properties: unavoidableProperties(snapshot, metadata) })
+                    JSON.stringify({
+                        ...message,
+                        properties: { ...defaults, ...unavoidableProperties(snapshot, metadata) },
+                    })
                 )
                 if (minimum > MAX_ANALYTICS_BYTES) {
                     this._warnOversized(event, bytes)
@@ -364,13 +403,13 @@ export class Analytics {
                 }
             }
             const changed = applySessionProperties(snapshot, this._sessionProperties.values(session.sessionId))
-            message.properties = { ...snapshot.message, ...metadata }
+            message.properties = { ...defaults, ...snapshot.message, ...metadata }
             if (changed) bytes = utf8Bytes(JSON.stringify(message))
             return {
                 message,
                 bytes,
                 preparedSession,
-                observedProperties: { ...snapshot.observed, ...metadata, $groups: { ...groups } },
+                observedProperties: { ...defaults, ...snapshot.observed, ...metadata, $groups: { ...groups } },
             }
         } catch (error) {
             this._core.logger.error('The finalized event could not be measured', error)
@@ -392,6 +431,7 @@ export class Analytics {
             if (bytes > MAX_ANALYTICS_BYTES) this._warnOversized(message.event, bytes)
             return undefined
         }
+        const previous = this._core._state.session
         if (!this._core._state.sessionAdmitted(preparedSession)) {
             if (!immediate) this._buffer.discardQueued(message)
             return undefined
@@ -405,10 +445,20 @@ export class Analytics {
         )
             this._lastPersonProperties = undefined
         const session = preparedSession.context
+        if (message.event === '$pageview') this._pageview = [message.uuid, session.sessionId]
+        else if (this._pageview?.[1] !== session.sessionId) this._pageview = undefined
         this._sessionProperties.admitted(session.sessionId)
+        if (previous?.sessionId !== session.sessionId || previous.windowId !== session.windowId)
+            this._sessionIdPublisher.publish({ ...session })
         if (preparedSession.reason) this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         this._eventPublisher.publish(deepFreeze({ event: message.event, properties: observedProperties }))
         return message
+    }
+
+    /** A pageview belongs to its session, so an expired or rotated session has none. */
+    _pageviewIdFor(sessionId: string | undefined): string | undefined {
+        const pageview = this._pageview
+        return pageview && pageview[1] === sessionId ? pageview[0] : undefined
     }
 
     _hasPersonProcessing(): boolean {
@@ -435,7 +485,33 @@ export class Analytics {
     _canMutate(): boolean {
         if (this._disposed || !this._core._canMutate()) return false
         this._core._state.prepare()
+        this._adoptStoredIdentity()
         return true
+    }
+
+    /** Applies an identity another subdomain stored as this context applies its own reset or identify. */
+    private _adoptStoredIdentity(): void {
+        const state = this._core._state
+        const previousDistinctId = state.distinctId
+        const wasIdentified = state.isIdentified
+        if (!state.adoptStoredIdentity()) return
+        if (!state.isIdentified) return this._resetIdentityState()
+        this._lastPersonProperties = undefined
+        this._identifyPublisher.publish({
+            distinctId: state.distinctId,
+            previousDistinctId,
+            wasIdentified,
+            set: undefined,
+            setOnce: undefined,
+        })
+    }
+
+    /** Clears state that belonged to the previous identity and notifies reset listeners. */
+    private _resetIdentityState(): void {
+        this._lastPersonProperties = undefined
+        this._pageview = undefined
+        this._sessionProperties.clear()
+        this._resetPublisher.publish(undefined)
     }
 
     /** Whether registered properties are available now. */
@@ -493,12 +569,46 @@ export class Analytics {
         }
     }
 
-    reset(): void {
-        if (!this._canMutate()) return
-        this._core._state.reset()
-        this._lastPersonProperties = undefined
-        this._sessionProperties.clear()
-        this._resetPublisher.publish(undefined)
+    /** Resets identity state and returns the bootstrap values for the new identity, if any. */
+    reset(options?: boolean | ResetOptions): ResetOptions['bootstrap'] {
+        // A reset replaces any identity another subdomain stored, so it does not adopt that identity first.
+        if (this._disposed || !this._core._canMutate()) return undefined
+        this._core._state.prepare()
+        const { resetDeviceId, bootstrap } =
+            options === true || options === false ? { resetDeviceId: options } : snapshotOptions<ResetOptions>(options)
+        const { distinctId, isIdentifiedId } = bootstrap ?? {}
+        this._core._state.reset(
+            resetDeviceId === true,
+            isValidDistinctId(distinctId) ? [distinctId, isIdentifiedId === true] : undefined,
+            this._bootstrapSession(bootstrap)
+        )
+        this._resetIdentityState()
+        return bootstrap
+    }
+
+    /** Applies setup bootstrap without replacing a persisted identity, as in posthog-js. */
+    bootstrap(options: BootstrapOptions | undefined): void {
+        const bootstrap = snapshotOptions(options)
+        const { distinctId, isIdentifiedId } = bootstrap
+        const session = this._bootstrapSession(bootstrap)
+        if (session) this._core._state.bootstrapSession(session)
+        if (!isValidDistinctId(distinctId) || !this._canMutate()) return
+        const state = this._core._state
+        if (state.generated) return state.bootstrapIdentity(distinctId, isIdentifiedId === true)
+        // An anonymous ID never replaces a stored identity.
+        if (isIdentifiedId !== true) return
+        // A matching ID only marks the user identified, without an event.
+        if (distinctId === state.distinctId) state.identify(distinctId)
+        else if (!state.isIdentified) this.identify(distinctId)
+        else this._core.logger.warn('Ignored the bootstrap distinct ID of a different identified user')
+    }
+
+    private _bootstrapSession(bootstrap: BootstrapOptions | undefined): ReturnType<typeof readBootstrapSession> {
+        const sessionId = bootstrap?.sessionId
+        if (sessionId === undefined) return undefined
+        const session = readBootstrapSession(sessionId)
+        if (!session) this._core.logger.error('Ignored the bootstrap session ID: not a past UUIDv7')
+        return session
     }
 
     private _registration(properties: Record<string, unknown>): Record<string, unknown> | undefined {

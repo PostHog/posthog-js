@@ -670,6 +670,82 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(100)
   })
 
+  it('should parse snake_case OpenAI-style tokenUsage from ChatOpenRouter', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'openrouter', 'ChatOpenRouter'],
+      kwargs: {},
+    }
+    const runId = 'run_openrouter_snake_case_usage'
+    const metadata = { ls_model_name: 'openai/gpt-4o', ls_provider: 'openrouter' }
+
+    handler.handleLLMStart(serialized, ['Hello'], runId, undefined, {}, undefined, metadata)
+
+    const generation: ChatGeneration = { text: 'Hi', message: new AIMessage('Hi') }
+    // @langchain/openrouter passes the raw API usage object through as llmOutput.tokenUsage
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: {
+            prompt_tokens: 10000,
+            completion_tokens: 50,
+            total_tokens: 10050,
+            prompt_tokens_details: { cached_tokens: 9000 },
+            completion_tokens_details: { reasoning_tokens: 20 },
+          },
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(10000)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(9000)
+    expect(captureCall[0].properties['$ai_reasoning_tokens']).toBe(20)
+    expect(captureCall[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
+  })
+
+  it('should parse snake_case tokenUsage from ChatWatsonx', async () => {
+    const runId = 'run_watsonx_snake_case_usage'
+    handler.handleLLMStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'ibm', 'ChatWatsonx'], kwargs: {} },
+      ['Hello'],
+      runId,
+      undefined,
+      {},
+      undefined,
+      { ls_model_name: 'ibm/granite-3-8b-instruct', ls_provider: 'watsonx' }
+    )
+
+    const generation: ChatGeneration = {
+      text: 'Hi',
+      message: new AIMessage({
+        content: 'Hi',
+        usage_metadata: { input_tokens: 1200, output_tokens: 80, total_tokens: 1280 },
+      }),
+    }
+    // @langchain/ibm passes the watsonx TextChatUsage object through as llmOutput.tokenUsage
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: { prompt_tokens: 1200, completion_tokens: 80, total_tokens: 1280 },
+          model_name: 'ibm/granite-3-8b-instruct',
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(1200)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(80)
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+  })
+
   it('should not subtract for OpenAI even when cache_read_tokens >= input_tokens', async () => {
     const serialized = {
       lc: 1,
@@ -1918,6 +1994,177 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(200)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
+  })
+
+  describe('Claude served through an OpenAI-compatible proxy', () => {
+    const runClaudeViaOpenAI = (llmOutput: Record<string, any>, provider = 'openai'): Record<string, any> => {
+      const runId = `run_claude_proxy_${provider}`
+      handler.handleLLMStart(
+        { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'], kwargs: {} },
+        ['hello'],
+        runId,
+        undefined,
+        { invocation_params: {} },
+        undefined,
+        { ls_model_name: 'claude-sonnet-4-5', ls_provider: provider }
+      )
+      const message = new AIMessage({
+        content: 'hi',
+        usage_metadata: {
+          input_tokens: 10000,
+          output_tokens: 100,
+          total_tokens: 10100,
+          input_token_details: { cache_read: 9000 },
+        },
+      })
+      const generation: ChatGeneration = { text: 'hi', message }
+      handler.handleLLMEnd({ generations: [[generation]], llmOutput }, runId)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      return captureCall[0].properties
+    }
+
+    it.each([
+      ['invoke', { tokenUsage: { promptTokens: 10000, completionTokens: 100, totalTokens: 10100 } }],
+      ['streaming', {}],
+    ])('reports cache reads as included in input tokens on %s', (_label, llmOutput) => {
+      const properties = runClaudeViaOpenAI(llmOutput)
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    it('leaves the cache reporting flag unset when the caller overrides token counts', () => {
+      handler = new LangChainCallbackHandler({
+        client: mockPostHogClient,
+        properties: { $ai_input_tokens: 1000, $ai_cache_read_input_tokens: 9000 },
+      })
+
+      const properties = runClaudeViaOpenAI({})
+
+      expect(properties['$ai_input_tokens']).toBe(1000)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it('keeps a cache reporting flag declared by the caller alongside overridden token counts', () => {
+      handler = new LangChainCallbackHandler({
+        client: mockPostHogClient,
+        properties: { $ai_input_tokens: 1000, $ai_cache_reporting_exclusive: true },
+      })
+
+      const properties = runClaudeViaOpenAI({})
+
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
+    })
+
+    it('keeps the generation cache breakdown when snake_case tokenUsage totals match', () => {
+      const properties = runClaudeViaOpenAI({
+        tokenUsage: { prompt_tokens: 10000, completion_tokens: 100, total_tokens: 10100 },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    it('reports raw OpenAI-shaped usage as cache-inclusive', () => {
+      const properties = runClaudeViaOpenAI({
+        usage: { prompt_tokens: 10000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 9000 } },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(10000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    it('does not pair batched token totals with one prompt cache breakdown', () => {
+      const runId = 'run_claude_proxy_batch'
+      handler.handleLLMStart(
+        { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'], kwargs: {} },
+        ['first', 'second'],
+        runId,
+        undefined,
+        { invocation_params: {} },
+        undefined,
+        { ls_model_name: 'claude-sonnet-4-5', ls_provider: 'openai' }
+      )
+      const promptUsage = {
+        input_tokens: 10000,
+        output_tokens: 100,
+        total_tokens: 10100,
+        input_token_details: { cache_read: 9000 },
+      }
+      const generations: ChatGeneration[][] = [
+        [{ text: 'a', message: new AIMessage({ content: 'a', usage_metadata: promptUsage }) }],
+        [{ text: 'b', message: new AIMessage({ content: 'b', usage_metadata: promptUsage }) }],
+      ]
+      handler.handleLLMEnd(
+        { generations, llmOutput: { tokenUsage: { promptTokens: 20000, completionTokens: 200, totalTokens: 20200 } } },
+        runId
+      )
+
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(20000)
+      expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+      expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it('does not pair a larger aggregate token total with one generation cache breakdown', () => {
+      const properties = runClaudeViaOpenAI({
+        tokenUsage: { promptTokens: 20000, completionTokens: 200, totalTokens: 20200 },
+      })
+
+      expect(properties['$ai_input_tokens']).toBe(20000)
+      expect(properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it.each(['usage', 'tokenUsage'])('leaves the cache reporting flag unset for cache-exclusive raw %s', (key) => {
+      const properties = runClaudeViaOpenAI(
+        { [key]: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 500 } },
+        'openrouter'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(1000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(500)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it('leaves the cache reporting flag unset for providers with unknown token conventions', () => {
+      const properties = runClaudeViaOpenAI({}, 'some-custom-provider')
+
+      expect(properties['$ai_cache_read_input_tokens']).toBe(9000)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+  })
+
+  it('leaves the cache reporting flag unset for Anthropic, whose input tokens are already cache-exclusive', () => {
+    const runId = 'run_anthropic_cache_flag'
+    handler.handleLLMStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'], kwargs: {} },
+      ['hello'],
+      runId,
+      undefined,
+      { invocation_params: {} },
+      undefined,
+      { ls_model_name: 'claude-sonnet-4-5', ls_provider: 'anthropic' }
+    )
+    const message = new AIMessage({
+      content: 'hi',
+      usage_metadata: {
+        input_tokens: 10000,
+        output_tokens: 100,
+        total_tokens: 10100,
+        input_token_details: { cache_read: 9000 },
+      },
+    })
+    const generation: ChatGeneration = { text: 'hi', message }
+    handler.handleLLMEnd({ generations: [[generation]], llmOutput: {} }, runId)
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(1000)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(9000)
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
   })
 })
 

@@ -16,10 +16,12 @@ import {
   refuseRenderedMessageOverLimit,
 } from './attachments'
 import { EmailError } from './errors'
+import { importReactRenderer } from './react-renderer-import'
 import type {
   CodeEmailForm,
   EmailPreferences,
   EmailReactElement,
+  EmailReactRenderer,
   EmailStatus,
   EmailWarning,
   Emails,
@@ -53,10 +55,6 @@ const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 
 type EveryField<Form> = Record<keyof Form, true>
-interface ReactRenderer {
-  render(element: EmailReactElement): Promise<string>
-  toPlainText(html: string): string
-}
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
@@ -112,6 +110,7 @@ export interface EmailSenderConfig {
   requestTimeoutMs: number
   maxRetries: number
   migratedFrom?: string
+  reactRenderer?: EmailReactRenderer
 }
 
 export interface EmailFetchOptions extends PostHogFetchOptions {
@@ -222,7 +221,7 @@ export class EmailSender implements Emails {
       const content =
         prepared.react === undefined
           ? prepared.content
-          : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
+          : await withRenderedReact(prepared.content, prepared.react, this.config, this.hooks.logger)
       if (prepared.react !== undefined) {
         refuseRenderedMessageOverLimit(prepared.files, content)
       }
@@ -735,12 +734,29 @@ function isReactElement(value: unknown): value is EmailReactElement {
 async function withRenderedReact(
   content: Record<string, unknown>,
   react: EmailReactElement,
-  timeoutMs: number
+  config: EmailSenderConfig,
+  logger: Logger
 ): Promise<Record<string, unknown>> {
-  const { render, toPlainText } = await loadReactRenderer()
+  await Promise.resolve()
+  const renderer = config.reactRenderer ?? (await loadReactRenderer(logger))
   try {
-    const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
-    return { ...content, html, ...(content.text === undefined && { text: toPlainText(html) }) }
+    const html = await settleWithin(renderer.render(react), config.requestTimeoutMs, 'Rendering the react element')
+    if (typeof html !== 'string') {
+      throw new Error('reactEmailRenderer.render must return an HTML string.')
+    }
+    if (content.text !== undefined) {
+      return { ...content, html }
+    }
+    const text: unknown = renderer.toPlainText(html)
+    if (typeof text !== 'string') {
+      try {
+        Promise.prototype.then.call(text, undefined, () => {})
+      } catch {
+        void 0
+      }
+      throw new Error('reactEmailRenderer.toPlainText must return a string.')
+    }
+    return { ...content, html, text }
   } catch (cause) {
     throw new EmailError({
       code: 'react_render_failed',
@@ -762,17 +778,23 @@ async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string
   }
 }
 
-async function loadReactRenderer(): Promise<ReactRenderer> {
+async function loadReactRenderer(logger: Logger): Promise<EmailReactRenderer> {
   try {
-    return await import('@react-email/render')
+    return await importReactRenderer()
   } catch (cause) {
-    throw new EmailError({
+    const error = new EmailError({
       code: 'missing_react_renderer',
       message:
         "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-      fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+      fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
       cause,
     })
+    try {
+      logger.warn(`PostHog email error ${error.code}: ${error.message} ${error.fix}`)
+    } catch {
+      void 0
+    }
+    throw error
   }
 }
 

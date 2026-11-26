@@ -22,14 +22,41 @@ import type { AnalyticsOptions } from '../products/analytics/analytics-options'
 import { isLikelyBot } from './state/bot-filter'
 import { ExtensionRegistry, type AutomaticExtension, type ExtensionLoader } from './extensions/registry'
 import { deepFreeze } from '../primitives/immutable'
-import { createLogger } from '../platform/logger'
+import { createLogger, type LogState } from '../platform/logger'
+import { snapshotPersonProfileMode } from '../products/analytics/properties/person-processing'
 import { sendRequest, type RequestRuntime } from '../platform/request'
 import { BrowserState, CLIENT_KV_NAMESPACE, getDefaultSessionStorage, getDefaultStorage } from './state/state'
-import type { BrowserFetch, BrowserNavigator, CaptureSummary, CorePostHogOptions, IPostHog, StorageLike } from './types'
+import type {
+    BrowserFetch,
+    BrowserNavigator,
+    CaptureSummary,
+    CorePostHogOptions,
+    ExplicitConsentStatus,
+    IPostHog,
+    ResetOptions,
+    RuntimeOptions,
+    StorageLike,
+} from './types'
 import { version } from '../primitives/version'
+import type { FlagsExtension } from '../products/flags/flags-internal'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
+// The request the flags extension builds to list early-access features: the project token and stage filters only.
+const EARLY_ACCESS_CATALOGUE_PATH =
+    /^\/api\/early_access_features\/\?token=[^&#]*(&stage=(concept|alpha|beta|general-availability))*&?$/
+
+// The path below the host that a request resolves to, resolved as the request sender does, so raw or percent-encoded
+// dot segments cannot pass an allowed path and reach another endpoint. Undefined when it leaves the host's path.
+const resolveRequestPath = (host: string, path: string): string | undefined => {
+    try {
+        const base = new URL(`${host}/`)
+        const { pathname } = new URL(`.${path}`, base)
+        return pathname.startsWith(base.pathname) ? pathname.slice(base.pathname.length - 1) : undefined
+    } catch {
+        return undefined
+    }
+}
 
 const normalizeHost = (host: string): string => {
     let end = host.length
@@ -80,6 +107,7 @@ class PostHog implements IPostHog {
     readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onNewSession: IPostHog['onNewSession']
+    readonly onSessionId: IPostHog['onSessionId']
     readonly onEvent: IPostHog['onEvent']
     readonly onIdentify: IPostHog['onIdentify']
     readonly onChangeProperties: IPostHog['onChangeProperties']
@@ -90,6 +118,7 @@ class PostHog implements IPostHog {
     readonly onSession: Client['onSession']
     readonly projectToken: string
 
+    private readonly _logState: LogState
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     readonly _registry: ExtensionRegistry<IPostHog>
     readonly _requestRuntime: RequestRuntime
@@ -105,6 +134,10 @@ class PostHog implements IPostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     _immediateAuthority = {}
+    /** Whether work admitted before a cleared consent choice may still deliver while consent rests at its default denial. */
+    private _clearedChoiceRetainsWork = false
+    /** Consent changes raised during `reset()`, published in order once the new identity and `onReset` are done. */
+    private _heldConsentChanges: ConsentChangeInfo[] | undefined
     private readonly _consentChangePublisher: Publisher<ConsentChangeInfo>
     private _closing = false
     _disposed = false
@@ -134,7 +167,8 @@ class PostHog implements IPostHog {
         }
         this.projectToken = projectToken
         this._capturePageview = options.capturePageview ?? true
-        this.logger = createLogger('[PostHog]', options.debug ?? false)
+        this._logState = { enabled: options.debug ?? false }
+        this.logger = createLogger('[PostHog]', this._logState)
         if (!projectToken) {
             this.logger.error('A PostHog project token is required')
         }
@@ -173,13 +207,21 @@ class PostHog implements IPostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            (consent, previous) => {
-                if (consent === 'denied') {
-                    this._immediateAuthority = {}
-                    this._analytics?.purge()
-                }
-                this._consentChangePublisher.publish({ current: consent, previous })
-            }
+            (consent, previous, explicit) => {
+                // Only an explicit opt-out purges. A cleared choice (`reset()` or `clearOptInOut()`, here or in another
+                // context) affects future events only, so its return to a default denial keeps admitted work.
+                if (consent !== 'denied') {
+                    // A grant ends any pause on kept work, so redrive it instead of waiting for the next flush. A
+                    // microtask keeps the flush out of a consent read inside a delivery drive.
+                    if (this._clearedChoiceRetainsWork) void Promise.resolve().then(() => this._analytics?.flush())
+                    this._clearedChoiceRetainsWork = false
+                } else if (!explicit) this._clearedChoiceRetainsWork = true
+                else this._revokeAdmittedWork()
+                const change = { current: consent, previous }
+                if (this._heldConsentChanges) this._heldConsentChanges.push(change)
+                else this._consentChangePublisher.publish(change)
+            },
+            options.cookie
         )
         this._consentObservation = this._observeConsent(
             storage,
@@ -242,7 +284,20 @@ class PostHog implements IPostHog {
         this.onNewSession = this._analytics._newSessionPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
+        this.onSessionId = (handler) => {
+            const subscription = this._analytics._sessionIdPublisher.listener(handler)
+            const session = this._canMutate() ? this.session : undefined
+            if (session) {
+                try {
+                    handler(session)
+                } catch (error) {
+                    this.logger.error('A session ID listener failed', error)
+                }
+            }
+            return subscription
+        }
         this._registry = new ExtensionRegistry<IPostHog>(this, this.logger, loaders, () => this._canMutate())
+        if (options.bootstrap) this._analytics.bootstrap(options.bootstrap)
     }
 
     get distinctId(): string {
@@ -298,8 +353,22 @@ class PostHog implements IPostHog {
         this._analytics.identify(distinctId, set, setOnce)
     }
 
-    reset(): void {
-        this._analytics.reset()
+    reset(options?: boolean | ResetOptions): void {
+        // Nothing resets during shutdown, so the stored choice stays with the identity it belongs to.
+        if (!this._canMutate()) return
+        // Consent is user state, so reset forgets the stored choice, as in posthog-js, iOS and Android. It is
+        // forgotten before the identity reset, so a choice an `onReset` listener makes for the new identity stands.
+        // Consent listeners hear of it afterwards, so what they capture belongs to the new identity.
+        const held: ConsentChangeInfo[] = (this._heldConsentChanges = [])
+        let bootstrap: ResetOptions['bootstrap']
+        try {
+            this.clearOptInOut()
+            bootstrap = this._analytics.reset(options)
+        } finally {
+            this._heldConsentChanges = undefined
+        }
+        for (const change of held) this._consentChangePublisher.publish(change)
+        if (bootstrap) (this.featureFlags as FlagsExtension | undefined)?.bootstrap?.(bootstrap)
     }
 
     register(properties: Record<string, unknown>): void {
@@ -367,6 +436,10 @@ class PostHog implements IPostHog {
         return this._analytics.registerDynamicEventProperties(producer)
     }
 
+    getPageViewId(): string | undefined {
+        return this._analytics._pageviewIdFor(this._state.activeSessionId)
+    }
+
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension(name: string): Extension | undefined {
@@ -388,7 +461,12 @@ class PostHog implements IPostHog {
     }
 
     optOut(): void {
-        if (!this._disposed && this._state.optOut()) {
+        if (this._disposed) {
+            return
+        }
+        // Consent is already denied after a cleared choice, so an explicit denial purges the work it kept.
+        if (this._clearedChoiceRetainsWork) this._revokeAdmittedWork()
+        if (this._state.optOut()) {
             this._dispatchConsentChange()
         }
     }
@@ -397,8 +475,39 @@ class PostHog implements IPostHog {
         return this._state.consent === 'denied'
     }
 
+    getExplicitConsentStatus(): ExplicitConsentStatus {
+        return this._state.consentChoice ?? 'pending'
+    }
+
+    clearOptInOut(): void {
+        if (this._disposed) {
+            return
+        }
+        if (this._state.clearConsent()) {
+            this._dispatchConsentChange()
+        }
+    }
+
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return sendRequest(this._requestRuntime, path, init, () => !this._blocked && !this.hasOptedOut())
+        // Untyped callers may pass null, so normalize before reading options.
+        const options = init ?? {}
+        // As in posthog-js, flags evaluate while opted out. The early-access catalogue carries no person data, so it
+        // stays available too. Capture consent gates every other request.
+        const resolvedPath = resolveRequestPath(this._requestRuntime[0][options.target ?? 'api'], path)
+        const allowedWhileOptedOut =
+            (options.target === 'flags'
+                ? resolvedPath === '/flags/'
+                : EARLY_ACCESS_CATALOGUE_PATH.test(path) &&
+                  (options.method ?? 'GET') === 'GET' &&
+                  options.body === undefined) &&
+            !options.query &&
+            !options.headers
+        return sendRequest(
+            this._requestRuntime,
+            path,
+            options,
+            () => !this._blocked && (allowedWhileOptedOut || !this.hasOptedOut())
+        )
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
@@ -494,6 +603,24 @@ class PostHog implements IPostHog {
         }
 
         return this._remoteConfigPromise
+    }
+
+    setConfig(options: RuntimeOptions): void {
+        try {
+            const debug = options.debug
+            // oxlint-disable-next-line posthog-js/no-direct-boolean-check
+            if (typeof debug === 'boolean') this._logState.enabled = debug
+            const personProfiles = options.analytics?.personProfiles
+            if (personProfiles !== undefined) {
+                this._analytics._personProfiles = snapshotPersonProfileMode(() => personProfiles)
+            }
+        } catch (error) {
+            this.logger.error('Configuration update failed', error)
+        }
+    }
+
+    debug(enabled = true): void {
+        this.setConfig({ debug: enabled })
     }
 
     resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
@@ -751,7 +878,17 @@ class PostHog implements IPostHog {
     }
 
     _canDeliver(): boolean {
-        return !this._disposed && !this._blocked && !this.hasOptedOut()
+        return (
+            !this._disposed &&
+            !this._blocked &&
+            (!this.hasOptedOut() || (this._clearedChoiceRetainsWork && this._state.consentChoice === undefined))
+        )
+    }
+
+    private _revokeAdmittedWork(): void {
+        this._clearedChoiceRetainsWork = false
+        this._immediateAuthority = {}
+        this._analytics?.purge()
     }
 }
 

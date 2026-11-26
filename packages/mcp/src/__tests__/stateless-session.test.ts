@@ -1,3 +1,4 @@
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
@@ -117,6 +118,16 @@ describe('Stateless session minting', () => {
     // Negotiated spec version off the real SDK initialize response (echoes the
     // requested version, which the SDK supports).
     expect(initEvents[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it("puts $mcp_initialize in the host's session, not the minted one, when options.sessionId answers", async () => {
+    const { server } = createPod('pod-host-session', { sessionId: () => 'host-chat-1' })
+
+    expect(decodeSessionId(await mintToken(server))).not.toBeNull()
+
+    const initEvents = eventCapture.findCapturesByEvent('$mcp_initialize')
+    expect(initEvents).toHaveLength(1)
+    expect(initEvents[0].properties.$session_id).toBe(deriveSessionIdFromConversation('host-chat-1'))
   })
 
   it('mints through a getter-only wrapper transport (Node StreamableHTTP shape)', async () => {
@@ -296,10 +307,14 @@ describe('Stateless session minting', () => {
     await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
     // A later request with no session header falls back to in-memory session state;
     // the negotiated version persisted at initialize must still be stamped.
-    await invokeHandler(lowLevel, 'tools/call', {
-      method: 'tools/call',
-      params: { name: 'get_plan', arguments: {} },
-    })
+    // With no session, the version comes from the header every request since 2025-06-18
+    // carries: an unbound handshake on a shared HTTP instance identifies no one.
+    await invokeHandler(
+      lowLevel,
+      'tools/call',
+      { method: 'tools/call', params: { name: 'get_plan', arguments: {} } },
+      { requestInfo: { headers: { 'mcp-protocol-version': '2025-06-18' } } }
+    )
 
     const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
     expect(toolCalls).toHaveLength(1)
@@ -412,7 +427,9 @@ describe('Stateless session minting', () => {
       const { server, lowLevel } = createPod('pod-off-persist', OFF)
       setFakeTransport(server, {})
       await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
-      await invokeHandler(lowLevel, 'tools/call', callTool)
+      await invokeHandler(lowLevel, 'tools/call', callTool, {
+        requestInfo: { headers: { 'mcp-protocol-version': '2025-06-18' } },
+      })
 
       const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
       expect(toolCalls).toHaveLength(1)
