@@ -1,5 +1,17 @@
 # posthog-ai
 
+## 8.22.4
+
+### Patch Changes
+
+- [#5900](https://github.com/PostHog/posthog-js/pull/5900) [`b96c919`](https://github.com/PostHog/posthog-js/commit/b96c91946a997efc32f6043e354356274db4f89e) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop the LangChain callback handler from double-billing cached tokens for Claude models served through OpenAI-compatible providers.
+  (2026-11-26)
+
+- [#5900](https://github.com/PostHog/posthog-js/pull/5900) [`b96c919`](https://github.com/PostHog/posthog-js/commit/b96c91946a997efc32f6043e354356274db4f89e) Thanks [@marandaneto](https://github.com/marandaneto)! - Report input and output tokens for LangChain providers that return snake_case token usage, such as ChatOpenRouter, instead of 0.
+  (2026-11-26)
+- Updated dependencies [[`53a87b0`](https://github.com/PostHog/posthog-js/commit/53a87b09a3ccce9090e7b366d349fdab5706c729)]:
+  - posthog-node@6.2.0
+
 ## 8.22.3
 
 ### Patch Changes

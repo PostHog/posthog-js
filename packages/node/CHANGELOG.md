@@ -1,5 +1,13 @@
 # posthog-node
 
+## 6.2.0
+
+### Minor Changes
+
+- [#5875](https://github.com/PostHog/posthog-js/pull/5875) [`53a87b0`](https://github.com/PostHog/posthog-js/commit/53a87b09a3ccce9090e7b366d349fdab5706c729) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop bundling `@react-email/render` into apps that don't send React emails.
+
+  **Breaking for bundled apps that send `react` emails:** if you bundle your app (for example for Cloudflare Workers, Convex, or Vercel Edge) and `@react-email/render` isn't available in `node_modules` at runtime, `emails.send({ react })` now returns a `missing_react_renderer` error and doesn't send the email. Pass the renderer to the client to keep sending: `new PostHog(key, { reactEmailRenderer: await import('@react-email/render') })`. Plain Node apps with `@react-email/render` installed are unaffected. (2026-11-26)
+
 ## 6.1.1
 
 ### Patch Changes
