@@ -1,5 +1,19 @@
 # @posthog/react-native-plugin
 
+## 2.13.3
+
+### Patch Changes
+
+- [#5801](https://github.com/PostHog/posthog-js/pull/5801) [`da31915`](https://github.com/PostHog/posthog-js/commit/da31915efee6fd853f7f57e940abc9c437561fc3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-ios 3.98.1 to reduce main-thread hangs in iOS session replay during fast scrolls and animations
+  (2026-11-19)
+
+## 2.13.2
+
+### Patch Changes
+
+- [#5761](https://github.com/PostHog/posthog-js/pull/5761) [`dc7e81f`](https://github.com/PostHog/posthog-js/commit/dc7e81fbb9e57149609e45eaa62ab775d9d5ac4f) Thanks [@ioannisj](https://github.com/ioannisj)! - Require posthog-ios 3.98.0 to pick up the iOS session replay fixes since 3.92.7: skip a screenshot when `drawHierarchy` fails instead of uploading a blank frame, keep masks aligned with `screenshotModeBackgroundCapture` during scroll and animation, schedule capture without swizzling `UIView` layout, and fix replay crashes with custom `CALayer` subclasses and the iPad print panel.
+  (2026-11-18)
+
 ## 2.13.1
 
 ### Patch Changes

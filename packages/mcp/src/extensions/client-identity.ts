@@ -3,6 +3,7 @@ import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from '
 import { readHeaderValue } from './headers'
 import { getServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
+import { decodeSessionId, isHandshakeBound, readMcpSessionHeader } from './session-token'
 
 /**
  * Client identity — who is calling, and which spec revision they speak.
@@ -134,6 +135,18 @@ export function readHeaderProtocolVersion(
 }
 
 /**
+ * Reads the client a replayed session token of ours names. Per request, so it
+ * outranks the handshake, which on a shared instance may be another client's.
+ */
+export function readTokenClientIdentity(extra: CompatibleRequestHandlerExtra | undefined): MetaClientInfo | undefined {
+  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  if (!token || !(token.clientName || token.clientVersion || token.protocolVersion)) {
+    return undefined
+  }
+  return { clientName: token.clientName, clientVersion: token.clientVersion, protocolVersion: token.protocolVersion }
+}
+
+/**
  * Asks the server itself. `getClientVersion()` answers on any server that
  * handled an `initialize` (and v2 hosts such as `createMcpHandler` backfill it
  * from the envelope); `getNegotiatedProtocolVersion()` exists on v2 only, which
@@ -185,7 +198,8 @@ export function resolveClientIdentity({ request, extra, server }: ClientIdentity
     readEnvelopeClientInfo(extra),
     readMetaClientInfo(request),
     readHeaderProtocolVersion(extra),
-    readServerClientIdentity(server),
+    readTokenClientIdentity(extra),
+    isHandshakeBound(extra) ? readServerClientIdentity(server) : undefined,
   ]
   const result: MetaClientInfo = {}
   for (const source of chain) {

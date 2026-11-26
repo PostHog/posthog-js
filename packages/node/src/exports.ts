@@ -1,12 +1,18 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
 export * from './extensions/fetch-request'
+export { createReactRouterErrorHandler } from './extensions/react-router'
+export type { ReactRouterErrorArgs, ReactRouterErrorHandlerOptions } from './extensions/react-router'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export { CaptureError } from './capture-v1/errors'
+export type { CaptureDroppedEvent, CaptureErrorParams } from './capture-v1/errors'
+export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
+export { RemoteConfigPayloadError } from './remote-config-errors'
 export type {
   CodeEmailForm,
   EmailAttachment,

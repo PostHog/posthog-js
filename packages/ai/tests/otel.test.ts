@@ -236,16 +236,23 @@ describe('PostHogTraceExporter AI span filtering', () => {
     )
     const functionTool = { type: 'function', name: 'lookup' }
     const mcpTool = { type: 'mcp', server_url: 'https://mcp.example.com', authorization: 'CANARY_7f3a' }
+    const googleMcpServerTool = {
+      type: 'mcp_server',
+      name: 'docs',
+      url: 'https://mcp.example.com',
+      headers: { 'x-api-key': 'CANARY_7f3a' },
+    }
     const vercelMcpTool = {
       type: 'provider',
       id: 'openai.mcp',
       name: 'mcp',
       args: { serverUrl: 'https://mcp.example.com', headers: { Authorization: 'CANARY_7f3a' } },
     }
-    const toolDefinitions = (mcp: object, vercelMcp: object): Record<string, unknown> => ({
-      'gen_ai.tool.definitions': JSON.stringify([functionTool, mcp]),
-      'ai.prompt.tools': [JSON.stringify(functionTool), JSON.stringify(vercelMcp)],
+    const toolDefinitions = (mcp: object, googleMcp: object, vercelMcp: object): Record<string, unknown> => ({
+      'gen_ai.tool.definitions': JSON.stringify([functionTool, mcp, googleMcp]),
+      'ai.prompt.tools': [JSON.stringify(functionTool), JSON.stringify(vercelMcp), JSON.stringify(googleMcp)],
       'llm.tools.0.tool.json_schema': JSON.stringify(mcp),
+      'llm.tools.2.tool.json_schema': JSON.stringify(googleMcp),
     })
     const metadata = {
       'gen_ai.prompt.name': 'support-reply',
@@ -253,9 +260,10 @@ describe('PostHogTraceExporter AI span filtering', () => {
       'gen_ai.usage.output_tokens': 7,
     }
     const unparseableTool = { 'llm.tools.1.tool.json_schema': 'lookup(q: string)' }
-    const tools = { ...toolDefinitions(mcpTool, vercelMcpTool), ...unparseableTool }
+    const tools = { ...toolDefinitions(mcpTool, googleMcpServerTool, vercelMcpTool), ...unparseableTool }
     const redactedTools = toolDefinitions(
       { ...mcpTool, authorization: '[REDACTED]' },
+      { ...googleMcpServerTool, headers: '[REDACTED]' },
       { ...vercelMcpTool, args: { ...vercelMcpTool.args, headers: '[REDACTED]' } }
     )
     const providerMetadata = JSON.stringify({

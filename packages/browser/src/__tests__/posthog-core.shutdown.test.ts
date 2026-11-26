@@ -157,7 +157,7 @@ describe('shutdown()', () => {
         const initialize = vi.fn()
         try {
             instance.config.__preview_deferred_init_extensions = true
-            instance['_processInitTaskQueue']([initialize], 0)
+            instance['_processInitTaskQueue']([initialize], 0, true)
             expect(initialize).not.toHaveBeenCalled()
             await instance.shutdown()
             vi.advanceTimersByTime(1)

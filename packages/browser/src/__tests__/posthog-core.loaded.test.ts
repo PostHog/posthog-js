@@ -64,7 +64,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2',
+                url: 'https://us.i.posthog.com/flags/?v=4',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -90,7 +90,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2',
+                url: 'https://us.i.posthog.com/flags/?v=4',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -103,7 +103,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(vi.mocked(instance._send_request).mock.calls[1][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2',
+                url: 'https://us.i.posthog.com/flags/?v=4',
                 data: {
                     groups: { org: 'bazinga2' },
                 },
@@ -123,7 +123,7 @@ describe('loaded() with flags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/flags/?v=2&only_evaluate_survey_feature_flags=true',
+                url: 'https://us.i.posthog.com/flags/?v=4&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },

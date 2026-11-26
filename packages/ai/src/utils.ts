@@ -8,8 +8,10 @@ import type {
   FormattedImageContent,
   FormattedDocumentContent,
 } from './types'
+import type { JsonType } from '@posthog/core'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
+import { redactGeminiToolDefinition } from './mcpCredentials'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
 import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
@@ -95,6 +97,12 @@ export interface MonitoringEventPropertiesWithDefaults {
   providerOverride?: string
   costOverride?: CostOverride
   captureImmediate?: boolean
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`. posthog-node 5
+   * has no per-event options, so each option it knows is sent the way that version reads it, and
+   * other keys are dropped. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
 }
 
 export type MonitoringEventProperties = Partial<MonitoringEventPropertiesWithDefaults>
@@ -574,8 +582,8 @@ export const extractAvailableToolCalls = (provider: string, params: any): unknow
 
     return null
   } else if (provider === 'gemini') {
-    if (params.config && params.config.tools) {
-      return params.config.tools
+    if (params.config && Array.isArray(params.config.tools)) {
+      return params.config.tools.map(redactGeminiToolDefinition)
     }
 
     return null
@@ -627,6 +635,7 @@ const POSTHOG_PARAMS_MAP: Record<keyof MonitoringParams, string> = {
   posthogProviderOverride: 'providerOverride',
   posthogCostOverride: 'costOverride',
   posthogCaptureImmediate: 'captureImmediate',
+  posthogOptions: 'options',
 }
 
 export function extractPosthogParams<T>(body: T & MonitoringParams): {

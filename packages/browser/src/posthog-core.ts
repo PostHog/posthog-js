@@ -1,4 +1,5 @@
 import Config from './config'
+import { getBundledExtensionLoader, LoadExternalDependency } from './utils/extension-loader'
 import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
@@ -84,7 +85,7 @@ import {
     ToolbarParams,
     PostHogInterface,
 } from './types'
-import { CONFIG_DEFAULTS_DATES, type TreeShakeable } from '@posthog/types'
+import { CONFIG_DEFAULTS_DATES, type RequestResponse, type TreeShakeable } from '@posthog/types'
 import {
     _copyAndTruncateStrings,
     addEventListener,
@@ -532,11 +533,13 @@ export class PostHog implements PostHogInterface {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
+    __pending_remote_config_callbacks?: ((response: RequestResponse) => void)[]
     _pendingRemoteConfig?: RemoteConfigResult
     _lastRemoteConfig?: RemoteConfigResult
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
+    __loadExternalDependency?: LoadExternalDependency = getBundledExtensionLoader()
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
     // Keys registered via register_for_session — cleared when the PostHog session rotates
     _sessionRegisteredPropKeys: Set<string> = new Set()
@@ -1283,11 +1286,6 @@ export class PostHog implements PostHogInterface {
         if (ext.sessionRecording && !startInCookielessMode) {
             this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
         }
-        if (!this.config.disable_scroll_properties) {
-            initTasks.push(() => {
-                this.scrollManager.startMeasuringScrollPosition()
-            })
-        }
         if (ext.autocapture) {
             this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
@@ -1330,6 +1328,13 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.webMCP = this.webMCP ?? new ext.webMCP(this)))
         }
 
+        const hasExtensions = this._extensions.length > 0 || initTasks.length > 0
+        if (!this.config.disable_scroll_properties) {
+            initTasks.unshift(() => {
+                this.scrollManager.startMeasuringScrollPosition()
+            })
+        }
+
         this._extensions.forEach((extension) => {
             if (!extension.initialize) return
             initTasks.push(() => {
@@ -1347,10 +1352,10 @@ export class PostHog implements PostHogInterface {
         })
 
         // Process tasks with time-slicing to avoid blocking
-        this._processInitTaskQueue(initTasks, initStartTime)
+        this._processInitTaskQueue(initTasks, initStartTime, hasExtensions)
     }
 
-    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number): void {
+    private _processInitTaskQueue(queue: Array<() => void>, initStartTime: number, hasExtensions: boolean): void {
         const TIME_BUDGET_MS = 30 // Respect frame budget (~60fps = 16ms, but we're already deferred)
 
         while (queue.length > 0) {
@@ -1364,7 +1369,7 @@ export class PostHog implements PostHogInterface {
                     // Yield to browser, then continue processing
                     this._extensionInitTimeout = setTimeout(() => {
                         this._extensionInitTimeout = undefined
-                        this._processInitTaskQueue(queue, initStartTime)
+                        this._processInitTaskQueue(queue, initStartTime, hasExtensions)
                     }, 0)
                     return
                 }
@@ -1385,12 +1390,21 @@ export class PostHog implements PostHogInterface {
         // we don't support IE11 anymore, so performance.now is safe
         // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
-        this.register_for_session({
-            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
-                ? 'deferred'
-                : 'synchronous',
-            [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
-        })
+        if (hasExtensions && taskInitTiming > 0) {
+            this.register_for_session({
+                [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
+                    ? 'deferred'
+                    : 'synchronous',
+                [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
+            })
+        } else if (
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_METHOD]) ||
+            !isUndefined(this.sessionPersistence?.props[SDK_DEBUG_EXTENSIONS_INIT_TIME_MS])
+        ) {
+            // An earlier page load in this session may have registered them, possibly on an older SDK.
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_METHOD)
+            this.unregister_for_session(SDK_DEBUG_EXTENSIONS_INIT_TIME_MS)
+        }
         if (this.config.__preview_deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
         }
@@ -1869,9 +1883,7 @@ export class PostHog implements PostHogInterface {
                 // Always visible (not debug-only): otherwise a bot-flagged session silently sends no events
                 // oxlint-disable-next-line no-console
                 console.warn(
-                    '[PostHog.js] Events are being dropped because the user agent looks like a bot (first dropped event: "' +
-                        event_name +
-                        '"). Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
+                    '[PostHog.js] Events are being dropped because the user agent looks like a bot. Set `opt_out_useragent_filter: true` to capture them, e.g. in end-to-end tests. Note that logs from `captureLog` are not subject to this filter.'
                 )
             }
             logger.info(
@@ -1902,6 +1914,12 @@ export class PostHog implements PostHogInterface {
             )
         }
 
+        // Reconcile sibling-subdomain cookie identity changes before updating
+        // sessionPersistence so adopting an anonymous reset does not wipe the
+        // campaign, referrer, or search properties recorded for this event.
+        this.persistence.syncCookieProperties()
+        this._processCookieIdentityChange()
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1928,7 +1946,22 @@ export class PostHog implements PostHogInterface {
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties: this._calculateEventProperties(event_name, properties || {}, timestamp, uuid, false, true),
+        }
+
+        // A config version 2 flag event never carries some properties, and the flags extension names
+        // them for the event it is capturing. They are dropped here, after the super properties are
+        // merged, so a registered property cannot add them.
+        const flagEventCapture = this.featureFlags?.flagEventCapture?.(properties)
+        if (flagEventCapture) {
+            each(flagEventCapture.omit, (name) => {
+                delete data.properties[name]
+            })
+            // The extension drops an exposure whose distinct ID, groups, session or person processing is not
+            // the one its call was captured with.
+            if (flagEventCapture.resolved?.(data.properties) === false) {
+                return
+            }
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
@@ -2039,7 +2072,14 @@ export class PostHog implements PostHogInterface {
         // before_send runs after this filter and may deliberately re-add stripped properties;
         // the SDK itself must not enrich beyond allowlisted keys past this point.
         if (shouldSendMinimalFlagCalledEvent) {
-            data.properties = minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS)
+            // A config version 2 call also keeps its attribution. A config version 1 call keeps the
+            // shared allowlist alone, even when a super property is named like the attribution.
+            data.properties = minimizeFlagCalledEventProperties(
+                data.properties,
+                flagEventCapture
+                    ? FLAG_CALLED_TRANSPORT_PROPERTY_KEYS.concat(flagEventCapture.keep)
+                    : FLAG_CALLED_TRANSPORT_PROPERTY_KEYS
+            )
         }
 
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
@@ -2078,7 +2118,8 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!isNullish(this.config.before_send)) {
-            const beforeSendResult = this._runBeforeSend(data)
+            // A hook that throws is a failed capture of a flag event, not a discard.
+            const beforeSendResult = this._runBeforeSend(data, flagEventCapture?.failed)
             if (!beforeSendResult) {
                 return
             } else {
@@ -2088,7 +2129,12 @@ export class PostHog implements PostHogInterface {
             }
         }
 
-        if (this.sessionRecording && !this._replayDebugPropertiesPaused && isReplayDebugEvent(event_name)) {
+        if (
+            this.sessionRecording &&
+            !this.sessionRecording.isReplayOff &&
+            !this._replayDebugPropertiesPaused &&
+            isReplayDebugEvent(event_name)
+        ) {
             this._replayDebugPropertiesPaused = true
             setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
         }
@@ -2244,6 +2290,17 @@ export class PostHog implements PostHogInterface {
         uuid?: string,
         readOnly?: boolean
     ): Properties {
+        return this._calculateEventProperties(eventName, eventProperties, timestamp, uuid, readOnly, false)
+    }
+
+    private _calculateEventProperties(
+        eventName: string,
+        eventProperties: Properties,
+        timestamp?: Date,
+        uuid?: string,
+        readOnly?: boolean,
+        skipCookieSync: boolean = false
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return eventProperties
@@ -2254,8 +2311,10 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        this.persistence.syncCookieProperties()
-        this._processCookieIdentityChange()
+        if (!skipCookieSync) {
+            this.persistence.syncCookieProperties()
+            this._processCookieIdentityChange()
+        }
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
@@ -2301,6 +2360,7 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
+        let retryQueueSize: number | undefined
         try {
             if (this.sessionRecording) {
                 const replayProperties = this.sessionRecording.sdkDebugProperties
@@ -2311,7 +2371,7 @@ export class PostHog implements PostHogInterface {
                     }
                 }
             }
-            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
+            retryQueueSize = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
@@ -2390,6 +2450,14 @@ export class PostHog implements PostHogInterface {
             ...dynamicProperties,
             ...properties,
         })
+
+        // SDK-owned and only sent while requests wait to be retried, so a registered or caller value
+        // can't make an empty retry queue look backed up.
+        if (retryQueueSize) {
+            properties['$sdk_debug_retry_queue_size'] = retryQueueSize
+        } else {
+            delete properties['$sdk_debug_retry_queue_size']
+        }
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -2700,7 +2768,7 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
+     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
      * @returns {boolean | string | undefined} The feature flag value, or undefined if the flag is unavailable.
      */
     getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
@@ -2739,7 +2807,8 @@ export class PostHog implements PostHogInterface {
      * evaluation is available for the key. This includes globally inactive flags, which are omitted
      * from the remote `/flags` response.
      *
-     * By default, this method emits the `$feature_flag_called` event.
+     * By default, this method emits the `$feature_flag_called` event, and also `$experiment_exposure` when a
+     * config version 2 experiment split supplies the value.
      *
      * {@label Feature flags}
      *
@@ -2764,7 +2833,7 @@ export class PostHog implements PostHogInterface {
      *
      * @param {string} key Key of the feature flag.
      * @param {Object} [options] Options for the feature flag lookup.
-     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called event.
+     * @param {boolean} [options.send_event=true] If false, won't send the $feature_flag_called or $experiment_exposure event.
      * @param {boolean} [options.fresh=false] If true, won't return cached values from localStorage - only values loaded from the server.
      * @returns {FeatureFlagResult | undefined} The feature flag result including key, enabled, variant, and payload.
      */
@@ -2816,7 +2885,7 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
+     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
      * @returns {boolean | undefined} Whether the feature flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
     isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
@@ -4913,6 +4982,7 @@ export class PostHog implements PostHogInterface {
         // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
+            this.heatmaps?.discardPending()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {
@@ -5007,6 +5077,8 @@ export class PostHog implements PostHogInterface {
             // Consent granted in another tab leaves this tab holding the cookieless sentinel, and no $opt_in capture
             // will heal it below. Adopt the shared identity before re-enabling persistence saves the stale one over it.
             this._syncCookielessIdentity()
+        } else {
+            this.heatmaps?.discardPending()
         }
 
         this.consent.optInOut(true)
@@ -5079,6 +5151,7 @@ export class PostHog implements PostHogInterface {
         const sessionRecording = this.sessionRecording
         // Identity changes must not let queued recorder work flush under the cookieless identity.
         sessionRecording?.dispose({ discardBufferedEvents: true })
+        this.heatmaps?.discardPending()
 
         if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
             this._reset(true, true)
@@ -5330,7 +5403,9 @@ export class PostHog implements PostHogInterface {
         return migrateConfigField(originalConfig, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
     }
 
-    private _runBeforeSend(data: CaptureResult): CaptureResult | null {
+    // `onError` is called when a hook throws. A hook that returns null discards the event, which
+    // is not an error.
+    private _runBeforeSend(data: CaptureResult, onError?: () => void): CaptureResult | null {
         if (isNullish(this.config.before_send)) {
             return data
         }
@@ -5363,6 +5438,7 @@ export class PostHog implements PostHogInterface {
                 }
             } catch (e) {
                 logger.error(`Error in beforeSend function for event '${data.event}':`, e)
+                onError?.()
                 return null
             }
         }

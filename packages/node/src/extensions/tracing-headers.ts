@@ -48,6 +48,8 @@ export function getPostHogCookieReadOptions(posthog: {
 export interface PostHogTracingHeaderValues {
   sessionId?: string
   distinctId?: string
+  /** The distinct ID is from the cookie and belongs to a visitor posthog-js has not identified. */
+  anonymous?: true
 }
 
 export function addProperty(properties: Record<string, any>, key: string, value: unknown): void {
@@ -92,25 +94,25 @@ function isRecent(timestamp: unknown, now: number, maxAgeMs: number): boolean {
  * Reads the live session ID, and the distinct ID of an identified user, from the cookie that posthog-js writes with its
  * default persistence. The browser sends it on every same-site request, so backend events link to the browser session
  * without `tracing_headers`. A session past the posthog-js idle timeout or length cap is not returned, because the
- * browser starts a new session on its next activity. An anonymous distinct ID is not returned, so backend events for
- * anonymous visitors stay personless. Nothing is returned when the visitor's consent cookie opts out.
+ * browser starts a new session on its next activity. An anonymous distinct ID is returned only with
+ * `includeAnonymousDistinctId` (marked `anonymous`), so backend events for anonymous visitors otherwise stay
+ * personless. Nothing is returned when the visitor's consent cookie opts out.
  */
 export function getPostHogCookieValues(
   cookieHeader: HeaderValue,
   apiKey: string,
   now: number = Date.now(),
   sessionIdleTimeoutMs: number = COOKIE_SESSION_IDLE_TIMEOUT_MS,
-  optOutCapturingByDefault: boolean = false
+  optOutCapturingByDefault: boolean = false,
+  includeAnonymousDistinctId: boolean = false
 ): PostHogTracingHeaderValues {
   try {
     if (typeof cookieHeader !== 'string') {
       return {}
     }
-    // The adapter keeps the last duplicate, while the browser reads the first.
-    const cookies = cookieStoreFromHeader(cookieHeader.split(';').reverse().join(';'))
+    const cookies = readCookieStore(cookieHeader)
     const raw = cookies.get(getPostHogCookieName(apiKey))?.value
-    const consent = cookies.get(getConsentCookieName(apiKey))?.value ?? ''
-    if (!raw || isNoLike(consent) || (optOutCapturingByDefault && !isYesLike(consent))) {
+    if (!raw || isOptedOutByCookie(cookies, apiKey, optOutCapturingByDefault)) {
       return {}
     }
     const data = JSON.parse(raw)
@@ -118,7 +120,9 @@ export function getPostHogCookieValues(
       return {}
     }
 
-    const distinctId = data.$user_state === 'identified' ? sanitizeTracingHeaderValue(data.distinct_id) : undefined
+    const identified = data.$user_state === 'identified'
+    const distinctId =
+      identified || includeAnonymousDistinctId ? sanitizeTracingHeaderValue(data.distinct_id) : undefined
     let sessionId: string | undefined
     const session = data.$sesid
     if (Array.isArray(session) && (session.length === 2 || session.length === 3)) {
@@ -135,9 +139,42 @@ export function getPostHogCookieValues(
     return {
       ...(sessionId !== undefined ? { sessionId } : {}),
       ...(distinctId !== undefined ? { distinctId } : {}),
+      ...(distinctId !== undefined && !identified ? { anonymous: true } : {}),
     }
   } catch {
     return {}
+  }
+}
+
+function readCookieStore(cookieHeader: string): ReturnType<typeof cookieStoreFromHeader> {
+  // The adapter keeps the last duplicate, while the browser reads the first.
+  return cookieStoreFromHeader(cookieHeader.split(';').reverse().join(';'))
+}
+
+function isOptedOutByCookie(
+  cookies: ReturnType<typeof cookieStoreFromHeader>,
+  apiKey: string,
+  optOutCapturingByDefault: boolean
+): boolean {
+  const consent = cookies.get(getConsentCookieName(apiKey))?.value ?? ''
+  return isNoLike(consent) || (optOutCapturingByDefault && !isYesLike(consent))
+}
+
+/**
+ * Whether the visitor's posthog-js consent cookie opts out of capture, or, with `optOutCapturingByDefault`, does not
+ * opt in. posthog-js keeps consent in localStorage by default, which the server cannot read.
+ */
+export function isPostHogCookieOptedOut(
+  cookieHeader: HeaderValue,
+  apiKey: string,
+  optOutCapturingByDefault: boolean = false
+): boolean {
+  try {
+    // A request without a Cookie header has no consent cookie either.
+    const header = typeof cookieHeader === 'string' ? cookieHeader : ''
+    return isOptedOutByCookie(readCookieStore(header), apiKey, optOutCapturingByDefault)
+  } catch {
+    return false
   }
 }
 
@@ -151,13 +188,45 @@ function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
   return Math.min(Math.max(seconds, MIN_SESSION_IDLE_TIMEOUT_SECONDS), MAX_SESSION_IDLE_TIMEOUT_SECONDS) * 1000
 }
 
+function readCookieValues(
+  headers: IncomingHttpHeaders,
+  cookie: PostHogCookieReadOptions,
+  includeAnonymousDistinctId: boolean
+): PostHogTracingHeaderValues {
+  return getPostHogCookieValues(
+    headers.cookie,
+    cookie.apiKey,
+    Date.now(),
+    getSessionIdleTimeoutMs(cookie),
+    cookie.optOutCapturingByDefault === true,
+    includeAnonymousDistinctId
+  )
+}
+
+/**
+ * The request's tracing ids, with the posthog-js cookie fallback when `cookie` is set. When the client's
+ * `captureTracingHeaders` is `false`, the tracing headers count as absent, so only the cookie can supply ids.
+ */
+export function readPostHogTracingHeaders(
+  options: { captureTracingHeaders?: boolean },
+  headers?: IncomingHttpHeaders,
+  cookie?: PostHogCookieReadOptions | null,
+  includeAnonymousDistinctId: boolean = false
+): PostHogTracingHeaderValues {
+  if (options.captureTracingHeaders !== false) {
+    return getPostHogTracingHeaderValues(headers, cookie, includeAnonymousDistinctId)
+  }
+  return headers && cookie ? readCookieValues(headers, cookie, includeAnonymousDistinctId) : {}
+}
+
 /**
  * Reads the PostHog tracing headers. With cookie read options, a request with neither header falls back to the posthog-js
  * cookie. A request with either header uses headers only, so one request never mixes two identities.
  */
 export function getPostHogTracingHeaderValues(
   headers?: IncomingHttpHeaders,
-  cookie?: PostHogCookieReadOptions | null
+  cookie?: PostHogCookieReadOptions | null,
+  includeAnonymousDistinctId: boolean = false
 ): PostHogTracingHeaderValues {
   if (!headers) {
     return {}
@@ -165,19 +234,14 @@ export function getPostHogTracingHeaderValues(
 
   const headerSessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId])
   const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
-  const { sessionId, distinctId } =
+  const { sessionId, distinctId, anonymous }: PostHogTracingHeaderValues =
     headerSessionId === undefined && headerDistinctId === undefined && cookie
-      ? getPostHogCookieValues(
-          headers.cookie,
-          cookie.apiKey,
-          Date.now(),
-          getSessionIdleTimeoutMs(cookie),
-          cookie.optOutCapturingByDefault === true
-        )
+      ? readCookieValues(headers, cookie, includeAnonymousDistinctId)
       : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(distinctId !== undefined ? { distinctId } : {}),
+    ...(anonymous ? { anonymous } : {}),
   }
 }

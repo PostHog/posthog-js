@@ -335,7 +335,7 @@ class FeatureFlagsPoller {
             { skipLoadCheck: true }
           )
           response[flag.key] = matchValue
-          if (matchPayload) {
+          if (matchPayload !== undefined && matchPayload !== null) {
             payloads[flag.key] = matchPayload
           }
         } catch (e) {
@@ -412,6 +412,13 @@ class FeatureFlagsPoller {
     }
 
     const flagFilters = flag.filters || {}
+
+    // Enrollment is a person property, so it is read from the person properties on
+    // group-aggregated flags too.
+    if (flagFilters.feature_enrollment === true) {
+      return matchFeatureEnrollment(flag, personProperties)
+    }
+
     const aggregation_group_type_index = flagFilters.aggregation_group_type_index
 
     if (aggregation_group_type_index != undefined) {
@@ -788,6 +795,7 @@ class FeatureFlagsPoller {
           } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
+            assertPropertyFilterTypeSupported(prop)
             assertFeatureFlagFilterSupported(prop)
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
             continue
@@ -978,7 +986,7 @@ class FeatureFlagsPoller {
         : `Evaluating these flags falls back to a server request when evaluation reaches that part.`
       console.warn(
         `[PostHog] You are using local evaluation but ${unsupportedDefinitionFlags.length} flag(s) use something ` +
-          `local evaluation does not support, such as a static cohort, an unknown operator, ` +
+          `local evaluation does not support, such as a static cohort, an unknown operator or filter type, ` +
           `or a missing or circular flag dependency ` +
           `(reason: unsupported_definition): ${unsupportedDefinitionFlags.join(', ')}. ` +
           `${consequence} To evaluate them locally, change these flags in PostHog or upgrade posthog-node.`
@@ -1039,6 +1047,8 @@ class FeatureFlagsPoller {
   /**
    * Returns true if the feature flags poller has loaded successfully at least once and has more than 0 feature flags.
    * This is useful to check if local evaluation is ready before calling getFeatureFlag.
+   * A successful load with no flags does not count as ready; the `localEvaluationFlagsLoaded` event
+   * fires for every successful load and reports the flag count.
    */
   isLocalEvaluationReady(): boolean {
     return (this.loadedSuccessfullyOnce ?? false) && (this.featureFlags?.length ?? 0) > 0
@@ -1385,6 +1395,10 @@ function getDefinitionUnresolvedReason(
     return 'experience_continuity'
   }
   const flagFilters = flag.filters || {}
+  // Enrollment decides the flag before the group aggregation and release conditions are read.
+  if (flagFilters.feature_enrollment === true) {
+    return undefined
+  }
   const aggregation = flagFilters.aggregation_group_type_index
   if (aggregation != undefined && !definitions.groupTypeMapping[String(aggregation)]) {
     return 'unsupported_definition'
@@ -1393,6 +1407,22 @@ function getDefinitionUnresolvedReason(
     (condition.properties || []).some((property) => isUnsupportedProperty(property, definitions, new Set()))
   )
   return usesUnsupportedProperty ? 'unsupported_definition' : undefined
+}
+
+// An early-access feature flag returns the person's enrollment at once: `true` or `"true"` means
+// enrolled, and any other value that was passed, `null` included, means opted out. Without the
+// enrollment property the flag can't be resolved locally.
+function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
+  const enrollmentKey = `$feature_enrollment/${flag.key}`
+  const enrollment = personProperties[enrollmentKey]
+  // `undefined` is omitted from JSON, so /flags would read the stored enrollment.
+  if (enrollment === undefined) {
+    throw new InconclusiveMatchError(
+      `Flag has feature enrollment and '${enrollmentKey}' was not passed`,
+      'missing_context'
+    )
+  }
+  return enrollment === true || enrollment === 'true'
 }
 
 function isUnsupportedProperty(
@@ -1411,6 +1441,7 @@ function isUnsupportedProperty(
   }
   if (property.type !== 'cohort') {
     try {
+      assertPropertyFilterTypeSupported(property)
       assertFeatureFlagFilterSupported(property)
       return false
     } catch (e) {
@@ -1443,12 +1474,29 @@ function isUnsupportedPropertyGroup(
   )
 }
 
+// Filter types matched against the person or group properties the caller passes. Cohort and
+// flag filters have their own matching. Any other type, such as `person_metadata` (a value the
+// server reads from the persons table, not from person properties), can't be evaluated locally:
+// matching it against a caller property of the same key could disagree with /flags. A missing,
+// null, or empty type is a person filter.
+const PROPERTY_FILTER_TYPES = new Set<string | null | undefined>([undefined, null, '', 'person', 'group'])
+
+function assertPropertyFilterTypeSupported(property: FlagProperty): void {
+  if (!PROPERTY_FILTER_TYPES.has(property.type)) {
+    throw new InconclusiveMatchError(
+      `Can't evaluate a '${property.type}' filter on '${property.key}' locally`,
+      'unsupported_definition'
+    )
+  }
+}
+
 function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   warnFunction?: (msg: string) => void,
   propertyMatchingVersion?: number
 ): boolean {
+  assertPropertyFilterTypeSupported(property)
   return matchFeatureFlagProperty(property, propertyValues, { warnFunction, propertyMatchingVersion })
 }
 

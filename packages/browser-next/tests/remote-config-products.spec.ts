@@ -11,7 +11,6 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
         storage: false,
         navigator: false,
         capturePageview: false,
-        analytics: false,
         surveys: { automaticDisplay: false },
         fetch: async (input, init) => {
             const path = new URL(String(input)).pathname
@@ -47,7 +46,7 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
         expect(surveys).toEqual([])
         expect(requests).toContain('/api/surveys/')
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         document.body.innerHTML = '<button>Save</button>'
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))

@@ -1,10 +1,12 @@
 import { instrument } from '../index'
-import { getSessionId } from '../extensions/session'
+import { resolveSession } from '../extensions/session'
 import { stampClientIdentity } from '../extensions/client-identity'
 import { deriveSessionIdFromConversation } from '../extensions/session'
 import type { HighLevelMCPServerLike, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
 import { fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
+
+const getSessionId = (...args: Parameters<typeof resolveSession>): string => resolveSession(...args).sessionId
 
 /**
  * Host-supplied `sessionId` and `clientInfo` callbacks, for stateless per-request
@@ -18,7 +20,7 @@ describe('options.sessionId and options.clientInfo', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     cleanup = setup.cleanup
   })
 

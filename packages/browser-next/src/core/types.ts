@@ -1,20 +1,23 @@
-import type { FlagsConfiguration } from '../products/flags/flags-options'
-import type { ICoreCapabilities, BrowserExtensionAccess, BrowserExtension as Extension } from './context/browser-client'
+import type { FlagsConfiguration, FlagsOptions } from '../products/flags/flags-options'
+import type {
+    BrowserExtension as Extension,
+    BrowserProducts,
+    ChangePropertiesInfo,
+    ConsentChangeInfo,
+    GroupInfo,
+    IdentifyInfo,
+} from './context/browser-client'
 import type { LogsConfiguration } from '../products/logs/logs-options'
 import type { SurveysConfiguration } from '../products/surveys/surveys-options'
 import type { AutocaptureConfiguration } from '../products/autocapture/autocapture-options'
-import type {
-    AnalyticsConfiguration,
-    AnalyticsOptions,
-    AutomaticAnalyticsOptions,
-    LoadStrategy,
-    PersonProfileMode,
-} from '../products/analytics/analytics-options'
+import type { AnalyticsOptions, PersonProfileMode } from '../products/analytics/analytics-options'
 
 import type {
     ApiResponse,
     CaptureOptions,
+    Client,
     Disposable,
+    ExtensionToken,
     Listener,
     RemoteConfig,
     SendRequestInit,
@@ -44,6 +47,42 @@ export interface NewSessionInfo extends SessionContext {
     readonly reason: NewSessionReason
 }
 
+/** Whether the user explicitly opted in, explicitly opted out, or has not chosen. */
+export type ExplicitConsentStatus = 'granted' | 'denied' | 'pending'
+
+/** Identity and session values to use instead of generated ones. */
+export interface BootstrapOptions {
+    /** Distinct ID to use when no identity is stored. An identified ID also identifies a stored anonymous user. */
+    distinctId?: string
+    /** Whether `distinctId` identifies a known person rather than an anonymous user. */
+    isIdentifiedId?: boolean
+    /**
+     * UUIDv7 session ID to continue, such as one passed from another domain. Like a generated session, it starts with
+     * the first admitted event, so `session` and `onSessionId` report it from then on.
+     */
+    sessionId?: string
+}
+
+export interface ResetOptions {
+    /** Also replace the device ID. */
+    resetDeviceId?: boolean
+    /**
+     * Seed the new identity and next session instead of generating them. With feature flags, `featureFlags` and
+     * `featureFlagPayloads` are served for the new identity until flags load.
+     */
+    bootstrap?: BootstrapOptions & FlagsOptions['bootstrap']
+}
+
+/**
+ * Shares identity and session state through a cookie. Create one with `cookiePersistence()` from
+ * `@posthog/browser/persistence/cookie`; only instances it returns are supported. `wrap` and the state record it
+ * reads and writes are internal, so their shape can change in any release.
+ */
+export interface CookiePersistence {
+    /** Wraps the state storage so the identity record also reads from and writes to the cookie. */
+    wrap(storage: StorageLike, stateKey: string, projectToken: string): StorageLike
+}
+
 export interface PostHogOptions {
     /** PostHog project token. */
     projectToken: string
@@ -55,13 +94,20 @@ export interface PostHogOptions {
     storage?: StorageLike | false
     /** Override the storage key. */
     persistenceKey?: string
+    /** Also persist identity and session state in a cookie, sharing them across subdomains. */
+    cookie?: CookiePersistence
+    /**
+     * Identity and session values to use instead of generated ones. A stored identity takes precedence, except that an
+     * identified bootstrap ID identifies a stored anonymous user, as in posthog-js.
+     */
+    bootstrap?: BootstrapOptions
     /** Override the consent key verbatim. Defaults to `__ph_opt_in_out_<projectToken>`. */
     consentPersistenceName?: string
     /** Fetch implementation. Pass `false` to disable network requests. */
     fetch?: BrowserFetch | false
     /** Navigator implementation. Pass `false` to disable navigator capabilities. */
     navigator?: BrowserNavigator | false
-    /** Start with capture disabled until `optIn()` runs. */
+    /** Start with capture disabled until `optIn()` runs. Feature flags still load, as in posthog-js. */
     optOutByDefault?: boolean
     /** Capture one initial `$pageview` after configured extensions install. Defaults to `true`. */
     capturePageview?: boolean
@@ -77,11 +123,8 @@ export interface PostHogOptions {
     remoteConfig?: RemoteConfig
     /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
-    /**
-     * First-party analytics acquisition. Defaults to on-demand loading through resolution, product dependencies,
-     * or the initial pageview. Pass `false` to omit implicit analytics; explicit instances take precedence.
-     */
-    analytics?: AnalyticsConfiguration
+    /** Capture scheduling and person-processing policy. */
+    analytics?: AnalyticsOptions
     /** Acquire DOM autocapture from saved/fresh signals, or during initialization when configured explicitly. */
     autocapture?: AutocaptureConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
@@ -94,8 +137,19 @@ export interface PostHogOptions {
     extensions?: readonly Extension[]
 }
 
+/** Options that `setConfig()` can change after creation. Omitted options keep their current values. */
+export interface RuntimeOptions {
+    /** Enable or disable SDK diagnostic logs, including loggers that extensions already created. */
+    debug?: boolean
+    /**
+     * Analytics policy applied to subsequent captures. As in `posthog-js`, downgrading `personProfiles` from `'always'`
+     * to `'identified_only'` keeps person processing for a visitor whose events were already processed; `'never'` stops it.
+     */
+    analytics?: Pick<AnalyticsOptions, 'personProfiles'>
+}
+
 /** Options for the manually composed `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'flags' | 'logs' | 'surveys' | 'autocapture'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'
@@ -120,23 +174,103 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-/** Consumer-facing SDK contract; product controls use their public interfaces. */
-export interface IPostHog extends ICoreCapabilities, BrowserExtensionAccess, Disposable {
+/** The one browser client: the shared `Client` contract plus browser lifecycle, identity and product access. */
+export interface IPostHog extends Client, Readonly<Partial<BrowserProducts>>, Disposable {
+    readonly isRateLimited: boolean
+    captureImmediate(
+        event: string,
+        properties?: Record<string, unknown> | null,
+        options?: CaptureOptions
+    ): Promise<CaptureSummary>
+    identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    /**
+     * Starts a new anonymous identity and session, and forgets the stored consent choice. Pass `true`, as in
+     * posthog-js, or `{ resetDeviceId: true }` to also replace the device ID.
+     *
+     * With `optOutByDefault`, capture returns to the default (opted out), so calling `reset()` after `optIn()` stops
+     * capture. Reset first, then opt in again if needed: `posthog.reset(); posthog.optIn()`. Events captured before
+     * the reset, in this or another tab, are still delivered. Consent listeners hear of the forgotten choice after the
+     * new identity is in place and `onReset` listeners have run.
+     */
+    reset(options?: boolean | ResetOptions): void
+    register(properties: Record<string, unknown>): void
+    registerOnce(properties: Record<string, unknown>, defaultValue?: unknown): void
+    unregister(property: string): void
+    getProperty(property: string): unknown
+    /** The UUID of the last `$pageview` captured in the current session, sent on events as `$pageview_id`. */
+    getPageViewId(): string | undefined
+    registerForSession(properties: Record<string, unknown>): void
+    unregisterForSession(property: string): void
+    /** Links another distinct ID to the current person without changing the current identity. */
+    alias(aliasId: string): void
+    /** Associates future events with a group and, when person processing is enabled, records its properties. */
+    group(type: string, key: string, properties?: Record<string, unknown>): void
+    /** Sends a group-profile update without changing group membership. */
+    groupIdentify(
+        type: string,
+        key: string | number,
+        properties?: Record<string, unknown>,
+        options?: CaptureOptions
+    ): void
+    /** Clears group memberships, retaining identity, sessions and registered properties. */
+    resetGroups(): void
+    /** Enables person processing for the current identity without identifying it. */
+    createPersonProfile(): void
+    /** Sets person properties for the current identity. */
+    setPersonProperties(set?: Record<string, unknown>, setOnce?: Record<string, unknown>): void
+    /** Removes person properties from the current identity. */
+    unsetPersonProperties(names: string | readonly string[]): void
+    /** Marks the current person as an internal or test user. */
+    setInternalOrTestUser(): void
     readonly onNewSession: Listener<NewSessionInfo>
+    /**
+     * Fires with the current session immediately when one exists, then whenever this tab's session or window ID
+     * changes, including when it adopts a sibling tab's session. Sessions start with admitted events, not subscriptions.
+     */
+    readonly onSessionId: Listener<SessionContext>
+    /** Fires when consent changes, including changes observed from another tab. Does not replay. */
+    readonly onConsentChange: Listener<ConsentChangeInfo>
+    /**
+     * Fires after identification, independently of capture consent, including an identification this client adopts
+     * from another subdomain through cookie persistence. Does not replay.
+     */
+    readonly onIdentify: Listener<IdentifyInfo>
+    /** Local person-property changes, independently of capture consent. Does not replay. */
+    readonly onChangeProperties: Listener<ChangePropertiesInfo>
+    /** Fires after group membership or property updates, independently of capture consent. Does not replay. */
+    readonly onGroup: Listener<GroupInfo>
+    /** Fires after group-only reset clears local membership. Does not replay. */
+    readonly onGroupsReset: Listener<void>
+    /**
+     * Fires after local identity and persisted extension state are reset, including a reset this client adopts from
+     * another subdomain through cookie persistence. Does not replay.
+     */
+    readonly onReset: Listener<void>
+    resolveExtension<T extends Extension>(token: ExtensionToken<T>): Promise<T | undefined>
+    resolveExtension<Name extends keyof BrowserProducts>(name: Name): Promise<BrowserProducts[Name] | undefined>
+    resolveExtension<T extends Extension = Extension>(name: string): Promise<T | undefined>
     flush(): Promise<void>
     shutdown(shutdownTimeoutMs?: number): Promise<void>
     dispose(): Promise<void>
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
+    /** The stored opt-in or opt-out choice, independently of `optOutByDefault`. */
+    getExplicitConsentStatus(): ExplicitConsentStatus
+    /**
+     * Forgets the stored opt-in or opt-out choice, returning consent to the configured default. Events captured before
+     * the call are still delivered.
+     */
+    clearOptInOut(): void
     getRemoteConfig(): Promise<RemoteConfig | undefined>
+    /** Change the options in `RuntimeOptions`. Other creation options are fixed for the client's lifetime. */
+    setConfig(options: RuntimeOptions): void
+    /** Enable SDK diagnostic logs, or disable them with `debug(false)`. Equivalent to `setConfig({ debug })`. */
+    debug(enabled?: boolean): void
 }
 
 export type {
-    AnalyticsConfiguration,
     AnalyticsOptions,
-    AutomaticAnalyticsOptions,
-    LoadStrategy,
     PersonProfileMode,
     ApiResponse,
     CaptureOptions,

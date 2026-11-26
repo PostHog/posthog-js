@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.11.0",
+    "version": "0.11.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -79,7 +79,7 @@
         "@posthog/core": "workspace:^",
         "@posthog/react": "workspace:^",
         "posthog-js": "workspace:^",
-        "posthog-node": "workspace:^",
+        "posthog-node": "^5.58.0",
         "server-only": "^0.0.1"
     },
     "devDependencies": {
@@ -91,7 +91,7 @@
         "@testing-library/react": "^16.1.0",
         "@types/react": "^19.0.0",
         "@vercel/functions": "^3.4.3",
-        "next": "^15.5.22",
+        "next": "^15.5.29",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "typescript": "catalog:native",

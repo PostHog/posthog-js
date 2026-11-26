@@ -20,6 +20,7 @@ import {
     isArray,
     isGzipData,
     isGzipRequest,
+    isNullish,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isUndefined,
@@ -95,23 +96,32 @@ type EncodedRequest = {
  * @returns The URL with extended parameters
  */
 export const extendURLParams = (url: string, params: Record<string, any>, replace: boolean = true): string => {
-    const [baseUrl, search] = url.split('?')
+    const hashIndex = url.indexOf('#')
+    const hash = hashIndex === -1 ? '' : url.slice(hashIndex)
+    const urlWithoutHash = hashIndex === -1 ? url : url.slice(0, hashIndex)
+    const queryIndex = urlWithoutHash.indexOf('?')
+    const baseUrl = queryIndex === -1 ? urlWithoutHash : urlWithoutHash.slice(0, queryIndex)
+    const search = queryIndex === -1 ? '' : urlWithoutHash.slice(queryIndex + 1)
     const newParams = { ...params }
 
-    const updatedSearch =
-        search?.split('&').map((pair) => {
-            const [key, origValue] = pair.split('=')
-            const value = replace ? (newParams[key] ?? origValue) : origValue
+    const updatedSearch = search
+        .split('&')
+        .filter((pair) => pair !== '')
+        .map((pair) => {
+            // Split on the first = only: values such as base64 signatures contain further = characters
+            const equalsIndex = pair.indexOf('=')
+            const key = equalsIndex === -1 ? pair : pair.slice(0, equalsIndex)
+            const newValue = replace ? newParams[key] : undefined
             delete newParams[key]
-            return `${key}=${value}`
-        }) ?? []
+            return isNullish(newValue) ? pair : `${key}=${newValue}`
+        })
 
     const remaining = formDataToQuery(newParams)
     if (remaining) {
         updatedSearch.push(remaining)
     }
 
-    return updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl
+    return `${updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl}${hash}`
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -140,10 +150,13 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(jsonStringify(data))
-        const encodedBody = encodeToDataString(b64data)
+        // /i/v0/e/ rejects form-urlencoded bodies, so beacons post the bare base64 as
+        // text/plain, which is still CORS-simple
+        const isBeacon = options.transport === 'sendBeacon'
+        const encodedBody = isBeacon ? b64data : encodeToDataString(b64data)
 
         return {
-            contentType: CONTENT_TYPE_FORM,
+            contentType: isBeacon ? CONTENT_TYPE_PLAIN : CONTENT_TYPE_FORM,
             body: encodedBody,
             estimatedSize: new Blob([encodedBody]).size,
         }
@@ -160,7 +173,7 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
         // beacon bodies must keep a CORS-simple content type even on the gzip-failure
-        // fallback — uncompressed application/json preflights, base64 form data does not
+        // fallback — uncompressed application/json preflights, base64 text/plain does not
         if (options.transport === 'sendBeacon') {
             return {
                 url: extendURLParams(options.url, { compression: Compression.Base64 }),

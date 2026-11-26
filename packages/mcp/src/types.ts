@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { ErrorTracking } from '@posthog/core'
+import type { ErrorTracking, JsonType } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { BoundedCache, IdentityCache } from './extensions/internal'
@@ -61,7 +61,9 @@ export interface CompatibleToolsListLike {
  * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
  * `CallToolResult` — the direction that would silently break callers.
  */
-export interface CompatibleTextToolResult {
+// A type alias, not an interface: only an alias gets the implicit index signature
+// that `CallToolResult`'s `[x: string]: unknown` requires.
+export type CompatibleTextToolResult = {
   content: { type: 'text'; text: string }[]
   isError?: boolean
 }
@@ -89,8 +91,25 @@ export interface McpAnalytics {
    * verbatim (a customer event, so it is not `$`-prefixed). Resolves once the event
    * has been processed. Use for domain-specific actions that aren't auto-captured
    * (user feedback, workflow milestones, etc).
+   *
+   * Captured while a request is handled, the event carries that request's session and
+   * identity. That needs `AsyncLocalStorage` (Node, Bun, Deno, Vercel Edge, Cloudflare
+   * Workers with `nodejs_compat` or `nodejs_als`). Without it, nothing tells requests
+   * apart, so the event gets a session of its own and no identity rather than another
+   * caller's, and the SDK logs one warning.
    */
   capture(eventData: CaptureEventData): Promise<void>
+  /**
+   * Waits until every event this server has captured so far, auto-captured ones included,
+   * has been handed to `posthog-node`, then flushes the `posthog-node` queue. Auto-captured
+   * events reach `posthog.capture()` asynchronously, after the handler's response is built,
+   * so on a per-request runtime (serverless or edge functions, stateless MCP servers) call
+   * this before the runtime freezes or exits. A streamed (SSE) response is returned before
+   * its handler has run, so there call it when the stream ends. It never rejects: when `posthog.flush()`
+   * does, that is logged. posthog-node 6 reports failed deliveries through
+   * `posthog.on('error', ...)` instead. Resolves at once when no PostHog client was passed to `instrument()`.
+   */
+  flush(): Promise<void>
 }
 
 export interface MCPAnalyticsOptions {
@@ -140,8 +159,9 @@ export interface MCPAnalyticsOptions {
    * instances.
    *
    * On by default, and fully inert when disabled: no parameter is injected, no schema is
-   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
-   * before (the request's own session id, else this instance's).
+   * touched, no prompt-back is appended, and `$session_id` comes from the request's own
+   * session, else a one-client connection's (stdio), else a fresh one for each stateless
+   * HTTP request that carries none.
    */
   enableConversationId?: boolean
   /**
@@ -214,12 +234,14 @@ export interface MCPAnalyticsOptions {
   /**
    * Inspect, modify, or drop each event right before it is sent to PostHog
    * (matching posthog-node's `beforeSend`). Receives the fully-built capture
-   * payload — event name, `distinct_id`, and `properties` — and runs once per
-   * emitted event, including the `$exception` sibling of a failed tool call.
+   * payload (event name, `distinct_id`, `properties`, and `options`) and runs
+   * once per emitted event, including the `$exception` sibling of a failed tool call.
+   * An event with no resolved identity arrives with the `process_person_profile: false`
+   * option unless `eventOptions` chose a value.
    *
    * Return the (possibly mutated) event to send it, or `null`/`undefined` to
-   * drop it. Use this to redact sensitive values, add or remove properties, or
-   * suppress specific events. A throw drops that event.
+   * drop it. Use this to redact sensitive values, add or remove properties or
+   * options, or suppress specific events. A throw drops that event.
    */
   beforeSend?: BeforeSendFn
   /**
@@ -253,6 +275,18 @@ export interface MCPAnalyticsOptions {
    * event properties as-is; values must be JSON-serializable.
    */
   eventProperties?: (
+    request: MCPRequestLike,
+    extra?: CompatibleRequestHandlerExtra
+  ) => JsonRecord | null | Promise<JsonRecord | null>
+  /**
+   * Attach posthog-node per-event options, such as `process_person_profile`, on every
+   * auto-captured event, including the `$exception` sibling. Values must be JSON-serializable.
+   * An explicit `process_person_profile` wins over the personless default for sessions with no
+   * resolved identity. A throw is logged and the event is captured without these options.
+   * posthog-node 5 has no per-event options, so there the known options are sent the way that
+   * version reads them, and other keys are dropped.
+   */
+  eventOptions?: (
     request: MCPRequestLike,
     extra?: CompatibleRequestHandlerExtra
   ) => JsonRecord | null | Promise<JsonRecord | null>
@@ -341,6 +375,8 @@ export interface MCPAnalyticsModelOptions {
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
+/** Which source grouped the call into its `$session_id`, first match wins. */
+export type MCPAnalyticsSessionSource = 'conversation' | 'transport' | 'client_metadata' | 'generated'
 
 export type ToolCallback =
   | ((
@@ -418,6 +454,8 @@ export interface Event {
    */
   errorType?: string
   eventId?: string
+  /** posthog-node per-event options → the payload's `options`. */
+  eventOptions?: Record<string, JsonType>
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
   /**
@@ -457,6 +495,7 @@ export interface Event {
   serverName?: string
   serverVersion?: string
   sessionId: string
+  sessionSource?: MCPAnalyticsSessionSource
   timestamp: Date
   toolCategory?: string
   toolDescription?: string
@@ -612,6 +651,9 @@ export interface MCPAnalyticsData {
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
   toolInputSchemas: BoundedCache<Map<string, unknown>>
+  /** From `cacheToolListing`: outside the LRU, so other sessions' listings never evict it. */
+  seededToolInputSchemas?: Map<string, unknown>
+  warnedUnattributedCustomEvents?: boolean
 }
 
 export interface CaptureEventData {
@@ -622,6 +664,11 @@ export interface CaptureEventData {
   event: string
   /** Event properties, spread onto the PostHog event. Values must be JSON-serializable. */
   properties?: JsonRecord
+  /**
+   * posthog-node per-event options for this event, such as `process_person_profile`. An explicit
+   * `process_person_profile` wins over the personless default for sessions with no resolved identity.
+   */
+  eventOptions?: Record<string, JsonType>
 }
 
 /**
@@ -633,7 +680,10 @@ export interface McpCaptureCommon {
   /**
    * Resolved person distinct id (becomes `distinct_id`). Supplying it enables
    * person processing so `$set` lands on a real person; omitting it falls back
-   * to an anonymous capture with `$process_person_profile: false`.
+   * to an anonymous capture with the `process_person_profile: false` option,
+   * which a registered or context option cannot override. Set
+   * `process_person_profile` in {@link McpCaptureCommon.eventOptions} to choose
+   * otherwise.
    */
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
@@ -674,6 +724,12 @@ export interface McpCaptureCommon {
   groups?: Record<string, string>
   /** Extra event properties, spread onto the PostHog event verbatim. */
   properties?: JsonRecord
+  /**
+   * posthog-node per-event options for this event and its `$exception` sibling, such as
+   * `process_person_profile`. An explicit `process_person_profile` wins over the anonymous
+   * default above. The inherited `capture()` keeps posthog-node's own `options` field.
+   */
+  eventOptions?: Record<string, JsonType>
   /** Event timestamp. Defaults to the capture time. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
 }
@@ -710,6 +766,12 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
   response?: unknown
+  /**
+   * The `tools/call` request's `_meta`. With the {@link McpCaptureCommon.clientUserAgent}
+   * or `_meta` client name that recognizes the client, its conversation id (such
+   * as ChatGPT's `openai/session`) sets `$session_id` in place of `sessionId`.
+   */
+  requestMeta?: JsonRecord
   /** Wall-clock duration → `$mcp_duration_ms`. */
   durationMs?: number
   /** Whether the call failed → `$mcp_is_error`. */
@@ -787,6 +849,12 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
    */
   collectFeedback?: boolean
+  /**
+   * The `tools/list` request's HTTP headers. A client recognized by its
+   * `User-Agent` as naming its conversation in `_meta` (ChatGPT) gets no
+   * `conversation_id` argument.
+   */
+  headers?: Record<string, unknown>
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
@@ -799,12 +867,22 @@ export interface PrepareToolCallOptions {
    * by that name is dispatched normally instead of being flagged as feedback.
    */
   originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
-  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata and conversation ids. */
   requestMeta?: JsonRecord
   /**
-   * A session id carried by the request or transport. A valid echoed
-   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
-   * from minting a second session handle.
+   * The request's HTTP headers. Their `User-Agent` recognizes clients that name
+   * their conversation in `_meta`, such as ChatGPT's `openai/session`.
+   */
+  headers?: Record<string, unknown>
+  /**
+   * The `initialize` `clientInfo`, when you hold one bound to this request's
+   * transport session. Recognizes a client over stdio, which has no `User-Agent`.
+   */
+  clientInfo?: { name?: string; version?: string }
+  /**
+   * A session id carried by the request or transport. A client conversation id
+   * or a valid echoed `conversation_id` takes precedence. Otherwise this value
+   * prevents the SDK from minting a second session handle.
    */
   sessionId?: string
 }

@@ -1,8 +1,10 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
-import { deriveSessionIdFromMCPSession, getSessionId, isModernEraRequest } from '../extensions/session'
+import { deriveSessionIdFromMCPSession, resolveSession, isModernEraRequest } from '../extensions/session'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
-import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPRequestLike } from '../types'
+import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPRequestLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -15,7 +17,7 @@ describe('Session ID Management', () => {
   beforeEach(async () => {
     resetTodos()
     const setup = await setupTestServerAndClient()
-    server = setup.server
+    server = setup.server as unknown as HighLevelMCPServerLike
     cleanup = setup.cleanup
   })
 
@@ -63,7 +65,7 @@ describe('Session ID Management', () => {
       const extra = { sessionId: mcpSessionId }
 
       // Get session ID with MCP sessionId provided
-      const sessionId = getSessionId(lowLevelServer, extra)
+      const sessionId = resolveSession(lowLevelServer, extra).sessionId
 
       // Verify it's deterministically derived
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
@@ -85,7 +87,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Get initial session ID without MCP sessionId
-      const sessionId1 = getSessionId(lowLevelServer)
+      const sessionId1 = resolveSession(lowLevelServer).sessionId
       expect(sessionId1).toMatch(SESSION_ID_PATTERN)
 
       // Verify tracking data shows PostHog MCP analytics source
@@ -93,7 +95,7 @@ describe('Session ID Management', () => {
       expect(data?.sessionSource).toBe('generated')
 
       // Get session ID again - should be the same
-      const sessionId2 = getSessionId(lowLevelServer)
+      const sessionId2 = resolveSession(lowLevelServer).sessionId
       expect(sessionId2).toBe(sessionId1)
 
       await eventCapture.stop()
@@ -109,7 +111,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Start with no MCP sessionId
-      const generatedSessionId = getSessionId(lowLevelServer)
+      const generatedSessionId = resolveSession(lowLevelServer).sessionId
       expect(generatedSessionId).toMatch(SESSION_ID_PATTERN)
 
       let data = getServerTrackingData(lowLevelServer)
@@ -117,7 +119,7 @@ describe('Session ID Management', () => {
 
       // Now provide MCP sessionId
       const extra = { sessionId: mcpSessionId }
-      const mcpDerivedSessionId = getSessionId(lowLevelServer, extra)
+      const mcpDerivedSessionId = resolveSession(lowLevelServer, extra).sessionId
 
       // Verify it switched to MCP-derived ID
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
@@ -142,13 +144,13 @@ describe('Session ID Management', () => {
 
       // Provide MCP sessionId
       const extra = { sessionId: mcpSessionId }
-      const mcpDerivedSessionId = getSessionId(lowLevelServer, extra)
+      const mcpDerivedSessionId = resolveSession(lowLevelServer, extra).sessionId
 
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
       expect(mcpDerivedSessionId).toBe(expectedSessionId)
 
       // Now call without MCP sessionId (it disappeared)
-      const sessionIdAfterDisappear = getSessionId(lowLevelServer)
+      const sessionIdAfterDisappear = resolveSession(lowLevelServer).sessionId
 
       // Should keep using the last derived sessionId
       expect(sessionIdAfterDisappear).toBe(mcpDerivedSessionId)
@@ -172,14 +174,14 @@ describe('Session ID Management', () => {
 
       // Provide first MCP sessionId
       const extra1 = { sessionId: mcpSessionId1 }
-      const sessionId1 = getSessionId(lowLevelServer, extra1)
+      const sessionId1 = resolveSession(lowLevelServer, extra1).sessionId
 
       const expectedSessionId1 = deriveSessionIdFromMCPSession(mcpSessionId1)
       expect(sessionId1).toBe(expectedSessionId1)
 
       // Change to second MCP sessionId
       const extra2 = { sessionId: mcpSessionId2 }
-      const sessionId2 = getSessionId(lowLevelServer, extra2)
+      const sessionId2 = resolveSession(lowLevelServer, extra2).sessionId
 
       const expectedSessionId2 = deriveSessionIdFromMCPSession(mcpSessionId2)
       expect(sessionId2).toBe(expectedSessionId2)
@@ -205,7 +207,7 @@ describe('Session ID Management', () => {
 
       // Get MCP-derived session ID
       const extra = { sessionId: mcpSessionId }
-      const sessionId1 = getSessionId(lowLevelServer, extra)
+      const sessionId1 = resolveSession(lowLevelServer, extra).sessionId
 
       // Manually set lastActivity to simulate timeout (31 minutes ago)
       const data = getServerTrackingData(lowLevelServer)
@@ -214,7 +216,7 @@ describe('Session ID Management', () => {
       }
 
       // Get session ID again with same MCP sessionId
-      const sessionId2 = getSessionId(lowLevelServer, extra)
+      const sessionId2 = resolveSession(lowLevelServer, extra).sessionId
 
       // Should still be the same (no timeout for MCP sessions)
       expect(sessionId2).toBe(sessionId1)
@@ -231,7 +233,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Get PostHog MCP analytics-generated session ID
-      const sessionId1 = getSessionId(lowLevelServer)
+      const sessionId1 = resolveSession(lowLevelServer).sessionId
 
       // Manually set lastActivity to simulate timeout (31 minutes ago)
       const data = getServerTrackingData(lowLevelServer)
@@ -240,7 +242,7 @@ describe('Session ID Management', () => {
       }
 
       // Get session ID again without MCP sessionId
-      const sessionId2 = getSessionId(lowLevelServer)
+      const sessionId2 = resolveSession(lowLevelServer).sessionId
 
       // Should be different (timeout occurred)
       expect(sessionId2).not.toBe(sessionId1)
@@ -260,7 +262,7 @@ describe('Session ID Management', () => {
       const token = encodeSessionId(tokenPayload)
       const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: token } } }
 
-      const sessionId = getSessionId(lowLevelServer, extra)
+      const sessionId = resolveSession(lowLevelServer, extra).sessionId
 
       expect(sessionId).toBe(tokenPayload.sessionId)
       const data = getServerTrackingData(lowLevelServer)
@@ -274,7 +276,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       const token = encodeSessionId(tokenPayload)
-      const sessionId = getSessionId(lowLevelServer, { sessionId: token })
+      const sessionId = resolveSession(lowLevelServer, { sessionId: token }).sessionId
 
       expect(sessionId).toBe(deriveSessionIdFromMCPSession(token))
       expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('mcp')
@@ -284,7 +286,7 @@ describe('Session ID Management', () => {
       instrument(server, fakePostHog())
       const lowLevelServer = server.server
 
-      const sessionId = getSessionId(lowLevelServer, { sessionId: 'plain-mcp-session' })
+      const sessionId = resolveSession(lowLevelServer, { sessionId: 'plain-mcp-session' }).sessionId
 
       expect(sessionId).toBe(deriveSessionIdFromMCPSession('plain-mcp-session'))
       expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('mcp')
@@ -295,7 +297,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: 'not-a-token-uuid' } } }
-      const sessionId = getSessionId(lowLevelServer, extra)
+      const sessionId = resolveSession(lowLevelServer, extra).sessionId
 
       expect(sessionId).toMatch(SESSION_ID_PATTERN)
       expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('generated')
@@ -306,10 +308,10 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       const token = encodeSessionId(tokenPayload)
-      const first = getSessionId(lowLevelServer, {
+      const first = resolveSession(lowLevelServer, {
         requestInfo: { headers: { [MCP_SESSION_HEADER]: token } },
-      })
-      const second = getSessionId(lowLevelServer)
+      }).sessionId
+      const second = resolveSession(lowLevelServer).sessionId
 
       expect(second).toBe(first)
       expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('token')
@@ -321,15 +323,15 @@ describe('Session ID Management', () => {
 
       const token = encodeSessionId(tokenPayload)
       const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: token } } }
-      const first = getSessionId(lowLevelServer, extra)
+      const first = resolveSession(lowLevelServer, extra).sessionId
 
       const data = getServerTrackingData(lowLevelServer)
       if (data) {
         data.lastActivity = new Date(Date.now() - 31 * 60 * 1000)
       }
 
-      expect(getSessionId(lowLevelServer, extra)).toBe(first)
-      expect(getSessionId(lowLevelServer)).toBe(first)
+      expect(resolveSession(lowLevelServer, extra).sessionId).toBe(first)
+      expect(resolveSession(lowLevelServer).sessionId).toBe(first)
     })
   })
 
@@ -402,5 +404,153 @@ describe('isModernEraRequest', () => {
     // Guessing "modern" here would take that away from them.
     expect(call({ method: 'tools/call', params: { name: 'echo' } })).toBe(false)
     expect(call({ method: 'tools/call', params: { name: 'echo' } }, { requestInfo: { headers: {} } })).toBe(false)
+  })
+})
+
+/**
+ * Rule 4 of the spec's "Session identity": a stateless HTTP request carrying no
+ * session gets a fresh id of its own. A shared HTTP instance serves every client,
+ * so its own id would group them all; a one-client connection (stdio) keeps it.
+ */
+describe('a request that carries no session', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const http = (): CompatibleRequestHandlerExtra => ({ requestInfo: { headers: {} } }) as CompatibleRequestHandlerExtra
+  const stdio = (): CompatibleRequestHandlerExtra | undefined => undefined
+
+  it.each([
+    ['tools/call over stateless HTTP', 'tools/call', '$mcp_tool_call', http, 'fresh'],
+    ['tools/list over stateless HTTP', 'tools/list', '$mcp_tools_list', http, 'fresh'],
+    ['tools/call over stdio', 'tools/call', '$mcp_tool_call', stdio, 'shared'],
+  ] as const)('%s gets a %s session per request', async (_case, method, eventName, extra, expected) => {
+    const server = new Server({ name: 'rule-4', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(CallToolRequestSchema, async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }))
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: 'echo', inputSchema: { type: 'object' as const } }],
+    }))
+    const lowLevel = server as unknown as MCPServerLike
+    instrument(lowLevel, fakePostHog(), { enableConversationId: false })
+    const handler = lowLevel._requestHandlers.get(method)!
+    const request: MCPRequestLike = { method, params: { name: 'echo', arguments: {} } }
+
+    await handler(request, extra())
+    await handler(request, extra())
+    await new Promise((r) => setTimeout(r, 50))
+
+    const events = capture.findCapturesByEvent(eventName).map((e) => e.properties)
+    expect(events.map((p) => p.$mcp_session_source)).toEqual(['generated', 'generated'])
+    expect(new Set(events.map((p) => p.$session_id)).size).toBe(expected === 'fresh' ? 2 : 1)
+  })
+})
+
+describe('a stateless HTTP request with a fresh session', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const headers = (caller: string, token?: string): CompatibleRequestHandlerExtra =>
+    ({
+      requestInfo: { headers: { 'x-caller': caller, ...(token ? { [MCP_SESSION_HEADER]: token } : {}) } },
+    }) as CompatibleRequestHandlerExtra
+
+  const createServer = (
+    pause: (caller: string) => Promise<void> = async () => {},
+    sessionId?: () => string
+  ): { lowLevel: MCPServerLike; call: (extra: CompatibleRequestHandlerExtra) => Promise<unknown> } => {
+    const server = new Server({ name: 'fresh-session', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    const callerOf = (extra?: CompatibleRequestHandlerExtra): string =>
+      String(extra?.requestInfo?.headers?.['x-caller'])
+    const analytics = instrument(lowLevel, fakePostHog(), {
+      enableConversationId: false,
+      sessionId,
+      identify: async (_request, extra) => ({ distinctId: callerOf(extra), groups: { org: `${callerOf(extra)}-org` } }),
+    })
+    server.setRequestHandler(CallToolRequestSchema, async (_request, extra) => {
+      await pause(callerOf(extra as CompatibleRequestHandlerExtra))
+      await analytics.capture({ event: 'domain_action' })
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: 'search', inputSchema: { type: 'object' as const, properties: { query: { type: 'string' } } } }],
+    }))
+    const handler = lowLevel._requestHandlers.get('tools/call')!
+    return {
+      lowLevel,
+      call: (extra) =>
+        handler({ method: 'tools/call', params: { name: 'search', arguments: { query: 'flags' } } }, extra),
+    }
+  }
+
+  const expectCustomEventOf = (caller: string): void => {
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call').find((e) => e.distinct_id === caller)
+    const custom = capture.findCapturesByEvent('domain_action').filter((e) => e.distinct_id === caller)
+    expect(custom).toHaveLength(1)
+    expect(custom[0].properties.$groups).toEqual({ org: `${caller}-org` })
+    expect(custom[0].properties.$session_id).toBe(toolCall?.properties.$session_id)
+  }
+
+  it.each([
+    ['after another caller presented its token', true],
+    ['as the first request', false],
+  ])('attributes a custom event inside the tool to its own caller %s', async (_case, aliceFirst) => {
+    const { call } = createServer()
+    if (aliceFirst) {
+      await call(headers('alice', encodeSessionId({ sessionId: 'ses_alice' })))
+    }
+    await call(headers('bob'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expectCustomEventOf('bob')
+  })
+
+  it.each([
+    ['the first caller has a token', encodeSessionId({ sessionId: 'ses_alice' }), undefined],
+    ['the first caller has no token', undefined, undefined],
+    ['the host puts both in one session', undefined, () => 'host-shared'],
+  ])('keeps a custom event with its caller while another call runs: %s', async (_case, token, sessionId) => {
+    const gates = new Map<string, () => void>()
+    const { call } = createServer((caller) => new Promise<void>((resolve) => gates.set(caller, resolve)), sessionId)
+    const until = async (caller: string): Promise<void> => {
+      while (!gates.has(caller)) await new Promise((r) => setTimeout(r, 5))
+    }
+
+    const alice = call(headers('alice', token))
+    await until('alice')
+    const bob = call(headers('bob'))
+    await until('bob')
+    gates.get('alice')!()
+    await alice
+    gates.get('bob')!()
+    await bob
+    await new Promise((r) => setTimeout(r, 50))
+
+    expectCustomEventOf('alice')
+    expectCustomEventOf('bob')
+  })
+
+  it('records the argument names a fresh-session listing declared', async () => {
+    const { lowLevel, call } = createServer()
+    await lowLevel._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, headers('bob'))
+    await call(headers('bob'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[0]?.properties.$mcp_input_keys).toEqual(['query'])
   })
 })

@@ -38,6 +38,30 @@ describe('PostHog Core', () => {
       expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toEqual([])
     })
 
+    it('allows a durable client to retain an exhausted HTTP batch without changing the default policy', async () => {
+      class DurableClient extends PostHogCoreTestClient {
+        protected shouldRetainBatchOnError(error: unknown): boolean {
+          return super.shouldRetainBatchOnError(error) || (error as { status?: number }).status === 503
+        }
+      }
+      const options = { flushInterval: 0, fetchRetryCount: 0, disableCompression: true }
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', options)
+      mocks.fetch.mockResolvedValue(new Response(null, { status: 503 }))
+      posthog.capture('default-policy')
+      await expect(posthog.flush()).rejects.toMatchObject({ status: 503 })
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toEqual([])
+
+      const durable = new DurableClient(mocks, 'TEST_API_KEY', options)
+      durable.capture('retained')
+      await expect(durable.flush()).rejects.toMatchObject({ status: 503 })
+      expect(durable.getPersistedProperty(PostHogPersistedProperty.Queue)).toMatchObject([
+        { message: { event: 'retained' } },
+      ])
+      mocks.fetch.mockResolvedValue(new Response(null, { status: 200 }))
+      await durable.flush()
+      expect(durable.getPersistedProperty(PostHogPersistedProperty.Queue)).toEqual([])
+    })
+
     it('preserves response consumption for HTTP 302 feature flag reads', async () => {
       const json = vi.fn().mockResolvedValue({ featureFlags: { 'test-flag': true } })
       mocks.fetch.mockResolvedValue({ status: 302, text: async () => '', json })

@@ -1,4 +1,4 @@
-import type { AnalyticsDeliveryFactory } from '../src/products/analytics/analytics-internal'
+import { createPostHog } from '../src/composition/npm'
 import type { IPostHog, PostHogOptions } from '../src/core/types'
 import { localRemoteConfig, requireInstalledExtension } from './helpers'
 
@@ -16,41 +16,13 @@ const options = {
 } satisfies PostHogOptions
 
 const clients: IPostHog[] = []
-const releases: Array<() => void> = []
-const gate = () => {
-    let release: () => void = () => {}
-    const promise = new Promise<void>((resolve) => {
-        release = resolve
-    })
-    releases.push(release)
-    return { promise, release }
-}
-const observeDelivery = (pending = Promise.resolve(), failures = 0) => {
-    const evaluated = vi.fn()
-    const initialized = vi.fn<Parameters<AnalyticsDeliveryFactory>, ReturnType<AnalyticsDeliveryFactory>>()
-    vi.doMock('../src/products/analytics/delivery/analytics-delivery', async () => {
-        evaluated()
-        await pending
-        const actual = await vi.importActual<typeof import('../src/products/analytics/delivery/analytics-delivery')>(
-            '../src/products/analytics/delivery/analytics-delivery'
-        )
-        initialized.mockImplementation((...args) => {
-            if (failures > 0) {
-                failures--
-                throw new Error('delivery initialization failed')
-            }
-            return actual.createAnalyticsDelivery(...args)
-        })
-        return { createAnalyticsDelivery: initialized }
-    })
-    return { evaluated, initialized }
-}
 const create = async (settings: Partial<PostHogOptions> = {}) => {
     const batches: Array<Array<Record<string, unknown>>> = []
-    const { createPostHog } = await import('../src/composition/npm')
+    const urls: string[] = []
     const client = await createPostHog({
         ...options,
-        fetch: async (_input, init) => {
+        fetch: async (input, init) => {
+            urls.push(String(input))
             const { batch } = JSON.parse(String(init?.body)) as { batch: Array<Record<string, unknown>> }
             batches.push(batch)
             return new Response(
@@ -62,76 +34,52 @@ const create = async (settings: Partial<PostHogOptions> = {}) => {
         ...settings,
     })
     clients.push(client)
-    return { client, batches }
+    return { client, batches, urls }
 }
 
-beforeEach(() => {
-    vi.resetModules()
-})
 afterEach(async () => {
-    releases.splice(0).forEach((release) => release())
     await Promise.all(clients.splice(0).map((client) => client.shutdown(0)))
-    await vi.dynamicImportSettled()
-    vi.doUnmock('../src/products/analytics/delivery/analytics-delivery')
-    vi.resetModules()
 })
 
-it.each([false, true])('leaves delivery unevaluated after flags dependency startup (denied: %s)', async (denied) => {
-    const { evaluated, initialized } = observeDelivery()
+it.each([false, true])('sends nothing after flags dependency startup without captures (denied: %s)', async (denied) => {
     const { client, batches } = await create({ flags: { featureFlagEvaluation: false }, optOutByDefault: denied })
     expect(client.featureFlags).toBeDefined()
-    expect(client.analytics).toBeDefined()
-    expect(evaluated).not.toHaveBeenCalled()
-    expect(initialized).not.toHaveBeenCalled()
     await client.flush()
     await client.shutdown()
-    expect(evaluated).not.toHaveBeenCalled()
+    expect(client.session).toBeUndefined()
     expect(batches).toEqual([])
 })
 
-it('leaves delivery unevaluated after explicit lazy resolution and rejected captures', async () => {
-    const { evaluated, initialized } = observeDelivery()
+it('sends nothing for rejected captures', async () => {
     const { client, batches } = await create()
-    expect(client.analytics).toBeUndefined()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
     const circular: Record<string, unknown> = {}
     circular.self = circular
-    product.capture('invalid', circular)
-    product.capture('')
+    client.capture('invalid', circular)
+    client.capture('')
     client.optOut()
-    product.capture('denied')
+    client.capture('denied')
     await client.flush()
     expect(client.session).toBeUndefined()
-    expect(evaluated).not.toHaveBeenCalled()
-    expect(initialized).not.toHaveBeenCalled()
     expect(batches).toEqual([])
 })
 
-it('loads delivery once after synchronous finalized admission, retaining snapshots while import is delayed', async () => {
-    const pending = gate()
-    const { evaluated, initialized } = observeDelivery(pending.promise)
-    const { client, batches } = await create()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
+it('delivers finalized admission snapshots through Capture V1', async () => {
+    const { client, batches, urls } = await create()
     const observed: string[] = []
-    product.onEvent(({ event }) => observed.push(event))
+    client.onEvent(({ event }) => observed.push(event))
     const properties = { phase: 'admitted' }
     const timestamp = new Date('2026-01-01T00:00:00.000Z')
     const originalId = client.distinctId
-    expect(product.capture('first', properties, { uuid: 'first-uuid', timestamp })).toBe(true)
+    expect(client.capture('first', properties, { uuid: 'first-uuid', timestamp })).toBe(true)
     const session = requireInstalledExtension(client.session)
-    product.capture('second')
+    client.capture('second')
     expect(observed).toEqual(['first', 'second'])
     properties.phase = 'mutated'
     timestamp.setUTCFullYear(2030)
-    await product.identify('later-identity')
-    await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
-    expect(initialized).not.toHaveBeenCalled()
+    client.identify('later-identity')
     expect(batches).toEqual([])
-    const flushing = client.flush()
-    pending.release()
-    await flushing
-    expect(initialized).toHaveBeenCalledOnce()
-    expect(evaluated).toHaveBeenCalledOnce()
+    await client.flush()
+    expect(urls).toEqual(['https://us.i.posthog.com/i/v1/analytics/events'])
     expect(batches.flat().map(({ event }) => event)).toEqual(['first', 'second', '$identify'])
     expect(batches[0]?.[0]).toMatchObject({
         event: 'first',
@@ -141,116 +89,30 @@ it('loads delivery once after synchronous finalized admission, retaining snapsho
         session_id: session.sessionId,
         properties: { phase: 'admitted' },
     })
-    expect(client.analytics).toBe(product)
 })
 
-it('retains queued events after inner factory failure and retries initialization on flush', async () => {
-    const { evaluated, initialized } = observeDelivery(Promise.resolve(), 1)
+it('reports immediate capture outcomes', async () => {
     const { client, batches } = await create()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
-    product.capture('retained-first')
-    await vi.waitFor(() => expect(initialized).toHaveBeenCalledOnce())
-    product.capture('retained-second')
-    expect(initialized).toHaveBeenCalledOnce()
-    expect(batches).toEqual([])
-    await client.flush()
-    expect(initialized).toHaveBeenCalledTimes(2)
-    expect(evaluated).toHaveBeenCalledOnce()
-    expect(batches.flat().map(({ event }) => event)).toEqual(['retained-first', 'retained-second'])
+    const summary = await client.captureImmediate('now', null, { uuid: 'now-uuid' })
+    expect(summary).toMatchObject({ submitted: 1, notPersisted: 0, allPersisted: true, results: { 'now-uuid': {} } })
+    expect(batches.flat().map(({ event }) => event)).toEqual(['now'])
 })
 
-it('retains admission after an inner import rejection and retries the recovered chunk on flush', async () => {
-    const rejected = vi.fn(() => {
-        throw new Error('chunk unavailable')
-    })
-    vi.doMock('../src/products/analytics/delivery/analytics-delivery', rejected)
+it('purges queued work on opt-out without reviving it after opt-in', async () => {
     const { client, batches } = await create()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
-    product.capture('before-recovery')
-    await vi.waitFor(() => expect(rejected).toHaveBeenCalledOnce())
-    await vi.dynamicImportSettled()
-    expect(batches).toEqual([])
-    const { evaluated, initialized } = observeDelivery()
-    product.capture('after-recovery')
-    expect(evaluated).not.toHaveBeenCalled()
-    await client.flush()
-    expect(evaluated).toHaveBeenCalledOnce()
-    expect(initialized).toHaveBeenCalledOnce()
-    expect(batches.flat().map(({ event }) => event)).toEqual(['before-recovery', 'after-recovery'])
-})
-
-it('cancels revoked immediate work and purges queued work without reviving it after opt-in', async () => {
-    const pending = gate()
-    const { evaluated, initialized } = observeDelivery(pending.promise)
-    const { client, batches } = await create()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
-    product.capture('purged')
-    const immediate = product.captureImmediate('cancelled')
-    await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
+    client.capture('purged')
     client.optOut()
     client.optIn()
-    product.capture('after-grant')
-    const flushing = client.flush()
-    pending.release()
-    const [summary] = await Promise.all([immediate, flushing])
-    expect(summary).toMatchObject({
-        submitted: 0,
-        allPersisted: false,
-        error: { message: 'Immediate analytics delivery was cancelled' },
-    })
-    expect(initialized).toHaveBeenCalledOnce()
+    client.capture('after-grant')
+    await client.flush()
     expect(batches.flat().map(({ event }) => event)).toEqual(['after-grant'])
 })
 
-it('joins the in-flight import and drains admitted events during shutdown', async () => {
-    const pending = gate()
-    const { evaluated, initialized } = observeDelivery(pending.promise)
+it('drains admitted events during shutdown and rejects captures after closing starts', async () => {
     const { client, batches } = await create()
-    const product = requireInstalledExtension(await client.resolveExtension('analytics'))
-    product.capture('shutdown-pending')
-    await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
+    client.capture('shutdown-pending')
     const closing = client.shutdown(1_000)
-    product.capture('after-closing')
-    expect(initialized).not.toHaveBeenCalled()
-    pending.release()
+    client.capture('after-closing')
     await closing
-    expect(initialized).toHaveBeenCalledOnce()
     expect(batches.flat().map(({ event }) => event)).toEqual(['shutdown-pending'])
 })
-
-it('never initializes late delivery after shutdown wins the pending import', async () => {
-    const pending = gate()
-    const { evaluated, initialized } = observeDelivery(pending.promise)
-    const { client, batches } = await create()
-    requireInstalledExtension(await client.resolveExtension('analytics')).capture('too-late')
-    await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
-    await client.shutdown(0)
-    expect(client.analytics).toBeUndefined()
-    pending.release()
-    await vi.dynamicImportSettled()
-    expect(initialized).not.toHaveBeenCalled()
-    expect(batches).toEqual([])
-})
-
-it.each([false, true])(
-    'awaits eager inner delivery before readiness without flags or pageviews (denied: %s)',
-    async (denied) => {
-        const pending = gate()
-        const { evaluated, initialized } = observeDelivery(pending.promise)
-        let ready = false
-        const creating = create({ analytics: { load: 'eager' }, optOutByDefault: denied }).then((result) => {
-            ready = true
-            return result
-        })
-        await vi.waitFor(() => expect(evaluated).toHaveBeenCalledOnce())
-        expect(ready).toBe(false)
-        expect(initialized).not.toHaveBeenCalled()
-        pending.release()
-        const { client, batches } = await creating
-        expect(ready).toBe(true)
-        expect(client.analytics).toBeDefined()
-        expect(initialized).toHaveBeenCalledOnce()
-        expect(client.session).toBeUndefined()
-        expect(batches).toEqual([])
-    }
-)

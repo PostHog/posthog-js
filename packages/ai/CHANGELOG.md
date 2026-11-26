@@ -1,5 +1,84 @@
 # posthog-ai
 
+## 8.22.3
+
+### Patch Changes
+
+- [#5898](https://github.com/PostHog/posthog-js/pull/5898) [`af86965`](https://github.com/PostHog/posthog-js/commit/af869657541cf91925cafba923bf5e75dda4515f) Thanks [@susheelg1197](https://github.com/susheelg1197)! - Gemini `generateContentStream` now captures image and other inline data output parts in `$ai_output_choices`, formatted and redacted like `generateContent`, and an inline data chunk sets `$ai_time_to_first_token`.
+  (2026-11-26)
+- Updated dependencies [[`11a927d`](https://github.com/PostHog/posthog-js/commit/11a927daeef9260566d58d05fe80a5a2bb889524)]:
+  - posthog-node@6.1.1
+
+## 8.22.2
+
+### Patch Changes
+
+- [#5868](https://github.com/PostHog/posthog-js/pull/5868) [`9079e1e`](https://github.com/PostHog/posthog-js/commit/9079e1e5e025be7874a95bf1dbbfcb478821989e) Thanks [@efekamak](https://github.com/efekamak)! - Redact `headers` and `authorization` credentials on Google Gemini Interactions `type: 'mcp_server'` tool definitions in `$ai_tools` and OpenTelemetry tool definition attributes.
+  (2026-11-25)
+
+- [#5879](https://github.com/PostHog/posthog-js/pull/5879) [`dc2afc0`](https://github.com/PostHog/posthog-js/commit/dc2afc0b42b2973cb9bda5f85b947962bbea5f81) Thanks [@bernatixer](https://github.com/bernatixer)! - `$ai_tools` masks the credentials in Gemini tool definitions with `[REDACTED]`, with or without privacy mode: every `apiKey`, `apiAuth`, `authConfig`, and `headers` inside a built-in tool's config, such as `retrieval`, `googleMaps`, `exaAiSearch`, `parallelAiSearch`, and `mcpServers`. Function declarations are not masked. The tools you pass in are not modified.
+  (2026-11-25)
+- Updated dependencies [[`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b), [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec), [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2)]:
+  - posthog-node@6.1.0
+
+## 8.22.1
+
+### Patch Changes
+
+- [#5860](https://github.com/PostHog/posthog-js/pull/5860) [`4288b33`](https://github.com/PostHog/posthog-js/commit/4288b33c33107a949657f6c6d316f34a4fe94734) Thanks [@utsxvrai](https://github.com/utsxvrai)! - Keep the choices of an `n > 1` streamed OpenAI chat completion apart in `$ai_output_choices`, one message per choice as non-streamed calls already do, and take `$ai_stop_reason` from the first choice.
+  (2026-11-25)
+
+## 8.22.0
+
+### Minor Changes
+
+- [#5835](https://github.com/PostHog/posthog-js/pull/5835) [`6e58c08`](https://github.com/PostHog/posthog-js/commit/6e58c08a93903cf46a1e78ced42a90f9b9dd1c37) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Read revisions, correct scores, and update or delete accepted offline evaluation items, results, and payloads.
+  (2026-11-20)
+
+## 8.21.1
+
+### Patch Changes
+
+- [#5764](https://github.com/PostHog/posthog-js/pull/5764) [`93a47d8`](https://github.com/PostHog/posthog-js/commit/93a47d8b3c9e6f16fc9015f56c7ef1caa8ef8030) Thanks [@pcbeingused333](https://github.com/pcbeingused333)! - fix(ai): stop logging a parse error for streamed Anthropic tool calls that take no arguments
+  (2026-11-18)
+
+## 8.21.0
+
+### Minor Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - With posthog-node 6.x.x, every AI event is sent through `captureAi` on the capture v1 AI lane, and `enableFullAiCapture` only controls truncation and media redaction. With posthog-node 5.x.x, nothing changes: AI events use `capture` unless `enableFullAiCapture` is set.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Add per-event options for posthog-node: `posthogOptions` on wrapped provider calls and `withTracing()`, and `options` on the LangChain, OpenAI Agents, Claude Agent SDK, Google ADK and Genkit integrations. An event with no distinct id still has person processing turned off. On posthog-node 6.x.x, AI events carry person processing only as the `process_person_profile` option. On posthog-node 5.x.x, each option that version knows is sent in the form it reads, and other keys are dropped. OpenAI Agents `instrument()` now passes every processor option, including `options` and `onError`, to the processor it registers.
+  (2026-11-17)
+
+### Patch Changes
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Genkit spans and `@posthog/mcp` events with no user distinct id set the `process_person_profile: false` event option on posthog-node 6.x.x, so a registered or context `process_person_profile: true` option no longer creates a person for each trace or session. Genkit also counts an empty or whitespace-only distinct id as missing.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Export the table of per-event options and the event properties posthog-node 5.x.x reads instead, so posthog-node, `@posthog/ai` and `@posthog/mcp` share one copy.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - `@posthog/ai` now recognizes posthog-node 6.x.x by its `registerOptions` method instead of by `getLibraryVersion()`. A posthog-node 6.x.x client whose version a wrapper or subclass overrides, for example `@posthog/mcp`, no longer sends its AI events to the analytics endpoint. posthog-node 5.x.x clients still use `capture()` unless `enableFullAiCapture` is on.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Supports posthog-node 6.x.x. Exception autocapture passes an options object to `captureException` when the client is posthog-node 6.x.x, and positional arguments for posthog-node 5.x.x.
+  (2026-11-17)
+
+- [#5407](https://github.com/PostHog/posthog-js/pull/5407) [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - An AI event with no user distinct id now also sets the `process_person_profile: false` event option, so with posthog-node 6.x.x it stays personless even when a context or registered option turns person processing on. An empty or whitespace-only distinct id now counts as missing in every integration, so the event uses the trace or run id and stays personless.
+  (2026-11-17)
+- Updated dependencies [[`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff), [`6405dfd`](https://github.com/PostHog/posthog-js/commit/6405dfda3d32c452fd0b1497fa19383c0d64a1ff)]:
+  - @posthog/core@1.69.0
+  - posthog-node@6.0.0
+
+## 8.20.2
+
+### Patch Changes
+
+- [#5533](https://github.com/PostHog/posthog-js/pull/5533) [`50197f0`](https://github.com/PostHog/posthog-js/commit/50197f0becfec65aa00a8ce7e23b41f4324ce89e) Thanks [@yoarajota](https://github.com/yoarajota)! - Keep an object that appears twice in the input of a captured AI generation. The second occurrence was replaced with `null`.
+  (2026-11-16)
+
 ## 8.20.1
 
 ### Patch Changes

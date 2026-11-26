@@ -1,10 +1,16 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
 
-import { createId } from '../../primitives/id'
+import { createId, createTimeId } from '../../primitives/id'
 import { createKeyValueStore, TabValues } from './key-value-store'
-import type { NewSessionReason, StorageLike } from '../types'
+import type { CookiePersistence, NewSessionReason, StorageLike } from '../types'
+
+// Extensions share the client's key-value namespace, as in posthog-js persistence.
+export const CLIENT_KV_NAMESPACE = 'core'
+const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
+const SESSION_MAX_LENGTH_MS = 86_400_000
 
 export type ConsentState = 'implicit' | 'granted' | 'denied'
+type ConsentChoice = Exclude<ConsentState, 'implicit'>
 
 type StoredValue = [read: boolean, value: unknown]
 
@@ -42,7 +48,7 @@ interface PreparedSession {
 
 const emptyRecord = <T>(): Record<string, T> => Object.create(null) as Record<string, T>
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const readGroups = (value: unknown): Record<string, string> => {
@@ -57,7 +63,7 @@ const readGroups = (value: unknown): Record<string, string> => {
     return groups
 }
 
-const isTimestamp = (value: unknown): value is number =>
+export const isTimestamp = (value: unknown): value is number =>
     // oxlint-disable-next-line posthog-js/no-direct-number-check
     typeof value === 'number' && Number.isFinite(value) && value >= 0
 
@@ -68,7 +74,7 @@ const sessionExpiryReason = (
     if (!session) return undefined
     const safeNow = isTimestamp(now) ? now : 0
     if (Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000) return 'idleTimeout'
-    if (Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000) return 'maxLength'
+    if (Math.abs(safeNow - session.sessionStartTimestamp) > SESSION_MAX_LENGTH_MS) return 'maxLength'
     return undefined
 }
 
@@ -93,7 +99,7 @@ const compareRevisions = (left: string | undefined, right: string | undefined): 
     return left.length === right.length ? (left > right ? 1 : -1) : left.length > right.length ? 1 : -1
 }
 
-const incrementRevision = (revision: string): string => {
+export const incrementRevision = (revision: string): string => {
     const digits = revision.split('')
     for (let index = digits.length - 1; index >= 0; index--) {
         if (digits[index] !== '9') {
@@ -141,12 +147,26 @@ const readExtensionData = (value: unknown): Record<string, Record<string, unknow
     return extensionData
 }
 
-const createSession = (now: number, revision: string): PersistedSession => ({
-    sessionId: createId(),
-    sessionStartTimestamp: now,
+const createSession = (
+    now: number,
+    revision: string,
+    [sessionId, sessionStartTimestamp]: BootstrapSession = [createTimeId(now), now]
+): PersistedSession => ({
+    sessionId,
+    sessionStartTimestamp,
     lastActivityTimestamp: now,
     revision,
 })
+
+/** A caller-supplied session ID and the start time encoded in it. */
+type BootstrapSession = [sessionId: string, sessionStartTimestamp: number]
+
+/** Reads a UUIDv7 session ID's start time, rejecting IDs more than a minute in the future. */
+export const readBootstrapSession = (sessionId: unknown, now = Date.now()): BootstrapSession | undefined => {
+    const hex = typeof sessionId === 'string' ? sessionId.replace(/-/g, '') : ''
+    const start = /^[0-9a-f]{12}7[0-9a-f]{19}$/i.test(hex) ? parseInt(hex.slice(0, 12), 16) : NaN
+    return start <= now + 60_000 ? [sessionId as string, start] : undefined
+}
 
 const authorityRevision = (state: PersistedState | undefined): string | undefined =>
     state?.session?.revision ?? state?.sessionReset
@@ -199,7 +219,18 @@ const createInitialState = (deviceId = createId(), anonymousId = deviceId): Pers
     extensionData: emptyRecord<Record<string, unknown>>(),
 })
 
-const decodeConsent = (value: unknown): ConsentState | undefined => {
+/** The identity a record describes, compared to notice an identify or reset made by another subdomain. */
+const identityOf = (state: PersistedState): string =>
+    JSON.stringify([state.distinctId, state.isIdentified, state.deviceId])
+
+/** Seeds an identified ID beside the generated anonymous ID, or replaces the anonymous ID. */
+const seedIdentity = (state: PersistedState, distinctId: string, identified: boolean): void => {
+    state.distinctId = distinctId
+    if (identified) state.isIdentified = true
+    else state.anonymousId = distinctId
+}
+
+const decodeConsent = (value: unknown): ConsentChoice | undefined => {
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : value
     return normalized === true ||
         normalized === 1 ||
@@ -280,6 +311,7 @@ export const getDefaultSessionStorage = (): StorageLike | undefined => {
 export class BrowserState {
     private _state: PersistedState
     private _consent: ConsentState
+    private _consentChoice: ConsentChoice | undefined
     private readonly _stateKey: string
     readonly consentKey: string
     private readonly _windowKey: string
@@ -290,7 +322,13 @@ export class BrowserState {
     private _windowListenerInstalled = false
     private _lastActivityWriteTimestamp = 0
     private _pendingSessionReason: 'reset' | undefined
+    private _bootstrapSession: BootstrapSession | undefined
     private _stateReadPending = false
+    private _generated: boolean
+    // Only the cookie adapter keeps stale writers from replacing the stored identity, so only it is adopted live.
+    private readonly _sharesIdentity: boolean
+    /** The stored identity this context last read, which a sibling subdomain's change replaces. */
+    private _storedIdentity: string | undefined
     private _lastConsentValue: unknown = null
     private _ignoredConsentValue: unknown
     private _hasIgnoredConsentValue = false
@@ -298,7 +336,7 @@ export class BrowserState {
     private readonly _storage: StorageLike | undefined
     private readonly _windowStorageFactory: (() => StorageLike | undefined) | undefined
     private readonly _defaultConsent: ConsentState
-    private readonly _onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void
+    private readonly _onConsentChange: (consent: ConsentState, previousConsent: ConsentState, explicit: boolean) => void
     private readonly _beforeUnload = (): void => {
         this._flushSession()
         this._windowRemove(this._primaryWindowKey)
@@ -311,11 +349,17 @@ export class BrowserState {
         consentPersistenceName: string | undefined,
         optOutByDefault: boolean,
         windowStorageFactory: (() => StorageLike | undefined) | undefined,
-        onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void
+        onConsentChange: (consent: ConsentState, previousConsent: ConsentState, explicit: boolean) => void,
+        cookie?: CookiePersistence
     ) {
-        this._storage = storage
-        this._windowStorageFactory = windowStorageFactory
         this._stateKey = persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`
+        try {
+            this._storage = storage && cookie ? cookie.wrap(storage, this._stateKey, projectToken) : storage
+        } catch {
+            this._storage = storage
+        }
+        this._sharesIdentity = this._storage !== storage
+        this._windowStorageFactory = windowStorageFactory
         const windowPrefix = persistenceKey ?? `ph_${projectToken}`
         this._windowKey = `${windowPrefix}_window_id`
         this._primaryWindowKey = `${windowPrefix}_primary_window_exists`
@@ -328,14 +372,18 @@ export class BrowserState {
         const [consentRead, storedConsent] = this._read(this.consentKey)
         if (consentRead) {
             this._lastConsentValue = storedConsent
-            this._consent = decodeConsent(storedConsent) ?? this._defaultConsent
+            this._consentChoice = decodeConsent(storedConsent)
+            this._consent = this._consentChoice ?? this._defaultConsent
         }
         const [stateRead, storedState] = this._read(this._stateKey)
-        this._state = parseState(typeof storedState === 'string' ? storedState : null) ?? createInitialState()
+        const persisted = parseState(typeof storedState === 'string' ? storedState : null)
+        this._generated = !persisted
+        this._state = persisted ?? createInitialState()
         this._lastActivityWriteTimestamp = this._state.session?.lastActivityTimestamp ?? 0
         this._stateReadPending = !stateRead
         if (stateRead) {
             this._save()
+            this._storedIdentity = identityOf(this._state)
         }
     }
 
@@ -351,11 +399,48 @@ export class BrowserState {
         const persisted = parseState(typeof storedState === 'string' ? storedState : null)
         if (persisted) {
             this._state = persisted
+            this._generated = false
             this._lastActivityWriteTimestamp = persisted.session?.lastActivityTimestamp ?? 0
         } else {
             this._save(false)
         }
+        this._storedIdentity = identityOf(this._state)
         return true
+    }
+
+    /**
+     * Adopts an identity that another subdomain stored since this context last read it, as posthog-js does before
+     * each identity operation and event. Session authority still follows revisions. Returns whether it changed.
+     */
+    adoptStoredIdentity(): boolean {
+        const known = this._storedIdentity
+        const [, stored] = this._sharesIdentity && known ? this._readPersistedState() : []
+        if (!stored) {
+            return false
+        }
+        this._storedIdentity = identityOf(stored)
+        if (this._storedIdentity === identityOf(this._state)) {
+            // Another subdomain can enable person processing without changing the identity.
+            if (stored.extensionData[CLIENT_KV_NAMESPACE]?.personProcessingEnabled === true) {
+                ;(this._state.extensionData[CLIENT_KV_NAMESPACE] ??= emptyRecord()).personProcessingEnabled = true
+            }
+            return false
+        }
+        if (this._storedIdentity === known) {
+            return false
+        }
+        // The stored record already drops groups and caches that belonged to this context's identity.
+        copyAuthority(stored, this._state)
+        this._state = stored
+        // Writing the adopted identity tells the cookie adapter it is current, so a later write from this context
+        // cannot restore it over a newer identity that another subdomain stores.
+        this._save()
+        return true
+    }
+
+    /** Whether this identity was generated rather than read from storage, including a later successful read. */
+    get generated(): boolean {
+        return this._generated
     }
 
     get deviceId(): string {
@@ -403,6 +488,12 @@ export class BrowserState {
         return this.refreshConsent()
     }
 
+    /** The persisted opt-in or opt-out choice, independently of `optOutByDefault`. */
+    get consentChoice(): ConsentChoice | undefined {
+        this.refreshConsent()
+        return this._consentChoice
+    }
+
     refreshConsent(): ConsentState {
         const [read, value] = this._read(this.consentKey)
         return read ? this.observeConsent(value) : this._consent
@@ -414,7 +505,8 @@ export class BrowserState {
         }
         this._hasIgnoredConsentValue = false
         this._lastConsentValue = value
-        this._applyConsent(decodeConsent(value) ?? this._defaultConsent)
+        this._consentChoice = decodeConsent(value)
+        this._applyConsent(this._consentChoice ?? this._defaultConsent)
         return this._consent
     }
 
@@ -422,6 +514,18 @@ export class BrowserState {
         this._state.distinctId = distinctId
         this._state.isIdentified = true
         this._save()
+    }
+
+    /** Seeds a generated identity. An anonymous ID also becomes the device ID, as in posthog-js. */
+    bootstrapIdentity(distinctId: string, identified: boolean): void {
+        seedIdentity(this._state, distinctId, identified)
+        if (!identified) this._state.deviceId = distinctId
+        this._save()
+    }
+
+    /** Uses the session for the next admitted event unless it has exceeded the maximum session length by then. */
+    bootstrapSession(session: BootstrapSession): void {
+        this._bootstrapSession = session
     }
 
     group(type: string, key: string): boolean {
@@ -435,6 +539,10 @@ export class BrowserState {
 
     resetGroups(): void {
         this._state.groups = emptyRecord<string>()
+        const flagsData = this._state.extensionData[CLIENT_KV_NAMESPACE]
+        if (flagsData && STORED_GROUP_PROPERTIES_KEY in flagsData) {
+            delete flagsData[STORED_GROUP_PROPERTIES_KEY]
+        }
         this._save()
     }
 
@@ -444,12 +552,16 @@ export class BrowserState {
 
         const pendingReason = this._pendingSessionReason
         const expiry = sessionExpiryReason(session, safeNow)
-        const rotated = !!(pendingReason || !session || expiry)
+        const bootstrap =
+            this._bootstrapSession && safeNow - this._bootstrapSession[1] <= SESSION_MAX_LENGTH_MS
+                ? this._bootstrapSession
+                : undefined
+        const rotated = !!(pendingReason || !session || expiry || (bootstrap && bootstrap[0] !== session.sessionId))
         const reason = adoptedAfterReset ? 'reset' : (pendingReason ?? expiry)
         const preparedSession = rotated
-            ? createSession(safeNow, nextRevision(safeNow, this._state, external))
+            ? createSession(safeNow, nextRevision(safeNow, this._state, external), bootstrap)
             : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
-        const window = this._prepareWindow(rotated)
+        const window = this._prepareWindow(rotated, safeNow)
         return {
             context: {
                 sessionId: preparedSession.sessionId,
@@ -506,18 +618,25 @@ export class BrowserState {
             }
             return false
         }
+        this._bootstrapSession = undefined
         return true
     }
 
-    reset(): void {
+    reset(
+        resetDeviceId = false,
+        bootstrap?: readonly [distinctId: string, identified: boolean],
+        bootstrapSession?: BootstrapSession
+    ): void {
         const [, external] = this._readPersistedState()
         const now = Date.now()
         const safeNow = isTimestamp(now) ? now : 0
         const resetRevision = nextRevision(safeNow, this._state, external)
-        this._state = createInitialState(this._state.deviceId, createId())
+        this._state = createInitialState(resetDeviceId ? createId() : this._state.deviceId, createId())
+        if (bootstrap) seedIdentity(this._state, ...bootstrap)
         this._state.sessionReset = resetRevision
         this._lastActivityWriteTimestamp = 0
         this._pendingSessionReason = 'reset'
+        this._bootstrapSession = bootstrapSession
         this._clearWindow(true)
         this._save(false)
     }
@@ -528,16 +647,28 @@ export class BrowserState {
         this._windowRemove(this._primaryWindowKey)
     }
 
+    // Each choice is stored before listeners learn of it, so a listener that reads consent sees the new choice.
     optIn(): boolean {
-        this._applyConsent('granted')
+        this._consentChoice = 'granted'
         const written = this._writeConsent('1')
+        this._applyConsent('granted')
         this._save()
         return written
     }
 
     optOut(): boolean {
+        this._consentChoice = 'denied'
+        const written = this._writeConsent('0')
         this._applyConsent('denied')
-        return this._writeConsent('0')
+        return written
+    }
+
+    /** Forgets the persisted choice, returning consent to the configured default. */
+    clearConsent(): boolean {
+        this._consentChoice = undefined
+        const written = this._writeConsent(null)
+        this._applyConsent(this._defaultConsent)
+        return written
     }
 
     keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
@@ -593,13 +724,20 @@ export class BrowserState {
         }
     }
 
-    private _prepareWindow(rotated: boolean): {
+    private _prepareWindow(
+        rotated: boolean,
+        now: number
+    ): {
         windowId: string
         storage: StorageLike | undefined
         storageResolved: boolean
     } {
         if (rotated || this._windowId) {
-            return { windowId: rotated ? createId() : this._windowId, storage: undefined, storageResolved: false }
+            return {
+                windowId: rotated ? createTimeId(now) : this._windowId,
+                storage: undefined,
+                storageResolved: false,
+            }
         }
 
         let storage: StorageLike | undefined
@@ -621,7 +759,7 @@ export class BrowserState {
             // A fresh in-memory window remains available.
         }
         const reusable = lastWindowId && (!primaryWindowExists || this._isReload()) ? lastWindowId : undefined
-        return { windowId: reusable ?? createId(), storage, storageResolved: true }
+        return { windowId: reusable ?? createTimeId(now), storage, storageResolved: true }
     }
 
     private _initializeWindowStorage(
@@ -767,7 +905,8 @@ export class BrowserState {
         const previousConsent = this._consent
         this._consent = consent
         try {
-            this._onConsentChange(consent, previousConsent)
+            // Every caller sets the choice first, so a cleared choice reports a non-explicit transition.
+            this._onConsentChange(consent, previousConsent, this._consentChoice !== undefined)
         } catch {
             // The consent transition remains authoritative when host reactions fail.
         }
@@ -793,14 +932,15 @@ export class BrowserState {
         }
     }
 
-    private _writeConsent(value: '0' | '1'): boolean {
+    private _writeConsent(value: '0' | '1' | null): boolean {
         if (!this._storage) {
             this._ignoredConsentValue = this._lastConsentValue
             this._hasIgnoredConsentValue = true
             return false
         }
         try {
-            this._storage.setItem(this.consentKey, value)
+            if (value === null) this._storage.removeItem(this.consentKey)
+            else this._storage.setItem(this.consentKey, value)
             this._lastConsentValue = value
             this._hasIgnoredConsentValue = false
             return true

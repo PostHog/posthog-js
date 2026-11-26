@@ -1,5 +1,71 @@
 # @posthog/browser-common
 
+## 0.14.2
+
+### Patch Changes
+
+- [#5772](https://github.com/PostHog/posthog-js/pull/5772) [`e6b10dc`](https://github.com/PostHog/posthog-js/commit/e6b10dc87febb5f5c95a1b580eef859beb3c7f62) Thanks [@Vivek1898](https://github.com/Vivek1898)! - Stop counting the browser's forwarded click from a `<label>` as a second click, so clicking a label no longer triggers a false rage click
+  (2026-11-25)
+
+## 0.14.1
+
+### Patch Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Let a browser SDK that reads the `/flags?v=4` response send the config version 2 flag events. SDKs that do not opt in send `$feature_flag_called` as before.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Let a browser SDK choose the `/flags` response version it requests and how it reads it. SDKs that do not opt in keep requesting `v=2`.
+  (2026-11-25)
+
+## 0.14.0
+
+### Minor Changes
+
+- [#5789](https://github.com/PostHog/posthog-js/pull/5789) [`6715a04`](https://github.com/PostHog/posthog-js/commit/6715a04401ec840ac78cc1998a1dfcce4bf0d906) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add local flag property overrides, flag read controls, early-access features and `onActiveMatchingSurveysChanged` to `@posthog/browser`, and load its feature flags while capture is opted out as `posthog-js` does.
+  (2026-11-25)
+
+- [#5787](https://github.com/PostHog/posthog-js/pull/5787) [`c17ad19`](https://github.com/PostHog/posthog-js/commit/c17ad19fa3977385ac5c277769ab14e1dc8719e1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `setConfig()` and `debug()`, immediate per-event delivery, and `getPageViewId()` to `@posthog/browser`.
+  (2026-11-25)
+
+## 0.13.1
+
+### Patch Changes
+
+- [#5857](https://github.com/PostHog/posthog-js/pull/5857) [`2f8247d`](https://github.com/PostHog/posthog-js/commit/2f8247d2dcb40bab0495d390b953768f1e1f32bb) Thanks [@slshults](https://github.com/slshults)! - Updated DOMPurify from 3.4.13 to 3.4.18.
+  (2026-11-23)
+
+## 0.13.0
+
+### Minor Changes
+
+- [#5851](https://github.com/PostHog/posthog-js/pull/5851) [`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b) Thanks [@ella-c-ph](https://github.com/ella-c-ph)! - Capture the Snapchat click ID as `sccid` when the landing URL spells it `ScCid` or `SsCid`. When `mask_personal_data_properties` is on, also mask `ScCid`, `SsCid` and `sscid` in captured URLs, including landing URLs stored by older SDK versions.
+  (2026-11-23)
+
+### Patch Changes
+
+- Updated dependencies [[`54220f6`](https://github.com/PostHog/posthog-js/commit/54220f673c69fd4ff1b40cb7df61eea713a0032b)]:
+  - @posthog/types@1.427.1
+
+## 0.12.2
+
+### Patch Changes
+
+- [#5829](https://github.com/PostHog/posthog-js/pull/5829) [`1c8b544`](https://github.com/PostHog/posthog-js/commit/1c8b544e9725a51497e0d2c74b9f021c31029a9e) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Name survey buttons by their visible text instead of a hard-coded English "Submit survey" label, so screen readers and voice control match the configured or translated button text. Tests that find the button by the name "Submit survey" need to use the visible button text or the `.form-submit` class instead.
+  (2026-11-20)
+
+## 0.12.1
+
+### Patch Changes
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip autocapture when ancestor privacy checks cannot complete.
+  (2026-11-19)
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor autocapture privacy markers across shadow hosts and slots before collecting text and attributes.
+  (2026-11-19)
+
+- [#5715](https://github.com/PostHog/posthog-js/pull/5715) [`4e53c65`](https://github.com/PostHog/posthog-js/commit/4e53c65f62e094d8c630bad0b51eaabc3c4582b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Expose a narrow autocapture client type for shared renderer integrations.
+  (2026-11-19)
+
 ## 0.12.0
 
 ### Minor Changes

@@ -139,15 +139,6 @@ describe('PostHogSpanProcessor request context', () => {
     expect(ended[0].attributes).toEqual({ 'gen_ai.system': 'openai' })
   })
 
-  it('reads a context entered with enterContext', () => {
-    const provider = providerWithClient()
-
-    posthog.enterContext({ distinctId: 'alice' })
-    emitAISpan(provider)
-
-    expect(ended[0].attributes['posthog.distinct_id']).toBe('alice')
-  })
-
   it('keeps the context off the live span and other processors', () => {
     const seenByOthers: ReadableSpan[] = []
     const provider = new BasicTracerProvider({

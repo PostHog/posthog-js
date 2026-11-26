@@ -82,6 +82,24 @@ describe('Tool Handling Tests', () => {
       expect(tools).toEqual(params.config.tools)
     })
 
+    it('masks credentials in Gemini tool fields it does not know', () => {
+      const params = { config: { tools: [{ someNewAiSearch: { apiKey: 'secret' } }] } }
+
+      expect(extractAvailableToolCalls('gemini', params)).toEqual([{ someNewAiSearch: { apiKey: '[REDACTED]' } }])
+      expect(params.config.tools[0].someNewAiSearch.apiKey).toBe('secret')
+    })
+
+    it('replaces class-based Gemini tools such as mcpToTool() with a stub', () => {
+      class CallableTool {
+        client: unknown = this
+        headers = { Authorization: 'secret' }
+      }
+
+      expect(extractAvailableToolCalls('gemini', { config: { tools: [new CallableTool()] } })).toEqual([
+        { type: 'callable_tool' },
+      ])
+    })
+
     it('should extract tools from Vercel AI SDK params', () => {
       const params = {
         tools: [

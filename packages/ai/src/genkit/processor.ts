@@ -1,10 +1,11 @@
 import type { PostHog } from 'posthog-node'
+import type { JsonType } from '@posthog/core'
 import { version } from '../../package.json'
-import { captureAiEvent } from '../captureAiEvent'
+import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiEvent'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
 import { formatToolResult } from '../toolResult'
-import { isObject } from '../typeGuards'
+import { normalizeKey, redactKeys } from '../mcpCredentials'
 import type { FormattedMessage } from '../types'
 import { AIEvent, MAX_OUTPUT_SIZE, formatInlineDataBlock, isPrivacyModeEnabled } from '../utils'
 
@@ -14,17 +15,9 @@ const SPAN_STATUS_ERROR = 2
 const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 'stopSequences']
 
 // Plugin config is part of the span input and output, so `config.apiKey` would otherwise be captured.
-// Keys are compared in lower case without `-` and `_`.
-const CREDENTIAL_KEYS = new Set([
-  'apikey',
-  'accesstoken',
-  'authorization',
-  'clientsecret',
-  'headers',
-  'password',
-  'secret',
-  'token',
-])
+const CREDENTIAL_KEYS = new Set(
+  ['apiKey', 'accessToken', 'authorization', 'clientSecret', 'headers', 'password', 'secret', 'token'].map(normalizeKey)
+)
 
 // Genkit plugin names that differ from the provider names the other integrations send.
 const PROVIDER_NAMES = new Map([
@@ -101,6 +94,11 @@ export interface PostHogGenkitSpanProcessorOptions {
   groups?: Record<string, string | number>
   /** Extra properties merged into every captured event. */
   properties?: Record<string, unknown>
+  /**
+   * Per-event options for posthog-node, such as `{ process_person_profile: false }`, sent with
+   * every event. An event with no distinct id always has person processing turned off.
+   */
+  options?: Record<string, JsonType>
   /** Invoked when the processor fails to capture an event. Never throws into the Genkit flow. */
   onError?: (error: unknown) => void
 }
@@ -137,21 +135,23 @@ export class PostHogGenkitSpanProcessor {
   private readonly _privacyMode: boolean
   private readonly _groups?: Record<string, string | number>
   private readonly _properties: Record<string, unknown>
+  private readonly _eventOptions?: Record<string, JsonType>
   private readonly _onError?: (error: unknown) => void
   private readonly _spanDistinctIds = new WeakMap<object, string>()
 
   constructor(options: PostHogGenkitSpanProcessorOptions) {
     this._client = options.client
-    this._distinctId = options.distinctId
+    this._distinctId = userDistinctId(options.distinctId)
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups
     this._properties = options.properties ?? {}
+    this._eventOptions = options.options
     this._onError = options.onError
   }
 
   onStart(span: Pick<GenkitSpan, 'spanContext'>): void {
     try {
-      const distinctId = this._distinctId ?? this._client.getContext?.()?.distinctId
+      const distinctId = this._distinctId ?? userDistinctId(this._client.getContext?.()?.distinctId)
       if (distinctId !== undefined) {
         this._spanDistinctIds.set(span, distinctId)
       }
@@ -220,6 +220,7 @@ export class PostHogGenkitSpanProcessor {
       },
       stopReason: finishReason,
       groups: this._groups,
+      options: this._eventOptions,
       privacyMode: this._privacyMode,
       onError: this._onError,
       error: spanError(span),
@@ -250,6 +251,7 @@ export class PostHogGenkitSpanProcessor {
       output: null,
       latency: latencySeconds(span),
       groups: this._groups,
+      options: this._eventOptions,
       privacyMode: this._privacyMode,
       onError: this._onError,
       error: spanError(span),
@@ -268,30 +270,30 @@ export class PostHogGenkitSpanProcessor {
     const { traceId, spanId, parentId } = spanIds(span)
     const error = spanError(span)
 
+    const properties = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
+      $ai_framework: 'genkit',
+      $ai_trace_id: traceId,
+      $ai_span_id: spanId,
+      ...(!isRoot && parentId ? { $ai_parent_id: parentId } : {}),
+      $ai_span_name: span.name,
+      $ai_span_type: span.attributes['genkit:metadata:subtype'] ?? span.attributes['genkit:type'],
+      $ai_input_state: this._formatState(span, 'genkit:input'),
+      $ai_output_state: this._formatState(span, 'genkit:output'),
+      $ai_latency: latencySeconds(span),
+      ...(error
+        ? {
+            $ai_is_error: true,
+            $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, this._privacyMode)),
+          }
+        : {}),
+      ...this._properties,
+    }
     captureAiEvent(this._client, {
       distinctId: distinctId ?? traceId,
       event: isRoot ? '$ai_trace' : '$ai_span',
-      properties: {
-        $ai_lib: 'posthog-ai',
-        $ai_lib_version: version,
-        $ai_framework: 'genkit',
-        $ai_trace_id: traceId,
-        $ai_span_id: spanId,
-        ...(!isRoot && parentId ? { $ai_parent_id: parentId } : {}),
-        $ai_span_name: span.name,
-        $ai_span_type: span.attributes['genkit:metadata:subtype'] ?? span.attributes['genkit:type'],
-        $ai_input_state: this._formatState(span, 'genkit:input'),
-        $ai_output_state: this._formatState(span, 'genkit:output'),
-        $ai_latency: latencySeconds(span),
-        ...(error
-          ? {
-              $ai_is_error: true,
-              $ai_error: formatAiError(error, isPrivacyModeEnabled(this._client, this._privacyMode)),
-            }
-          : {}),
-        ...this._properties,
-        ...(distinctId ? {} : { $process_person_profile: false }),
-      },
+      ...eventOptionFields(this._client, properties, this._eventOptions, !distinctId),
       groups: this._groups,
     })
   }
@@ -308,7 +310,7 @@ export class PostHogGenkitSpanProcessor {
     if (isPrivacyModeEnabled(this._client, this._privacyMode)) {
       return null
     }
-    return formatToolResult(redactCredentials(parseAttribute(span, key)), this._client, MAX_OUTPUT_SIZE)
+    return formatToolResult(redactKeys(parseAttribute(span, key), CREDENTIAL_KEYS), this._client, MAX_OUTPUT_SIZE)
   }
 
   private _formatMessages(messages: GenkitMessage[]): FormattedMessage[] {
@@ -317,7 +319,7 @@ export class PostHogGenkitSpanProcessor {
       content: (message.content ?? []).map((part) => formatPart(part, this._client)),
     }))
     // Redacts credentials (tool results reach the model as messages), base64 media and long strings.
-    return formatToolResult(redactCredentials(formatted), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
+    return formatToolResult(redactKeys(formatted, CREDENTIAL_KEYS), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
   }
 }
 
@@ -374,21 +376,6 @@ function formatDocument(content: GenkitPart[], client: PostHog): unknown {
     return content.map((part) => part.text).join('')
   }
   return content.map((part) => formatPart(part, client))
-}
-
-function redactCredentials(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactCredentials)
-  }
-  if (!isObject(value)) {
-    return value
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      CREDENTIAL_KEYS.has(key.toLowerCase().replace(/[-_]/g, '')) ? '[REDACTED]' : redactCredentials(item),
-    ])
-  )
 }
 
 /** Genkit stores span input and output as JSON strings. */

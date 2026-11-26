@@ -5,7 +5,7 @@ import {
   addProperty,
   getFirstHeaderValue,
   getPostHogCookieReadOptions,
-  getPostHogTracingHeaderValues,
+  readPostHogTracingHeaders,
 } from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
@@ -40,12 +40,12 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const headers = getPostHogTracingHeaderValues(req.headers, getPostHogCookieReadOptions(posthog))
+  const headers = readPostHogTracingHeaders(posthog.options, req.headers, getPostHogCookieReadOptions(posthog))
   const context = posthog.getContext()
   const sessionId = context?.sessionId ?? headers.sessionId
   const distinctId = context?.distinctId ?? headers.distinctId
   const properties: Record<string, any> = {}
-  const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
+  const disableCaptureUrlHashes = posthog.options.disableCaptureUrlHashes === true
 
   addProperty(
     properties,
@@ -64,6 +64,11 @@ function buildRequestContextData(posthog: PostHogBackendClient, req: Request): P
   }
 }
 
+/**
+ * Adds request context to events captured during an Express request. Call it before your routes.
+ * Events then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
+ * `$ip` is the first `x-forwarded-for` value when the request has that header, otherwise the socket's remote address.
+ */
 export function setupExpressRequestContext(
   _posthog: PostHogBackendClient,
   app: {
@@ -82,6 +87,9 @@ function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware
   }
 }
 
+/**
+ * Captures errors that Express passes to its error middleware. Call it after your routes.
+ */
 export function setupExpressErrorHandler(
   _posthog: PostHogBackendClient,
   app: {
@@ -135,6 +143,7 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
           hint,
           contextData.distinctId,
           additionalProperties,
+          undefined,
           posthog.getContext()
         ),
         // Downstream error handlers can choose a different status, even asynchronously.

@@ -29,10 +29,18 @@ const replayNodeAttributes = new RegExp(
     `^${eventRoot}\\.properties\\.\\$snapshot_data\\[\\d+\\]\\.data\\.node(?:\\.childNodes\\[\\d+\\])*\\.attributes$`
 )
 const storageRoot = /^api\.storage\.(?:local|session)\.[^.]+$/
+const extensionInitDebugProperties = new Set([
+    '$sdk_debug_extensions_init_method',
+    '$sdk_debug_extensions_init_time_ms',
+])
 const storageProperty = /^api\.storage\.(?:local|session)\.[^.]+\.[^.]+(?:\[\d+\])?$/
 const storedSessionId =
     /^api\.storage\.(?:local|session)\.[^.]+\.(?:\$client_session_props|\$sess_rec_flush_size)\.sessionId$/
 const flagsRequestProperty = /^network\.requests\[\d+\]\.body\.(?:distinct_id|\$anon_distinct_id|\$device_id)$/
+// Conversations identifies the visitor's widget and analytics sessions in requests and storage.
+const conversationsRequestProperty =
+    /^network\.requests\[\d+\]\.(?:body\.(?:widget_session_id|session_id)|query\.widget_session_id\[\d+\])$/
+const conversationsReplayUrl = /^network\.requests\[\d+\]\.body\.session_context\.session_replay_url$/
 const callbackMetadata = /^api\.callbacks\[\d+\]\.values\[\d+\]\.requestId$/
 const protocolQuery = /^network\.requests\[\d+\]\.query\.(?:ver|v)\[\d+\]$/
 const otelAttribute =
@@ -103,6 +111,8 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
         '$session_recording_window_id',
         '$insert_id',
         '$survey_submission_id',
+        '$session_recording_event_trigger_activated_session',
+        '$session_recording_url_trigger_activated_session',
         '$pageview_id',
         '$prev_pageview_id',
     ])
@@ -146,13 +156,21 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                 eventEnvelope.test(path) ||
                 (eventProperty.test(path) && identityKeys.has(key)) ||
                 flagsRequestProperty.test(path) ||
+                conversationsRequestProperty.test(path) ||
                 callbackMetadata.test(path) ||
                 storedSessionId.test(path) ||
                 (key === 'sessionId' && replayFlushData.test(path.slice(0, -(key.length + 1)))) ||
                 /^api\.(get_distinct_id|get_session_id|identified-id|reset-id)$/.test(path) ||
-                (storageProperty.test(path) && (identityKeys.has(key) || key === '$sesid')) ||
+                (storageProperty.test(path) &&
+                    (identityKeys.has(key) || ['$sesid', 'widgetSessionId'].includes(key))) ||
                 (storageRoot.test(path) && key.endsWith('_window_id'))
             if (sdkId && (uuid.test(value) || key === '$insert_id')) return mapId(value)
+            // A sampled-out decision stores the session ID behind a marker. Keep the marker verbatim so a
+            // change to it remains a reviewable difference; only the generated session ID is tokenized.
+            if (key === '$session_is_sampled' && (eventProperty.test(path) || storageProperty.test(path))) {
+                const sessionId = value.slice(-36)
+                if (value.length > 36 && uuid.test(sessionId)) return value.slice(0, -36) + mapId(sessionId)
+            }
             if (
                 key === '$lib_version' &&
                 (eventProperty.test(path) ||
@@ -182,7 +200,7 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
                     .slice(origin.length)
                     .replace(`/static/${version}/`, '/static/<core-version>/')
                     .replace(`?v=${version}`, '?v=<core-version>')
-                if (key === 'sessionRecordingUrl' && eventProperty.test(path))
+                if ((key === 'sessionRecordingUrl' && eventProperty.test(path)) || conversationsReplayUrl.test(path))
                     relative = relative.replace(
                         /\/replay\/([0-9a-f-]{36})(?=[/?#]|$)/i,
                         (_, id) => `/replay/${mapId(id)}`
@@ -249,13 +267,30 @@ export function normalize(snapshot, { origin, version, extensionVersion = versio
             )
                 item = '<network-clock-ms>'
             const debugProperties = sdkProperties.test(path) || storageRoot.test(path)
+            // Current cores register these only when extension init takes at least 1 ms, and historical cores
+            // always register them, possibly with 0, so presence and value vary by machine.
             if (
-                child === '$sdk_debug_extensions_init_time_ms' &&
                 debugProperties &&
-                typeof item === 'number' &&
-                Number.isFinite(item)
+                ((child === '$sdk_debug_extensions_init_method' && ['synchronous', 'deferred'].includes(item)) ||
+                    (child === '$sdk_debug_extensions_init_time_ms' &&
+                        typeof item === 'number' &&
+                        Number.isFinite(item) &&
+                        item >= 0))
             )
-                item = '<cpu-duration-ms>'
+                continue
+            if (/^api\.storage\.(?:local|session)$/.test(path) && child.endsWith('_session_registered_properties')) {
+                // Browser storage holds the list as a JSON string.
+                let registered = item
+                if (typeof registered === 'string') {
+                    try {
+                        registered = JSON.parse(registered)
+                    } catch {}
+                }
+                if (Array.isArray(registered)) {
+                    item = registered.filter((key) => !extensionInitDebugProperties.has(key))
+                    if (!item.length) continue
+                }
+            }
             if (
                 webVitals &&
                 ((sdkProperties.test(path) && child === '$web_vitals_FCP_value') ||
