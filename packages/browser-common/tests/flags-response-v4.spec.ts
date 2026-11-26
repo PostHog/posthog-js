@@ -171,8 +171,8 @@ afterEach(() => {
 describe('the /flags?v=4 response', () => {
     it('reads the contract fixtures of the release that posthog-node records', () => {
         const source = load('SOURCE.json')
-        expect(source.release).toBe('1.30.0')
-        expect(source.contract_version).toBe('10.0.0')
+        expect(source.release).toBe('1.36.0')
+        expect(source.contract_version).toBe('10.1.0')
         for (const name of ['readers.json', 'responses.json', 'legacy_projection.json', 'v2_value_evaluation.json']) {
             const digest = createHash('sha256')
                 .update(readFileSync(path.join(FIXTURES, name)))
