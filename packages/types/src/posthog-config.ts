@@ -546,14 +546,26 @@ export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     captureExtensionExceptions?: boolean
 
     /**
-     * The release id to attach to exception events as `$release_id`, for apps that only know
-     * their release when they start, such as one build deployed unchanged to several environments.
-     * A release id injected at build time by a PostHog build plugin or posthog-cli takes precedence,
-     * and a `$release_id` passed to `captureException` or registered as a super property wins over both.
+     * Release identity for manual and automatically captured exceptions only.
+     * Supply either a PostHog release id, or a name and version matching the release created
+     * during source-map upload (`--release-name`, `--release-version`, and optional `--build`).
+     * A Git commit SHA can be used as the version. This option does not create releases.
+     *
+     * Explicit event, session, or super-property release identity takes precedence over this
+     * option, which takes precedence over a build-injected release id. Name/version configuration
+     * sends `$app_namespace`, `$app_version`, and optional `$app_build` instead of `$release_id`.
+     * Blank or incomplete configuration is ignored. Values are trimmed.
+     *
+     * @example
+     * ```js
+     * error_tracking: { release: { name: 'my-app', version: gitSha } }
+     * ```
      *
      * @default undefined
      */
-    releaseId?: string
+    release?:
+        | { id: string; name?: never; version?: never; build?: never }
+        | { id?: never; name: string; version: string; build?: string }
 
     /**
      * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured

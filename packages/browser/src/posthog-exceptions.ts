@@ -4,7 +4,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfigResult } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
-import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
+import { isString, isArray, isObject, ErrorTracking, isNullish, isUndefined } from '@posthog/core'
 import { isStackOverflowError } from './utils/stack-overflow'
 
 const logger = /* @__PURE__ */ createLogger('[Error tracking]')
@@ -181,10 +181,15 @@ export class PostHogExceptions implements Extension {
                     ? this._addBufferedExceptionSteps(properties)
                     : properties
 
-            if (!this._hasExplicitReleaseId(propertiesForExceptionCapture)) {
-                const releaseId = ErrorTracking.getInjectedReleaseId() ?? this._configuredReleaseId()
-                if (releaseId) {
-                    propertiesForExceptionCapture.$release_id = releaseId
+            if (!this._hasExplicitRelease(propertiesForExceptionCapture)) {
+                const configuredRelease = this._configuredReleaseProperties()
+                if (configuredRelease) {
+                    Object.assign(propertiesForExceptionCapture, configuredRelease)
+                } else {
+                    const releaseId = ErrorTracking.getInjectedReleaseId()
+                    if (releaseId) {
+                        propertiesForExceptionCapture.$release_id = releaseId
+                    }
                 }
             }
 
@@ -254,18 +259,40 @@ export class PostHogExceptions implements Extension {
         return this._instance.config.error_tracking?.exception_steps ?? {}
     }
 
-    // A $release_id set by the caller or registered as a super property wins over the SDK's own value.
-    private _hasExplicitReleaseId(properties: Properties): boolean {
+    private _hasExplicitRelease(properties: Properties): boolean {
+        const property = (key: string) =>
+            properties[key] ?? this._instance.getSessionProperty(key) ?? this._instance.get_property(key)
+
         return (
-            !isNullish(properties.$release_id) ||
-            !isNullish(this._instance.get_property('$release_id')) ||
-            !isNullish(this._instance.getSessionProperty('$release_id'))
+            !isNullish(property('$release_id')) ||
+            (!isNullish(property('$app_namespace')) &&
+                (!isNullish(property('$app_version')) || !isNullish(property('$app_build'))))
         )
     }
 
-    private _configuredReleaseId(): string | undefined {
-        const releaseId = this._instance.config.error_tracking?.releaseId
-        return isString(releaseId) ? releaseId.trim() || undefined : undefined
+    private _configuredReleaseProperties(): Properties | undefined {
+        const release = this._instance.config.error_tracking?.release
+        if (!isObject(release)) {
+            return
+        }
+
+        const trim = (value: unknown) => (isString(value) ? value.trim() || undefined : undefined)
+        const id = trim(release.id)
+        if (id && isUndefined(release.name) && isUndefined(release.version) && isUndefined(release.build)) {
+            return { $release_id: id }
+        }
+
+        const name = trim(release.name)
+        const version = trim(release.version)
+        if (isUndefined(release.id) && name && version) {
+            const build = trim(release.build)
+            return {
+                $app_namespace: name,
+                $app_version: version,
+                ...(build ? { $app_build: build } : {}),
+            }
+        }
+        return undefined
     }
 
     private _matchesSuppressionRule(exceptionList: ErrorTracking.ExceptionList): boolean {
