@@ -146,16 +146,19 @@ describe('record a blocked iframe', () => {
     },
   );
 
-  it.each([
-    { blockSelector: '[', description: 'an invalid selector' },
-    {
-      // an unknown pseudo-class also stands in for one a browser lacks
-      blockSelector: '.private, :not-a-pseudo',
-      description: 'a selector list with one unsupported part',
-    },
-  ])(
-    'does not record anything with $description',
-    async ({ blockSelector }) => {
+  it.each(
+    (['blockSelector', 'maskTextSelector'] as const).flatMap((option) => [
+      { option, selector: '[', description: 'an invalid selector' },
+      {
+        option,
+        // an unknown pseudo-class also stands in for one a browser lacks
+        selector: '.private, :not-a-pseudo',
+        description: 'a selector list with one unsupported part',
+      },
+    ]),
+  )(
+    'does not record anything with $description as $option',
+    async ({ option, selector }) => {
       const page = await browser.newPage();
       try {
         await page.goto('about:blank');
@@ -173,13 +176,19 @@ describe('record a blocked iframe', () => {
         await page.addScriptTag({
           path: path.resolve(__dirname, '../../dist/rrweb.umd.cjs'),
         });
-        const started = await page.evaluate((blockSelector) => {
-          const { rrweb, emit } = window as unknown as IWindow;
-          return (
-            rrweb.record({ blockSelector, emit: (event) => emit?.(event) }) !==
-            undefined
-          );
-        }, blockSelector);
+        const started = await page.evaluate(
+          (option, selector) => {
+            const { rrweb, emit } = window as unknown as IWindow;
+            return (
+              rrweb.record({
+                [option]: selector,
+                emit: (event) => emit?.(event),
+              }) !== undefined
+            );
+          },
+          option,
+          selector,
+        );
         await waitForRAF(page);
 
         await page.evaluate(() => {
@@ -190,7 +199,7 @@ describe('record a blocked iframe', () => {
         expect({
           started,
           events: events.length,
-          loggedError: errors.some((e) => e.includes('blockSelector')),
+          loggedError: errors.some((e) => e.includes(option)),
         }).toEqual({ started: false, events: 0, loggedError: true });
       } finally {
         await page.close();

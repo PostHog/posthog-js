@@ -405,13 +405,15 @@ function record<T = eventWithTime>(
     throw new Error('emit function is required');
   }
   // The browser rejects a whole selector list if any part is invalid or
-  // unsupported, which would silently record everything it should block.
-  if (blockSelector) {
+  // unsupported, which would silently record everything it should block or mask.
+  const privacySelectors = { blockSelector, maskTextSelector };
+  for (const [name, selector] of Object.entries(privacySelectors)) {
+    if (!selector) continue;
     try {
-      document.createDocumentFragment().querySelector(blockSelector);
+      document.createDocumentFragment().querySelector(selector);
     } catch (error) {
       console.error(
-        `rrweb: not recording because blockSelector "${blockSelector}" is not a valid selector in this browser`,
+        `rrweb: not recording because ${name} "${selector}" is not a valid selector in this browser`,
         error,
       );
       unregisterErrorHandler();
