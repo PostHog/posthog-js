@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.22.5
+
+### Patch Changes
+
+- [#5890](https://github.com/PostHog/posthog-js/pull/5890) [`50b5b2e`](https://github.com/PostHog/posthog-js/commit/50b5b2e290d282b0fa66817018fa37c7785b75d3) Thanks [@bernatixer](https://github.com/bernatixer)! - Genkit telemetry now masks any key ending in a credential word, such as `refresh_token`, `SecretAccessKey`, `oauth_token_secret` or `cookies`, in tool output and model messages, including tool output returned as JSON text. String values in Gemini tool definitions are scanned the same way on every integration, so a URL with `?api_key=` is masked there too.
+  (2026-11-26)
+
 ## 8.22.4
 
 ### Patch Changes
