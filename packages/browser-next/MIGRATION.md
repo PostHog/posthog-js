@@ -1,6 +1,6 @@
 # Migrating from `posthog-js` to `@posthog/browser`
 
-> **Draft:** `@posthog/browser` is experimental. This guide maps application-facing APIs on the [`posthog-js` facade](../browser/src/posthog-core.ts) to the current [`@posthog/browser` API](./src/types.ts). **TODO** entries identify missing migration paths, not APIs that you can call today.
+> **Draft:** `@posthog/browser` is experimental. This guide maps application-facing APIs on the [`posthog-js` facade](../browser/src/posthog-core.ts) to the current [`@posthog/browser` API](./src/core/types.ts). **TODO** entries identify missing migration paths, not APIs that you can call today.
 
 The main changes are:
 
