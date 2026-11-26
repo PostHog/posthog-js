@@ -384,8 +384,9 @@ export type PostHogOptions = Omit<
    */
   disableCompression?: boolean
   /**
-   * Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the
-   * posthog-js cookie when a request has neither tracing header.
+   * Lets the Express, NestJS, Hono and `instrumentRequest` integrations read the session ID, and the distinct ID of an
+   * identified user, from the posthog-js cookie when a request has neither tracing header.
+   * `createReactRouterErrorHandler` also reads an anonymous visitor's distinct ID, and sends their exceptions personless.
    *
    * Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server
    * cannot read an opt-out that posthog-js keeps in localStorage (its default).
@@ -717,6 +718,11 @@ export type PostHogFeatureFlag = {
     // group's property filters match but the rollout percentage excludes the user, rather than
     // continuing to evaluate later groups.
     early_exit?: boolean
+    /**
+     * Early-access feature flag. The person's opt-in, stored in the person property
+     * `$feature_enrollment/<flag key>`, decides the flag before holdouts and release conditions.
+     */
+    feature_enrollment?: boolean | null
   }
   deleted: boolean
   active: boolean

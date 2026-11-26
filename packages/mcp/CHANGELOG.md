@@ -1,5 +1,42 @@
 # @posthog/mcp
 
+## 1.8.2
+
+### Patch Changes
+
+- [#5889](https://github.com/PostHog/posthog-js/pull/5889) [`c8f17c6`](https://github.com/PostHog/posthog-js/commit/c8f17c663aef32f1e7b15dd6e19a8f4c830631ee) Thanks [@lucasheriques](https://github.com/lucasheriques)! - `PostHogMCP.flush()` and `shutdown()` now wait for MCP captures still in the pipeline before flushing, within the shutdown deadline, instead of relying on the pipeline finishing first.
+  (2026-11-26)
+
+## 1.8.1
+
+### Patch Changes
+
+- [#5738](https://github.com/PostHog/posthog-js/pull/5738) [`12e1c48`](https://github.com/PostHog/posthog-js/commit/12e1c48966b3786d38090bce57e2d65a388ec6b5) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A conversation handle the agent never received (the tool threw, or its result had no `content` to carry it) no longer sets `$session_id`: the call keeps the session it would have had without one, as the sdk-specs MCP analytics spec requires.
+  (2026-11-25)
+
+## 1.8.0
+
+### Minor Changes
+
+- [#5842](https://github.com/PostHog/posthog-js/pull/5842) [`8ec7e4a`](https://github.com/PostHog/posthog-js/commit/8ec7e4ad33b1e6abe31bfb406e1fd46a5397f014) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Add `analytics.flush()`, which waits until every event the server has captured so far, auto-captured ones included, is handed to `posthog-node`, then flushes the `posthog-node` queue. Await it before a per-request runtime (serverless or edge functions) freezes or exits, instead of waiting a macrotask before `posthog.shutdown()`
+  (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b), [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec), [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2)]:
+  - posthog-node@6.1.0
+
+## 1.7.1
+
+### Patch Changes
+
+- [#5740](https://github.com/PostHog/posthog-js/pull/5740) [`11b76dc`](https://github.com/PostHog/posthog-js/commit/11b76dc7447eebeb16017d823c62dad8bfff6d9a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - A stateless HTTP request that carries no session (no client conversation id, conversation handle, transport session or session token) now gets a fresh `$session_id` of its own, as the sdk-specs MCP analytics spec requires. Before, a shared HTTP instance with conversation anchoring off grouped every client's requests under the instance's id.
+
+  A custom event from `analytics.capture()` now carries the session and identity of the request it was captured in (a tool call, a tool listing or a resource request), even when requests overlap. This uses `AsyncLocalStorage`. On a runtime without it, such as Cloudflare Workers without the `nodejs_compat` or `nodejs_als` flag, custom events are sent with a session of their own and no identity, and the SDK logs one warning. Before, they could take another caller's. (2026-11-25)
+
+- [#5741](https://github.com/PostHog/posthog-js/pull/5741) [`8110b53`](https://github.com/PostHog/posthog-js/commit/8110b53d365e22f9b4bd1114421bffb7ee59076d) Thanks [@lucasheriques](https://github.com/lucasheriques)! - An HTTP request that carries no session no longer takes `$mcp_client_name`, `$mcp_client_version` or `$mcp_protocol_version` from an `initialize` handshake or another request's session token on the same instance. On a shared HTTP instance, those name whichever client came before, so such a request is now unidentified unless it identifies itself, as the sdk-specs MCP analytics spec requires.
+  (2026-11-25)
+
 ## 1.7.0
 
 ### Minor Changes

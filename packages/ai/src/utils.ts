@@ -11,6 +11,7 @@ import type {
 import type { JsonType } from '@posthog/core'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
+import { redactGeminiToolDefinition } from './mcpCredentials'
 import { redactBase64DataUrl } from './sanitization'
 import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
 import { isPrivacyModeEnabled, type PrivacyModeGate } from './privacyMode'
@@ -581,8 +582,8 @@ export const extractAvailableToolCalls = (provider: string, params: any): unknow
 
     return null
   } else if (provider === 'gemini') {
-    if (params.config && params.config.tools) {
-      return params.config.tools
+    if (params.config && Array.isArray(params.config.tools)) {
+      return params.config.tools.map(redactGeminiToolDefinition)
     }
 
     return null

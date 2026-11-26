@@ -1,5 +1,47 @@
 # posthog-js
 
+## 1.455.2
+
+### Patch Changes
+
+- [#5772](https://github.com/PostHog/posthog-js/pull/5772) [`e6b10dc`](https://github.com/PostHog/posthog-js/commit/e6b10dc87febb5f5c95a1b580eef859beb3c7f62) Thanks [@Vivek1898](https://github.com/Vivek1898)! - Stop counting the browser's forwarded click from a `<label>` as a second click, so clicking a label no longer triggers a false rage click
+  (2026-11-25)
+- Updated dependencies [[`e6b10dc`](https://github.com/PostHog/posthog-js/commit/e6b10dc87febb5f5c95a1b580eef859beb3c7f62)]:
+  - @posthog/browser-common@0.14.2
+
+## 1.455.1
+
+### Patch Changes
+
+- [#5839](https://github.com/PostHog/posthog-js/pull/5839) [`c95186e`](https://github.com/PostHog/posthog-js/commit/c95186e7ca6415bfa70ddc3b371bebb49295af9e) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Stopping exception autocapture no longer removes `window.onerror`, `window.onunhandledrejection`, or `console.error` handlers installed on top of PostHog's.
+  (2026-11-25)
+
+## 1.455.0
+
+### Minor Changes
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Send `$experiment_exposure` for config version 2 experiment splits, and send the reason code and rule attribution on `$feature_flag_called` for config version 2 flags in place of `$feature_flag_reason`.
+  (2026-11-25)
+
+- [#5729](https://github.com/PostHog/posthog-js/pull/5729) [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3) Thanks [@andehen](https://github.com/andehen)! - Request `/flags/?v=4` instead of `/flags/?v=2` and read its typed flag records. For a well-formed response, flag getters, payloads, `onFeatureFlags` callbacks and `$feature_flag_called` events return and send the same values as before, and older posthog-js versions can still read the stored flags. A PostHog server that does not serve `v=4` answers as it does for `v=2`, and that response is read as before.
+
+  A `v=4` flag record with a field of the wrong JSON type, such as a string `metadata.version`, reads as a disabled flag without a payload. Other flags in the same response are not affected. Tests that mock `/flags` may need to match the new URL. (2026-11-25)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3), [`6cd9664`](https://github.com/PostHog/posthog-js/commit/6cd96645135e79dbe122223963e96e62561650e3)]:
+  - @posthog/browser-common@0.14.1
+
+## 1.454.8
+
+### Patch Changes
+
+- [#5874](https://github.com/PostHog/posthog-js/pull/5874) [`053d7a6`](https://github.com/PostHog/posthog-js/commit/053d7a66b95c4f3bfae579760be7df723f683890) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Session replay restarts its recorder when it stops taking full snapshots, and no longer starts a second recorder when it restarts during its own start.
+  (2026-11-25)
+
+- [#5862](https://github.com/PostHog/posthog-js/pull/5862) [`0023700`](https://github.com/PostHog/posthog-js/commit/0023700ed4efa941793ac8ac86fc52d7a13a9050) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Avoid crashes when XHR tracing encounters a missing or faulty `send` accessor.
+  (2026-11-25)
+
 ## 1.454.7
 
 ### Patch Changes

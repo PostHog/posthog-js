@@ -46,6 +46,7 @@ try {
   )
 
   // Keep each package's dependencies nested rather than hoisting them to the fixture root.
+  linkDependency('@posthog/core')
   linkDependency('@opentelemetry/api')
   linkDependency('@opentelemetry/exporter-trace-otlp-http')
 
