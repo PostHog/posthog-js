@@ -1143,7 +1143,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="messageid"></a> `messageId?` | `readonly` | `string` | The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
-| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as when a retry was refused after an earlier attempt went unanswered. | - |
+| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as when a retry was refused after an earlier attempt wasn't confirmed. | - |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
@@ -2965,8 +2965,9 @@ What happened to one recipient of a batch:
 - `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, PostHog answered 409
   with any code but `batch_unavailable` (such as `idempotency_key_in_flight`, `idempotency_key_reused`, or no
-  code), or PostHog refused a retry of a request it may have queued. `error` holds
-  PostHog's answer, and `id` the message ID when PostHog named one.
+  code), or PostHog refused a retry of a request it may have queued. `error` keeps
+  PostHog's `code` and `statusCode` when PostHog answered, with the client's own message and same-key `fix` in
+  place of PostHog's text, and `id` is the message ID when PostHog named one.
   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
   that key: PostHog queues no second email for a key it has.
 
@@ -3358,7 +3359,7 @@ with the same idempotency keys, so a retry queues no second email. When the clie
 `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
 so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
 or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-`emails.send()`. That advice holds for `failed` recipients only: when an earlier attempt went unanswered, the
+`emails.send()`. That advice holds for `failed` recipients only: when an earlier attempt wasn't confirmed, the
 recipients are `unconfirmed`, so send them again with the same `idempotencyKey`s, not split or one at a time
 with new keys, and read each recipient's result. Each attempt waits for PostHog's answer as long as a send does: the client's
 `emailRequestTimeoutMs`, 15 seconds by default.

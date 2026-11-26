@@ -196,13 +196,18 @@ export function recordAnswer(
   return warningsOf(fields)
 }
 
-export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): EmailError {
+export function recordFailure(
+  sent: Slot[],
+  error: EmailError,
+  mayHaveQueuedBefore: boolean,
+  earlierMayHaveQueued: boolean
+): EmailError {
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
-  // After an unanswered attempt, PostHog's own words on a refusal (any 4xx, a 409 conflict included) speak only
-  // of the retry, so they are replaced; a retry that went unanswered too keeps its own message.
+  // After an earlier attempt PostHog may have queued, PostHog's own words on a refusal (any 4xx, a 409 conflict
+  // included) speak only of the retry, so they are replaced; a retry that went unanswered too keeps its own message.
   const refusedRetry =
     !mayHaveQueued(error) || (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500)
-  const answer = mayHaveQueuedBefore && refusedRetry ? afterUnansweredAttempt(error) : error
+  const answer = earlierMayHaveQueued && refusedRetry ? afterUnconfirmedAttempt(error) : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = answer
@@ -210,12 +215,12 @@ export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefo
   return unconfirmed ? copyError(answer, { fix: BATCH_RESEND_FIX }) : answer
 }
 
-function afterUnansweredAttempt(error: EmailError): EmailError {
+function afterUnconfirmedAttempt(error: EmailError): EmailError {
   if (error.statusCode === undefined) {
     return copyError(error, { message: `${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}` })
   }
   return copyError(error, {
-    message: `PostHog refused the retry of this batch with ${error.code}, but an earlier attempt of this batch went unanswered, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.`,
+    message: `PostHog refused the retry of this batch with ${error.code}, but an earlier attempt of this batch wasn't confirmed, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.`,
     why: undefined,
   })
 }
@@ -251,7 +256,7 @@ const BATCH_RESEND_FIX =
 const UNCONFIRMED_MESSAGE = "PostHog didn't confirm this email, and it may still go out."
 
 const EARLIER_ATTEMPT_MAY_HAVE_QUEUED =
-  'An earlier attempt of this batch went unanswered, so PostHog may have queued its emails.'
+  "An earlier attempt of this batch wasn't confirmed, so PostHog may have queued its emails."
 
 const RESEND_FIX =
   'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours of the first request with that key: PostHog queues no second email for a key it has.'

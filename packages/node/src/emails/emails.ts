@@ -304,7 +304,10 @@ export class EmailSender implements Emails {
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
       const body = batchBody(content, slots)
       let warnings: EmailWarning[]
+      // Whether any attempt so far may have queued the batch, and whether one before the last failed attempt may have.
       let mayHaveQueuedBefore = false
+      let queuedBeforeLastFailure = false
+      let lastFailure: EmailError | undefined
       try {
         const stopAtShutdown = (): void => {
           if (this.hooks.isClosed()) {
@@ -335,6 +338,8 @@ export class EmailSender implements Emails {
               )
             } catch (caught) {
               const failure = asRequestError(caught)
+              queuedBeforeLastFailure = mayHaveQueuedBefore
+              lastFailure = failure
               if (mayHaveQueued(failure)) {
                 mayHaveQueuedBefore = true
               }
@@ -344,7 +349,11 @@ export class EmailSender implements Emails {
           stopAtShutdown
         )
       } catch (caught) {
-        const failure = recordFailure(slots, asRequestError(caught), mayHaveQueuedBefore)
+        const error = asRequestError(caught)
+        // A stop at shutdown between attempts comes after every attempt so far; an attempt's own failure comes after
+        // the attempts before it.
+        const earlierMayHaveQueued = error === lastFailure ? queuedBeforeLastFailure : mayHaveQueuedBefore
+        const failure = recordFailure(slots, error, mayHaveQueuedBefore, earlierMayHaveQueued)
         return { data: null, error: withResults(failure, slots) }
       }
       this.logWarnings(warnings)

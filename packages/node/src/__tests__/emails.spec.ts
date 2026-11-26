@@ -1994,6 +1994,51 @@ describe('emails', () => {
       }
     )
 
+    it.each([
+      ['409 conflict', { status: 409, code: 'conflict', message: 'PostHog could not take this batch.' }],
+      ['409 api_error', { status: 409, code: 'api_error', message: 'PostHog could not take this batch.' }],
+      [
+        '409 idempotency_key_in_flight',
+        { status: 409, code: 'idempotency_key_in_flight', message: 'PostHog could not take this batch.' },
+      ],
+    ] as const)(
+      "keeps PostHog's message on a first attempt answered %s, and claims no earlier attempt",
+      async (_case, fault) => {
+        const postHog = againstPostHog()
+        postHog.failNext('batch', fault)
+
+        const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+        expect(error).toMatchObject({ code: fault.code, statusCode: 409, message: fault.message })
+        expect(error?.message).not.toMatch(/retry|earlier attempt|unanswered/i)
+        expect(error?.fix).toMatch(/^PostHog may have queued these emails\./)
+        expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
+        expect(postHog.requests.batch).toBe(1)
+      }
+    )
+
+    it.each([
+      ['a 503', { status: 503 }],
+      ['a 409 idempotency_key_in_flight', { status: 409, code: 'idempotency_key_in_flight' }],
+    ] as const)(
+      'says an earlier attempt was not confirmed, not that it went unanswered, when shutdown follows %s',
+      async (_case, fault) => {
+        const postHog = againstPostHog()
+        postHog.failNext('batch', fault)
+
+        const pending = posthog.emails.batch({ ...WELCOME, maxRetries: 2 }, recipientsTo(2))
+        await vi.advanceTimersByTimeAsync(0)
+        void posthog.shutdown()
+        const { error } = await settle(pending)
+
+        expect(error).toMatchObject({ code: 'client_closed' })
+        expect(error?.message).toMatch(/An earlier attempt of this batch wasn't confirmed, so PostHog may have queued/)
+        expect(error?.message).not.toMatch(/unanswered/i)
+        expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
+        expect(postHog.requests.batch).toBe(1)
+      }
+    )
+
     it('keeps recipients unconfirmed when PostHog fails the whole request with a 5xx, and sends nothing again', async () => {
       const postHog = againstPostHog()
       postHog.failNext('batch', { status: 500 })
@@ -2306,7 +2351,7 @@ describe('emails', () => {
         expect(error).toMatchObject({
           code: fault.code,
           statusCode: fault.status,
-          message: `PostHog refused the retry of this batch with ${fault.code}, but an earlier attempt of this batch went unanswered, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.`,
+          message: `PostHog refused the retry of this batch with ${fault.code}, but an earlier attempt of this batch wasn't confirmed, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.`,
         })
         expect(error?.fix).toMatch(
           /^PostHog may have queued these emails\. Call emails\.batch\(\) again with the same email and recipients, unchanged, giving each recipient the idempotencyKey of its entry in error\.results/
