@@ -998,8 +998,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     // would get its cache reads billed twice unless we declare the convention explicitly.
     if (
       !isAnthropic &&
-      // OpenAI's `prompt_tokens` always includes cached tokens, even when passed through as raw usage.
-      (inputIncludesCacheTokens || usage.prompt_tokens != null) &&
+      // Decide from the usage shape where possible, since wrappers like tokenUsage can carry raw provider usage.
+      // OpenAI's `prompt_tokens` includes cached tokens; Anthropic's top-level cache fields mean input excludes them.
+      (usage.prompt_tokens != null ||
+        (inputIncludesCacheTokens &&
+          usage.cache_read_input_tokens == null &&
+          usage.cache_creation_input_tokens == null)) &&
       cacheTokens > 0 &&
       parsedUsage.input >= cacheTokens &&
       provider &&

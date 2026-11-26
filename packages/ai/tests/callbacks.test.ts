@@ -2081,9 +2081,9 @@ describe('LangChainCallbackHandler', () => {
       expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
     })
 
-    it('leaves the cache reporting flag unset for cache-exclusive raw usage', () => {
+    it.each(['usage', 'tokenUsage'])('leaves the cache reporting flag unset for cache-exclusive raw %s', (key) => {
       const properties = runClaudeViaOpenAI(
-        { usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 500 } },
+        { [key]: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 500 } },
         'openrouter'
       )
 
