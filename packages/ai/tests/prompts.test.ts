@@ -1012,6 +1012,25 @@ describe('Prompts', () => {
       expect(result).toBe('Hello, John! Welcome to Acme Corp. Your tier is premium.')
     })
 
+    it('should leave variables named like inherited object properties unchanged', () => {
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const template = '{{constructor}} {{toString}} {{valueOf}} {{__proto__}} {{hasOwnProperty}}'
+
+      expect(prompts.compile(template, {})).toBe(template)
+      expect(prompts.compile(template, { name: 'World' })).toBe(template)
+    })
+
+    it('should replace a provided variable named like an inherited object property', () => {
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const result = prompts.compile('{{constructor}} and {{toString}}', { constructor: 'mine' })
+
+      expect(result).toBe('mine and {{toString}}')
+    })
+
     it('should handle numbers', () => {
       const posthog = createMockPostHog()
       const prompts = new Prompts({ posthog })

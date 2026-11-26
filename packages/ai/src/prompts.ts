@@ -501,7 +501,7 @@ export class Prompts {
    */
   compile(prompt: string, variables: PromptVariables): string {
     return prompt.replace(/\{\{([\w.-]+)\}\}/g, (match, variableName) => {
-      if (variableName in variables) {
+      if (Object.prototype.hasOwnProperty.call(variables, variableName)) {
         return String(variables[variableName])
       }
 
