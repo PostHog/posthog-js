@@ -19,6 +19,7 @@ export type {
   EmailDeliveryStatus,
   EmailPreferences,
   EmailReactElement,
+  EmailReactRenderer,
   Emails,
   EmailStatus,
   EmailTracking,

@@ -22,7 +22,7 @@ import type { V1EventOptions } from './capture-v1/types'
 /** Processing options sent with an event to capture v1. */
 export type EventOptions = V1EventOptions
 
-import type { Emails } from './emails/types'
+import type { EmailReactRenderer, Emails } from './emails/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
@@ -467,6 +467,18 @@ export type PostHogOptions = Omit<
   emailRequestMaxRetries?: number
   /** The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. */
   migratedFrom?: string
+  /**
+   * Renders the `react` element of an `emails.send`. Set it when you bundle your app, such as
+   * for Cloudflare Workers, Convex, or Vercel Edge: posthog-node doesn't bundle `@react-email/render`,
+   * so apps that never send `react` don't carry it. Without it, posthog-node loads
+   * `@react-email/render` from `node_modules` when a send has `react`.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { reactEmailRenderer: await import('@react-email/render') })
+   * ```
+   */
+  reactEmailRenderer?: EmailReactRenderer
   /**
    * Redact prompts, outputs and error details from every event that the PostHog AI
    * integrations (`@posthog/ai`) capture with this client. Per-call privacy settings
