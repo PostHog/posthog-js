@@ -832,17 +832,28 @@ class FeatureFlagsPoller {
       let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
       let regexError: InconclusiveMatchError | undefined
       let serverEvaluationError: RequiresServerEvaluation | undefined = undefined
+      // In a group condition, person filters and person cohort leaves read the person properties
+      // and person listing, as the flags service does. Other filters keep reading the group.
+      const personFilterScope: PersonFilterScope | undefined =
+        conditionAggregationOf(condition, flag.filters?.aggregation_group_type_index) != null
+          ? {
+              properties: evaluationContext.personProperties,
+              knownAbsentKeys: evaluationContext.personPropertyKeysKnownAbsent,
+            }
+          : undefined
       for (const prop of condition.properties) {
         const propertyType = prop.type
-        const filterKnownAbsentKeys = knownAbsentKeysForFilter(prop, knownAbsentKeys, knownAbsentKeysGroupTypeIndex)
+        const readsPerson = personFilterScope !== undefined && propertyType === 'person'
+        const filterProperties = readsPerson ? personFilterScope.properties : properties
+        const filterKnownAbsentKeys = readsPerson
+          ? personFilterScope.knownAbsentKeys
+          : knownAbsentKeysForFilter(prop, knownAbsentKeys, knownAbsentKeysGroupTypeIndex)
         let matches = false
 
         try {
           if (propertyType === 'cohort') {
-            // Cohorts are person-scoped, so group known-absent keys must not apply to a cohort in a
-            // group condition. That cohort still reads the group properties, as before known absence.
-            const isGroupCondition =
-              conditionAggregationOf(condition, flag.filters?.aggregation_group_type_index) != null
+            // In a group condition, the cohort's other leaves read the group properties without a
+            // listing, since a cohort's scope is the person.
             matches = await matchCohort(
               prop,
               properties,
@@ -850,13 +861,14 @@ class FeatureFlagsPoller {
               this.debugMode,
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
               definitions.propertyMatchingVersion,
-              isGroupCondition ? undefined : knownAbsentKeys
+              personFilterScope ? undefined : knownAbsentKeys,
+              personFilterScope
             )
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
           } else if (
             !filterKnownAbsentKeys?.has(prop.key) &&
-            !Object.prototype.hasOwnProperty.call(properties, prop.key)
+            !Object.prototype.hasOwnProperty.call(filterProperties, prop.key)
           ) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
@@ -867,7 +879,7 @@ class FeatureFlagsPoller {
           } else {
             matches = matchProperty(
               prop,
-              properties,
+              filterProperties,
               warnFunction,
               definitions.propertyMatchingVersion,
               filterKnownAbsentKeys
@@ -1641,6 +1653,12 @@ function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPolle
 
 type FlagDependencyEvaluator = (prop: FlagProperty) => Promise<boolean>
 
+/** The person properties and person listing that person filters read in a group condition. */
+type PersonFilterScope = {
+  properties: Record<string, any>
+  knownAbsentKeys?: ReadonlySet<string>
+}
+
 async function matchCohort(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
@@ -1648,7 +1666,8 @@ async function matchCohort(
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
   propertyMatchingVersion?: number,
-  knownAbsentKeys?: ReadonlySet<string>
+  knownAbsentKeys?: ReadonlySet<string>,
+  personFilterScope?: PersonFilterScope
 ): Promise<boolean> {
   const cohortId = String(property.value)
   checkCohortExists(cohortId, cohortProperties)
@@ -1661,7 +1680,8 @@ async function matchCohort(
     debugMode,
     flagDependencyEvaluator,
     propertyMatchingVersion,
-    knownAbsentKeys
+    knownAbsentKeys,
+    personFilterScope
   )
   return property.operator === 'not_in' ? !inCohort : inCohort
 }
@@ -1673,7 +1693,8 @@ async function matchPropertyGroup(
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
   propertyMatchingVersion?: number,
-  knownAbsentKeys?: ReadonlySet<string>
+  knownAbsentKeys?: ReadonlySet<string>,
+  personFilterScope?: PersonFilterScope
 ): Promise<boolean> {
   // The backend's canonical empty PropertyGroup is {}.
   if (!propertyGroup || Object.keys(propertyGroup).length === 0) {
@@ -1704,7 +1725,8 @@ async function matchPropertyGroup(
           debugMode,
           flagDependencyEvaluator,
           propertyMatchingVersion,
-          knownAbsentKeys
+          knownAbsentKeys,
+          personFilterScope
         )
         if (propertyGroupType === 'AND') {
           if (!matches) {
@@ -1752,7 +1774,8 @@ async function matchPropertyGroup(
             debugMode,
             flagDependencyEvaluator,
             propertyMatchingVersion,
-            knownAbsentKeys
+            knownAbsentKeys,
+            personFilterScope
           )
         } else if (prop.type === 'flag') {
           if (!flagDependencyEvaluator) {
@@ -1761,6 +1784,14 @@ async function matchPropertyGroup(
             )
           }
           matches = await flagDependencyEvaluator(prop)
+        } else if (personFilterScope && prop.type === 'person') {
+          matches = matchProperty(
+            prop,
+            personFilterScope.properties,
+            undefined,
+            propertyMatchingVersion,
+            personFilterScope.knownAbsentKeys
+          )
         } else {
           // Cohorts only receive person keys, so they apply only to person leaves.
           matches = matchProperty(

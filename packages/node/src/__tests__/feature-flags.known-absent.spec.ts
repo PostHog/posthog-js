@@ -227,7 +227,7 @@ describe('known-absent property keys', () => {
       ['a group flag', { aggregation_group_type_index: 0 }, {}],
       ['a mixed group condition', {}, { aggregation_group_type_index: 0 }],
     ])(
-      'do not apply to a dynamic cohort in %s, which stays as without known absence',
+      'do not apply to a person leaf of a dynamic cohort in %s, which reads the person',
       async (_name, flagExtra, conditionExtra) => {
         setup(
           {
@@ -259,16 +259,15 @@ describe('known-absent property keys', () => {
           personProperties: { plan: 'pro' },
           groupProperties: { organization: {} },
         }
-        for (const listing of [
-          { groupPropertyKeysKnownAbsent: { organization: ['plan'] } },
-          { personPropertyKeysKnownAbsent: ['plan'] },
-        ]) {
-          expect(
-            await posthog.getFeatureFlag('cohort-flag', 'user', { ...options, ...listing, onlyEvaluateLocally: true })
-          ).toBeUndefined()
-          expect(await posthog.getFeatureFlag('cohort-flag', 'user', { ...options, ...listing })).toBe('remote')
+        // The person leaf reads the person's plan, so the organization's listing does not make it
+        // match, and the person's listing does.
+        for (const [listing, expected] of [
+          [{ groupPropertyKeysKnownAbsent: { organization: ['plan'] } }, false],
+          [{ personPropertyKeysKnownAbsent: ['plan'] }, true],
+        ] as const) {
+          expect(await posthog.getFeatureFlag('cohort-flag', 'user', { ...options, ...listing })).toBe(expected)
         }
-        expect(flagsRequests()).toHaveLength(2)
+        expect(flagsRequests()).toHaveLength(0)
       }
     )
 
@@ -810,6 +809,123 @@ describe('known-absent property keys', () => {
         expect(flagsRequests()).toHaveLength(0)
       }
     )
+  })
+
+  describe('person filters in group conditions read the person', () => {
+    const planFilter = (type: string | undefined, operator = 'exact', value: unknown = 'pro'): object => ({
+      key: 'plan',
+      ...(type === undefined ? {} : { type }),
+      ...(type === 'group' ? { group_type_index: 0 } : {}),
+      operator,
+      value,
+    })
+    const inCohort = (id: string): object => ({ key: 'id', type: 'cohort', value: id, operator: 'in' })
+    const orgFlag = (key: string, filter: object): object => flag(key, [filter], { aggregation_group_type_index: 0 })
+
+    function setupPlanFlags(filter: (operator?: string, value?: unknown) => object): void {
+      setup(
+        {
+          flags: [
+            orgFlag('org-filter', filter()),
+            orgFlag('org-cohort', inCohort('c1')),
+            orgFlag('org-nested-cohort', inCohort('c2')),
+            flag('person-dependent', [
+              {
+                key: 'org-filter',
+                type: 'flag',
+                value: true,
+                operator: 'flag_evaluates_to',
+                dependency_chain: ['org-filter'],
+              },
+            ]),
+            {
+              ...flag('mixed', [filter()]),
+              filters: {
+                groups: [{ properties: [filter()], rollout_percentage: 100, aggregation_group_type_index: 0 }],
+              },
+            },
+            orgFlag('org-filter-not-set', filter('is_not_set', null)),
+            orgFlag('org-cohort-not-set', inCohort('c3')),
+          ],
+          cohorts: {
+            c1: { type: 'AND', values: [filter()] },
+            c2: { type: 'AND', values: [{ type: 'OR', values: [inCohort('c1')] }] },
+            c3: { type: 'AND', values: [filter('is_not_set', null)] },
+          },
+          group_type_mapping: { '0': 'organization' },
+        },
+        { 'org-filter-not-set': 'remote', 'org-cohort-not-set': 'remote' }
+      )
+    }
+
+    const planKeys = ['org-filter', 'org-cohort', 'org-nested-cohort', 'person-dependent', 'mixed']
+
+    it.each([
+      ['free', 'pro', false],
+      ['pro', 'free', true],
+    ])('a person filter reads the person plan %s, not the organization plan %s', async (person, org, expected) => {
+      setupPlanFlags((operator, value) => planFilter('person', operator, value))
+
+      for (const key of planKeys) {
+        expect(
+          await posthog.getFeatureFlag(key, 'user', {
+            groups: { organization: 'acme' },
+            personProperties: { plan: person },
+            groupProperties: { organization: { plan: org } },
+          })
+        ).toBe(expected)
+      }
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it.each(['org-filter-not-set', 'org-cohort-not-set'])(
+      'a person filter in %s uses the person listing over a supplied organization value',
+      async (key) => {
+        setupPlanFlags((operator, value) => planFilter('person', operator, value))
+
+        expect(
+          await posthog.getFeatureFlag(key, 'user', {
+            groups: { organization: 'acme' },
+            groupProperties: { organization: { plan: 'pro' } },
+            personPropertyKeysKnownAbsent: ['plan'],
+          })
+        ).toBe(true)
+        expect(flagsRequests()).toHaveLength(0)
+      }
+    )
+
+    it.each([
+      ['a group', 'group'],
+      ['an untyped', undefined],
+    ])('%s filter still reads the organization plan', async (_name, type) => {
+      setupPlanFlags((operator, value) => planFilter(type, operator, value))
+
+      for (const key of planKeys) {
+        expect(
+          await posthog.getFeatureFlag(key, 'user', {
+            groups: { organization: 'acme' },
+            personProperties: { plan: 'free' },
+            groupProperties: { organization: { plan: 'pro' } },
+          })
+        ).toBe(true)
+      }
+      expect(flagsRequests()).toHaveLength(0)
+    })
+
+    it('a group filter still uses the organization listing, and a group cohort leaf still uses no listing', async () => {
+      setupPlanFlags((operator, value) => planFilter('group', operator, value))
+
+      const options = {
+        groups: { organization: 'acme' },
+        personProperties: { plan: 'pro' },
+        groupProperties: { organization: { plan: 'pro' } },
+        groupPropertyKeysKnownAbsent: { organization: ['plan'] },
+        personPropertyKeysKnownAbsent: ['plan'],
+      }
+      expect(await posthog.getFeatureFlag('org-filter-not-set', 'user', options)).toBe(true)
+      expect(await posthog.getFeatureFlag('org-cohort-not-set', 'user', options)).toBe(false)
+      expect(flagsRequests()).toHaveLength(0)
+    })
   })
 
   describe('remote /flags body', () => {
