@@ -1,6 +1,5 @@
 import { toJsonSafeValue } from '@posthog/core'
 import { isObject } from './typeGuards'
-import { namesCredential } from './sanitization/credential_text_scanner'
 
 const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
 
@@ -65,13 +64,30 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   )
 }
 
+// A quoted name before a colon, at any nesting level (`"key":`, `\\"key\\":`, `'key':`), or a form field or URL query
+// parameter (`access_token=`, `?access_token=`, `#access_token=`). Names exclude quotes, backslashes and separators, so
+// each pattern reads every character a bounded number of times.
+const QUOTED_KEY = /["']([^"'\\\s:]{1,128})\\*["']\s*:/g
+const FORM_FIELD = /(?:^|[?&#;\s'"])([^&=?#;\s'"]+)=/g
+
+function namesCredential(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  for (const pattern of [QUOTED_KEY, FORM_FIELD]) {
+    for (const [, name] of text.matchAll(pattern)) {
+      if (isCredentialKey(normalizeKey(name))) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string. JSON text is
 // masked field by field and re-serialized when either the structural pass or the raw scan finds a credential: the raw
 // scan sees an earlier duplicate key that `JSON.parse` drops, and the structural pass sees keys the raw scan cannot
 // decode. Other text that names one, such as JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is
 // replaced whole. Text where neither finds one is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
-  const namesOne = namesCredential(value, (name) => isCredentialKey(normalizeKey(name)))
+  const namesOne = namesCredential(value, isCredentialKey)
   const trimmed = value.trim()
   if (/^[[{"]/.test(trimmed)) {
     let parsed: unknown
