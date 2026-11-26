@@ -1582,7 +1582,7 @@ omits globally inactive flags and therefore leaves those keys absent.
 
 **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
 first time each flag value is read for a user. Experiments use these events as exposures.
-When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+When a config version 2 flag assigns an experiment variant, locally or remotely, the read also
 sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
 The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
 `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
@@ -3500,7 +3500,7 @@ server-side evaluation, so it matches either runtime.
 | <a id="description-1"></a> `description` | `string` \| `undefined` | - |
 | <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
 | <a id="id"></a> `id` | `number` \| `undefined` | - |
-| <a id="payload"></a> `payload` | `string` \| `undefined` | - |
+| <a id="payload-1"></a> `payload` | `string` \| `undefined` | - |
 | <a id="version"></a> `version` | `number` \| `undefined` | - |
 
 ### `FeatureFlagOverrideOptions`
