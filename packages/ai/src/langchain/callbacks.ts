@@ -21,6 +21,8 @@ import type { JsonType } from '@posthog/core'
 // LangChain `ls_provider` values whose usage_metadata input_tokens include cache reads and writes.
 const CACHE_INCLUSIVE_PROVIDERS = new Set(['openai', 'azure', 'openrouter'])
 
+const INPUT_OR_CACHE_TOKEN_KEYS = ['$ai_input_tokens', '$ai_cache_read_input_tokens', '$ai_cache_creation_input_tokens']
+
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
 // LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
 // and future subclasses) exposes a prototype getter `is_bubble_up` that returns true, which the
@@ -575,7 +577,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         eventProperties['$ai_cache_creation_5m_input_tokens'] = additionalTokenData.cacheWrite5mInputTokens
         eventProperties['$ai_cache_creation_1h_input_tokens'] = additionalTokenData.cacheWrite1hInputTokens
       }
-      if (additionalTokenData.cacheReportingExclusive !== undefined) {
+      // The inferred flag describes the SDK-derived counts, so drop it when caller properties replace them.
+      const callerReportsTokens = INPUT_OR_CACHE_TOKEN_KEYS.some((key) =>
+        Object.prototype.hasOwnProperty.call(this.properties, key)
+      )
+      if (additionalTokenData.cacheReportingExclusive !== undefined && !callerReportsTokens) {
         eventProperties['$ai_cache_reporting_exclusive'] = additionalTokenData.cacheReportingExclusive
       }
       if (additionalTokenData.reasoningTokens) {

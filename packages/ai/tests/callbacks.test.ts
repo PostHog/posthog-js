@@ -1958,6 +1958,29 @@ describe('LangChainCallbackHandler', () => {
       expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
     })
 
+    it('leaves the cache reporting flag unset when the caller overrides token counts', () => {
+      handler = new LangChainCallbackHandler({
+        client: mockPostHogClient,
+        properties: { $ai_input_tokens: 1000, $ai_cache_read_input_tokens: 9000 },
+      })
+
+      const properties = runClaudeViaOpenAI({})
+
+      expect(properties['$ai_input_tokens']).toBe(1000)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it('keeps a cache reporting flag declared by the caller alongside overridden token counts', () => {
+      handler = new LangChainCallbackHandler({
+        client: mockPostHogClient,
+        properties: { $ai_input_tokens: 1000, $ai_cache_reporting_exclusive: true },
+      })
+
+      const properties = runClaudeViaOpenAI({})
+
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
+    })
+
     it('leaves the cache reporting flag unset for providers with unknown token conventions', () => {
       const properties = runClaudeViaOpenAI({}, 'some-custom-provider')
 
