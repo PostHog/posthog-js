@@ -5,6 +5,7 @@ import { render, cleanup } from '@testing-library/react'
 // Records the style every Text/TextInput is rendered with, so a test can assert
 // which font reached which node.
 const renderedTextProps: { children: unknown; style: unknown }[] = []
+const platform = vi.hoisted(() => ({ OS: 'ios', select: (o: any) => o.ios ?? o.default }))
 
 vi.mock('react-native', async () => {
   const RealReact = await vi.importActual<typeof import('react')>('react')
@@ -24,7 +25,7 @@ vi.mock('react-native', async () => {
     Text: RecordingText,
     TextInput: RecordingText,
     Linking: { canOpenURL: vi.fn(), openURL: vi.fn() },
-    Platform: { OS: 'ios', select: (o: any) => o.ios ?? o.default },
+    Platform: platform,
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
     useWindowDimensions: () => ({ width: 375, height: 800 }),
   }
@@ -69,6 +70,31 @@ describe('getFontFamily', () => {
   it('ignores a value that is not a string', () => {
     expect(getFontFamily({ fontFamily: null as unknown as string })).toBeUndefined()
     expect(getFontFamily({ fontFamily: 12 as unknown as string })).toBeUndefined()
+  })
+  it('matches the CSS keywords in any case', () => {
+    expect(getFontFamily({ fontFamily: 'Inherit' })).toBeUndefined()
+    expect(getFontFamily({ fontFamily: 'System-UI' })).toBeUndefined()
+  })
+
+  it('uses the first family of a CSS font list', () => {
+    expect(getFontFamily({ fontFamily: '"Times New Roman", serif' })).toBe('Times New Roman')
+    expect(getFontFamily({ fontFamily: "'Courier New', monospace" })).toBe('Courier New')
+    expect(getFontFamily({ fontFamily: 'Inter, sans-serif' })).toBe('Inter')
+    expect(getFontFamily({ fontFamily: 'system-ui, sans-serif' })).toBeUndefined()
+  })
+
+  it('lowercases the editor web fonts on Android so they match the system aliases', () => {
+    platform.OS = 'android'
+    try {
+      expect(getFontFamily({ fontFamily: '"Times New Roman", serif' })).toBe('times new roman')
+      expect(getFontFamily({ fontFamily: 'Inter' })).toBe('Inter')
+    } finally {
+      platform.OS = 'ios'
+    }
+  })
+
+  it('keeps a quoted family that contains a comma', () => {
+    expect(getFontFamily({ fontFamily: '"Foo, Bar", serif' })).toBe('Foo, Bar')
   })
 })
 
