@@ -1,7 +1,5 @@
-import { createBufferedPostHog as createPostHog } from './helpers'
-import { requireInstalledExtension } from './helpers'
+import { createPostHog } from '../src/composition/npm/core'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/products/analytics/analytics'
 import type { CaptureV1Event } from '../src/products/analytics/delivery/capture-v1'
 import {
     applySessionProperties,
@@ -47,7 +45,7 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
             capturePageview: false,
             storage: false,
             navigator: false,
-            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+            analytics: { flushAt: 100, flushInterval: 0 },
             fetch: async (_input, init) => {
                 const { batch } = JSON.parse(String(init?.body)) as { batch: CaptureV1Event[] }
                 received.push(...batch)
@@ -56,13 +54,9 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
         })
         const snapshot = structuredClone(properties)
         const observed: unknown[] = []
-        requireInstalledExtension(posthog.analytics).onEvent(({ properties }) => observed.push(properties))
+        posthog.onEvent(({ properties }) => observed.push(properties))
         try {
-            const result = await requireInstalledExtension(posthog.analytics)[method](
-                'Nullable Properties',
-                properties,
-                { uuid: 'nullable-uuid' }
-            )
+            const result = await posthog[method]('Nullable Properties', properties, { uuid: 'nullable-uuid' })
             if (method === 'captureImmediate') {
                 expect(result).toMatchObject({ submitted: 1, notPersisted: 0, allPersisted: true })
             }
@@ -95,7 +89,7 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
             capturePageview: false,
             storage: false,
             navigator: false,
-            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+            analytics: { flushAt: 100, flushInterval: 0 },
             fetch: async (_input, init) => {
                 const { batch } = JSON.parse(String(init?.body)) as { batch: CaptureV1Event[] }
                 received.push(...batch)
@@ -104,13 +98,9 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
         })
         const toJSON = vi.fn(() => ({ drop: null, items: [null, { drop: null }], keep: true }))
         const enrich = vi.fn(() => ({ dynamicNull: null, dynamicObject: { drop: null } }))
-        requireInstalledExtension(posthog.analytics).registerDynamicEventProperties(enrich)
+        posthog.registerDynamicEventProperties(enrich)
         try {
-            await requireInstalledExtension(posthog.analytics)[method](
-                'Enriched Properties',
-                { converted: { toJSON } },
-                { uuid: 'nullable-uuid' }
-            )
+            await posthog[method]('Enriched Properties', { converted: { toJSON } }, { uuid: 'nullable-uuid' })
             await posthog.flush()
 
             expect(received).toHaveLength(1)

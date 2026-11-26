@@ -96,6 +96,7 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { V1CaptureSender, type V1CaptureSenderConfig } from './capture-v1/sender'
 import { AI_CAPTURE_ENDPOINT, ANALYTICS_CAPTURE_ENDPOINT, type CaptureEndpoint } from './capture-v1/types'
 import type { CaptureError } from './capture-v1/errors'
+import { RemoteConfigPayloadError } from './remote-config-errors'
 import { CaptureLane, type CaptureLaneConfig } from './capture-lane/lane'
 import { AI_MAX_PROPERTIES_BYTES, ANALYTICS_MAX_EVENT_BYTES, CAPTURE_BATCH_TARGET_BYTES } from './capture-lane/limits'
 import { type CaptureSettings, resolveCaptureSettings } from './capture-lane/settings'
@@ -1663,6 +1664,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Queues an exception event a framework integration built. It skips an error that exception autocapture already sent
+   * to this project in this turn, and logs a failure instead of rejecting, so `shutdown()` still flushes the queue.
+   * No context or registered property fills a key in `callOnlyProperties`. Resolves once the event is queued.
+   * @internal
+   */
+  _captureIntegrationException(
+    error: unknown,
+    buildEvent: () => Promise<EventMessage>,
+    callOnlyProperties?: readonly string[]
+  ): Promise<void> {
+    if (!this.errorTracking.claimExplicitCapture(error)) {
+      return Promise.resolve()
+    }
+    return this.addPendingPromise(
+      buildEvent()
+        .then((msg) => this._sendPreparedEvent('capture', msg, false, { callOnlyProperties }))
+        .catch((captureError) => {
+          this._logger.error('Failed to capture an exception:', captureError)
+        })
+    )
+  }
+
+  /**
    * Capture an event manually.
    *
    * @example
@@ -2003,9 +2027,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * }
    * ```
    *
+   * @remarks
+   * Readiness requires at least one loaded flag definition. A successful load that returns no
+   * flags (for example, after every flag is deleted) does not count as ready, and readiness
+   * returns to `false` if a later load returns no flags. To react to every successful load,
+   * including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
+   * number of loaded flags.
+   *
    * {@label Feature flags}
    *
-   * @returns true if local evaluation is ready, false otherwise
+   * @returns true if flag definitions have loaded successfully and include at least one flag, false otherwise
    */
   isLocalEvaluationReady(): boolean {
     return this.featureFlagsPoller?.isLocalEvaluationReady() ?? false
@@ -2078,10 +2109,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * const isReady = await client.waitForLocalEvaluationReady(10000) // 10 seconds
    * ```
    *
+   * @remarks
+   * Like {@link isLocalEvaluationReady}, this requires at least one loaded flag definition. If the
+   * first load after the call returns no flags, the promise resolves to `false` without waiting for
+   * the timeout. To react to every successful load, including empty ones, listen for the
+   * `localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
+   *
    * {@label Feature flags}
    *
    * @param timeoutMs - Timeout in milliseconds (default: 30000)
-   * @returns Promise that resolves to true if ready, false if timed out
+   * @returns Promise that resolves to true if ready, false if timed out or if the next load returned no flags
    */
   async waitForLocalEvaluationReady(timeoutMs: number = THIRTY_SECONDS): Promise<boolean> {
     if (this.isLocalEvaluationReady()) {
@@ -2640,7 +2677,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param flagKey - The feature flag key
-   * @returns Promise that resolves to the remote config payload or undefined
+   * @returns Promise that resolves to:
+   * - the payload, when the flag has one
+   * - `null`, when the flag is disabled
+   * - `undefined`, when the flag has no payload, or the request failed. A response with a status
+   *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
+   *   client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
@@ -2658,7 +2700,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return undefined
     }
 
-    const parsed = await response.json()
+    if (response.status < 200 || response.status >= 300) {
+      // The error body is not read, so cancel it to release the connection
+      void Promise.resolve(response.body?.cancel()).catch(() => {})
+      this._events.emit('error', new RemoteConfigPayloadError(flagKey, response.status))
+      return undefined
+    }
+
+    let parsed: JsonType
+    try {
+      // A flag with no payload is answered with an empty body
+      const body = await response.text()
+      if (!body.trim()) {
+        return undefined
+      }
+      parsed = JSON.parse(body)
+    } catch (error) {
+      this._events.emit('error', error)
+      return undefined
+    }
+
     // The payload from the endpoint is stored as a JSON encoded string. So when we return
     // it, it's effectively double encoded. As far as we know, we should never get single-encoded
     // JSON, but we'll be defensive here just in case.

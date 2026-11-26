@@ -736,7 +736,10 @@ export class Autocapture implements Extension {
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 !!config.rageclick &&
-                this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
+                // The target is passed so the detector can drop the browser's synthetic click
+                // forwarded from a <label> to its control, which would otherwise double-count a
+                // single user click and could trigger a false rage click.
+                this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime(), target)
             ) {
                 if (shouldCaptureRageclick(target, config.rageclick)) {
                     this._captureEvent(e, '$rageclick', targetOverride)
