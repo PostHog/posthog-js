@@ -1,7 +1,5 @@
-import { requireInstalledExtension } from '../tests/helpers'
 import { createPostHog } from '../src/composition/npm'
 import { autocapture } from '../src/products/autocapture/autocapture'
-import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
 import { surveys } from '../src/products/surveys/surveys'
 import type { IPostHog } from '../src/core/types'
 import type { Survey } from '../src/products/surveys/surveys-options'
@@ -101,10 +99,10 @@ export const autocaptureHarness = {
             capturePageview: false,
             flags: false,
             logs: false,
-            analytics: false,
+            analytics: { flushAt: 100, flushInterval: 0 },
             surveys: { automaticDisplay: false },
             autocapture: { maskAllText: masked, maskAllElementAttributes: masked },
-            extensions: [createAnalyticsExtension(), ...extensions],
+            extensions,
             remoteConfig: remote,
             fetch: async (input) => {
                 if (String(input).includes('/api/surveys/')) {
@@ -115,9 +113,7 @@ export const autocaptureHarness = {
                 return new Response('{}')
             },
         })
-        requireInstalledExtension(client.analytics).onEvent((event) =>
-            captured.push({ event: event.event, properties: { ...event.properties } })
-        )
+        client.onEvent((event) => captured.push({ event: event.event, properties: { ...event.properties } }))
         if (!delayed) await client.surveys?.canRenderSurvey(actionSurvey.id)
         else void client.surveys?.canRenderSurvey(actionSurvey.id)
     },

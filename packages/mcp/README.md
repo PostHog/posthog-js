@@ -22,6 +22,13 @@ stable with no server-side store.
 The SDK publishes no standalone `$identify` event. The `identify` callback runs on every request,
 on any pod, and stamps `distinct_id` and `$set` onto each event it sends.
 
+A custom event from `analytics.capture()` takes the session and identity of the request it
+was captured in, even when requests overlap on one instance. That needs `AsyncLocalStorage`,
+which Node, Bun, Deno, Vercel Edge and Cloudflare Workers with the `nodejs_compat` or
+`nodejs_als` flag provide. Without it the SDK cannot tell requests apart, so it sends custom
+events with a session of their own and no identity rather than another caller's, and logs one
+warning.
+
 ### Streamable HTTP: set `enableJsonResponse: true`
 
 The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`
@@ -65,6 +72,45 @@ if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
 ```
 
 Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
+
+### Flushing on per-request runtimes
+
+Auto-captured events reach `posthog.capture()` asynchronously, after the handler's response is
+built. On a runtime that freezes or exits after each request (serverless and edge functions,
+Convex HTTP actions), await `analytics.flush()` before you return. It waits until every event the
+server has captured so far is handed to `posthog-node`, then flushes the `posthog-node` queue:
+
+```ts
+const analytics = instrument(server, posthog)
+
+const response = await handleRequest(request)
+await analytics.flush()
+return response
+```
+
+On a runtime with background work, such as Cloudflare Workers or Vercel, pass it to `waitUntil`
+so the response doesn't wait: `ctx.waitUntil(analytics.flush())`.
+
+An event is captured when its handler finishes. A JSON response is complete by then, but a streamed
+(SSE) one is returned before the handler has run, so there `flush()` has nothing to wait for yet.
+Return JSON (`enableJsonResponse: true`), or flush when the stream ends:
+
+```ts
+const response = await handleRequest(request)
+if (!response.body) {
+  await analytics.flush()
+  return response
+}
+const { readable, writable } = new TransformStream()
+const sent = response.body.pipeTo(writable).catch(() => undefined) // the client may disconnect
+ctx.waitUntil(sent.then(() => analytics.flush()))
+return new Response(readable, response)
+```
+
+It flushes the whole client, so events you capture on it yourself are sent too. It never rejects.
+When `posthog.flush()` does, that goes to the `logger` option. posthog-node 6.x.x reports failed
+deliveries through `posthog.on('error', ...)` instead. Which failed events are retried is up to
+`posthog-node`.
 
 ## MCP TypeScript SDK v2
 

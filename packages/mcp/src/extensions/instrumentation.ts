@@ -44,13 +44,16 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
+import { runInRequestScope, type PendingCustomEvents } from './request-scope'
 import {
   deriveSessionIdFromMCPSession,
   getSessionInfo,
+  instanceSessionSource,
   isModernEraRequest,
   newSessionId,
   resolveSession,
 } from './session'
+import type { ResolvedSession } from './session'
 import {
   omitClientConversation,
   recognizeClient,
@@ -83,11 +86,45 @@ type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHand
 /** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 
-function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string {
-  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+// Requests that carry no session share one schema cache entry: each gets a fresh
+// session, so keying by it would never let a call find its listing's schemas.
+const UNBOUND_HTTP_SCHEMA_KEY = 'unbound-http'
+
+// Every sessionless client's listing merges into the shared entry, so it is the one
+// that needs a cap; a session's own entry holds no more than its catalogue.
+const MAX_SHARED_SCHEMAS = 10_000
+
+/**
+ * A host session keeps its listings to itself: its schemas decide which argument
+ * names a call may send verbatim, so another tenant's must never apply.
+ */
+function listingSchemaKey(
+  data: MCPAnalyticsData,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  hostSessionId: string | undefined
+): string {
+  return hostSessionId ?? transportSchemaKey(data, extra)
+}
+
+/**
+ * A call reads its host session's listing when it has one. A host session with no
+ * listing yet (the callback answered for the call but not its listing) reads the
+ * transport's, which holds only listings no host session claimed.
+ */
+function callSchemaKey(
+  data: MCPAnalyticsData,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  hostSessionId: string | undefined
+): string {
+  return hostSessionId && data.toolInputSchemas.has(hostSessionId) ? hostSessionId : transportSchemaKey(data, extra)
+}
+
+function transportSchemaKey(data: MCPAnalyticsData, extra: CompatibleRequestHandlerExtra | undefined): string {
+  const headers = getRequestHeaders(extra)
+  const token = decodeSessionId(readMcpSessionHeader(headers))
   if (token) return token.sessionId
   if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
-  return data.sessionId
+  return headers ? UNBOUND_HTTP_SCHEMA_KEY : data.sessionId
 }
 
 function resolveInputAliases(data: MCPAnalyticsData, toolName: string | undefined): InputAliasMap | undefined {
@@ -194,7 +231,6 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   const canCaptureContextIntent = ownership.read.context
   const conversation = resolveToolConversation(ownership.read.conversationId, client, request, extra)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
-  const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
@@ -214,11 +250,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   const hostProperties = preparedEvent?.event.properties
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const sessionSchemas =
-      (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
-      data.toolInputSchemas.get(schemaSessionId) ??
-      data.toolInputSchemas.get(SEEDED_LISTING)
-    const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
+    const schema = inputSchema ?? listedSchema(data, callSchemaKey(data, extra, preparedEvent.hostSessionId), request)
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
       ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
@@ -237,13 +269,18 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     preparedEvent.event.parameters = undefined
   }
 
+  // Only a session the minted handle chose can still change with the outcome.
+  const pendingCustomEvents: PendingCustomEvents | undefined = preparedEvent?.sessionWithoutHandle
+    ? { events: [] }
+    : undefined
   let result: unknown
   try {
-    result = await execute(downstreamRequest)
+    result = await runInRequestScope(data, preparedEvent, () => execute(downstreamRequest), pendingCustomEvents)
   } catch (error) {
-    if (preparedEvent && conversation.minted) {
-      preparedEvent.event.conversationId = undefined
+    if (conversation.minted) {
+      dropUndeliveredHandle(preparedEvent)
     }
+    settleCustomEvents(server, pendingCustomEvents, preparedEvent, data.logger)
     if (isUnknownTool) {
       publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
     } else {
@@ -252,7 +289,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     throw error
   }
 
-  const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
+  const finalResult = applyConversationInstructions(preparedEvent, result, conversation, ownership)
+  settleCustomEvents(server, pendingCustomEvents, preparedEvent, data.logger)
   if (isUnknownTool && isToolResultError(result)) {
     publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
@@ -337,6 +375,53 @@ function resolveToolConversation(
 interface PreparedToolEvent {
   event: McpEvent
   requestAttribution: SessionInfo
+  hostSessionId?: string
+  /** Set when a minted handle chose the session: the one the event falls back to if the agent never receives it. */
+  sessionWithoutHandle?: ResolvedSession
+}
+
+/**
+ * Sends the custom events a call held back, with the session its own event settled
+ * on. Not awaited, like the call's own event, so the tool's result never waits on it.
+ */
+function settleCustomEvents(
+  server: MCPServerLike,
+  pending: PendingCustomEvents | undefined,
+  preparedEvent: PreparedToolEvent | null,
+  logger: LoggerFn
+): void {
+  if (!pending || !preparedEvent) {
+    return
+  }
+  const { sessionId, sessionSource } = preparedEvent.event
+  pending.settled = { sessionId, sessionSource }
+  const dropped = (error: unknown): void =>
+    logger(`Warning: dropped a custom event while settling a tool call - ${error}`)
+  for (const event of pending.events.splice(0)) {
+    try {
+      captureEvent(server, { ...event, sessionId, sessionSource }, logger, preparedEvent.requestAttribution)?.catch(
+        dropped
+      )
+    } catch (error) {
+      dropped(error)
+    }
+  }
+}
+
+/**
+ * A minted handle the agent never received groups nothing, so the event takes
+ * the session the call would have had without one.
+ */
+function dropUndeliveredHandle(preparedEvent: PreparedToolEvent | null): void {
+  if (!preparedEvent) {
+    return
+  }
+  preparedEvent.event.conversationId = undefined
+  const fallback = preparedEvent.sessionWithoutHandle
+  if (fallback) {
+    preparedEvent.event.sessionId = fallback.sessionId
+    preparedEvent.event.sessionSource = fallback.source
+  }
 }
 
 /**
@@ -427,16 +512,22 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const { sessionId, source: sessionSource } = resolveSession(
-      server,
-      extra,
-      conversation.conversationId,
-      request,
-      client
-    )
+    const {
+      sessionId,
+      source: sessionSource,
+      fromHost,
+    } = resolveSession(server, extra, conversation.conversationId, request, client)
+    // Resolved now, with the handle's, so both describe the call as it arrived.
+    // Only when the minted handle chose the session; a host or client id outranks it.
+    // The handle chose the session only when the host's callback declined, so the
+    // fallback skips the callback rather than asking it again.
+    const sessionWithoutHandle =
+      conversation.minted && sessionSource === 'conversation'
+        ? resolveSession(server, extra, undefined, undefined, client)
+        : undefined
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
-    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const sessionInfo = getSessionInfo(server, data, sessionId, extra)
 
     const toolName = request.params?.name
     const event: McpEvent = {
@@ -474,7 +565,7 @@ async function prepareToolCallEvent(
       const resolvedModel = resolveModel(request, ownership.read.llmModel)
       setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
-    return { event, requestAttribution }
+    return { event, requestAttribution, hostSessionId: fromHost && sessionId, sessionWithoutHandle }
   } catch (error) {
     data.logger(
       `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
@@ -494,7 +585,7 @@ async function prepareToolCallEvent(
  * nobody has.
  */
 function applyConversationInstructions(
-  event: McpEvent | null,
+  preparedEvent: PreparedToolEvent | null,
   result: unknown,
   conversation: ConversationIdResolution,
   ownership: Pick<AnalyticsParameterOwnership, 'outputInstructions'>
@@ -519,8 +610,8 @@ function applyConversationInstructions(
   }
 
   // Only a minted session handle can be lost this way — one the agent supplied, it has.
-  if (!delivered && conversation.minted && event) {
-    event.conversationId = undefined
+  if (!delivered && conversation.minted) {
+    dropUndeliveredHandle(preparedEvent)
   }
 
   return updated
@@ -716,7 +807,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
   let preparedEvent: PreparedToolEvent | null = null
   try {
     const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
-    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const sessionInfo = getSessionInfo(server, data, sessionId, extra)
     const event: McpEvent = {
       sessionId,
       sessionSource,
@@ -736,7 +827,7 @@ async function captureResourceRequest(params: TraceRequestParams): Promise<unkno
 
   let result: unknown
   try {
-    result = await originalHandler(request, extra)
+    result = await runInRequestScope(data, preparedEvent, async () => await originalHandler(request, extra))
   } catch (error) {
     publishResourceEvent(server, preparedEvent, startTime, params, { error })
     throw error
@@ -904,10 +995,10 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
+  const { sessionId, source: sessionSource, fromHost } = resolveSession(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
-  const sessionInfo = getSessionInfo(server, data, sessionId)
+  const sessionInfo = getSessionInfo(server, data, sessionId, extra)
   const event: McpEvent = {
     sessionId,
     sessionSource,
@@ -939,6 +1030,7 @@ export async function handleListToolsRequest(
     originalListToolsHandler,
     request,
     extra,
+    data ? listingSchemaKey(data, extra, fromHost && sessionId) : undefined,
     event,
     logger,
     requestAttribution,
@@ -976,9 +1068,6 @@ export async function handleListToolsRequest(
   return response
 }
 
-/** Input schemas from a listing no client asked for, which belongs to no session. */
-const SEEDED_LISTING = ''
-
 /**
  * Caches what a client's own `tools/list` on this server would: which analytics
  * parameters each tool owns, its input schema, description and category. For a
@@ -991,7 +1080,7 @@ export function cacheToolListing(server: MCPServerLike, tools: CompatibleToolsLi
     return
   }
   cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-  data.toolInputSchemas.set(SEEDED_LISTING, new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema])))
+  data.seededToolInputSchemas = new Map(tools.filter((t) => t?.name).map((t) => [t.name, t.inputSchema]))
   cacheToolDescriptions(data.toolDescriptions, tools)
   cacheToolCategories(data.toolCategories, tools)
 }
@@ -1023,11 +1112,31 @@ function toolsListEnvelope(response: CompatibleToolsListLike): Record<string, un
   return Object.keys(envelope).length > 0 ? envelope : undefined
 }
 
+function rememberListedSchemas(data: MCPAnalyticsData, key: string, tools: CompatibleToolsListLike['tools']): void {
+  const schemas = data.toolInputSchemas.get(key) ?? new Map<string, unknown>()
+  for (const tool of tools) {
+    if (!tool?.name) continue
+    schemas.delete(tool.name)
+    schemas.set(tool.name, tool.inputSchema)
+    if (key === UNBOUND_HTTP_SCHEMA_KEY && schemas.size > MAX_SHARED_SCHEMAS) {
+      schemas.delete(schemas.keys().next().value as string)
+    }
+  }
+  data.toolInputSchemas.set(key, schemas)
+}
+
+function listedSchema(data: MCPAnalyticsData, key: string, request: MCPRequestLike): unknown {
+  const name = request.params?.name ?? ''
+  const schemas = data.toolInputSchemas.get(key)
+  return schemas?.has(name) ? schemas.get(name) : data.seededToolInputSchemas?.get(name)
+}
+
 async function getTracedToolsList(
   server: MCPServerLike,
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
+  schemaKey: string | undefined,
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo,
@@ -1035,19 +1144,19 @@ async function getTracedToolsList(
 ): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
-    const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
+    const originalResponse = (await (data
+      ? runInRequestScope(
+          data,
+          { event, requestAttribution },
+          async () => await originalListToolsHandler(request, extra)
+        )
+      : originalListToolsHandler(request, extra))) as CompatibleToolsListLike
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
-    if (data) {
+    if (data && schemaKey !== undefined) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-      if (event.sessionId) {
-        const sessionSchemas = data.toolInputSchemas.get(event.sessionId) ?? new Map<string, unknown>()
-        for (const tool of tools) {
-          if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
-        }
-        data.toolInputSchemas.set(event.sessionId, sessionSchemas)
-      }
+      rememberListedSchemas(data, schemaKey, tools)
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
@@ -1322,10 +1431,16 @@ export async function handleInitializeRequest(
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
-  const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
+  const resolved = resolveSession(server, extra, undefined, request)
+  // The request itself carries no token yet, so resolving it lands on step 4's
+  // fresh id. When nothing outranked that, the session is the one just minted.
+  const { sessionId, source: sessionSource } =
+    mintedSessionId && resolved.source === 'generated'
+      ? { sessionId: mintedSessionId, source: instanceSessionSource(data) }
+      : resolved
   // Snapshot before identify, metadata, or the initialize handler can yield to
   // another request using the same instrumented server.
-  const sessionInfo = getSessionInfo(server, data, sessionId)
+  const sessionInfo = getSessionInfo(server, data, sessionId, extra)
   const initializeClientInfo = readInitializeClientInfo(request)
   const requestSessionInfo: SessionInfo = {
     ...sessionInfo,

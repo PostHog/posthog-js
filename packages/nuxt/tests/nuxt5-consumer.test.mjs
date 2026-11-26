@@ -130,6 +130,11 @@ try {
       2
     )
   )
+  // unhead 3.5.x sets its Vite config in a configResolved hook that Vite skips under applyToEnvironment, so `nuxt build` crashes.
+  writeFileSync(
+    join(fixtureDir, 'pnpm-workspace.yaml'),
+    "overrides:\n  unhead: 3.4.3\n  '@unhead/vue': 3.4.3\n  '@unhead/bundler': 3.4.3\n"
+  )
   writeFileSync(
     join(fixtureDir, 'nuxt.config.mjs'),
     `export default defineNuxtConfig({ modules: ['@posthog/nuxt'], posthogConfig: { publicKey: 'phc_test', host: '${posthogHost}', serverConfig: { enableExceptionAutocapture: true, flushAt: 100, flushInterval: 0, disableCompression: true, disableRemoteConfig: true } } })\n`

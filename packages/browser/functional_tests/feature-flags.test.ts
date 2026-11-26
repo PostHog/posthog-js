@@ -41,7 +41,7 @@ describe('FunctionalTests / Feature Flags', () => {
             bodyWrapper: '<gzip>',
             compression: null,
             contentType: 'text/plain',
-            path: '/flags/?v=2',
+            path: '/flags/?v=4',
         })
         expect(wireRequest.decodedBody.$device_id).toEqual(expect.any(String))
         expect(wireRequest.decodedBody.distinct_id).toEqual(expect.any(String))

@@ -1,5 +1,18 @@
 # posthog-node
 
+## 6.1.0
+
+### Minor Changes
+
+- [`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Local evaluation supports early-access feature enrollment. For a flag with `feature_enrollment`, the person property `$feature_enrollment/<flag key>` decides the flag before holdouts and release conditions: `true` or `"true"` is enrolled, any other value is opted out, and without it the flag falls back to `/flags`
+  (2026-11-25)
+
+- [#5818](https://github.com/PostHog/posthog-js/pull/5818) [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec) Thanks [@NikitaKurpas](https://github.com/NikitaKurpas)! - feat: `getRemoteConfigPayload` resolves `undefined` instead of returning an error response body or throwing on an empty body, and emits a new `RemoteConfigPayloadError` with the `statusCode` and `flagKey` on the client's `error` event for a failed response.
+  (2026-11-25)
+
+- [#5866](https://github.com/PostHog/posthog-js/pull/5866) [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add experimental `createReactRouterErrorHandler` to capture React Router server errors with the request's person, session and page URL. Linking page loads to the browser session reads the posthog-js cookie, which needs `readPostHogCookie: true`.
+  (2026-11-25)
+
 ## 6.0.6
 
 ### Patch Changes
