@@ -25,7 +25,7 @@ const withoutMcpCredentials = (config: Record<string, unknown>): Record<string, 
 }
 
 // Keys are compared in lower case without `-` and `_`, so camelCase and snake_case configs both match.
-export const normalizeKey = (key: string): string => key.toLowerCase().replace(/[-_]/g, '')
+export const normalizeKey = (key: string): string => key.toLowerCase().replace(/[-_\s]/g, '')
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (!isObject(value)) {
@@ -64,7 +64,7 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   )
 }
 
-const ESCAPED_WHITESPACE = new Set(['n', 't', 'r'])
+const ESCAPED_WHITESPACE = new Set(['n', 't', 'r', 'f', 'b'])
 
 const MAX_KEY_DECODE_LEVELS = 16
 
