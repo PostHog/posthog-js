@@ -75,7 +75,7 @@ function createWeatherFlow() {
 }
 
 const toolResult = (credentialKey: string) => ({
-  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer' },
+  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer', inputTokens: 1234 },
   forecast: 'Sunny',
 })
 
@@ -84,6 +84,7 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ...[
     'apiKey',
     'refresh_token',
+    'refresh_tokens',
     'refreshToken',
     'idToken',
     'sessionToken',
@@ -96,18 +97,23 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     'Credentials',
     'credential',
     'Proxy-Authorization',
+    'requestHeaders',
   ].map((credentialKey): [string, unknown] => [credentialKey, toolResult(credentialKey)]),
   ['JSON text', JSON.stringify(toolResult('refresh_token'))],
   ['JSON text with a BOM', `\uFEFF${JSON.stringify(toolResult('refresh_token'))}`],
   [
     'JSON text with an escaped key',
-    '{"auth":{"refresh_tok\\u0065n":"tool-secret","token_type":"Bearer"},"forecast":"Sunny"}',
+    '{"auth":{"refresh_tok\\u0065n":"tool-secret","token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],
   [
     'JSON text with an escaped duplicate key',
-    '{"auth":{"refresh_tok\\u0065n":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
+    '{"auth":{"refresh_tok\\u0065n":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],
-  ['JSON lines', `{"forecast":"Sunny","token_type":"Bearer"}\n{"refresh_token":"tool-secret"}`, false],
+  [
+    'JSON lines',
+    `{"forecast":"Sunny","token_type":"Bearer","inputTokens":1234}\n{"refresh_token":"tool-secret"}`,
+    false,
+  ],
   ['JSON text after prose', `Result: ${JSON.stringify(toolResult('refresh_token'))}`, false],
   ['double-encoded JSON text', JSON.stringify(JSON.stringify(toolResult('refresh_token')))],
   [
@@ -117,7 +123,9 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ],
   [
     'JSON text with escaped whitespace before a nested colon',
-    JSON.stringify({ body: '{"auth":{"refresh_token"\n: "tool-secret","token_type":"Bearer"},"forecast":"Sunny"}' }),
+    JSON.stringify({
+      body: '{"auth":{"refresh_token"\n: "tool-secret","token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
+    }),
   ],
   [
     'truncated JSON text with escaped whitespace before a nested colon',
@@ -125,8 +133,14 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     false,
   ],
   [
+    'JSON text with a nested key in escaped quotes',
+    '{"forecast":"Sunny","body":"{\\u0022refresh_token\\u0022:\\u0022tool-secret\\u0022}"}',
+    false,
+  ],
+  ['malformed JSON text with a non-breaking space before the colon', '{"refresh_token"\u00a0:"tool-secret"}', false],
+  [
     'JSON text with a duplicate key',
-    '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
+    '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],
 ]
 
@@ -403,6 +417,7 @@ describe('PostHogGenkitSpanProcessor', () => {
       if (keepsContent) {
         expect(input).toContain('Sunny')
         expect(input).toContain('Bearer')
+        expect(input).toContain('1234')
       }
     }
   )

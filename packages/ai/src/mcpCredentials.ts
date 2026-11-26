@@ -64,7 +64,6 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   )
 }
 
-const WHITESPACE = new Set([' ', '\t', '\n', '\r'])
 const ESCAPED_WHITESPACE = new Set(['n', 't', 'r'])
 
 // A key as written in raw text, unescaped as many times as the text is nested, so `refresh_tok\\u0065n` matches.
@@ -84,13 +83,16 @@ function decodeKey(raw: string): string {
   return key
 }
 
-// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`), past whitespace that may
-// itself be escaped (`\\n`). Every walk back stops at the previous quote, so no character is read twice.
+// Any whitespace or control character, including ones JSON rejects, so malformed text cannot hide a key.
+const isSeparator = (char: string): boolean => char <= ' ' || char.trim() === ''
+
+// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`), past separators that may
+// themselves be escaped (`\\n`). Every walk back stops at the previous quote, so no character is read twice.
 function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
   for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
     let close = colon - 1
     while (close >= 0) {
-      if (WHITESPACE.has(text[close])) {
+      if (isSeparator(text[close])) {
         close--
       } else if (ESCAPED_WHITESPACE.has(text[close]) && text[close - 1] === '\\') {
         close -= 2
@@ -112,6 +114,15 @@ function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: strin
   return false
 }
 
+// False when the value is too deep to serialize, so the original text is never returned unchecked.
+function serializesTo(value: unknown, json: string): boolean {
+  try {
+    return JSON.stringify(value) === json
+  } catch {
+    return false
+  }
+}
+
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
 // JSON text is masked field by field. Text that names a credential key but does not parse, such as JSON lines,
 // truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
@@ -123,7 +134,7 @@ function redactJsonString(value: string, isCredentialKey: (normalizedKey: string
       const parsed = JSON.parse(trimmed)
       const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
       // `JSON.parse` keeps only the last of duplicate keys, so the raw scan decides too.
-      return namesCredential || redacted !== JSON.stringify(parsed) ? redacted : value
+      return namesCredential || !serializesTo(parsed, redacted) ? redacted : value
     } catch {
       // Not JSON, so only the raw scan applies.
     }

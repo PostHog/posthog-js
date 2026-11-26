@@ -19,6 +19,7 @@ const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 
 // `token_type` alone.
 const CREDENTIAL_KEY_SUFFIXES = [
   'token',
+  'tokens',
   'secret',
   'secrets',
   'secretkey',
@@ -34,12 +35,29 @@ const CREDENTIAL_KEY_SUFFIXES = [
   'cookies',
   'credential',
   'credentials',
+  // Masked whole, since headers hold credentials under other names, such as `x-api-key`.
+  'headers',
 ]
-// `headers` is masked whole, since it holds credentials under other names, such as `x-api-key`.
-const CREDENTIAL_KEYS = new Set(['headers'])
+// Token counts and limits end in `tokens` but hold no secret.
+const TOKEN_COUNT_KEYS = new Set([
+  'maxtokens',
+  'maxoutputtokens',
+  'maxcompletiontokens',
+  'inputtokens',
+  'outputtokens',
+  'totaltokens',
+  'prompttokens',
+  'completiontokens',
+  'reasoningtokens',
+  'thoughtstokens',
+  'cachedtokens',
+  'cachedcontenttokens',
+  'cachecreationinputtokens',
+  'cachereadinputtokens',
+])
 
 const isCredentialKey = (key: string): boolean =>
-  CREDENTIAL_KEYS.has(key) || CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
+  !TOKEN_COUNT_KEYS.has(key) && CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
 
 // Genkit plugin names that differ from the provider names the other integrations send.
 const PROVIDER_NAMES = new Map([
