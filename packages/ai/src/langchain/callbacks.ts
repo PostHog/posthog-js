@@ -996,6 +996,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     // would get its cache reads billed twice unless we declare the convention explicitly.
     if (
       !isAnthropic &&
+      inputIncludesCacheTokens &&
       cacheTokens > 0 &&
       parsedUsage.input >= cacheTokens &&
       provider &&
@@ -1016,10 +1017,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     let normalizedGenerationUsage: any
     let rawGenerationUsage: any
     let fallbackGenerationUsage: any
+    let generationCount = 0
 
     for (const generation of response.generations ?? []) {
       for (const genChunk of generation) {
         const generationInfo = genChunk.generationInfo ?? {}
+        generationCount++
         const message = 'message' in genChunk ? genChunk.message : undefined
         const messageUsage =
           message && typeof message === 'object' && 'usage_metadata' in message ? message.usage_metadata : undefined
@@ -1077,6 +1080,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         // LangChain's aggregated tokenUsage drops the cache breakdown that usage_metadata keeps.
         const usageWithCacheDetails =
           key !== 'usage' &&
+          generationCount === 1 &&
           llmUsage.input_token_details == null &&
           normalizedGenerationUsage?.input_token_details != null
             ? { ...llmUsage, input_token_details: normalizedGenerationUsage.input_token_details }

@@ -1981,6 +1981,49 @@ describe('LangChainCallbackHandler', () => {
       expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
     })
 
+    it('does not pair batched token totals with one prompt cache breakdown', () => {
+      const runId = 'run_claude_proxy_batch'
+      handler.handleLLMStart(
+        { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'], kwargs: {} },
+        ['first', 'second'],
+        runId,
+        undefined,
+        { invocation_params: {} },
+        undefined,
+        { ls_model_name: 'claude-sonnet-4-5', ls_provider: 'openai' }
+      )
+      const promptUsage = {
+        input_tokens: 10000,
+        output_tokens: 100,
+        total_tokens: 10100,
+        input_token_details: { cache_read: 9000 },
+      }
+      const generations: ChatGeneration[][] = [
+        [{ text: 'a', message: new AIMessage({ content: 'a', usage_metadata: promptUsage }) }],
+        [{ text: 'b', message: new AIMessage({ content: 'b', usage_metadata: promptUsage }) }],
+      ]
+      handler.handleLLMEnd(
+        { generations, llmOutput: { tokenUsage: { promptTokens: 20000, completionTokens: 200, totalTokens: 20200 } } },
+        runId
+      )
+
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(20000)
+      expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+      expect(captureCall[0].properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    it('leaves the cache reporting flag unset for cache-exclusive raw usage', () => {
+      const properties = runClaudeViaOpenAI(
+        { usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 500 } },
+        'openrouter'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(1000)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(500)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
     it('leaves the cache reporting flag unset for providers with unknown token conventions', () => {
       const properties = runClaudeViaOpenAI({}, 'some-custom-provider')
 
