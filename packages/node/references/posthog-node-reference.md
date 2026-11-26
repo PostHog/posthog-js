@@ -2356,8 +2356,8 @@ config flag, versus `429` or `5xx` when the request should be tried again later.
 | Property | Modifier | Type | Default value | Description | Overrides |
 | ------ | ------ | ------ | ------ | ------ | ------ |
 | <a id="flagkey"></a> `flagKey` | `readonly` | `string` | `undefined` | The key of the flag whose payload was requested. | - |
-| <a id="name-3"></a> `name` | `public` | `string` | `'RemoteConfigPayloadError'` | - | `Error.name` |
-| <a id="statuscode-1"></a> `statusCode` | `readonly` | `number` | `undefined` | The HTTP status PostHog answered with. | - |
+| <a id="name-4"></a> `name` | `public` | `string` | `'RemoteConfigPayloadError'` | - | `Error.name` |
+| <a id="statuscode-2"></a> `statusCode` | `readonly` | `number` | `undefined` | The HTTP status PostHog answered with. | - |
 
 ## SDK utils
 
@@ -5185,7 +5185,7 @@ Supports multiple formats:
 | <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
 | <a id="id"></a> `id` | `number` | - |
 | <a id="key-2"></a> `key` | `string` | - |
-| <a id="name-4"></a> `name` | `string` | - |
+| <a id="name-5"></a> `name` | `string` | - |
 | <a id="rollout_percentage-1"></a> `rollout_percentage` | `null` \| `number` | - |
 
 ### `PostHogFetchBodyBytes`
