@@ -160,6 +160,25 @@ describe('RageClick()', () => {
             expect(detection).toEqual([false, false, false, false])
         })
 
+        it('recognises the forwarded click without Element.closest (IE11)', () => {
+            const closest = Element.prototype.closest
+            // @ts-expect-error simulating a browser without closest()
+            delete Element.prototype.closest
+            try {
+                const span = document.createElement('span')
+                label.appendChild(span)
+                const detection = [
+                    instance.isRageClick(5, 5, 10, span),
+                    instance.isRageClick(5, 5, 11, control),
+                    instance.isRageClick(5, 5, 30, span),
+                    instance.isRageClick(5, 5, 31, control),
+                ]
+                expect(detection).toEqual([false, false, false, false])
+            } finally {
+                Element.prototype.closest = closest
+            }
+        })
+
         it('still detects a rage click from three genuine label clicks', () => {
             const detection = [...labelClick(10), ...labelClick(30), ...labelClick(50)]
             // The third genuine click (fifth call) triggers; the forwarded clicks never do.

@@ -43,10 +43,19 @@ export default class RageClick {
         // by its target instead: the control of the <label> the previous click landed in, dispatched
         // a few milliseconds later. Counting it would double-count a single user click and could
         // trigger a false rage click, so drop it without recording it.
-        // The target may be a non-Element (e.g. document, when a click is dispatched on it), which has
-        // no closest(), so narrow to Element before calling it.
-        const previousLabel =
-            this.lastTarget instanceof Element ? (this.lastTarget.closest('label') as HTMLLabelElement | null) : null
+        // The target may be a non-Element (e.g. document, when a click is dispatched on it). Walk the
+        // parents instead of calling closest(), which IE11 lacks.
+        let previousLabel: HTMLLabelElement | null = null
+        for (
+            let el: Element | null = this.lastTarget instanceof Element ? this.lastTarget : null;
+            el;
+            el = el.parentElement
+        ) {
+            if (el.tagName === 'LABEL') {
+                previousLabel = el as HTMLLabelElement
+                break
+            }
+        }
         const isForwardedLabelClick =
             !!previousLabel && !!target && previousLabel.control === target && timestamp - this.lastTimestamp < 50
         this.lastTarget = target ?? null
