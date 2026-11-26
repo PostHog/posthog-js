@@ -826,6 +826,38 @@ describe('flag events of a local config version 2 result', () => {
     })
   })
 
+  // The events carry what the record holds, as for a remote record: the reader leaves out an id or
+  // version that is not an integer, and an experiment link that is not a boolean.
+  it.each(
+    Object.keys(READS).flatMap((name) => [
+      [name, { id: 41, version: 3, has_experiment: true }, { id: 41, version: 3, hasExperiment: true }],
+      [name, { id: '41', version: '3', has_experiment: 'true' }, {}],
+      [name, { id: 41.5, version: 3.5, has_experiment: 1 }, {}],
+      [name, { id: true, version: false, has_experiment: null }, {}],
+    ])
+  )('send the id, version and experiment link of the record (%s read, stored %j)', async (name, stored, sent) => {
+    const { client, events, remoteCalls } = setUp({ definitions: definitionsBody([{ ...SPLIT, ...stored }]) })
+
+    await READS[name](client)
+    await client.shutdown()
+
+    const [called] = named(events, FLAG_CALLED, 'shelf-order')
+    const [exposure] = named(events, EXPOSURE, 'shelf-order')
+    const carried = (properties: Record<string, any>): Json =>
+      Object.fromEntries(
+        [
+          ['id', properties.$feature_flag_id],
+          ['version', properties.$feature_flag_version],
+          ['hasExperiment', properties.$feature_flag_has_experiment],
+        ].filter(([, value]) => value !== undefined)
+      )
+    expect(remoteCalls()).toBe(0)
+    expect(carried(called.properties)).toEqual(sent)
+    // An exposure carries no experiment link.
+    const { hasExperiment: _link, ...exposed } = sent as Json
+    expect(carried(exposure.properties)).toEqual(exposed)
+  })
+
   it.each(Object.keys(READS))('name the rule of a targeting match and send no exposure (%s read)', async (name) => {
     const flag = definition('shelf-order', filters([targeted('title')], 'string', 'date'))
     const { client, events } = setUp({ definitions: definitionsBody([flag]) })

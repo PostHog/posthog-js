@@ -2294,7 +2294,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             if (localResult.record !== undefined) {
               // A config version 2 flag: its record is read, and its events built, as a remote one.
               flagRecord = localResult.record.record
+              flagId = flagRecord.metadata.id
               flagVersion = flagRecord.metadata.version
+              flagHasExperiment = flagRecord.metadata.hasExperiment
               result.reasonCode = flagRecord.reason?.code
             }
           }
@@ -3151,20 +3153,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       for (const [key, value] of Object.entries(localResult.response)) {
         const flagDef = this.featureFlagsPoller?.featureFlagsByKey[key]
         // A config version 2 flag has the record a /flags?v=4 response gives, which supplies its
-        // version and its flag events.
+        // id, version, experiment link and flag events.
         const parsed = localResult.records[key]?.record
         records[key] = {
           key,
           enabled: value !== false,
           variant: typeof value === 'string' ? value : undefined,
           payload: localResult.payloads[key],
-          id: flagDef?.id,
+          id: parsed !== undefined ? parsed.metadata.id : flagDef?.id,
           // The version 1 local-evaluation definition is read without a version field; only the
           // remote `/flags` response and a config version 2 record carry `metadata.version`.
           version: parsed?.metadata.version,
           reason: 'Evaluated locally',
           locallyEvaluated: true,
-          hasExperiment: flagDef?.has_experiment,
+          hasExperiment: parsed !== undefined ? parsed.metadata.hasExperiment : flagDef?.has_experiment,
           ...(parsed !== undefined ? { parsed } : {}),
         }
         locallyEvaluatedKeys.add(key)
