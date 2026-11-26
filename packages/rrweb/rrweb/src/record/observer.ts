@@ -538,7 +538,7 @@ function initInputObserver({
     if (selectMaskingFn && tagName === 'SELECT') {
       // Flush callbacks before reading policy or selection, even with known IDs.
       if (mutationBuffers[0]?.isFrozen())
-        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        [...mutationBuffers].forEach((buffer) => buffer.unfreeze());
       if (!active) return;
     }
     if (
@@ -582,7 +582,7 @@ function initInputObserver({
     ) {
       // Input normally unfreezes mutations at emission, too late for ID lookup.
       if (mutationBuffers[0]?.isFrozen()) {
-        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        [...mutationBuffers].forEach((buffer) => buffer.unfreeze());
         if (!active) return;
         // Emission callbacks can change the selection or its blocking rules.
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);

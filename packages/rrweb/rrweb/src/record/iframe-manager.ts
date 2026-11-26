@@ -1,7 +1,12 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
-import { _isBlockedElement, genId } from '@posthog/rrweb-snapshot';
+import { _isBlockedElement, genId, isShadowRoot } from '@posthog/rrweb-snapshot';
+import dom from '@posthog/rrweb-utils';
 import type { CrossOriginIframeMessageEvent } from '../types';
-import { callSafely, removeEventListenerSafely } from '../utils';
+import {
+  callSafely,
+  isBlockedIncludingShadowHosts,
+  removeEventListenerSafely,
+} from '../utils';
 import CrossOriginIframeMirror from './cross-origin-iframe-mirror';
 import { findAndRemoveIframeBuffer } from './observer';
 import { EventType, NodeType, IncrementalSource } from '@posthog/rrweb-types';
@@ -9,6 +14,7 @@ import type {
   blockClass,
   eventWithTime,
   eventWithoutTime,
+  mutationRecord,
   serializedNodeWithId,
   mutationCallBack,
 } from '@posthog/rrweb-types';
@@ -32,6 +38,7 @@ export class IframeManager {
   ) => void;
   private loadListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private pageHideListener?: (iframeEl: HTMLIFrameElement) => unknown;
+  private blockedListener?: (iframeEl: HTMLIFrameElement) => unknown;
   private stylesheetManager: StylesheetManager;
   private recordCrossOriginIframes: boolean;
   private blockClass: blockClass;
@@ -55,6 +62,11 @@ export class IframeManager {
   // Fallback for iframes removed before first load — mirror entry is gone
   // by then, but we still need the element to dispose its load listener.
   private iframeElementsById: Map<number, HTMLIFrameElement> = new Map();
+  private blockedDocuments: WeakSet<Document> = new WeakSet();
+  // Iframes whose relayed messages are forwarded. A cross-origin document is
+  // not observed here, so a block has to be noticed from the parent page.
+  private relayingIframes: Set<HTMLIFrameElement> = new Set();
+  private blockedRelayWindows: WeakSet<MessageEventSource> = new WeakSet();
   // Set per element — same multi-load reasoning as loadListenerDisposers.
   private pageHideHandlers: WeakMap<
     HTMLIFrameElement,
@@ -93,11 +105,96 @@ export class IframeManager {
   }
 
   public addIframe(iframeEl: HTMLIFrameElement): void {
-    if (_isBlockedElement(iframeEl, this.blockClass, this.blockSelector))
+    if (
+      _isBlockedElement(iframeEl, this.blockClass, this.blockSelector) ||
+      this.isIframeBlocked(iframeEl)
+    ) {
+      // A full snapshot re-serializes an iframe that may have been tracked
+      // before it became blocked.
+      this.releaseBlockedIframe(iframeEl);
       return;
+    }
+    callSafely(() => {
+      if (iframeEl.contentDocument)
+        this.blockedDocuments.delete(iframeEl.contentDocument);
+    });
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);
+    // Tracked whatever the current origin, because the iframe can navigate.
+    if (this.recordCrossOriginIframes) this.relayingIframes.add(iframeEl);
+  }
+
+  // A cross-origin child cannot see the parent's block state and posts its
+  // events at any time, so a message can arrive after a block has already been
+  // removed. Once a relaying iframe is seen blocked, its window's messages are
+  // dropped for the rest of the recording, since nothing can tell which ones
+  // were produced while it was blocked. Relaying is off under a block
+  // selector (see record()), so only the block class has to be tracked here.
+  public releaseBlockedRelayingIframes(mutations: mutationRecord[]): void {
+    if (this.relayingIframes.size === 0) return;
+    // Only a class change can add the block class; a moved iframe is
+    // serialized again anyway.
+    if (
+      !mutations.some(
+        (m) => m.type === 'attributes' && m.attributeName === 'class',
+      )
+    )
+      return;
+    // A batch can hold a class being added and removed again, so an element
+    // that had the block class at any point counts, not only its final state.
+    let blockedAtSomePoint: Set<Node> | undefined;
+    for (const m of mutations) {
+      if (m.type === 'attributes' && this.oldValueBlocked(m))
+        (blockedAtSomePoint ??= new Set()).add(m.target);
+    }
+    // Moves in the same batch make past ancestry ambiguous, so this fails
+    // closed: the iframe stops relaying if it is under such an element now.
+    for (const iframeEl of [...this.relayingIframes]) {
+      if (
+        blockedAtSomePoint &&
+        this.hasAncestorIn(iframeEl, blockedAtSomePoint)
+      ) {
+        this.releaseBlockedIframe(iframeEl);
+        continue;
+      }
+      let sameOrigin = false;
+      try {
+        sameOrigin = Boolean(iframeEl.contentDocument);
+      } catch {
+        // cross-origin
+      }
+      // A same-origin document is observed directly and checked per event.
+      if (sameOrigin || !this.isIframeBlocked(iframeEl)) continue;
+      this.releaseBlockedIframe(iframeEl);
+    }
+  }
+
+  // Crosses shadow hosts and same-origin frames up to the recorder's document.
+  private hasAncestorIn(iframeEl: HTMLIFrameElement, nodes: Set<Node>): boolean {
+    let node: Node | null = iframeEl;
+    while (node) {
+      if (nodes.has(node)) return true;
+      let parent: Node | null = dom.parentNode(node);
+      if (parent && isShadowRoot(parent)) parent = dom.host(parent);
+      if (!parent && node.nodeType === node.DOCUMENT_NODE && node !== document) {
+        try {
+          parent = (node as Document).defaultView?.frameElement ?? null;
+        } catch {
+          parent = null;
+        }
+      }
+      node = parent;
+    }
+    return false;
+  }
+
+  // Whether the element had the block class before this attribute change.
+  private oldValueBlocked(m: mutationRecord): boolean {
+    if (m.attributeName !== 'class' || !m.oldValue) return false;
+    const probe = (m.target as Element).ownerDocument.createElement('div');
+    probe.className = m.oldValue;
+    return _isBlockedElement(probe, this.blockClass, null);
   }
 
   public registerLoadListenerDisposer(
@@ -153,6 +250,10 @@ export class IframeManager {
     this.pageHideListener = cb;
   }
 
+  public addBlockedListener(cb: (iframeEl: HTMLIFrameElement) => unknown): void {
+    this.blockedListener = cb;
+  }
+
   public removeLoadListener(): void {
     this.loadListener = undefined;
   }
@@ -170,6 +271,11 @@ export class IframeManager {
     iframeEl: HTMLIFrameElement,
     childSn: serializedNodeWithId,
   ): void {
+    if (this.releaseIfBlocked(iframeEl)) {
+      const doc = iframeEl.contentDocument;
+      if (doc) callSafely(() => this.mirror.removeNodeFromMap(doc));
+      return;
+    }
     const iframeId = this.trackIframeContent(iframeEl, childSn);
     // Accumulate every contentDocument across loads (blank → src → blank).
     if (iframeEl.contentDocument) {
@@ -265,10 +371,11 @@ export class IframeManager {
       return;
 
     const iframeSourceWindow = message.source;
-    if (!iframeSourceWindow) return;
+    if (!iframeSourceWindow || this.blockedRelayWindows.has(iframeSourceWindow))
+      return;
 
     const iframeEl = this.crossOriginIframeMap.get(message.source);
-    if (!iframeEl) return;
+    if (!iframeEl || this.releaseIfBlocked(iframeEl)) return;
 
     const transformedEvent = this.transformCrossOriginEvent(
       iframeEl,
@@ -485,53 +592,138 @@ export class IframeManager {
 
     this.iframeElementsById.delete(iframeId);
 
-    if (iframe) {
-      const win = iframe.contentWindow;
-
-      // Clear listeners for every Window this iframe ever held — host
-      // may have swapped iframe.src before removal.
-      const capturedWins = this.attachedWindows.get(iframe);
-      if (capturedWins) {
-        capturedWins.forEach((capturedWin) => {
-          const handler = this.nestedIframeListeners.get(capturedWin);
-          if (handler) {
-            removeEventListenerSafely(capturedWin, 'message', handler);
-            this.nestedIframeListeners.delete(capturedWin);
-          }
-          this.crossOriginIframeMap.delete(capturedWin);
-        });
-        this.attachedWindows.delete(iframe);
-      }
-      // Legacy/test path: nestedIframeListeners populated without
-      // attachIframe (preserves SecurityError handling from #163).
-      if (win && this.nestedIframeListeners.has(win)) {
-        const handler = this.nestedIframeListeners.get(win)!;
-        removeEventListenerSafely(win, 'message', handler);
-        this.nestedIframeListeners.delete(win);
-      }
-
-      if (win) {
-        this.crossOriginIframeMap.delete(win);
-      }
-      this.iframes.delete(iframe);
-
-      this.disposeLoadListeners(iframe);
-      this.removePageHideListener(iframe);
-
-      // Walk captured docs so mirror.idNodeMap drops them even after
-      // an iframe.src swap, then splice their MutationBuffers.
-      const capturedDocs = this.attachedDocuments.get(iframe);
-      if (capturedDocs) {
-        capturedDocs.forEach((doc) => {
-          callSafely(() => this.mirror.removeNodeFromMap(doc));
-        });
-        callSafely(() => findAndRemoveIframeBuffer(iframe, capturedDocs));
-        this.attachedDocuments.delete(iframe);
-      }
-    }
+    if (iframe) this.releaseIframe(iframe);
 
     if (entry) {
       this.attachedIframes.delete(iframeId);
+    }
+  }
+
+  // Walks up through parent frames so iframes nested in a blocked iframe are
+  // blocked too.
+  private isIframeBlocked(iframeEl: HTMLIFrameElement): boolean {
+    let el: Element | null = iframeEl;
+    while (el) {
+      if (
+        this.blockedDocuments.has(el.ownerDocument) ||
+        isBlockedIncludingShadowHosts(el, this.blockClass, this.blockSelector)
+      )
+        return true;
+      // The page embedding this recorder is not part of its recording.
+      if (el.ownerDocument === document) break;
+      try {
+        el = el.ownerDocument.defaultView?.frameElement ?? null;
+      } catch {
+        el = null;
+      }
+    }
+    return false;
+  }
+
+  private releaseIfBlocked(iframeEl: HTMLIFrameElement): boolean {
+    if (!this.isIframeBlocked(iframeEl)) return false;
+    this.releaseBlockedIframe(iframeEl);
+    return true;
+  }
+
+  // Stops recording an iframe's document while keeping the iframe element
+  // itself in the recording, where it is now serialized as a placeholder.
+  private releaseBlockedIframe(iframeEl: HTMLIFrameElement): void {
+    this.attachedDocuments
+      .get(iframeEl)
+      ?.forEach((doc) => this.blockedDocuments.add(doc));
+    callSafely(() => {
+      if (iframeEl.contentDocument)
+        this.blockedDocuments.add(iframeEl.contentDocument);
+    });
+    this.blockedListener?.(iframeEl);
+    if (this.relayingIframes.delete(iframeEl) && iframeEl.contentWindow)
+      this.blockedRelayWindows.add(iframeEl.contentWindow);
+    this.releaseIframe(iframeEl);
+    this.crossOriginIframeMirror.reset(iframeEl);
+    this.crossOriginIframeStyleMirror.reset(iframeEl);
+    this.crossOriginIframeRootIdMap.delete(iframeEl);
+    this.attachedIframes.forEach(({ element }, iframeId) => {
+      if (element === iframeEl) this.attachedIframes.delete(iframeId);
+    });
+    this.iframeElementsById.forEach((element, iframeId) => {
+      if (element === iframeEl) this.iframeElementsById.delete(iframeId);
+    });
+  }
+
+  // Every event from an iframe's document passes through here (or through
+  // handleMessage for cross-origin iframes), so a newly blocked iframe is
+  // released before it can emit. This avoids rescanning tracked iframes on
+  // every mutation batch of the parent page.
+  public isBlockedDocument(doc: Document): boolean {
+    if (doc === document) return false;
+    if (this.blockedDocuments.has(doc)) return true;
+    let frame: Element | null = null;
+    try {
+      frame = doc.defaultView?.frameElement ?? null;
+    } catch {
+      return false;
+    }
+    if (!frame || frame.localName !== 'iframe') return false;
+    return this.releaseIfBlocked(frame as HTMLIFrameElement);
+  }
+
+  private trackedIframes(): Set<HTMLIFrameElement> {
+    const tracked = new Set<HTMLIFrameElement>();
+    this.attachedIframes.forEach(({ element }) => tracked.add(element));
+    this.iframeElementsById.forEach((element) => tracked.add(element));
+    return tracked;
+  }
+
+  // Blocking can be added after an iframe is tracked, and attribute mutations
+  // on a blocked element are not recorded, so callers check again here.
+  public releaseBlockedIframes(): void {
+    this.trackedIframes().forEach((iframeEl) => this.releaseIfBlocked(iframeEl));
+  }
+
+  private releaseIframe(iframe: HTMLIFrameElement): void {
+    const win = iframe.contentWindow;
+
+    // Clear listeners for every Window this iframe ever held — host
+    // may have swapped iframe.src before removal.
+    const capturedWins = this.attachedWindows.get(iframe);
+    if (capturedWins) {
+      capturedWins.forEach((capturedWin) => {
+        const handler = this.nestedIframeListeners.get(capturedWin);
+        if (handler) {
+          removeEventListenerSafely(capturedWin, 'message', handler);
+          this.nestedIframeListeners.delete(capturedWin);
+        }
+        this.crossOriginIframeMap.delete(capturedWin);
+      });
+      this.attachedWindows.delete(iframe);
+    }
+    // Legacy/test path: nestedIframeListeners populated without
+    // attachIframe (preserves SecurityError handling from #163).
+    if (win && this.nestedIframeListeners.has(win)) {
+      const handler = this.nestedIframeListeners.get(win)!;
+      removeEventListenerSafely(win, 'message', handler);
+      this.nestedIframeListeners.delete(win);
+    }
+
+    if (win) {
+      this.crossOriginIframeMap.delete(win);
+    }
+    this.iframes.delete(iframe);
+    this.relayingIframes.delete(iframe);
+
+    this.disposeLoadListeners(iframe);
+    this.removePageHideListener(iframe);
+
+    // Walk captured docs so mirror.idNodeMap drops them even after
+    // an iframe.src swap, then splice their MutationBuffers.
+    const capturedDocs = this.attachedDocuments.get(iframe);
+    if (capturedDocs) {
+      capturedDocs.forEach((doc) => {
+        callSafely(() => this.mirror.removeNodeFromMap(doc));
+      });
+      callSafely(() => findAndRemoveIframeBuffer(iframe, capturedDocs));
+      this.attachedDocuments.delete(iframe);
     }
   }
 
@@ -549,6 +741,7 @@ export class IframeManager {
   }
 
   public reattachIframes(): void {
+    this.releaseBlockedIframes();
     this.attachedIframes.forEach(({ content }, iframeId) => {
       // Verify the iframe ID is still in the mirror (still being tracked by rrweb)
       // If removed, the mirror would have been cleaned up via removeNodeFromMap()
@@ -607,6 +800,9 @@ export class IframeManager {
     this.loadListenerDisposers = new WeakMap();
     this.pageHideHandlers = new WeakMap();
     this.attachedDocuments = new WeakMap();
+    this.blockedDocuments = new WeakSet();
+    this.relayingIframes.clear();
+    this.blockedRelayWindows = new WeakSet();
     this.attachedWindows = new WeakMap();
     this.iframeElementsById = new Map();
   }
