@@ -97,6 +97,7 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     'Credentials',
     'credential',
     'Proxy-Authorization',
+    'authorization_header',
     'requestHeaders',
   ].map((credentialKey): [string, unknown] => [credentialKey, toolResult(credentialKey)]),
   ['JSON text', JSON.stringify(toolResult('refresh_token'))],
@@ -143,6 +144,7 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     `Response: ${[1, 2, 3, 4].reduce<string>((text) => JSON.stringify(text), '{"refresh_tok\\u0065n":"tool-secret"}')}`,
     false,
   ],
+  ['Python-style text', "{'refresh_token': 'tool-secret', 'token_type': 'Bearer'}", false],
   ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
   [
     'JSON text with an escaped colon in a duplicate field',

@@ -132,10 +132,12 @@ function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string
       }
       close = next
     }
-    if (close <= 0 || text[close] !== '"') {
+    // Single quotes cover Python-style output, such as `str(dict)`.
+    const quote = text[close]
+    if (close <= 0 || (quote !== '"' && quote !== "'")) {
       continue
     }
-    const open = text.lastIndexOf('"', close - 1)
+    const open = text.lastIndexOf(quote, close - 1)
     if (open === -1) {
       continue
     }

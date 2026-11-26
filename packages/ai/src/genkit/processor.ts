@@ -56,8 +56,11 @@ const TOKEN_COUNT_KEYS = new Set([
   'cachereadinputtokens',
 ])
 
-const isCredentialKey = (key: string): boolean =>
-  !TOKEN_COUNT_KEYS.has(key) && CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
+// A field named for one header, such as `authorization_header`, holds that header's value.
+const isCredentialKey = (key: string): boolean => {
+  const name = key.replace(/header$/, '')
+  return !TOKEN_COUNT_KEYS.has(name) && CREDENTIAL_KEY_SUFFIXES.some((suffix) => name.endsWith(suffix))
+}
 
 // Genkit plugin names that differ from the provider names the other integrations send.
 const PROVIDER_NAMES = new Map([
