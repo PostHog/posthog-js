@@ -193,6 +193,22 @@ describe('RageClick()', () => {
             expect(detection).toEqual([false, false])
         })
 
+        it('finds a label any number of levels above the clicked element', () => {
+            let inner: HTMLElement = label
+            for (let i = 0; i < 1500; i++) {
+                const span = document.createElement('span')
+                inner.appendChild(span)
+                inner = span
+            }
+            const detection = [
+                instance.isRageClick(5, 5, 10, inner),
+                instance.isRageClick(5, 5, 11, control),
+                instance.isRageClick(5, 5, 30, inner),
+                instance.isRageClick(5, 5, 31, control),
+            ]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
         it('recognises a label in an XHTML document', () => {
             const doc = document.implementation.createDocument('http://www.w3.org/1999/xhtml', 'html', null)
             const body = doc.createElementNS('http://www.w3.org/1999/xhtml', 'body')

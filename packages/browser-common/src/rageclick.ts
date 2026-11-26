@@ -9,23 +9,27 @@ const DEFAULT_THRESHOLD_PX = 30
 const DEFAULT_TIMEOUT_MS = 1000
 const DEFAULT_CLICK_COUNT = 3
 
-const MAX_LABEL_SEARCH_DEPTH = 1000
-// The native getter: a form exposes a control named "parentElement" as a property of that name.
-const parentElementGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement')?.get
-
 // closest('label') without closest(), which IE11 lacks. The target may be a non-Element, for
 // example the document when a click is dispatched on it.
 function findLabel(target: EventTarget | null): HTMLLabelElement | null {
-    if (!parentElementGetter || !(target instanceof Element)) {
+    if (typeof Node === 'undefined' || !(target instanceof Element)) {
         return null
     }
-    let el: Element | null = target
-    for (let depth = 0; el && depth < MAX_LABEL_SEARCH_DEPTH; depth++) {
+    // The native getter: a form exposes a control named "parentNode" as a property of that name,
+    // which would otherwise make this walk loop forever. IE11 defines parentElement only on
+    // HTMLElement, so parentNode is the getter available on Node.prototype everywhere.
+    const parentNodeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'parentNode')?.get
+    if (!parentNodeGetter) {
+        return null
+    }
+    let node: Node | null = target
+    // like closest(), stop at the document or a shadow root
+    while (node && node.nodeType === 1) {
         // localName, unlike tagName, is lowercase in XHTML documents too
-        if (el.localName === 'label') {
-            return el as HTMLLabelElement
+        if ((node as Element).localName === 'label') {
+            return node as HTMLLabelElement
         }
-        el = parentElementGetter.call(el) as Element | null
+        node = parentNodeGetter.call(node) as Node | null
     }
     return null
 }
