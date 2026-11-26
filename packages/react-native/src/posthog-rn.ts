@@ -397,6 +397,9 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
+  // True when the last evaluation wanted to record but the native start failed, so the next
+  // matching trigger-group event retries it.
+  private _sessionReplayStartFailed = false
   // Whether the app wants replay on: enableSessionReplay at setup, then the last
   // startSessionRecording()/stopSessionRecording() made with consent. Opt-in restarts replay only
   // when it is set; internal stops (linked flag, sampling) leave it alone.
@@ -404,9 +407,6 @@ export class PostHog extends PostHogCore {
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
   private _sessionReplayStartedByApp: boolean = false
-  // True when the last evaluation wanted to record but the native start failed, so the next
-  // matching trigger-group event retries it.
-  private _sessionReplayStartFailed = false
   private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
@@ -1294,10 +1294,10 @@ export class PostHog extends PostHogCore {
 
     // Cancel before super.reset() emits flags for the next, anonymous user.
     this._cancelManualRecordingStart()
-    const wasOptedOut = this.optedOut
     // The persisted activation is wiped below; the in-memory evaluator must drop its copy too,
     // or a session id kept via propertiesToKeep would carry one user's activated groups forward.
     this._triggerGroupsEvaluator.clearActivation()
+    const wasOptedOut = this.optedOut
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -2373,7 +2373,7 @@ export class PostHog extends PostHogCore {
       if (!resumeCurrent) {
         this._rotateReplaySession()
         // An explicit start into a new session is its own decision: don't re-evaluate it as a rotation.
-        this._replayEvaluatedSessionId = super.getSessionId()
+        this._replayEvaluatedSessionId = this._currentSessionId
       }
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
@@ -3692,15 +3692,17 @@ export class PostHog extends PostHogCore {
       const restoreAppRecording =
         freshSession && !this.optedOut && this._sessionReplayWanted && !this._sessionReplayStartedByApp
       this._logger.info('Session replay is not enabled.')
+      const cachedReplayConfig = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+        [key: string]: JsonType
+      }
       // Replay off: only a recording the app wants waits on event triggers, so a matching event
       // retries its pending start below. Otherwise disarm them so the capture hook stays inert.
-      this._sessionReplayEventTriggers = this._sessionReplayWanted
-        ? this._parseEventTriggers(
-            ((this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as { [key: string]: JsonType })[
-              'eventTriggers'
-            ]
-          )
-        : []
+      // Trigger groups replace event triggers and only gate automatic replay, so both stay disarmed
+      // under a v2 config.
+      this._sessionReplayEventTriggers =
+        this._sessionReplayWanted && !parseSessionRecordingTriggerGroups(cachedReplayConfig)
+          ? this._parseEventTriggers(cachedReplayConfig['eventTriggers'])
+          : []
       this._sessionReplayTriggerGroups = null
       this._unregisterTriggerGroupsDebugProperties()
       if (restoreAppRecording) {
