@@ -388,10 +388,9 @@ other keys. `PostHogMCP.capture()` is posthog-node's own `capture()`, so it take
 
 ### Properties from a tool's result (`resultProperties`)
 
-`resultProperties` adds properties derived from what a tool returned, such as a domain status in
-`structuredContent` or how many items the result held, without keeping `$mcp_response`. It runs
-once per tool call that returned a result, `isError` results included, and its return value is
-merged into that `$mcp_tool_call` event before `beforeSend`:
+`resultProperties` adds properties derived from a tool's result, such as a domain status in
+`structuredContent` or how many items the result held, to that `$mcp_tool_call` event, so you can
+keep them without keeping `$mcp_response`:
 
 ```ts
 instrument(server, posthog, {
@@ -409,18 +408,6 @@ instrument(server, posthog, {
   },
 })
 ```
-
-It runs synchronously on the tool path, so keep it cheap, and don't mutate the result: it is the
-object the client gets. It is not called for a tool that threw,
-for the SDK's virtual tools or for an unknown tool. An error result that the MCP SDK builds without
-running the tool, such as for invalid arguments, counts as returned. So does a throw that a framework
-turned into a result before this SDK could see it, as FastMCP does. A throw in the callback, or a
-value that is not a plain object, is logged and adds nothing.
-
-The properties are merged after `eventProperties`, so they win on the same key. For an `isError`
-result they are also on the `$exception` event. They are sent as-is, without the redaction that
-`$mcp_response` gets, so return only values you want to store. Values must be JSON-serializable: a
-`BigInt` or a circular reference drops the event.
 
 ### What `$mcp_llm_model` records, and when it stays empty
 

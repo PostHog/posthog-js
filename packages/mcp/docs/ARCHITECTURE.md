@@ -53,7 +53,7 @@ client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captu
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ execute(request, extra)      ← run the wrapped tool handler
   ├─ attach result, duration, error
-  ├─ applyResultProperties        ← runs the resultProperties callback, unless the tool threw
+  ├─ applyResultProperties        ← runs the resultProperties callback on the result
   └─ captureEvent(server, event)  → McpEventSink.capture()
 ```
 
@@ -315,7 +315,7 @@ Callers never hand-write the `$groups` key.
 
 The `eventProperties` callback returns key/value pairs that are **spread flat at the top level of the PostHog event properties**, alongside the `$mcp_*` keys. They can therefore override built-in `$mcp_*` keys — intentional, so customers can backfill missing context. Values must be JSON-serializable; the SDK does not validate keys or values beyond truncation.
 
-`resultProperties` adds properties derived from a tool's result to that `$mcp_tool_call` event the same way, and to its `$exception` sibling for an `isError` result. They are merged after `eventProperties`, so they win on the same key, and are not redacted.
+`resultProperties` adds properties derived from a tool's result to that `$mcp_tool_call` event the same way. Its JSDoc in `src/types.ts` has the details.
 
 ### Customer-defined options
 
