@@ -3392,7 +3392,7 @@ React Native survey appearance, including native-only text scaling options.
 | <a id="property-bordercolor"></a> `borderColor?` | `string` | - | - | `SurveyAppearance.borderColor` |
 | <a id="property-displayintroscreen"></a> `displayIntroScreen?` | `boolean` | - | - | `SurveyAppearance.displayIntroScreen` |
 | <a id="property-displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` | - | - | `SurveyAppearance.displayThankYouMessage` |
-| <a id="property-fontfamily"></a> `fontFamily?` | `string` | Font family for survey text. Use a font bundled with the app; any other name falls back to the system font. `inherit` (the survey editor's default) or an empty value uses `defaultSurveyAppearance.fontFamily` from `PostHogSurveyProvider`, then the system font. `system-ui` always uses the system font. | `SurveyAppearance.fontFamily` | - |
+| <a id="property-fontfamily"></a> `fontFamily?` | `string` | Font family for survey text. Use a font bundled with the app; other names fall back to the system font. On Android the survey editor's web fonts (`Georgia`, `Courier New`, ...) use the matching system font. `inherit` (the editor's default) or an empty value uses `defaultSurveyAppearance.fontFamily`, then the system font. `system-ui` uses the system font. | `SurveyAppearance.fontFamily` | - |
 | <a id="property-inputbackground"></a> `inputBackground?` | `string` | - | - | `SurveyAppearance.inputBackground` |
 | <a id="property-inputtextcolor"></a> `inputTextColor?` | `string` | - | - | `SurveyAppearance.inputTextColor` |
 | <a id="property-introscreenbuttontext"></a> `introScreenButtonText?` | `string` | - | - | `SurveyAppearance.introScreenButtonText` |
