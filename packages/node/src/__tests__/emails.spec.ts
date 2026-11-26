@@ -2814,6 +2814,37 @@ describe('emails', () => {
       ])
     })
 
+    it.each([
+      ['a string', 'Odd.'],
+      ['an array', ['Odd.']],
+    ])('keeps a recipient PostHog answered queued but with %s as its error unconfirmed', async (_case, odd) => {
+      makeClient({
+        fetch: async () => fakeReply(200, { results: [{ message_id: 'm0', status: 'queued', error: odd }] }),
+      })
+
+      const { data } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
+
+      expect(data?.results).toMatchObject([
+        { status: 'unconfirmed', error: { message: UNCONFIRMED, fix: expect.stringMatching(/same idempotencyKey/) } },
+      ])
+    })
+
+    it.each([
+      ['409', 409],
+      ['503', 503],
+    ] as const)(
+      "treats a %s whose code is client_closed as PostHog's answer, not the client shutting down",
+      async (_case, status) => {
+        makeClient({ fetch: async () => fakeReply(status, { code: 'client_closed', detail: 'No email was sent.' }) })
+
+        const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+        expect(error).toMatchObject({ statusCode: status })
+        expect(error?.message).not.toMatch(/no email/i)
+        expect(error?.results?.map(({ status: s }) => s)).toEqual(['unconfirmed', 'unconfirmed'])
+      }
+    )
+
     it('fails every recipient of a first attempt answered 413, whatever its code', async () => {
       const postHog = againstPostHog()
       postHog.failNext('batch', { status: 413, code: 'idempotency_key_in_flight' })

@@ -161,7 +161,7 @@ export function recordAnswer(
     const answer = replyFields(answers[position])
     const id = text(answer.message_id)
     const error = isRecord(answer.error) ? answer.error : undefined
-    if (answer.status === 'queued' && id && !error) {
+    if (answer.status === 'queued' && id && (answer.error === undefined || answer.error === null)) {
       slot.status = 'queued'
       slot.id = id
       slot.replayed = answer.replayed === true
@@ -242,7 +242,7 @@ function afterUnconfirmedAttempt(error: EmailError): EmailError {
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
-  if (error.code === 'client_closed' || error.statusCode === 413) {
+  if ((error.code === 'client_closed' && error.statusCode === undefined) || error.statusCode === 413) {
     return false
   }
   return (
