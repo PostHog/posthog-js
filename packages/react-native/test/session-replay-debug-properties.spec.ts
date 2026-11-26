@@ -1486,7 +1486,7 @@ describe('PostHog RN session replay debug properties', () => {
       expectOffShape(captureOne(client, '$screen').properties)
     })
 
-    it('a linked flag resuming the recorder after an app stop restores the replay keys', async () => {
+    it('an app stop holds across a linked flag turning on again, and an app start restores the replay keys', async () => {
       currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
       currentFlags = { 'replay-flag': true }
       await warmup()
@@ -1501,6 +1501,11 @@ describe('PostHog RN session replay debug properties', () => {
       await reloadAndSettle(client)
       currentFlags = { 'replay-flag': true }
       await reloadAndSettle(client)
+      expect(nativeRecording).toBe(false)
+      expectOffShape(captureOne(client, '$screen').properties)
+
+      await client.startSessionRecording()
+      await waitForNativeChain(client)
       expect(nativeRecording).toBe(true)
 
       advanceClock(WINDOW_MS)
