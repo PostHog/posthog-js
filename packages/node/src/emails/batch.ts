@@ -174,16 +174,19 @@ export function recordAnswer(
       )
       return
     }
-    const code = text(error.code) ?? 'api_error'
-    // A 409 is decided by its code alone: only batch_unavailable says PostHog queued nothing for this recipient.
+    const coded = text(error.code)?.trim() || undefined
+    const code = coded ?? 'api_error'
+    // A recipient error without a code can't say PostHog queued nothing, and a 409 is decided by its code alone:
+    // only batch_unavailable says PostHog queued nothing for this recipient.
     const unconfirmed =
-      error.status === 409
+      coded === undefined ||
+      (error.status === 409
         ? code !== 'batch_unavailable' || mayHaveQueuedBefore
         : code !== 'idempotency_key_reused' &&
           (error.retryable === true ||
             code === 'delivery_unavailable' ||
             code === 'idempotency_key_in_flight' ||
-            mayHaveQueuedBefore)
+            mayHaveQueuedBefore))
     const refusal = new EmailError({
       code,
       message: text(error.detail) ?? `PostHog refused this recipient with ${code}.`,
@@ -301,6 +304,16 @@ function batchReplyError(
     })
   }
   const code = error.code.trim()
+  if (status === 413 && (code === '' || code === 'api_error')) {
+    return new EmailError({
+      code: 'content_too_large',
+      statusCode: status,
+      message:
+        'PostHog answered 413: the batch is larger than PostHog can take at once, so it sent no email of this request.',
+      fix: 'Split the recipients into smaller batches.',
+      retryAfterMs,
+    })
+  }
   if (status === 404 && error.field === undefined && (code === '' || code === 'not_found' || code === 'api_error')) {
     return templateForm
       ? new EmailError({

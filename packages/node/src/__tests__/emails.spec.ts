@@ -1948,6 +1948,10 @@ describe('emails', () => {
         'failed',
       ],
       ['a 503 that is neither', { status: 503, code: 'recipient_rejected', retryable: false }, 'failed'],
+      ['a 400 without a code', { status: 400, retryable: false }, 'unconfirmed'],
+      ['a 422 without a code', { status: 422, retryable: false }, 'unconfirmed'],
+      ['a 422 with a blank code', { status: 422, code: ' ', retryable: false }, 'unconfirmed'],
+      ['a 503 without a code', { status: 503, retryable: false }, 'unconfirmed'],
     ] as const)(
       'decides a recipient by its code and retryable flag, not its status: %s',
       async (_case, refusal, status) => {
@@ -1955,7 +1959,7 @@ describe('emails', () => {
 
         const { data } = await settle(posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }]))
 
-        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code ?? 'api_error' } }])
+        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code?.trim() || 'api_error' } }])
         expect(data?.results[0]).toMatchObject(
           status === 'unconfirmed'
             ? {
@@ -2226,6 +2230,76 @@ describe('emails', () => {
       const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
 
       expect(error).toMatchObject({ code: 'content_too_large', statusCode: status, name })
+    })
+
+    it.each([
+      ['a body that is not JSON', { status: 413, page: '<html><body>413 Request Entity Too Large</body></html>' }],
+      ['JSON without a code', { status: 413, page: '{"detail":"Payload too large."}' }],
+      ['JSON with a blank code', { status: 413, page: '{"code":" ","detail":"Payload too large."}' }],
+    ] as const)('names a 413 with %s content_too_large, and says to split the recipients', async (_case, fault) => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', fault)
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({ code: 'content_too_large', statusCode: 413, name: 'application_error' })
+      expect(error?.fix).toMatch(/Split the recipients into smaller batches/)
+      expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
+      expect(postHog.requests.batch).toBe(1)
+      expect(postHog.emails).toEqual([])
+    })
+
+    it('says some emails may have gone out, with no split advice, when a lost answer is followed by a 413 without a code', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', 'lost reply', {
+        status: 413,
+        page: '<html><body>413 Request Entity Too Large</body></html>',
+      })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({
+        code: 'content_too_large',
+        statusCode: 413,
+        message:
+          "PostHog refused the retry of this batch with content_too_large, but an earlier attempt of this batch wasn't confirmed, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.",
+      })
+      expect(error?.fix).toMatch(/^PostHog may have queued these emails\. Call emails\.batch\(\) again/)
+      for (const text of [error?.message, error?.fix, error?.why]) {
+        expect(text ?? '').not.toMatch(/split|smaller|one at a time|on its own/i)
+      }
+      expect(error?.results).toMatchObject(
+        [0, 1].map(() => ({
+          status: 'unconfirmed',
+          idempotencyKey: expect.any(String),
+          error: { message: UNCONFIRMED },
+        }))
+      )
+    })
+
+    it("keeps PostHog's message and fix on a 400 content_too_large, with no split advice", async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', {
+        status: 400,
+        page: JSON.stringify({
+          type: 'validation_error',
+          code: 'content_too_large',
+          detail: 'The content that a batch sends to every recipient can be at most 256 KiB.',
+          fix: 'Send these emails one at a time with emails.send().',
+          attr: null,
+        }),
+      })
+
+      const { error } = await settle(posthog.emails.batch(WELCOME, recipientsTo(2)))
+
+      expect(error).toMatchObject({
+        code: 'content_too_large',
+        statusCode: 400,
+        message: 'The content that a batch sends to every recipient can be at most 256 KiB.',
+        fix: 'Send these emails one at a time with emails.send().',
+      })
+      expect(error?.fix).not.toMatch(/split|smaller batches/i)
+      expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
     })
 
     it('retries a batch PostHog answered 503 with the same keys, and queues each email once', async () => {
