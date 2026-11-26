@@ -163,6 +163,7 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     new URLSearchParams({ body: JSON.stringify({ refresh_token: 'tool-secret' }) }).toString(),
     false,
   ],
+  ['JSON text with an escaped colon inside a key', JSON.stringify('{"oauth\\u003at\\u006fken":"tool-secret"}'), false],
   ['a form name behind a malformed escape', '%FFrefresh%5Ftok%65n=tool-secret&token_type=bearer', false],
   ['a token in a URL fragment', 'https://app.example/cb?state=xyz#access_token=tool-secret&token_type=bearer', false],
   ['a URL with a token in the query', { next: 'https://api.example.com/feed?access_token=tool-secret&after=x' }, false],
@@ -194,6 +195,10 @@ describe('redactKeys on text that names no credential', () => {
     ['a URL with harmless query params', 'https://example.com/search?page=2&sort=asc'],
   ])('returns %s as written', (_name, text) => {
     expect(redactKeys(text, (key) => key.endsWith('token'))).toBe(text)
+  })
+
+  it('masks a numeric credential', () => {
+    expect(redactKeys({ otp_token: 123456 }, (key) => key.endsWith('token'))).toEqual({ otp_token: '[REDACTED]' })
   })
 })
 

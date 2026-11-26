@@ -41,8 +41,7 @@ const MAX_REDACT_DEPTH = 64
 
 /**
  * Replaces the value of every key that `isCredentialKey` accepts (normalized) with `[REDACTED]`, through plain
- * objects, arrays and JSON strings. Numbers and booleans keep their value, since they hold no secret. Other strings
- * that name a credential key or form field are replaced whole, and values nested deeper than 64 levels become
+ * objects, arrays and JSON strings. Other strings that name a credential key or form field are replaced whole, and values nested deeper than 64 levels become
  * `[Truncated]`. Class instances, such as the MCP client inside an `mcpToTool()` tool, are returned as they are.
  */
 export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean, depth = 0): unknown {
@@ -61,30 +60,39 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      isCredentialKey(normalizeKey(key)) && typeof item !== 'number' && typeof item !== 'boolean'
-        ? '[REDACTED]'
-        : redactKeys(item, isCredentialKey, depth + 1),
+      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey, depth + 1),
     ])
   )
 }
 
-// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string. Text that
-// names no credential is returned as written. JSON text that names one is masked field by field and re-serialized: the
-// raw scan sees every key, including an earlier duplicate that `JSON.parse` drops. Other text that names one, such as
-// JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is replaced whole.
+// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string. JSON text is
+// masked field by field and re-serialized when either the structural pass or the raw scan finds a credential: the raw
+// scan sees an earlier duplicate key that `JSON.parse` drops, and the structural pass sees keys the raw scan cannot
+// decode. Other text that names one, such as JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is
+// replaced whole. Text where neither finds one is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
-  if (!namesCredential(value, (name) => isCredentialKey(normalizeKey(name)))) {
-    return value
-  }
+  const namesOne = namesCredential(value, (name) => isCredentialKey(normalizeKey(name)))
   const trimmed = value.trim()
   if (/^[[{"]/.test(trimmed)) {
+    let parsed: unknown
     try {
-      return JSON.stringify(redactKeys(JSON.parse(trimmed), isCredentialKey, depth + 1))
+      parsed = JSON.parse(trimmed)
     } catch {
-      // Not JSON, so it is replaced whole.
+      return namesOne ? '[REDACTED]' : value
     }
+    const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
+    return namesOne || !serializesTo(parsed, redacted) ? redacted : value
   }
-  return '[REDACTED]'
+  return namesOne ? '[REDACTED]' : value
+}
+
+// False when the value is too deep to serialize, so text is never returned unchecked.
+function serializesTo(value: unknown, json: string): boolean {
+  try {
+    return JSON.stringify(value) === json
+  } catch {
+    return false
+  }
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
