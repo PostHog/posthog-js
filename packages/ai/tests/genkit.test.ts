@@ -145,6 +145,18 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ],
   ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
   [
+    'JSON text with an escaped colon in a duplicate field',
+    '{"body":"{\\"refresh_token\\"\\u003A\\"tool-secret\\"}","body":"ok"}',
+    false,
+  ],
+  ['JSON text with a backslash key under a duplicate parent', '{"a":{"\\\\token":"tool-secret"},"a":1}', false],
+  ['truncated JSON text with a path key', '{"C:\\\\temp\\\\token":"tool-secret","C:\\\\temp\\\\notes.txt":"h', false],
+  [
+    'truncated JSON text with a nested key in escaped quotes',
+    '{"status":200,"body":"{\\u0022refresh_token\\u0022:\\u0022tool-secret\\u0022,\\u0022expires_in\\u0022:3600}',
+    false,
+  ],
+  [
     'JSON text with a duplicate key',
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],

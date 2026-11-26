@@ -68,25 +68,31 @@ const ESCAPED_WHITESPACE = new Set(['n', 't', 'r'])
 
 const MAX_KEY_DECODE_LEVELS = 16
 
-// A key as written in raw text, unescaped as many times as the text is nested, so `refresh_tok\\u0065n` matches.
-// A key still escaped after the last level is returned as undefined, so the caller can treat it as a credential.
-function decodeKey(raw: string): string | undefined {
+// Tests a key as written in raw text at every unescaping level, since the text can nest it any number of times
+// (`refresh_tok\\u0065n`), and a key with a literal backslash (`C:\\temp\\token`) reads right only before the
+// extra level. A key still escaped after the last level counts as a credential.
+function keyIsCredential(raw: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
   let end = raw.length
   while (end > 0 && raw[end - 1] === '\\') {
     end--
   }
   let key = raw.slice(0, end)
-  for (let level = 0; key.includes('\\'); level++) {
+  for (let level = 0; ; level++) {
+    if (isCredentialKey(normalizeKey(key))) {
+      return true
+    }
+    if (!key.includes('\\')) {
+      return false
+    }
     if (level === MAX_KEY_DECODE_LEVELS) {
-      return undefined
+      return true
     }
     try {
       key = JSON.parse(`"${key}"`)
     } catch {
-      break
+      return false
     }
   }
-  return key
 }
 
 // The index just before an escaped separator (`\\n`, `\\u0020`) that ends at `end`, or `end` when there is none.
@@ -114,7 +120,9 @@ const isSeparator = (char: string): boolean => char <= ' ' || char.trim() === ''
 
 // Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`), past separators that may
 // themselves be escaped (`\\n`). Every walk back stops at the previous quote, so no character is read twice.
-function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  // Some serializers write the quotes and colon of embedded JSON as `\\u0022` and `\\u003a`.
+  const text = raw.replace(/\\u00(22|3a)/gi, (_escape, hex: string) => (hex === '22' ? '"' : ':'))
   for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
     let close = colon - 1
     while (close >= 0) {
@@ -131,40 +139,27 @@ function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: strin
     if (open === -1) {
       continue
     }
-    const key = decodeKey(text.slice(open + 1, close))
-    if (key === undefined || isCredentialKey(normalizeKey(key))) {
+    if (keyIsCredential(text.slice(open + 1, close), isCredentialKey)) {
       return true
     }
   }
   return false
 }
 
-// False when the value is too deep to serialize, so the original text is never returned unchecked.
-function serializesTo(value: unknown, json: string): boolean {
-  try {
-    return JSON.stringify(value) === json
-  } catch {
-    return false
-  }
-}
-
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-// JSON text is masked field by field. Text that names a credential key but does not parse, such as JSON lines,
-// truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
+// JSON text is masked field by field and re-serialized even when nothing changed, since `JSON.parse` keeps only the
+// last of duplicate keys and an earlier one can hold a credential. Text that names a credential key but does not
+// parse, such as JSON lines, truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
-  const namesCredential = namesCredentialKey(value, isCredentialKey)
   const trimmed = value.trim()
   if (/^[[{"]/.test(trimmed)) {
     try {
-      const parsed = JSON.parse(trimmed)
-      const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
-      // `JSON.parse` keeps only the last of duplicate keys, so the raw scan decides too.
-      return namesCredential || !serializesTo(parsed, redacted) ? redacted : value
+      return JSON.stringify(redactKeys(JSON.parse(trimmed), isCredentialKey, depth + 1))
     } catch {
       // Not JSON, so only the raw scan applies.
     }
   }
-  return namesCredential ? '[REDACTED]' : value
+  return namesCredentialKey(value, isCredentialKey) ? '[REDACTED]' : value
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
