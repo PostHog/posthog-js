@@ -768,7 +768,7 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"false\\",
       \\"true\\"
     ],
-    \\"release_id\\": [
+    \\"releaseId\\": [
       \\"undefined\\",
       \\"string\\"
     ],

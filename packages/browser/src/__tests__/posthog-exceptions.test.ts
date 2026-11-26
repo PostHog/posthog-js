@@ -143,7 +143,7 @@ describe('PostHogExceptions', () => {
             })
 
             it('attaches the configured release id when none is injected', () => {
-                config.error_tracking = { release_id: '  configured-release  ' }
+                config.error_tracking = { releaseId: '  configured-release  ' }
 
                 exceptions.sendExceptionEvent({ custom_property: true })
 
@@ -155,7 +155,7 @@ describe('PostHogExceptions', () => {
             })
 
             it('prefers the injected release id over the configured one', () => {
-                config.error_tracking = { release_id: 'configured-release' }
+                config.error_tracking = { releaseId: 'configured-release' }
                 ;(globalThis as any)._posthogReleaseId = 'release-row-id'
 
                 exceptions.sendExceptionEvent({ custom_property: true })
@@ -168,7 +168,7 @@ describe('PostHogExceptions', () => {
             })
 
             it.each(['', '   '])('omits a blank configured release id %j', (releaseId) => {
-                config.error_tracking = { release_id: releaseId }
+                config.error_tracking = { releaseId }
 
                 exceptions.sendExceptionEvent({ custom_property: true })
 
@@ -176,7 +176,7 @@ describe('PostHogExceptions', () => {
             })
 
             it('keeps a release id supplied by the caller', () => {
-                config.error_tracking = { release_id: 'configured-release' }
+                config.error_tracking = { releaseId: 'configured-release' }
                 ;(globalThis as any)._posthogReleaseId = 'release-row-id'
 
                 exceptions.sendExceptionEvent({ custom_property: true, $release_id: 'caller-release' })
@@ -192,7 +192,7 @@ describe('PostHogExceptions', () => {
                 ['super property', () => posthog.persistence!.register({ $release_id: 'registered-release' })],
                 ['session property', () => sessionProps.set('$release_id', 'registered-release')],
             ])('leaves a release id registered as a %s for capture to add', (_, register) => {
-                config.error_tracking = { release_id: 'configured-release' }
+                config.error_tracking = { releaseId: 'configured-release' }
                 ;(globalThis as any)._posthogReleaseId = 'release-row-id'
                 register()
 

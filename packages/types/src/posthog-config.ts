@@ -553,7 +553,7 @@ export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
      *
      * @default undefined
      */
-    release_id?: string
+    releaseId?: string
 
     /**
      * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured

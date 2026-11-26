@@ -264,7 +264,7 @@ export class PostHogExceptions implements Extension {
     }
 
     private _configuredReleaseId(): string | undefined {
-        const releaseId = this._instance.config.error_tracking?.release_id
+        const releaseId = this._instance.config.error_tracking?.releaseId
         return isString(releaseId) ? releaseId.trim() || undefined : undefined
     }
 
