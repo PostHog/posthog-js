@@ -1,5 +1,12 @@
+import type { MockInstance } from 'vitest'
 import type { PropertyFilters, PropertyOperator } from '../types'
-import { isMatchingRegex, isValidRegex, matchPropertyFilters, propertyComparisons } from './property-matching'
+import {
+  hasNestedQuantifier,
+  isMatchingRegex,
+  isValidRegex,
+  matchPropertyFilters,
+  propertyComparisons,
+} from './property-matching'
 
 const operators: PropertyOperator[] = [
   'exact',
@@ -27,6 +34,87 @@ describe('shared property matching contract', () => {
     it('returns false for invalid regular expressions', () => {
       expect(isValidRegex('[invalid')).toBe(false)
       expect(isMatchingRegex('anything', '[invalid')).toBe(false)
+    })
+
+    it.each([
+      ['^/docs/.*', '/docs/a', true],
+      ['^(foo|bar)+$', 'foobarfoo', true],
+      ['^(?:ab)+$', 'ababab', true],
+      ['^a+b*$', 'aab', true],
+      ['\\(a+\\)+', '(aa)))', true],
+      ['[(a+)]+', 'a+)', true],
+      ['^(a+)?b$', 'aab', true],
+      ['^(a+){1}$', 'aaa', true],
+      ['example\\.com', 'admin@example.org', false],
+      ['^foo$', 'foo\n', false],
+    ])('keeps matching for safe pattern %s against %j', (pattern, value, expected) => {
+      expect(isMatchingRegex(value, pattern)).toBe(expected)
+      expect(isMatchingRegex(value, pattern)).toBe(expected)
+    })
+  })
+
+  describe('nested quantifier guard', () => {
+    let warnSpy: MockInstance<Parameters<typeof console.warn>, void>
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      warnSpy.mockRestore()
+    })
+
+    it.each(['^(a+)+$', '(a*)*', '(?:x+y?)+', '((ab)+)+', '(a+){2,}', '(a+){2}', '(\\d+\\.)+', '(a[)]+)+'])(
+      'flags %s',
+      (pattern) => {
+        expect(hasNestedQuantifier(pattern)).toBe(true)
+      }
+    )
+
+    it.each(['^(a+)?$', '(a+){1}', '(a)+', '(a+)b+', '\\(a+\\)+', '[(a+)]+', '(a|a)*', '(?<n>a)+'])(
+      'does not flag %s',
+      (pattern) => {
+        expect(hasNestedQuantifier(pattern)).toBe(false)
+      }
+    )
+
+    it('returns no match quickly for catastrophic backtracking input', () => {
+      const start = Date.now()
+      expect(isMatchingRegex('a'.repeat(40) + '!', '^(a+)+$')).toBe(false)
+      expect(propertyComparisons.regex(['^(b+)+$'], ['b'.repeat(40) + '!'])).toBe(false)
+      expect(propertyComparisons.not_regex(['^(c+)+$'], ['c'.repeat(40) + '!'])).toBe(true)
+      expect(Date.now() - start).toBeLessThan(500)
+    })
+
+    it('treats a rejected pattern like an invalid one, even when the value would match', () => {
+      expect(isMatchingRegex('dd', '^(d+)+$')).toBe(false)
+      expect(propertyComparisons.not_regex(['^(d+)+$'], ['dd'])).toBe(true)
+    })
+
+    // The logger binds console.warn when first created, so each test needs a fresh module.
+    const freshIsMatchingRegex = async (): Promise<typeof isMatchingRegex> => {
+      vi.resetModules()
+      return (await import('./property-matching')).isMatchingRegex
+    }
+
+    it('warns once per rejected pattern', async () => {
+      const isMatching = await freshIsMatchingRegex()
+
+      isMatching('x', '^(warn+)+$')
+      isMatching('y', '^(warn+)+$')
+      isMatching('z', '^(other+)+$')
+
+      expect(warnSpy).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenCalledWith('[PostHog]', expect.stringContaining('^(warn+)+$'))
+    })
+
+    it('does not warn for invalid or safe patterns', async () => {
+      const isMatching = await freshIsMatchingRegex()
+
+      isMatching('x', '[invalid')
+      isMatching('x', '^x+$')
+
+      expect(warnSpy).not.toHaveBeenCalled()
     })
   })
 

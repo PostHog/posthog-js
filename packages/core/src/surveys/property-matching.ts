@@ -1,6 +1,7 @@
 import type { Properties } from '@posthog/types'
 
-import type { PropertyFilters, PropertyOperator } from '../types'
+import type { Logger, PropertyFilters, PropertyOperator } from '../types'
+import { createLogger } from '../utils/logger'
 
 export const isValidRegex = (pattern: string): boolean => {
   try {
@@ -11,13 +12,104 @@ export const isValidRegex = (pattern: string): boolean => {
   return true
 }
 
+const isRepeatingQuantifierAt = (pattern: string, index: number): boolean => {
+  const character = pattern[index]
+  if (character === '*' || character === '+') {
+    return true
+  }
+  if (character !== '{') {
+    return false
+  }
+  const repetition = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(index))
+  if (!repetition) {
+    return false
+  }
+  const max = repetition[2] ? repetition[3] : repetition[1]
+  return max === '' || Number(max) > 1
+}
+
+/**
+ * Detects a repeated group that itself contains repetition, such as `(a+)+` or `(?:x*y)*`.
+ * JavaScript's backtracking engine can take exponential time on these, which would stall the
+ * synchronous capture path. Overlapping alternation such as `(a|a)*` is not detected.
+ */
+export const hasNestedQuantifier = (pattern: string): boolean => {
+  const groupContainsRepetition: boolean[] = [false]
+  let previousWasRepeatingGroup = false
+
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index]
+    const closedRepeatingGroup = previousWasRepeatingGroup
+    previousWasRepeatingGroup = false
+
+    if (character === '\\') {
+      index++
+    } else if (character === '[') {
+      for (index++; index < pattern.length && pattern[index] !== ']'; index++) {
+        if (pattern[index] === '\\') {
+          index++
+        }
+      }
+    } else if (character === '(') {
+      groupContainsRepetition.push(false)
+      if (pattern[index + 1] === '?') {
+        index++
+      }
+    } else if (character === ')') {
+      const containsRepetition = groupContainsRepetition.length > 1 && !!groupContainsRepetition.pop()
+      groupContainsRepetition[groupContainsRepetition.length - 1] ||= containsRepetition
+      previousWasRepeatingGroup = containsRepetition
+    } else if (isRepeatingQuantifierAt(pattern, index)) {
+      if (closedRepeatingGroup) {
+        return true
+      }
+      groupContainsRepetition[groupContainsRepetition.length - 1] = true
+    }
+  }
+  return false
+}
+
+const MAX_COMPILED_PATTERNS = 100
+// null marks a pattern that failed to compile or was rejected as unsafe.
+const compiledPatterns = new Map<string, RegExp | null>()
+let regexLogger: Logger | undefined
+
+const compilePattern = (pattern: string): RegExp | null => {
+  const cached = compiledPatterns.get(pattern)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  let regex: RegExp | null = null
+  try {
+    regex = new RegExp(pattern)
+  } catch {
+    // An invalid pattern never matches.
+  }
+  if (regex && hasNestedQuantifier(pattern)) {
+    regex = null
+    regexLogger ??= createLogger('[PostHog]')
+    regexLogger.warn(
+      `Ignoring regex "${pattern}": a repeated group containing repetition can stall matching, so it never matches.`
+    )
+  }
+
+  // Map.prototype.keys is unavailable in IE11, so drop the whole cache instead of the oldest entry.
+  if (compiledPatterns.size >= MAX_COMPILED_PATTERNS) {
+    compiledPatterns.clear()
+  }
+  compiledPatterns.set(pattern, regex)
+  return regex
+}
+
 export const isMatchingRegex = (value: string, pattern: string): boolean => {
-  if (!isValidRegex(pattern)) {
+  const regex = compilePattern(pattern)
+  if (!regex) {
     return false
   }
 
   try {
-    return new RegExp(pattern).test(value)
+    return regex.test(value)
   } catch {
     return false
   }

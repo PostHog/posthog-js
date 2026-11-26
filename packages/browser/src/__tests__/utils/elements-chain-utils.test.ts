@@ -46,6 +46,14 @@ describe('elements-chain-utils', () => {
         it('returns false for invalid regex', () => {
             expect(matchString('hello', '[invalid', 'regex')).toBe(false)
         })
+
+        it('returns false quickly for a regex that would backtrack catastrophically', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const start = Date.now()
+            expect(matchString('a'.repeat(40) + '!', '^(a+)+$', 'regex')).toBe(false)
+            expect(Date.now() - start).toBeLessThan(500)
+            warnSpy.mockRestore()
+        })
     })
 
     describe('matchTexts', () => {
