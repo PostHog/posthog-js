@@ -851,6 +851,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       ['completionTokens', 'output'],
       ['input_tokens', 'input'],
       ['output_tokens', 'output'],
+      ['prompt_tokens', 'input'],
+      ['completion_tokens', 'output'],
       ['prompt_token_count', 'input'],
       ['candidates_token_count', 'output'],
       ['inputTokenCount', 'input'],

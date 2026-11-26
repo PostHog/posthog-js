@@ -670,6 +670,44 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(100)
   })
 
+  it('should parse snake_case OpenAI-style tokenUsage from ChatOpenRouter', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'openrouter', 'ChatOpenRouter'],
+      kwargs: {},
+    }
+    const runId = 'run_openrouter_snake_case_usage'
+    const metadata = { ls_model_name: 'openai/gpt-4o', ls_provider: 'openrouter' }
+
+    handler.handleLLMStart(serialized, ['Hello'], runId, undefined, {}, undefined, metadata)
+
+    const generation: ChatGeneration = { text: 'Hi', message: new AIMessage('Hi') }
+    // @langchain/openrouter passes the raw API usage object through as llmOutput.tokenUsage
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: {
+            prompt_tokens: 10000,
+            completion_tokens: 50,
+            total_tokens: 10050,
+            prompt_tokens_details: { cached_tokens: 9000 },
+            completion_tokens_details: { reasoning_tokens: 20 },
+          },
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(10000)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(9000)
+    expect(captureCall[0].properties['$ai_reasoning_tokens']).toBe(20)
+    expect(captureCall[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
+  })
+
   it('should not subtract for OpenAI even when cache_read_tokens >= input_tokens', async () => {
     const serialized = {
       lc: 1,
