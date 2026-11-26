@@ -4,7 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it, vi } from 'vitest'
 
-import { instrument } from '../index'
+import { instrument, PostHogMCP } from '../index'
 import { McpEventSink } from '../extensions/sink'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { BeforeSendFn, McpEvent } from '../types'
@@ -263,6 +263,73 @@ describe('analytics.flush()', () => {
       await expect(analytics.flush()).resolves.toBeUndefined()
     } finally {
       await cleanup()
+    }
+  })
+})
+
+/** A real `PostHogMCP` whose MCP pipeline takes `delayMs`, like one with an async step that awaits I/O. */
+function slowPipelineClient(delayMs: number): { posthog: PostHogMCP; sent: () => string[]; restore: () => void } {
+  const fetch = vi.fn(async (_url: string, _init: any) => ({
+    status: 200,
+    text: async () => JSON.stringify({ results: {} }),
+    json: async () => ({ results: {} }),
+    headers: { get: () => null },
+  }))
+  const posthog = new PostHogMCP('phc_test', {
+    host: 'http://localhost',
+    flushAt: 1000,
+    fetchRetryCount: 0,
+    captureCompression: 'none',
+    fetch: fetch as any,
+  })
+  const slowStep: BeforeSendFn = async (event) => {
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+    return event
+  }
+  const processAndCapture = McpEventSink.prototype['processAndCapture']
+  const pipeline = vi.spyOn(McpEventSink.prototype as any, 'processAndCapture').mockImplementation(async function (
+    this: McpEventSink,
+    event: any,
+    options: any
+  ) {
+    return processAndCapture.call(this, event, { ...options, beforeSend: slowStep })
+  })
+  const sent = (): string[] =>
+    fetch.mock.calls
+      .filter(([url]) => String(url).endsWith('/i/v1/analytics/events'))
+      .flatMap(([, init]) => JSON.parse(init.body).batch.map((event: any) => event.event))
+  return { posthog, sent, restore: () => pipeline.mockRestore() }
+}
+
+describe('PostHogMCP', () => {
+  it.each(['flush', 'shutdown'] as const)(
+    'sends a tool call still in the pipeline when %s() is called',
+    async (method) => {
+      const { posthog, sent, restore } = slowPipelineClient(10)
+
+      try {
+        posthog.captureToolCall({ toolName: 'search_docs', isError: false, distinctId: 'user_123' })
+        await posthog[method]()
+
+        expect(sent()).toEqual(['$mcp_tool_call'])
+      } finally {
+        restore()
+        await posthog.shutdown()
+      }
+    }
+  )
+
+  it('keeps the shutdown deadline when the pipeline is slower than it', async () => {
+    const { posthog, restore } = slowPipelineClient(1000)
+
+    try {
+      posthog.captureToolCall({ toolName: 'search_docs', isError: false, distinctId: 'user_123' })
+      const startedAt = Date.now()
+      await posthog.shutdown(50)
+
+      expect(Date.now() - startedAt).toBeLessThan(500)
+    } finally {
+      restore()
     }
   })
 })
