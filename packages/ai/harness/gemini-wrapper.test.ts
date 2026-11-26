@@ -191,6 +191,40 @@ it.each(['generateContent', 'generateContentStream'] as const)(
 )
 
 it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s leaves Google Search retrieval tokens out of input tokens',
+  async (operation) => {
+    const searchUsage = {
+      promptTokenCount: 11,
+      candidatesTokenCount: 3,
+      toolUsePromptTokenCount: 40,
+      totalTokenCount: 54,
+    }
+    const body = {
+      candidates: [
+        {
+          index: 0,
+          content: { role: 'model', parts: [{ text: 'Grounded answer.' }] },
+          finishReason: 'STOP',
+          groundingMetadata: { webSearchQueries: ['weather in Paris'] },
+        },
+      ],
+      usageMetadata: searchUsage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents: 'Search the web.', config: { tools: [{ googleSearch: {} }] } },
+      operation === 'generateContentStream' ? [body] : body
+    )
+    expect(event.properties).toMatchObject({
+      $ai_input_tokens: 11,
+      $ai_output_tokens: 3,
+      $ai_web_search_count: 1,
+      $ai_usage: searchUsage,
+    })
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
   'built Gemini %s preserves function calls and tool telemetry',
   async (operation) => {
     const call = { name: 'weather', args: { city: 'Paris' } }

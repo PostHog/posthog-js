@@ -28,7 +28,12 @@ import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isObject, isString } from '../typeGuards'
 import { formatToolResult } from '../toolResult'
-import { mapGeminiUsage } from './usage'
+import {
+  detectGeminiRetrievalTools,
+  geminiToolUseTokensBilled,
+  mapGeminiUsage,
+  emptyGeminiRetrievalTools,
+} from './usage'
 import { WrappedInteractions } from './interactions'
 
 /** Append streamed text to the last block of the same type, or start a new one. */
@@ -107,7 +112,11 @@ export class WrappedModels {
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
-        usage: mapGeminiUsage(metadata, { webSearchCount: calculateGoogleWebSearchCount(response) }),
+        usage: mapGeminiUsage(
+          metadata,
+          { webSearchCount: calculateGoogleWebSearchCount(response) },
+          { billToolUseTokens: geminiToolUseTokensBilled(detectGeminiRetrievalTools(response)) }
+        ),
         stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
@@ -139,10 +148,20 @@ export class WrappedModels {
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
     let stopReason: string | undefined
-    let usage: TokenUsage = {
-      webSearchCount: 0,
-      rawUsage: undefined,
-    }
+    let webSearchCount = 0
+    // Grounding, URL context and code execution can arrive on a different chunk
+    // than the final usageMetadata, so remember them across the stream and map
+    // the usage only when the event is captured.
+    const retrievalTools = emptyGeminiRetrievalTools()
+    let lastUsageMetadata: GeminiResponse['usageMetadata']
+    const buildUsage = (): TokenUsage =>
+      lastUsageMetadata
+        ? mapGeminiUsage(
+            lastUsageMetadata,
+            { webSearchCount },
+            { billToolUseTokens: geminiToolUseTokensBilled(retrievalTools) }
+          )
+        : { webSearchCount, rawUsage: undefined }
     let errored = false
 
     try {
@@ -153,9 +172,10 @@ export class WrappedModels {
         if (firstTokenTime === undefined && chunk.text) {
           firstTokenTime = Date.now()
         }
+        detectGeminiRetrievalTools(chunk, retrievalTools)
         const chunkWebSearchCount = calculateGoogleWebSearchCount(chunk)
-        if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
-          usage.webSearchCount = chunkWebSearchCount
+        if (chunkWebSearchCount > webSearchCount) {
+          webSearchCount = chunkWebSearchCount
         }
 
         // chunk.text skips thought parts, so read thought summaries from the
@@ -207,7 +227,7 @@ export class WrappedModels {
 
         // Update usage metadata - handle both old and new field names
         if (chunk.usageMetadata) {
-          usage = mapGeminiUsage(chunk.usageMetadata, { webSearchCount: usage.webSearchCount })
+          lastUsageMetadata = chunk.usageMetadata
         }
         yield chunk
       }
@@ -223,7 +243,7 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage,
+        usage: buildUsage(),
         error,
       })
       throw error
@@ -251,11 +271,7 @@ export class WrappedModels {
           baseURL: 'https://generativelanguage.googleapis.com',
           modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
           httpStatus: 200,
-          usage: {
-            ...usage,
-            webSearchCount: usage.webSearchCount,
-            rawUsage: usage.rawUsage,
-          },
+          usage: buildUsage(),
           stopReason,
           tools: availableTools,
         })

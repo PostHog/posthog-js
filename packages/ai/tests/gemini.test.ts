@@ -393,6 +393,237 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
   })
 
+  test('does not count Google Search retrieval tokens as input tokens', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: { parts: [{ text: 'Answer' }] },
+          finishReason: 'STOP',
+          groundingMetadata: { webSearchQueries: ['posthog llm analytics'] },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(15)
+    expect(captureArgs[0].properties['$ai_web_search_count']).toBe(1)
+    expect(captureArgs[0].properties['$ai_usage'].toolUsePromptTokenCount).toBe(40)
+  })
+
+  test('counts URL context tokens as input tokens when Google Search also ran', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: { parts: [{ text: 'Answer' }] },
+          finishReason: 'STOP',
+          groundingMetadata: { webSearchQueries: ['posthog llm analytics'] },
+          urlContextMetadata: {
+            urlMetadata: [{ retrievedUrl: 'https://posthog.com', urlRetrievalStatus: 'URL_RETRIEVAL_STATUS_SUCCESS' }],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Read https://posthog.com and search the web',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+  })
+
+  test('does not count Google Search retrieval tokens when grounding arrives after usage in a stream', async () => {
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream([
+      {
+        text: 'Answer',
+        candidates: [{ content: { parts: [{ text: 'Answer' }] } }],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 8,
+          toolUsePromptTokenCount: 40,
+          totalTokenCount: 63,
+        },
+      },
+      {
+        candidates: [
+          {
+            content: { parts: [] },
+            finishReason: 'STOP',
+            groundingMetadata: { webSearchQueries: ['posthog llm analytics'] },
+          },
+        ],
+      },
+    ])
+
+    const stream = await client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _ of stream) {
+      // drain
+    }
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(15)
+  })
+
+  test.each([
+    ['web groundingChunks', { groundingChunks: [{ web: { uri: 'https://example.com', title: 'Example' } }] }],
+    ['imageSearchQueries', { imageSearchQueries: ['red fox'] }],
+    [
+      'image groundingChunks',
+      {
+        groundingChunks: [
+          {
+            image: {
+              sourceUri: 'https://example.com',
+              imageUri: 'https://example.com/a.jpg',
+              title: 'Fox',
+              domain: 'example.com',
+            },
+          },
+        ],
+      },
+    ],
+  ])('does not count Google Search retrieval tokens when Search shows up only as %s', async (_, groundingMetadata) => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: 'Answer' }] }, finishReason: 'STOP', groundingMetadata }],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({ model: 'gemini-2.5-flash', contents: 'Search', posthogDistinctId: 'test-id' })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(15)
+  })
+
+  test('still counts File Search retrievedContext tool-use tokens as input tokens', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: { parts: [{ text: 'Answer' }] },
+          finishReason: 'STOP',
+          groundingMetadata: {
+            groundingChunks: [{ retrievedContext: { uri: 'fileSearchStores/1', title: 'doc.pdf', text: 'excerpt' } }],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: 'Search files',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+  })
+
+  test('counts tool-use prompt tokens as input tokens when Google Search and Code Execution both ran', async () => {
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [
+              { executableCode: { language: 'PYTHON', code: 'print(2 + 2)' } },
+              { codeExecutionResult: { outcome: 'OUTCOME_OK', output: '4\n' } },
+              { text: '4' },
+            ],
+          },
+          finishReason: 'STOP',
+          groundingMetadata: { webSearchQueries: ['current exchange rate'] },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 8,
+        toolUsePromptTokenCount: 40,
+        totalTokenCount: 63,
+      },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: 'Look up the rate and calculate',
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
+  })
+
+  test('uses grounding metadata from a late chunk when a stream errors', async () => {
+    ;(client as any).client.models.generateContentStream = vi.fn().mockImplementation(() => {
+      return (async function* () {
+        yield {
+          text: 'Answer',
+          candidates: [{ content: { parts: [{ text: 'Answer' }] } }],
+          usageMetadata: {
+            promptTokenCount: 15,
+            candidatesTokenCount: 8,
+            toolUsePromptTokenCount: 40,
+            totalTokenCount: 63,
+          },
+        }
+        yield {
+          candidates: [{ content: { parts: [] }, groundingMetadata: { webSearchQueries: ['posthog llm analytics'] } }],
+        }
+        throw new Error('stream failed')
+      })()
+    })
+
+    const stream = await client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Search the web',
+      posthogDistinctId: 'test-id',
+    })
+    await expect(
+      (async () => {
+        for await (const _ of stream) {
+          // drain
+        }
+      })()
+    ).rejects.toThrow('stream failed')
+
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_input_tokens']).toBe(15)
+    expect(captureArgs[0].properties['$ai_web_search_count']).toBe(1)
+    expect(captureArgs[0].properties['$ai_is_error']).toBe(true)
+  })
+
   test('preserves output inline data when the client enables multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
     ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
