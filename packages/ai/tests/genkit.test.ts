@@ -2,6 +2,7 @@ import { genkit, z } from 'genkit'
 import { enableTelemetry, flushTracing } from 'genkit/tracing'
 import { PostHog } from 'posthog-node'
 import { PostHogGenkitSpanProcessor } from '../src/genkit'
+import { redactKeys } from '../src/mcpCredentials'
 import { EVENT_OPTION_CASES, USER_EVENT_OPTIONS, asPostHogNodeMajor, expectUserEventOptions } from './test-utils'
 
 // Genkit sets up OpenTelemetry once per process, so one forwarding processor is registered
@@ -75,7 +76,7 @@ function createWeatherFlow() {
 }
 
 const toolResult = (credentialKey: string) => ({
-  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer', inputTokens: 1234 },
+  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer', budgetTokens: 1234 },
   forecast: 'Sunny',
 })
 
@@ -83,6 +84,7 @@ const toolResult = (credentialKey: string) => ({
 const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ...[
     'apiKey',
+    'password',
     'refresh_token',
     'refresh_tokens',
     'refreshToken',
@@ -154,6 +156,15 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ['a form-encoded token response', 'access_token=tool-secret&refresh_token=tool-secret&token_type=bearer', false],
   ['a form-encoded response with an encoded name', 'scope=repo&refresh%5Ftoken=tool-secret', false],
   ['JSON text in a form value', 'body={"refresh_token":"tool-secret"}', false],
+  ['a form-encoded response after a newline', '\naccess_token=tool-secret&token_type=bearer', false],
+  ['a form-encoded response after a status line', 'Status: 200\n\naccess_token=tool-secret&scope=repo', false],
+  [
+    'JSON percent-encoded in a form value',
+    new URLSearchParams({ body: JSON.stringify({ refresh_token: 'tool-secret' }) }).toString(),
+    false,
+  ],
+  ['a form name behind a malformed escape', '%FFrefresh%5Ftok%65n=tool-secret&token_type=bearer', false],
+  ['a token in a URL fragment', 'https://app.example/cb?state=xyz#access_token=tool-secret&token_type=bearer', false],
   ['a URL with a token in the query', { next: 'https://api.example.com/feed?access_token=tool-secret&after=x' }, false],
   ['Python-style text', "{'refresh_token': 'tool-secret', 'token_type': 'Bearer'}", false],
   ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
@@ -174,6 +185,17 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],
 ]
+
+describe('redactKeys on text that names no credential', () => {
+  it.each([
+    ['JSON text with a big integer', '{"id": 12345678901234567890}'],
+    ['pretty-printed JSON text', '{\n  "a": 1\n}'],
+    ['prose mentioning a token', 'Use your API token wisely: rotate it monthly.'],
+    ['a URL with harmless query params', 'https://example.com/search?page=2&sort=asc'],
+  ])('returns %s as written', (_name, text) => {
+    expect(redactKeys(text, (key) => key.endsWith('token'))).toBe(text)
+  })
+})
 
 describe('PostHogGenkitSpanProcessor', () => {
   let client: any

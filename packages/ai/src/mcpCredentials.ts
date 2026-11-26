@@ -1,5 +1,6 @@
 import { toJsonSafeValue } from '@posthog/core'
 import { isObject } from './typeGuards'
+import { namesCredential } from './sanitization/credential_text_scanner'
 
 const MCP_CREDENTIAL_FIELDS = ['headers', 'authorization']
 
@@ -24,7 +25,7 @@ const withoutMcpCredentials = (config: Record<string, unknown>): Record<string, 
   return redacted
 }
 
-// Keys are compared in lower case without `-` and `_`, so camelCase and snake_case configs both match.
+// Keys are compared in lower case without `-`, `_` or whitespace, so camelCase and snake_case configs both match.
 export const normalizeKey = (key: string): string => key.toLowerCase().replace(/[-_\s]/g, '')
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -40,8 +41,9 @@ const MAX_REDACT_DEPTH = 64
 
 /**
  * Replaces the value of every key that `isCredentialKey` accepts (normalized) with `[REDACTED]`, through plain
- * objects, arrays and JSON strings. Class instances, such as the MCP client inside an `mcpToTool()` tool, are
- * returned as they are.
+ * objects, arrays and JSON strings. Numbers and booleans keep their value, since they hold no secret. Other strings
+ * that name a credential key or form field are replaced whole, and values nested deeper than 64 levels become
+ * `[Truncated]`. Class instances, such as the MCP client inside an `mcpToTool()` tool, are returned as they are.
  */
 export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: string) => boolean, depth = 0): unknown {
   if (depth > MAX_REDACT_DEPTH) {
@@ -59,135 +61,30 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      isCredentialKey(normalizeKey(key)) ? '[REDACTED]' : redactKeys(item, isCredentialKey, depth + 1),
+      isCredentialKey(normalizeKey(key)) && typeof item !== 'number' && typeof item !== 'boolean'
+        ? '[REDACTED]'
+        : redactKeys(item, isCredentialKey, depth + 1),
     ])
   )
 }
 
-const ESCAPED_WHITESPACE = new Set(['n', 't', 'r', 'f', 'b'])
-
-const MAX_KEY_DECODE_LEVELS = 16
-
-// Tests a key as written in raw text at every unescaping level, since the text can nest it any number of times
-// (`refresh_tok\\u0065n`), and a key with a literal backslash (`C:\\temp\\token`) reads right only before the
-// extra level. A key still escaped after the last level counts as a credential.
-function keyIsCredential(raw: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
-  let end = raw.length
-  while (end > 0 && raw[end - 1] === '\\') {
-    end--
-  }
-  let key = raw.slice(0, end)
-  for (let level = 0; ; level++) {
-    if (isCredentialKey(normalizeKey(key))) {
-      return true
-    }
-    if (!key.includes('\\')) {
-      return false
-    }
-    if (level === MAX_KEY_DECODE_LEVELS) {
-      return true
-    }
-    try {
-      key = JSON.parse(`"${key}"`)
-    } catch {
-      return false
-    }
-  }
-}
-
-// The index just before an escaped separator (`\\n`, `\\u0020`) that ends at `end`, or `end` when there is none.
-function beforeEscapedSeparator(text: string, end: number): number {
-  let start = -1
-  if (ESCAPED_WHITESPACE.has(text[end]) && text[end - 1] === '\\') {
-    start = end - 1
-  } else if (text[end - 4] === 'u' && text[end - 5] === '\\') {
-    const hex = text.slice(end - 3, end + 1)
-    if (/^[0-9a-f]{4}$/i.test(hex) && isSeparator(String.fromCharCode(parseInt(hex, 16)))) {
-      start = end - 5
-    }
-  }
-  if (start === -1) {
-    return end
-  }
-  while (start >= 0 && text[start] === '\\') {
-    start--
-  }
-  return start
-}
-
-// Any whitespace or control character, including ones JSON rejects, so malformed text cannot hide a key.
-const isSeparator = (char: string): boolean => char <= ' ' || char.trim() === ''
-
-// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`), past separators that may
-// themselves be escaped (`\\n`). Every walk back stops at the previous quote, so no character is read twice.
-function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
-  // Some serializers write the quotes and colon of embedded JSON as `\\u0022` and `\\u003a`.
-  const text = raw.replace(/\\u00(22|3a)/gi, (_escape, hex: string) => (hex === '22' ? '"' : ':'))
-  for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
-    // A colon written as `\\u003a` one level down keeps a backslash in front once decoded.
-    let close = colon - 1
-    while (close >= 0 && text[close] === '\\') {
-      close--
-    }
-    while (close >= 0) {
-      const next = isSeparator(text[close]) ? close - 1 : beforeEscapedSeparator(text, close)
-      if (next === close) {
-        break
-      }
-      close = next
-    }
-    // Single quotes cover Python-style output, such as `str(dict)`.
-    const quote = text[close]
-    if (close <= 0 || (quote !== '"' && quote !== "'")) {
-      continue
-    }
-    const open = text.lastIndexOf(quote, close - 1)
-    if (open === -1) {
-      continue
-    }
-    if (keyIsCredential(text.slice(open + 1, close), isCredentialKey)) {
-      return true
-    }
-  }
-  return false
-}
-
-// A form field or URL query parameter, such as in an OAuth token response or `?access_token=`. Names exclude `?`
-// and `&`, so each character is read by at most one match.
-const FORM_FIELD = /(?:^|[?&])([^&=?\s]+)=/g
-
-function namesCredentialField(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
-  for (const [, name] of text.matchAll(FORM_FIELD)) {
-    let decoded = name
-    try {
-      decoded = decodeURIComponent(name.replace(/\+/g, ' '))
-    } catch {
-      // Not percent-encoded, so the name is read as written.
-    }
-    if (isCredentialKey(normalizeKey(decoded))) {
-      return true
-    }
-  }
-  return false
-}
-
-// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-// JSON text is masked field by field and re-serialized even when nothing changed, since `JSON.parse` keeps only the
-// last of duplicate keys and an earlier one can hold a credential. Text that names a credential key or form field but
-// does not parse, such as JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is replaced whole.
-// Other text is returned as written.
+// A tool can return a response body as JSON text, which would otherwise pass through as one opaque string. Text that
+// names no credential is returned as written. JSON text that names one is masked field by field and re-serialized: the
+// raw scan sees every key, including an earlier duplicate that `JSON.parse` drops. Other text that names one, such as
+// JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is replaced whole.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
+  if (!namesCredential(value, (name) => isCredentialKey(normalizeKey(name)))) {
+    return value
+  }
   const trimmed = value.trim()
   if (/^[[{"]/.test(trimmed)) {
     try {
       return JSON.stringify(redactKeys(JSON.parse(trimmed), isCredentialKey, depth + 1))
     } catch {
-      // Not JSON, so only the raw scan applies.
+      // Not JSON, so it is replaced whole.
     }
   }
-  return namesCredentialKey(value, isCredentialKey) || namesCredentialField(value, isCredentialKey)
-    ? '[REDACTED]'
-    : value
+  return '[REDACTED]'
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these

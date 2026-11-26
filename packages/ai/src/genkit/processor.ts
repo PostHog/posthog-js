@@ -38,7 +38,8 @@ const CREDENTIAL_KEY_SUFFIXES = [
   // Masked whole, since headers hold credentials under other names, such as `x-api-key`.
   'headers',
 ]
-// Token counts and limits end in `tokens` but hold no secret.
+// Token counts and limits end in `tokens` but hold no secret. Numeric values are kept anyway, so this list keeps text
+// that names them from being replaced whole.
 const TOKEN_COUNT_KEYS = new Set([
   'maxtokens',
   'maxoutputtokens',
@@ -54,6 +55,11 @@ const TOKEN_COUNT_KEYS = new Set([
   'cachedcontenttokens',
   'cachecreationinputtokens',
   'cachereadinputtokens',
+  'budgettokens',
+  'thinkingtokens',
+  'audiotokens',
+  'acceptedpredictiontokens',
+  'rejectedpredictiontokens',
 ])
 
 // A field named for one header, such as `authorization_header`, holds that header's value.
