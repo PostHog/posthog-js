@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.455.4
+
+### Patch Changes
+
+- [#5876](https://github.com/PostHog/posthog-js/pull/5876) [`52d422b`](https://github.com/PostHog/posthog-js/commit/52d422bdb3400d54edd85b3ea709a7a444ae4c93) Thanks [@marandaneto](https://github.com/marandaneto)! - Session replay no longer records when `blockSelector` or `maskTextSelector` is not a valid selector in the visitor's browser, and logs an error naming it. Before, an invalid `blockSelector` recorded the content it was meant to block in the first snapshot and then broke recording, and an invalid `maskTextSelector` recorded text unmasked.
+  (2026-11-26)
+
+- [#5876](https://github.com/PostHog/posthog-js/pull/5876) [`52d422b`](https://github.com/PostHog/posthog-js/commit/52d422bdb3400d54edd85b3ea709a7a444ae4c93) Thanks [@marandaneto](https://github.com/marandaneto)! - Session replay stops recording an iframe's content once the iframe is blocked with the block class or block selector.
+  (2026-11-26)
+
 ## 1.455.3
 
 ### Patch Changes
