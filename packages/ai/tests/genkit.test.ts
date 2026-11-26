@@ -152,6 +152,9 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     false,
   ],
   ['a form-encoded token response', 'access_token=tool-secret&refresh_token=tool-secret&token_type=bearer', false],
+  ['a form-encoded response with an encoded name', 'scope=repo&refresh%5Ftoken=tool-secret', false],
+  ['JSON text in a form value', 'body={"refresh_token":"tool-secret"}', false],
+  ['a URL with a token in the query', { next: 'https://api.example.com/feed?access_token=tool-secret&after=x' }, false],
   ['Python-style text', "{'refresh_token': 'tool-secret', 'token_type': 'Bearer'}", false],
   ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
   [

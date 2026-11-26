@@ -152,24 +152,32 @@ function namesCredentialKey(raw: string, isCredentialKey: (normalizedKey: string
   return false
 }
 
-const FORM_ENCODED = /^[\w.-]+=[^&\s]*(?:&[\w.-]+=[^&\s]*)*$/
+// A form field or URL query parameter, such as in an OAuth token response or `?access_token=`. Names exclude `?`
+// and `&`, so each character is read by at most one match.
+const FORM_FIELD = /(?:^|[?&])([^&=?\s]+)=/g
+
+function namesCredentialField(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  for (const [, name] of text.matchAll(FORM_FIELD)) {
+    let decoded = name
+    try {
+      decoded = decodeURIComponent(name.replace(/\+/g, ' '))
+    } catch {
+      // Not percent-encoded, so the name is read as written.
+    }
+    if (isCredentialKey(normalizeKey(decoded))) {
+      return true
+    }
+  }
+  return false
+}
 
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
 // JSON text is masked field by field and re-serialized even when nothing changed, since `JSON.parse` keeps only the
-// last of duplicate keys and an earlier one can hold a credential. Text that names a credential key but does not
-// parse, such as JSON lines, truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
+// last of duplicate keys and an earlier one can hold a credential. Text that names a credential key or form field but
+// does not parse, such as JSON lines, truncated JSON, JSON inside prose, or a form-encoded body, is replaced whole.
+// Other text is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
   const trimmed = value.trim()
-  // A form-encoded body, such as an OAuth token response, is masked field by field.
-  if (FORM_ENCODED.test(trimmed)) {
-    return trimmed
-      .split('&')
-      .map((pair) => {
-        const key = pair.slice(0, pair.indexOf('='))
-        return isCredentialKey(normalizeKey(key)) ? `${key}=[REDACTED]` : pair
-      })
-      .join('&')
-  }
   if (/^[[{"]/.test(trimmed)) {
     try {
       return JSON.stringify(redactKeys(JSON.parse(trimmed), isCredentialKey, depth + 1))
@@ -177,7 +185,9 @@ function redactJsonString(value: string, isCredentialKey: (normalizedKey: string
       // Not JSON, so only the raw scan applies.
     }
   }
-  return namesCredentialKey(value, isCredentialKey) ? '[REDACTED]' : value
+  return namesCredentialKey(value, isCredentialKey) || namesCredentialField(value, isCredentialKey)
+    ? '[REDACTED]'
+    : value
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
