@@ -2277,6 +2277,16 @@ describe('emails', () => {
       ['404 not_found on a template batch', { templateId: TEMPLATE_ID }, { status: 404, code: 'not_found' }],
       ['409 batch_unavailable', WELCOME, { status: 409, code: 'batch_unavailable' }],
       [
+        '409 conflict saying nothing was sent',
+        WELCOME,
+        { status: 409, code: 'conflict', message: 'PostHog sent no email of this request. Split the batch.' },
+      ],
+      [
+        '409 api_error saying nothing was sent',
+        WELCOME,
+        { status: 409, code: 'api_error', message: "PostHog didn't send this batch. Send each email on its own." },
+      ],
+      [
         '413 content_too_large',
         WELCOME,
         {

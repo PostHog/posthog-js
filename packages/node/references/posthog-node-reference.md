@@ -2963,8 +2963,9 @@ What happened to one recipient of a batch:
 - `queued`: PostHog queued the email.
 - `failed`: PostHog didn't queue the email, and `error` says why.
 - `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
-  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, its key was still in flight
-  (`idempotency_key_in_flight`, or a 409 whose code was lost), or PostHog refused a retry of a request it may have queued. `error` holds
+  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, PostHog answered 409
+  with any code but `batch_unavailable` (such as `idempotency_key_in_flight`, `idempotency_key_reused`, or no
+  code), or PostHog refused a retry of a request it may have queued. `error` holds
   PostHog's answer, and `id` the message ID when PostHog named one.
   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
   that key: PostHog queues no second email for a key it has.

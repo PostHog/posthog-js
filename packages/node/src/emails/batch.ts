@@ -198,7 +198,11 @@ export function recordAnswer(
 
 export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): EmailError {
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
-  const answer = mayHaveQueuedBefore && !mayHaveQueued(error) ? afterUnansweredAttempt(error) : error
+  // After an unanswered attempt, PostHog's own words on a refusal (any 4xx, a 409 conflict included) speak only
+  // of the retry, so they are replaced; a retry that went unanswered too keeps its own message.
+  const refusedRetry =
+    !mayHaveQueued(error) || (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500)
+  const answer = mayHaveQueuedBefore && refusedRetry ? afterUnansweredAttempt(error) : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = answer
