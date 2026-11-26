@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.455.3
+
+### Patch Changes
+
+- [#5901](https://github.com/PostHog/posthog-js/pull/5901) [`2673945`](https://github.com/PostHog/posthog-js/commit/267394593ee2b1c3f294b7951e8402a712d5ebea) Thanks [@marandaneto](https://github.com/marandaneto)! - Autocapture works again in Internet Explorer 11. The label-click check added to rage-click detection called `Element.closest`, which IE11 doesn't have, so the click after a label click failed to be captured.
+  (2026-11-26)
+
 ## 1.455.2
 
 ### Patch Changes

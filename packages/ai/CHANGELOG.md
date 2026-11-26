@@ -1,5 +1,14 @@
 # posthog-ai
 
+## 8.22.3
+
+### Patch Changes
+
+- [#5898](https://github.com/PostHog/posthog-js/pull/5898) [`af86965`](https://github.com/PostHog/posthog-js/commit/af869657541cf91925cafba923bf5e75dda4515f) Thanks [@susheelg1197](https://github.com/susheelg1197)! - Gemini `generateContentStream` now captures image and other inline data output parts in `$ai_output_choices`, formatted and redacted like `generateContent`, and an inline data chunk sets `$ai_time_to_first_token`.
+  (2026-11-26)
+- Updated dependencies [[`11a927d`](https://github.com/PostHog/posthog-js/commit/11a927daeef9260566d58d05fe80a5a2bb889524)]:
+  - posthog-node@6.1.1
+
 ## 8.22.2
 
 ### Patch Changes

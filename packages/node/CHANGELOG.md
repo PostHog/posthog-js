@@ -1,5 +1,12 @@
 # posthog-node
 
+## 6.1.1
+
+### Patch Changes
+
+- [#5840](https://github.com/PostHog/posthog-js/pull/5840) [`11a927d`](https://github.com/PostHog/posthog-js/commit/11a927daeef9260566d58d05fe80a5a2bb889524) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Local evaluation treats a filter type it can't evaluate, such as a cohort's `person_metadata` filter on first seen, as inconclusive instead of matching it against a person property with the same key. A later condition can still decide the flag, and otherwise it falls back to `/flags`
+  (2026-11-26)
+
 ## 6.1.0
 
 ### Minor Changes
