@@ -250,8 +250,8 @@ export interface BatchEmailRecipient {
  *   PostHog answered that it couldn't tell either, such as `delivery_unavailable`, PostHog answered 409
  *   with any code but `batch_unavailable` (such as `idempotency_key_in_flight`, `idempotency_key_reused`, or no
  *   code), or PostHog refused a retry of a request it may have queued. `error` keeps
- *   the code and `statusCode` of PostHog's answer when PostHog answered (a 404 that names no field reads
- *   `not_found`, whatever code it carried), with the client's own message and same-key `fix` in
+ *   the code and `statusCode` of PostHog's answer when PostHog answered (a 404 for the whole batch that names
+ *   no field reads `not_found` when its code is missing, blank or `api_error`), with the client's own message and same-key `fix` in
  *   place of PostHog's text, and `id` is the message ID when PostHog named one.
  *   Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
  *   that key: PostHog queues no second email for a key it has.
