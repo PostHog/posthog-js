@@ -2,7 +2,7 @@ import { PostHog, PostHogCustomStorage } from '../src'
 import { PostHogPersistedProperty } from '@posthog/core'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState, Platform } from 'react-native'
-import { waitForExpect } from './test-utils'
+import { waitForExpect, waitForRemoteConfig } from './test-utils'
 
 // Same native bridge mock as the manual recording spec: isEnabled() reports whether the
 // recorder is actually running, which is how the SDK confirms a start or a stop.
@@ -161,6 +161,7 @@ describe('PostHog RN session replay follows consent', () => {
   it('stops a recording the app started by hand when the user opts out', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
     await posthog.startSessionRecording()
     expect(nativeRecording).toBe(true)
 
@@ -790,6 +791,7 @@ describe('PostHog RN session replay follows consent', () => {
   it('retries a manual recording native refuses to restart on opt-in, on the opt-in session', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
     await posthog.startSessionRecording()
     await posthog.optOut()
     replay.startRecording.mockImplementationOnce(async () => {})

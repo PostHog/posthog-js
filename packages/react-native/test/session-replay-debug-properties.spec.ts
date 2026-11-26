@@ -1,7 +1,7 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState, Platform } from 'react-native'
-import { wait, waitForNativeChain, waitForNativePluginEvaluation } from './test-utils'
+import { wait, waitForNativeChain, waitForNativePluginEvaluation, waitForRemoteConfig } from './test-utils'
 
 // The native plugin bridge, mocked with the legacy start() surface (no `setup`). The
 // getter lets a test remove the plugin altogether to model an app without it installed.
@@ -160,6 +160,8 @@ describe('PostHog RN session replay debug properties', () => {
     }
     const client = newPostHog(options)
     await client.ready()
+    // A manual start waits for it too.
+    await waitForRemoteConfig(client)
     await waitForNativePluginEvaluation(client)
     return client
   }

@@ -1,7 +1,7 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
-import { waitForExpect, wait, waitForNativePluginEvaluation } from './test-utils'
+import { waitForExpect, wait, waitForNativeChain, waitForNativePluginEvaluation } from './test-utils'
 import * as uuidModule from '../../core/src/vendor/uuidv7'
 import { sampleOnTriggerProperty } from '../src/session-replay/triggerGroups'
 
@@ -686,6 +686,9 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     await posthog.ready()
     await posthog.startSessionRecording()
     expect(replay.startRecording).toHaveBeenCalledTimes(1)
+    // The launch's flags load evaluates the app's recording under its groups; let it land first.
+    await wait(50)
+    await waitForNativePluginEvaluation(posthog)
 
     await posthog.optOut()
     await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
@@ -1613,6 +1616,107 @@ describe('PostHog RN session replay v2 trigger groups', () => {
         expect(minimumDurations()).toEqual([5000, 5000])
       })
 
+      it('is lowered only after the recorder stops for an off decision', async () => {
+        currentFlags = { 'replay-flag': true }
+        await launch(v2Config([slowGroup]))
+        expect(nativeRecording).toBe(true)
+
+        currentFlags = { 'replay-flag': false }
+        await posthog.reloadFeatureFlagsAsync()
+        await settle()
+
+        expect(minimumDurations()).toEqual([5000, 0])
+        expect(replay.stopRecording.mock.invocationCallOrder[0]).toBeLessThan(
+          setMinimumDuration.mock.invocationCallOrder.at(-1)!
+        )
+      })
+
+      it('is lowered only after the recorder stops for a new-session start that waits on a group', async () => {
+        await launch(
+          v2Config([
+            {
+              id: 'g1',
+              name: 'Taps',
+              sampleRate: 1,
+              minDurationMs: 5000,
+              conditions: { matchType: 'any', events: [{ name: 'tap' }] },
+            },
+          ])
+        )
+        posthog.capture('tap')
+        await settle()
+        expect(nativeRecording).toBe(true)
+        replay.stopRecording.mockClear()
+
+        await posthog.startSessionRecording(false)
+        await settle()
+
+        expect(nativeRecording).toBe(false)
+        expect(minimumDurations()).toEqual([5000, 0])
+        expect(replay.stopRecording.mock.invocationCallOrder[0]).toBeLessThan(
+          setMinimumDuration.mock.invocationCallOrder.at(-1)!
+        )
+      })
+
+      describe('for a recording the app started with replay off', () => {
+        const everyone = { id: 'g1', name: 'Everyone', sampleRate: 1, minDurationMs: 60000, conditions: {} }
+
+        const startByApp = async (sessionRecording: any): Promise<void> => {
+          currentSessionRecording = sessionRecording
+          await warmup()
+          setMinimumDuration.mockClear()
+          posthog = newPostHog({ ...replayOnlyOptions, enableSessionReplay: false })
+          await posthog.ready()
+          await posthog.startSessionRecording()
+          await settle()
+          expect(nativeRecording).toBe(true)
+        }
+
+        it('lowers to the minimum of a group a later event activates', async () => {
+          await startByApp(
+            v2Config([
+              everyone,
+              {
+                id: 'g2',
+                name: 'Purchase',
+                sampleRate: 1,
+                minDurationMs: 30000,
+                conditions: { matchType: 'any', events: [{ name: 'purchase' }] },
+              },
+            ])
+          )
+
+          posthog.capture('purchase')
+          await settle()
+
+          expect(minimumDurations()).toEqual([60000, 30000])
+          expect(nativeRecording).toBe(true)
+        })
+
+        it('lowers to the minimum of a group a later flags load activates', async () => {
+          await startByApp(v2Config([everyone, fastGroup]))
+
+          currentFlags = { 'other-flag': true }
+          await posthog.reloadFeatureFlagsAsync()
+          await settle()
+
+          expect(minimumDurations()).toEqual([60000, 2000])
+          expect(nativeRecording).toBe(true)
+        })
+
+        it('is cleared only once the app stops the recording', async () => {
+          await startByApp(v2Config([everyone]))
+
+          await posthog.stopSessionRecording()
+          await settle()
+
+          expect(minimumDurations()).toEqual([60000, null])
+          expect(replay.stopRecording.mock.invocationCallOrder[0]).toBeLessThan(
+            setMinimumDuration.mock.invocationCallOrder.at(-1)!
+          )
+        })
+      })
+
       it('is cleared on opt-out', async () => {
         currentFlags = { 'replay-flag': true }
         await launch(v2Config([slowGroup]))
@@ -1623,13 +1727,52 @@ describe('PostHog RN session replay v2 trigger groups', () => {
         expect(minimumDurations()).toEqual([5000, null])
       })
 
+      // Holds the flags reload reset() starts, so its evaluation can't send a minimum of its own.
+      const holdFlagsReload = (): (() => void) => {
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        const respond = (window.fetch as any).getMockImplementation() as (url: string) => Promise<unknown>
+        ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+          await gate
+          return respond(url)
+        })
+        return release
+      }
+
       it('is cleared on reset()', async () => {
         currentFlags = { 'replay-flag': true }
         await launch(v2Config([slowGroup]))
 
+        const releaseFlags = holdFlagsReload()
         posthog.reset()
+        await waitForNativeChain(posthog)
 
         expect(minimumDurations()).toEqual([5000, null])
+        releaseFlags()
+      })
+
+      it('is cleared on reset() only after native resets', async () => {
+        const nativeReset = vi.fn(async () => {})
+        ;(replay as any).reset = nativeReset
+        try {
+          currentFlags = { 'replay-flag': true }
+          await launch(v2Config([slowGroup]))
+
+          const releaseFlags = holdFlagsReload()
+          posthog.reset()
+          expect(minimumDurations()).toEqual([5000])
+          await waitForNativeChain(posthog)
+
+          expect(minimumDurations()).toEqual([5000, null])
+          expect(nativeReset.mock.invocationCallOrder[0]).toBeLessThan(
+            setMinimumDuration.mock.invocationCallOrder.at(-1)!
+          )
+          releaseFlags()
+        } finally {
+          delete (replay as any).reset
+        }
       })
 
       it('is skipped with one warning when the plugin lacks the method', async () => {
@@ -1768,6 +1911,64 @@ describe('PostHog RN session replay v2 trigger groups', () => {
         expect(replayEnabledAtSetup()).toEqual([false])
         expect(nativeRecording).toBe(false)
         releaseConfig()
+      })
+
+      describe('a startSessionRecording() made before the config', () => {
+        const startBeforeConfig = async (options: Record<string, any> = {}): Promise<void> => {
+          holdConfig()
+          posthog = newPostHog({ ...replayOnlyOptions, enableSessionReplay: false, ...options })
+          await posthog.ready()
+          await posthog.startSessionRecording()
+          await settle()
+          expect(setup).not.toHaveBeenCalled()
+          expect(replay.startRecording).not.toHaveBeenCalled()
+        }
+
+        it('starts nothing while every v2 group is pending, and starts once one activates', async () => {
+          currentSessionRecording = v2Config([flagGroup])
+          currentFlags = { 'replay-flag': false }
+          await startBeforeConfig()
+
+          releaseConfig()
+          await posthog.reloadFeatureFlagsAsync()
+          await settle()
+          expect(replayEnabledAtSetup()).not.toContain(true)
+          expect(replay.startRecording).not.toHaveBeenCalled()
+          expect(nativeRecording).toBe(false)
+
+          currentFlags = { 'replay-flag': true }
+          await posthog.reloadFeatureFlagsAsync()
+          await settle()
+          expect(replay.startRecording).toHaveBeenCalled()
+          expect(nativeRecording).toBe(true)
+        })
+
+        it('starts once the config brings an eligible v2 group', async () => {
+          currentSessionRecording = v2Config([{ id: 'g1', name: 'Everyone', sampleRate: 1, conditions: {} }])
+          await startBeforeConfig()
+
+          releaseConfig()
+          await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+          expect(replayEnabledAtSetup()).toEqual([false])
+        })
+
+        it('starts once a v1 config arrives', async () => {
+          currentSessionRecording = { endpoint: '/s/' }
+          await startBeforeConfig()
+
+          releaseConfig()
+          await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+          expect(nativeRecording).toBe(true)
+        })
+
+        it('starts once a v1 config arrives with replay on', async () => {
+          currentSessionRecording = { endpoint: '/s/' }
+          await startBeforeConfig({ enableSessionReplay: true })
+
+          releaseConfig()
+          await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+          expect(nativeRecording).toBe(true)
+        })
       })
     })
   })

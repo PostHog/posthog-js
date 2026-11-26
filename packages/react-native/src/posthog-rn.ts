@@ -170,6 +170,8 @@ type ManualRecordingStartRequest = {
   timer?: ReturnType<typeof setTimeout>
   // Set for the opt-in restore: holds the start until an event trigger fires in the current session.
   awaitEventTrigger?: boolean
+  // Set while no replay config has loaded yet; the load that brings it retries the start.
+  awaitReplayConfig?: boolean
 }
 
 export interface PostHogOptions extends PostHogCoreOptions {
@@ -754,7 +756,7 @@ export class PostHog extends PostHogCore {
       // gates recording without an app restart. A pending manual start can also retry here,
       // even when replay was disabled at setup.
       this.onFeatureFlags(() => {
-        if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
+        if (this._shouldEvaluateSessionReplay()) {
           void this._evaluateAndStartSessionReplay()
         }
         this._refreshNativeSessionReplayDebugProperties()
@@ -809,7 +811,7 @@ export class PostHog extends PostHogCore {
       return
     }
     const freshReplayConfig = typeof response.sessionRecording === 'object' && response.sessionRecording !== null
-    if (freshReplayConfig && (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending)) {
+    if (freshReplayConfig && this._shouldEvaluateSessionReplay()) {
       void this._evaluateAndStartSessionReplay()
     }
   }
@@ -1310,7 +1312,8 @@ export class PostHog extends PostHogCore {
     // The persisted activation is wiped below; the in-memory evaluator must drop its copy too,
     // or a session id kept via propertiesToKeep would carry one user's activated groups forward.
     this._triggerGroupsEvaluator.clearActivation()
-    void this._syncNativeMinimumDuration(null)
+    // Native gets the cleared minimum on the native chain below, after its own reset.
+    this._nativeMinimumDurationMs = null
     const wasOptedOut = this.optedOut
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
@@ -1350,6 +1353,7 @@ export class PostHog extends PostHogCore {
         this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true
       )
     }
+    void this._enqueueNative('setSessionReplayMinimumDuration', () => this._sendNativeMinimumDuration())
     // super.reset() started a new session; move native onto it before replay restarts, as optIn() does.
     if (this._isInitialized && wasOptedOut && !this.optedOut && this._sessionReplayWanted) {
       try {
@@ -2110,6 +2114,16 @@ export class PostHog extends PostHogCore {
     )
   }
 
+  // With replay off, a load still evaluates for a pending start, and for a recording the app started
+  // under trigger groups, whose minimum duration follows the groups.
+  private _shouldEvaluateSessionReplay(): boolean {
+    return (
+      this._isEnableSessionReplay() ||
+      !!this._manualRecordingStartRequest?.pending ||
+      (this._sessionReplayStartedByApp && this._sessionReplayTriggerGroups !== null)
+    )
+  }
+
   _isEnableSessionReplay(): boolean {
     // Session replay has no macOS backend, so it is never enabled there (crash tracking still is).
     return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
@@ -2295,6 +2309,14 @@ export class PostHog extends PostHogCore {
       }
       return false
     }
+    await this._initPromise
+    // Until the config says whether the project is v1 or v2, a start would record under gates a v2
+    // config may override. Native refuses a start before its own config loads all the same.
+    request.awaitReplayConfig = this._isReplayConfigUnknown()
+    if (request.awaitReplayConfig) {
+      request.pending = true
+      return false
+    }
     // An explicit start keeps the v2 trigger group gates. A pending group holds the request, and a
     // matching event or flags load retries it.
     const groupsDecision = await this._evaluateTriggerGroupsForManualStart(request)
@@ -2311,7 +2333,12 @@ export class PostHog extends PostHogCore {
       } else {
         this._cancelManualRecordingStart()
       }
+      // Lowering the minimum while recording would release the held buffer, so only after the stop.
+      await this._syncNativeMinimumDuration(groupsDecision)
       return false
+    }
+    if (groupsDecision) {
+      await this._syncNativeMinimumDuration(groupsDecision)
     }
     this._sessionReplayStartedByApp = true
 
@@ -2353,23 +2380,35 @@ export class PostHog extends PostHogCore {
       this._rotateSessionForManualStart()
       request.resumeCurrent = true
     }
+    return this._evaluateTriggerGroups(triggerGroups, true)
+  }
+
+  private _evaluateTriggerGroups(
+    triggerGroups: SessionReplayTriggerGroup[],
+    explicitStart: boolean
+  ): SessionReplayTriggerGroupsDecision {
     const sessionId = super.getSessionId()
     this._sessionReplayTriggerGroups = triggerGroups
     this._triggerGroupsEvaluator.onConfig(triggerGroups)
+    // A session kept across an app restart keeps the groups it already activated, like the v1 trigger.
     this._triggerGroupsEvaluator.restoreActivation(
       sessionId,
       this.getPersistedProperty<SessionReplayTriggerGroupsActivation>(
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
       )
     )
-    this._checkTriggerGroupsScreen(sessionId, true)
-    const decision = this._triggerGroupsEvaluator.evaluate(
+    this._checkTriggerGroupsScreen(sessionId, explicitStart)
+    return this._triggerGroupsEvaluator.evaluate(
       sessionId,
       this.getKnownFeatureFlags(),
       this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
     )
-    await this._syncNativeMinimumDuration(decision)
-    return decision
+  }
+
+  private _isReplayConfigUnknown(
+    remoteConfig: unknown = this.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)
+  ): boolean {
+    return remoteConfig == null && this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) == null
   }
 
   private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
@@ -2520,6 +2559,11 @@ export class PostHog extends PostHogCore {
       .catch(() => {})
       .then(async () => {
         await this._stopSessionRecording(true)
+        // With replay off the groups only followed the app's recording, which has ended.
+        if (!this._isEnableSessionReplay()) {
+          this._sessionReplayTriggerGroups = null
+          await this._syncNativeMinimumDuration(null)
+        }
       })
     await this._sessionReplayEvalChain
   }
@@ -3816,27 +3860,40 @@ export class PostHog extends PostHogCore {
       const cachedReplayConfig = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
         [key: string]: JsonType
       }
+      const triggerGroups = parseSessionRecordingTriggerGroups(cachedReplayConfig, this._logger)
       // Replay off: only a recording the app wants waits on event triggers, so a matching event
       // retries its pending start below. Otherwise disarm them so the capture hook stays inert.
-      // Trigger groups replace event triggers and only gate automatic replay, so both stay disarmed
-      // under a v2 config.
+      // Trigger groups replace event triggers, so those stay disarmed under a v2 config.
       this._sessionReplayEventTriggers =
-        this._sessionReplayWanted && parseSessionRecordingTriggerGroups(cachedReplayConfig, this._logger) === null
+        this._sessionReplayWanted && triggerGroups === null
           ? this._parseEventTriggers(cachedReplayConfig['eventTriggers'])
           : []
-      this._sessionReplayTriggerGroups = null
-      this._unregisterTriggerGroupsDebugProperties()
-      await this._syncNativeMinimumDuration(null)
+      // A recording the app started keeps its groups armed: they set its minimum duration, and a
+      // group activating later can lower it. Otherwise the groups only gate a start, so disarm them.
+      const appRecordingGroups = triggerGroups !== null && this._sessionReplayStartedByApp && !this.optedOut
+      if (appRecordingGroups) {
+        await this._syncNativeMinimumDuration(this._evaluateTriggerGroups(triggerGroups, false))
+      } else {
+        this._sessionReplayTriggerGroups = null
+        this._unregisterTriggerGroupsDebugProperties()
+      }
       if (restoreAppRecording) {
+        await this._syncNativeMinimumDuration(null)
         await this._restoreAppRecording()
-      } else if (
-        // Opt-out ends any recording, including one the app started by hand. Opt-in stops the
-        // recorder posthog-ios optIn() restarts when it reinstalls its integrations, unless the
-        // app has started one since.
-        this._sessionReplayNativeInitialized &&
-        (this.optedOut || (freshSession && !this._sessionReplayStartedByApp))
-      ) {
-        await this._stopSessionRecording(this.optedOut)
+      } else {
+        if (
+          // Opt-out ends any recording, including one the app started by hand. Opt-in stops the
+          // recorder posthog-ios optIn() restarts when it reinstalls its integrations, unless the
+          // app has started one since.
+          this._sessionReplayNativeInitialized &&
+          (this.optedOut || (freshSession && !this._sessionReplayStartedByApp))
+        ) {
+          await this._stopSessionRecording(this.optedOut)
+        }
+        // After the stop: lowering the minimum while recording would release the held buffer.
+        if (!appRecordingGroups) {
+          await this._syncNativeMinimumDuration(null)
+        }
       }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
@@ -3865,8 +3922,13 @@ export class PostHog extends PostHogCore {
 
     // On a first launch nothing says whether the project is v1 or v2, so starting native here would
     // record under v1 gates that v2 may then override. Wait for the config.
-    const replayConfigUnknown =
-      remoteConfig == null && this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) == null
+    const replayConfigUnknown = this._isReplayConfigUnknown(remoteConfig)
+
+    // A start the app made before the config loaded goes first, so the gates below see its recording.
+    const request = this._manualRecordingStartRequest
+    if (!replayConfigUnknown && request?.pending && request.awaitReplayConfig) {
+      await this._attemptManualRecordingStart(request)
+    }
 
     if (replayConfigUnknown) {
       this._logger.info('Session replay waits for the remote config before it starts.')
@@ -3882,23 +3944,7 @@ export class PostHog extends PostHogCore {
       recordingActive = false
     } else if (triggerGroups) {
       this._sessionReplayEventTriggers = []
-      this._sessionReplayTriggerGroups = triggerGroups
-      this._triggerGroupsEvaluator.onConfig(triggerGroups)
-      const sessionId = super.getSessionId()
-      // A session kept across an app restart keeps the groups it already activated, like the v1 trigger.
-      this._triggerGroupsEvaluator.restoreActivation(
-        sessionId,
-        this.getPersistedProperty<SessionReplayTriggerGroupsActivation>(
-          PostHogPersistedProperty.SessionReplayTriggerGroupsActivation
-        )
-      )
-      this._checkTriggerGroupsScreen(sessionId, false)
-
-      const decision = this._triggerGroupsEvaluator.evaluate(
-        sessionId,
-        this.getKnownFeatureFlags(),
-        this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
-      )
+      const decision = this._evaluateTriggerGroups(triggerGroups, false)
       this._registerTriggerGroupsDebugProperties(decision)
       this._logger.info(
         `Session replay trigger groups v2 (${decision.groupsCount} groups): ` +
@@ -3930,8 +3976,6 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    await this._syncNativeMinimumDuration(this.optedOut ? null : triggerGroupsDecision)
-
     // Consent overrides every other gate (linked flag, event triggers). It gates recording, not native
     // setup: native still comes up armed (it carries the push identity provider and its own opt-out
     // flag), so replay can start on optIn() without a restart, but nothing records until then.
@@ -3943,6 +3987,7 @@ export class PostHog extends PostHogCore {
       if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording(true)
       }
+      await this._syncNativeMinimumDuration(null)
       // Mark the recorder stopped only when opt-in should restart it, so the opt-in evaluation starts it
       // if the gates above pass. Otherwise _sessionReplayRecordingActive is left as it was, so opt-in
       // doesn't restart a recording the app stopped.
@@ -3959,6 +4004,7 @@ export class PostHog extends PostHogCore {
       if (this._sessionReplayNativeInitialized && (freshSession || this._sessionReplayRecordingActive !== false)) {
         await this._stopSessionRecording(true)
       }
+      await this._syncNativeMinimumDuration(triggerGroupsDecision)
       this._sessionReplayRecordingActive = false
       this._sessionReplayStartFailed = false
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
@@ -3968,6 +4014,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (recordingActive) {
+      await this._syncNativeMinimumDuration(triggerGroupsDecision)
       if (this._sessionReplayRecordingActive === true) {
         // Already recording — nothing to do.
         return
@@ -4017,6 +4064,8 @@ export class PostHog extends PostHogCore {
         }
         this._sessionReplayRecordingActive = false
       }
+      // After the stop: lowering the minimum while recording would release the held buffer.
+      await this._syncNativeMinimumDuration(triggerGroupsDecision)
 
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
