@@ -1517,6 +1517,32 @@ describe('emails', () => {
       expect(postHog.emails).toHaveLength(1)
     })
 
+    it('counts the minute from the first attempt when a refused first attempt is retried', async () => {
+      const postHog = new FakePostHog({ secretKey: SECRET_KEY, queuesScheduledSendsNow: true })
+      postHog.failNext('send', { status: 429, code: 'throttled' })
+      const sentAt: number[] = []
+      makeClient({
+        fetch: async (url, options) => {
+          sentAt.push(Date.now())
+          const reply = await postHog.fetch(url, options)
+          if (sentAt.length === 1) {
+            vi.setSystemTime(Date.now() + 5000)
+          }
+          return reply
+        },
+      })
+      const scheduledAt = new Date(NOW.getTime() + 62_000)
+
+      const { data, error } = await settle(send({ scheduledAt }))
+
+      expect(sentAt).toHaveLength(2)
+      expect(sentAt[0]).toBe(NOW.getTime())
+      expect(scheduledAt.getTime() - sentAt[1]).toBeLessThan(60_000)
+      expect(data).toBeNull()
+      expect(error).toMatchObject({ code: 'schedule_not_confirmed', messageId: postHog.emails[0].id })
+      expect(postHog.emails).toHaveLength(1)
+    })
+
     it('accepts PostHog sending now a time at most a minute ahead, since its clock may run ahead of ours', async () => {
       const postHog = againstPostHog({ queuesScheduledSendsNow: true })
 
