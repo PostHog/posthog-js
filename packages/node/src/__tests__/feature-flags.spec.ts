@@ -2968,13 +2968,7 @@ describe('local evaluation', () => {
         flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], { '7': { type: 'AND', values: [firstSeenFilter] } }),
       ],
       ['in a flag condition', flagTargeting([firstSeenFilter])],
-      ['with an empty type in a flag condition', flagTargeting([{ ...firstSeenFilter, type: '' }])],
-      [
-        'with an empty type in a cohort',
-        flagTargeting([{ key: 'id', value: 7, type: 'cohort' }], {
-          '7': { type: 'AND', values: [{ ...firstSeenFilter, type: '' }] },
-        }),
-      ],
+      ['with an unknown type in a flag condition', flagTargeting([{ ...firstSeenFilter, type: 'future_type' }])],
     ])('falls back to /flags instead of matching a created_at person property (%s)', async (_, localFlags) => {
       posthog = createClient(localFlags)
 
@@ -3000,7 +2994,7 @@ describe('local evaluation', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
     })
 
-    it.each([['person'], [undefined]])('still matches %s filters locally', async (type) => {
+    it.each([['person'], [undefined], [null], ['']])('still matches %p filters locally', async (type) => {
       posthog = createClient(
         flagTargeting([{ key: 'created_at', type, operator: 'is_date_after', value: '2025-01-01' }])
       )
@@ -3106,20 +3100,21 @@ describe('local evaluation', () => {
           [name, { created_at: '2026-06-01' }] as const,
           [name, {}] as const,
         ])
-      )('falls back to /flags before a later condition chooses differently: %s, %o', async (name, personProperties) => {
-        const expected = name === 'an early exit' ? false : 'new-user'
-        posthog = createTargetClient(definitions[name], expected)
+      )('lets a later condition decide the flag: %s, %o', async (name, personProperties) => {
+        // An inconclusive condition doesn't trigger early exit, so the catch-all decides there too.
+        const expected = name === 'an early exit' ? true : 'existing-user'
+        posthog = createTargetClient(definitions[name], 'from-server')
 
         const result = await posthog.getFeatureFlag('target', 'test-distinct-id', { personProperties })
 
         expect(result).toBe(expected)
-        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       })
 
       it.each([
         ['before', [{ key: 'plan', type: 'person', operator: 'exact', value: 'paid' }, firstSeenFilter]],
         ['after', [firstSeenFilter, { key: 'plan', type: 'person', operator: 'exact', value: 'paid' }]],
-      ])('falls back to /flags with a missing property %s the filter', async (_, properties) => {
+      ])('lets a later condition decide with a missing property %s the filter', async (_, properties) => {
         const [target] = definitions['another variant']
         const [, existingUser] = target.filters.groups
         posthog = createTargetClient(
@@ -3129,11 +3124,11 @@ describe('local evaluation', () => {
               multivariate,
             }),
           ],
-          'new-user'
+          'from-server'
         )
 
-        expect(await posthog.getFeatureFlag('target', 'test-distinct-id')).toBe('new-user')
-        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+        expect(await posthog.getFeatureFlag('target', 'test-distinct-id')).toBe('existing-user')
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       })
 
       it('stays local when the later condition chooses the same value', async () => {
