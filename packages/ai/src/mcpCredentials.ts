@@ -65,6 +65,7 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
 }
 
 const WHITESPACE = new Set([' ', '\t', '\n', '\r'])
+const ESCAPED_WHITESPACE = new Set(['n', 't', 'r'])
 
 // A key as written in raw text, unescaped as many times as the text is nested, so `refresh_tok\\u0065n` matches.
 function decodeKey(raw: string): string {
@@ -83,13 +84,22 @@ function decodeKey(raw: string): string {
   return key
 }
 
-// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`). Every walk back stops at
-// the previous quote, so no character is read twice and the scan stays linear.
+// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`), past whitespace that may
+// itself be escaped (`\\n`). Every walk back stops at the previous quote, so no character is read twice.
 function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
   for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
     let close = colon - 1
-    while (close >= 0 && WHITESPACE.has(text[close])) {
-      close--
+    while (close >= 0) {
+      if (WHITESPACE.has(text[close])) {
+        close--
+      } else if (ESCAPED_WHITESPACE.has(text[close]) && text[close - 1] === '\\') {
+        close -= 2
+        while (close >= 0 && text[close] === '\\') {
+          close--
+        }
+      } else {
+        break
+      }
     }
     if (close <= 0 || text[close] !== '"') {
       continue
@@ -103,17 +113,22 @@ function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: strin
 }
 
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-// Text that names a credential key is masked field by field when it parses, and replaced whole when it does not,
-// such as JSON lines, truncated JSON, or JSON inside prose. Other text is returned as written.
+// JSON text is masked field by field. Text that names a credential key but does not parse, such as JSON lines,
+// truncated JSON, or JSON inside prose, is replaced whole. Other text is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
-  if (!namesCredentialKey(value, isCredentialKey)) {
-    return value
+  const namesCredential = namesCredentialKey(value, isCredentialKey)
+  const trimmed = value.trim()
+  if (/^[[{"]/.test(trimmed)) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
+      // `JSON.parse` keeps only the last of duplicate keys, so the raw scan decides too.
+      return namesCredential || redacted !== JSON.stringify(parsed) ? redacted : value
+    } catch {
+      // Not JSON, so only the raw scan applies.
+    }
   }
-  try {
-    return JSON.stringify(redactKeys(JSON.parse(value.trim()), isCredentialKey, depth + 1))
-  } catch {
-    return '[REDACTED]'
-  }
+  return namesCredential ? '[REDACTED]' : value
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these

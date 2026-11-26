@@ -116,6 +116,15 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     false,
   ],
   [
+    'JSON text with escaped whitespace before a nested colon',
+    JSON.stringify({ body: '{"auth":{"refresh_token"\n: "tool-secret","token_type":"Bearer"},"forecast":"Sunny"}' }),
+  ],
+  [
+    'truncated JSON text with escaped whitespace before a nested colon',
+    JSON.stringify({ body: '{"refresh_token"\n: "tool-secret"}' }).slice(0, -2),
+    false,
+  ],
+  [
     'JSON text with a duplicate key',
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
   ],
