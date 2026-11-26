@@ -258,7 +258,7 @@ polarity; categorical inputs are lists of keys, usable as `"safe" in categories`
 arithmetic, comparisons, membership, Boolean operators, conditionals, `number`, `min`, `max`, and
 `abs`. They accept 1–16 inputs and up to 1,024 characters. Aliases must be unique lowercase
 identifiers (`[a-z][a-z0-9_]{0,31}`), cannot be formula keywords/functions, and must occur in the
-expression. Nested composites and numeric composite `step` values are unsupported.
+expression. Item formulas require reported item scorers. Numeric composite `step` values are unsupported.
 
 Calculation mode and output kind are fixed after creation. Pass the complete `composition` to
 `createVersion`, alongside `config` and optionally `baseVersion`. Source updates never change
@@ -283,6 +283,15 @@ corrections, subject to current access checks. Re-uploading a deleted result whi
 is open creates it again and counts as new usage for a reported result. Older reported receipts
 without outcomes expose `status: null` and `errorCode: null`. Save and restore calculation
 declarations with the same serialization and recovery methods as reported results.
+
+### Experiment scores
+
+Use a composite scorer with `scope: 'experiment'` to calculate one score for a completed
+run. Each input references an item scorer version and specifies a statistic such as
+`pass_rate` or `mean`. To set a default for future runs, create or publish the scorer
+with `applyToSuiteKeys: ['agent-ci']` and create runs with `suiteKey: 'agent-ci'`.
+Pass `experimentScorerVersionId` to select a specific version for a run. PostHog pins
+the version on first creation and computes the score from accepted item results.
 
 | Operation                              | Required scopes                              |
 | -------------------------------------- | -------------------------------------------- |

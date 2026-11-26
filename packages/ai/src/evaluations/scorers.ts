@@ -61,15 +61,30 @@ export interface ScorerConfigs {
 }
 export type ScorerKind = keyof ScorerConfigs
 export type ScorerCalculation = 'reported' | 'composite'
+export type ScorerScope = 'item' | 'experiment'
+export type ExperimentScoreStatistic = 'pass_rate' | 'mean' | 'true_rate' | 'category_rate'
+export type ExperimentScoreVersionPolicy = 'run' | 'exact' | 'combine'
 export interface ScorerCompositionInput {
   alias: string
   scorerVersionId: string
 }
-/** Server-evaluated formula with 1–16 pinned reported inputs; nested composites are unsupported. */
+/** Item formula with 1–16 exact reported item scorer versions. */
 export interface ScorerComposition {
   expression: string
   inputs: readonly ScorerCompositionInput[]
 }
+export interface ExperimentScorerCompositionInput extends ScorerCompositionInput {
+  statistic: ExperimentScoreStatistic
+  /** Defaults to the single scorer version that successfully scored items in the run. */
+  versionPolicy?: ExperimentScoreVersionPolicy
+  /** Required for category_rate. */
+  category?: string
+}
+/** Experiment formula over statistics from item scorers. */
+export interface ExperimentScorerComposition extends ScorerComposition {
+  inputs: readonly ExperimentScorerCompositionInput[]
+}
+type ScorerFormula = ScorerComposition | ExperimentScorerComposition
 /** Pinned input configuration alongside the source scorer's latest version. */
 export type ScorerInput = {
   [K in ScorerKind]: {
@@ -87,9 +102,13 @@ export type ScorerInput = {
 export type ScorerConfig = ScorerConfigs[ScorerKind]
 interface ScorerRecord {
   calculation: ScorerCalculation
-  composition: ScorerComposition | null
+  composition: ScorerFormula | null
+  scope: ScorerScope
+  suiteKeys: string[]
   inputScorers: ScorerInput[]
   dependentCompositeCount: number
+  /** Suite defaults across visible versions, returned on detail reads. */
+  assignedSuiteKeys?: string[]
   id: string
   name: string
   description: string
@@ -104,7 +123,9 @@ interface ScorerRecord {
 }
 interface VersionRecord {
   calculation: ScorerCalculation
-  composition: ScorerComposition | null
+  composition: ScorerFormula | null
+  scope: ScorerScope
+  suiteKeys: string[]
   id: string
   definitionId: string
   version: number
@@ -134,6 +155,7 @@ export type ScorerOrder =
   | 'current_version'
   | '-current_version'
 export interface ScorerListOptions extends PageOptions {
+  scope?: ScorerScope
   calculation?: ScorerCalculation
   inputDefinitionId?: string
   search?: string
@@ -148,6 +170,10 @@ export interface ScorerMetadata {
   description?: string | null
   archived?: boolean
   tags?: readonly string[]
+  /** An empty list clears the selected version's suite defaults. */
+  applyToSuiteKeys?: readonly string[]
+  /** Exact version to assign. Defaults to the current version. */
+  suiteVersionId?: string
 }
 export type CreateScorerOptions = {
   [K in ScorerKind]: {
@@ -155,13 +181,15 @@ export type CreateScorerOptions = {
     kind: K
     config: ScorerConfigs[K]
     calculation?: ScorerCalculation
-    composition?: ScorerComposition | null
+    scope?: ScorerScope
+    applyToSuiteKeys?: readonly string[]
+    composition?: ScorerFormula | null
     description?: string | null
     tags?: readonly string[]
   }
 }[ScorerKind]
 export type ValidateCompositionOptions = {
-  [K in ScorerKind]: { kind: K; composition: ScorerComposition; config?: ScorerConfigs[K] }
+  [K in ScorerKind]: { kind: K; composition: ScorerFormula; config?: ScorerConfigs[K]; scope?: ScorerScope }
 }[ScorerKind]
 const CONFIG_KEYS: Record<string, string> = {
   trueLabel: 'true_label',
@@ -188,36 +216,84 @@ function alias(value: unknown): string {
     throw new TypeError('Invalid composite input alias.')
   return name
 }
-function composition(value: unknown, fromWire = false): ScorerComposition {
+function scope(value: unknown): ScorerScope {
+  if (value !== 'item' && value !== 'experiment') throw new TypeError('Unsupported scorer scope.')
+  return value
+}
+function suiteKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new TypeError('Expected a list of suite keys.')
+  return Array.from(value, text)
+}
+function compositionInput(
+  entry: unknown,
+  fromWire: boolean,
+  selectedScope?: ScorerScope
+): ScorerCompositionInput | ExperimentScorerCompositionInput {
+  const input = object(entry)
+  const base = {
+    alias: alias(input.alias),
+    scorerVersionId: uuid(input[fromWire ? 'scorer_version_id' : 'scorerVersionId']),
+  }
+  const policyKey = fromWire ? 'version_policy' : 'versionPolicy'
+  const hasStatistics = ['statistic', policyKey, 'category'].some((key) => input[key] !== undefined)
+  if (selectedScope !== 'experiment' && !hasStatistics) return base
+  if (selectedScope === 'item') throw new TypeError('Statistics apply to experiment scorers.')
+  const statistic = input.statistic
+  if (statistic !== 'pass_rate' && statistic !== 'mean' && statistic !== 'true_rate' && statistic !== 'category_rate')
+    throw new TypeError('Unsupported experiment score statistic.')
+  const parsed: ExperimentScorerCompositionInput = { ...base, statistic }
+  const policy = input[policyKey]
+  if (policy !== undefined) {
+    if (policy !== 'run' && policy !== 'exact' && policy !== 'combine')
+      throw new TypeError('Unsupported experiment score version policy.')
+    parsed.versionPolicy = policy
+  }
+  if (statistic === 'category_rate') {
+    parsed.category = identifier(input.category, 128)
+  } else if (input.category !== undefined) {
+    throw new TypeError('Only category_rate accepts a category key.')
+  }
+  return parsed
+}
+function composition(value: unknown, fromWire = false, selectedScope?: ScorerScope) {
   const data = object(value)
   const expression = text(data.expression)
   if (!expression.trim() || Array.from(expression).length > 1024)
     throw new TypeError('A formula must contain 1–1024 characters.')
   if (!Array.isArray(data.inputs) || data.inputs.length < 1 || data.inputs.length > 16)
-    throw new TypeError('A composite requires 1–16 reported inputs.')
-  const inputs = Array.from(data.inputs, (entry) => {
-    const input = object(entry)
-    return {
-      alias: alias(input.alias),
-      scorerVersionId: uuid(input[fromWire ? 'scorer_version_id' : 'scorerVersionId']),
-    }
-  })
+    throw new TypeError('A composite requires 1–16 inputs.')
+  const inputs = Array.from(data.inputs, (entry) => compositionInput(entry, fromWire, selectedScope))
   if (new Set(inputs.map((input) => input.alias)).size !== inputs.length)
     throw new TypeError('Composite input aliases must be unique.')
   return { expression, inputs }
 }
-function compositionBody(value: ScorerComposition): WireObject {
-  const parsed = composition(value)
+function compositionBody(value: ScorerFormula, selectedScope?: ScorerScope): WireObject {
+  const parsed = composition(value, false, selectedScope)
   return {
     expression: parsed.expression,
-    inputs: parsed.inputs.map((input) => ({ alias: input.alias, scorer_version_id: input.scorerVersionId })),
+    inputs: parsed.inputs.map((input) => ({
+      alias: input.alias,
+      scorer_version_id: input.scorerVersionId,
+      ...('statistic' in input
+        ? defined({ statistic: input.statistic, version_policy: input.versionPolicy, category: input.category })
+        : {}),
+    })),
   }
 }
-function scoring(data: WireObject): Pick<Scorer, 'calculation' | 'composition'> {
+function scoring(data: WireObject): Pick<Scorer, 'calculation' | 'composition' | 'scope' | 'suiteKeys'> {
   const selected = calculation(data.calculation === undefined ? 'reported' : data.calculation)
-  if (selected === 'composite') return { calculation: selected, composition: composition(data.composition, true) }
-  if (data.composition != null) throw new TypeError('Reported scorers cannot contain a composition.')
-  return { calculation: selected, composition: null }
+  const selectedScope = scope(data.scope === undefined ? 'item' : data.scope)
+  const suites = suiteKeys(data.suite_keys === undefined ? [] : data.suite_keys)
+  if (selected === 'composite')
+    return {
+      calculation: selected,
+      composition: composition(data.composition, true, selectedScope),
+      scope: selectedScope,
+      suiteKeys: suites,
+    }
+  if (selectedScope === 'experiment' || data.composition != null)
+    throw new TypeError('Expected a formula-based scorer.')
+  return { calculation: selected, composition: null, scope: selectedScope, suiteKeys: suites }
 }
 function compositeConfig(value: WireObject): void {
   if (value.step != null) throw new TypeError('Numeric composite scorers do not accept a step.')
@@ -285,6 +361,7 @@ function scorer(data: WireObject, project: number, id?: string): Scorer {
   return {
     id: identity,
     ...scoring(data),
+    ...(data.assigned_suite_keys === undefined ? {} : { assignedSuiteKeys: suiteKeys(data.assigned_suite_keys) }),
     inputScorers: inputScorers(data.input_scorers === undefined ? [] : data.input_scorers),
     dependentCompositeCount:
       data.dependent_composite_count === undefined ? 0 : integer(data.dependent_composite_count, 0),
@@ -337,6 +414,7 @@ function fields(options: ScorerMetadata): WireObject {
     description: options.description === undefined ? undefined : nullable(options.description, text),
     archived: options.archived === undefined ? undefined : boolean(options.archived),
     tags: options.tags === undefined ? undefined : tags(options.tags),
+    apply_to_suite_keys: options.applyToSuiteKeys === undefined ? undefined : suiteKeys(options.applyToSuiteKeys),
   })
 }
 /** Versioned scorer definitions. Reported evaluators run in the caller; composites calculate on the server. */
@@ -359,8 +437,21 @@ export class Scorers {
     options: T,
     request: RequestOptions = {}
   ): Promise<Extract<Scorer, { kind: T['kind'] }>> {
-    keys(options, ['name', 'kind', 'config', 'description', 'tags', 'calculation', 'composition'])
+    keys(options, [
+      'name',
+      'kind',
+      'config',
+      'description',
+      'tags',
+      'calculation',
+      'composition',
+      'scope',
+      'applyToSuiteKeys',
+    ])
     const selectedCalculation = calculation(options.calculation === undefined ? 'reported' : options.calculation)
+    const selectedScope = scope(options.scope === undefined ? 'item' : options.scope)
+    if (selectedScope === 'experiment' && selectedCalculation !== 'composite')
+      throw new TypeError('Experiment scorers require a composite formula.')
     if ((selectedCalculation === 'composite') !== (options.composition != null))
       throw new TypeError('Provide composition only for a composite scorer.')
     const selectedKind = kind(options.kind)
@@ -372,8 +463,9 @@ export class Scorers {
         name: identifier(options.name, 400),
         kind: selectedKind,
         config: outputConfig,
+        ...(selectedScope === 'experiment' ? { scope: selectedScope } : {}),
         ...(selectedCalculation === 'composite'
-          ? { calculation: selectedCalculation, composition: compositionBody(options.composition!) }
+          ? { calculation: selectedCalculation, composition: compositionBody(options.composition!, selectedScope) }
           : {}),
       })
     )
@@ -384,6 +476,7 @@ export class Scorers {
         const result = scorer(data, this.#transport.projectId)
         if (result.kind !== selectedKind) throw new TypeError('Mismatched scorer kind.')
         if (result.calculation !== selectedCalculation) throw new TypeError('Mismatched scorer calculation.')
+        if (result.scope !== selectedScope) throw new TypeError('Mismatched scorer scope.')
         return result
       },
       {
@@ -421,6 +514,7 @@ export class Scorers {
         search: options.search === undefined ? undefined : text(options.search),
         kind: options.kind === undefined ? undefined : kind(options.kind),
         calculation: options.calculation === undefined ? undefined : calculation(options.calculation),
+        scope: options.scope === undefined ? undefined : scope(options.scope),
         input_definition_id: options.inputDefinitionId === undefined ? undefined : uuid(options.inputDefinitionId),
         archived: options.archived === undefined ? undefined : String(boolean(options.archived)),
         order_by: options.orderBy,
@@ -438,11 +532,16 @@ export class Scorers {
     )
   }
   async update(scorerId: string, options: ScorerMetadata, request: RequestOptions = {}): Promise<Scorer> {
-    keys(options, ['name', 'description', 'archived', 'tags'])
+    keys(options, ['name', 'description', 'archived', 'tags', 'applyToSuiteKeys', 'suiteVersionId'])
     const id = uuid(scorerId)
     return this.#request('PATCH', `${this.#base}${id}/`, (data) => scorer(data, this.#transport.projectId, id), {
       ...request,
-      body: encode(json(fields(options))),
+      body: encode(
+        json({
+          ...fields(options),
+          ...(options.suiteVersionId === undefined ? {} : { suite_version_id: uuid(options.suiteVersionId) }),
+        })
+      ),
     })
   }
   /** Composite versions require a complete composition, even when only changing output config. */
@@ -450,14 +549,15 @@ export class Scorers {
     scorerId: string,
     options: {
       config: ScorerConfig
-      composition?: ScorerComposition | null
+      composition?: ScorerFormula | null
       baseVersion?: number
+      applyToSuiteKeys?: readonly string[]
       name?: string
       description?: string | null
     },
     request: RequestOptions = {}
   ): Promise<Scorer> {
-    keys(options, ['config', 'composition', 'baseVersion', 'name', 'description'])
+    keys(options, ['config', 'composition', 'baseVersion', 'name', 'description', 'applyToSuiteKeys'])
     const id = uuid(scorerId)
     const outputConfig = config(options.config, true)
     if (options.composition != null) compositeConfig(outputConfig)
@@ -480,14 +580,16 @@ export class Scorers {
   }
   /** Validate syntax and types without saving, using llm_analytics:read access. Omit config for syntax/type checks only. */
   async validateComposition(options: ValidateCompositionOptions, request: RequestOptions = {}): Promise<boolean> {
-    keys(options, ['kind', 'composition', 'config'])
+    keys(options, ['kind', 'composition', 'config', 'scope'])
+    const selectedScope = scope(options.scope === undefined ? 'item' : options.scope)
     const outputConfig = options.config === undefined ? undefined : config(options.config, true)
     if (outputConfig) compositeConfig(outputConfig)
     const body = encode(
       json(
         defined({
           kind: kind(options.kind),
-          composition: compositionBody(options.composition),
+          composition: compositionBody(options.composition, selectedScope),
+          scope: selectedScope === 'experiment' ? selectedScope : undefined,
           config: outputConfig,
         })
       )

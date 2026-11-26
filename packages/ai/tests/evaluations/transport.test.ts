@@ -95,10 +95,27 @@ it('Creation can be replayed after an uncertain response', async () => {
     .mockRejectedValueOnce(new Error('lost response'))
     .mockImplementation((_url, init) => Promise.resolve(reply(experimentResponse(JSON.parse(init.body)))))
   const evaluations = client()
-  const error = await evaluations.createExperiment({ name: 'Run' }).catch((e) => e)
-  expect(error).toMatchObject({ persistence: 'unknown' })
+  const error = await evaluations
+    .createExperiment({ name: 'Run', suiteKey: 'Agent-CI', experimentScorerVersionId: VERSION.toUpperCase() })
+    .catch((e) => e)
+  expect(error).toMatchObject({ persistence: 'unknown', submission: { experimentScorerVersionId: VERSION } })
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ experiment_scorer_version_id: VERSION })
   await evaluations.createExperiment(error.submission)
   expect(fetch.mock.calls[0][1].body).toBe(fetch.mock.calls[1][1].body)
+})
+it.each([undefined, null])('preserves omission or null when using a suite default: %s', async (override) => {
+  const fetch = mockFetch().mockResolvedValue(reply(experimentResponse()))
+  const run = await client().createExperiment({
+    name: 'Run',
+    id: ID,
+    suiteKey: 'Agent-CI',
+    experimentScorerVersionId: override,
+  })
+  const body = JSON.parse(fetch.mock.calls[0][1].body)
+  expect(body.suite_key).toBe('Agent-CI')
+  expect(body.experiment_scorer_version_id).toBe(override)
+  expect(Object.hasOwn(body, 'experiment_scorer_version_id')).toBe(override !== undefined)
+  expect(run.submission?.experimentScorerVersionId).toBe(override)
 })
 it('Retry preserves the exact upload', async () => {
   vi.useFakeTimers()
