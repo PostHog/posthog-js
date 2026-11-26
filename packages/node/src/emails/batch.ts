@@ -161,7 +161,7 @@ export function recordAnswer(
     const answer = replyFields(answers[position])
     const id = text(answer.message_id)
     const error = isRecord(answer.error) ? answer.error : undefined
-    if (answer.status === 'queued' && id) {
+    if (answer.status === 'queued' && id && !error) {
       slot.status = 'queued'
       slot.id = id
       slot.replayed = answer.replayed === true
@@ -174,7 +174,8 @@ export function recordAnswer(
       )
       return
     }
-    const coded = text(error.code)?.trim() || undefined
+    const given = text(error.code)
+    const coded = given?.trim() ? given : undefined
     const code = coded ?? 'api_error'
     // A recipient error without a code can't say PostHog queued nothing, and a 409 is decided by its code alone:
     // only batch_unavailable says PostHog queued nothing for this recipient.
@@ -210,12 +211,24 @@ export function recordFailure(
   // included) speak only of the retry, so they are replaced; a retry that went unanswered too keeps its own message.
   const refusedRetry =
     !mayHaveQueued(error) || (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500)
-  const answer = earlierMayHaveQueued && refusedRetry ? afterUnconfirmedAttempt(error) : error
+  const answer =
+    earlierMayHaveQueued && refusedRetry
+      ? afterUnconfirmedAttempt(error)
+      : unconfirmed && error.statusCode !== undefined && error.statusCode >= 300
+        ? unconfirmedAnswer(error)
+        : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = answer
   }
   return unconfirmed ? copyError(answer, { fix: BATCH_RESEND_FIX }) : answer
+}
+
+function unconfirmedAnswer(error: EmailError): EmailError {
+  return copyError(error, {
+    message: `PostHog answered ${error.statusCode} with ${error.code}, which doesn't confirm whether it queued these emails, so some may have gone out.`,
+    why: undefined,
+  })
 }
 
 function afterUnconfirmedAttempt(error: EmailError): EmailError {
@@ -229,7 +242,7 @@ function afterUnconfirmedAttempt(error: EmailError): EmailError {
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
-  if (error.code === 'client_closed') {
+  if (error.code === 'client_closed' || error.statusCode === 413) {
     return false
   }
   return (

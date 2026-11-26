@@ -1951,6 +1951,11 @@ describe('emails', () => {
       ['a 400 without a code', { status: 400, retryable: false }, 'unconfirmed'],
       ['a 422 without a code', { status: 422, retryable: false }, 'unconfirmed'],
       ['a 422 with a blank code', { status: 422, code: ' ', retryable: false }, 'unconfirmed'],
+      [
+        'a 409 with a padded batch_unavailable',
+        { status: 409, code: ' batch_unavailable ', retryable: false },
+        'unconfirmed',
+      ],
       ['a 503 without a code', { status: 503, retryable: false }, 'unconfirmed'],
     ] as const)(
       'decides a recipient by its code and retryable flag, not its status: %s',
@@ -1959,7 +1964,9 @@ describe('emails', () => {
 
         const { data } = await settle(posthog.emails.batch(WELCOME, [{ to: 'ada@example.com' }]))
 
-        expect(data?.results).toMatchObject([{ status, error: { code: refusal.code?.trim() || 'api_error' } }])
+        expect(data?.results).toMatchObject([
+          { status, error: { code: refusal.code?.trim() ? refusal.code : 'api_error' } },
+        ])
         expect(data?.results[0]).toMatchObject(
           status === 'unconfirmed'
             ? {
@@ -2031,21 +2038,18 @@ describe('emails', () => {
         '409 idempotency_key_in_flight',
         { status: 409, code: 'idempotency_key_in_flight', message: 'PostHog could not take this batch.' },
       ],
-    ] as const)(
-      "keeps PostHog's message on a first attempt answered %s, and claims no earlier attempt",
-      async (_case, fault) => {
-        const postHog = againstPostHog()
-        postHog.failNext('batch', fault)
+    ] as const)('claims no earlier attempt on a first attempt answered %s', async (_case, fault) => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', fault)
 
-        const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+      const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
 
-        expect(error).toMatchObject({ code: fault.code, statusCode: 409, message: fault.message })
-        expect(error?.message).not.toMatch(/retry|earlier attempt|unanswered/i)
-        expect(error?.fix).toMatch(/^PostHog may have queued these emails\./)
-        expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
-        expect(postHog.requests.batch).toBe(1)
-      }
-    )
+      expect(error).toMatchObject({ code: fault.code, statusCode: 409 })
+      expect(error?.message).not.toMatch(/retry|earlier attempt|unanswered/i)
+      expect(error?.fix).toMatch(/^PostHog may have queued these emails\./)
+      expect(error?.results?.map(({ status }) => status)).toEqual(['unconfirmed', 'unconfirmed'])
+      expect(postHog.requests.batch).toBe(1)
+    })
 
     it.each([
       ['a 503', { status: 503 }],
@@ -2770,6 +2774,55 @@ describe('emails', () => {
       expect(error).toMatchObject({ code: 'client_closed' })
       expect(error?.results).toBeUndefined()
       expect(postHog.requests.batch).toBe(0)
+    })
+
+    it.each([
+      ['409 conflict', 409, { code: 'conflict', detail: 'No email was sent.', why: 'Nothing was queued.' }],
+      ['409 without a code', 409, { detail: 'No email was sent.' }],
+      ['500', 500, { code: 'server_error', detail: 'No email was sent.' }],
+    ] as const)(
+      'never says nothing was sent when a first attempt answered %s leaves every recipient unconfirmed',
+      async (_case, status, body) => {
+        makeClient({ fetch: async () => fakeReply(status, body) })
+
+        const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+        expect(error).toMatchObject({ statusCode: status })
+        expect(error?.message).toMatch(/some may have gone out/)
+        for (const text of [error?.message, error?.why]) {
+          expect(text ?? '').not.toMatch(/no email|nothing|not sent|wasn't sent|retry|earlier attempt/i)
+        }
+        expect(error?.fix).toMatch(/^PostHog may have queued these emails\./)
+        expect(error?.results?.map(({ status: s }) => s)).toEqual(['unconfirmed', 'unconfirmed'])
+      }
+    )
+
+    it('keeps a recipient PostHog answered queued but with an error that has no code unconfirmed', async () => {
+      makeClient({
+        fetch: async () =>
+          fakeReply(200, { results: [{ message_id: 'm0', status: 'queued', error: { detail: 'Odd.' } }] }),
+      })
+
+      const { data } = await settle(posthog.emails.batch(WELCOME, recipientsTo(1)))
+
+      expect(data?.results).toMatchObject([
+        {
+          status: 'unconfirmed',
+          id: 'm0',
+          error: { message: UNCONFIRMED, fix: expect.stringMatching(/same idempotencyKey/) },
+        },
+      ])
+    })
+
+    it('fails every recipient of a first attempt answered 413, whatever its code', async () => {
+      const postHog = againstPostHog()
+      postHog.failNext('batch', { status: 413, code: 'idempotency_key_in_flight' })
+
+      const { error } = await settle(posthog.emails.batch({ ...WELCOME, maxRetries: 0 }, recipientsTo(2)))
+
+      expect(error).toMatchObject({ statusCode: 413 })
+      expect(error?.results?.map(({ status }) => status)).toEqual(['failed', 'failed'])
+      expect(postHog.emails).toEqual([])
     })
 
     it('keeps a recipient PostHog answered without a result unconfirmed, and reads nothing back by its key', async () => {
