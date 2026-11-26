@@ -290,8 +290,8 @@ export interface MCPAnalyticsOptions {
    * The return value is merged into that `$mcp_tool_call` event's properties before
    * `beforeSend`, whether or not `$mcp_response` is captured, and wins over `eventProperties`
    * on the same key. For an `isError` result it is also on the `$exception` sibling. Values must
-   * be JSON-serializable and are sent as-is, without the redaction `$mcp_response` gets. A throw
-   * is logged and adds nothing.
+   * be JSON-serializable and are sent as-is, without the redaction `$mcp_response` gets. A throw,
+   * or a promise from an `async` callback, is logged and adds nothing; a rejection is handled.
    */
   resultProperties?: (toolName: string, result: unknown) => JsonRecord | null | undefined
   /**

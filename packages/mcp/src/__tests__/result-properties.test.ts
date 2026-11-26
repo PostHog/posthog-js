@@ -252,6 +252,56 @@ describe('resultProperties', () => {
     expect(capture.getEvents().length).toBeGreaterThan(0)
   })
 
+  it.each([
+    ['throws', () => Promise.reject(new Error('no such tool'))],
+    ['returns an isError result', async () => ({ content: [{ type: 'text', text: 'No such tool' }], isError: true })],
+  ])('is not called for an unknown tool a low-level Server dispatcher %s for', async (_, dispatch) => {
+    const resultProperties = vi.fn(() => ({ search_status: 'unexpected' }))
+    const server = createServer(
+      {
+        resultProperties,
+        resolveOriginalTool: (name) => (name === 'search' ? { inputSchema: { type: 'object' } } : undefined),
+      },
+      async (request) => (request.params?.name === 'search' ? searchResult : dispatch())
+    )
+
+    await callTool(server, 'not_a_tool').catch(() => undefined)
+    await flushCaptures()
+
+    expect(resultProperties).not.toHaveBeenCalled()
+    expect(capture.findCapturesByEvent('$mcp_unknown_tool')).toHaveLength(1)
+    expect(capture.findCapturesByEvent('$mcp_tool_call')).toEqual([])
+    for (const event of capture.getEvents()) {
+      expect(event.properties ?? {}).not.toHaveProperty('search_status')
+    }
+  })
+
+  it.each([
+    ['rejects', () => Promise.reject(new Error('async failure'))],
+    ['resolves', () => Promise.resolve({ search_status: 'no_results' })],
+  ])('ignores a promise from an async callback that %s, without an unhandled rejection', async (_, callback) => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => void unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const messages: string[] = []
+      const server = createServer(
+        { resultProperties: callback as any, logger: (message: string) => messages.push(message) },
+        async () => searchResult
+      )
+
+      expect(await callTool(server)).toEqual(searchResult)
+      await flushCaptures()
+
+      expect(unhandled).toEqual([])
+      expect(messages.some((message) => message.includes('resultProperties returned a promise'))).toBe(true)
+      expect(toolCallProperties()).toMatchObject({ $mcp_tool_name: 'search' })
+      expect(toolCallProperties()).not.toHaveProperty('search_status')
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   it('wins over eventProperties on the same key and keeps the others', async () => {
     const server = createServer(
       {

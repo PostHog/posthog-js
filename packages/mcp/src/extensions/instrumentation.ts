@@ -313,13 +313,24 @@ function applyResultProperties(event: McpEvent, data: MCPAnalyticsData, result: 
     return
   }
   try {
-    const properties = callback(event.resourceName ?? '', result)
+    const properties: unknown = callback(event.resourceName ?? '', result)
+    if (isThenable(properties)) {
+      // Not awaited, so the event isn't held back. A rejection must not reach the host as an
+      // unhandled rejection, which ends a Node.js process by default.
+      properties.then(undefined, () => {})
+      data.logger('resultProperties returned a promise; it must return synchronously, so its value is ignored')
+      return
+    }
     if (properties) {
-      event.properties = { ...event.properties, ...properties }
+      event.properties = { ...event.properties, ...(properties as JsonRecord) }
     }
   } catch (e) {
     data.logger(`resultProperties callback error: ${e}`)
   }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof (value as PromiseLike<unknown> | null)?.then === 'function'
 }
 
 const NO_CONVERSATION: ConversationIdResolution = { minted: false, conversationId: undefined }
