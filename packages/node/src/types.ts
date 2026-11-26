@@ -451,16 +451,17 @@ export type PostHogOptions = Omit<
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,
-   * so raise it when large files upload slowly.
+   * Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request,
+   * so raise it when large files upload slowly. `shutdown()` doesn't wait past its own timeout for a request still
+   * in flight, so keep this below the shutdown timeout, 30 seconds by default.
    *
    * @default 15000
    */
   emailRequestTimeoutMs?: number
   /**
-   * Number of retries for an `emails.send` after a network error, a rate limit, or an
-   * unavailable service. Every retry sends the same idempotency key. Set to 0 when a job
-   * runner already retries the send.
+   * Number of retries for an `emails.send` or `emails.batch` after a network error, a rate
+   * limit, or an unavailable service. Every retry sends the same idempotency keys. Set to 0
+   * when a job runner already retries the send.
    *
    * @default 2
    */

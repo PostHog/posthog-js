@@ -1143,6 +1143,7 @@ failure. The message never contains the secret key or the request body.
 | <a id="fix"></a> `fix?` | `readonly` | `string` | - | - |
 | <a id="messageid"></a> `messageId?` | `readonly` | `string` | The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. | - |
 | <a id="name-1"></a> `name` | `public` | `EmailErrorName` | - | `Error.name` |
+| <a id="results"></a> `results?` | `readonly` | `BatchEmailRecipientResult`[] | Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as when a retry was refused after an earlier attempt wasn't confirmed. | - |
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
@@ -2907,6 +2908,101 @@ Sync with plugin-server/src/types.ts
 | ------ | ------ |
 | `type` | *typeof* `SurveyQuestionType.Open` |
 
+### `BatchCodeEmailOptions`
+
+> **BatchCodeEmailOptions** = `BatchEmailBase` & `CodeEmailForm` & `object` & `Without`\<`TemplateEmailForm`\>
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| `attachments?` | `never` |
+| `bcc?` | `never` |
+| `cc?` | `never` |
+
+### `BatchEmailBase`
+
+What every batch takes, whatever its form. The recipients, and what is per recipient, go in `recipients`.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-distinctid"></a> `distinctId?` | `undefined` | - |
+| <a id="property-idempotencykey"></a> `idempotencyKey?` | `undefined` | - |
+| <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this batch. `0` turns retries off. |
+| <a id="property-scheduledat"></a> `scheduledAt?` | `undefined` | - |
+| <a id="property-to"></a> `to?` | `undefined` | - |
+
+### `BatchEmailOptions`
+
+> **BatchEmailOptions** = `BatchTemplateEmailOptions` \| `BatchCodeEmailOptions`
+
+The email every recipient of `posthog.emails.batch()` gets: a template made in PostHog, or content from your code.
+A batch takes no copies, files or schedule. Send those with `posthog.emails.send()`.
+
+### `BatchEmailRecipient`
+
+One recipient of `posthog.emails.batch()`, who gets their own email.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product, as for `send()`. |
+| <a id="property-idempotencykey-1"></a> `idempotencyKey?` | `string` | As for `send()`, 1 to 255 visible ASCII characters, and unique within the batch. Without it, the client makes a UUID, which the recipient's result returns. Pass a key derived from what the email is for, such as `digest:2026-11-23:user_1`, so sending the batch again queues no second email for a recipient PostHog already accepted. |
+| <a id="property-templatedata"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Only with `templateId`: values merged over the batch's `templateData` for this recipient. |
+| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
+
+### `BatchEmailRecipientResult`
+
+> **BatchEmailRecipientResult** = `object` & (\{ `id`: `string`; `replayed`: `boolean`; `status`: `"queued"`; \} \| \{ `error`: `EmailError`; `id`: `string` \| `null`; `status`: `"failed"` \| `"unconfirmed"`; \})
+
+What happened to one recipient of a batch:
+
+- `queued`: PostHog queued the email.
+- `failed`: PostHog didn't queue the email, and `error` says why.
+- `unconfirmed`: the client can't tell whether PostHog queued the email, because the request went unanswered,
+  PostHog answered that it couldn't tell either, such as `delivery_unavailable`, PostHog's error for the
+  recipient carried no code, PostHog answered 409
+  with any code but `batch_unavailable` (such as `idempotency_key_in_flight`, `idempotency_key_reused`, or no
+  code), or PostHog refused a retry of a request it may have queued. `error` keeps
+  the code and `statusCode` of PostHog's answer when PostHog answered (a 404 for the whole batch that names
+  no field reads `not_found` when its code is missing, blank or `api_error`), with the client's own message and same-key `fix` in
+  place of PostHog's text, and `id` is the message ID when PostHog named one.
+  Send the recipient again, unchanged and with the same `idempotencyKey`, within 24 hours of the first request with
+  that key: PostHog queues no second email for a key it has.
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `idempotencyKey` | `string` | The key the email went out with, yours or the one the client made. |
+| `index` | `number` | The recipient's position in the `recipients` you passed. |
+| `to` | `string` | - |
+
+### `BatchEmailResponse`
+
+> **BatchEmailResponse** = \{ `data`: `BatchEmailResult`; `error`: `null`; \} \| \{ `data`: `null`; `error`: `EmailError`; \}
+
+What `posthog.emails.batch()` resolves to. Exactly one of `data` and `error` is set. The promise does not reject.
+An `error` from the batch request, refused or unanswered, carries `error.results`.
+
+### `BatchEmailResult`
+
+What happened to each recipient of a batch, in the order you passed them.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-results"></a> `results` | `BatchEmailRecipientResult`[] |
+| <a id="property-warnings"></a> `warnings` | `EmailWarning`[] |
+
+### `BatchTemplateEmailOptions`
+
+> **BatchTemplateEmailOptions** = `BatchEmailBase` & `TemplateEmailForm` & `Without`\<`CodeEmailFields` & `object`\>
+
 ### `BeforeSendFn`
 
 > **BeforeSendFn** = (`event`) => `EventMessage` \| `null`
@@ -3216,6 +3312,7 @@ A coarse category of the failure, for code that branches on the kind of failure 
 | <a id="property-fix"></a> `fix?` | `string` |
 | <a id="property-message"></a> `message` | `string` |
 | <a id="property-messageid"></a> `messageId?` | `string` |
+| <a id="property-results"></a> `results?` | `BatchEmailRecipientResult`[] |
 | <a id="property-retryafterms"></a> `retryAfterMs?` | `number` |
 | <a id="property-statuscode"></a> `statusCode?` | `number` |
 | <a id="property-why"></a> `why?` | `string` |
@@ -3229,7 +3326,7 @@ A recipient's preferences after the change.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-allmarketing"></a> `allMarketing` | `boolean` \| `null` | `false` when the recipient opted out of all marketing, `true` when they opted back in, `null` when they never chose. |
-| <a id="property-to"></a> `to` | `string` | - |
+| <a id="property-to-2"></a> `to` | `string` | - |
 | <a id="property-topics"></a> `topics` | `Record`\<`string`, `boolean`\> | Topic key to `false` (opted out) or `true` (opted in), for every topic the recipient chose. |
 
 ### `EmailReactElement`
@@ -3251,6 +3348,39 @@ content your code rendered, reads the status of each email it sent, and sets a r
 topic preferences.
 
 #### Methods
+
+##### batch()
+
+> **batch**(`email`, `recipients`): `Promise`\<`BatchEmailResponse`\>
+
+Queue one email per recipient, from one transactional email template or one piece of content from your code.
+
+A batch takes at most 100 recipients and sends them in one request. More than 100 recipients is an error before
+anything is sent. Network errors, rate limits, an in-flight idempotency key and an unavailable service are retried
+with the same idempotency keys, so a retry queues no second email. When the client shuts down, a batch waiting to retry ends at once with `client_closed` and sends no retry. A request already sent runs to its answer or its timeout, so pass your own `idempotencyKey` for each recipient when the process may exit mid-batch. PostHog refuses a batch over its size limits with
+`content_too_large`, and the status says which kind: with 413 (also when the 413 carries no code, such as a
+proxy's page) the batch is too large for PostHog to send at once,
+so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
+or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
+`emails.send()`. That advice holds for `failed` recipients only: when an earlier attempt wasn't confirmed, the
+recipients are `unconfirmed`, so send them again with the same `idempotencyKey`s, not split or one at a time
+with new keys, and read each recipient's result. Each attempt waits for PostHog's answer as long as a send does: the client's
+`emailRequestTimeoutMs`, 15 seconds by default.
+
+Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused
+recipient doesn't fail the batch. When PostHog refuses the whole request or doesn't answer it, `error.results`
+says what happened to each recipient, and an `unconfirmed` one says how to send it again safely.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `BatchEmailOptions` |
+| `recipients` | `BatchEmailRecipient`[] |
+
+###### Returns
+
+`Promise`\<`BatchEmailResponse`\>
 
 ##### get()
 
@@ -4981,7 +5111,7 @@ Supports multiple formats:
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-deviceid"></a> `deviceId?` | `string` | - |
-| <a id="property-distinctid"></a> `distinctId` | `string` | - |
+| <a id="property-distinctid-2"></a> `distinctId` | `string` | - |
 | <a id="property-isidentified"></a> `isIdentified` | `boolean` | - |
 | <a id="property-sessionid"></a> `sessionId?` | `string` | - |
 | <a id="property-sessionlastactivitytimestamp"></a> `sessionLastActivityTimestamp?` | `number` | When the session last had activity (`$sesid[0]`), in milliseconds since the Unix epoch. |
@@ -5182,8 +5312,8 @@ differently for cellular cost vs tab-suspension behavior).
 | `disableCaptureUrlHashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured request URLs. **Default** `false` |
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
 | `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
-| `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
+| `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` or `emails.batch` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency keys. Set to 0 when a job runner already retries the send. **Default** `2` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request, so raise it when large files upload slowly. `shutdown()` doesn't wait past its own timeout for a request still in flight, so keep this below the shutdown timeout, 30 seconds by default. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |
@@ -5343,11 +5473,11 @@ What every send takes, whatever its form.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-distinctid-1"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
-| <a id="property-idempotencykey"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
-| <a id="property-maxretries"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
-| <a id="property-scheduledat"></a> `scheduledAt?` | `string` \| `Date` | When to send the email, at most 7 days ahead: a `Date`, or an ISO 8601 time with an offset, such as `2026-12-01T09:00:00Z` or `2026-12-01T10:00:00+01:00`. A time that has passed sends the email now. PostHog keeps the time to the millisecond, and the client rounds a finer time up to the next millisecond. Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends nothing and returns an error with code `scheduling_requires_cloud`. Work out a relative time, such as an hour from now, once, and send the same time when you send again with the same `idempotencyKey`. When PostHog accepts the email but doesn't confirm the time, such as when it queues a time more than a minute ahead to go out now, the client returns an error with code `schedule_not_confirmed` and the email's `messageId`. |
-| <a id="property-to-1"></a> `to` | `string` | One recipient email address. |
+| <a id="property-distinctid-3"></a> `distinctId?` | `string` | The recipient's distinct ID in your product. The email's events go to this person. Without it, they go to a person whose distinct ID is the email address. |
+| <a id="property-idempotencykey-2"></a> `idempotencyKey?` | `string` | 1 to 255 visible ASCII characters. A send with a key that PostHog has already accepted queues nothing and returns the first send's result. The same key with other options sends nothing and returns an error with code `idempotency_key_reused`. Without it, the client makes a UUID that covers its own retries. Pass a key derived from what the email is for, such as `welcome:user_123`, to cover retries outside this call too. |
+| <a id="property-maxretries-1"></a> `maxRetries?` | `number` | Overrides the client's `emailRequestMaxRetries` for this send. `0` turns retries off. |
+| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `Date` | When to send the email, at most 7 days ahead: a `Date`, or an ISO 8601 time with an offset, such as `2026-12-01T09:00:00Z` or `2026-12-01T10:00:00+01:00`. A time that has passed sends the email now. PostHog keeps the time to the millisecond, and the client rounds a finer time up to the next millisecond. Only PostHog Cloud schedules emails: on any other host, such as a self-hosted PostHog or a proxy, the client sends nothing and returns an error with code `scheduling_requires_cloud`. Work out a relative time, such as an hour from now, once, and send the same time when you send again with the same `idempotencyKey`. When PostHog accepts the email but doesn't confirm the time, such as when it queues a time more than a minute ahead to go out now, the client returns an error with code `schedule_not_confirmed` and the email's `messageId`. |
+| <a id="property-to-3"></a> `to` | `string` | One recipient email address. |
 
 ### `SendEmailOptions`
 
@@ -5372,8 +5502,8 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 | ------ | ------ | ------ |
 | <a id="property-id-1"></a> `id` | `string` | The queued email's message ID. |
 | <a id="property-replayed"></a> `replayed` | `boolean` | True when PostHog had already accepted this idempotency key and returned the first send's result. |
-| <a id="property-scheduledat-1"></a> `scheduledAt?` | `string` \| `null` | Only for a send with `scheduledAt`: the time the email waits for, as an ISO 8601 UTC timestamp, or `null` when the time had passed and the email goes out now. |
-| <a id="property-warnings"></a> `warnings` | `EmailWarning`[] | - |
+| <a id="property-scheduledat-2"></a> `scheduledAt?` | `string` \| `null` | Only for a send with `scheduledAt`: the time the email waits for, as an ISO 8601 UTC timestamp, or `null` when the time had passed and the email goes out now. |
+| <a id="property-warnings-1"></a> `warnings` | `EmailWarning`[] | - |
 
 ### `SendFeatureFlagsOptions`
 
@@ -5415,7 +5545,7 @@ Options for `posthog.emails.setPreferences()`. Set `allMarketing`, `topics`, or 
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-allmarketing-1"></a> `allMarketing?` | `boolean` | `false` opts the recipient out of every marketing topic. `true` lifts that opt-out. Applied before `topics`. |
-| <a id="property-to-2"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
+| <a id="property-to-4"></a> `to` | `string` | The recipient's email address, exactly as Workflows sends to it. Matching is exact, so `Jane@example.com` and `jane@example.com` are two recipients. |
 | <a id="property-topics-1"></a> `topics?` | `Record`\<`string`, `boolean`\> | Topic key to `false` to opt the recipient out of that topic, or `true` to opt them back in. Topic keys are the ones you set under Workflows opt-outs. Opting back in to one marketing topic after an all-marketing opt-out lifts that opt-out, so `allMarketing` becomes `true`, and keeps the other marketing topics opted out. Topics you leave out keep their current choice. |
 
 ### `SetEmailPreferencesResponse`
@@ -5947,7 +6077,7 @@ A template made transactional in PostHog, sent by its ID.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-templatedata"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. |
+| <a id="property-templatedata-1"></a> `templateData?` | `Record`\<`string`, `unknown`\> | Values for the template's `{{ variables.* }}` placeholders. Sent as `message_data`. |
 | <a id="property-templateid"></a> `templateId` | `string` | The UUID of an email template made transactional in PostHog. |
 
 ### `TracesConfig`

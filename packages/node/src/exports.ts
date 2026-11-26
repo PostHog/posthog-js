@@ -14,6 +14,14 @@ export { EmailError } from './emails/errors'
 export type { EmailErrorName } from './emails/errors'
 export { RemoteConfigPayloadError } from './remote-config-errors'
 export type {
+  BatchCodeEmailOptions,
+  BatchEmailBase,
+  BatchEmailOptions,
+  BatchEmailRecipient,
+  BatchEmailRecipientResult,
+  BatchEmailResponse,
+  BatchEmailResult,
+  BatchTemplateEmailOptions,
   CodeEmailForm,
   EmailAttachment,
   EmailDeliveryStatus,

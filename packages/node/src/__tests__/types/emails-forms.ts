@@ -1,4 +1,4 @@
-import type { SendEmailOptions } from '../../exports'
+import type { BatchEmailOptions, BatchEmailRecipient, SendEmailOptions } from '../../exports'
 
 const react = { type: 'p', props: { children: 'Reset' }, key: null }
 
@@ -76,4 +76,26 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateId, react },
   // @ts-expect-error scheduledAt takes a Date or an ISO 8601 time, not milliseconds
   { to, templateId, scheduledAt: 1795597200000 },
+]
+
+export const batchForms: BatchEmailOptions[] = [
+  { templateId, templateData: { plan: 'pro' } },
+  { templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', from: 'news@example.com', tracking: false },
+  { templateKey: 'digest', subject: 'Your week', react },
+  { templateId, maxRetries: 0 },
+  // @ts-expect-error each recipient carries its own address
+  { to, templateId },
+  // @ts-expect-error a batch takes no copies
+  { templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', cc: 'finance@example.com' },
+  // @ts-expect-error a batch takes no files
+  { templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', attachments: [] },
+  // @ts-expect-error a batch takes no schedule
+  { templateId, scheduledAt: '2026-12-01T09:00:00Z' },
+]
+
+export const recipients: BatchEmailRecipient[] = [
+  { to },
+  { to, distinctId: 'user_1', templateData: { name: 'Jane' }, idempotencyKey: 'digest:user_1' },
+  // @ts-expect-error a recipient takes no copies
+  { to, cc: 'finance@example.com' },
 ]

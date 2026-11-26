@@ -15,8 +15,23 @@ import {
   hashedFiles,
   refuseRenderedMessageOverLimit,
 } from './attachments'
+import {
+  IDEMPOTENCY_KEY_PATTERN,
+  type Slot,
+  batchBody,
+  fieldsOf,
+  mayHaveQueued,
+  prepareRecipients,
+  recordAnswer,
+  recordFailure,
+  resultOf,
+} from './batch'
 import { EmailError } from './errors'
+import { type Reply, parseJson, replyError, replyFields, text, warningsOf } from './replies'
 import type {
+  BatchEmailOptions,
+  BatchEmailRecipient,
+  BatchEmailResponse,
   CodeEmailForm,
   EmailPreferences,
   EmailReactElement,
@@ -35,6 +50,7 @@ import type {
 } from './types'
 
 const SEND_PATH = '/api/messaging/send/email/'
+const BATCH_PATH = '/api/messaging/send/email_batch/'
 const UPLOADS_PATH = '/api/messaging/attachments/uploads/'
 const STATUS_PATH = '/api/messaging/emails/{messageId}/'
 const PREFERENCES_PATH = '/api/messaging/preferences/'
@@ -49,7 +65,6 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
 }
 const MAX_RETRY_DELAY_MS = 30_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const SCHEDULED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-](\d{2}):(\d{2}))$/
 const CLOUD_APP_HOST_SET: ReadonlySet<string> = new Set([US_APP_HOST, EU_APP_HOST])
@@ -63,9 +78,11 @@ type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
   name: 'templateId' | 'templateKey'
+  call: 'send' | 'batch'
   fields: ReadonlySet<string>
   why: string
   howToSend: string
+  fixes?: Record<string, string>
 }
 
 const SHARED_FIELDS: EveryField<SendEmailBase> = {
@@ -91,17 +108,45 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   text: true,
   react: true,
 }
+const KNOWN_FIELDS = fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS, CODE_FIELDS)
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
+  call: 'send',
   fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
   why: "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
   howToSend: 'send a template made in PostHog with templateId',
 }
 const CODE_FORM: SendForm = {
   name: 'templateKey',
+  call: 'send',
   fields: fieldSet(SHARED_FIELDS, CODE_FIELDS),
   why: 'A send with templateKey takes its content from your code.',
   howToSend: 'send content from your code with templateKey',
+}
+const SEND_ONLY_FIX = 'Remove {field}, or send each email with emails.send().'
+const PER_RECIPIENT_FIX = 'Set {field} on each recipient in recipients.'
+const BATCH_FIXES: Record<string, string> = {
+  to: PER_RECIPIENT_FIX,
+  distinctId: PER_RECIPIENT_FIX,
+  idempotencyKey: PER_RECIPIENT_FIX,
+  scheduledAt: SEND_ONLY_FIX,
+  cc: SEND_ONLY_FIX,
+  bcc: SEND_ONLY_FIX,
+  attachments: SEND_ONLY_FIX,
+}
+const BATCH_TEMPLATE_FORM: SendForm = {
+  ...TEMPLATE_FORM,
+  call: 'batch',
+  fields: new Set([...fieldSet(TEMPLATE_FIELDS), 'maxRetries']),
+  howToSend: 'send a batch of a template made in PostHog with templateId',
+  fixes: BATCH_FIXES,
+}
+const BATCH_CODE_FORM: SendForm = {
+  ...CODE_FORM,
+  call: 'batch',
+  fields: new Set([...[...fieldSet(CODE_FIELDS)].filter((field) => !(field in BATCH_FIXES)), 'maxRetries']),
+  howToSend: 'send a batch of content from your code with templateKey',
+  fixes: BATCH_FIXES,
 }
 
 export const DEFAULT_EMAIL_REQUEST_TIMEOUT_MS = 15_000
@@ -146,12 +191,6 @@ interface Upload {
   field: string
 }
 
-interface Reply {
-  status: number
-  text: string
-  retryAfterMs?: number
-}
-
 /**
  * Sends one transactional email per call to the messaging send API on the app host, reads the
  * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
@@ -161,6 +200,7 @@ export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
   private readonly hooks: EmailSenderHooks
   private readonly inFlight = new Set<Promise<unknown>>()
+  private readonly retryWaitsToEndAtShutdown = new Set<() => void>()
 
   constructor(config: EmailSenderConfig, hooks: EmailSenderHooks) {
     this.config = config
@@ -169,6 +209,10 @@ export class EmailSender implements Emails {
 
   send(options: SendEmailOptions, ...unexpected: unknown[]): Promise<SendEmailResponse> {
     return this.track(this.sendUntracked(options, unexpected))
+  }
+
+  batch(email: BatchEmailOptions, recipients: BatchEmailRecipient[]): Promise<BatchEmailResponse> {
+    return this.track(this.batchUntracked(email, recipients))
   }
 
   get(id: string): Promise<GetEmailResponse> {
@@ -190,6 +234,9 @@ export class EmailSender implements Emails {
    * Kept apart from the client's pending-promise queue, so a send in its retry backoff does not hold back `flush()`.
    */
   async drain(): Promise<void> {
+    for (const endWait of this.retryWaitsToEndAtShutdown) {
+      endWait()
+    }
     while (this.inFlight.size > 0) {
       await Promise.all(this.inFlight)
     }
@@ -232,6 +279,93 @@ export class EmailSender implements Emails {
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
+    }
+  }
+
+  private async batchUntracked(email: BatchEmailOptions, recipients: unknown): Promise<BatchEmailResponse> {
+    let slots: Slot[] = []
+    try {
+      const prepared = prepareBatchEmail(email, this.config.maxRetries)
+      slots = prepareRecipients(recipients, prepared.templateForm, KNOWN_FIELDS)
+      const { appHost, secretKey } = this.connect(
+        'no email was sent',
+        'Sending email needs secretKey, a project secret API key with the transactional_email:write scope.'
+      )
+      const content =
+        prepared.react === undefined
+          ? prepared.content
+          : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
+      if (this.hooks.isClosed()) {
+        throw new EmailError({
+          code: 'client_closed',
+          message: 'The PostHog client shut down before the batch went out, so no email was sent.',
+        })
+      }
+      const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
+      const body = batchBody(content, slots)
+      let warnings: EmailWarning[]
+      // Whether any attempt so far may have queued the batch, and whether one before the last failed attempt may have.
+      let mayHaveQueuedBefore = false
+      let queuedBeforeLastFailure = false
+      let lastFailure: EmailError | undefined
+      try {
+        const stopAtShutdown = (): void => {
+          if (this.hooks.isClosed()) {
+            throw new EmailError({
+              code: 'client_closed',
+              message: 'The PostHog client shut down during the batch, so it sent no retry.',
+              fix: 'Send the batch again from a running client, unchanged and with the same idempotency keys.',
+            })
+          }
+        }
+        warnings = await this.withRetries(
+          prepared.maxRetries,
+          async (attempt) => {
+            try {
+              return recordAnswer(
+                slots,
+                await this.request(
+                  appHost + BATCH_PATH,
+                  'POST',
+                  headers,
+                  body,
+                  undefined,
+                  this.config.requestTimeoutMs,
+                  attempt > 0 ? stopAtShutdown : undefined
+                ),
+                mayHaveQueuedBefore,
+                prepared.templateForm
+              )
+            } catch (caught) {
+              const failure = asRequestError(caught)
+              queuedBeforeLastFailure = mayHaveQueuedBefore
+              lastFailure = failure
+              if (mayHaveQueued(failure)) {
+                mayHaveQueuedBefore = true
+              }
+              throw failure
+            }
+          },
+          stopAtShutdown
+        )
+      } catch (caught) {
+        const error = asRequestError(caught)
+        // A stop at shutdown between attempts comes after every attempt so far; an attempt's own failure comes after
+        // the attempts before it.
+        const earlierMayHaveQueued = error === lastFailure ? queuedBeforeLastFailure : mayHaveQueuedBefore
+        const failure = recordFailure(slots, error, mayHaveQueuedBefore, earlierMayHaveQueued)
+        return { data: null, error: withResults(failure, slots) }
+      }
+      this.logWarnings(warnings)
+      return { data: { results: slots.map(resultOf), warnings }, error: null }
+    } catch (caught) {
+      return { data: null, error: asEmailError(caught, 'Sending the batch failed unexpectedly.') }
+    }
+  }
+
+  private logWarnings(warnings: EmailWarning[]): void {
+    for (const warning of warnings) {
+      this.hooks.logger.warn(`PostHog email warning ${warning.code}: ${warning.message}`)
     }
   }
 
@@ -409,28 +543,42 @@ export class EmailSender implements Emails {
     return headers
   }
 
-  private async withRetries<T>(maxRetries: number, attemptOnce: () => Promise<T>): Promise<T> {
+  private async withRetries<T>(
+    maxRetries: number,
+    attemptOnce: (attempt: number) => Promise<T>,
+    stopAtShutdown?: () => void
+  ): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       let error: EmailError
       try {
-        return await attemptOnce()
+        return await attemptOnce(attempt)
       } catch (caught) {
-        error =
-          caught instanceof EmailError
-            ? caught
-            : new EmailError({
-                code: 'network_error',
-                message: 'The request to PostHog failed.',
-                cause: caught,
-              })
+        error = asRequestError(caught)
       }
       const delayMs = retryDelayMs(error, attempt, maxRetries)
       if (delayMs === undefined) {
         throw error
       }
-      // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      if (stopAtShutdown) {
+        stopAtShutdown()
+        await this.waitUnlessShutdown(delayMs)
+      } else {
+        // A plain timer, not an unref'd one: the caller awaits the request, so the process must stay up for the retry.
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
     }
+  }
+
+  private waitUnlessShutdown(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const end = (): void => {
+        clearTimeout(timer)
+        this.retryWaitsToEndAtShutdown.delete(end)
+        resolve()
+      }
+      const timer = setTimeout(end, delayMs)
+      this.retryWaitsToEndAtShutdown.add(end)
+    })
   }
 
   private async request(
@@ -438,10 +586,11 @@ export class EmailSender implements Emails {
     method: 'GET' | 'POST' | 'PUT',
     headers: Record<string, string>,
     body?: string | Uint8Array<ArrayBuffer>,
-    redirect?: 'manual'
+    redirect?: 'manual',
+    timeoutMs = this.config.requestTimeoutMs,
+    beforeFetch?: () => void
   ): Promise<Reply> {
     const controller = new AbortController()
-    const timeoutMs = this.config.requestTimeoutMs
     let timer: ReturnType<typeof setTimeout>
     // `fetch` is injectable and may ignore the abort signal, so both phases race the deadline.
     // A plain timer, not an unref'd one: an injected fetch may hold no handle, and the process must stay up until
@@ -454,15 +603,16 @@ export class EmailSender implements Emails {
         controller.abort(timeoutError)
       }, timeoutMs)
     })
-    const fetchPromise = Promise.resolve().then(() =>
-      this.hooks.fetch(url, {
+    const fetchPromise = Promise.resolve().then(() => {
+      beforeFetch?.()
+      return this.hooks.fetch(url, {
         method,
         headers,
         ...(body === undefined ? {} : { body }),
         ...(redirect ? { redirect } : {}),
         signal: controller.signal,
       })
-    )
+    })
     void fetchPromise
       .then((lateResponse) => {
         if (controller.signal.aborted) {
@@ -506,7 +656,7 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send: UncheckedSend = options ?? {}
+  const send: UncheckedSend = fieldsOf(options, KNOWN_FIELDS)
   const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
@@ -626,6 +776,38 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
+function prepareBatchEmail(
+  options: BatchEmailOptions,
+  defaultMaxRetries: number
+): {
+  content: Record<string, unknown>
+  react?: EmailReactElement
+  templateForm: boolean
+  maxRetries: number
+} {
+  const send: UncheckedSend = fieldsOf(options, KNOWN_FIELDS)
+  const maxRetries = send.maxRetries
+  if (maxRetries !== undefined && !isRetryCount(maxRetries)) {
+    throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
+  }
+  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
+    })
+  }
+  const templateForm = send.templateKey === undefined
+  const content = templateForm
+    ? templateContent(send, undefined, BATCH_TEMPLATE_FORM, BATCH_CODE_FORM)
+    : codeContent(send, undefined, BATCH_CODE_FORM, BATCH_TEMPLATE_FORM).content
+  return {
+    content: snapshotOf(content),
+    react: isReactElement(send.react) ? send.react : undefined,
+    templateForm,
+    maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
+  }
+}
+
 function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
   if ((send.templateId === undefined) === (send.templateKey === undefined)) {
     throw new EmailError({
@@ -638,7 +820,12 @@ function contentOf(send: UncheckedSend, distinctId: string | undefined): SendCon
     : codeContent(send, distinctId)
 }
 
-function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+function templateContent(
+  send: UncheckedSend,
+  distinctId: string | undefined,
+  form = TEMPLATE_FORM,
+  otherForm = CODE_FORM
+): Record<string, unknown> {
   const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
@@ -649,7 +836,7 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(send, form, otherForm)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -657,7 +844,12 @@ function templateContent(send: UncheckedSend, distinctId: string | undefined): R
   }
 }
 
-function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+function codeContent(
+  send: UncheckedSend,
+  distinctId: string | undefined,
+  form = CODE_FORM,
+  otherForm = TEMPLATE_FORM
+): SendContent {
   const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
@@ -666,7 +858,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
       'templateKey'
     )
   }
-  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(send, form, otherForm)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -795,9 +987,11 @@ function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: Sen
   if (field === undefined) {
     return
   }
-  const message = `A send with ${form.name} doesn't take ${field}, so no email was sent.`
+  const message = `A ${form.call} with ${form.name} doesn't take ${field}, so no email was sent.`
   if (!otherForm.fields.has(field)) {
-    throw new EmailError({ code: 'invalid_form', message, field, fix: `Remove ${field} and send again.` })
+    const hint = form.fixes && Object.hasOwn(form.fixes, field) ? form.fixes[field] : undefined
+    const fix = hint?.replace('{field}', field) ?? `Remove ${field} and send again.`
+    throw new EmailError({ code: 'invalid_form', message, field, fix })
   }
   throw new EmailError({
     code: 'invalid_form',
@@ -836,14 +1030,6 @@ function resolveAppHost(host: string, appHost: string | undefined): string | und
   return CLOUD_APP_HOSTS[removeTrailingSlash(host)]
 }
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
-
 function readRetryAfter(response: PostHogFetchResponse): number | undefined {
   try {
     // The full wait, not the shared five minute cap: callers schedule their own retry from it, and the retry ceiling
@@ -852,17 +1038,6 @@ function readRetryAfter(response: PostHogFetchResponse): number | undefined {
   } catch {
     return undefined
   }
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined
-}
-
-function replyFields(payload: unknown): Record<string, unknown> {
-  return (payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) as Record<
-    string,
-    unknown
-  >
 }
 
 function parseSendReply(
@@ -881,19 +1056,7 @@ function parseSendReply(
         statusCode: status,
       })
     }
-    const warnings: EmailWarning[] = []
-    if (Array.isArray(fields.warnings)) {
-      for (const warning of fields.warnings) {
-        if (warning !== null && typeof warning === 'object') {
-          warnings.push({
-            code: text(warning.code) ?? 'warning',
-            message: text(warning.detail) ?? text(warning.message) ?? '',
-            fix: text(warning.fix),
-          })
-        }
-      }
-    }
-    const result = { id, replayed: fields.replayed === true, warnings }
+    const result = { id, replayed: fields.replayed === true, warnings: warningsOf(fields) }
     return scheduledAtMs === undefined
       ? result
       : { ...result, scheduledAt: confirmedSchedule(fields, scheduledAtMs, firstSentAtMs, id, status, callerChoseKey) }
@@ -1025,21 +1188,30 @@ function parsePreferencesReply({ status, text: body, retryAfterMs }: Reply): Ema
   return { to, allMarketing, topics: topics as Record<string, boolean> }
 }
 
-function replyError(fields: Record<string, unknown>, status: number, retryAfterMs: number | undefined): EmailError {
-  return new EmailError({
-    code: text(fields.code) ?? 'api_error',
-    message: text(fields.detail) ?? `PostHog answered HTTP ${status}.`,
-    statusCode: status,
-    why: text(fields.why),
-    fix: text(fields.fix),
-    docsUrl: text(fields.docs_url),
-    field: text(fields.attr),
-    retryAfterMs,
-  })
-}
-
 function asEmailError(error: unknown, message: string): EmailError {
   return error instanceof EmailError ? error : new EmailError({ code: 'unexpected_error', message, cause: error })
+}
+
+function asRequestError(error: unknown): EmailError {
+  return error instanceof EmailError
+    ? error
+    : new EmailError({ code: 'network_error', message: 'The request to PostHog failed.', cause: error })
+}
+
+function withResults(error: EmailError, slots: Slot[]): EmailError {
+  return new EmailError({
+    code: error.code,
+    message: error.message,
+    statusCode: error.statusCode,
+    why: error.why,
+    fix: error.fix,
+    docsUrl: error.docsUrl,
+    field: error.field,
+    retryAfterMs: error.retryAfterMs,
+    messageId: error.messageId,
+    results: slots.map(resultOf),
+    cause: error.cause,
+  })
 }
 
 function isRetryable(error: EmailError): boolean {
@@ -1068,6 +1240,9 @@ function retryDelayMs(error: EmailError, attempt: number, maxRetries: number): n
   if (error.retryAfterMs !== undefined && error.retryAfterMs > MAX_RETRY_DELAY_MS) {
     return undefined
   }
-  const backoffMs = Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
-  return Math.max(backoffMs, error.retryAfterMs ?? 0)
+  return Math.max(backoffMs(attempt), error.retryAfterMs ?? 0)
+}
+
+function backoffMs(attempt: number): number {
+  return Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt * (0.8 + Math.random() * 0.4))
 }

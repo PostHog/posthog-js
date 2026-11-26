@@ -1,3 +1,5 @@
+import type { BatchEmailRecipientResult } from './types'
+
 /**
  * A coarse category of the failure, for code that branches on the kind of failure rather than the exact `code`.
  */
@@ -23,6 +25,7 @@ export interface EmailErrorParams {
   field?: string
   retryAfterMs?: number
   messageId?: string
+  results?: BatchEmailRecipientResult[]
   cause?: unknown
 }
 
@@ -47,6 +50,12 @@ export class EmailError extends Error {
   readonly retryAfterMs?: number
   /** The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. */
   readonly messageId?: string
+  /**
+   * Only from `emails.batch()`, once it sent its request: what happened to each recipient, in the order you passed
+   * them. Each is `failed` when PostHog refused the request, or `unconfirmed` when PostHog may have queued it, such as
+   * when a retry was refused after an earlier attempt wasn't confirmed.
+   */
+  readonly results?: BatchEmailRecipientResult[]
 
   constructor(params: EmailErrorParams) {
     super(params.message, params.cause === undefined ? undefined : { cause: params.cause })
@@ -59,10 +68,11 @@ export class EmailError extends Error {
     this.field = params.field
     this.retryAfterMs = params.retryAfterMs
     this.messageId = params.messageId
+    this.results = params.results
   }
 }
 
-const ATTACHMENT_LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
+const LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
 
 function emailErrorName(status: number | undefined, code: string): EmailErrorName {
   if (code === 'missing_secret_key' || status === 401) {
@@ -72,7 +82,7 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     if (code === 'network_error') {
       return 'service_unavailable'
     }
-    return code.startsWith('invalid_') || ATTACHMENT_LIMIT_CODES.has(code) ? 'validation_error' : 'application_error'
+    return code.startsWith('invalid_') || LIMIT_CODES.has(code) ? 'validation_error' : 'application_error'
   }
   if (code === 'attachment_upload_failed') {
     return status >= 500 ? 'service_unavailable' : 'application_error'
@@ -85,7 +95,10 @@ function emailErrorName(status: number | undefined, code: string): EmailErrorNam
     case 404:
       return 'not_found'
     case 409:
-      return code === 'template_outdated' ? 'validation_error' : 'concurrent_idempotent_requests'
+      if (code === 'template_outdated') {
+        return 'validation_error'
+      }
+      return code === 'batch_unavailable' ? 'application_error' : 'concurrent_idempotent_requests'
     case 422:
       // The template send route also answers 422 for send checks such as recipient_suppressed.
       return code === 'idempotency_key_reused' ? 'invalid_idempotent_request' : 'validation_error'
