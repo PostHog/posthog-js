@@ -139,6 +139,12 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
   ],
   ['malformed JSON text with a non-breaking space before the colon', '{"refresh_token"\u00a0:"tool-secret"}', false],
   [
+    'JSON text after prose with the key encoded five times',
+    `Response: ${[1, 2, 3, 4].reduce<string>((text) => JSON.stringify(text), '{"refresh_tok\\u0065n":"tool-secret"}')}`,
+    false,
+  ],
+  ['malformed JSON text with an escaped space before the colon', '{"refresh_token"\\u0020: "tool-secret"}', false],
+  [
     'JSON text with a duplicate key',
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
   ],

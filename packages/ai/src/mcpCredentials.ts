@@ -66,14 +66,20 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
 
 const ESCAPED_WHITESPACE = new Set(['n', 't', 'r'])
 
+const MAX_KEY_DECODE_LEVELS = 16
+
 // A key as written in raw text, unescaped as many times as the text is nested, so `refresh_tok\\u0065n` matches.
-function decodeKey(raw: string): string {
+// A key still escaped after the last level is returned as undefined, so the caller can treat it as a credential.
+function decodeKey(raw: string): string | undefined {
   let end = raw.length
   while (end > 0 && raw[end - 1] === '\\') {
     end--
   }
   let key = raw.slice(0, end)
-  for (let level = 0; level < 4 && key.includes('\\'); level++) {
+  for (let level = 0; key.includes('\\'); level++) {
+    if (level === MAX_KEY_DECODE_LEVELS) {
+      return undefined
+    }
     try {
       key = JSON.parse(`"${key}"`)
     } catch {
@@ -81,6 +87,26 @@ function decodeKey(raw: string): string {
     }
   }
   return key
+}
+
+// The index just before an escaped separator (`\\n`, `\\u0020`) that ends at `end`, or `end` when there is none.
+function beforeEscapedSeparator(text: string, end: number): number {
+  let start = -1
+  if (ESCAPED_WHITESPACE.has(text[end]) && text[end - 1] === '\\') {
+    start = end - 1
+  } else if (text[end - 4] === 'u' && text[end - 5] === '\\') {
+    const hex = text.slice(end - 3, end + 1)
+    if (/^[0-9a-f]{4}$/i.test(hex) && isSeparator(String.fromCharCode(parseInt(hex, 16)))) {
+      start = end - 5
+    }
+  }
+  if (start === -1) {
+    return end
+  }
+  while (start >= 0 && text[start] === '\\') {
+    start--
+  }
+  return start
 }
 
 // Any whitespace or control character, including ones JSON rejects, so malformed text cannot hide a key.
@@ -92,22 +118,21 @@ function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: strin
   for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
     let close = colon - 1
     while (close >= 0) {
-      if (isSeparator(text[close])) {
-        close--
-      } else if (ESCAPED_WHITESPACE.has(text[close]) && text[close - 1] === '\\') {
-        close -= 2
-        while (close >= 0 && text[close] === '\\') {
-          close--
-        }
-      } else {
+      const next = isSeparator(text[close]) ? close - 1 : beforeEscapedSeparator(text, close)
+      if (next === close) {
         break
       }
+      close = next
     }
     if (close <= 0 || text[close] !== '"') {
       continue
     }
     const open = text.lastIndexOf('"', close - 1)
-    if (open !== -1 && isCredentialKey(normalizeKey(decodeKey(text.slice(open + 1, close))))) {
+    if (open === -1) {
+      continue
+    }
+    const key = decodeKey(text.slice(open + 1, close))
+    if (key === undefined || isCredentialKey(normalizeKey(key))) {
       return true
     }
   }
