@@ -706,6 +706,56 @@ describe('record a blocked iframe', () => {
   },
   );
 
+  it('records a same-origin iframe again after it is unblocked and a full snapshot runs', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(
+        `<!DOCTYPE html><html><body>
+          <iframe srcdoc="<body></body>"></iframe>
+        </body></html>`,
+        { waitUntil: 'load' },
+      );
+      const iframeFrame = page.frames()[1];
+      const events: eventWithTime[] = [];
+      await page.exposeFunction('emit', (e: eventWithTime) => {
+        events.push(e);
+      });
+      await startRecording(page.mainFrame(), {});
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await page.evaluate(() =>
+        document.querySelector('iframe')!.classList.add('rr-block'),
+      );
+      await waitForRAF(page);
+      await appendParagraph(iframeFrame, INITIAL_CONTENT);
+      await waitForRAF(page);
+      await page.evaluate(() => {
+        document.querySelector('iframe')!.classList.remove('rr-block');
+        // let the unblock mutation be processed before the snapshot
+        return new Promise<void>((resolve) =>
+          setTimeout(() => {
+            (window as unknown as IWindow).rrweb.record.takeFullSnapshot(true);
+            resolve();
+          }),
+        );
+      });
+      await waitForRAF(page);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const eventsAfterSnapshot = events.length;
+
+      await appendParagraph(iframeFrame, LATER_CONTENT);
+      await waitForRAF(page);
+
+      expect(
+        JSON.stringify(events.slice(eventsAfterSnapshot)),
+      ).toContain(LATER_CONTENT);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('a same-origin iframe that gets blocked and then navigates is not recorded', async () => {
     const page = await browser.newPage();
     try {

@@ -143,17 +143,17 @@ export class IframeManager {
       return;
     // A batch can hold a class being added and removed again, so an element
     // that had the block class at any point counts, not only its final state.
-    let blockedAtSomePoint: Node[] | undefined;
+    let blockedAtSomePoint: Set<Node> | undefined;
     for (const m of mutations) {
       if (m.type === 'attributes' && this.oldValueBlocked(m))
-        (blockedAtSomePoint ??= []).push(m.target);
+        (blockedAtSomePoint ??= new Set()).add(m.target);
     }
     // Moves in the same batch make past ancestry ambiguous, so this fails
     // closed: the iframe stops relaying if it is under such an element now.
     for (const iframeEl of [...this.relayingIframes]) {
       if (
         blockedAtSomePoint &&
-        this.hasAncestorIn(iframeEl, new Set(blockedAtSomePoint))
+        this.hasAncestorIn(iframeEl, blockedAtSomePoint)
       ) {
         this.releaseBlockedIframe(iframeEl);
         continue;
