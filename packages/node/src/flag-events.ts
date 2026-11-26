@@ -191,8 +191,8 @@ export type ConfigVersion2FlagEvents = {
  *
  * Returns `undefined` when `record` has no config version 2 attribution (see
  * {@link ruleAttribution}), including when it is absent because the value came from local
- * evaluation, an override or no flag at all. The caller then sends its `$feature_flag_called` as
- * before.
+ * evaluation of a version 1 flag, an override or no flag at all. The caller then sends its
+ * `$feature_flag_called` as before.
  *
  * `$feature_flag_called` gets the record's attribution in place of the human-readable
  * `$feature_flag_reason`. Its dedupe key is the flag key, the response, the groups, the config

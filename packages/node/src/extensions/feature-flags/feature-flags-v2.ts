@@ -1,12 +1,15 @@
 import { hashSHA1, InconclusiveMatchError, matchFeatureFlagProperty } from '@posthog/core'
-import type { UnresolvedFlagReason } from '@posthog/core'
+import type { FeatureFlagDetail, FeatureFlagValue, JsonType, UnresolvedFlagReason } from '@posthog/core'
 
-import type { FlagRecordValue } from '../../flags-response'
+import { parsedFlagRecordOf, readFlagRecords } from '../../flags-response'
+import type { FlagRecordValue, ParsedFlagRecord } from '../../flags-response'
+import type { PostHogFeatureFlag } from '../../types'
 
 /**
  * Local evaluation of feature flags whose `filters.version` is 2.
  *
- * Nothing in the SDK calls this module yet, and nothing in it is exported from the package.
+ * The poller calls {@link evaluateConfigV2Definition} for every loaded definition whose config
+ * version is not 1. Nothing in this module is exported from the package.
  *
  * A config version 2 flag holds an ordered list of rules. The first rule whose targeting matches
  * decides the result, unless its rollout misses and the rule says to continue. The flags service
@@ -25,7 +28,9 @@ import type { FlagRecordValue } from '../../flags-response'
  * - `error`: a property value or a regular expression is invalid.
  *
  * None of them is a guess. A caller that cannot use the result must fall back to the flags
- * service, not to `false` or to the flag default.
+ * service, not to `false` or to the flag default. {@link evaluateConfigV2Definition} does that for
+ * the poller: it turns a result into the record a `/flags?v=4` response gives, and anything else
+ * into the unresolved reason of the poller's fallback.
  *
  * Regular expressions use the matcher of the version 1 evaluator, which runs a pattern locally
  * only in the subset where JavaScript and the flags service agree. Text comparisons read a value
@@ -1829,4 +1834,176 @@ function offsetAt(seconds: number, timeZone: string): number {
     second: Number(parts.second),
   })
   return local - seconds
+}
+
+// --- Local evaluation in the poller -------------------------------------------------------
+//
+// The poller evaluates a loaded definition here when its config version is not 1. The definitions
+// request does not select config version 2 flags yet, so none arrives from the API; one can still
+// come from a definition cache that a newer release shares.
+
+/** The reason description of a locally evaluated record, as for a version 1 flag. */
+const LOCAL_REASON_DESCRIPTION = 'Evaluated locally'
+
+/**
+ * Whether a flag definition is config version 1, the format the version 1 evaluator reads. It is
+ * when `filters.version` is absent or the number 1. Any other value, also one that is not a number,
+ * belongs to the config version 2 evaluator, which accepts only version 2.
+ */
+export function isConfigVersion1(flag: unknown): boolean {
+  const filters = isJsonObject(flag) ? flag.filters : undefined
+  if (!isJsonObject(filters) || filters.version === undefined) {
+    return true
+  }
+  return filters.version === 1
+}
+
+/** A loaded definition and its `filters`, parsed once when definitions load. */
+export type ParsedConfigV2Definition = {
+  readonly definition: PostHogFeatureFlag
+  readonly config: ConfigV2 | ConfigV2Unsupported
+}
+
+/** The result of a config version 2 definition: the record a `/flags?v=4` response gives. */
+export type ConfigV2LocalResult = {
+  /** The legacy rendering of the record, which the existing getters read. */
+  readonly detail: FeatureFlagDetail
+  readonly record: ParsedFlagRecord
+  /** The value the legacy getters return: the variant, or whether the flag is enabled. */
+  readonly value: FeatureFlagValue
+  /** The decoded payload of a number or object value, or `null`. */
+  readonly payload: JsonType | null
+}
+
+/** Parses each config version 2 definition of a definitions list, by flag key. */
+export function parseConfigV2Definitions(
+  flags: readonly PostHogFeatureFlag[]
+): ReadonlyMap<string, ParsedConfigV2Definition> {
+  const parsed = new Map<string, ParsedConfigV2Definition>()
+  for (const flag of flags) {
+    if (!isConfigVersion1(flag)) {
+      parsed.set(flag.key, { definition: flag, config: parseConfigV2(flag.filters) })
+    }
+  }
+  return parsed
+}
+
+/** The parsed `filters` of a definition, read now if it was not parsed on load. */
+function configFor(
+  flag: PostHogFeatureFlag,
+  parsed: ReadonlyMap<string, ParsedConfigV2Definition>
+): ConfigV2 | ConfigV2Unsupported {
+  const entry = parsed.get(flag.key)
+  return entry !== undefined && entry.definition === flag ? entry.config : parseConfigV2(flag.filters)
+}
+
+/** The reason the definition alone leaves the flag unresolved, known on load. */
+export function configV2UnresolvedReason(
+  flag: PostHogFeatureFlag,
+  parsed: ReadonlyMap<string, ParsedConfigV2Definition>
+): UnresolvedFlagReason | undefined {
+  return flag.active && isConfigV2Unsupported(configFor(flag, parsed)) ? 'unsupported_definition' : undefined
+}
+
+/**
+ * Evaluates a config version 2 definition for one person.
+ *
+ * Returns the record a `/flags?v=4` response gives for the same result, so the client reads it and
+ * sends its flag events as for a remote record. Throws `InconclusiveMatchError` with the
+ * unresolved reason when the evaluator gives no value; the caller then falls back as for a
+ * version 1 flag.
+ *
+ * The flags service evaluates these flags with the distinct ID only, so experience continuity and
+ * device bucketing do not apply. The caller never knows that its properties are complete, and
+ * dates without an offset are read in UTC, as version 1 local evaluation reads them.
+ */
+export async function evaluateConfigV2Definition(
+  flag: PostHogFeatureFlag,
+  parsed: ReadonlyMap<string, ParsedConfigV2Definition>,
+  context: { distinctId: string; properties: Record<string, unknown>; propertyMatchingVersion: number | undefined }
+): Promise<ConfigV2LocalResult> {
+  let outcome: ConfigV2Outcome = await evaluateConfigV2(
+    configFor(flag, parsed),
+    {
+      identifier: String(context.distinctId),
+      properties: context.properties,
+      propertiesComplete: false,
+      explicitExactMatching: context.propertyMatchingVersion === 2,
+      timeZone: 'UTC',
+    },
+    { active: Boolean(flag.active) }
+  )
+  if (outcome.outcome === 'evaluated') {
+    const result = localResult(flag, outcome)
+    if (!result.record.failed) {
+      return result
+    }
+    outcome = { outcome: 'unsupported', kind: 'malformed', field: result.record.unreadableField ?? 'record' }
+  }
+  throw new InconclusiveMatchError(describe(outcome), reasonOf(outcome))
+}
+
+/** Builds the `/flags?v=4` record of a result and reads it as the response reader does. */
+function localResult(flag: PostHogFeatureFlag, outcome: ConfigV2Evaluated): ConfigV2LocalResult {
+  const definition = flag as PostHogFeatureFlag & { version?: unknown }
+  const metadata: Record<string, unknown> = { config_version: CONFIG_VERSION, description: null }
+  // A field the reader would reject is left out, so that it does not fail the whole record.
+  if (Number.isInteger(definition.id)) {
+    metadata.id = definition.id
+  }
+  if (Number.isInteger(definition.version)) {
+    metadata.version = definition.version
+  }
+  if (typeof definition.has_experiment === 'boolean') {
+    metadata.has_experiment = definition.has_experiment
+  }
+  if (outcome.ruleType !== undefined) {
+    metadata.rule_type = outcome.ruleType
+    metadata.rule_id = outcome.ruleId
+  }
+  if (outcome.variantKey !== undefined) {
+    metadata.variant_key = outcome.variantKey
+  }
+  const raw = {
+    key: flag.key,
+    // An object value is the configuration's own object, so the record gets a copy.
+    value: outcome.value === null ? null : JSON.parse(JSON.stringify(outcome.value)),
+    reason: {
+      code: outcome.reason,
+      condition_index: outcome.ruleIndex ?? null,
+      description: LOCAL_REASON_DESCRIPTION,
+    },
+    metadata,
+  }
+  const { body } = readFlagRecords({ flags: { [flag.key]: raw } }) as {
+    body: { flags: Record<string, FeatureFlagDetail> }
+  }
+  const detail = body.flags[flag.key]
+  const record = parsedFlagRecordOf(detail)
+  const rendered = detail.metadata?.payload
+  return {
+    detail,
+    record,
+    value: detail.variant ?? detail.enabled,
+    payload: rendered === undefined || rendered === null ? null : (JSON.parse(rendered) as JsonType),
+  }
+}
+
+/** The unresolved reason of an outcome without a value, as the contract maps it. */
+function reasonOf(outcome: ConfigV2Inconclusive | ConfigV2Unsupported | ConfigV2EvaluationError): UnresolvedFlagReason {
+  if (outcome.outcome === 'inconclusive') {
+    return outcome.reason
+  }
+  if (outcome.outcome === 'error' && outcome.kind === 'invalid_property') {
+    // The person property is not in a form the rule can compare.
+    return 'missing_context'
+  }
+  return 'unsupported_definition'
+}
+
+function describe(outcome: ConfigV2Inconclusive | ConfigV2Unsupported | ConfigV2EvaluationError): string {
+  if (outcome.outcome === 'unsupported') {
+    return `The config version 2 document is ${outcome.kind} at '${outcome.field}'`
+  }
+  return outcome.detail
 }
