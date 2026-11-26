@@ -3353,12 +3353,12 @@ Queue one email per recipient, from one transactional email template or one piec
 
 A batch takes at most 100 recipients and sends them in one request. More than 100 recipients is an error before
 anything is sent. Network errors, rate limits, an in-flight idempotency key and an unavailable service are retried
-with the same idempotency keys, so a retry queues no second email. When the client shuts down, a batch waiting to retry ends at once with `client_closed` and sends no retry. A request already sent runs to its answer or its timeout, which can outlast the shutdown deadline, so pass your own `idempotencyKey` for each recipient when the process may exit mid-batch. PostHog refuses a batch over its size limits with
+with the same idempotency keys, so a retry queues no second email. When the client shuts down, a batch waiting to retry ends at once with `client_closed` and sends no retry. A request already sent runs to its answer or its timeout, so pass your own `idempotencyKey` for each recipient when the process may exit mid-batch. PostHog refuses a batch over its size limits with
 `content_too_large`, and the status says which kind: with 413 the batch is too large for PostHog to send at once,
 so split the recipients into smaller batches, or, for one recipient, send a smaller email; with 400 the content
 or `templateData` that every recipient shares is too large for a batch, so send those emails one at a time with
-`emails.send()`. Each attempt waits up to 45 seconds for PostHog's answer, or longer when the client's
-`emailRequestTimeoutMs` is longer.
+`emails.send()`. Each attempt waits for PostHog's answer as long as a send does: the client's
+`emailRequestTimeoutMs`, 15 seconds by default.
 
 Resolves to `{ data, error }` and does not reject. `data.results` says what happened to each recipient: a refused
 recipient doesn't fail the batch. When PostHog refuses the whole request or doesn't answer it, `error.results`
@@ -5306,7 +5306,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
 | `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` or `emails.batch` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency keys. Set to 0 when a job runner already retries the send. **Default** `2` |
-| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
+| `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
 | `enableExceptionAutocapture?` | `boolean` | - |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
 | `enableLocalEvaluation?` | `boolean` | - |

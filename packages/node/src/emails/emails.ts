@@ -64,7 +64,6 @@ const CLOUD_APP_HOSTS: Record<string, string> = {
   'https://eu.posthog.com': EU_APP_HOST,
 }
 const MAX_RETRY_DELAY_MS = 30_000
-const BATCH_REQUEST_TIMEOUT_MS = 45_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 const SCHEDULED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-](\d{2}):(\d{2}))$/
@@ -303,7 +302,6 @@ export class EmailSender implements Emails {
         })
       }
       const headers = this.headers(secretKey, { 'Content-Type': 'application/json' })
-      const timeoutMs = Math.max(BATCH_REQUEST_TIMEOUT_MS, this.config.requestTimeoutMs)
       const body = batchBody(content, slots)
       let warnings: EmailWarning[]
       let mayHaveQueuedBefore = false
@@ -329,7 +327,7 @@ export class EmailSender implements Emails {
                   headers,
                   body,
                   undefined,
-                  timeoutMs,
+                  this.config.requestTimeoutMs,
                   attempt > 0 ? stopAtShutdown : undefined
                 ),
                 mayHaveQueuedBefore,

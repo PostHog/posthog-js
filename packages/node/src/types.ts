@@ -451,7 +451,7 @@ export type PostHogOptions = Omit<
    */
   appHost?: string
   /**
-   * Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request,
+   * Timeout in milliseconds for each `emails.send` or `emails.batch` request. Each attachment upload is one request,
    * so raise it when large files upload slowly.
    *
    * @default 15000

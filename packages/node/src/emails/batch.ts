@@ -147,7 +147,7 @@ export function recordAnswer(
 ): EmailWarning[] {
   const fields = replyFields(parseJson(body))
   if (status < 200 || status >= 300) {
-    throw batchReplyError(fields, status, retryAfterMs, templateForm, mayHaveQueuedBefore)
+    throw batchReplyError(fields, status, retryAfterMs, templateForm)
   }
   const answers = Array.isArray(fields.results) ? fields.results : []
   if (answers.length !== sent.length) {
@@ -180,7 +180,7 @@ export function recordAnswer(
       (error.retryable === true ||
         code === 'delivery_unavailable' ||
         code === 'idempotency_key_in_flight' ||
-        (text(error.code) === undefined && error.status === 409) ||
+        (error.status === 409 && code !== 'batch_unavailable') ||
         mayHaveQueuedBefore)
     const refusal = new EmailError({
       code,
@@ -196,17 +196,22 @@ export function recordAnswer(
 
 export function recordFailure(sent: Slot[], error: EmailError, mayHaveQueuedBefore: boolean): EmailError {
   const unconfirmed = mayHaveQueuedBefore || mayHaveQueued(error)
-  const answer =
-    mayHaveQueuedBefore && !mayHaveQueued(error)
-      ? copyError(error, {
-          message: `${error.statusCode === undefined ? '' : 'PostHog refused the retry of this batch: '}${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}`,
-        })
-      : error
+  const answer = mayHaveQueuedBefore && !mayHaveQueued(error) ? afterUnansweredAttempt(error) : error
   for (const slot of sent) {
     slot.status = unconfirmed ? 'unconfirmed' : 'failed'
     slot.error = answer
   }
   return unconfirmed ? copyError(answer, { fix: BATCH_RESEND_FIX }) : answer
+}
+
+function afterUnansweredAttempt(error: EmailError): EmailError {
+  if (error.statusCode === undefined) {
+    return copyError(error, { message: `${error.message} ${EARLIER_ATTEMPT_MAY_HAVE_QUEUED}` })
+  }
+  return copyError(error, {
+    message: `PostHog refused the retry of this batch with ${error.code}, but an earlier attempt of this batch went unanswered, so some of its emails may have gone out. Send the batch again with each recipient's idempotencyKey from error.results, then read each recipient's result.`,
+    why: undefined,
+  })
 }
 
 export function mayHaveQueued(error: EmailError): boolean {
@@ -218,7 +223,7 @@ export function mayHaveQueued(error: EmailError): boolean {
     error.statusCode >= 500 ||
     error.statusCode < 300 ||
     error.code === 'idempotency_key_in_flight' ||
-    (error.statusCode === 409 && error.code === 'api_error')
+    (error.statusCode === 409 && error.code !== 'batch_unavailable')
   )
 }
 
@@ -230,12 +235,14 @@ export function resultOf(slot: Slot): BatchEmailRecipientResult {
     case 'failed':
       return { index, to, idempotencyKey, status: 'failed', id: slot.id, error: slot.error! }
     case 'unconfirmed':
-      return { index, to, idempotencyKey, status: 'unconfirmed', id: slot.id, error: withResendFix(slot.error!) }
+      return { index, to, idempotencyKey, status: 'unconfirmed', id: slot.id, error: unconfirmedError(slot.error!) }
   }
 }
 
 const BATCH_RESEND_FIX =
-  'PostHog may have queued these emails. Call emails.batch() again with the same email and recipients, unchanged, giving each recipient the idempotencyKey of its entry in error.results (matched by index), within 24 hours of the first request with those keys: PostHog queues no second email for a key it has.'
+  "PostHog may have queued these emails. Call emails.batch() again with the same email and recipients, unchanged, giving each recipient the idempotencyKey of its entry in error.results (matched by index), within 24 hours of the first request with those keys: PostHog queues no second email for a key it has. Then read each recipient's result."
+
+const UNCONFIRMED_MESSAGE = "PostHog didn't confirm this email, and it may still go out."
 
 const EARLIER_ATTEMPT_MAY_HAVE_QUEUED =
   'An earlier attempt of this batch went unanswered, so PostHog may have queued its emails.'
@@ -243,20 +250,17 @@ const EARLIER_ATTEMPT_MAY_HAVE_QUEUED =
 const RESEND_FIX =
   'PostHog may have queued this email. Send this recipient again, unchanged and with the same idempotencyKey, within 24 hours of the first request with that key: PostHog queues no second email for a key it has.'
 
-function withResendFix(error: EmailError): EmailError {
-  return copyError(error, { fix: RESEND_FIX })
+function unconfirmedError(error: EmailError): EmailError {
+  return copyError(error, { message: UNCONFIRMED_MESSAGE, why: undefined, fix: RESEND_FIX })
 }
 
-function copyError(
-  error: EmailError,
-  { message = error.message, fix = error.fix }: { message?: string; fix?: string }
-): EmailError {
+function copyError(error: EmailError, changes: { message?: string; why?: string; fix?: string }): EmailError {
   return new EmailError({
     code: error.code,
-    message,
+    message: changes.message ?? error.message,
     statusCode: error.statusCode,
-    why: error.why,
-    fix,
+    why: 'why' in changes ? changes.why : error.why,
+    fix: changes.fix ?? error.fix,
     docsUrl: error.docsUrl,
     field: error.field,
     retryAfterMs: error.retryAfterMs,
@@ -274,16 +278,14 @@ function batchReplyError(
   fields: Record<string, unknown>,
   status: number,
   retryAfterMs: number | undefined,
-  templateForm: boolean,
-  mayHaveQueuedBefore: boolean
+  templateForm: boolean
 ): EmailError {
   const error = replyError(fields, status, retryAfterMs)
-  const sentNone = mayHaveQueuedBefore ? '' : ', so PostHog sent no email of this request'
   if (error.code === 'batch_unavailable') {
     return new EmailError({
       code: error.code,
       statusCode: status,
-      message: `Batch sends are not on for this project yet${sentNone}.`,
+      message: 'Batch sends are not on for this project yet, so PostHog sent no email of this request.',
       fix: 'Send each email with emails.send() until batch sends are on for the project.',
     })
   }
@@ -293,13 +295,14 @@ function batchReplyError(
       ? new EmailError({
           code: 'not_found',
           statusCode: status,
-          message: `PostHog found no template with this ID, or batch sends aren't available for this project${mayHaveQueuedBefore ? '' : ', so it sent no email of this request'}.`,
+          message:
+            "PostHog found no template with this ID, or batch sends aren't available for this project, so it sent no email of this request.",
           fix: 'Check the templateId. If it is right, send each recipient on its own with emails.send() until batch sends are available for the project.',
         })
       : new EmailError({
           code: 'not_found',
           statusCode: status,
-          message: `Batch sends from code aren't available for this project${sentNone}.`,
+          message: "Batch sends from code aren't available for this project, so PostHog sent no email of this request.",
           fix: 'Send each recipient on its own with emails.send() until batch sends are available for the project.',
         })
   }

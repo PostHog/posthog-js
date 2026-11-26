@@ -72,7 +72,7 @@ export class EmailError extends Error {
   }
 }
 
-const LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large', 'content_too_large'])
+const LIMIT_CODES: ReadonlySet<string> = new Set(['too_many_attachments', 'message_too_large'])
 
 function emailErrorName(status: number | undefined, code: string): EmailErrorName {
   if (code === 'missing_secret_key' || status === 401) {

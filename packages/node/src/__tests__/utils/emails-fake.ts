@@ -66,6 +66,7 @@ export type Fault =
   | 'network error'
   | 'hang'
   | 'lost reply'
+  | 'slow reply'
 
 export interface FakePostHogOptions {
   secretKey: string
@@ -252,6 +253,11 @@ export class FakePostHog {
     }
     if (fault === 'lost reply') {
       throw new TypeError('fetch failed', { cause: new Error('ECONNRESET') })
+    }
+    if (fault === 'slow reply') {
+      return new Promise((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () => reject(options.signal?.reason))
+      })
     }
     if (answer.location && options.redirect !== 'manual') {
       return this.fetch(answer.location, options)
