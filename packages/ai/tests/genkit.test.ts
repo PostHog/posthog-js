@@ -108,6 +108,13 @@ const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
     '{"auth":{"refresh_tok\\u0065n":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',
   ],
   ['JSON lines', `{"forecast":"Sunny","token_type":"Bearer"}\n{"refresh_token":"tool-secret"}`, false],
+  ['JSON text after prose', `Result: ${JSON.stringify(toolResult('refresh_token'))}`, false],
+  ['double-encoded JSON text', JSON.stringify(JSON.stringify(toolResult('refresh_token')))],
+  [
+    'truncated JSON text with the key in an embedded JSON string',
+    JSON.stringify({ status: 200, body: JSON.stringify(toolResult('access_token')) }).slice(0, -5),
+    false,
+  ],
   [
     'JSON text with a duplicate key',
     '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer"},"forecast":"Sunny"}',

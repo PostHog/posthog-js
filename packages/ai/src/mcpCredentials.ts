@@ -64,19 +64,38 @@ export function redactKeys(value: unknown, isCredentialKey: (normalizedKey: stri
   )
 }
 
-// Each key string in raw JSON text. Starting at a quote with a bounded length keeps the scan linear.
-const JSON_KEY = /"((?:[^"\\]|\\.){1,256})"\s*:/g
+const WHITESPACE = new Set([' ', '\t', '\n', '\r'])
 
-// `JSON.parse` keeps only the last of duplicate keys, so the raw text is scanned for credential keys too.
-function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
-  for (const [, rawKey] of text.matchAll(JSON_KEY)) {
-    let key = rawKey
+// A key as written in raw text, unescaped as many times as the text is nested, so `refresh_tok\\u0065n` matches.
+function decodeKey(raw: string): string {
+  let end = raw.length
+  while (end > 0 && raw[end - 1] === '\\') {
+    end--
+  }
+  let key = raw.slice(0, end)
+  for (let level = 0; level < 4 && key.includes('\\'); level++) {
     try {
-      key = JSON.parse(`"${rawKey}"`)
+      key = JSON.parse(`"${key}"`)
     } catch {
-      // Not a valid JSON string, so it is checked as written.
+      break
     }
-    if (isCredentialKey(normalizeKey(key))) {
+  }
+  return key
+}
+
+// Reads the quoted name before each `:`, at any nesting level (`"key":` or `\\"key\\":`). Every walk back stops at
+// the previous quote, so no character is read twice and the scan stays linear.
+function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: string) => boolean): boolean {
+  for (let colon = text.indexOf(':'); colon !== -1; colon = text.indexOf(':', colon + 1)) {
+    let close = colon - 1
+    while (close >= 0 && WHITESPACE.has(text[close])) {
+      close--
+    }
+    if (close <= 0 || text[close] !== '"') {
+      continue
+    }
+    const open = text.lastIndexOf('"', close - 1)
+    if (open !== -1 && isCredentialKey(normalizeKey(decodeKey(text.slice(open + 1, close))))) {
       return true
     }
   }
@@ -84,23 +103,17 @@ function namesCredentialKey(text: string, isCredentialKey: (normalizedKey: strin
 }
 
 // A tool can return a response body as JSON text, which would otherwise pass through as one opaque string.
-// Text without credentials is returned as written, so its formatting and large numbers survive.
+// Text that names a credential key is masked field by field when it parses, and replaced whole when it does not,
+// such as JSON lines, truncated JSON, or JSON inside prose. Other text is returned as written.
 function redactJsonString(value: string, isCredentialKey: (normalizedKey: string) => boolean, depth: number): string {
-  const trimmed = value.trimStart()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+  if (!namesCredentialKey(value, isCredentialKey)) {
     return value
   }
-  const namesCredential = namesCredentialKey(trimmed, isCredentialKey)
-  let parsed: unknown
   try {
-    parsed = JSON.parse(trimmed)
+    return JSON.stringify(redactKeys(JSON.parse(value.trim()), isCredentialKey, depth + 1))
   } catch {
-    // JSON lines or truncated JSON cannot be masked field by field, so it fails closed.
-    return namesCredential ? '[REDACTED]' : value
+    return '[REDACTED]'
   }
-  const redacted = JSON.stringify(redactKeys(parsed, isCredentialKey, depth + 1))
-  // A credential inside a nested JSON string only shows up once the outer text is parsed.
-  return namesCredential || redacted !== JSON.stringify(parsed) ? redacted : value
 }
 
 // The fields of a `@google/genai` `Tool`. A Gemini tool has no `type`, so an object with any of these
