@@ -391,8 +391,9 @@ const filters = (rules: Case[], fields: Case = {}): Case => ({
 
 const person = (key: string, operator: string, value: unknown): Case => ({ key, type: 'person', operator, value })
 
-function nested(depth: number): unknown {
-  let value: unknown = 0
+/** `innermost` inside `depth` arrays. */
+function nested(depth: number, innermost: unknown = 0): unknown {
+  let value: unknown = innermost
   for (let level = 0; level < depth; level++) {
     value = [value]
   }
@@ -863,6 +864,25 @@ describe('the config version 2 evaluator, beyond the corpora', () => {
     expect(await match(operator, filterValue, propertyValue)).toBe('missing_context')
   })
 
+  // The flags service reads JSON nested at most 127 arrays or objects deep.
+  it.each([
+    ['127 arrays around a number', nested(127), false],
+    ['127 arrays, the last one empty', nested(126, []), false],
+    ['126 arrays around an empty object', nested(126, {}), false],
+    ['128 arrays around a number', nested(128), 'missing_context'],
+    ['128 arrays, the last one empty', nested(127, []), 'missing_context'],
+    ['127 arrays around an empty object', nested(127, {}), 'missing_context'],
+  ])('compares the text of %s only up to that depth', async (_name, propertyValue, expected) => {
+    for (const [operator, filterValue] of [
+      ['exact', 'pro'],
+      ['icontains', 'pro'],
+      ['regex', 'pro'],
+      ['semver_eq', '1.2.3'],
+    ]) {
+      expect(await match(operator, filterValue, propertyValue)).toBe(expected)
+    }
+  })
+
   it.each([
     // Leading zeros, a missing patch number and one leading "v" are read.
     ['semver_eq', '3.8.0', 'v03.08', true],
@@ -1011,6 +1031,48 @@ describe('the config version 2 evaluator, beyond the corpora', () => {
     expect(await evaluateAt(now)).toMatchObject({ reason: 'targeting_match', ruleId: RULE_ID })
     expect(await evaluateAt(now - 7200)).toEqual({ outcome: 'evaluated', value: false, reason: 'no_rule_match' })
   })
+
+  it('counts every relative date of one evaluation back from the same time', async () => {
+    const config = v2.parseConfigV2(filters([targeted([person('seen', 'is_date_exact', '-1d')])]))
+    let reads = 0
+    class Clock extends Date {
+      constructor(...args: unknown[]) {
+        // Each read of the clock is one second after the read before it.
+        super(args.length === 0 ? NOW.getTime() + 1000 * reads++ : (args[0] as number))
+      }
+    }
+    vi.stubGlobal('Date', Clock)
+    try {
+      const outcome = await v2.evaluateConfigV2(config, {
+        identifier: 'visitor-42',
+        properties: { seen: '1d' },
+        propertiesComplete: true,
+        explicitExactMatching: true,
+        timeZone: 'UTC',
+      })
+
+      expect(outcome).toMatchObject({ outcome: 'evaluated', reason: 'targeting_match', ruleId: RULE_ID })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it.each(['UTC', OSLO])(
+    'leaves a relative date to the server when the current time is not a date, in %s',
+    async (timeZone) => {
+      const config = v2.parseConfigV2(filters([targeted([person('seen', 'is_date_after', '-1d')])]))
+      const outcome = await v2.evaluateConfigV2(config, {
+        identifier: 'visitor-42',
+        properties: { seen: '2025-06-15T12:00:00Z' },
+        propertiesComplete: true,
+        explicitExactMatching: true,
+        timeZone,
+        now: new Date(NaN),
+      })
+
+      expect(outcome).toMatchObject({ outcome: 'inconclusive', reason: 'missing_context' })
+    }
+  )
 
   /** The hashes an evaluation draws, when every hash is 0.25. */
   async function hashesDrawn(document: Case, identifier: string): Promise<[string, string, string][]> {

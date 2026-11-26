@@ -245,10 +245,14 @@ type Rule =
       readonly holdout: Holdout | undefined
     }
 
-/** A parsed `filters` document. `defaultValue` is `null` for a null default. */
+/**
+ * A parsed `filters` document. `defaultValue` is `null` for a null default. `comparesDates` says
+ * whether a rule has a date filter, so that evaluating the document can need the current time.
+ */
 export type ConfigV2 = {
   readonly defaultValue: FlagRecordValue
   readonly rules: readonly Rule[]
+  readonly comparesDates: boolean
 }
 
 /**
@@ -264,7 +268,8 @@ export type ConfigV2 = {
  *   false, a filter value that looks like a boolean matches by truthiness.
  * - `timeZone`: the project's timezone, as an IANA name. Dates without a UTC offset and relative
  *   dates are read in it. Absent, a filter that needs it is inconclusive.
- * - `now`: the time relative dates count back from. Absent, the current time.
+ * - `now`: the time relative dates count back from. Absent, the current time, read once per
+ *   evaluation.
  */
 export type ConfigV2Context = {
   readonly identifier: string
@@ -346,7 +351,8 @@ function readConfig(filters: unknown): ConfigV2 {
   if (new Set(rules.map((rule) => rule.id)).size !== rules.length) {
     throw malformed('rule.id')
   }
-  return { defaultValue: defaultValue as FlagRecordValue, rules }
+  const comparesDates = rules.some((rule) => rule.targeting.some((predicate) => DATE_OPERATORS.has(predicate.operator)))
+  return { defaultValue: defaultValue as FlagRecordValue, rules, comparesDates }
 }
 
 /** Rejects values that the reference's JSON reader does not produce. */
@@ -708,6 +714,10 @@ export async function evaluateConfigV2WithHash(
   }
   if (isConfigV2Unsupported(config)) {
     return config
+  }
+  if (context.now === undefined && config.comparesDates) {
+    // Every relative date of one evaluation counts back from the same time.
+    context = { ...context, now: new Date() }
   }
   const draws = new Draws(truncateIdentifier(context.identifier), draw)
   try {
@@ -1080,11 +1090,12 @@ export function jsonText(value: unknown, reason: UnresolvedFlagReason): string {
     }
     return value
   }
-  return jsonValueText(value, reason, 0)
+  return jsonValueText(value, reason, 1)
 }
 
+/** Depth counts arrays and objects, with the outermost at level 1, as in `checkJson`. */
 function jsonValueText(value: unknown, reason: UnresolvedFlagReason, depth: number): string {
-  if (depth > MAX_JSON_DEPTH) {
+  if ((Array.isArray(value) || isJsonObject(value)) && depth > MAX_JSON_DEPTH) {
     throw new InconclusiveMatchError('A value is nested too deeply to compare', reason)
   }
   if (value === null) {
@@ -1689,6 +1700,9 @@ function timeZoneOf(context: ConfigV2Context): string {
 function relativeWallClock(date: RelativeDate, context: ConfigV2Context): [WallClock, number] {
   const now = context.now ?? new Date()
   const nowMilliseconds = now.getTime()
+  if (!Number.isFinite(nowMilliseconds)) {
+    throw unusableContext('The current time is not a valid date')
+  }
   const milliseconds = ((nowMilliseconds % 1000) + 1000) % 1000
   const nowSeconds = (nowMilliseconds - milliseconds) / 1000
   const timeZone = timeZoneOf(context)
