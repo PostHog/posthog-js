@@ -40,4 +40,5 @@ export interface BrowserProducts {
     logs: LogsExtension
     surveys: SurveysExtension
     autocapture: BrowserExtension & { setElementSelectors(selectors: Set<string>): void }
+    webVitals: BrowserExtension
 }

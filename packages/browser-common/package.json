@@ -101,6 +101,9 @@
             ],
             "rageclick": [
                 "dist/rageclick.d.ts"
+            ],
+            "web-vitals": [
+                "dist/web-vitals.d.ts"
             ]
         }
     },
@@ -244,6 +247,11 @@
             "types": "./dist/rageclick.d.ts",
             "require": "./dist/rageclick.js",
             "import": "./dist/rageclick.mjs"
+        },
+        "./web-vitals": {
+            "types": "./dist/web-vitals.d.ts",
+            "require": "./dist/web-vitals.js",
+            "import": "./dist/web-vitals.mjs"
         }
     },
     "scripts": {

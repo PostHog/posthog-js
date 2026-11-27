@@ -21,11 +21,10 @@ export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
 export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
 export const ERROR_TRACKING_SUPPRESSION_RULES = '$error_tracking_suppression_rules'
 export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capture_extension_exceptions'
-export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
+export { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '@posthog/browser-common/constants'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
 export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
-export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
 export const RECORDING_REMOTE_CONFIG_TTL_MS = 1000 * 60 * 60
 // @deprecated can be removed along with eager loaded replay
