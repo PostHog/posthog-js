@@ -3111,6 +3111,7 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 | <a id="property-attachments"></a> `attachments?` | `EmailAttachment`[] | Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing. |
 | <a id="property-bcc"></a> `bcc?` | `string` \| `string`[] | Bare addresses that get a copy the other recipients never see. |
 | <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
+| <a id="property-category"></a> `category?` | `string` | The key of one of the project's message categories, such as `'newsletter'`, for the email your code rendered. A marketing category skips recipients who opted out of it or of all marketing email, fills `{{ unsubscribe_url }}` with the recipient's preferences link, and adds List-Unsubscribe headers. A marketing email can't have `cc` or `bcc`. PostHog refuses the send with `category_not_found` when the project has no category with this key, `marketing_copies_unsupported` when a marketing email has `cc` or `bcc`, and `sandbox_fields_unsupported` when a marketing email would go out from PostHog's test sender because the project has no verified sending domain. A marketing email with `attachments` is refused with `workflow_can_wait` (verified sender) or `sandbox_fields_unsupported` (test sender). |
 | <a id="property-cc"></a> `cc?` | `string` \| `string`[] | Bare addresses, such as `'finance@example.com'`, that get a copy. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
@@ -3281,9 +3282,9 @@ Renders a React element to HTML. Typed as `any` because `@react-email/render` ta
 
 ### `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates or from
-content your code rendered, reads the status of each email it sent, and sets a recipient's
-topic preferences.
+The `posthog.emails` API: sends transactional email from PostHog email templates, or
+transactional and marketing email from content your code rendered, reads the status of each
+email it sent, and sets a recipient's topic preferences.
 
 #### Methods
 
@@ -3311,7 +3312,8 @@ seconds after the send. Network errors, rate limits and an unavailable service a
 
 > **send**(`options`): `Promise`\<`SendEmailResponse`\>
 
-Queue one email, from a transactional email template or from content your code rendered.
+Queue one email: a transactional email from a PostHog email template, or a transactional or
+marketing email from content your code rendered.
 
 Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
 not that it was delivered. Network errors, rate limits, an in-flight idempotency key and

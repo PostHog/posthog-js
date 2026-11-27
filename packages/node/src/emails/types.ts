@@ -82,6 +82,19 @@ interface CodeEmailFields {
    * click tracking.
    */
   tracking?: boolean | EmailTracking
+  /**
+   * The key of one of the project's message categories, such as `'newsletter'`, for the email
+   * your code rendered. A marketing category skips recipients who opted out of it or of all
+   * marketing email, fills `{{ unsubscribe_url }}` with the recipient's preferences link, and
+   * adds List-Unsubscribe headers. A marketing email can't have `cc` or `bcc`.
+   *
+   * PostHog refuses the send with `category_not_found` when the project has no category with this
+   * key, `marketing_copies_unsupported` when a marketing email has `cc` or `bcc`, and
+   * `sandbox_fields_unsupported` when a marketing email would go out from PostHog's test sender
+   * because the project has no verified sending domain. A marketing email with `attachments` is
+   * refused with `workflow_can_wait` (verified sender) or `sandbox_fields_unsupported` (test sender).
+   */
+  category?: string
 }
 
 /** Which kinds of tracking a send with `templateKey` turns on. */
@@ -266,13 +279,14 @@ export interface EmailPreferences {
 export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null } | { data: null; error: EmailError }
 
 /**
- * The `posthog.emails` API: sends transactional email from PostHog email templates or from
- * content your code rendered, reads the status of each email it sent, and sets a recipient's
- * topic preferences.
+ * The `posthog.emails` API: sends transactional email from PostHog email templates, or
+ * transactional and marketing email from content your code rendered, reads the status of each
+ * email it sent, and sets a recipient's topic preferences.
  */
 export interface Emails {
   /**
-   * Queue one email, from a transactional email template or from content your code rendered.
+   * Queue one email: a transactional email from a PostHog email template, or a transactional or
+   * marketing email from content your code rendered.
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and

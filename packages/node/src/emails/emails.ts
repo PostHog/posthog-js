@@ -85,11 +85,12 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   html: true,
   text: true,
   react: true,
+  category: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
   fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
-  why: "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+  why: "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
   howToSend: 'send a template made in PostHog with templateId',
 }
 const CODE_FORM: SendForm = {
@@ -147,9 +148,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional email per call to the messaging send API on the app host, reads the
- * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
- * attempt of a send carries the same idempotency key.
+ * Sends one transactional or marketing email per call to the messaging send API on the app host,
+ * reads the status of a sent email, and sets a recipient's topic preferences. Owns the attempt
+ * loop, so every attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -624,7 +625,7 @@ function codeContent(send: UncheckedSend, distinctId: string | undefined): SendC
 }
 
 function codeFormFields(send: UncheckedSend): Record<string, unknown> {
-  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking, category } = send
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -633,6 +634,7 @@ function codeFormFields(send: UncheckedSend): Record<string, unknown> {
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
+    ...(category !== undefined && { category }),
   }
 }
 
