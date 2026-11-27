@@ -1412,6 +1412,14 @@ describe('PostHog React Native', () => {
         })
       })
 
+      it('should reset cached group properties when the group changes', async () => {
+        posthog.group('company', 'acme-inc', { plan: 'enterprise' })
+        posthog.group('company', 'other-inc')
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
+        expect(cachedProps).toEqual({})
+      })
+
       it('should clear group properties on reset()', async () => {
         posthog.group('company', 'acme-inc', { name: 'Acme Inc' })
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toBeTruthy()

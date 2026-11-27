@@ -135,6 +135,23 @@ describe('PostHog Core', () => {
         ],
       })
     })
+
+    it('should not send the previous group key properties for flags after the key changes', async () => {
+      posthog.groups({ company: 'company-a', project: 'project-1' })
+      posthog.setGroupPropertiesForFlags({ company: { plan: 'enterprise' }, project: { name: 'Project 1' } })
+      await waitForPromises()
+      mocks.fetch.mockClear()
+
+      posthog.group('company', 'company-b')
+      await waitForPromises()
+
+      const flagsCalls = mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))
+      expect(flagsCalls).toHaveLength(1)
+      const body = parseBody(flagsCalls[0])
+      expect(body.groups).toEqual({ company: 'company-b', project: 'project-1' })
+      // the unchanged group type keeps its properties
+      expect(body.group_properties).toEqual({ project: { name: 'Project 1' } })
+    })
   })
 
   describe('groupIdentify', () => {
