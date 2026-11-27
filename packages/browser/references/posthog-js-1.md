@@ -145,7 +145,7 @@ The snippet loads the latest SDK from PostHog and calls `init`, so you can skip 
 ```html
 <script>
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],Object.defineProperty(u,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}}),Object.defineProperty(u.people,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(){return u.toString(1)+".people (stub)"}}),o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-    posthog.init('<ph_project_api_key>', {
+    posthog.init('<ph_project_token>', {
         api_host: 'https://us.i.posthog.com',
     })
 </script>
@@ -162,7 +162,7 @@ npm install posthog-js
 ```ts
 import posthog from 'posthog-js'
 
-posthog.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+posthog.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com' })
 ```
 
 ### Capture an event
@@ -176,6 +176,16 @@ posthog.capture('signed_up', { plan: 'pro' })
 ```ts
 posthog.identify('user_123', { email: 'user@example.com' })
 ```
+
+### Track across marketing website and app
+
+Install PostHog on both your marketing site and your web app to follow visitors from landing through signup and product usage.
+
+PostHog sets a cross-subdomain cookie by default, so visitors moving between `example.com` and `app.example.com` keep the same session and identity. For tracking across unrelated domains, see the [cross-website tracking tutorial](https://posthog.com/tutorials/cross-domain-tracking).
+
+### Replay triggers
+
+Configure replay triggers in your [project settings](https://app.posthog.com/project/settings) to start or pause session recording on matching URLs. You can also set up event triggers so recording starts immediately before PostHog queues a matching event.
 
 ### Pin the snippet version
 
@@ -198,7 +208,7 @@ The `files` object in the manifest maps each asset to its hash. Store the hashes
     src="https://us-assets.i.posthog.com/static/<SDK_VERSION>/loader.js"
     integrity="sha384-<LOADER_SHA384_BASE64_DIGEST>"
     data-core-integrity="sha384-<ARRAY_SHA384_BASE64_DIGEST>"
-    data-project-token="<ph_project_api_key>"
+    data-project-token="<ph_project_token>"
     crossorigin="anonymous"
 ></script>
 ```
@@ -253,10 +263,14 @@ posthog.capture('$feature_interaction', {
 posthog-js already skips browsers whose user agent contains `Chrome-Lighthouse`, ignoring case. Some tools built on Lighthouse, such as Ahrefs and Semrush, send an ordinary browser user agent instead, so PostHog can't tell them apart from real visitors. If one of them inflates your numbers, add a string that only its user agent contains to `custom_blocked_useragents`. The SDK sends nothing from a browser whose user agent contains one of these strings, ignoring case, so never add a full browser user agent: that also blocks real visitors on the same browser and platform.
 
 ```ts
-posthog.init('<ph_project_api_key>', {
+posthog.init('<ph_project_token>', {
     custom_blocked_useragents: ['example-crawler'],
 })
 ```
+
+#### Removing already ingested events
+
+You can't easily delete already ingested events, so add unwanted user agents to the [internal and test accounts filter](https://app.posthog.com/settings/project-customization#internal-user-filtering) in your project settings to exclude them from analytics.
 
 ### Use `posthog` in the browser console
 
@@ -283,7 +297,7 @@ Construct a new instance only when you need to manage a separate SDK instance ma
 
 ```js
 const instance = new PostHog()
-instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+instance.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com' })
 ```
 
 ### `PostHog.init`
@@ -315,15 +329,15 @@ All new instances are added to the main posthog object as sub properties (such a
 
 ```js
 // basic initialization
-posthog.init('<ph_project_api_key>', {
+posthog.init('<ph_project_token>', {
     api_host: '<ph_client_api_host>'
 })
 ```
 
 ```js
 // multiple instances
-posthog.init('<ph_project_api_key>', {}, 'project1')
-posthog.init('<ph_project_api_key>', {}, 'project2')
+posthog.init('<ph_project_token>', {}, 'project1')
+posthog.init('<ph_project_token>', {}, 'project2')
 ```
 
 ### `PostHog.set_config`
@@ -6164,7 +6178,7 @@ Configuration options for the PostHog JavaScript SDK.
 
 #### See
 
-https://posthog.com/docs/libraries/js#config
+https://posthog.com/docs/libraries/js/config
 
 #### Properties
 
@@ -6272,7 +6286,7 @@ https://posthog.com/docs/libraries/js#config
 | <a id="property-opt_out_persistence_by_default"></a> `opt_out_persistence_by_default?` | `boolean` | Determines if users should be opted out of browser data storage by this PostHog instance by default, requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`. **Default** `false` |
 | <a id="property-opt_out_useragent_filter"></a> `opt_out_useragent_filter` | `boolean` | Determines if users should be opted out of user agent filtering such as googlebot or other bots. If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events, but will process all events as if they were from a browser. When the filter drops events, a one-time warning is written to the console (even without debug mode). The filter applies to events only; logs sent with `captureLog` bypass it. Set this to `true` behind a test flag for end-to-end tests (Playwright, Puppeteer). **Default** `false` |
 | <a id="property-override_display_language"></a> `override_display_language?` | `string` \| `null` | Display language override for Product Tours. Must be a valid BCP 47 language code. In the future this will be used for Surveys and other products that deliver in-app experiences to end-users. |
-| <a id="property-persistence"></a> `persistence` | `"localStorage"` \| `"cookie"` \| `"memory"` \| `"localStorage+cookie"` \| `"sessionStorage"` | Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details. PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser. - `'localStorage+cookie'` stores essential state, such as the distinct ID, device ID and session ID, in a cookie, and other data in `localStorage`. `cookie_persisted_properties` adds custom properties to the cookie. - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors. - `'localStorage'` stores everything in `localStorage`. - `'sessionStorage'` stores everything in `sessionStorage`. - `'memory'` stores everything in page memory, so it lasts for one pageview. Call `set_config` to change the mode after `init`, for example when a user accepts cookies. **Default** `'localStorage+cookie'` |
+| <a id="property-persistence"></a> `persistence` | `"localStorage"` \| `"cookie"` \| `"memory"` \| `"localStorage+cookie"` \| `"sessionStorage"` | Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js/persistence) for details. PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser. - `'localStorage+cookie'` stores essential state, such as the distinct ID, device ID and session ID, in a cookie, and other data in `localStorage`. `cookie_persisted_properties` adds custom properties to the cookie. - `'cookie'` stores everything in a cookie. Cookies hold about 4KB, so many feature flags can cause `431 Request Header Fields Too Large` errors. - `'localStorage'` stores everything in `localStorage`. - `'sessionStorage'` stores everything in `sessionStorage`. - `'memory'` stores everything in page memory, so it lasts for one pageview. Call `set_config` to change the mode after `init`, for example when a user accepts cookies. **Default** `'localStorage+cookie'` |
 | <a id="property-persistence_name"></a> `persistence_name` | `string` | The name for the super properties persistent store **Default** `''` |
 | <a id="property-persistence_save_debounce_ms"></a> `persistence_save_debounce_ms?` | `number` | Coalesce rapid `Persistence.save()` calls into a single write. Set to a positive number (milliseconds) to debounce writes to localStorage / cookie by that window. The in-memory `props` object is always updated synchronously so within-tab reads see the latest values immediately. Cross-tab `storage` events (which carry the full persistence value as a payload) are reduced proportionally to the debounce window. Pending writes are flushed on `beforeunload` and `pagehide` so no state is lost on tab close. The cross-tab visibility delay is bounded by the configured window. Defaults to `0` (no debouncing, write synchronously) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point to reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30` config default opts into `250` automatically. **Default** `0` |
 | <a id="property-person_profiles"></a> `person_profiles?` | `"always"` \| `"never"` \| `"identified_only"` | You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting. There are three options: - `person_profiles: 'always'` - we will process persons data for all events - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`. - `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.unsetPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles. **Default** `'identified_only'` |

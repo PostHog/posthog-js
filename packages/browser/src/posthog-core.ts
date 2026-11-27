@@ -772,7 +772,7 @@ export class PostHog implements PostHogInterface {
      * @example
      * ```js
      * const instance = new PostHog()
-     * instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+     * instance.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com' })
      * ```
      */
     constructor() {
@@ -835,7 +835,7 @@ export class PostHog implements PostHogInterface {
      * @example
      * ```js
      * // basic initialization
-     * posthog.init('<ph_project_api_key>', {
+     * posthog.init('<ph_project_token>', {
      *     api_host: '<ph_client_api_host>'
      * })
      * ```
@@ -843,8 +843,8 @@ export class PostHog implements PostHogInterface {
      * @example
      * ```js
      * // multiple instances
-     * posthog.init('<ph_project_api_key>', {}, 'project1')
-     * posthog.init('<ph_project_api_key>', {}, 'project2')
+     * posthog.init('<ph_project_token>', {}, 'project1')
+     * posthog.init('<ph_project_token>', {}, 'project2')
      * ```
      *
      * @public
