@@ -44,6 +44,32 @@ const CONFIG_V2_FLAGS_CACHE_FIELD = 'flags_v2'
 
 type FlagDefinitionCacheDataWithConfigV2 = FlagDefinitionCacheData & { [CONFIG_V2_FLAGS_CACHE_FIELD]?: unknown }
 
+/** The definitions of cache data: `flags`, then the ones of another config version. */
+function definitionsOf(flagData: FlagDefinitionCacheInput): PostHogFeatureFlag[] {
+  const configV2Flags = (flagData as FlagDefinitionCacheDataWithConfigV2)[CONFIG_V2_FLAGS_CACHE_FIELD]
+  return Array.isArray(configV2Flags) ? [...flagData.flags, ...(configV2Flags as PostHogFeatureFlag[])] : flagData.flags
+}
+
+/**
+ * What local evaluation reads from cache data, as JSON with sorted object members, so data that a
+ * cache provider stores in another member order, or under one of the two spellings, is the same.
+ */
+function definitionsFingerprint(flagData: FlagDefinitionCacheInput): string {
+  return JSON.stringify(
+    {
+      flags: definitionsOf(flagData),
+      group_type_mapping: flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {},
+      cohorts: flagData.cohorts,
+      property_matching_version: flagData.property_matching_version ?? flagData.propertyMatchingVersion,
+      minimal_flag_called_events: (flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true,
+    },
+    (_key, value: unknown) =>
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : value
+  )
+}
+
 const SIXTY_SECONDS = 60 * 1000
 
 // A definition with no runtime, or one from a server that does not know the field, reports the
@@ -202,6 +228,9 @@ class FeatureFlagsPoller {
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
+  // The fingerprint of the definitions that `flagsEtag` validates, which a cache read compares
+  // with what it installs. A string, so a provider that changes cache data in place cannot change it.
+  private flagsEtagDefinitions?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
@@ -968,11 +997,7 @@ class FeatureFlagsPoller {
   }
 
   private updateFlagState(flagData: FlagDefinitionCacheInput): void {
-    // The cache keeps definitions of another config version apart; evaluation reads them all.
-    const configV2Flags = (flagData as FlagDefinitionCacheDataWithConfigV2)[CONFIG_V2_FLAGS_CACHE_FIELD]
-    const allFlags = Array.isArray(configV2Flags)
-      ? [...flagData.flags, ...(configV2Flags as PostHogFeatureFlag[])]
-      : flagData.flags
+    const allFlags = definitionsOf(flagData)
     const flags = this.filterFlagsByEvaluationContexts(allFlags)
     const featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
@@ -1071,7 +1096,15 @@ class FeatureFlagsPoller {
     try {
       const cached = await this.cacheProvider.getFlagDefinitions()
       if (cached) {
+        // The ETag validates the definitions this client fetched. A 304 for it would keep other
+        // definitions read from the cache, such as the legacy feed an older release wrote, until
+        // the feed changes.
+        const fingerprint = this.flagsEtag === undefined ? undefined : definitionsFingerprint(cached)
         this.updateFlagState(cached)
+        if (fingerprint !== this.flagsEtagDefinitions) {
+          this.flagsEtag = undefined
+          this.flagsEtagDefinitions = undefined
+        }
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
         // Warn only about flags this instance actually evaluates locally; context-filtered flags
@@ -1313,6 +1346,10 @@ class FeatureFlagsPoller {
           }
 
           this.updateFlagState(flagData)
+          // Taken before the provider receives flagData, which it may keep and change. Only a cache
+          // read compares it, so a client without a provider does not compute it.
+          this.flagsEtagDefinitions =
+            this.cacheProvider && this.flagsEtag !== undefined ? definitionsFingerprint(flagData) : undefined
           // Set timestamp to when definitions were actually fetched from server
           this.flagDefinitionsLoadedAt = Date.now()
           this.clearBackoff()
@@ -1376,7 +1413,9 @@ class FeatureFlagsPoller {
       throw new ClientError('A secretKey or personalApiKey is required to fetch feature flag definitions from PostHog.')
     }
 
-    const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
+    // v=2 selects the feed with config version 2 definitions. For a project without them, and on
+    // a server that ignores v, the body is the same.
+    const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts&v=2`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
 
