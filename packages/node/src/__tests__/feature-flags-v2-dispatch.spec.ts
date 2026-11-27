@@ -635,12 +635,16 @@ function feedClient(remote?: Json): ReturnType<typeof createClient> {
 /** A local record in the shape of a corpus `expected` member. */
 function recordAsExpectation(record: v2.ConfigV2LocalResult['record']): Json {
   const expectation: Json = { status: 'success', value: record.value, reason: record.reason?.code }
-  if (record.metadata.ruleId !== undefined) {
-    expectation.rule = {
-      id: record.metadata.ruleId,
-      rule_type: record.metadata.ruleType,
-      index: record.reason?.conditionIndex,
-    }
+  const rule = {
+    id: record.metadata.ruleId,
+    rule_type: record.metadata.ruleType,
+    index: record.reason?.conditionIndex,
+  }
+  // The evaluator sets all three rule fields or none of them.
+  const present = Object.values(rule).filter((field) => field !== undefined).length
+  expect(present === 0 || present === 3, `a partial rule in ${JSON.stringify(record)}`).toBe(true)
+  if (present === 3) {
+    expectation.rule = rule
   }
   if (record.metadata.variantKey !== undefined) {
     expectation.variant = record.metadata.variantKey
@@ -1135,10 +1139,9 @@ async function reachable(testCase: Case): Promise<boolean> {
     return false
   }
   const expected = testCase.expected
-  const rule =
-    outcome.ruleId === undefined
-      ? undefined
-      : { id: outcome.ruleId, rule_type: outcome.ruleType, index: outcome.ruleIndex }
+  // A partial rule keeps the fields it has, so it never equals a corpus rule or no rule.
+  const fields = { id: outcome.ruleId, rule_type: outcome.ruleType, index: outcome.ruleIndex }
+  const rule = Object.values(fields).some((field) => field !== undefined) ? fields : undefined
   return (
     JSON.stringify([outcome.value, outcome.reason, rule, outcome.variantKey]) ===
     JSON.stringify([expected.value, expected.reason, expected.rule, expected.variant])
