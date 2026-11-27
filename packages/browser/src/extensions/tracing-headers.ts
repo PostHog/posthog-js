@@ -106,6 +106,8 @@ export class TracingHeaders implements Extension {
         }
     }
 
+    private _getSessionManager = () => this._instance.sessionManager
+
     private _startCapturing = () => {
         const { hostnames, traceparentTargets } = this._syncForPatch()
         if (!hostnames && !traceparentTargets) {
@@ -129,7 +131,8 @@ export class TracingHeaders implements Extension {
                 this._hostnamesForPatch,
                 () => this._instance.get_distinct_id(),
                 this._instance.sessionManager,
-                this._traceparentTargetsForPatch
+                this._traceparentTargetsForPatch,
+                this._getSessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
@@ -137,7 +140,8 @@ export class TracingHeaders implements Extension {
                 this._hostnamesForPatch,
                 () => this._instance.get_distinct_id(),
                 this._instance.sessionManager,
-                this._traceparentTargetsForPatch
+                this._traceparentTargetsForPatch,
+                this._getSessionManager
             )
         }
     }

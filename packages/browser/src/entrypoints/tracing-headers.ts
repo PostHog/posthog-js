@@ -8,6 +8,7 @@ import type {
     TraceparentTargets,
     TracingHeadersDistinctId,
     TracingHeadersHostnames,
+    TracingHeadersSessionManagerProvider,
 } from '../extensions/tracing-headers-types'
 
 const SESSION_ID_HEADER = 'X-POSTHOG-SESSION-ID'
@@ -131,10 +132,15 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
 const getDistinctId = (distinctId: TracingHeadersDistinctId): string | undefined =>
     isFunction(distinctId) ? distinctId() : distinctId
 
+const sessionManagerProvider = (
+    sessionManager: SessionIdManager | undefined,
+    getSessionManager: TracingHeadersSessionManagerProvider | undefined
+): TracingHeadersSessionManagerProvider => (isFunction(getSessionManager) ? getSessionManager : () => sessionManager)
+
 const addTracingHeaders = (
     hostnames: TracingHeadersHostnames,
     distinctId: TracingHeadersDistinctId,
-    sessionManager: SessionIdManager | undefined,
+    getSessionManager: TracingHeadersSessionManagerProvider,
     url: string,
     headers: Headers
 ): boolean => {
@@ -167,6 +173,7 @@ const addTracingHeaders = (
         }
         hasAddedHeaders = true
     }
+    const sessionManager = getSessionManager()
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         headers.set(SESSION_ID_HEADER, sessionId)
@@ -313,8 +320,10 @@ const patchFetch = (
     hostnames: TracingHeadersHostnames,
     distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager,
-    traceparentTargets?: TraceparentTargets
+    traceparentTargets?: TraceparentTargets,
+    getSessionManager?: TracingHeadersSessionManagerProvider
 ): (() => void) => {
+    const currentSessionManager = sessionManagerProvider(sessionManager, getSessionManager)
     // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -336,7 +345,7 @@ const patchFetch = (
                         fetchArgs = [req]
                         const tracingHeaders = new Headers()
                         try {
-                            addTracingHeaders(hostnames, distinctId, sessionManager, req.url, tracingHeaders)
+                            addTracingHeaders(hostnames, distinctId, currentSessionManager, req.url, tracingHeaders)
                             tracingHeaders.forEach((value, name) => req.headers.set(name, value))
                         } catch {
                             // Send the request without tracing headers.
@@ -347,7 +356,7 @@ const patchFetch = (
                         const addedTracingHeaders = addTracingHeaders(
                             hostnames,
                             distinctId,
-                            sessionManager,
+                            currentSessionManager,
                             requestUrl,
                             headers
                         )
@@ -373,8 +382,10 @@ const patchXHR = (
     hostnames: TracingHeadersHostnames,
     distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager,
-    traceparentTargets?: TraceparentTargets
+    traceparentTargets?: TraceparentTargets,
+    getSessionManager?: TracingHeadersSessionManagerProvider
 ): (() => void) => {
+    const currentSessionManager = sessionManagerProvider(sessionManager, getSessionManager)
     // The app sets its own XHR headers after open(), and setRequestHeader appends rather than replaces,
     // so the request url is remembered in open() and traceparent is only decided and set in send(), against
     // the live target list, unless the app set one in between.
@@ -406,7 +417,7 @@ const patchXHR = (
                 const requestUrl = getRequestUrl(url)
                 if (requestUrl) {
                     try {
-                        addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
+                        addTracingHeaders(hostnames, distinctId, currentSessionManager, requestUrl, headers)
                     } catch {
                         // Do not let tracing header preparation break the host app's XHR.
                         headers = new Headers()

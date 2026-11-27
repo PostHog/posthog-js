@@ -33,6 +33,7 @@ import type {
     TraceparentTargets,
     TracingHeadersDistinctId,
     TracingHeadersHostnames,
+    TracingHeadersSessionManagerProvider,
 } from '../extensions/tracing-headers-types'
 import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
 
@@ -326,13 +327,15 @@ interface PostHogExtensions {
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
             sessionManager?: SessionIdManager,
-            traceparentTargets?: TraceparentTargets
+            traceparentTargets?: TraceparentTargets,
+            getSessionManager?: TracingHeadersSessionManagerProvider
         ) => () => void
         _patchXHR: (
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
             sessionManager?: SessionIdManager,
-            traceparentTargets?: TraceparentTargets
+            traceparentTargets?: TraceparentTargets,
+            getSessionManager?: TracingHeadersSessionManagerProvider
         ) => () => void
     }
     initDeadClicksAutocapture?: (

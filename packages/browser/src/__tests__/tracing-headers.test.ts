@@ -2,6 +2,9 @@ import { isNull, isUndefined } from '@posthog/core'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import patchFns from '../entrypoints/tracing-headers'
 import { TracingHeaders } from '../extensions/tracing-headers'
+import type { PostHog } from '../posthog-core'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { createPosthogInstance } from './helpers/posthog-instance'
 
 class TestRequest {
     body?: BodyInit | null
@@ -883,6 +886,183 @@ describe('tracing headers', () => {
             expect((tracingHeaders as any)._syncHostnamesForPatch()).toBeUndefined()
             config.tracing_headers = ['example.com']
             expect((tracingHeaders as any)._syncHostnamesForPatch()).toBe(hostnames)
+        })
+    })
+    describe('session manager provider', () => {
+        const staleSessionManager = {
+            checkAndGetSessionAndWindowId: vi.fn(() => ({ sessionId: 'stale-session', windowId: 'stale-window' })),
+        }
+
+        it('reads the session manager per fetch, ahead of the snapshot argument', async () => {
+            const originalFetch = mockFetch()
+            let current: typeof sessionManager | undefined = sessionManager
+            restoreFetchPatch = patchFns._patchFetch(
+                ['example.com'],
+                'distinct-id',
+                staleSessionManager as any,
+                undefined,
+                () => current as any
+            )
+
+            await window.fetch('https://example.com/path')
+            const headers = new Headers(originalFetch.mock.calls[0][1]?.headers)
+            expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+            expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+
+            current = undefined
+            await window.fetch('https://example.com/path')
+            const headersWithoutManager = new Headers(originalFetch.mock.calls[1][1]?.headers)
+            expect(headersWithoutManager.get('X-POSTHOG-DISTINCT-ID')).toBe('distinct-id')
+            expect(headersWithoutManager.get('X-POSTHOG-SESSION-ID')).toBeNull()
+            expect(headersWithoutManager.get('X-POSTHOG-WINDOW-ID')).toBeNull()
+            expect(staleSessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        })
+
+        it('reads the session manager per XHR, ahead of the snapshot argument', () => {
+            const setRequestHeaderSpy = vi
+                .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                .mockImplementation(() => {})
+            let current: typeof sessionManager | undefined = undefined
+            restoreXHRPatch = patchFns._patchXHR(
+                ['example.com'],
+                'distinct-id',
+                staleSessionManager as any,
+                undefined,
+                () => current as any
+            )
+
+            new XMLHttpRequest().open('GET', 'https://example.com/path')
+            expect(setRequestHeaderSpy.mock.calls).toEqual([['X-POSTHOG-DISTINCT-ID', 'distinct-id']])
+
+            current = sessionManager
+            new XMLHttpRequest().open('GET', 'https://example.com/path')
+            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-SESSION-ID', 'session-id')
+            expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-WINDOW-ID', 'window-id')
+        })
+
+        // A tracing-headers bundle that predates the provider calls methods on its third argument,
+        // so that position must stay a manager (or undefined), never a function.
+        it('keeps the manager snapshot in its original position and appends the provider', () => {
+            const patchXHR = vi.fn((..._args: unknown[]) => () => {})
+            const patchFetch = vi.fn((..._args: unknown[]) => () => {})
+            const extensions = ((window as any).__PosthogExtensions__ = (window as any).__PosthogExtensions__ || {})
+            const originalPatchFns = extensions.tracingHeadersPatchFns
+            extensions.tracingHeadersPatchFns = { _patchXHR: patchXHR, _patchFetch: patchFetch }
+            try {
+                const instance: Record<string, unknown> = {
+                    config: { tracing_headers: ['example.com'] },
+                    get_distinct_id: () => 'id',
+                    sessionManager,
+                }
+                new TracingHeaders(instance as any).startIfEnabledOrStop()
+
+                ;[patchXHR, patchFetch].forEach((patchFn) => {
+                    const [, , snapshot, , provider] = patchFn.mock.calls[0] as any[]
+                    expect(snapshot).toBe(sessionManager)
+                    expect(provider()).toBe(sessionManager)
+                    instance.sessionManager = undefined
+                    expect(provider()).toBeUndefined()
+                    instance.sessionManager = sessionManager
+                })
+            } finally {
+                extensions.tracingHeadersPatchFns = originalPatchFns
+            }
+        })
+    })
+
+    describe('session manager replaced at runtime (cookieless on_reject)', () => {
+        const host = 'api.example.com'
+        const url = `https://${host}/path`
+        let posthog: PostHog | undefined
+
+        const setup = async (config: Partial<PostHog['config']> = {}): Promise<PostHog> => {
+            posthog = await createPosthogInstance(uuidv7(), {
+                cookieless_mode: 'on_reject',
+                tracing_headers: [host],
+                ...config,
+            })
+            return posthog
+        }
+
+        const fetchHeaders = async (originalFetch: ReturnType<typeof mockFetch>): Promise<Headers> => {
+            originalFetch.mockClear()
+            await window.fetch(url)
+            const call = originalFetch.mock.calls.find(([input]) => input === url)
+            return new Headers(call?.[1]?.headers)
+        }
+
+        const xhrHeaders = (): Record<string, string> => {
+            const setRequestHeaderSpy = vi
+                .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
+                .mockImplementation(() => {})
+            new XMLHttpRequest().open('GET', url)
+            const headers: Record<string, string> = {}
+            setRequestHeaderSpy.mock.calls.forEach(([name, value]) => (headers[name] = value))
+            setRequestHeaderSpy.mockRestore()
+            return headers
+        }
+
+        const liveIds = (instance: PostHog) => instance.sessionManager!.checkAndGetSessionAndWindowId(true)
+
+        afterEach(() => {
+            posthog?.set_config({ tracing_headers: [] })
+            posthog = undefined
+        })
+
+        it('sends the current session after opting in from pending consent', async () => {
+            const originalFetch = mockFetch()
+            const instance = await setup()
+
+            instance.opt_in_capturing()
+
+            const headers = await fetchHeaders(originalFetch)
+            expect(headers.get('X-POSTHOG-SESSION-ID')).toBe(liveIds(instance).sessionId)
+            expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe(liveIds(instance).windowId)
+        })
+
+        it('sends the session created by opting in after starting rejected', async () => {
+            const originalFetch = mockFetch()
+            const instance = await setup({ opt_out_capturing_by_default: true })
+
+            const rejectedHeaders = await fetchHeaders(originalFetch)
+            expect(rejectedHeaders.get('X-POSTHOG-SESSION-ID')).toBeNull()
+            expect(rejectedHeaders.get('X-POSTHOG-WINDOW-ID')).toBeNull()
+
+            instance.opt_in_capturing()
+
+            const { sessionId, windowId } = liveIds(instance)
+            const headers = await fetchHeaders(originalFetch)
+            expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe(instance.get_distinct_id())
+            expect(headers.get('X-POSTHOG-SESSION-ID')).toBe(sessionId)
+            expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe(windowId)
+            expect(xhrHeaders()).toMatchObject({
+                'X-POSTHOG-SESSION-ID': sessionId,
+                'X-POSTHOG-WINDOW-ID': windowId,
+            })
+        })
+
+        it('stops sending session headers after opting out, and resumes on the next opt in', async () => {
+            const originalFetch = mockFetch()
+            const instance = await setup()
+            instance.opt_in_capturing()
+            expect((await fetchHeaders(originalFetch)).get('X-POSTHOG-SESSION-ID')).toBe(liveIds(instance).sessionId)
+
+            instance.opt_out_capturing()
+
+            expect(instance.sessionManager).toBeUndefined()
+            const optedOutHeaders = await fetchHeaders(originalFetch)
+            expect(optedOutHeaders.get('X-POSTHOG-SESSION-ID')).toBeNull()
+            expect(optedOutHeaders.get('X-POSTHOG-WINDOW-ID')).toBeNull()
+            const optedOutXhrHeaders = xhrHeaders()
+            expect(optedOutXhrHeaders['X-POSTHOG-SESSION-ID']).toBeUndefined()
+            expect(optedOutXhrHeaders['X-POSTHOG-WINDOW-ID']).toBeUndefined()
+
+            instance.opt_in_capturing()
+
+            const { sessionId, windowId } = liveIds(instance)
+            const headers = await fetchHeaders(originalFetch)
+            expect(headers.get('X-POSTHOG-SESSION-ID')).toBe(sessionId)
+            expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe(windowId)
         })
     })
 })
