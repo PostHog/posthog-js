@@ -208,7 +208,8 @@ export function resolveSession(
  * that call, because a desktop app can keep one process alive across many chats.
  * Only tool calls count: a client polling listings must not keep a chat open.
  * Only the most recent call holds the session open, so a call that never settles
- * cannot stop the connection from rotating.
+ * cannot stop the connection from rotating. Every call's end restarts the idle clock,
+ * including an older call that finishes after a newer one.
  * Token and transport ids live as long as the client replays them, so they
  * never rotate: that would split a session that is still alive.
  *
@@ -229,9 +230,9 @@ export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestH
   const callId = newPrefixedId('call')
   connection.runningToolCall = callId
   return () => {
+    connection.lastToolCallEnded = Date.now()
     if (connection.runningToolCall === callId) {
       connection.runningToolCall = undefined
-      connection.lastToolCallEnded = Date.now()
     }
   }
 }

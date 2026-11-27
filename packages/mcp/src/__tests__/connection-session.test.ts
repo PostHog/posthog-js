@@ -138,6 +138,23 @@ describe('one-client connection session rotation', () => {
     expectGroups('aaa')
   })
 
+  it('restarts the idle clock when an earlier call ends after a later one', async () => {
+    gate = new Promise((resolve) => (release = resolve))
+    const { server } = createStdioServer()
+    const call = (args: Record<string, unknown>): Promise<unknown> =>
+      server._requestHandlers.get('tools/call')!({ method: 'tools/call', params: { name: 'work', arguments: args } })
+
+    const earlier = call({ block: true })
+    await call({})
+    vi.advanceTimersByTime(40 * 60_000)
+    release()
+    await earlier
+    await call({})
+    await settle()
+
+    expectGroups('aaa')
+  })
+
   it('rotates when an earlier call never settles but the latest call ended', async () => {
     gate = new Promise(() => {})
     const { server } = createStdioServer()
