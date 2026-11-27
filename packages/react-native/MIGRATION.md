@@ -16,6 +16,7 @@ You need to change code or configuration if your app does any of these:
 - uses the `useFeatureFlag()`, `useFeatureFlags()` or `useFeatureFlagWithPayload()` hooks (see [Feature flag hooks](#feature-flag-hooks))
 - passes `sendEvent` to `getFeatureFlag()`, `getFeatureFlagResult()` or `isFeatureEnabled()`
 - calls `getAllFeatureFlags()`, which returns `undefined` until flags are cached (see [`getAllFeatureFlags`](#getallfeatureflags))
+- checks `getFeatureFlag(key) === false` or `isFeatureEnabled(key) === undefined` for a flag that isn't in the loaded flags (see [Missing flags](#missing-flags))
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
 - reads `enabled` from `getFeatureFlagResult()` or `getAllFeatureFlags()` for a flag whose variant is an empty string, or filters on `$active_feature_flags`
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header the SDK sets in `requestHeaders` and expects capture requests to carry it
@@ -142,6 +143,22 @@ const payloads = Object.fromEntries(
   results.filter((r) => r.enabled && r.payload !== null).map((r) => [r.key, r.payload])
 )
 ```
+
+### Missing flags
+
+For a flag that isn't in the loaded flags, `getFeatureFlag()` returns `undefined` and `isFeatureEnabled()` returns `false`, like posthog-ios, posthog-android and posthog_flutter:
+
+| Call                        | 4.x before flags load | 4.x after a load that returned flags | 5.0                                        |
+| --------------------------- | --------------------- | ------------------------------------ | ------------------------------------------ |
+| `getFeatureFlag(key)`       | `undefined`           | `false`                              | `undefined`                                |
+| `isFeatureEnabled(key)`     | `undefined`           | `false`                              | `false`, or `defaultValue` if you pass one |
+| `getFeatureFlagResult(key)` | `undefined`           | `undefined`                          | `undefined`                                |
+
+This also covers a failed first load and globally inactive flags, which `/flags` leaves out.
+A flag that has a value, including `false`, reads as before.
+
+To tell a flag that is off from one with no value, use `getFeatureFlagResult(key)`, which returns `undefined` only when there's no value.
+Replace `getFeatureFlag(key) === false` with `getFeatureFlagResult(key)?.enabled === false` where you mean "off", and `isFeatureEnabled(key) === undefined` with `getFeatureFlagResult(key) === undefined` where you mean "no value yet".
 
 ### Payloads
 

@@ -40,7 +40,7 @@ export type PostHogFeatureFlagOptions = {
 
 /** Per-call settings for `isFeatureEnabled()`. */
 export type PostHogIsFeatureEnabledOptions = PostHogFeatureFlagOptions & {
-  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. Defaults to `false`. */
   defaultValue?: boolean
 }
 

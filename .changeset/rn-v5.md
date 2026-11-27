@@ -19,6 +19,8 @@
 - **Breaking:** leave disabled flags and flags whose variant is an empty string out of `$active_feature_flags`, like posthog-ios and posthog-android
 - **Breaking:** keep a string payload in `bootstrap.featureFlagPayloads` as a string instead of parsing it as JSON, like posthog-ios 4.0 — pass decoded values, such as `{ color: 'blue' }` instead of `'{"color":"blue"}'`
 - **Breaking:** `getAllFeatureFlags()` returns `undefined` instead of an empty list before flags first load — use `posthog.getAllFeatureFlags() ?? []` where you only iterate
+- **Breaking:** `getFeatureFlag()` returns `undefined` instead of `false` for a flag that isn't in the loaded flags, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key)?.enabled === false` to check that a flag is off
+- **Breaking:** `isFeatureEnabled()` without a `defaultValue` returns `false` instead of `undefined` when the flag has no value, such as before flags load, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key) === undefined` to check that a flag has no value yet
 - **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
 - **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
@@ -49,3 +51,4 @@
 - Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts in the app's cache directory, which isn't backed up, when the SDK uses Expo's file system; with `persistence: 'memory'`, `customStorage` or AsyncStorage they're kept only in memory
 - Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
+- Send the device time zone as `timezone` with `/flags` requests, like posthog-ios and posthog-android
