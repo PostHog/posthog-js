@@ -270,6 +270,16 @@ describe('emails', () => {
       },
     ],
     [
+      'a message category',
+      { templateKey: 'weekly-digest', subject: 'Your week', html: '<p>News</p>', category: 'newsletter' },
+      {
+        template_key: 'weekly-digest',
+        subject: 'Your week',
+        html: '<p>News</p>',
+        category: 'newsletter',
+      },
+    ],
+    [
       'an empty reply-to list, which it leaves out',
       {
         templateKey: 'password-reset',
@@ -1548,6 +1558,7 @@ describe('emails', () => {
       ['subject on the template form', { templateId: TEMPLATE_ID, subject: 'Hi' }, 'subject'],
       ['html on the template form', { templateId: TEMPLATE_ID, html: '<p>Hi</p>' }, 'html'],
       ['text on the template form', { templateId: TEMPLATE_ID, text: 'Hi' }, 'text'],
+      ['a category on the template form', { templateId: TEMPLATE_ID, category: 'newsletter' }, 'category'],
       [
         'captureEngagement on the template form',
         { templateId: TEMPLATE_ID, captureEngagement: false },
@@ -1641,13 +1652,13 @@ describe('emails', () => {
       [
         'a sender on the template form',
         { templateId: TEMPLATE_ID, from: 'Acme <hi@example.com>' },
-        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
         'Remove from, or send content from your code with templateKey.',
       ],
       [
         'engagement capture on the template form',
         { templateId: TEMPLATE_ID, captureEngagement: true },
-        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
         'Remove captureEngagement, or send content from your code with templateKey.',
       ],
       [

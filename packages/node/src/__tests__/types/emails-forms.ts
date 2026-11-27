@@ -31,6 +31,7 @@ export const forms: SendEmailOptions[] = [
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: false },
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: { clicks: true } },
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', sensitive: false },
+  { to, templateKey: 'weekly-digest', subject: 'Your week', html: '<p>News</p>', category: 'newsletter' },
   {
     to,
     templateKey: 'invite',
@@ -55,6 +56,8 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateId, sensitive: false },
   // @ts-expect-error tracking takes only opens, clicks and engagement
   { to, templateKey: 'welcome', subject: 'Welcome', html: '<p>Hi</p>', tracking: { open: false } },
+  // @ts-expect-error a template made in PostHog keeps its own category
+  { to, templateId, category: 'newsletter' },
   // @ts-expect-error a template made in PostHog keeps its own sender
   { to, templateId, from: 'security@example.com' },
   // @ts-expect-error the code form needs html, text or both
