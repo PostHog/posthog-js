@@ -29,6 +29,7 @@
         "test:electron-release": "node --test scripts/__tests__/electron-release.test.mjs",
         "test:dependency-cooldown": "node --test scripts/__tests__/dependency-cooldown.test.mjs",
         "test:build-graph": "node --test scripts/__tests__/build-graph.test.mjs",
+        "test:sdk-reference-generator": "node --test scripts/__tests__/generate-sdk-reference.test.mjs",
         "test:dev-watch": "node --test scripts/test-dev-watch.mjs",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
