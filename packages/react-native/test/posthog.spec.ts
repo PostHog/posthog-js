@@ -242,6 +242,40 @@ describe('PostHog React Native', () => {
     expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual(expected)
   })
 
+  it('keeps cached surveys when the remote config request fails', async () => {
+    const cachedSurveys = [{ id: 'survey-1' }]
+    const storageCache: Record<string, string> = {
+      '.posthog-rn.json': JSON.stringify({
+        version: 'v1',
+        content: {
+          [PostHogPersistedProperty.RemoteConfig]: { hasFeatureFlags: true },
+          [PostHogPersistedProperty.Surveys]: cachedSurveys,
+        },
+      }),
+    }
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
+      if (url.includes('/config')) {
+        throw new Error('offline')
+      }
+      return { status: 200, json: async () => ({ featureFlags: {} }) }
+    })
+    posthog = new PostHog('test-token', {
+      customStorage: {
+        getItem: async (key) => storageCache[key] ?? null,
+        setItem: async (key, value) => {
+          storageCache[key] = value
+        },
+      },
+      flushInterval: 0,
+      captureAppLifecycleEvents: false,
+    })
+
+    await posthog.ready()
+    await posthog._onSurveysReady()
+
+    expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual(cachedSurveys)
+  })
+
   it('should allow customising of native app properties', async () => {
     posthog = new PostHog('test-token', {
       customAppProperties: { $app_name: 'custom' },

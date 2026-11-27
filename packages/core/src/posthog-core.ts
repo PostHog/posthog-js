@@ -817,6 +817,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             this.maybeNotifyRemoteConfig(!willLoadFlags, response)
 
             remoteConfig = response
+          } else if (this.preloadFeatureFlags !== false && !this.disableRemoteFeatureFlags) {
+            // A failed config fetch says nothing about whether the project has flags, so still load
+            // them. The flags request fetches the config too and fires onRemoteConfig from it.
+            this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
           }
 
           return remoteConfig

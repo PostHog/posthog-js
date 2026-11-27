@@ -201,6 +201,39 @@ describe('PostHog onRemoteConfig', () => {
     })
   })
 
+  describe('when the remote config request fails', () => {
+    it('still loads feature flags and applies the config they carry', async () => {
+      ;[posthog, mocks] = createTestClientWithRemoteConfig('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        _mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/config')) {
+            return Promise.reject(new Error('offline'))
+          }
+          if (url.includes('/flags/')) {
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ featureFlags: { 'feature-1': true }, errorTracking: false }),
+            })
+          }
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+      })
+
+      await posthog.reloadRemoteConfigAsync()
+      await waitForPromises()
+
+      const flagsCalls = mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))
+      expect(flagsCalls).toHaveLength(1)
+      expect(flagsCalls[0][0]).toContain('config=true')
+      expect(posthog.getFeatureFlags()).toEqual({ 'feature-1': true })
+      expect(posthog.onRemoteConfigCalls).toHaveLength(1)
+    })
+  })
+
   describe('fires exactly once', () => {
     it('fires from flags path (not remote config path) when remote config triggers flag reload', async () => {
       const remoteConfigResponse = {

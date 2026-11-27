@@ -2871,6 +2871,13 @@ export class PostHog extends PostHogCore {
 
     const surveys = response.surveys
 
+    // When the fetch fails, core hands back the cached config, which is stored without surveys.
+    // That says nothing about the surveys, so keep the cached ones.
+    if (surveys === undefined) {
+      this._logger.info('Remote config has no surveys field, keeping cached surveys.')
+      return
+    }
+
     // Keep an authoritative empty list distinct from an unavailable survey cache.
     if (Array.isArray(surveys)) {
       this._cacheSurveys(surveys as Survey[], 'remote config')
