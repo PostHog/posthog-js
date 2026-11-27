@@ -16,6 +16,8 @@ export type MatchFeatureFlagPropertyOptions = {
   semverParsingPolicy?: FeatureFlagSemverParsingPolicy
   /** Only version 2 enables explicit equality; absent/other versions use service legacy matching. */
   propertyMatchingVersion?: number
+  /** Keys the caller knows are absent. A listed key is absent even when `propertyValues` has a value for it. */
+  knownAbsentKeys?: ReadonlySet<string>
 }
 
 export type FeatureFlagVariant = {
@@ -41,6 +43,42 @@ const NULL_VALUES_ALLOWED_OPERATORS = [
   'not_ends_with',
   'regex',
   'not_regex',
+]
+
+// Operators that match a known-absent key, like the flags service. Every other operator does not match.
+const KNOWN_ABSENT_MATCHING_OPERATORS = [
+  'is_not_set',
+  'is_not',
+  'not_icontains',
+  'not_starts_with',
+  'not_ends_with',
+  'not_regex',
+]
+
+// Operators the local evaluator implements, as handled by assertFeatureFlagFilterSupported.
+const LOCALLY_SUPPORTED_OPERATORS = [
+  ...KNOWN_ABSENT_MATCHING_OPERATORS,
+  'is_set',
+  'exact',
+  'icontains',
+  'starts_with',
+  'ends_with',
+  'regex',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'is_date_after',
+  'is_date_before',
+  'semver_eq',
+  'semver_neq',
+  'semver_gt',
+  'semver_gte',
+  'semver_lt',
+  'semver_lte',
+  'semver_tilde',
+  'semver_caret',
+  'semver_wildcard',
 ]
 
 // This value is intentionally larger than Number.MAX_SAFE_INTEGER. Changing its rounding changes
@@ -576,6 +614,19 @@ export function matchFeatureFlagProperty(
   propertyValues: Record<string, any>,
   options: MatchFeatureFlagPropertyOptions = {}
 ): boolean {
+  if (options.knownAbsentKeys?.has(property.key)) {
+    const operator = property.operator || 'exact'
+    // The flags service reads a JSON null condition value as omitted, which it never resolves
+    // for a value-requiring operator, so neither may the known-absent table.
+    if (property.value == null && operator !== 'is_set' && operator !== 'is_not_set') {
+      throw new InconclusiveMatchError(`Operator ${operator} requires a condition value`)
+    }
+    if (!LOCALLY_SUPPORTED_OPERATORS.includes(operator)) {
+      throw new InconclusiveMatchError(`Unknown operator: ${property.operator}`)
+    }
+    // Like the flags service, resolve without parsing or validating a present condition value.
+    return KNOWN_ABSENT_MATCHING_OPERATORS.includes(operator)
+  }
   try {
     return matchPropertyValue(property, propertyValues, options)
   } catch (e) {

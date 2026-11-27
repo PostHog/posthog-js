@@ -393,3 +393,80 @@ describe('feature flag local evaluation primitives', () => {
     })
   })
 })
+
+describe('matchFeatureFlagProperty with knownAbsentKeys', () => {
+  const knownAbsentKeys = new Set(['key'])
+
+  test.each([
+    ['is_not_set', null, true],
+    ['is_set', null, false],
+    ['exact', 'pro', false],
+    ['is_not', 'pro', true],
+    ['icontains', 'pro', false],
+    ['not_icontains', 'pro', true],
+    ['starts_with', 'pro', false],
+    ['not_starts_with', 'pro', true],
+    ['ends_with', 'pro', false],
+    ['not_ends_with', 'pro', true],
+    ['regex', '^pro', false],
+    ['not_regex', '^pro', true],
+    ['gt', '10', false],
+    ['gte', '10', false],
+    ['lt', '10', false],
+    ['lte', '10', false],
+    ['semver_eq', '1.2.3', false],
+    ['semver_neq', '1.2.3', false],
+    ['semver_gt', '1.2.3', false],
+    ['semver_tilde', '1.2.3', false],
+    ['semver_caret', '1.2.3', false],
+    ['semver_wildcard', '1.2.*', false],
+    ['is_date_before', '2025-01-01T10:00:00Z', false],
+    ['is_date_after', '2025-01-01T10:00:00Z', false],
+  ])('a known-absent key with %s matches %s', (operator, value, expected) => {
+    expect(matchFeatureFlagProperty(property(operator, value), {}, { knownAbsentKeys })).toBe(expected)
+  })
+
+  test('the listing wins over a supplied value', () => {
+    expect(matchFeatureFlagProperty(property('is_not_set', null), { key: 'pro' }, { knownAbsentKeys })).toBe(true)
+    expect(matchFeatureFlagProperty(property('exact', 'pro'), { key: 'pro' }, { knownAbsentKeys })).toBe(false)
+  })
+
+  test('an omitted key that is not listed stays inconclusive', () => {
+    expect(() =>
+      matchFeatureFlagProperty(property('is_not_set', null), {}, { knownAbsentKeys: new Set(['other']) })
+    ).toThrow(expect.objectContaining({ reason: 'missing_context' }))
+  })
+
+  test.each([
+    ['not_icontains_multi', ['pro']],
+    ['not_between', [1, 2]],
+    ['icontains_multi', ['pro']],
+    ['between', [1, 2]],
+    ['future_operator', 'pro'],
+  ])('an unsupported %s on a known-absent key stays unsupported', (operator, value) => {
+    expect(() => matchFeatureFlagProperty(property(operator, value), {}, { knownAbsentKeys })).toThrow(
+      expect.objectContaining({ reason: 'unsupported_definition' })
+    )
+  })
+
+  // Like the flags service, the known-absent table resolves before the condition value is read.
+  test.each([
+    ['not_regex', '[', true],
+    ['regex', '[', false],
+    ['not_regex', '\\p{L}', true],
+    ['regex', '\\p{L}', false],
+    ['gt', 'not-a-number', false],
+    ['gte', 'not-a-number', false],
+    ['lt', 'not-a-number', false],
+    ['lte', 'not-a-number', false],
+    ['semver_neq', 'not-a-version', false],
+    ['semver_tilde', 'not-a-version', false],
+    ['semver_caret', 'not-a-version', false],
+    ['semver_wildcard', 'not-a-version', false],
+    ['is_date_before', 'not-a-date', false],
+    ['is_date_after', true, false],
+    ['is_not', '\ud800', true],
+  ])('a known-absent key with %s and unusable value %j matches %s', (operator, value, expected) => {
+    expect(matchFeatureFlagProperty(property(operator, value), {}, { knownAbsentKeys })).toBe(expected)
+  })
+})

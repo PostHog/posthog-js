@@ -185,6 +185,7 @@ app.get('/health', (req, res) => {
             // Remote /flags requests send ?v=4 and read the v4 flag record.
             'flags_response_v4',
             'feature_flags_local_evaluation_v1',
+            'feature_flags_known_absent_v1',
             'feature_flag_payloads',
         ],
     })
@@ -359,13 +360,21 @@ app.post('/get_feature_flag', async (req, res) => {
         person_properties,
         groups,
         group_properties,
+        person_property_keys_known_absent,
+        group_property_keys_known_absent,
         disable_geoip,
         only_evaluate_locally = false,
+        allow_remote_fallback = false,
     } = req.body || {}
-    const force_remote = req.body?.force_remote ?? !only_evaluate_locally
+    const force_remote = req.body?.force_remote ?? (!only_evaluate_locally && !allow_remote_fallback)
 
     if (only_evaluate_locally && force_remote) {
         return res.status(400).json({ error: 'only_evaluate_locally conflicts with force_remote' })
+    }
+    if (allow_remote_fallback && (force_remote || only_evaluate_locally)) {
+        return res
+            .status(400)
+            .json({ error: 'allow_remote_fallback conflicts with force_remote and only_evaluate_locally' })
     }
 
     if (!key) {
@@ -381,6 +390,8 @@ app.post('/get_feature_flag', async (req, res) => {
                 groups,
                 personProperties: person_properties,
                 groupProperties: group_properties,
+                personPropertyKeysKnownAbsent: person_property_keys_known_absent,
+                groupPropertyKeysKnownAbsent: group_property_keys_known_absent,
                 disableGeoip: disable_geoip,
                 onlyEvaluateLocally: true,
                 sendFeatureFlagEvents: false,
@@ -395,8 +406,11 @@ app.post('/get_feature_flag', async (req, res) => {
             groups,
             personProperties: person_properties,
             groupProperties: group_properties,
+            personPropertyKeysKnownAbsent: person_property_keys_known_absent,
+            groupPropertyKeysKnownAbsent: group_property_keys_known_absent,
             disableGeoip: disable_geoip,
-            onlyEvaluateLocally: !force_remote,
+            // allow_remote_fallback uses the default getter: local evaluation, then /flags when inconclusive.
+            ...(allow_remote_fallback ? {} : { onlyEvaluateLocally: !force_remote }),
         })
 
         // Flush the $feature_flag_called event so it cannot leak into the next test case.

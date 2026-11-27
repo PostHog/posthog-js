@@ -142,6 +142,10 @@ export type FeatureFlagEvaluationContext = {
   groups: Record<string, string>
   personProperties: Record<string, any>
   groupProperties: Record<string, Record<string, any>>
+  /** Person property keys known to be absent, without person-metadata keys. */
+  personPropertyKeysKnownAbsent?: ReadonlySet<string>
+  /** Group property keys known to be absent, by group type name. */
+  groupPropertyKeysKnownAbsent?: Record<string, ReadonlySet<string>>
   evaluationCache: Record<string, FeatureFlagValue>
   definitions?: FlagEvaluationSnapshot
 }
@@ -414,8 +418,12 @@ class FeatureFlagsPoller {
     const flagFilters = flag.filters || {}
 
     // Enrollment is a person property, so it is read from the person properties on
-    // group-aggregated flags too.
-    if (flagFilters.feature_enrollment === true) {
+    // group-aggregated flags too. A listed enrollment key means not enrolled, even over a
+    // supplied value, so evaluation continues through holdouts and release conditions.
+    if (
+      flagFilters.feature_enrollment === true &&
+      !evaluationContext.personPropertyKeysKnownAbsent?.has(featureEnrollmentKey(flag))
+    ) {
       return matchFeatureEnrollment(flag, personProperties)
     }
 
@@ -433,14 +441,12 @@ class FeatureFlagsPoller {
         throw new InconclusiveMatchError('Flag has unknown group type index')
       }
 
-      if (!(groupName in groups)) {
-        this.logMsgIfDebug(() =>
-          console.warn(`[FEATURE FLAGS] Can't compute group feature flag: ${flag.key} without group names passed in`)
-        )
-        return false
-      }
+      // Without a usable key, matchFeatureFlagProperties skips each group condition, and conditions
+      // with their own person aggregation still run.
+      const groupKey = usableGroupKey(groups, groupName)
 
       if (
+        groupKey !== undefined &&
         flag.bucketing_identifier === 'device_id' &&
         (personProperties?.$device_id === undefined ||
           personProperties?.$device_id === null ||
@@ -452,7 +458,13 @@ class FeatureFlagsPoller {
       }
 
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationContext)
+      return await this.matchFeatureFlagProperties(
+        flag,
+        groupKey ?? '',
+        focusedGroupProperties,
+        evaluationContext,
+        evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
+      )
     } else {
       const bucketingValue = this.getBucketingValueForFlag(flag, distinctId, personProperties)
       if (bucketingValue === undefined) {
@@ -468,7 +480,13 @@ class FeatureFlagsPoller {
           getDefinitionUnresolvedReason(flag, evaluationContext.definitions!) ?? 'missing_context'
         )
       }
-      return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
+      return await this.matchFeatureFlagProperties(
+        flag,
+        bucketingValue,
+        personProperties,
+        evaluationContext,
+        evaluationContext.personPropertyKeysKnownAbsent
+      )
     }
   }
 
@@ -484,6 +502,14 @@ class FeatureFlagsPoller {
       return distinctId
     }
 
+    return this.getPersonBucketingValue(flag, distinctId, properties)
+  }
+
+  private getPersonBucketingValue(
+    flag: PostHogFeatureFlag,
+    distinctId: string,
+    properties: Record<string, any>
+  ): string | undefined {
     if (flag.bucketing_identifier === 'device_id') {
       const deviceId = properties?.$device_id
       if (deviceId === undefined || deviceId === null || deviceId === '') {
@@ -615,10 +641,25 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     bucketingValue: string,
     properties: Record<string, any>,
-    evaluationContext: FeatureFlagEvaluationContext
+    evaluationContext: FeatureFlagEvaluationContext,
+    knownAbsentKeys?: ReadonlySet<string>
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+    const flagAggregation = flagFilters.aggregation_group_type_index
+    const { distinctId, groups, groupProperties, personProperties } = evaluationContext
+
+    // The server hashes an empty identifier for the holdout of a group flag without a usable key,
+    // so only the server can tell whether that holdout excludes this flag.
+    if (flagAggregation != undefined && holdoutCanExclude(flagFilters.holdout)) {
+      const flagGroupName = evaluationContext.definitions!.groupTypeMapping[String(flagAggregation)]
+      if (!flagGroupName || usableGroupKey(groups, flagGroupName) === undefined) {
+        throw new InconclusiveMatchError(
+          `Can't compute the holdout of group feature flag ${flag.key} without a group key`,
+          'missing_context'
+        )
+      }
+    }
 
     // Holdouts are resolved before the release conditions, so a held-out value is excluded
     // from the flag's targeting rather than being bucketed into a variant.
@@ -628,9 +669,7 @@ class FeatureFlagsPoller {
     }
 
     const flagConditions = flagFilters.groups || []
-    const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
-    const { groups, groupProperties } = evaluationContext
     let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
     let regexError: InconclusiveMatchError | undefined
     const deferredRegexValues = new Set<FeatureFlagValue>()
@@ -639,36 +678,48 @@ class FeatureFlagsPoller {
     for (const condition of flagConditions) {
       let effectiveBucketingValue = bucketingValue
       try {
-        // Per-condition aggregation overrides only when the condition explicitly
-        // sets its own aggregation_group_type_index (mixed targeting).
-        // When absent, use the properties/bucketing already resolved by the caller.
-        const conditionAggregation =
-          condition.aggregation_group_type_index !== undefined
-            ? condition.aggregation_group_type_index
-            : flagAggregation
+        // A condition uses its own aggregation_group_type_index when it sets one (an explicit null
+        // is person aggregation), else the flag's. When it matches the flag's, use the
+        // properties/bucketing already resolved by the caller.
+        const conditionAggregation = conditionAggregationOf(condition, flagAggregation)
 
         let effectiveProperties = properties
+        let effectiveKnownAbsentKeys = knownAbsentKeys
+        let knownAbsentKeysGroupTypeIndex: number | null | undefined = flagAggregation
 
-        // Mixed-override path: condition-level aggregation differs from flag-level.
-        // This assumes flag-level aggregation is null/undefined for mixed flags.
-        if (conditionAggregation !== flagAggregation) {
-          if (conditionAggregation !== null && conditionAggregation !== undefined) {
-            const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
-            if (!groupName || !(groupName in groups)) {
-              this.logMsgIfDebug(() =>
-                console.debug(
-                  `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
-                )
+        if (conditionAggregation != undefined) {
+          // Each group condition needs a usable key for its own group type, else it is skipped.
+          const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
+          const groupKey = groupName ? usableGroupKey(groups, groupName) : undefined
+          if (!groupName || groupKey === undefined) {
+            this.logMsgIfDebug(() =>
+              console.debug(
+                `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
               )
-              continue
-            }
+            )
+            continue
+          }
+          if (conditionAggregation !== flagAggregation) {
             if (!(groupName in groupProperties)) {
               inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
               continue
             }
             effectiveProperties = groupProperties[groupName]
-            effectiveBucketingValue = groups[groupName]
+            effectiveKnownAbsentKeys = evaluationContext.groupPropertyKeysKnownAbsent?.[groupName]
+            knownAbsentKeysGroupTypeIndex = conditionAggregation
+            effectiveBucketingValue = groupKey
           }
+        } else if (flagAggregation != undefined) {
+          // A person condition in a group flag reads person properties and buckets as a person flag.
+          const personBucketingValue = this.getPersonBucketingValue(flag, distinctId, personProperties)
+          if (personBucketingValue === undefined) {
+            inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
+            continue
+          }
+          effectiveProperties = personProperties
+          effectiveKnownAbsentKeys = evaluationContext.personPropertyKeysKnownAbsent
+          knownAbsentKeysGroupTypeIndex = null
+          effectiveBucketingValue = personBucketingValue
         }
 
         const matchResult = await this.isConditionMatch(
@@ -676,7 +727,9 @@ class FeatureFlagsPoller {
           effectiveBucketingValue,
           condition,
           effectiveProperties,
-          evaluationContext
+          evaluationContext,
+          effectiveKnownAbsentKeys,
+          knownAbsentKeysGroupTypeIndex
         )
         if (matchResult === 'match') {
           const variantOverride = condition.variant
@@ -762,7 +815,10 @@ class FeatureFlagsPoller {
     bucketingValue: string,
     condition: FeatureFlagCondition,
     properties: Record<string, any>,
-    evaluationContext: FeatureFlagEvaluationContext
+    evaluationContext: FeatureFlagEvaluationContext,
+    knownAbsentKeys?: ReadonlySet<string>,
+    /** The group type index `knownAbsentKeys` belong to, or null/undefined for person keys. */
+    knownAbsentKeysGroupTypeIndex?: number | null
   ): Promise<ConditionMatchResult> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const definitions = evaluationContext.definitions!
@@ -776,23 +832,44 @@ class FeatureFlagsPoller {
       let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
       let regexError: InconclusiveMatchError | undefined
       let serverEvaluationError: RequiresServerEvaluation | undefined = undefined
+      // In a group condition, person filters and person cohort leaves read the person properties
+      // and person listing, as the flags service does. Other filters keep reading the group.
+      const personFilterScope: PersonFilterScope | undefined =
+        conditionAggregationOf(condition, flag.filters?.aggregation_group_type_index) != null
+          ? {
+              properties: evaluationContext.personProperties,
+              knownAbsentKeys: evaluationContext.personPropertyKeysKnownAbsent,
+            }
+          : undefined
       for (const prop of condition.properties) {
         const propertyType = prop.type
+        const readsPerson = personFilterScope !== undefined && propertyType === 'person'
+        const filterProperties = readsPerson ? personFilterScope.properties : properties
+        const filterKnownAbsentKeys = readsPerson
+          ? personFilterScope.knownAbsentKeys
+          : knownAbsentKeysForFilter(prop, knownAbsentKeys, knownAbsentKeysGroupTypeIndex)
         let matches = false
 
         try {
           if (propertyType === 'cohort') {
+            // In a group condition, the cohort's other leaves read the group properties without a
+            // listing, since a cohort's scope is the person.
             matches = await matchCohort(
               prop,
               properties,
               definitions.cohorts,
               this.debugMode,
               (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
-              definitions.propertyMatchingVersion
+              definitions.propertyMatchingVersion,
+              personFilterScope ? undefined : knownAbsentKeys,
+              personFilterScope
             )
           } else if (propertyType === 'flag') {
             matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
-          } else if (!Object.prototype.hasOwnProperty.call(properties, prop.key)) {
+          } else if (
+            !filterKnownAbsentKeys?.has(prop.key) &&
+            !Object.prototype.hasOwnProperty.call(filterProperties, prop.key)
+          ) {
             // Same result as matchProperty for an absent key, without the cost of throwing for
             // every missing filter now that the loop no longer stops at the first one.
             assertPropertyFilterTypeSupported(prop)
@@ -800,7 +877,13 @@ class FeatureFlagsPoller {
             inconclusiveReason = pickUnresolvedReason(inconclusiveReason, 'missing_context')
             continue
           } else {
-            matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
+            matches = matchProperty(
+              prop,
+              filterProperties,
+              warnFunction,
+              definitions.propertyMatchingVersion,
+              filterKnownAbsentKeys
+            )
           }
         } catch (e) {
           if (e instanceof RequiresServerEvaluation) {
@@ -1384,6 +1467,34 @@ class FeatureFlagsPoller {
  * The unresolved reason that comes from the flag's definition alone, so it is known when
  * definitions load. Matches the reason local evaluation reports for the same cause.
  */
+/** Whether a group key counts as a key: a non-empty string or a number, as on the server. */
+export function isUsableGroupKey(groupKey: unknown): groupKey is string | number {
+  return (typeof groupKey === 'string' && groupKey !== '') || typeof groupKey === 'number'
+}
+
+/** The key of the group type, or undefined when it is omitted or unusable and so counts as no group key. */
+function usableGroupKey(groups: Record<string, unknown>, groupName: string): string | undefined {
+  const groupKey = groups[groupName]
+  return isUsableGroupKey(groupKey) ? String(groupKey) : undefined
+}
+
+/** The condition's own aggregation when it sets one (null is person aggregation), else the flag's. */
+function conditionAggregationOf(
+  condition: FeatureFlagCondition,
+  flagAggregation: number | null | undefined
+): number | null | undefined {
+  return condition.aggregation_group_type_index !== undefined ? condition.aggregation_group_type_index : flagAggregation
+}
+
+/** Whether getHoldoutVariant could return a holdout variant for some bucketing value. */
+function holdoutCanExclude(holdout: { id: number; exclusion_percentage: number } | null | undefined): boolean {
+  if (holdout == null || holdout.id == null || holdout.exclusion_percentage == null) {
+    return false
+  }
+  const percentage = Number(holdout.exclusion_percentage)
+  return Number.isFinite(percentage) && percentage > 0
+}
+
 function getDefinitionUnresolvedReason(
   flag: PostHogFeatureFlag,
   definitions: FlagEvaluationSnapshot
@@ -1412,8 +1523,12 @@ function getDefinitionUnresolvedReason(
 // An early-access feature flag returns the person's enrollment at once: `true` or `"true"` means
 // enrolled, and any other value that was passed, `null` included, means opted out. Without the
 // enrollment property the flag can't be resolved locally.
+function featureEnrollmentKey(flag: PostHogFeatureFlag): string {
+  return `$feature_enrollment/${flag.key}`
+}
+
 function matchFeatureEnrollment(flag: PostHogFeatureFlag, personProperties: Record<string, any>): boolean {
-  const enrollmentKey = `$feature_enrollment/${flag.key}`
+  const enrollmentKey = featureEnrollmentKey(flag)
   const enrollment = personProperties[enrollmentKey]
   // `undefined` is omitted from JSON, so /flags would read the stored enrollment.
   if (enrollment === undefined) {
@@ -1474,6 +1589,25 @@ function isUnsupportedPropertyGroup(
   )
 }
 
+/**
+ * Person keys apply only to person filters and group keys only to group filters of their own group
+ * type. A group filter without `group_type_index` belongs to the condition's group type. Other filter
+ * types, such as `person_metadata`, never resolve from a listing.
+ */
+function knownAbsentKeysForFilter(
+  property: FlagProperty & { group_type_index?: number | null },
+  knownAbsentKeys: ReadonlySet<string> | undefined,
+  knownAbsentKeysGroupTypeIndex: number | null | undefined
+): ReadonlySet<string> | undefined {
+  if (knownAbsentKeysGroupTypeIndex == null) {
+    return property.type === 'person' ? knownAbsentKeys : undefined
+  }
+  return property.type === 'group' &&
+    (property.group_type_index ?? knownAbsentKeysGroupTypeIndex) === knownAbsentKeysGroupTypeIndex
+    ? knownAbsentKeys
+    : undefined
+}
+
 // Filter types matched against the person or group properties the caller passes. Cohort and
 // flag filters have their own matching. Any other type, such as `person_metadata` (a value the
 // server reads from the persons table, not from person properties), can't be evaluated locally:
@@ -1494,10 +1628,15 @@ function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   warnFunction?: (msg: string) => void,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>
 ): boolean {
   assertPropertyFilterTypeSupported(property)
-  return matchFeatureFlagProperty(property, propertyValues, { warnFunction, propertyMatchingVersion })
+  return matchFeatureFlagProperty(property, propertyValues, {
+    warnFunction,
+    propertyMatchingVersion,
+    knownAbsentKeys,
+  })
 }
 
 function parseSemver(value: string): [number, number, number] {
@@ -1514,13 +1653,21 @@ function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPolle
 
 type FlagDependencyEvaluator = (prop: FlagProperty) => Promise<boolean>
 
+/** The person properties and person listing that person filters read in a group condition. */
+type PersonFilterScope = {
+  properties: Record<string, any>
+  knownAbsentKeys?: ReadonlySet<string>
+}
+
 async function matchCohort(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>,
+  personFilterScope?: PersonFilterScope
 ): Promise<boolean> {
   const cohortId = String(property.value)
   checkCohortExists(cohortId, cohortProperties)
@@ -1532,7 +1679,9 @@ async function matchCohort(
     cohortProperties,
     debugMode,
     flagDependencyEvaluator,
-    propertyMatchingVersion
+    propertyMatchingVersion,
+    knownAbsentKeys,
+    personFilterScope
   )
   return property.operator === 'not_in' ? !inCohort : inCohort
 }
@@ -1543,7 +1692,9 @@ async function matchPropertyGroup(
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
   flagDependencyEvaluator?: FlagDependencyEvaluator,
-  propertyMatchingVersion?: number
+  propertyMatchingVersion?: number,
+  knownAbsentKeys?: ReadonlySet<string>,
+  personFilterScope?: PersonFilterScope
 ): Promise<boolean> {
   // The backend's canonical empty PropertyGroup is {}.
   if (!propertyGroup || Object.keys(propertyGroup).length === 0) {
@@ -1573,7 +1724,9 @@ async function matchPropertyGroup(
           cohortProperties,
           debugMode,
           flagDependencyEvaluator,
-          propertyMatchingVersion
+          propertyMatchingVersion,
+          knownAbsentKeys,
+          personFilterScope
         )
         if (propertyGroupType === 'AND') {
           if (!matches) {
@@ -1620,7 +1773,9 @@ async function matchPropertyGroup(
             cohortProperties,
             debugMode,
             flagDependencyEvaluator,
-            propertyMatchingVersion
+            propertyMatchingVersion,
+            knownAbsentKeys,
+            personFilterScope
           )
         } else if (prop.type === 'flag') {
           if (!flagDependencyEvaluator) {
@@ -1629,8 +1784,23 @@ async function matchPropertyGroup(
             )
           }
           matches = await flagDependencyEvaluator(prop)
+        } else if (personFilterScope && prop.type === 'person') {
+          matches = matchProperty(
+            prop,
+            personFilterScope.properties,
+            undefined,
+            propertyMatchingVersion,
+            personFilterScope.knownAbsentKeys
+          )
         } else {
-          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion)
+          // Cohorts only receive person keys, so they apply only to person leaves.
+          matches = matchProperty(
+            prop,
+            propertyValues,
+            undefined,
+            propertyMatchingVersion,
+            knownAbsentKeysForFilter(prop, knownAbsentKeys, null)
+          )
         }
 
         const negation = prop.negation || false

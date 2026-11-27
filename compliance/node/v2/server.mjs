@@ -162,6 +162,7 @@ export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1'
             'flag_snapshot_exposure_missing_absent',
             'flag_snapshot_enablement_default',
             'feature_flags_local_evaluation_v1',
+            'feature_flags_known_absent_v1',
         ],
         fixture_capabilities: ['storage.empty.v1'],
     }
