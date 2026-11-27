@@ -1177,6 +1177,36 @@ describe('the definitions request', () => {
 
     expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, FEED_ETAG])
   })
+
+  it('drops the ETag when the cache changes its definitions in place', async () => {
+    // A provider that keeps the object it receives, returns it, and later changes it in place.
+    class InPlaceCache extends MemoryCache {
+      getFlagDefinitions(): Json | undefined {
+        return this.stored
+      }
+      onFlagDefinitionsReceived(data: Json): void {
+        this.received += 1
+        this.stored = data
+      }
+    }
+    const cache = new InPlaceCache()
+    const { client, requests } = conditionalClient(definitionsBody([v1Definition('legacy-shelf'), BOOLEAN]), {
+      flagDefinitionCacheProvider: cache as any,
+    })
+
+    await client.reloadFeatureFlags()
+    cache.fetching = false
+    // The same definitions keep the ETag.
+    await client.reloadFeatureFlags()
+    delete cache.stored!.flags_v2
+    await client.reloadFeatureFlags()
+    expect(await readLocally(client, 'reading-mode')).toBeUndefined()
+    cache.fetching = true
+    await client.reloadFeatureFlags()
+
+    expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, undefined])
+    expect(await readLocally(client, 'reading-mode')).toBe(true)
+  })
 })
 
 // --- The corpora through the client ----------------------------------------------------------

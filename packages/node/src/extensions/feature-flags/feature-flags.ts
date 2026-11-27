@@ -228,8 +228,9 @@ class FeatureFlagsPoller {
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
-  // The cache data of the definitions in use, which a cache read compares with what it installs.
-  private installedDefinitions?: FlagDefinitionCacheInput
+  // The fingerprint of the definitions that `flagsEtag` validates, which a cache read compares
+  // with what it installs. A string, so a provider that changes cache data in place cannot change it.
+  private flagsEtagDefinitions?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
@@ -1013,7 +1014,6 @@ class FeatureFlagsPoller {
     this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
     this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
-    this.installedDefinitions = flagData
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
     this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
@@ -1099,13 +1099,11 @@ class FeatureFlagsPoller {
         // The ETag validates the definitions this client fetched. A 304 for it would keep other
         // definitions read from the cache, such as the legacy feed an older release wrote, until
         // the feed changes.
-        const otherDefinitions =
-          this.flagsEtag !== undefined &&
-          (this.installedDefinitions === undefined ||
-            definitionsFingerprint(cached) !== definitionsFingerprint(this.installedDefinitions))
+        const fingerprint = this.flagsEtag === undefined ? undefined : definitionsFingerprint(cached)
         this.updateFlagState(cached)
-        if (otherDefinitions) {
+        if (fingerprint !== this.flagsEtagDefinitions) {
           this.flagsEtag = undefined
+          this.flagsEtagDefinitions = undefined
         }
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
@@ -1348,6 +1346,10 @@ class FeatureFlagsPoller {
           }
 
           this.updateFlagState(flagData)
+          // Taken before the provider receives flagData, which it may keep and change. Only a cache
+          // read compares it, so a client without a provider does not compute it.
+          this.flagsEtagDefinitions =
+            this.cacheProvider && this.flagsEtag !== undefined ? definitionsFingerprint(flagData) : undefined
           // Set timestamp to when definitions were actually fetched from server
           this.flagDefinitionsLoadedAt = Date.now()
           this.clearBackoff()
