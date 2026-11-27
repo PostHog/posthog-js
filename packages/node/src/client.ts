@@ -1787,7 +1787,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Queue an event in memory to send asynchronously without blocking the caller.
    *
-   * Events with a `distinctId` (explicit or from `withContext()`) create or update person profiles (`process_person_profile: true`). Pass `$set` and `$set_once` inside `properties` to set person properties, pass `groups` (such as `{ company: 'acme' }`) to link groups, or send `event: '$pageview'` with `$current_url` for backend-only pageviews.
+   * Events with a `distinctId` (explicit or from `withContext()`) create or update person profiles by default unless `options.process_person_profile` is `false` on the call, in `withContext()`, or via `registerOptions()`. Pass `$set` and `$set_once` inside `properties` to set person properties, pass `groups` (such as `{ company: 'acme' }`) to link groups, or send `event: '$pageview'` with `$current_url` for backend-only pageviews.
    *
    * Omitting `distinctId` outside an identified context generates a UUIDv7 and sends a personless event (`options: { process_person_profile: false }`). Pass `options: { process_person_profile: false }` to send a personless event for a known `distinctId`.
    *
@@ -3588,7 +3588,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Queue a `$groupidentify` event to create or update a group and its properties (requires Group Analytics).
    *
-   * Projects support up to 5 group types. Set `name` in `properties` for the group's display name in PostHog, otherwise PostHog shows `groupKey`. When `distinctId` is omitted outside `withContext()`, it falls back to `$<groupType>_<groupKey>`. Pass `groups` on `capture()` and `evaluateFlags()` to link events and flags to the group.
+   * Projects support up to 5 group types. Set `name` in `properties` for the group's display name in PostHog, otherwise PostHog shows `groupKey`. When `distinctId` is omitted outside `withContext()`, it falls back to `$<groupType>_<groupKey>`. Group identify events don't inherit context `sessionId`. Pass `groups` on `capture()` and `evaluateFlags()` to link events and flags to the group.
    *
    * @example
    * ```ts
@@ -3914,7 +3914,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * By default, nested contexts inherit parent state while overriding keys locally without mutating the parent. Pass `{ fresh: true }` at request or job boundaries to clear inherited state, and pass `{ signal }` to end a context when an `AbortSignal` aborts.
    *
-   * Events and exceptions inherit `distinctId`, `sessionId` (`$session_id`), `properties`, and `options`. `evaluateFlags()`, `getAllFlags()`, `getAllFlagsAndPayloads()`, and `getFeatureFlagResult()` read `distinctId` when omitted. Logs and spans inherit `distinctId` and `sessionId`. Pass a UUIDv7 `sessionId` (such as `x-posthog-session-id` from `posthog-js`) to link backend telemetry to Session Replay.
+   * Events and exceptions inherit `distinctId`, `sessionId` (`$session_id`, except `groupIdentify()`), `properties`, and `options`. `evaluateFlags()`, `getAllFlags()`, `getAllFlagsAndPayloads()`, and `getFeatureFlagResult()` read `distinctId` when omitted. Logs and spans inherit `distinctId` and `sessionId`. Pass a UUIDv7 `sessionId` (such as `x-posthog-session-id` from `posthog-js`) to link backend telemetry to Session Replay.
    *
    * On `posthog-node/edge`, `withContext()` runs `fn` directly without `AsyncLocalStorage`, so nested calls won't see context data.
    *

@@ -29,7 +29,7 @@ import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './ex
 export type IdentifyMessage = {
   /** User distinct ID matching your frontend `posthog.identify()` call. */
   distinctId: string
-  /** Person properties to set via `$set`, `$set_once`, `$unset`, or `$anon_distinct_id`. */
+  /** Person properties to set directly, or via `$set`, `$set_once`, and `$anon_distinct_id`. */
   properties?: Record<string | number, any>
   /** Overrides the client's `disableGeoip` setting for this event. */
   disableGeoip?: boolean
@@ -74,13 +74,15 @@ export type SendFeatureFlagsOptions = {
   flagKeys?: string[]
 }
 
-export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
+export type EventMessage = {
   /**
    * The event's distinct ID. When missing, empty, or whitespace, uses `withContext()`, else generates a UUIDv7 and sets `options.process_person_profile: false`.
    */
   distinctId?: string
   /** Event name (such as `'order_placed'` or `'$pageview'`). Must be 200 UTF-8 bytes or fewer. */
   event: string
+  /** Event properties (also accepts `$set`, `$set_once`, and `$current_url`). */
+  properties?: Record<string | number, any>
   /** Group types and keys to associate with this event (for example `{ company: 'acme' }`, up to 5 per project). */
   groups?: Record<string, string | number>
   /**
@@ -98,6 +100,10 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   timestamp?: Date
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
+  /** Overrides the client's `disableGeoip` setting for this event. */
+  disableGeoip?: boolean
+  /** Processing options sent with this event to capture v1. */
+  options?: EventOptions
   /**
    * Internal flag set by captureException() to indicate this $exception
    * event originated from the proper exception capture path. Used to warn users who call
@@ -548,7 +554,7 @@ export type PostHogOptions = Omit<
    */
   maxCacheSize?: number
   /**
-   * Custom HTTP transport replacing global `fetch`. Capture requests pass `redirect: 'manual'` and follow up to 5 same-origin `307` or `308` redirects, so a custom `fetch` must return `3xx` responses unchanged.
+   * Custom HTTP transport replacing global `fetch`. Capture requests pass `redirect: 'manual'` and follow up to 5 same-origin `307` or `308` redirects, and a custom `fetch` that follows redirects itself still works.
    */
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   /**

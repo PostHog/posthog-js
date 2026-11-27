@@ -255,7 +255,10 @@ const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
 const major = Number(values.major ?? declared + Number(nextMajor))
 
 const app = await Application.bootstrapWithPlugins({
-    entryPoints: [config.entry, ...(config.extraEntries ?? [])].map((entry) => path.join(pkgDir, entry)),
+    entryPoints: [
+        config.entry,
+        ...(config.extraEntries ?? []).filter((entry) => fs.existsSync(path.join(pkgDir, entry))),
+    ].map((entry) => path.join(pkgDir, entry)),
     tsconfig: path.join(pkgDir, 'tsconfig.json'),
     // missing-exports documents the types a page names that the package doesn't export, such as @posthog/core's.
     plugin: ['typedoc-plugin-markdown', 'typedoc-plugin-missing-exports'].map((p) =>

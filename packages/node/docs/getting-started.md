@@ -58,11 +58,11 @@ Some frameworks can help you populate request context automatically from incomin
 
 Calls inside `withContext()` inherit these fields by telemetry type:
 
-| Telemetry                                                                                        | Inherited from context                                             |
-| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| Events and exceptions                                                                            | `distinctId`, `sessionId` (`$session_id`), `properties`, `options` |
-| Logs and spans                                                                                   | `distinctId`, `sessionId`                                          |
-| Feature flags (`evaluateFlags`, `getAllFlags`, `getAllFlagsAndPayloads`, `getFeatureFlagResult`) | `distinctId` when omitted                                          |
+| Telemetry                                                                                        | Inherited from context                                                                     |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Events and exceptions                                                                            | `distinctId`, `sessionId` (`$session_id`, except `groupIdentify`), `properties`, `options` |
+| Logs and spans                                                                                   | `distinctId`, `sessionId`                                                                  |
+| Feature flags (`evaluateFlags`, `getAllFlags`, `getAllFlagsAndPayloads`, `getFeatureFlagResult`) | `distinctId` when omitted                                                                  |
 
 Tracing headers are untrusted client data, never authentication. Pass an authenticated `distinctId` explicitly for authorization or sensitive decisions.
 
