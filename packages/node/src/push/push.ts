@@ -18,8 +18,15 @@ const FIELDS = new Set(['templateId', 'distinctId', 'templateData', 'idempotency
 export class PushSender implements Push {
   constructor(private readonly sender: EmailSender) {}
 
-  async send(options: SendPushOptions): Promise<SendPushResponse> {
+  async send(options: SendPushOptions, ...unexpected: unknown[]): Promise<SendPushResponse> {
     try {
+      if (unexpected.some((argument) => argument !== undefined)) {
+        throw invalid(
+          'invalid_form',
+          'send takes one options object, so no push notification was sent. Put idempotencyKey and every other option in it.',
+          'options'
+        )
+      }
       const { body, idempotencyKey, maxRetries } = preparePush(options)
       const { data, error } = await this.sender.call({
         method: 'POST',

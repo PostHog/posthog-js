@@ -152,6 +152,17 @@ describe('push', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('refuses a second argument without a request', async () => {
+    const { data, error } = await (posthog.push.send as any)(
+      { templateId: TEMPLATE_ID, distinctId: 'user_123' },
+      { idempotencyKey: 'order-shipped:1042' }
+    )
+
+    expect(data).toBeNull()
+    expect(error).toMatchObject({ name: 'validation_error', code: 'invalid_form' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['a custom host without appHost', { host: 'https://ph.example.com' }, 'missing_app_host'],
     ['no secret key', { secretKey: undefined }, 'missing_secret_key'],
