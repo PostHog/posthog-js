@@ -434,6 +434,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _captureLogger?: CaptureLogger
   /** Resolved once on first event; `null` means no service name is configured. */
   private _serviceName?: string | null
+  /** Read once while the client is constructed, so one process release id holds for its lifetime. */
+  private readonly _releaseId?: string
   private _spanContext?: SpanContextManager
 
   // Created on first use, so a client that never calls captureAi has no AI lane.
@@ -603,6 +605,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    this._releaseId = CoreErrorTracking.getInjectedReleaseId()
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
     this._distinctIdHasSentFlagCalls = new Map()
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
@@ -1441,8 +1444,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * The properties the SDK adds to an event: `$is_server` (unless the `isServer` option is
    * `false`), `$geoip_disable` (when the `disableGeoip` option is on), feature flag properties,
-   * and for `$exception` events the active OpenTelemetry trace ids and the injected release id.
-   * They fill only the keys every other layer left unset.
+   * the release id when one is configured, and for `$exception` events the active OpenTelemetry
+   * trace ids. They fill only the keys every other layer left unset.
    */
   private async _sdkEventProperties(
     event: string,
@@ -1460,14 +1463,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this.options.disableGeoip ?? true) {
       sdkProperties.$geoip_disable = true
     }
+    if (this._releaseId) {
+      sdkProperties.$release_id = this._releaseId
+    }
     if (event === '$exception') {
       // Both ids or neither, so a trace id is never paired with another trace's span id.
       if (isUnsetProperty(properties, '$trace_id') && isUnsetProperty(properties, '$span_id')) {
         Object.assign(sdkProperties, await getActiveTraceProperties())
-      }
-      const releaseId = CoreErrorTracking.getInjectedReleaseId()
-      if (releaseId) {
-        sdkProperties.$release_id = releaseId
       }
     }
     return sdkProperties
