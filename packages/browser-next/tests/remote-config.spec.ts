@@ -1,7 +1,6 @@
-import { requireInstalledExtension } from './helpers'
 import { createPostHog as createRoot } from '../src/composition/npm'
 import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/composition/npm/core'
-import { localRemoteConfig, withBufferedAnalytics } from './helpers'
+import { localRemoteConfig } from './helpers'
 
 const options: CorePostHogOptions = {
     projectToken: 'ph_test',
@@ -71,23 +70,21 @@ describe.each([
         )
         const first = vi.fn()
         const second = vi.fn()
-        const posthog = await create(
-            withBufferedAnalytics({
-                ...options,
-                fetch,
-                extensions: [
-                    {
-                        name: 'subscriber',
-                        setup(client) {
-                            client.onRemoteConfig(first)
-                            requireInstalledExtension(client.analytics).capture('setup')
-                        },
+        const posthog = await create({
+            ...options,
+            fetch,
+            extensions: [
+                {
+                    name: 'subscriber',
+                    setup(client) {
+                        client.onRemoteConfig(first)
+                        client.capture('setup')
                     },
-                ],
-            })
-        )
+                },
+            ],
+        })
         posthog.onRemoteConfig(second)
-        requireInstalledExtension(posthog.analytics).capture('before config')
+        posthog.capture('before config')
         expect(posthog.session!.sessionId).not.toBe('')
         const pending = posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)
@@ -97,7 +94,7 @@ describe.each([
         expect(second.mock.calls).toEqual(first.mock.calls)
         await posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)
-        // Do not flush buffered analytics into the pending-response transport.
+        // Do not flush queued analytics into the pending-response transport.
         posthog.optOut()
         await posthog.dispose()
     })

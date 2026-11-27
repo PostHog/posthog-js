@@ -18,6 +18,11 @@ import { responsesStopReason } from '../openai/utils'
 import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiEvent'
 import type { JsonType } from '@posthog/core'
 
+// LangChain `ls_provider` values whose usage_metadata input_tokens include cache reads and writes.
+const CACHE_INCLUSIVE_PROVIDERS = new Set(['openai', 'azure', 'openrouter'])
+
+const INPUT_OR_CACHE_TOKEN_KEYS = ['$ai_input_tokens', '$ai_cache_read_input_tokens', '$ai_cache_creation_input_tokens']
+
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
 // LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
 // and future subclasses) exposes a prototype getter `is_bubble_up` that returns true, which the
@@ -572,6 +577,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         eventProperties['$ai_cache_creation_5m_input_tokens'] = additionalTokenData.cacheWrite5mInputTokens
         eventProperties['$ai_cache_creation_1h_input_tokens'] = additionalTokenData.cacheWrite1hInputTokens
       }
+      // The inferred flag describes the SDK-derived counts, so drop it when caller properties replace them.
+      const callerReportsTokens = INPUT_OR_CACHE_TOKEN_KEYS.some((key) =>
+        Object.prototype.hasOwnProperty.call(this.properties, key)
+      )
+      if (additionalTokenData.cacheReportingExclusive !== undefined && !callerReportsTokens) {
+        eventProperties['$ai_cache_reporting_exclusive'] = additionalTokenData.cacheReportingExclusive
+      }
       if (additionalTokenData.reasoningTokens) {
         eventProperties['$ai_reasoning_tokens'] = additionalTokenData.reasoningTokens
       }
@@ -839,6 +851,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       ['completionTokens', 'output'],
       ['input_tokens', 'input'],
       ['output_tokens', 'output'],
+      ['prompt_tokens', 'input'],
+      ['completion_tokens', 'output'],
       ['prompt_token_count', 'input'],
       ['candidates_token_count', 'output'],
       ['inputTokenCount', 'input'],
@@ -965,7 +979,6 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     // Our cost calculation expects them to be separate for Anthropic, so we subtract cache tokens.
     // Both cache_read and cache_write tokens should be subtracted since Anthropic's raw API
     // reports input_tokens as tokens NOT read from or used to create a cache.
-    // For other providers (OpenAI, etc.), input_tokens already excludes cache tokens as expected.
     // Match logic consistent with plugin-server: exact match on provider OR substring match on model
     let isAnthropic = false
     if (provider && provider.toLowerCase() === 'anthropic') {
@@ -974,12 +987,29 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       isAnthropic = true
     }
 
-    if (isAnthropic && inputIncludesCacheTokens && parsedUsage.input) {
-      const cacheTokens =
-        (additionalTokenData.cacheReadInputTokens || 0) + (additionalTokenData.cacheWriteInputTokens || 0)
-      if (cacheTokens > 0) {
-        parsedUsage.input = Math.max(parsedUsage.input - cacheTokens, 0)
-      }
+    const cacheTokens =
+      (additionalTokenData.cacheReadInputTokens || 0) + (additionalTokenData.cacheWriteInputTokens || 0)
+    if (isAnthropic && inputIncludesCacheTokens && parsedUsage.input && cacheTokens > 0) {
+      parsedUsage.input = Math.max(parsedUsage.input - cacheTokens, 0)
+    }
+
+    // OpenAI-shaped providers report prompt tokens inclusive of cache tokens, whatever model they serve.
+    // Ingestion assumes `claude*` models are cache-exclusive, so Claude behind an OpenAI-compatible proxy
+    // would get its cache reads billed twice unless we declare the convention explicitly.
+    if (
+      !isAnthropic &&
+      // Decide from the usage shape where possible, since wrappers like tokenUsage can carry raw provider usage.
+      // OpenAI's `prompt_tokens` includes cached tokens; Anthropic's top-level cache fields mean input excludes them.
+      (usage.prompt_tokens != null ||
+        (inputIncludesCacheTokens &&
+          usage.cache_read_input_tokens == null &&
+          usage.cache_creation_input_tokens == null)) &&
+      cacheTokens > 0 &&
+      parsedUsage.input >= cacheTokens &&
+      provider &&
+      CACHE_INCLUSIVE_PROVIDERS.has(provider.toLowerCase())
+    ) {
+      additionalTokenData.cacheReportingExclusive = false
     }
 
     return [parsedUsage.input, parsedUsage.output, additionalTokenData]
@@ -994,10 +1024,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     let normalizedGenerationUsage: any
     let rawGenerationUsage: any
     let fallbackGenerationUsage: any
+    let generationCount = 0
 
     for (const generation of response.generations ?? []) {
       for (const genChunk of generation) {
         const generationInfo = genChunk.generationInfo ?? {}
+        generationCount++
         const message = 'message' in genChunk ? genChunk.message : undefined
         const messageUsage =
           message && typeof message === 'object' && 'usage_metadata' in message ? message.usage_metadata : undefined
@@ -1052,7 +1084,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         if (!isNonEmptyUsage(llmUsage)) {
           continue
         }
-        return this._parseUsageModel(llmUsage, provider, model, key !== 'usage', llmUsage)
+        // LangChain's aggregated tokenUsage drops the cache breakdown that usage_metadata keeps.
+        const usageWithCacheDetails =
+          key !== 'usage' &&
+          generationCount === 1 &&
+          llmUsage.input_token_details == null &&
+          normalizedGenerationUsage?.input_token_details != null &&
+          (llmUsage.promptTokens ?? llmUsage.prompt_tokens ?? llmUsage.input_tokens) ===
+            normalizedGenerationUsage.input_tokens
+            ? { ...llmUsage, input_token_details: normalizedGenerationUsage.input_token_details }
+            : llmUsage
+        return this._parseUsageModel(usageWithCacheDetails, provider, model, key !== 'usage', llmUsage)
       }
     }
 

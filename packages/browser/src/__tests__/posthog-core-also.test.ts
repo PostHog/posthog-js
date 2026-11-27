@@ -209,6 +209,73 @@ describe('posthog core', () => {
             expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
         })
 
+        it('drops replay diagnostics from events while replay is stopped but keeps status', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            const recorderKeys = {
+                $recording_status: 'active',
+                $sdk_debug_session_start: baseUTCDateTime.getTime(),
+                $sdk_debug_replay_internal_buffer_length: 3,
+                $sdk_debug_rrweb_attached: true,
+            }
+            const persisted = {
+                $sdk_debug_recording_script_not_loaded: false,
+                $sdk_debug_replay_url_trigger_status: 'trigger_pending',
+                $sdk_debug_replay_stale_config: false,
+            }
+            posthog.register_for_session(persisted)
+            posthog.sessionRecording!['_lazyLoadedSessionRecording'] = {
+                sdkDebugProperties: recorderKeys,
+                stop: vi.fn(),
+            } as any
+            expect(posthog.calculateEventProperties('$pageview', {}, undefined, undefined, true)).toMatchObject({
+                ...persisted,
+                ...recorderKeys,
+            })
+
+            posthog.set_config({ disable_session_recording: true })
+
+            for (const event of ['custom_event', '$pageview', '$autocapture']) {
+                const properties = posthog.capture(event)!.properties
+                expect(properties).toMatchObject({ $recording_status: 'disabled' })
+                for (const key of [...Object.keys(persisted), ...Object.keys(recorderKeys)]) {
+                    if (key !== '$recording_status') {
+                        expect(properties).not.toHaveProperty(key)
+                    }
+                }
+            }
+        })
+
+        it('does not consume the replay diagnostic interval while replay is off', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            const recorderKeys = {
+                $recording_status: 'active',
+                $sdk_debug_session_start: baseUTCDateTime.getTime(),
+            }
+            posthog.sessionRecording!['_lazyLoadedSessionRecording'] = {
+                sdkDebugProperties: recorderKeys,
+                stop: vi.fn(),
+            } as any
+
+            posthog.set_config({ disable_session_recording: true })
+            expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+
+            posthog.set_config({ disable_session_recording: false })
+            expect(posthog.capture('$pageview')!.properties).toMatchObject(recorderKeys)
+            expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+        })
+
+        it('keeps caller-supplied replay-named properties while replay is off', () => {
+            const posthog = posthogWith({
+                capture_pageview: false,
+                autocapture: false,
+                disable_session_recording: true,
+            })
+
+            const properties = posthog.capture('x', { $sdk_debug_replay_custom: 1 })!.properties
+
+            expect(properties).toMatchObject({ $sdk_debug_replay_custom: 1, $recording_status: 'disabled' })
+        })
+
         it.each(['property enrichment', 'before_send rejection', 'snapshot capture'])(
             'does not consume the replay diagnostic interval on %s',
             (scenario) => {
@@ -2246,7 +2313,7 @@ describe('posthog core', () => {
                 vi.advanceTimersByTime(10)
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/flags/?v=2',
+                    url: 'http://localhost/flags/?v=4',
                 })
             })
 

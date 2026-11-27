@@ -1,6 +1,8 @@
 export * from './extensions/sentry-integration'
 export * from './extensions/express'
 export * from './extensions/fetch-request'
+export { createReactRouterErrorHandler } from './extensions/react-router'
+export type { ReactRouterErrorArgs, ReactRouterErrorHandlerOptions } from './extensions/react-router'
 export * from './types'
 export { enrichCurrentSpan } from './extensions/context/listeners'
 
@@ -9,20 +11,20 @@ export { CaptureError } from './capture-v1/errors'
 export type { CaptureDroppedEvent, CaptureErrorParams } from './capture-v1/errors'
 export type { CaptureEndpoint } from './capture-v1/types'
 export { EmailError } from './emails/errors'
-export { TRANSACTIONAL_EMAIL_CATEGORY } from './emails/types'
 export type { EmailErrorName } from './emails/errors'
+export { RemoteConfigPayloadError } from './remote-config-errors'
 export type {
   CodeEmailForm,
   EmailAttachment,
   EmailDeliveryStatus,
   EmailPreferences,
   EmailReactElement,
+  EmailReactRenderer,
   Emails,
   EmailStatus,
   EmailTracking,
   EmailWarning,
   GetEmailResponse,
-  MessageCategory,
   SendCodeEmailOptions,
   SendEmailBase,
   SendEmailOptions,

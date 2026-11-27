@@ -21,33 +21,6 @@ export interface SendEmailBase {
   maxRetries?: number
 }
 
-/**
- * The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
- * send without a category, it doesn't follow the category of the template that `templateKey` names.
- */
-export const TRANSACTIONAL_EMAIL_CATEGORY = 'transactional'
-
-/**
- * A message category that a send defines in code. PostHog creates the category when the project has
- * none with this key, and restores it when it was deleted. Both creation and restoration need room
- * under the project's active category limit. Otherwise the send leaves the category as it is: a send
- * never renames a category or changes its description. Change those in PostHog.
- */
-export interface MessageCategory {
-  /**
-   * Identifies the category in the project, such as `'newsletter'`. PostHog trims surrounding
-   * whitespace when storing the key. Recipients opt out of a category by its key: pass the trimmed
-   * key as a topic key in `posthog.emails.setPreferences({ topics })`.
-   */
-  key: string
-  /** A marketing category honors the recipient's opt-outs. A transactional one only files the email. */
-  type: 'marketing' | 'transactional'
-  /** The category's name, shown in PostHog. Used only when the send creates the category. */
-  name: string
-  /** Notes about which emails belong to the category. Used only when the send creates the category. */
-  description?: string
-}
-
 /** A template made transactional in PostHog, sent by its ID. */
 export interface TemplateEmailForm {
   /** The UUID of an email template made transactional in PostHog. */
@@ -109,38 +82,6 @@ interface CodeEmailFields {
    * click tracking.
    */
   tracking?: boolean | EmailTracking
-  /**
-   * The email's message category. Without it, the email follows the category of the template that
-   * `templateKey` names (when code-send categories are enabled), or is transactional with no
-   * category. A template made in PostHog must be enabled for transactional sends first: PostHog
-   * refuses a template that isn't enabled for transactional sends with `template_not_transactional`,
-   * and refuses an enabled template whose category is marketing with `marketing_template`.
-   *
-   * When `templateKey` names a sendable template, that template fixes the category: for an
-   * uncategorized template, leave `category` out or pass `TRANSACTIONAL_EMAIL_CATEGORY`; for a
-   * template in a transactional category, leave `category` out or pass a `MessageCategory` with the
-   * matching `key` and `type`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no
-   * category, so PostHog refuses it with `category_mismatch` when `templateKey` names a sendable
-   * template in a transactional category.
-   *
-   * A `MessageCategory` files the email under that category. A marketing email honors the
-   * recipient's opt-outs and gets unsubscribe headers. Its `html` needs a link with
-   * `<a href="{{ unsubscribe_url }}">`, or its `text` needs `{{ unsubscribe_url }}` when it has no
-   * `html`. Marketing emails can't carry attachments.
-   *
-   * The send returns an error with code `category_mismatch` when a category with this key has
-   * another type, or when `templateKey` names a sendable template in another category (including an
-   * uncategorized template given a `MessageCategory`); `too_many_categories` when creating or
-   * restoring a category would pass the project's active category limit;
-   * `unsubscribe_link_required` when a marketing email has no unsubscribe link placeholder;
-   * `copies_not_allowed` when a marketing email has `cc` or `bcc`; `workflow_can_wait` (verified
-   * sender) or `sandbox_fields_unsupported` (PostHog test sender) when a marketing email has
-   * `attachments`; `recipient_opted_out` when the recipient opted out of the category or of all
-   * marketing email; `template_not_transactional` when `templateKey` names a template not enabled
-   * for transactional sends; and `marketing_template` when `templateKey` names an enabled template
-   * in a marketing category.
-   */
-  category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory
 }
 
 /** Which kinds of tracking a send with `templateKey` turns on. */
@@ -185,6 +126,19 @@ export interface EmailReactElement {
 }
 
 /**
+ * Renders `react` sends: the `@react-email/render` module, or an object with its `render` and
+ * `toPlainText`.
+ */
+export interface EmailReactRenderer {
+  /**
+   * Renders a React element to HTML. Typed as `any` because `@react-email/render` takes
+   * `React.ReactNode`, which posthog-node doesn't depend on.
+   */
+  render(element: any): Promise<string>
+  toPlainText(html: string): string
+}
+
+/**
  * Email content from your code, named by a key: `html`, `text` or both, or a `react` element
  * the client renders. PostHog sends it as is and never stores it. PostHog derives a missing
  * `text` from the `html`.
@@ -196,7 +150,9 @@ export type CodeEmailForm = CodeEmailFields &
     | {
         /**
          * A React Email element. The client renders it into `html`, and into `text` when the
-         * send has none. Needs the `@react-email/render` package installed next to posthog-node.
+         * send has none. Needs the `@react-email/render` package: posthog-node loads it from
+         * `node_modules` at runtime, or set the client's `reactEmailRenderer` option when you bundle
+         * your app, such as for Cloudflare Workers, Convex, or Vercel Edge.
          * The client renders the element after `send()` returns, so give each send its own
          * element and props, and don't change them while the send is pending.
          */
@@ -214,10 +170,7 @@ export type SendTemplateEmailOptions = SendEmailBase &
 
 export type SendCodeEmailOptions = SendEmailBase & CodeEmailForm & Without<TemplateEmailForm>
 
-/**
- * Options for `posthog.emails.send()`: a template made in PostHog, or content from your code.
- * Declared fields of the active form (shared fields plus `templateId`/`templateData` or `templateKey` and code-send fields) are read once per send by property access, `to` first and `category` last. Cross-form and unknown-field validation inspects only own enumerable properties, so a template send ignores an inherited or non-enumerable `category`. Accessors that change other fields aren't supported.
- */
+/** Options for `posthog.emails.send()`: a template made in PostHog, or content from your code. */
 export type SendEmailOptions = SendTemplateEmailOptions | SendCodeEmailOptions
 
 /** A warning PostHog returned with a queued email. */
@@ -313,14 +266,13 @@ export interface EmailPreferences {
 export type SetEmailPreferencesResponse = { data: EmailPreferences; error: null } | { data: null; error: EmailError }
 
 /**
- * The `posthog.emails` API: sends transactional email from PostHog email templates, or
- * transactional and marketing email from content your code rendered, reads the status of each
- * email it sent, and sets a recipient's topic preferences.
+ * The `posthog.emails` API: sends transactional email from PostHog email templates or from
+ * content your code rendered, reads the status of each email it sent, and sets a recipient's
+ * topic preferences.
  */
 export interface Emails {
   /**
-   * Queue one email: a transactional email from a PostHog email template, or a transactional or
-   * marketing email from content your code rendered.
+   * Queue one email, from a transactional email template or from content your code rendered.
    *
    * Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
    * not that it was delivered. Network errors, rate limits, an in-flight idempotency key and

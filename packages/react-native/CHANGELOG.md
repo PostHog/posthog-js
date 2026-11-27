@@ -1,5 +1,19 @@
 # posthog-react-native
 
+## 4.87.3
+
+### Patch Changes
+
+- [#5808](https://github.com/PostHog/posthog-js/pull/5808) [`5dc32e4`](https://github.com/PostHog/posthog-js/commit/5dc32e4d620e4fb595e0d32cacb46a152b5499d8) Thanks [@kayahickindev](https://github.com/kayahickindev)! - `Application Opened`, `Application Backgrounded` and `Application Became Active` are still captured when `Linking.getInitialURL()` rejects.
+  (2026-11-25)
+
+## 4.87.2
+
+### Patch Changes
+
+- [#5797](https://github.com/PostHog/posthog-js/pull/5797) [`7f9920a`](https://github.com/PostHog/posthog-js/commit/7f9920ae31bed45df8a8d138185e9bef5114e065) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop sending replay debug properties on events captured while session replay is off
+  (2026-11-23)
+
 ## 4.87.1
 
 ### Patch Changes

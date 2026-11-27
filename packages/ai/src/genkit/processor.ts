@@ -5,7 +5,7 @@ import { captureAiEvent, eventOptionFields, userDistinctId } from '../captureAiE
 import { captureAiGeneration } from '../captureAiGeneration'
 import { formatAiError } from '../serializeError'
 import { formatToolResult } from '../toolResult'
-import { isObject } from '../typeGuards'
+import { redactKeys } from '../mcpCredentials'
 import type { FormattedMessage } from '../types'
 import { AIEvent, MAX_OUTPUT_SIZE, formatInlineDataBlock, isPrivacyModeEnabled } from '../utils'
 
@@ -14,18 +14,58 @@ const SPAN_STATUS_ERROR = 2
 
 const MODEL_PARAMETER_KEYS = ['temperature', 'maxOutputTokens', 'topK', 'topP', 'stopSequences']
 
-// Plugin config is part of the span input and output, so `config.apiKey` would otherwise be captured.
-// Keys are compared in lower case without `-` and `_`.
-const CREDENTIAL_KEYS = new Set([
-  'apikey',
-  'accesstoken',
-  'authorization',
-  'clientsecret',
-  'headers',
-  'password',
-  'secret',
+// Plugin config, tool results and model messages can all carry credentials. Matching the end of the
+// normalized key masks `refresh_token`, `SecretAccessKey` and `Set-Cookie` but leaves `maxOutputTokens` and
+// `token_type` alone.
+const CREDENTIAL_KEY_SUFFIXES = [
   'token',
+  'tokens',
+  'secret',
+  'secrets',
+  'secretkey',
+  'password',
+  'passwords',
+  'passwd',
+  'apikey',
+  'apikeys',
+  'privatekey',
+  'accesskey',
+  'authorization',
+  'cookie',
+  'cookies',
+  'credential',
+  'credentials',
+  // Masked whole, since headers hold credentials under other names, such as `x-api-key`.
+  'headers',
+]
+// Token counts and limits end in `tokens` but hold no secret.
+const TOKEN_COUNT_KEYS = new Set([
+  'maxtokens',
+  'maxoutputtokens',
+  'maxcompletiontokens',
+  'inputtokens',
+  'outputtokens',
+  'totaltokens',
+  'prompttokens',
+  'completiontokens',
+  'reasoningtokens',
+  'thoughtstokens',
+  'cachedtokens',
+  'cachedcontenttokens',
+  'cachecreationinputtokens',
+  'cachereadinputtokens',
+  'budgettokens',
+  'thinkingtokens',
+  'audiotokens',
+  'acceptedpredictiontokens',
+  'rejectedpredictiontokens',
 ])
+
+// A field named for one header, such as `authorization_header`, holds that header's value.
+const isCredentialKey = (key: string): boolean => {
+  const name = key.replace(/header$/, '')
+  return !TOKEN_COUNT_KEYS.has(name) && CREDENTIAL_KEY_SUFFIXES.some((suffix) => name.endsWith(suffix))
+}
 
 // Genkit plugin names that differ from the provider names the other integrations send.
 const PROVIDER_NAMES = new Map([
@@ -318,7 +358,7 @@ export class PostHogGenkitSpanProcessor {
     if (isPrivacyModeEnabled(this._client, this._privacyMode)) {
       return null
     }
-    return formatToolResult(redactCredentials(parseAttribute(span, key)), this._client, MAX_OUTPUT_SIZE)
+    return formatToolResult(redactKeys(parseAttribute(span, key), isCredentialKey), this._client, MAX_OUTPUT_SIZE)
   }
 
   private _formatMessages(messages: GenkitMessage[]): FormattedMessage[] {
@@ -327,7 +367,7 @@ export class PostHogGenkitSpanProcessor {
       content: (message.content ?? []).map((part) => formatPart(part, this._client)),
     }))
     // Redacts credentials (tool results reach the model as messages), base64 media and long strings.
-    return formatToolResult(redactCredentials(formatted), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
+    return formatToolResult(redactKeys(formatted, isCredentialKey), this._client, MAX_OUTPUT_SIZE) as FormattedMessage[]
   }
 }
 
@@ -384,21 +424,6 @@ function formatDocument(content: GenkitPart[], client: PostHog): unknown {
     return content.map((part) => part.text).join('')
   }
   return content.map((part) => formatPart(part, client))
-}
-
-function redactCredentials(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactCredentials)
-  }
-  if (!isObject(value)) {
-    return value
-  }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      CREDENTIAL_KEYS.has(key.toLowerCase().replace(/[-_]/g, '')) ? '[REDACTED]' : redactCredentials(item),
-    ])
-  )
 }
 
 /** Genkit stores span input and output as JSON strings. */

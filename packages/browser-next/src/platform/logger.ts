@@ -4,9 +4,14 @@ import { originalConsoleMethod } from '@posthog/browser-common/utils/console-ori
 type Logger = Client['logger']
 type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error'
 
-export const createLogger = (prefix: string, enabled: boolean): Logger => {
+/** Shared output switch, so a runtime change reaches child loggers that extensions already created. */
+export interface LogState {
+    enabled: boolean
+}
+
+export const createLogger = (prefix: string, state: LogState): Logger => {
     const write = (level: ConsoleLevel, args: unknown[]): void => {
-        if (!enabled) {
+        if (!state.enabled) {
             return
         }
 
@@ -24,6 +29,6 @@ export const createLogger = (prefix: string, enabled: boolean): Logger => {
         warn: (...args: unknown[]) => write('warn', args),
         error: (...args: unknown[]) => write('error', args),
         critical: (...args: unknown[]) => write('error', args),
-        createLogger: (childPrefix: string) => createLogger(`${prefix} ${childPrefix}`, enabled),
+        createLogger: (childPrefix: string) => createLogger(`${prefix} ${childPrefix}`, state),
     }
 }

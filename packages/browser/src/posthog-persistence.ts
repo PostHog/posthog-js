@@ -152,6 +152,35 @@ const parseStorageValue = (value: string | null): Properties => {
     return isObject(parsed) ? parsed : {}
 }
 
+// V1 flags need only their legacy rendering across page loads: their typed value and metadata
+// repeat the legacy members, and only config version 2 records are read for flag events. Keep
+// the v4 details in memory, but store each v1 record as released versions do. An older version
+// that reads the storage (after a rollback, or in another tab) then returns no typed member from
+// its detail getters, and cookies keep their legacy footprint. V2 records retain their typed
+// value and attribution so cached reads can still report exposures.
+const compactV1FlagDetails = (props: Properties): Properties => {
+    const details = props[PERSISTENCE_FEATURE_FLAG_DETAILS]
+    if (!isObject(details)) {
+        return props
+    }
+    return {
+        ...props,
+        [PERSISTENCE_FEATURE_FLAG_DETAILS]: Object.fromEntries(
+            Object.entries(details).map(([key, detail]) => {
+                if (!isObject(detail) || !('value' in detail) || detail.metadata?.config_version !== 1) {
+                    return [key, detail]
+                }
+                const legacy: Properties = { ...detail, metadata: { ...detail.metadata } }
+                delete legacy.value
+                for (const member of ['config_version', 'rule_type', 'rule_id', 'variant_key', 'forced_variant']) {
+                    delete legacy.metadata[member]
+                }
+                return [key, legacy]
+            })
+        ),
+    }
+}
+
 type StorageSlot = PersistenceStorageGroup | typeof MAIN_STORAGE_SLOT
 type StorageWriteResult = 'written' | 'skipped' | 'failed'
 
@@ -1179,14 +1208,22 @@ export class PostHogPersistence {
             const previousUserState = localEntryBeforeMerge?.[USER_STATE] ?? USER_STATE_ANONYMOUS
             const nextDistinctId = entry[DISTINCT_ID]
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
+            const sessionEntryBeforeMerge = sessionStore._parse(this._name)
+            const hasPreviousLocalIdentity =
+                !isUndefined(previousDistinctId) ||
+                !isUndefined(localEntryBeforeMerge?.[USER_STATE]) ||
+                (!!sessionEntryBeforeMerge && !isEmptyObject(sessionEntryBeforeMerge))
             if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
-                this._cookieIdentityChangePending = true
-                if (!this._disabled) {
-                    sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                if (hasPreviousLocalIdentity) {
+                    this._cookieIdentityChangePending = true
+                    if (!this._disabled) {
+                        sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                    }
                 }
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
                 const siblingReset =
+                    hasPreviousLocalIdentity &&
                     nextUserState === USER_STATE_ANONYMOUS &&
                     (previousUserState === USER_STATE_IDENTIFIED ||
                         cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS ||
@@ -1217,13 +1254,14 @@ export class PostHogPersistence {
                             groupProps[key] = value
                         }
                     })
+                    const storedGroupProps = compactV1FlagDetails(groupProps)
                     if (isEmptyObject(groupProps)) {
                         localStore._remove(this._groupEntryName(group))
                         this._slotState[group] = {}
-                    } else if (localStore._set(this._groupEntryName(group), groupProps)) {
+                    } else if (localStore._set(this._groupEntryName(group), storedGroupProps)) {
                         this._slotState[group] = {
                             persisted: true,
-                            fingerprint: this._entryFingerprint(groupProps, group),
+                            fingerprint: this._entryFingerprint(storedGroupProps, group),
                         }
                     }
                 })
@@ -1640,9 +1678,13 @@ export class PostHogPersistence {
             return 'skipped'
         }
 
+        // Every store gets v1 flag records in their legacy shape. Fingerprint the same projection
+        // we write; the live props stay intact.
+        let storedProps = props
         let fingerprint: string | undefined
         try {
-            fingerprint = this._entryFingerprint(props, slot)
+            storedProps = compactV1FlagDetails(props)
+            fingerprint = this._entryFingerprint(storedProps, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
                 return 'skipped'
@@ -1658,7 +1700,9 @@ export class PostHogPersistence {
         // after a confirmed-successful durable write: localStorage / sessionStorage
         // swallow quota errors, so caching ahead of a failed write would skip
         // every future retry and silently lose the entry.
-        if (storage._set(name, props, this._expire_days, this._cross_subdomain, this._secure, this._config.debug)) {
+        if (
+            storage._set(name, storedProps, this._expire_days, this._cross_subdomain, this._secure, this._config.debug)
+        ) {
             state.dirty = false
             if (slot !== MAIN_STORAGE_SLOT) {
                 // The group entry has now actually landed on disk — only here is
@@ -1743,6 +1787,7 @@ export class PostHogPersistence {
     clear(): void {
         this.remove()
         this.props = {}
+        this._campaign_params_url = undefined
     }
 
     /**
@@ -1887,7 +1932,9 @@ export class PostHogPersistence {
         if (initialPersonInfo) {
             const initialPersonProps = getInitialPersonPropsFromInfo(
                 initialPersonInfo,
-                this._config.disable_capture_url_hashes
+                this._config.disable_capture_url_hashes,
+                this._config.mask_personal_data_properties,
+                this._config.custom_personal_data_properties
             )
             extend(p, initialPersonProps)
         }

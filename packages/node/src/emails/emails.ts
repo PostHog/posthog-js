@@ -16,24 +16,24 @@ import {
   refuseRenderedMessageOverLimit,
 } from './attachments'
 import { EmailError } from './errors'
-import {
-  TRANSACTIONAL_EMAIL_CATEGORY,
-  type CodeEmailForm,
-  type EmailPreferences,
-  type EmailReactElement,
-  type EmailStatus,
-  type EmailWarning,
-  type Emails,
-  type GetEmailResponse,
-  type MessageCategory,
-  type SendEmailBase,
-  type SendEmailOptions,
-  type SendEmailResponse,
-  type SendEmailResult,
-  type SendTemplateEmailOptions,
-  type SetEmailPreferencesOptions,
-  type SetEmailPreferencesResponse,
-  type TemplateEmailForm,
+import { importReactRenderer } from './react-renderer-import'
+import type {
+  CodeEmailForm,
+  EmailPreferences,
+  EmailReactElement,
+  EmailReactRenderer,
+  EmailStatus,
+  EmailWarning,
+  Emails,
+  GetEmailResponse,
+  SendEmailBase,
+  SendEmailOptions,
+  SendEmailResponse,
+  SendEmailResult,
+  SendTemplateEmailOptions,
+  SetEmailPreferencesOptions,
+  SetEmailPreferencesResponse,
+  TemplateEmailForm,
 } from './types'
 
 const SEND_PATH = '/api/messaging/send/email/'
@@ -55,10 +55,6 @@ const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/
 const TEMPLATE_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,400}$/
 
 type EveryField<Form> = Record<keyof Form, true>
-interface ReactRenderer {
-  render(element: EmailReactElement): Promise<string>
-  toPlainText(html: string): string
-}
 type UncheckedSend = { [Field in keyof SendTemplateEmailOptions]?: unknown }
 
 interface SendForm {
@@ -80,21 +76,20 @@ const CODE_FIELDS: EveryField<CodeEmailForm> = {
   subject: true,
   from: true,
   replyTo: true,
+  captureEngagement: true,
   cc: true,
   bcc: true,
   attachments: true,
-  captureEngagement: true,
   sensitive: true,
   tracking: true,
   html: true,
   text: true,
   react: true,
-  category: true,
 }
 const TEMPLATE_FORM: SendForm = {
   name: 'templateId',
   fields: fieldSet(SHARED_FIELDS, TEMPLATE_FIELDS),
-  why: "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
+  why: "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
   howToSend: 'send a template made in PostHog with templateId',
 }
 const CODE_FORM: SendForm = {
@@ -115,6 +110,7 @@ export interface EmailSenderConfig {
   requestTimeoutMs: number
   maxRetries: number
   migratedFrom?: string
+  reactRenderer?: EmailReactRenderer
 }
 
 export interface EmailFetchOptions extends PostHogFetchOptions {
@@ -151,9 +147,9 @@ interface Reply {
 }
 
 /**
- * Sends one transactional or marketing email per call to the messaging send API on the app host,
- * reads the status of a sent email, and sets a recipient's topic preferences. Owns the attempt
- * loop, so every attempt of a send carries the same idempotency key.
+ * Sends one transactional email per call to the messaging send API on the app host, reads the
+ * status of a sent email, and sets a recipient's topic preferences. Owns the attempt loop, so every
+ * attempt of a send carries the same idempotency key.
  */
 export class EmailSender implements Emails {
   private readonly config: EmailSenderConfig
@@ -204,7 +200,7 @@ export class EmailSender implements Emails {
       const content =
         prepared.react === undefined
           ? prepared.content
-          : await withRenderedReact(prepared.content, prepared.react, this.config.requestTimeoutMs)
+          : await withRenderedReact(prepared.content, prepared.react, this.config, this.hooks.logger)
       if (prepared.react !== undefined) {
         refuseRenderedMessageOverLimit(prepared.files, content)
       }
@@ -484,36 +480,15 @@ function refuseSecondArgument(unexpected: unknown[]): void {
 }
 
 function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): PreparedSend {
-  const send: Record<string, unknown> = Object.create(null)
-  const raw = isOptionsObject(options) ? options : undefined
-  const read = (name: string): unknown => {
-    const value = raw?.[name]
-    send[name] = value
-    return value
-  }
-  const to = read('to')
+  const send: UncheckedSend = options ?? {}
+  const { to, distinctId, idempotencyKey, maxRetries } = send
   if (typeof to !== 'string' || !to.trim()) {
     throw invalid('invalid_recipient', 'to must be one email address as a nonempty string.', 'to')
   }
-  const distinctId = read('distinctId')
-  const idempotencyKey = read('idempotencyKey')
-  const maxRetries = read('maxRetries')
   if (distinctId !== undefined && (typeof distinctId !== 'string' || !distinctId)) {
     throw invalid('invalid_distinct_id', 'distinctId must be a nonempty string.', 'distinctId')
   }
-  const templateId = read('templateId')
-  const templateKey = read('templateKey')
-  if ((templateId === undefined) === (templateKey === undefined)) {
-    throw new EmailError({
-      code: 'invalid_form',
-      message: 'Send either templateId, or templateKey with subject and html, text or react.',
-    })
-  }
-  const unchecked = send as UncheckedSend
-  const { content, files } =
-    templateKey === undefined
-      ? { content: templateContent(unchecked, raw, read, distinctId), files: [] }
-      : codeContent(unchecked, raw, read, distinctId)
+  const { content, files } = contentOf(send, distinctId)
   if (
     idempotencyKey !== undefined &&
     (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey))
@@ -528,18 +503,13 @@ function prepareSend(options: SendEmailOptions, defaultMaxRetries: number): Prep
     throw invalid('invalid_max_retries', 'maxRetries must be a nonnegative integer.', 'maxRetries')
   }
 
-  const react = 'react' in send ? send.react : read('react')
   return {
     content: snapshotOf({ ...content, to }),
     files,
-    react: isReactElement(react) ? react : undefined,
+    react: isReactElement(send.react) ? send.react : undefined,
     idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
     maxRetries: isRetryCount(maxRetries) ? maxRetries : defaultMaxRetries,
   }
-}
-
-function isOptionsObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && (typeof value === 'object' || typeof value === 'function')
 }
 
 function snapshotOf(content: Record<string, unknown>): Record<string, unknown> {
@@ -584,24 +554,30 @@ interface SendContent {
   files: AttachmentFile[]
 }
 
-function templateContent(
-  send: UncheckedSend,
-  raw: Record<string, unknown> | undefined,
-  read: (name: string) => unknown,
-  distinctId: string | undefined
-): Record<string, unknown> {
-  const { templateId } = send
+function contentOf(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  if ((send.templateId === undefined) === (send.templateKey === undefined)) {
+    throw new EmailError({
+      code: 'invalid_form',
+      message: 'Send either templateId, or templateKey with subject and html, text or react.',
+    })
+  }
+  return send.templateKey === undefined
+    ? { content: templateContent(send, distinctId), files: [] }
+    : codeContent(send, distinctId)
+}
+
+function templateContent(send: UncheckedSend, distinctId: string | undefined): Record<string, unknown> {
+  const { templateId, templateData } = send
   if (typeof templateId !== 'string' || !UUID_PATTERN.test(templateId)) {
     throw invalid('invalid_template_id', "templateId must be the template's UUID.", 'templateId')
   }
-  const templateData = read('templateData')
   if (
     templateData !== undefined &&
     (typeof templateData !== 'object' || templateData === null || Array.isArray(templateData))
   ) {
     throw invalid('invalid_template_data', 'templateData must be an object.', 'templateData')
   }
-  refuseFieldsOutside(raw, send, read, TEMPLATE_FORM, CODE_FORM)
+  refuseFieldsOutside(send, TEMPLATE_FORM, CODE_FORM)
   return {
     template_id: templateId.toLowerCase(),
     message_data: templateData ?? {},
@@ -609,13 +585,8 @@ function templateContent(
   }
 }
 
-function codeContent(
-  send: UncheckedSend,
-  raw: Record<string, unknown> | undefined,
-  read: (name: string) => unknown,
-  distinctId: string | undefined
-): SendContent {
-  const { templateKey } = send
+function codeContent(send: UncheckedSend, distinctId: string | undefined): SendContent {
+  const { templateKey, subject, html, text, react } = send
   if (typeof templateKey !== 'string' || !TEMPLATE_KEY_PATTERN.test(templateKey)) {
     throw invalid(
       'invalid_template_key',
@@ -623,11 +594,7 @@ function codeContent(
       'templateKey'
     )
   }
-  const subject = read('subject')
-  const html = read('html')
-  const text = read('text')
-  const react = read('react')
-  refuseFieldsOutside(raw, send, read, CODE_FORM, TEMPLATE_FORM)
+  refuseFieldsOutside(send, CODE_FORM, TEMPLATE_FORM)
   if (typeof subject !== 'string') {
     throw invalid('invalid_form', 'A send with templateKey needs a subject.', 'subject')
   }
@@ -642,32 +609,22 @@ function codeContent(
   } else if (html === undefined && text === undefined) {
     throw invalid('invalid_form', 'A send with templateKey needs html, text or react.', 'html')
   }
-  const attachments = read('attachments')
-  const files = attachments === undefined ? [] : attachmentFiles(attachments, { html, text, subject })
-  const fields = codeFormFields(read)
+  const files = send.attachments === undefined ? [] : attachmentFiles(send.attachments, { html, text, subject })
   return {
     content: {
       template_key: templateKey,
       subject,
       ...(html !== undefined && { html }),
       ...(text !== undefined && { text }),
-      ...fields,
+      ...codeFormFields(send),
       ...(distinctId !== undefined && { distinct_id: distinctId }),
     },
     files,
   }
 }
 
-function codeFormFields(read: (name: string) => unknown): Record<string, unknown> {
-  const from = read('from')
-  const replyTo = read('replyTo')
-  const cc = read('cc')
-  const bcc = read('bcc')
-  const captureEngagement = read('captureEngagement')
-  const sensitive = read('sensitive')
-  const tracking = read('tracking')
-  const category = read('category')
-  const validatedCategory = category !== undefined ? checkedCategory(category) : undefined
+function codeFormFields(send: UncheckedSend): Record<string, unknown> {
+  const { from, replyTo, cc, bcc, captureEngagement, sensitive, tracking } = send
   return {
     ...(from !== undefined && { from }),
     ...(replyTo !== undefined && unlessEmpty('reply_to', addressList(replyTo))),
@@ -676,30 +633,7 @@ function codeFormFields(read: (name: string) => unknown): Record<string, unknown
     ...(captureEngagement !== undefined && { capture_engagement: captureEngagement }),
     ...(sensitive !== undefined && { sensitive }),
     ...(tracking !== undefined && { tracking }),
-    ...(validatedCategory !== undefined && { category: validatedCategory }),
   }
-}
-
-function checkedCategory(value: unknown): typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory {
-  if (value === TRANSACTIONAL_EMAIL_CATEGORY) {
-    return value
-  }
-  if (value !== null && typeof value === 'object') {
-    const { key, type, name, description } = value as Record<string, unknown>
-    if (
-      typeof key === 'string' &&
-      typeof name === 'string' &&
-      (type === 'marketing' || type === 'transactional') &&
-      (description === undefined || typeof description === 'string')
-    ) {
-      return description === undefined ? { key, type, name } : { key, type, name, description }
-    }
-  }
-  throw invalid(
-    'invalid_category',
-    "category must be TRANSACTIONAL_EMAIL_CATEGORY or a MessageCategory with a string key and name, a type of 'marketing' or 'transactional', and an optional string description.",
-    'category'
-  )
 }
 
 function unlessEmpty(field: string, list: unknown): Record<string, unknown> {
@@ -743,12 +677,29 @@ function isReactElement(value: unknown): value is EmailReactElement {
 async function withRenderedReact(
   content: Record<string, unknown>,
   react: EmailReactElement,
-  timeoutMs: number
+  config: EmailSenderConfig,
+  logger: Logger
 ): Promise<Record<string, unknown>> {
-  const { render, toPlainText } = await loadReactRenderer()
+  await Promise.resolve()
+  const renderer = config.reactRenderer ?? (await loadReactRenderer(logger))
   try {
-    const html = await settleWithin(render(react), timeoutMs, 'Rendering the react element')
-    return { ...content, html, ...(content.text === undefined && { text: toPlainText(html) }) }
+    const html = await settleWithin(renderer.render(react), config.requestTimeoutMs, 'Rendering the react element')
+    if (typeof html !== 'string') {
+      throw new Error('reactEmailRenderer.render must return an HTML string.')
+    }
+    if (content.text !== undefined) {
+      return { ...content, html }
+    }
+    const text: unknown = renderer.toPlainText(html)
+    if (typeof text !== 'string') {
+      try {
+        Promise.prototype.then.call(text, undefined, () => {})
+      } catch {
+        void 0
+      }
+      throw new Error('reactEmailRenderer.toPlainText must return a string.')
+    }
+    return { ...content, html, text }
   } catch (cause) {
     throw new EmailError({
       code: 'react_render_failed',
@@ -770,45 +721,28 @@ async function settleWithin<T>(work: Promise<T>, timeoutMs: number, what: string
   }
 }
 
-async function loadReactRenderer(): Promise<ReactRenderer> {
+async function loadReactRenderer(logger: Logger): Promise<EmailReactRenderer> {
   try {
-    return await import('@react-email/render')
+    return await importReactRenderer()
   } catch (cause) {
-    throw new EmailError({
+    const error = new EmailError({
       code: 'missing_react_renderer',
       message:
         "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-      fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+      fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
       cause,
     })
+    try {
+      logger.warn(`PostHog email error ${error.code}: ${error.message} ${error.fix}`)
+    } catch {
+      void 0
+    }
+    throw error
   }
 }
 
-function refuseFieldsOutside(
-  raw: Record<string, unknown> | undefined,
-  send: UncheckedSend,
-  read: (name: string) => unknown,
-  form: SendForm,
-  otherForm: SendForm
-): void {
-  if (raw === undefined) {
-    return
-  }
-  let field: string | undefined
-  for (const name of Object.getOwnPropertyNames(raw)) {
-    if (form.fields.has(name)) {
-      continue
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(raw, name)
-    if (!descriptor?.enumerable) {
-      continue
-    }
-    const value = name in send ? (send as Record<string, unknown>)[name] : read(name)
-    if (value !== undefined) {
-      field = name
-      break
-    }
-  }
+function refuseFieldsOutside(send: UncheckedSend, form: SendForm, otherForm: SendForm): void {
+  const field = Object.entries(send).find(([name, value]) => value !== undefined && !form.fields.has(name))?.[0]
   if (field === undefined) {
     return
   }

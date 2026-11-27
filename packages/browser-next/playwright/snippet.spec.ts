@@ -63,9 +63,7 @@ for (const mode of ['sync', 'async', 'defer']) {
         await expect
             .poll(() => page.evaluate(() => window.snippetEvidence))
             .toMatchObject({ readyCount: 1, detailMatchesGlobal: true, flushed: true })
-        expect(await page.evaluate(() => typeof (window.posthog as IPostHog | undefined)?.analytics?.capture)).toBe(
-            'function'
-        )
+        expect(await page.evaluate(() => typeof (window.posthog as IPostHog | undefined)?.capture)).toBe('function')
         const captures = (await backend.inspect()).requests.filter(
             (request) => request.path === '/i/v1/analytics/events'
         )
@@ -97,9 +95,7 @@ test('embedded analytics delivers queued and immediate events without optional c
     await expect.poll(() => page.evaluate(() => window.snippetEvidence)).toMatchObject({ readyCount: 1, flushed: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
     const summary = await page.evaluate(() => {
-        const product = (window.posthog as IPostHog).analytics
-        if (!product) throw new Error('Expected embedded analytics')
-        return product.captureImmediate('inline_script')
+        return (window.posthog as IPostHog).captureImmediate('inline_script')
     })
     expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
     expect((await backend.inspect()).events.map((event) => (event as { event: string }).event)).toEqual([
@@ -120,9 +116,7 @@ test('core is embedded in the first response; disabled products do not request c
     expect((await backend.inspect()).events).toHaveLength(0)
     const summary = await page.evaluate(async () => {
         ;(window.posthog as IPostHog).optIn()
-        const product = (window.posthog as IPostHog).analytics
-        if (!product) throw new Error('Expected embedded analytics')
-        return product.captureImmediate('after_opt_in')
+        return (window.posthog as IPostHog).captureImmediate('after_opt_in')
     })
     expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'after_opt_in' })])
@@ -191,9 +185,7 @@ test('persisted denial gates pageview and early capture while initialization rem
     await page.evaluate(async () => {
         const client = window.posthog as IPostHog
         client.optIn()
-        const product = client.analytics
-        if (!product) throw new Error('Expected embedded analytics')
-        product.capture('after_persisted_denial')
+        client.capture('after_persisted_denial')
         await client.flush()
     })
     expect((await backend.inspect()).events.map((event) => (event as { event: string }).event)).toEqual([
@@ -270,9 +262,7 @@ test('failed optional chunks leave embedded analytics usable and optional acquis
     expect(await page.evaluate(() => (window.posthog as IPostHog).featureFlags)).toBeUndefined()
     expect((await backend.inspect()).events).toEqual([expect.objectContaining({ event: 'snippet_early' })])
     const summary = await page.evaluate(() => {
-        const product = (window.posthog as IPostHog).analytics
-        if (!product) throw new Error('Expected embedded analytics')
-        return product.captureImmediate('optional_failure')
+        return (window.posthog as IPostHog).captureImmediate('optional_failure')
     })
     expect(summary).toMatchObject({ submitted: 1, allPersisted: true })
     await assets.failChunks(false)

@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.12.2",
+    "version": "0.14.2",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -44,6 +44,9 @@
             ],
             "feature-flags-config": [
                 "dist/feature-flags-config.d.ts"
+            ],
+            "flags-response-v4": [
+                "dist/flags-response-v4.d.ts"
             ],
             "logs": [
                 "dist/logs.d.ts"
@@ -146,6 +149,11 @@
             "types": "./dist/feature-flags-config.d.ts",
             "require": "./dist/feature-flags-config.js",
             "import": "./dist/feature-flags-config.mjs"
+        },
+        "./flags-response-v4": {
+            "types": "./dist/flags-response-v4.d.ts",
+            "require": "./dist/flags-response-v4.js",
+            "import": "./dist/flags-response-v4.mjs"
         },
         "./logs": {
             "types": "./dist/logs.d.ts",
@@ -251,7 +259,7 @@
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
-        "dompurify": "^3.4.13",
+        "dompurify": "^3.4.18",
         "preact": "^10.29.3"
     },
     "devDependencies": {
@@ -261,6 +269,7 @@
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/preact": "catalog:",
+        "ajv": "^8.18.0",
         "jsdom": "catalog:",
         "lightningcss": "^1.33.0",
         "typescript": "catalog:native",

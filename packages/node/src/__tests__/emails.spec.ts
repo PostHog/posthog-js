@@ -2,14 +2,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createElement, type ReactElement, Suspense, use } from 'react'
 
-import {
-  EmailError,
-  MessageCategory,
-  PostHog,
-  PostHogOptions,
-  SendEmailOptions,
-  TRANSACTIONAL_EMAIL_CATEGORY,
-} from '@/entrypoints/index.node'
+import { EmailError, PostHog, PostHogOptions, SendEmailOptions } from '@/entrypoints/index.node'
 
 import { FakePostHog, type FakePostHogOptions, type ServerChange } from './utils/emails-fake'
 
@@ -1068,10 +1061,120 @@ describe('emails', () => {
         code: 'missing_react_renderer',
         message:
           "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
         cause: expect.any(Error),
       })
       expect(inbox).toEqual([])
+    })
+
+    it('renders with a custom reactEmailRenderer wrapper', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      makeClient({
+        reactEmailRenderer: {
+          render: (element) => render(element, { pretty: true }),
+          toPlainText,
+        },
+      })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('\n'),
+          text: 'Welcome, Ada',
+        }),
+      ])
+      expect(inbox[0].html).toContain('<p>Welcome, Ada</p>')
+    })
+
+    it('renders with the @react-email/render module passed as reactEmailRenderer', async () => {
+      const reactEmailRenderer = await import('@react-email/render')
+      makeClient({ reactEmailRenderer })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
+      ])
+    })
+
+    it('renders with reactEmailRenderer after send() returns, not synchronously', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      let renderedSynchronously = false
+      makeClient({
+        reactEmailRenderer: {
+          render: (element) => {
+            renderedSynchronously = true
+            return render(element)
+          },
+          toPlainText,
+        },
+      })
+
+      const pending = sendReact({ react: welcome })
+      expect(renderedSynchronously).toBe(false)
+
+      const { error } = await pending
+      expect(error).toBeNull()
+      expect(renderedSynchronously).toBe(true)
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.render resolves to a non-string even with text supplied', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => undefined as unknown as string,
+          toPlainText: (html) => html,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome, text: 'Fallback text' })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.toPlainText returns a non-string', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => '<p>Welcome, Ada</p>',
+          toPlainText: () => undefined as unknown as string,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('renders with a thenable reactEmailRenderer object without invoking its then method', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      makeClient({
+        reactEmailRenderer: {
+          render,
+          toPlainText,
+          then() {
+            throw new Error('renderer object must not be awaited')
+          },
+        } as unknown as Parameters<typeof makeClient>[0]['reactEmailRenderer'],
+      })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
+      ])
     })
 
     it('sends html without loading @react-email/render', async () => {
@@ -1538,13 +1641,13 @@ describe('emails', () => {
       [
         'a sender on the template form',
         { templateId: TEMPLATE_ID, from: 'Acme <hi@example.com>' },
-        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
         'Remove from, or send content from your code with templateKey.',
       ],
       [
         'engagement capture on the template form',
         { templateId: TEMPLATE_ID, captureEngagement: true },
-        "A template made in PostHog sets its own sender, subject, content and category, and follows the project's engagement setting.",
+        "A template made in PostHog sets its own sender, subject and content, and follows the project's engagement setting.",
         'Remove captureEngagement, or send content from your code with templateKey.',
       ],
       [
@@ -1579,528 +1682,6 @@ describe('emails', () => {
       expect(fetch).toHaveBeenCalledTimes(requests)
       expect(error?.code ?? null).toBe(requests ? null : 'invalid_form')
     })
-  })
-
-  describe('message categories', () => {
-    const CODE_SEND = {
-      to: 'reader@example.com',
-      templateKey: 'monthly-news',
-      subject: 'This month',
-      html: '<a href="{{ unsubscribe_url }}">Unsubscribe</a>',
-    }
-
-    const NEWSLETTER: MessageCategory = {
-      key: 'newsletter',
-      type: 'marketing',
-      name: 'Newsletter',
-      description: 'Monthly product news',
-    }
-
-    const RECEIPTS: MessageCategory = {
-      key: 'receipts',
-      type: 'transactional',
-      name: 'Receipts',
-    }
-
-    const HELLO_SHA256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
-    const HELLO_BYTES = utf8('hello')
-    const HELLO_CHECKSUM = 'LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ='
-    const UPLOADS_URL = 'https://us.posthog.com/api/messaging/attachments/uploads/'
-    const STORAGE_UPLOAD_URL = `https://storage.example.com/team/2/${HELLO_SHA256}?X-Amz-Expires=900&X-Amz-Signature=sig-1`
-
-    const uploadGrantReply = (): Reply => ({
-      status: 200,
-      body: {
-        files: [
-          {
-            sha256: HELLO_SHA256,
-            status: 'upload',
-            url: STORAGE_UPLOAD_URL,
-            method: 'PUT',
-            headers: {
-              'Content-Length': String(HELLO_BYTES.byteLength),
-              'x-amz-checksum-sha256': HELLO_CHECKSUM,
-            },
-            url_expires_at: '2026-11-30T00:00:00Z',
-          },
-        ],
-      },
-    })
-
-    const sendIn = (
-      category?: typeof TRANSACTIONAL_EMAIL_CATEGORY | MessageCategory,
-      overrides: Record<string, unknown> = {}
-    ): ReturnType<PostHog['emails']['send']> =>
-      posthog.emails.send({ ...CODE_SEND, ...overrides, category } as SendEmailOptions)
-
-    const sendUnchecked = (send: Record<string, unknown>): ReturnType<PostHog['emails']['send']> =>
-      posthog.emails.send(send as unknown as SendEmailOptions)
-
-    const requestHeaders = (callIndex = 0): Record<string, string> => {
-      const [, options] = fetch.mock.calls[callIndex]
-      return Object.fromEntries(
-        Object.entries((options.headers ?? {}) as Record<string, string>).map(([key, value]) => [
-          key.toLowerCase(),
-          value,
-        ])
-      )
-    }
-
-    const postedSend = (
-      callIndex = 0
-    ): { url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> } => {
-      const [url, options] = fetch.mock.calls[callIndex]
-      return {
-        url,
-        method: options.method,
-        headers: requestHeaders(callIndex),
-        body: JSON.parse(options.body),
-      }
-    }
-
-    it.each([
-      ['omitted category', undefined, undefined],
-      ['the built-in transactional category', TRANSACTIONAL_EMAIL_CATEGORY, 'transactional'],
-      [
-        'a marketing category with description',
-        NEWSLETTER,
-        { key: 'newsletter', type: 'marketing', name: 'Newsletter', description: 'Monthly product news' },
-      ],
-      [
-        'a transactional category without description',
-        { key: 'receipts', type: 'transactional' as const, name: 'Receipts' },
-        { key: 'receipts', type: 'transactional', name: 'Receipts' },
-      ],
-      [
-        'a marketing category with an empty description',
-        { key: 'newsletter', type: 'marketing' as const, name: 'Newsletter', description: '' },
-        { key: 'newsletter', type: 'marketing', name: 'Newsletter', description: '' },
-      ],
-    ])('serializes %s on the send route', async (_label, category, expectedCategory) => {
-      replies = [accepted()]
-
-      const { data, error } = await sendIn(category)
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      const request = postedSend()
-      expect(request.url).toBe(SEND_URL)
-      expect(request.method).toBe('POST')
-      expect(request.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
-      expect(request.body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-        ...(expectedCategory !== undefined && { category: expectedCategory }),
-      })
-      expect('category' in request.body).toBe(expectedCategory !== undefined)
-      if (typeof expectedCategory === 'object') {
-        expect('description' in (request.body.category as object)).toBe('description' in expectedCategory)
-      }
-    })
-
-    it('sends a categorized transactional email with attachments and preserves exact outbound fields', async () => {
-      replies = [uploadGrantReply(), { status: 200, body: {} }, accepted()]
-
-      const { data, error } = await sendIn(RECEIPTS, {
-        attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
-      })
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(3)
-
-      const uploadsRequest = postedSend(0)
-      expect(uploadsRequest.url).toBe(UPLOADS_URL)
-      expect(uploadsRequest.method).toBe('POST')
-      expect(uploadsRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
-      expect(uploadsRequest.headers['content-type']).toBe('application/json')
-      expect(uploadsRequest.body).toEqual({ files: [{ sha256: HELLO_SHA256, size: HELLO_BYTES.byteLength }] })
-
-      const [putUrl, putOptions] = fetch.mock.calls[1]
-      const putHeaders = requestHeaders(1)
-      expect(putUrl).toBe(STORAGE_UPLOAD_URL)
-      expect(putOptions.method).toBe('PUT')
-      expect('authorization' in putHeaders).toBe(false)
-      expect(putHeaders['content-length']).toBe(String(HELLO_BYTES.byteLength))
-      expect(putHeaders['x-amz-checksum-sha256']).toBe(HELLO_CHECKSUM)
-      expect(new Uint8Array(await new Response(putOptions.body).arrayBuffer())).toEqual(HELLO_BYTES)
-
-      const sendRequest = postedSend(2)
-      expect(sendRequest.url).toBe(SEND_URL)
-      expect(sendRequest.method).toBe('POST')
-      expect(sendRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
-      expect(sendRequest.headers['content-type']).toBe('application/json')
-      expect(sendRequest.headers['idempotency-key']).toBeTruthy()
-      expect(sendRequest.body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-        category: RECEIPTS,
-        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
-      })
-    })
-
-    it('reads an enumerable category getter once and sends the first marketing category', async () => {
-      replies = [accepted()]
-      let reads = 0
-      const options = {
-        ...CODE_SEND,
-        get category(): MessageCategory | undefined {
-          reads += 1
-          return reads === 1 ? NEWSLETTER : undefined
-        },
-      }
-
-      const { data, error } = await posthog.emails.send(options as unknown as SendEmailOptions)
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('sends the validated marketing category when category getters change on later reads', async () => {
-      replies = [accepted()]
-      let keyReads = 0
-      let typeReads = 0
-      let nameReads = 0
-      let descriptionReads = 0
-      const category = {
-        get key(): string {
-          keyReads += 1
-          return keyReads === 1 ? NEWSLETTER.key : 'mutated-key'
-        },
-        get type(): 'marketing' | 'transactional' {
-          typeReads += 1
-          return typeReads === 1 ? 'marketing' : 'transactional'
-        },
-        get name(): string {
-          nameReads += 1
-          return nameReads === 1 ? NEWSLETTER.name : 'Mutated Name'
-        },
-        get description(): string | undefined {
-          descriptionReads += 1
-          return descriptionReads === 1 ? NEWSLETTER.description : 'Mutated description'
-        },
-      }
-
-      const { data, error } = await posthog.emails.send({
-        ...CODE_SEND,
-        category,
-      })
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('sends getter-backed idempotencyKey and category on a class instance', async () => {
-      replies = [accepted()]
-      class ClassEmailSend {
-        readonly to = CODE_SEND.to
-        readonly templateKey = CODE_SEND.templateKey
-        readonly subject = CODE_SEND.subject
-        readonly html = CODE_SEND.html
-
-        get idempotencyKey(): string {
-          return 'idem-class-parity-1'
-        }
-
-        get category(): MessageCategory {
-          return NEWSLETTER
-        }
-      }
-
-      const { data, error } = await posthog.emails.send(new ClassEmailSend())
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().headers['idempotency-key']).toBe('idem-class-parity-1')
-      expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('sends a non-enumerable own category on a code send', async () => {
-      replies = [accepted()]
-      const options = { ...CODE_SEND }
-      Object.defineProperty(options, 'category', { value: NEWSLETTER, enumerable: false })
-
-      const { data, error } = await posthog.emails.send(options)
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('preserves getter-backed idempotencyKey across retries on a templateId class instance', async () => {
-      replies = [rejected(503, 'delivery_unavailable'), accepted()]
-      class ClassTemplateSend {
-        readonly to = 'reader@example.com'
-        readonly templateId = TEMPLATE_ID
-
-        get idempotencyKey(): string {
-          return 'idem-template-class-1'
-        }
-      }
-
-      const { data, error } = await settle(posthog.emails.send(new ClassTemplateSend()))
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(2)
-      expect(postedSend(0).headers['idempotency-key']).toBe('idem-template-class-1')
-      expect(postedSend(1).headers['idempotency-key']).toBe('idem-template-class-1')
-      expect(postedSend(0).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: {},
-      })
-      expect(postedSend(1).body).toEqual({
-        to: 'reader@example.com',
-        template_id: TEMPLATE_ID,
-        message_data: {},
-      })
-    })
-
-    it('copies only the four declared category fields and drops extra properties', async () => {
-      replies = [accepted()]
-
-      const { data, error } = await sendUnchecked({
-        ...CODE_SEND,
-        category: { ...NEWSLETTER, extra: 'ignored' },
-      })
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(postedSend().body.category).toEqual(NEWSLETTER)
-    })
-
-    it('validates recipient first before reading subject, category, or template fields', async () => {
-      const { data, error } = await sendUnchecked({
-        category: 'not-a-category',
-        templateKey: 'bad key!',
-        get subject(): string {
-          throw new Error('subject should not be read before validating to')
-        },
-        html: CODE_SEND.html,
-        to: '',
-      })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_recipient', name: 'validation_error', field: 'to' })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it('allows an explicit undefined cross-form field on a plain categorized code send', async () => {
-      replies = [accepted()]
-
-      const { data, error } = await sendUnchecked({
-        ...CODE_SEND,
-        templateId: undefined,
-        category: NEWSLETTER,
-      })
-
-      expect(error).toBeNull()
-      expect(data).toEqual({ id: 'msg_1', replayed: false, warnings: [] })
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(postedSend().body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-        category: NEWSLETTER,
-      })
-    })
-
-    it.each([
-      [
-        'category on a template send',
-        { to: 'reader@example.com', templateId: TEMPLATE_ID, category: TRANSACTIONAL_EMAIL_CATEGORY },
-        'category',
-      ],
-      [
-        'templateData on a categorized code send',
-        { ...CODE_SEND, category: NEWSLETTER, templateData: { name: 'Ada' } },
-        'templateData',
-      ],
-      [
-        'an unknown field on a categorized code send',
-        { ...CODE_SEND, category: NEWSLETTER, unexpected: true },
-        'unexpected',
-      ],
-    ])('refuses %s and sends nothing', async (_label, options, expectedField) => {
-      const { data, error } = await sendUnchecked(options)
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_form', name: 'validation_error', field: expectedField })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it.each([
-      ['a category key as a bare string', 'newsletter'],
-      ['null', null],
-      ['a category without a name', { key: 'newsletter', type: 'marketing' }],
-      ['a category with a key that is not a string', { ...NEWSLETTER, key: 7 }],
-      ['a category of a type PostHog does not have', { ...NEWSLETTER, type: 'promotional' }],
-      ['a category with a description that is not a string', { ...NEWSLETTER, description: ['Monthly'] }],
-    ])('refuses %s as the category and sends nothing', async (_name, category) => {
-      const { data, error } = await sendUnchecked({ ...CODE_SEND, category })
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({ code: 'invalid_category', name: 'validation_error', field: 'category' })
-      expect(fetch).not.toHaveBeenCalled()
-    })
-
-    it.each([
-      ['category_mismatch', 400, 'category', NEWSLETTER, {}],
-      ['marketing_template', 400, null, undefined, { templateKey: 'marketing-tpl' }],
-      ['categories_not_enabled', 400, 'category', NEWSLETTER, {}],
-      ['too_many_categories', 400, 'category', NEWSLETTER, {}],
-      ['unsubscribe_link_required', 400, null, NEWSLETTER, { html: '<p>Hi</p>' }],
-      ['copies_not_allowed', 400, null, NEWSLETTER, { cc: 'copy@example.com', bcc: ['hidden@example.com'] }],
-      ['sandbox_fields_unsupported', 400, 'cc', RECEIPTS, { cc: ['copy@example.com'] }],
-      ['recipient_opted_out', 422, null, NEWSLETTER, {}],
-    ])(
-      'surfaces server %s (%i) refusal as validation_error without retrying',
-      async (code, status, attr, category, overrides) => {
-        replies = [
-          {
-            status,
-            body: { type: 'invalid_request', code, detail: 'Refused.', attr },
-          },
-          accepted(),
-        ]
-
-        const { data, error } = await settle(sendIn(category, { ...overrides, maxRetries: 2 }))
-
-        expect(data).toBeNull()
-        expect(error).toMatchObject({ code, name: 'validation_error', statusCode: status })
-        expect(error?.field).toBe(attr ?? undefined)
-        expect(fetch).toHaveBeenCalledTimes(1)
-        const request = postedSend()
-        expect(request.url).toBe(SEND_URL)
-        expect(request.method).toBe('POST')
-        expect(request.body).toMatchObject({
-          to: CODE_SEND.to,
-          template_key: 'templateKey' in overrides ? overrides.templateKey : CODE_SEND.templateKey,
-          subject: CODE_SEND.subject,
-          html: 'html' in overrides ? overrides.html : CODE_SEND.html,
-        })
-        expect('category' in request.body).toBe(category !== undefined)
-        if (category !== undefined) {
-          expect(request.body.category).toEqual(category)
-        }
-        if ('cc' in overrides) {
-          expect(request.body.cc).toEqual(['copy@example.com'])
-        }
-        if ('bcc' in overrides) {
-          expect(request.body.bcc).toEqual(['hidden@example.com'])
-        }
-      }
-    )
-
-    it('surfaces server workflow_can_wait (400) refusal on categorized marketing send with attachments without retrying', async () => {
-      replies = [
-        uploadGrantReply(),
-        { status: 200, body: {} },
-        {
-          status: 400,
-          body: {
-            type: 'invalid_request',
-            code: 'workflow_can_wait',
-            detail: 'Workflow can wait.',
-            attr: 'attachments',
-          },
-        },
-        accepted(),
-      ]
-
-      const { data, error } = await settle(
-        sendIn(NEWSLETTER, {
-          attachments: [{ filename: 'guide.txt', content: utf8('hello') }],
-          maxRetries: 2,
-        })
-      )
-
-      expect(data).toBeNull()
-      expect(error).toMatchObject({
-        code: 'workflow_can_wait',
-        name: 'validation_error',
-        statusCode: 400,
-        field: 'attachments',
-      })
-      expect(fetch).toHaveBeenCalledTimes(3)
-      expect(fetch.mock.calls[0][0]).toBe(UPLOADS_URL)
-      expect(fetch.mock.calls[1][0]).toBe(STORAGE_UPLOAD_URL)
-      expect(new Uint8Array(await new Response(fetch.mock.calls[1][1].body).arrayBuffer())).toEqual(HELLO_BYTES)
-
-      const sendRequest = postedSend(2)
-      expect(sendRequest.url).toBe(SEND_URL)
-      expect(sendRequest.method).toBe('POST')
-      expect(sendRequest.headers.authorization).toBe(`Bearer ${SECRET_KEY}`)
-      expect(sendRequest.headers['content-type']).toBe('application/json')
-      expect(sendRequest.headers['idempotency-key']).toBeTruthy()
-      expect(sendRequest.body).toEqual({
-        to: CODE_SEND.to,
-        template_key: CODE_SEND.templateKey,
-        subject: CODE_SEND.subject,
-        html: CODE_SEND.html,
-        category: NEWSLETTER,
-        attachments: [{ sha256: HELLO_SHA256, filename: 'guide.txt' }],
-      })
-    })
-
-    it.each([
-      [
-        'mixed-version old CDP',
-        NEWSLETTER,
-        {
-          type: 'invalid_request',
-          code: 'field_not_accepted',
-          detail: "PostHog doesn't take this field yet, so it didn't send the email.",
-          attr: 'category',
-          fix: 'Wait until PostHog accepts `category`, then send the email again.',
-        },
-        'Wait until PostHog accepts `category`, then send the email again.',
-      ],
-      [
-        'pre-category Django',
-        TRANSACTIONAL_EMAIL_CATEGORY,
-        {
-          type: 'validation_error',
-          code: 'invalid_input',
-          detail: "PostHog doesn't take this field, so it doesn't send the email without it.",
-          attr: 'category',
-        },
-        undefined,
-      ],
-    ])(
-      'returns an older-server refusal from %s on category without retrying or stripping category',
-      async (_server, category, body, expectedFix) => {
-        replies = [{ status: 400, body }, accepted()]
-
-        const { data, error } = await settle(sendIn(category, { maxRetries: 2 }))
-
-        expect(data).toBeNull()
-        expect(error).toMatchObject({
-          code: body.code,
-          name: 'validation_error',
-          statusCode: 400,
-          field: 'category',
-        })
-        expect(error?.fix).toBe(expectedFix)
-        expect(fetch).toHaveBeenCalledTimes(1)
-        const request = postedSend()
-        expect(request.url).toBe(SEND_URL)
-        expect(request.body.category).toEqual(category)
-      }
-    )
   })
 
   describe('get', () => {

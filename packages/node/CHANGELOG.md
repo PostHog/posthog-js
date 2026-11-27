@@ -1,5 +1,40 @@
 # posthog-node
 
+## 6.2.0
+
+### Minor Changes
+
+- [#5875](https://github.com/PostHog/posthog-js/pull/5875) [`53a87b0`](https://github.com/PostHog/posthog-js/commit/53a87b09a3ccce9090e7b366d349fdab5706c729) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop bundling `@react-email/render` into apps that don't send React emails.
+
+  **Breaking for bundled apps that send `react` emails:** if you bundle your app (for example for Cloudflare Workers, Convex, or Vercel Edge) and `@react-email/render` isn't available in `node_modules` at runtime, `emails.send({ react })` now returns a `missing_react_renderer` error and doesn't send the email. Pass the renderer to the client to keep sending: `new PostHog(key, { reactEmailRenderer: await import('@react-email/render') })`. Plain Node apps with `@react-email/render` installed are unaffected. (2026-11-26)
+
+## 6.1.1
+
+### Patch Changes
+
+- [#5840](https://github.com/PostHog/posthog-js/pull/5840) [`11a927d`](https://github.com/PostHog/posthog-js/commit/11a927daeef9260566d58d05fe80a5a2bb889524) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Local evaluation treats a filter type it can't evaluate, such as a cohort's `person_metadata` filter on first seen, as inconclusive instead of matching it against a person property with the same key. A later condition can still decide the flag, and otherwise it falls back to `/flags`
+  (2026-11-26)
+
+## 6.1.0
+
+### Minor Changes
+
+- [`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b) Thanks [@srednoff888-art](https://github.com/srednoff888-art)! - Local evaluation supports early-access feature enrollment. For a flag with `feature_enrollment`, the person property `$feature_enrollment/<flag key>` decides the flag before holdouts and release conditions: `true` or `"true"` is enrolled, any other value is opted out, and without it the flag falls back to `/flags`
+  (2026-11-25)
+
+- [#5818](https://github.com/PostHog/posthog-js/pull/5818) [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec) Thanks [@NikitaKurpas](https://github.com/NikitaKurpas)! - feat: `getRemoteConfigPayload` resolves `undefined` instead of returning an error response body or throwing on an empty body, and emits a new `RemoteConfigPayloadError` with the `statusCode` and `flagKey` on the client's `error` event for a failed response.
+  (2026-11-25)
+
+- [#5866](https://github.com/PostHog/posthog-js/pull/5866) [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add experimental `createReactRouterErrorHandler` to capture React Router server errors with the request's person, session and page URL. Linking page loads to the browser session reads the posthog-js cookie, which needs `readPostHogCookie: true`.
+  (2026-11-25)
+
+## 6.0.6
+
+### Patch Changes
+
+- [#5816](https://github.com/PostHog/posthog-js/pull/5816) [`ffdb355`](https://github.com/PostHog/posthog-js/commit/ffdb355c4534faec8e3b207a6b1efdd900f38e59) Thanks [@NikitaKurpas](https://github.com/NikitaKurpas)! - Document that `isLocalEvaluationReady()` and `waitForLocalEvaluationReady()` require at least one loaded flag; use the `localEvaluationFlagsLoaded` event to observe empty loads.
+  (2026-11-23)
+
 ## 6.0.5
 
 ### Patch Changes

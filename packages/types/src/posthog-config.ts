@@ -2195,7 +2195,7 @@ export interface PostHogConfig {
      * This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add
      * custom properties to mask with `custom_personal_data_properties`.
      * @default false
-     * @see {PERSONAL_DATA_CAMPAIGN_PARAMS} - Default campaign parameters that are masked by default.
+     * @see {PERSONAL_DATA_URL_PARAMS} - Default URL parameters that are masked, including other spellings of them such as Snapchat's `ScCid`.
      * @see {PostHogConfig.custom_personal_data_properties} - Custom list of personal data properties to mask.
      */
     mask_personal_data_properties: boolean
@@ -2754,6 +2754,21 @@ export interface PostHogConfig {
      * @default true
      */
     __preview_replay_sync_fetch?: boolean
+
+    /**
+     * Private preview: return a recorded fetch response to the application before its body has been captured.
+     * Without it, a response is held until Replay finishes reading its body or the read times out, which
+     * delays streamed responses. In WebKit, aborting a request while its body is being read then rejects with
+     * a `TypeError` instead of an `AbortError`, so code that ignores aborts by checking `err.name` will report them.
+     * Requires `__preview_replay_sync_fetch`; without it, Replay keeps holding the response.
+     * Pair it with `session_recording.streamNetworkBody` so Replay stops reading a long-lived stream when its
+     * body read times out.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default false
+     * @internal
+     */
+    __preview_replay_early_fetch_response?: boolean
 
     /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.

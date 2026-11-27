@@ -12,7 +12,6 @@ const base = {
     navigator: false,
     fetch: false,
     capturePageview: false,
-    analytics: false,
     flags: false,
     autocapture: false,
     remoteConfig: localRemoteConfig,

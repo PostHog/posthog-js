@@ -1,9 +1,4 @@
-import { requireInstalledExtension } from './helpers'
 import { localRemoteConfig } from './helpers'
-import { analytics } from '../src/products/analytics/analytics'
-import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
-import { createAnalyticsDelivery } from '../src/products/analytics/delivery/analytics-delivery'
-import { type AnalyticsDeliveryFactory } from '../src/products/analytics/analytics-internal'
 import { createPostHog, type BrowserFetch } from '../src/composition/npm/core'
 import { MemoryStorage } from './helpers'
 
@@ -39,17 +34,14 @@ describe('@posthog/browser public lifecycle state machine', () => {
             storage,
             navigator: false,
             fetch,
-            extensions: [
-                analytics({ flushAt: 100, flushInterval: 0 }),
-                { name: 'cleanup-observer', setup() {}, dispose: cleanup },
-            ],
+            analytics: { flushAt: 100, flushInterval: 0 },
+            extensions: [{ name: 'cleanup-observer', setup() {}, dispose: cleanup }],
         })
         const observed: string[] = []
-        const installedAnalytics = requireInstalledExtension(posthog.analytics)
-        installedAnalytics.onEvent(({ event }) => observed.push(event))
-        await installedAnalytics.identify('baseline-user')
-        await installedAnalytics.group('company', 'baseline-company')
-        await installedAnalytics.capture('baseline-event')
+        posthog.onEvent(({ event }) => observed.push(event))
+        posthog.identify('baseline-user')
+        posthog.group('company', 'baseline-company')
+        posthog.capture('baseline-event')
         expect(observed).toEqual(['$identify', '$groupidentify', 'baseline-event'])
         observed.length = 0
 
@@ -63,12 +55,10 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(dispose).toBe(shutdown)
         expect(repeatedShutdown).toBe(shutdown)
 
-        installedAnalytics.reset()
-        installedAnalytics.capture('closing-capture')
-        await Promise.all([
-            installedAnalytics.identify('closing-user'),
-            installedAnalytics.group('company', 'closing-company'),
-        ])
+        posthog.reset()
+        posthog.capture('closing-capture')
+        posthog.identify('closing-user')
+        posthog.group('company', 'closing-company')
         expect(observed).toEqual([])
 
         await Promise.resolve()
@@ -80,13 +70,11 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(concurrentFlushSettled).toBe(true)
         expect(cleanup).toHaveBeenCalledTimes(1)
 
-        installedAnalytics.reset()
-        installedAnalytics.capture('disposed-capture')
-        await Promise.all([
-            installedAnalytics.identify('disposed-user'),
-            installedAnalytics.group('company', 'disposed-company'),
-            posthog.flush(),
-        ])
+        posthog.reset()
+        posthog.capture('disposed-capture')
+        posthog.identify('disposed-user')
+        posthog.group('company', 'disposed-company')
+        await posthog.flush()
         expect(posthog.shutdown()).toBe(shutdown)
         expect(posthog.dispose()).toBe(shutdown)
         expect(fetch).toHaveBeenCalledTimes(1)
@@ -104,41 +92,6 @@ describe('@posthog/browser public lifecycle state machine', () => {
         await reloaded.shutdown()
     })
 
-    it('leaves late-loaded delivery inert after shutdown', async () => {
-        vi.useFakeTimers()
-        const loaded = deferred<AnalyticsDeliveryFactory>()
-        const load = vi.fn(() => loaded.promise)
-        const fetch = vi
-            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
-            .mockResolvedValue(new Response('{}', { status: 200 }))
-        const createDelivery = vi.fn(createAnalyticsDelivery)
-        const posthog = await createPostHog({
-            remoteConfig: localRemoteConfig,
-            projectToken: 'ph_test',
-            capturePageview: false,
-            storage: false,
-            navigator: false,
-            fetch,
-            extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
-        })
-        const dispose = vi.spyOn(requireInstalledExtension(posthog.analytics), 'dispose')
-        await requireInstalledExtension(posthog.analytics).capture('pending-import')
-        await Promise.resolve()
-        expect(load).toHaveBeenCalledTimes(1)
-
-        const shutdown = posthog.shutdown(5)
-        await vi.advanceTimersByTimeAsync(5)
-        await shutdown
-
-        loaded.resolve(createDelivery)
-        await vi.advanceTimersByTimeAsync(0)
-        expect(createDelivery).not.toHaveBeenCalled()
-        expect(dispose).toHaveBeenCalledTimes(1)
-        expect(posthog.analytics).toBeUndefined()
-        expect(fetch).not.toHaveBeenCalled()
-        expect(vi.getTimerCount()).toBe(0)
-    })
-
     it('cancels a real retry timer when bounded shutdown expires', async () => {
         vi.useFakeTimers()
         const fetch = vi
@@ -151,9 +104,9 @@ describe('@posthog/browser public lifecycle state machine', () => {
             storage: false,
             navigator: false,
             fetch,
-            extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
+            analytics: { flushAt: 1, flushInterval: 0 },
         })
-        await requireInstalledExtension(posthog.analytics).capture('retrying')
+        posthog.capture('retrying')
         await vi.advanceTimersByTimeAsync(0)
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(vi.getTimerCount()).toBeGreaterThan(0)

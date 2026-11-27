@@ -112,7 +112,7 @@ The client queues events and sends them in batches, so call `shutdown` before yo
 ### Install
 
 ```bash
-npm install posthog-node
+npm install posthog-node@~6.0
 ```
 
 ### Initialize
@@ -917,6 +917,68 @@ https://posthog.com/docs/error-tracking/installation/node
 | <a id="setuponce"></a> ~~`setupOnce`~~ | `public` | (`addGlobalEventProcessor`, `getCurrentHub`) => `void` | `undefined` |
 | <a id="posthog_id_tag"></a> ~~`POSTHOG_ID_TAG`~~ | `public static readonly` | `"posthog_distinct_id"` | `'posthog_distinct_id'` |
 
+### `createReactRouterErrorHandler`
+
+> **createReactRouterErrorHandler**\<`A`\>(`posthog`, `options?`): (`error`, `args`) => `Promise`\<`void`\>
+
+**`Experimental`**
+
+Returns a React Router `handleError` that captures server errors (loaders, actions, middleware, resource routes,
+server rendering) with the request's person, session and request properties. It reports the page URL even for the
+`.data` requests of client navigations, never the query string. It skips aborted requests and the 404 and 405
+responses the router produces itself, and captures the error inside a `data(error, init)` a middleware threw. The
+event is marked unhandled, with the `middleware` mechanism and `$exception_source: 'react_router.handle_error'`.
+
+IDs set with `withContext` (in a middleware, for example) win. Otherwise, linking page loads to the browser's person
+and session reads the posthog-js cookie, which needs the client's `readPostHogCookie: true`, and requests with
+`x-posthog-*` tracing headers link without it. An anonymous visitor's exceptions carry their anonymous distinct ID and
+stay personless. When the visitor's consent cookie opts out, the event keeps no person, session, device, user agent
+or IP.
+
+Errors raised while streaming, after the shell was sent, skip `handleError` and reach the `onError` of the React
+stream in `entry.server.tsx`; call the same handler there. An error object is captured once per request, however
+many hooks or handlers see it.
+
+The returned handler resolves once the event is queued. On a serverless host, pass the platform's `waitUntil` as the
+client's `waitUntil` option. On Cloudflare Workers, create the client and the handler per request, with the request's
+`ctx.waitUntil`: a client kept across requests in a Workers isolate delivers only the first request's events.
+
+ Subject to change in a minor release.
+
+#### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-a-1"></a> `A` *extends* `ReactRouterErrorArgs` | `ReactRouterErrorArgs` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `posthog` | `PostHogBackendClient` |
+| `options?` | `ReactRouterErrorHandlerOptions`\<`A`\> |
+
+#### Returns
+
+(`error`, `args`) => `Promise`\<`void`\>
+
+#### Example
+
+```ts
+// app/entry.server.tsx
+const posthog = new PostHog('<ph_project_token>', { host: '<ph_client_api_host>', readPostHogCookie: true })
+
+export const handleError = createReactRouterErrorHandler(posthog)
+
+// In handleRequest, in the renderToPipeableStream options:
+onError(error: unknown) {
+  responseStatusCode = 500
+  if (shellRendered && !request.signal.aborted) {
+    void handleError(error, { request })
+  }
+},
+```
+
 ### `sentryIntegration`
 
 > **sentryIntegration**(`_posthog`, `options?`): `_SentryIntegration`
@@ -1083,13 +1145,6 @@ failure. The message never contains the secret key or the request body.
 | <a id="retryafterms"></a> `retryAfterMs?` | `readonly` | `number` | How long PostHog asked the client to wait before it sends again, in milliseconds. | - |
 | <a id="statuscode"></a> `statusCode?` | `readonly` | `number` | The HTTP status, when PostHog or its file storage answered. | - |
 | <a id="why"></a> `why?` | `readonly` | `string` | - | - |
-
-### `TRANSACTIONAL_EMAIL_CATEGORY`
-
-> `const` **TRANSACTIONAL\_EMAIL\_CATEGORY**: `"transactional"` = `'transactional'`
-
-The built-in message category of `posthog.emails.send()`: transactional email with no category. Unlike a
-send without a category, it doesn't follow the category of the template that `templateKey` names.
 
 ## Flush
 
@@ -2246,7 +2301,12 @@ Get the remote config payload for a feature flag.
 
 `Promise`\<`JsonType` \| `undefined`\>
 
-Promise that resolves to the remote config payload or undefined
+Promise that resolves to:
+- the payload, when the flag has one
+- `null`, when the flag is disabled
+- `undefined`, when the flag has no payload, or the request failed. A response with a status
+  outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
+  client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
 
 #### Example
 
@@ -2261,6 +2321,43 @@ if (payload) {
 #### Throws
 
 Error if personal API key is not provided
+
+### `RemoteConfigPayloadError`
+
+PostHog answered a `getRemoteConfigPayload` request with a status outside 200 to 299.
+
+Emitted on the client's `error` event; the call itself resolves to `undefined`.
+Branch on `statusCode`, for example `404` when the flag does not exist or is not a remote
+config flag, versus `429` or `5xx` when the request should be tried again later.
+
+#### Extends
+
+- `Error`
+
+#### Constructors
+
+##### Constructor
+
+> **new RemoteConfigPayloadError**(`flagKey`, `statusCode`): `RemoteConfigPayloadError`
+
+###### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flagKey` | `string` | The key of the flag whose payload was requested. |
+| `statusCode` | `number` | The HTTP status PostHog answered with. |
+
+###### Returns
+
+`RemoteConfigPayloadError`
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="flagkey"></a> `flagKey` | `readonly` | `string` | `undefined` | The key of the flag whose payload was requested. | - |
+| <a id="name-3"></a> `name` | `public` | `string` | `'RemoteConfigPayloadError'` | - | `Error.name` |
+| <a id="statuscode-1"></a> `statusCode` | `readonly` | `number` | `undefined` | The HTTP status PostHog answered with. | - |
 
 ## SDK utils
 
@@ -3014,7 +3111,6 @@ Options accepted by `posthog.metrics.count/gauge/histogram`.
 | <a id="property-attachments"></a> `attachments?` | `EmailAttachment`[] | Files sent with the email: at most 10, and at most 40 MB for the whole email after Base64 encoding, about 29 MB of files. The SDK checks both before any request. It uploads each file PostHog doesn't have yet, then sends the email. When an upload fails, it sends nothing. |
 | <a id="property-bcc"></a> `bcc?` | `string` \| `string`[] | Bare addresses that get a copy the other recipients never see. |
 | <a id="property-captureengagement"></a> ~~`captureEngagement?`~~ | `boolean` | Whether PostHog captures the email's engagement events (sent, delivered, opened, clicked, bounced) as events of the recipient. Defaults to `true`. A project whose admin turned engagement capture off captures nothing, whatever the send asks. A template made in PostHog follows the project's setting. **Deprecated** Use `tracking: { engagement: false }`. It keeps working, but PostHog refuses a send that sets both `captureEngagement` and `tracking`. |
-| <a id="property-category"></a> `category?` | `"transactional"` \| `MessageCategory` | The email's message category. Without it, the email follows the category of the template that `templateKey` names (when code-send categories are enabled), or is transactional with no category. A template made in PostHog must be enabled for transactional sends first: PostHog refuses a template that isn't enabled for transactional sends with `template_not_transactional`, and refuses an enabled template whose category is marketing with `marketing_template`. When `templateKey` names a sendable template, that template fixes the category: for an uncategorized template, leave `category` out or pass `TRANSACTIONAL_EMAIL_CATEGORY`; for a template in a transactional category, leave `category` out or pass a `MessageCategory` with the matching `key` and `type`. `TRANSACTIONAL_EMAIL_CATEGORY` asks for transactional email with no category, so PostHog refuses it with `category_mismatch` when `templateKey` names a sendable template in a transactional category. A `MessageCategory` files the email under that category. A marketing email honors the recipient's opt-outs and gets unsubscribe headers. Its `html` needs a link with `<a href="{{ unsubscribe_url }}">`, or its `text` needs `{{ unsubscribe_url }}` when it has no `html`. Marketing emails can't carry attachments. The send returns an error with code `category_mismatch` when a category with this key has another type, or when `templateKey` names a sendable template in another category (including an uncategorized template given a `MessageCategory`); `too_many_categories` when creating or restoring a category would pass the project's active category limit; `unsubscribe_link_required` when a marketing email has no unsubscribe link placeholder; `copies_not_allowed` when a marketing email has `cc` or `bcc`; `workflow_can_wait` (verified sender) or `sandbox_fields_unsupported` (PostHog test sender) when a marketing email has `attachments`; `recipient_opted_out` when the recipient opted out of the category or of all marketing email; `template_not_transactional` when `templateKey` names a template not enabled for transactional sends; and `marketing_template` when `templateKey` names an enabled template in a marketing category. |
 | <a id="property-cc"></a> `cc?` | `string` \| `string`[] | Bare addresses, such as `'finance@example.com'`, that get a copy. |
 | <a id="property-from"></a> `from?` | `string` | A verified sender, such as `'Acme <security@example.com>'`. Without it, the project's default sender. |
 | <a id="property-replyto"></a> `replyTo?` | `string` \| `string`[] | - |
@@ -3145,11 +3241,49 @@ posthog-node needs no React types.
 | <a id="property-props"></a> `props` | `unknown` |
 | <a id="property-type"></a> `type` | `unknown` |
 
+### `EmailReactRenderer`
+
+Renders `react` sends: the `@react-email/render` module, or an object with its `render` and
+`toPlainText`.
+
+#### Methods
+
+##### render()
+
+> **render**(`element`): `Promise`\<`string`\>
+
+Renders a React element to HTML. Typed as `any` because `@react-email/render` takes
+`React.ReactNode`, which posthog-node doesn't depend on.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `element` | `any` |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### toPlainText()
+
+> **toPlainText**(`html`): `string`
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `html` | `string` |
+
+###### Returns
+
+`string`
+
 ### `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates, or
-transactional and marketing email from content your code rendered, reads the status of each
-email it sent, and sets a recipient's topic preferences.
+The `posthog.emails` API: sends transactional email from PostHog email templates or from
+content your code rendered, reads the status of each email it sent, and sets a recipient's
+topic preferences.
 
 #### Methods
 
@@ -3177,8 +3311,7 @@ seconds after the send. Network errors, rate limits and an unavailable service a
 
 > **send**(`options`): `Promise`\<`SendEmailResponse`\>
 
-Queue one email: a transactional email from a PostHog email template, or a transactional or
-marketing email from content your code rendered.
+Queue one email, from a transactional email template or from content your code rendered.
 
 Resolves to `{ data, error }` and does not reject. `data` means PostHog queued the email,
 not that it was delivered. Network errors, rate limits, an in-flight idempotency key and
@@ -4699,22 +4832,6 @@ Warning. Something unexpected but non-fatal.
 
 Log capture types
 
-### `MessageCategory`
-
-A message category that a send defines in code. PostHog creates the category when the project has
-none with this key, and restores it when it was deleted. Both creation and restoration need room
-under the project's active category limit. Otherwise the send leaves the category as it is: a send
-never renames a category or changes its description. Change those in PostHog.
-
-#### Properties
-
-| Property | Type | Description |
-| ------ | ------ | ------ |
-| <a id="property-description"></a> `description?` | `string` | Notes about which emails belong to the category. Used only when the send creates the category. |
-| <a id="property-key"></a> `key` | `string` | Identifies the category in the project, such as `'newsletter'`. PostHog trims surrounding whitespace when storing the key. Recipients opt out of a category by its key: pass the trimmed key as a topic key in `posthog.emails.setPreferences({ topics })`. |
-| <a id="property-name"></a> `name` | `string` | The category's name, shown in PostHog. Used only when the send creates the category. |
-| <a id="property-type-1"></a> `type` | `"transactional"` \| `"marketing"` | A marketing category honors the recipient's opt-outs. A transactional one only files the email. |
-
 ### `MetricAttributes`
 
 > **MetricAttributes** = `Record`\<`string`, `MetricAttributeValue`\>
@@ -4974,6 +5091,7 @@ Supports multiple formats:
 | <a id="filters"></a> `filters?` | `object` | - |
 | `filters.aggregation_group_type_index?` | `number` | - |
 | `filters.early_exit?` | `boolean` | - |
+| `filters.feature_enrollment?` | `boolean` \| `null` | Early-access feature flag. The person's opt-in, stored in the person property `$feature_enrollment/<flag key>`, decides the flag before holdouts and release conditions. |
 | `filters.groups?` | `FeatureFlagCondition`[] | - |
 | `filters.holdout?` | \{ `exclusion_percentage`: `number`; `id`: `number`; \} \| `null` | - |
 | `filters.multivariate?` | `object` | - |
@@ -4982,7 +5100,7 @@ Supports multiple formats:
 | <a id="has_experiment"></a> `has_experiment?` | `boolean` | Whether the flag is linked to an experiment. Absent when the server does not report it. |
 | <a id="id"></a> `id` | `number` | - |
 | <a id="key-2"></a> `key` | `string` | - |
-| <a id="name-3"></a> `name` | `string` | - |
+| <a id="name-4"></a> `name` | `string` | - |
 | <a id="rollout_percentage-1"></a> `rollout_percentage` | `null` \| `number` | - |
 
 ### `PostHogFetchBodyBytes`
@@ -5122,7 +5240,8 @@ differently for cellular cost vs tab-suspension behavior).
 | `persistence?` | `"memory"` | - |
 | `personalApiKey?` | `string` | **Deprecated** Use `secretKey` instead. |
 | `privacyMode?` | `boolean` | Redact prompts, outputs and error details from every event that the PostHog AI integrations (`@posthog/ai`) capture with this client. Per-call privacy settings can only add redaction. Defaults to false. |
-| `readPostHogCookie?` | `boolean` \| \{ `optOutCapturingByDefault?`: `boolean`; `sessionIdleTimeoutSeconds?`: `number`; \} | Lets the Express, NestJS, Hono, and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has neither tracing header. Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage (its default). It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie counts as opted out. A request sent right after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls back to the cookie. To stop all request linking, also leave this option off. **Default** `false` |
+| `reactEmailRenderer?` | `EmailReactRenderer` | Renders the `react` element of an `emails.send`. Set it when you bundle your app, such as for Cloudflare Workers, Convex, or Vercel Edge: posthog-node doesn't bundle `@react-email/render`, so apps that never send `react` don't carry it. Without it, posthog-node loads `@react-email/render` from `node_modules` when a send has `react`. **Example** `const client = new PostHog('phc_...', { reactEmailRenderer: await import('@react-email/render') })` |
+| `readPostHogCookie?` | `boolean` \| \{ `optOutCapturingByDefault?`: `boolean`; `sessionIdleTimeoutSeconds?`: `number`; \} | Lets the Express, NestJS, Hono and `instrumentRequest` integrations read the session ID, and the distinct ID of an identified user, from the posthog-js cookie when a request has neither tracing header. `createReactRouterErrorHandler` also reads an anonymous visitor's distinct ID, and sends their exceptions personless. Turn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage (its default). It needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie name (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set `sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set `optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie counts as opted out. A request sent right after `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a short delay. When `captureTracingHeaders` is `false`, the tracing headers are ignored and every request falls back to the cookie. To stop all request linking, also leave this option off. **Default** `false` |
 | `requestTimeout?` | `number` | Timeout in milliseconds for any calls. `captureAi` requests use `captureAiRequestTimeoutMs`. **Default** `10000` |
 | `secretKey?` | `string` | Credential for fetching local feature flag definitions, decrypting remote config and sending email. Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`). Local evaluation can also use definitions from `flagDefinitionCacheProvider` without this credential. Remote config payload decryption via `getRemoteConfigPayload` still requires it. `emails.send` needs a Project Secret API Key with the `transactional_email:write` scope; set `enableLocalEvaluation: false` when the key is only for email. Prefer this over the deprecated `personalApiKey` option; when both are set, `secretKey` takes precedence. **Example** `const client = new PostHog('phc_...', { secretKey: 'phs_...' })` |
 | `strictLocalEvaluation?` | `boolean` | When enabled, all feature flag evaluations will use local evaluation only, never falling back to server-side evaluation. This prevents unexpected server requests and associated costs when using local evaluation. Flags that cannot be evaluated locally (e.g., those with experience continuity) will return `undefined` instead of making a server request. **Default** `false` |
@@ -5214,6 +5333,29 @@ Common types shared across PostHog SDKs
 | `type` | *typeof* `SurveyQuestionType.Rating` |
 | `upperBoundLabel` | `string` |
 
+### `ReactRouterErrorArgs`
+
+The part of React Router's `handleError` arguments the handler reads, so `react-router` is not a dependency.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-request"></a> `request` | `Request` |
+
+### `ReactRouterErrorHandlerOptions`
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-a"></a> `A` *extends* `ReactRouterErrorArgs` | `ReactRouterErrorArgs` |
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-handleerror"></a> `handleError?` | (`error`, `args`) => `void` | Your own `handleError`, called for every error after the capture decision, captured or not. Exporting `handleError` replaces React Router's own logging; without this option the handler logs the way React Router does (`console.error`, skipping aborted requests). |
+| <a id="property-shouldcapture"></a> `shouldCapture?` | (`error`, `args`) => `boolean` | Return `false` to skip capturing an error the handler would otherwise capture. It receives the error to capture: for a `data(error, init)` a middleware threw, the `error` inside. |
+
 ### `ResponseBasedBranching`
 
 > **ResponseBasedBranching** = `object`
@@ -5247,7 +5389,6 @@ What every send takes, whatever its form.
 > **SendEmailOptions** = `SendTemplateEmailOptions` \| `SendCodeEmailOptions`
 
 Options for `posthog.emails.send()`: a template made in PostHog, or content from your code.
-Declared fields of the active form (shared fields plus `templateId`/`templateData` or `templateKey` and code-send fields) are read once per send by property access, `to` first and `category` last. Cross-form and unknown-field validation inspects only own enumerable properties, so a template send ignores an inherited or non-enumerable `category`. Accessors that change other fields aren't supported.
 
 ### `SendEmailResponse`
 
@@ -5586,7 +5727,7 @@ encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
 | <a id="property-endtime"></a> `endTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |
 | <a id="property-events"></a> `events` | `public` | `object`[] | **`Experimental`** |
 | <a id="property-kind"></a> `kind` | `public` | `SpanKind` | **`Experimental`** |
-| <a id="property-name-1"></a> `name` | `public` | `string` | **`Experimental`** |
+| <a id="property-name"></a> `name` | `public` | `string` | **`Experimental`** |
 | <a id="property-parentspanid"></a> `parentSpanId?` | `readonly` | `string` | **`Experimental`** Absent on a root span. |
 | <a id="property-spanid-1"></a> `spanId` | `readonly` | `string` | **`Experimental`** |
 | <a id="property-starttime"></a> `startTime` | `public` | `number` | **`Experimental`** Millisecond epoch. |

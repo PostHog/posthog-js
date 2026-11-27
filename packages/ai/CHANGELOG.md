@@ -1,5 +1,52 @@
 # posthog-ai
 
+## 8.22.5
+
+### Patch Changes
+
+- [#5890](https://github.com/PostHog/posthog-js/pull/5890) [`50b5b2e`](https://github.com/PostHog/posthog-js/commit/50b5b2e290d282b0fa66817018fa37c7785b75d3) Thanks [@bernatixer](https://github.com/bernatixer)! - Genkit telemetry now masks any key ending in a credential word, such as `refresh_token`, `SecretAccessKey`, `oauth_token_secret` or `cookies`, in tool output and model messages, including tool output returned as JSON text. String values in Gemini tool definitions are scanned the same way on every integration, so a URL with `?api_key=` is masked there too.
+  (2026-11-26)
+
+## 8.22.4
+
+### Patch Changes
+
+- [#5900](https://github.com/PostHog/posthog-js/pull/5900) [`b96c919`](https://github.com/PostHog/posthog-js/commit/b96c91946a997efc32f6043e354356274db4f89e) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop the LangChain callback handler from double-billing cached tokens for Claude models served through OpenAI-compatible providers.
+  (2026-11-26)
+
+- [#5900](https://github.com/PostHog/posthog-js/pull/5900) [`b96c919`](https://github.com/PostHog/posthog-js/commit/b96c91946a997efc32f6043e354356274db4f89e) Thanks [@marandaneto](https://github.com/marandaneto)! - Report input and output tokens for LangChain providers that return snake_case token usage, such as ChatOpenRouter, instead of 0.
+  (2026-11-26)
+- Updated dependencies [[`53a87b0`](https://github.com/PostHog/posthog-js/commit/53a87b09a3ccce9090e7b366d349fdab5706c729)]:
+  - posthog-node@6.2.0
+
+## 8.22.3
+
+### Patch Changes
+
+- [#5898](https://github.com/PostHog/posthog-js/pull/5898) [`af86965`](https://github.com/PostHog/posthog-js/commit/af869657541cf91925cafba923bf5e75dda4515f) Thanks [@susheelg1197](https://github.com/susheelg1197)! - Gemini `generateContentStream` now captures image and other inline data output parts in `$ai_output_choices`, formatted and redacted like `generateContent`, and an inline data chunk sets `$ai_time_to_first_token`.
+  (2026-11-26)
+- Updated dependencies [[`11a927d`](https://github.com/PostHog/posthog-js/commit/11a927daeef9260566d58d05fe80a5a2bb889524)]:
+  - posthog-node@6.1.1
+
+## 8.22.2
+
+### Patch Changes
+
+- [#5868](https://github.com/PostHog/posthog-js/pull/5868) [`9079e1e`](https://github.com/PostHog/posthog-js/commit/9079e1e5e025be7874a95bf1dbbfcb478821989e) Thanks [@efekamak](https://github.com/efekamak)! - Redact `headers` and `authorization` credentials on Google Gemini Interactions `type: 'mcp_server'` tool definitions in `$ai_tools` and OpenTelemetry tool definition attributes.
+  (2026-11-25)
+
+- [#5879](https://github.com/PostHog/posthog-js/pull/5879) [`dc2afc0`](https://github.com/PostHog/posthog-js/commit/dc2afc0b42b2973cb9bda5f85b947962bbea5f81) Thanks [@bernatixer](https://github.com/bernatixer)! - `$ai_tools` masks the credentials in Gemini tool definitions with `[REDACTED]`, with or without privacy mode: every `apiKey`, `apiAuth`, `authConfig`, and `headers` inside a built-in tool's config, such as `retrieval`, `googleMaps`, `exaAiSearch`, `parallelAiSearch`, and `mcpServers`. Function declarations are not masked. The tools you pass in are not modified.
+  (2026-11-25)
+- Updated dependencies [[`02cd844`](https://github.com/PostHog/posthog-js/commit/02cd8447ca7c23f8536eacab2ad33150f139ad5b), [`771b556`](https://github.com/PostHog/posthog-js/commit/771b556c8e6c2fdf84c151db44bbf67b7184e6ec), [`06692d2`](https://github.com/PostHog/posthog-js/commit/06692d28a5c09687b04e5b5b6ad8bdd46f10dae2)]:
+  - posthog-node@6.1.0
+
+## 8.22.1
+
+### Patch Changes
+
+- [#5860](https://github.com/PostHog/posthog-js/pull/5860) [`4288b33`](https://github.com/PostHog/posthog-js/commit/4288b33c33107a949657f6c6d316f34a4fe94734) Thanks [@utsxvrai](https://github.com/utsxvrai)! - Keep the choices of an `n > 1` streamed OpenAI chat completion apart in `$ai_output_choices`, one message per choice as non-streamed calls already do, and take `$ai_stop_reason` from the first choice.
+  (2026-11-25)
+
 ## 8.22.0
 
 ### Minor Changes

@@ -237,7 +237,7 @@ export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client
     }
     lane.attach(delivery)
     return {
-        flush: () => lane.flush(),
+        flush: (immediate) => lane.flush(immediate),
         deliverImmediate: delivery.deliverImmediate,
         deliverUnload: (messages) => delivery.teardown?.(messages, CAPTURE_V1_TEARDOWN_BUDGET_BYTES),
         dispose,

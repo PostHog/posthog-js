@@ -1,20 +1,18 @@
-import { TRANSACTIONAL_EMAIL_CATEGORY, type SendEmailOptions } from '../../exports'
+import * as reactEmailRender from '@react-email/render'
+import { render, toPlainText } from '@react-email/render'
+import { createElement, type ReactElement, type ReactNode } from 'react'
+import { PostHog as EdgePostHog } from '../../entrypoints/index.edge'
+import { PostHog } from '../../entrypoints/index.node'
+import type { EmailReactElement, EmailReactRenderer, PostHogOptions, SendEmailOptions } from '../../exports'
 
 const react = { type: 'p', props: { children: 'Reset' }, key: null }
+const jsxReact = createElement('p', null, 'Reset')
 
 const to = 'jane@example.com'
 const templateId = '0190f6d2-7c1e-4b3a-9f5e-1c2d3e4f5a6b'
 
 export const forms: SendEmailOptions[] = [
   { to, templateId, templateData: { name: 'Jane' } },
-  { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', category: TRANSACTIONAL_EMAIL_CATEGORY },
-  {
-    to,
-    templateKey: 'digest',
-    subject: 'Your week',
-    html: '<a href="{{ unsubscribe_url }}">Unsubscribe</a>',
-    category: { key: 'digest', type: 'marketing', name: 'Weekly digest', description: 'News every Monday' },
-  },
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', replyTo: ['help@example.com'] },
   { to, templateKey: 'reset', subject: 'Reset', text: 'Reset', from: 'security@example.com', captureEngagement: false },
   {
@@ -42,6 +40,7 @@ export const forms: SendEmailOptions[] = [
     attachments: [{ filename: 'invite.ics', content: 'QkVHSU4=', contentType: 'text/calendar' }],
   },
   { to, templateKey: 'reset', subject: 'Reset', react },
+  { to, templateKey: 'reset', subject: 'Reset', react: jsxReact },
   { to, templateKey: 'reset', subject: 'Reset', react, text: 'Reset' },
 ]
 
@@ -62,10 +61,6 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateKey: 'reset', subject: 'Reset' },
   // @ts-expect-error the code form needs a subject
   { to, templateKey: 'reset', html: '<p>Reset</p>' },
-  // @ts-expect-error a template made in PostHog sends in its own category
-  { to, templateId, category: TRANSACTIONAL_EMAIL_CATEGORY },
-  // @ts-expect-error a category other than the built-in one is defined by an object, not its key
-  { to, templateKey: 'digest', subject: 'Your week', html: '<p>Hi</p>', category: 'digest' },
   // @ts-expect-error content from code takes no template data
   { to, templateKey: 'reset', subject: 'Reset', html: '<p>Reset</p>', templateData: { name: 'J' } },
   // @ts-expect-error a template made in PostHog keeps its own copies
@@ -85,3 +80,38 @@ export const wrongCombinations: SendEmailOptions[] = [
   // @ts-expect-error a template made in PostHog sets its own content
   { to, templateId, react },
 ]
+
+export const reactRenderers: EmailReactRenderer[] = [
+  reactEmailRender,
+  { render, toPlainText },
+  { render: (element) => render(element, { pretty: true }), toPlainText },
+  { render: async (_element: ReactElement) => '<p>Hi</p>', toPlainText: (html: string) => html },
+  { render: async (_element: ReactNode) => '<p>Hi</p>', toPlainText: (html: string) => html },
+  { render: async (_element: EmailReactElement) => '<p>Hi</p>', toPlainText: (html: string) => html },
+]
+
+export const wrongReactRenderers: EmailReactRenderer[] = [
+  // @ts-expect-error toPlainText is required
+  { render },
+  // @ts-expect-error render is required
+  { toPlainText },
+  // @ts-expect-error render must return Promise<string>
+  { render: () => '<p>Hi</p>', toPlainText },
+  // @ts-expect-error toPlainText must accept a string and return a string
+  { render, toPlainText: (html: string) => html.length },
+]
+
+export const reactRenderFn: EmailReactRenderer['render'] = render
+
+export async function reactRendererClientOptions(): Promise<PostHogOptions[]> {
+  const nodeClient = new PostHog('phc_test', { reactEmailRenderer: await import('@react-email/render') })
+  const edgeClient = new EdgePostHog('phc_test', { reactEmailRenderer: { render, toPlainText } })
+  void nodeClient
+  void edgeClient
+  return [
+    { reactEmailRenderer: reactEmailRender },
+    { reactEmailRenderer: { render, toPlainText } },
+    { reactEmailRenderer: { render: (element) => render(element, { pretty: true }), toPlainText } },
+    { reactEmailRenderer: await import('@react-email/render') },
+  ]
+}

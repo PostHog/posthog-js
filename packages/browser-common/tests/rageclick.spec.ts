@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import RageClick from '../src/rageclick'
 
 describe('RageClick()', () => {
@@ -126,6 +127,110 @@ describe('RageClick()', () => {
             instance = new RageClick(false)
             const result = instance.isRageClick(0, 0, 0)
             expect(result).toBe(false)
+        })
+    })
+
+    describe('browser-forwarded label clicks', () => {
+        let label: HTMLLabelElement
+        let control: HTMLInputElement
+
+        beforeEach(() => {
+            instance = new RageClick(true)
+            document.body.innerHTML = ''
+            label = document.createElement('label')
+            label.htmlFor = 'rc-input'
+            control = document.createElement('input')
+            control.id = 'rc-input'
+            document.body.appendChild(label)
+            document.body.appendChild(control)
+        })
+
+        // A real label click reaches the detector twice: the genuine click on the label, then the
+        // browser's synthetic click forwarded to the label's control a moment later. Only the genuine
+        // click should count. Firefox gives the forwarded click detail 1, so it is recognised by its
+        // target (label.control), not by its detail value.
+        const labelClick = (t: number) => [
+            instance.isRageClick(5, 5, t, label),
+            instance.isRageClick(5, 5, t + 1, control),
+        ]
+
+        it('does not count the forwarded click toward a rage click', () => {
+            // Two user clicks on the label (four detector calls) must not rage click.
+            const detection = [...labelClick(10), ...labelClick(30)]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
+        it('recognises the forwarded click without Element.closest (IE11)', () => {
+            const closest = Element.prototype.closest
+            // @ts-expect-error simulating a browser without closest()
+            delete Element.prototype.closest
+            try {
+                const span = document.createElement('span')
+                label.appendChild(span)
+                const detection = [
+                    instance.isRageClick(5, 5, 10, span),
+                    instance.isRageClick(5, 5, 11, control),
+                    instance.isRageClick(5, 5, 30, span),
+                    instance.isRageClick(5, 5, 31, control),
+                ]
+                expect(detection).toEqual([false, false, false, false])
+            } finally {
+                Element.prototype.closest = closest
+            }
+        })
+
+        it('does not hang on a form whose control shadows parentElement', () => {
+            const form = document.createElement('form')
+            const shadowing = document.createElement('input')
+            shadowing.name = 'parentElement'
+            const button = document.createElement('button')
+            form.append(shadowing, button)
+            document.body.appendChild(form)
+            // browsers expose a named form control as a form property; jsdom does not
+            Object.defineProperty(form, 'parentElement', { get: () => shadowing })
+            Object.defineProperty(form, 'parentNode', { get: () => shadowing })
+            const detection = [instance.isRageClick(5, 5, 10, button), instance.isRageClick(5, 5, 11, control)]
+            expect(detection).toEqual([false, false])
+        })
+
+        it('finds a label any number of levels above the clicked element', () => {
+            let inner: HTMLElement = label
+            for (let i = 0; i < 1500; i++) {
+                const span = document.createElement('span')
+                inner.appendChild(span)
+                inner = span
+            }
+            const detection = [
+                instance.isRageClick(5, 5, 10, inner),
+                instance.isRageClick(5, 5, 11, control),
+                instance.isRageClick(5, 5, 30, inner),
+                instance.isRageClick(5, 5, 31, control),
+            ]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
+        it('recognises a label in an XHTML document', () => {
+            const doc = document.implementation.createDocument('http://www.w3.org/1999/xhtml', 'html', null)
+            const body = doc.createElementNS('http://www.w3.org/1999/xhtml', 'body')
+            doc.documentElement.appendChild(body)
+            const xhtmlLabel = doc.createElementNS('http://www.w3.org/1999/xhtml', 'label') as HTMLLabelElement
+            const xhtmlControl = doc.createElementNS('http://www.w3.org/1999/xhtml', 'input') as HTMLInputElement
+            xhtmlControl.id = 'x-input'
+            xhtmlLabel.htmlFor = 'x-input'
+            body.append(xhtmlLabel, xhtmlControl)
+            const detection = [
+                instance.isRageClick(5, 5, 10, xhtmlLabel),
+                instance.isRageClick(5, 5, 11, xhtmlControl),
+                instance.isRageClick(5, 5, 30, xhtmlLabel),
+                instance.isRageClick(5, 5, 31, xhtmlControl),
+            ]
+            expect(detection).toEqual([false, false, false, false])
+        })
+
+        it('still detects a rage click from three genuine label clicks', () => {
+            const detection = [...labelClick(10), ...labelClick(30), ...labelClick(50)]
+            // The third genuine click (fifth call) triggers; the forwarded clicks never do.
+            expect(detection).toEqual([false, false, false, false, true, false])
         })
     })
 })
