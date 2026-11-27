@@ -139,10 +139,40 @@ function requestsFlagsV4(consumer) {
     }
 }
 
+// The installed client's own definitions request decides the capability: a client that sends
+// exactly one v=2 evaluates config version 2 flags locally. The probe client takes public options
+// only, and its fetch answers locally, so it never reaches the network.
+async function requestsDefinitionsV2(consumer) {
+    try {
+        const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-node')
+        if (typeof PostHog?.prototype?.reloadFeatureFlags !== 'function') return false
+        const versions = []
+        const client = new PostHog('phc_probe', {
+            host: 'http://127.0.0.1:9',
+            personalApiKey: 'phx_probe',
+            featureFlagsPollingInterval: null,
+            fetch: async (url) => {
+                const { pathname, searchParams } = new URL(url)
+                if (pathname === '/flags/definitions') versions.push(searchParams.getAll('v'))
+                return { status: 503, headers: new Headers(), text: async () => '', json: async () => ({}) }
+            },
+        })
+        try {
+            await client.reloadFeatureFlags()
+        } finally {
+            await client.shutdown(5000)
+        }
+        return versions.length > 0 && versions.every((values) => values.length === 1 && values[0] === '2')
+    } catch {
+        return false
+    }
+}
+
 export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1', port = 8080 }) {
     requireRequest(['cjs', 'esm'].includes(format), 'Invalid POSTHOG_NODE_MODULE')
     requireRequest(typeof consumer === 'string' && consumer.length > 0, 'POSTHOG_NODE_CONSUMER required')
     requireRequest(Number.isInteger(port) && port >= 0 && port <= 65535, 'Invalid PORT')
+    const localEvaluationV2 = await requestsDefinitionsV2(consumer)
     const profile = {
         id: 'node-analytics-v1',
         sdk_type: 'server',
@@ -162,6 +192,7 @@ export async function startServer({ consumer, format = 'cjs', host = '127.0.0.1'
             'flag_snapshot_exposure_missing_absent',
             'flag_snapshot_enablement_default',
             'feature_flags_local_evaluation_v1',
+            ...(localEvaluationV2 ? ['feature_flags_local_evaluation_v2'] : []),
         ],
         fixture_capabilities: ['storage.empty.v1'],
     }

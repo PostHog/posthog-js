@@ -616,6 +616,40 @@ test('the flags_response_v4 capability follows the installed client /flags versi
     )
 })
 
+test('the feature_flags_local_evaluation_v2 capability follows the installed client definitions request', async (t) => {
+    const capabilities = async (options) =>
+        (await (await harness(t, options)).post('negotiate', { protocol })).profiles[0].sdk_capabilities
+    // posthog-node requests the definitions with v=2.
+    assert.ok((await capabilities({})).includes('feature_flags_local_evaluation_v2'))
+    const client = (query) => `exports.PostHog = class {
+        constructor(token, options) { this.token = token; this.options = options }
+        async reloadFeatureFlags() {
+            await this.options.fetch(this.options.host + '/flags/definitions?token=' + this.token + '&send_cohorts${query}', {})
+        }
+        async shutdown() {}
+    }`
+    for (const [source, expected] of [
+        [client('&v=2'), true],
+        [client(''), false],
+        [client('&v=1'), false],
+        [client('&v=2&v=2'), false],
+        ['exports.PostHog = class { async reloadFeatureFlags() {} async shutdown() {} }', false],
+        ['exports.PostHog = class {}', false],
+    ]) {
+        const root = await controlledConsumer(t, source)
+        assert.equal(
+            (await capabilities({ consumer: root })).includes('feature_flags_local_evaluation_v2'),
+            expected,
+            source
+        )
+    }
+    assert.ok(
+        !(await capabilities({ consumer: '/nonexistent/node-compliance-consumer' })).includes(
+            'feature_flags_local_evaluation_v2'
+        )
+    )
+})
+
 test('the adapter declares the legacy payload getter', async (t) => {
     const negotiation = await (await harness(t, {})).post('negotiate', { protocol })
     assert.ok(negotiation.supported_routes.includes('/get_feature_flag_payload'))

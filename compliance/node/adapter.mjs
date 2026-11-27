@@ -185,6 +185,9 @@ app.get('/health', (req, res) => {
             // Remote /flags requests send ?v=4 and read the v4 flag record.
             'flags_response_v4',
             'feature_flags_local_evaluation_v1',
+            // Definitions requests send v=2, and config version 2 flags evaluate locally.
+            // /get_feature_flag honors allow_remote_fallback.
+            'feature_flags_local_evaluation_v2',
             'feature_flag_payloads',
         ],
     })
@@ -361,8 +364,16 @@ app.post('/get_feature_flag', async (req, res) => {
         group_properties,
         disable_geoip,
         only_evaluate_locally = false,
+        // The SDK's default getter on the client with definitions: local first, then a /flags
+        // request for a flag that local evaluation cannot decide.
+        allow_remote_fallback = false,
     } = req.body || {}
-    const force_remote = req.body?.force_remote ?? !only_evaluate_locally
+    if (allow_remote_fallback && (only_evaluate_locally || req.body?.force_remote)) {
+        return res
+            .status(400)
+            .json({ error: 'allow_remote_fallback conflicts with only_evaluate_locally and force_remote' })
+    }
+    const force_remote = req.body?.force_remote ?? !(only_evaluate_locally || allow_remote_fallback)
 
     if (only_evaluate_locally && force_remote) {
         return res.status(400).json({ error: 'only_evaluate_locally conflicts with force_remote' })
@@ -396,10 +407,10 @@ app.post('/get_feature_flag', async (req, res) => {
             personProperties: person_properties,
             groupProperties: group_properties,
             disableGeoip: disable_geoip,
-            onlyEvaluateLocally: !force_remote,
+            onlyEvaluateLocally: !(force_remote || allow_remote_fallback),
         })
 
-        // Flush the $feature_flag_called event so it cannot leak into the next test case.
+        // Flush the flag events so they cannot leak into the next test case.
         await client.flush()
 
         res.json({ success: true, value })
