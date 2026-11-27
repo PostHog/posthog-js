@@ -137,19 +137,82 @@ Flush queued events before the process exits.
 await client.shutdown()
 ```
 
+### Share context across calls
+
+Wrap a request or job in `withContext()` so telemetry inside shares user and session state across function calls and `await`. This is useful inside API route controller code, tagging each request's downstream calls with the same session, user, and other metadata.
+
+```ts
+await client.withContext(
+  { distinctId: 'user_123', sessionId: '0190f6d2-7c1e-7b3a-9f5e-1c2d3e4f5a6b', properties: { plan: 'pro' } },
+  async () => {
+    // Other downstream calls
+    client.capture({ event: 'order_placed' })
+  }
+)
+```
+
+#### Populate context in frameworks
+
+Some frameworks can help you populate request context automatically from incoming headers:
+
+- **Express.** Call `setupExpressRequestContext(client, app)` before your routes, and `setupExpressErrorHandler(client, app)` after them.
+- **NestJS.** Register `PostHogInterceptor` from `posthog-node/nestjs` globally.
+- **Hono and Fetch.** Wrap handlers with `posthogHonoMiddleware(client)` or `instrumentRequest(client, request, handler)`.
+
+Calls inside `withContext()` inherit these fields by telemetry type:
+
+| Telemetry                                                                                        | Inherited from context                                                                     |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Events and exceptions                                                                            | `distinctId`, `sessionId` (`$session_id`, except `groupIdentify`), `properties`, `options` |
+| Logs and spans                                                                                   | `distinctId`, `sessionId`                                                                  |
+| Feature flags (`evaluateFlags`, `getAllFlags`, `getAllFlagsAndPayloads`, `getFeatureFlagResult`) | `distinctId` when omitted                                                                  |
+
+Tracing headers are untrusted client data, never authentication. Pass an authenticated `distinctId` explicitly for authorization or sensitive decisions.
+
+### Flush in short-lived runtimes
+
+Serverless Node runtimes (AWS Lambda, Vercel Functions) can freeze as soon as a handler returns. Reuse a module-scope client across calls and await `client.flush()` before returning, or pass `waitUntil` in `PostHogOptions`.
+
+`flush()` has no overall timeout and never rejects, so race it against your remaining handler time. Save `shutdown()` for process exit, since it tears down flag polling, exception autocapture, and email sending.
+
+On Cloudflare Workers and edge runtimes (`posthog-node/edge`), create a client per request with `flushAt: 1`, `flushInterval: 0`, and `waitUntil: ctx.waitUntil.bind(ctx)`. The edge entrypoint has no `AsyncLocalStorage`, so `withContext()` doesn't propagate IDs and `withSpan()` doesn't nest across `await`. Pass `distinctId` and `{ parent: span }` explicitly instead.
+
+### Handle background errors
+
+Background batching, flag polling, and remote config calls never throw into your request path. Listen on the `'error'` event to catch `CaptureError`, `RemoteConfigPayloadError`, and network failures:
+
+```ts
+client.on('error', (err) => {
+  console.error('PostHog error:', err)
+})
+```
+
 ## Setup
 
 ### `new PostHog(...)`
 
 > **new PostHog**(`apiKey`, `options?`): `PostHog`
 
-Initialize a new PostHog client instance.
+Create a `PostHog` server client (`import { PostHog } from 'posthog-node'`).
+
+Keep one client for your server's lifetime and call `await client.shutdown()` on exit. For serverless handlers, reuse a module-scope client and call `await client.flush()`, or pass `waitUntil` in `PostHogOptions`.
+
+Passing an empty `apiKey` or a `phx_...` personal API key logs one error and disables the client (`isDisabled === true`). Passing a `phc_...` project token as `secretKey` throws an `Error`.
+
+#### Know what to await
+
+| Call | Methods | Reach for it when |
+| --- | --- | --- |
+| Don't `await` | `capture`, `captureAi`, `identify`, `alias`, `groupIdentify`, `setPersonProperties`, `unsetPersonProperties`, `captureException`, `captureLog`, `logger.*` | Queueing telemetry in memory on the request path without waiting on HTTP |
+| `await` | `captureImmediate`, `captureAiImmediate`, `identifyImmediate`, `aliasImmediate`, `groupIdentifyImmediate`, `captureExceptionImmediate` | Waiting for an upload attempt to finish before a short-lived handler exits |
+| `await` | `evaluateFlags`, `getFeatureFlagResult`, `getAllFlags`, `getAllFlagsAndPayloads`, `getRemoteConfigPayload`, `flush`, `shutdown`, `reloadFeatureFlags`, `waitForLocalEvaluationReady` | Reading flags, remote config, or draining queues |
+| `await` (`{ data, error }`) | `emails.send`, `emails.get`, `emails.setPreferences` | Sending transactional email or updating preferences (never rejects) |
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `apiKey` | `string` | Your PostHog project API key |
+| `apiKey` | `string` | Your PostHog project API key (`phc_...`) |
 | `options?` | `PostHogOptions` | Configuration options for the client |
 
 #### Returns
@@ -160,21 +223,19 @@ Initialize a new PostHog client instance.
 
 ```ts
 // Basic initialization
-const client = new PostHogBackendClient(
-  'your-api-key',
-  { host: 'https://app.posthog.com' }
-)
+import { PostHog } from 'posthog-node'
+
+const client = new PostHog('<ph_project_api_key>', {
+  host: 'https://us.i.posthog.com',
+})
 ```
 
 ```ts
-// With a secret key (Personal API Key or Project Secret API Key) for local evaluation
-const client = new PostHogBackendClient(
-  'your-api-key',
-  {
-    host: 'https://app.posthog.com',
-    secretKey: 'your-secret-key'
-  }
-)
+// With a secret key (Project Secret API Key or Personal API Key) for local evaluation and emails
+const client = new PostHog('<ph_project_api_key>', {
+  host: 'https://us.i.posthog.com',
+  secretKey: 'phs_...',
+})
 ```
 
 ## Capture
@@ -183,13 +244,19 @@ const client = new PostHogBackendClient(
 
 > **capture**(`props`): `void`
 
-Capture an event manually.
+Queue an event in memory to send asynchronously without blocking the caller.
+
+Events with a `distinctId` (explicit or from `withContext()`) create or update person profiles by default unless `options.process_person_profile` is `false` on the call, in `withContext()`, or via `registerOptions()`. Pass `$set` and `$set_once` inside `properties` to set person properties, pass `groups` (such as `{ company: 'acme' }`) to link groups, or send `event: '$pageview'` with `$current_url` for backend-only pageviews.
+
+Omitting `distinctId` outside an identified context generates a UUIDv7 and sends a personless event (`options: { process_person_profile: false }`). Pass `options: { process_person_profile: false }` to send a personless event for a known `distinctId`.
+
+Pass `flags` from `evaluateFlags()` to attach evaluated flags without extra requests. Use `captureException()` instead of `capture({ event: '$exception' })`, and don't mix `capture()` with `captureImmediate()` when event order matters.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `props` | `EventMessage` | The event properties |
+| `props` | `EventMessage` | The event payload |
 
 #### Returns
 
@@ -197,14 +264,28 @@ Capture an event manually.
 
 void
 
-#### Example
+#### Examples
 
 ```ts
-// Basic capture
+// Basic capture with person properties and groups
 client.capture({
   distinctId: 'user_123',
-  event: 'button_clicked',
-  properties: { button_color: 'red' }
+  event: 'movie_played',
+  properties: {
+    movie_id: '123',
+    $set: { name: 'Max Hedgehog' },
+    $set_once: { initial_url: '/blog' },
+  },
+  groups: { company: 'acme' },
+})
+```
+
+```ts
+// Personless event for a known user
+client.capture({
+  distinctId: 'user_123',
+  event: 'background_job',
+  options: { process_person_profile: false },
 })
 ```
 
@@ -212,19 +293,21 @@ client.capture({
 
 > **captureImmediate**(`props`): `Promise`\<`void`\>
 
-Capture an event immediately (synchronously).
+Send an event immediately and wait for the HTTP send attempt to settle.
+
+Use in short-lived runtimes where the process can freeze before a background flush. Follows the same `distinctId`, person-profile, `properties`, `groups`, and `flags` rules as `capture()`, and shouldn't be mixed with queued `capture()` calls when order matters.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `props` | `EventMessage` | The event properties |
+| `props` | `EventMessage` | The event payload |
 
 #### Returns
 
 `Promise`\<`void`\>
 
-Promise that resolves when the event is captured
+Promise that resolves when the send attempt completes
 
 #### Examples
 
@@ -233,30 +316,26 @@ Promise that resolves when the event is captured
 await client.captureImmediate({
   distinctId: 'user_123',
   event: 'button_clicked',
-  properties: { button_color: 'red' }
+  properties: { button_color: 'red' },
 })
 ```
 
 ```ts
-// With feature flags
+// With an evaluated flags snapshot
+const flags = await client.evaluateFlags('user_123')
 await client.captureImmediate({
   distinctId: 'user_123',
   event: 'user_action',
-  sendFeatureFlags: true
+  flags,
 })
 ```
 
 ```ts
-// With custom feature flags options
+// Personless immediate capture
 await client.captureImmediate({
   distinctId: 'user_123',
-  event: 'user_action',
-  sendFeatureFlags: {
-    onlyEvaluateLocally: true,
-    personProperties: { plan: 'premium' },
-    groupProperties: { org: { tier: 'enterprise' } },
-    flagKeys: ['flag1', 'flag2']
-  }
+  event: 'webhook_received',
+  options: { process_person_profile: false },
 })
 ```
 
@@ -306,13 +385,17 @@ successful HTTP status does not mean every event was accepted.
 
 > **identify**(`data`): `void`
 
-Identify a user and set their properties.
+Queue an `$identify` event setting person properties for `distinctId`.
+
+Use the same `distinctId` your frontend passes to `posthog.identify()` so server events, session replays, error tracking, and traces link to one person. Server `identify()` holds no ambient anonymous ID and only merges one when `$anon_distinct_id` is passed in `properties`.
+
+Prefer `$set` or `$set_once` on `capture()` (or `setPersonProperties()`) when you only need to update properties without linking an anonymous ID.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `IdentifyMessage` | The identify data containing distinctId and properties |
+| `data` | `IdentifyMessage` | The identify payload containing `distinctId` and `properties` |
 
 #### Returns
 
@@ -327,20 +410,20 @@ client.identify({
   properties: {
     name: 'John Doe',
     email: 'john@example.com',
-    plan: 'premium'
-  }
+    plan: 'premium',
+  },
 })
 ```
 
 ```ts
-// Using $set and $set_once
+// Using $set, $set_once, and $anon_distinct_id
 client.identify({
   distinctId: 'user_123',
   properties: {
     $set: { name: 'John Doe', email: 'john@example.com' },
     $set_once: { first_login: new Date().toISOString() },
-    $anon_distinct_id: 'anonymous_user_456'
-  }
+    $anon_distinct_id: 'anonymous_user_456',
+  },
 })
 ```
 
@@ -348,19 +431,21 @@ client.identify({
 
 > **identifyImmediate**(`data`): `Promise`\<`void`\>
 
-Identify a user and set their properties immediately (synchronously).
+Send an `$identify` event immediately and wait for the HTTP send attempt to settle.
+
+Use in short-lived runtimes where the process can freeze before a background flush. Follows the same `distinctId` matching and `$anon_distinct_id` rules as `identify()`.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `IdentifyMessage` | The identify data containing distinctId and properties |
+| `data` | `IdentifyMessage` | The identify payload containing `distinctId` and `properties` |
 
 #### Returns
 
 `Promise`\<`void`\>
 
-Promise that resolves when the identify is processed
+Promise that resolves when the identify call settles
 
 #### Example
 
@@ -370,8 +455,8 @@ await client.identifyImmediate({
   distinctId: 'user_123',
   properties: {
     name: 'John Doe',
-    email: 'john@example.com'
-  }
+    email: 'john@example.com',
+  },
 })
 ```
 
@@ -585,8 +670,9 @@ await posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, asy
 
 > **enrichCurrentSpan**(`client`): `void`
 
-Notify installed span processors after request IDs become available.
-This entry point does not load OpenTelemetry; without a processor it does nothing.
+Notify installed `PostHogContextSpanProcessor` instances after request IDs become available.
+
+This helper doesn't load OpenTelemetry, so it's a no-op unless you register `PostHogContextSpanProcessor` from `posthog-node/otel`.
 
 #### Parameters
 
@@ -669,19 +755,97 @@ the matched route (`GET /api/users/:id`), and a thrown error is recorded as a 50
 app.use('*', posthogHonoMiddleware(posthog))
 ```
 
+### `PostHogContextSpanProcessor`
+
+OpenTelemetry `SpanProcessor` that stamps `posthogDistinctId` and `sessionId` from the active PostHog context onto recording spans and the nearest enclosing `SERVER` span.
+
+Requires `@opentelemetry/api` (`^1.2.0`) as an optional peer dependency. Skips spans when the client is disabled or opted out.
+
+#### Example
+
+```ts
+import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
+import { PostHog } from 'posthog-node'
+import { PostHogContextSpanProcessor } from 'posthog-node/otel'
+
+const posthog = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+const provider = new BasicTracerProvider({ spanProcessors: [new PostHogContextSpanProcessor(posthog)] })
+```
+
+#### Constructors
+
+##### Constructor
+
+> **new PostHogContextSpanProcessor**(`posthog`): `PostHogContextSpanProcessor`
+
+Create a span processor bound to one PostHog client instance.
+
+###### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `posthog` | `PostHogBackendClient` | Client whose active request context populates span attributes |
+
+###### Returns
+
+`PostHogContextSpanProcessor`
+
+#### Methods
+
+##### forceFlush()
+
+> **forceFlush**(): `Promise`\<`void`\>
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### onEnd()
+
+> **onEnd**(): `void`
+
+###### Returns
+
+`void`
+
+##### onStart()
+
+> **onStart**(`span`, `parentContext?`): `void`
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `span` | `Span` |
+| `parentContext?` | `Context` |
+
+###### Returns
+
+`void`
+
+##### shutdown()
+
+> **shutdown**(): `Promise`\<`void`\>
+
+###### Returns
+
+`Promise`\<`void`\>
+
 ## Alias
 
 ### `PostHog.alias`
 
 > **alias**(`data`): `void`
 
-Create an alias to link two distinct IDs together.
+Queue a `$create_alias` event linking `alias` (the previous or secondary ID) to `distinctId` (the primary user ID).
+
+`distinctId` falls back to `withContext()` when blank, while `alias` never reads from context or `register()`. Never alias to shared placeholder values such as `'anonymous'` or `'null'`. Frontend `posthog.identify()` already links anonymous users, so backend `alias()` is mainly for backend-only flows.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | Primary `distinctId`, previous `alias`, and optional flags or options |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
@@ -694,10 +858,10 @@ Create an alias to link two distinct IDs together.
 #### Example
 
 ```ts
-// Link an anonymous user to an identified user
+// Link an anonymous user ID to a primary user ID
 client.alias({
-  distinctId: 'anonymous_123',
-  alias: 'user_456'
+  distinctId: 'user_456',
+  alias: 'anonymous_123',
 })
 ```
 
@@ -705,13 +869,15 @@ client.alias({
 
 > **aliasImmediate**(`data`): `Promise`\<`void`\>
 
-Create an alias to link two distinct IDs together immediately (synchronously).
+Send a `$create_alias` event immediately to link `alias` to `distinctId`.
+
+Follows the same ID precedence and placeholder warnings as `alias()`. Use in short-lived runtimes where the process can freeze before a background flush.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | The alias data containing distinctId and alias |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | Primary `distinctId`, previous `alias`, and optional flags or options |
 | `data.alias` | `string` | - |
 | `data.disableGeoip?` | `boolean` | - |
 | `data.distinctId` | `string` | - |
@@ -721,15 +887,15 @@ Create an alias to link two distinct IDs together immediately (synchronously).
 
 `Promise`\<`void`\>
 
-Promise that resolves when the alias is processed
+Promise that resolves when the alias call settles
 
 #### Example
 
 ```ts
-// Link an anonymous user to an identified user immediately
+// Link an anonymous user ID to a primary user ID immediately
 await client.aliasImmediate({
-  distinctId: 'anonymous_123',
-  alias: 'user_456'
+  distinctId: 'user_456',
+  alias: 'anonymous_123',
 })
 ```
 
@@ -1005,15 +1171,17 @@ https://posthog.com/docs/error-tracking/installation/node
 
 > **setupExpressErrorHandler**(`_posthog`, `app`): `void`
 
-Captures errors that Express passes to its error middleware. Call it after your routes.
+Register Express error-handling middleware after your routes to capture unhandled exceptions.
+
+Attaches request context, `$response_status_code`, and `$session_id`, skips errors already captured by process autocapture, and forwards each error to `next(error)`.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `_posthog` | `PostHogBackendClient` |
-| `app` | \{ `use`: (`middleware`) => `unknown`; \} |
-| `app.use` | (`middleware`) => `unknown` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `_posthog` | `PostHogBackendClient` | PostHog client instance |
+| `app` | \{ `use`: (`middleware`) => `unknown`; \} | Express app with `.use()` |
+| `app.use` | (`middleware`) => `unknown` | - |
 
 #### Returns
 
@@ -1025,9 +1193,21 @@ Captures errors that Express passes to its error middleware. Call it after your 
 
 > **get** **isDebug**(): `boolean`
 
+Checks whether debug logging is enabled on this client.
+
+##### Example
+
+```ts
+if (client.isDebug) {
+  console.log('PostHog debug logging is active')
+}
+```
+
 ##### Returns
 
 `boolean`
+
+`true` when debug logging is active
 
 ### `PostHog.debug`
 
@@ -1063,18 +1243,12 @@ client.debug(false)
 
 > **get** **emails**(): `Emails`
 
-The `posthog.emails` API: sends transactional email from PostHog email templates, reads
-the status of each email it sent, and sets a recipient's topic preferences.
+Send transactional email from PostHog templates or inline code, read send status, and update topic preferences.
 
-Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
-(the "Send transactional email" preset), and `get` needs `transactional_email:read` or
-`transactional_email:write`. `setPreferences` needs the
-`messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
-work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
-`get` and `setPreferences` resolve to `{ data, error }` and do not reject.
-`data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
-and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
-returns the error `client_closed`.
+- **Credentials and scopes.** Needs `secretKey` (`phs_...`). `send` needs `transactional_email:write`, `get` needs `transactional_email:read` or `transactional_email:write`, `setPreferences` needs `messaging_preference:write`, and `hog_flow:write` keys cover all three. Set `enableLocalEvaluation: false` when the key is only for email.
+- **Routing and retries.** Requests go to `appHost`, or the PostHog Cloud app host for `host`. Configure `emailRequestTimeoutMs` and `emailRequestMaxRetries` per client.
+- **Result handling.** `send`, `get`, and `setPreferences` resolve to `{ data, error }` and never reject. `data.id` is the queued email's ID for `get`.
+- **Lifecycle.** A disabled client returns `client_disabled`, and a shut-down client returns `client_closed`.
 
 ##### Example
 
@@ -1180,46 +1354,6 @@ try {
   clearTimeout(timer)
 }
 ```
-
-### `PostHog.flushWithPendingPromises`
-
-> **flushWithPendingPromises**(): `Promise`\<`void`\>
-
-Flushes the queue of pending events.
-
-This function will return a promise that will resolve when the flush is complete,
-or reject if there was an error (for example if the server or network is down).
-
-If there is already a flush in progress, this function will wait for that flush to complete.
-
-It's recommended to do error handling in the callback of the promise.
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Example
-
-```js
-// flush with error handling
-posthog.flush().then(() => {
-  console.log('Flush complete')
-}).catch((err) => {
-  console.error('Flush failed', err)
-})
-```
-
-#### Throws
-
-PostHogFetchHttpError
-
-#### Throws
-
-PostHogFetchNetworkError
-
-#### Throws
-
-Error
 
 ## Get feature flag
 
@@ -1835,13 +1969,15 @@ excluded from the slice.
 
 > **groupIdentify**(`data`): `void`
 
-Create or update a group and its properties.
+Queue a `$groupidentify` event to create or update a group and its properties (requires Group Analytics).
+
+Projects support up to 5 group types. Set `name` in `properties` for the group's display name in PostHog, otherwise PostHog shows `groupKey`. When `distinctId` is omitted outside `withContext()`, it falls back to `$<groupType>_<groupKey>`. Group identify events don't inherit context `sessionId`. Pass `groups` on `capture()` and `evaluateFlags()` to link events and flags to the group.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `GroupIdentifyMessage` | The group identify data |
+| `data` | `GroupIdentifyMessage` | Group identify payload |
 
 #### Returns
 
@@ -1850,28 +1986,28 @@ Create or update a group and its properties.
 #### Examples
 
 ```ts
-// Create a company group
+// Create or update a company group
 client.groupIdentify({
   groupType: 'company',
   groupKey: 'acme-corp',
   properties: {
     name: 'Acme Corporation',
     industry: 'Technology',
-    employee_count: 500
+    employee_count: 500,
   },
-  distinctId: 'user_123'
+  distinctId: 'user_123',
 })
 ```
 
 ```ts
-// Update organization properties
+// Update organization properties using fallback distinctId ($organization_org-456)
 client.groupIdentify({
   groupType: 'organization',
   groupKey: 'org-456',
   properties: {
     plan: 'enterprise',
-    region: 'US-West'
-  }
+    region: 'US-West',
+  },
 })
 ```
 
@@ -1879,19 +2015,21 @@ client.groupIdentify({
 
 > **groupIdentifyImmediate**(`data`): `Promise`\<`void`\>
 
-Create or update a group and its properties immediately (synchronously).
+Send a `$groupidentify` event immediately and wait for the HTTP send attempt to settle.
+
+Follows the same `name` property, `distinctId` fallback (`$<groupType>_<groupKey>`), and `groups` linking rules as `groupIdentify()`. Use in short-lived runtimes where the process can freeze before a background flush.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `GroupIdentifyMessage` | The group identify data |
+| `data` | `GroupIdentifyMessage` | Group identify payload |
 
 #### Returns
 
 `Promise`\<`void`\>
 
-Promise that resolves when the group identify is processed
+Promise that resolves when the group identify call settles
 
 #### Example
 
@@ -1903,8 +2041,8 @@ await client.groupIdentifyImmediate({
   properties: {
     name: 'Acme Corporation',
     industry: 'Technology',
-    employee_count: 500
-  }
+    employee_count: 500,
+  },
 })
 ```
 
@@ -1970,17 +2108,41 @@ Use evaluateFlags and call `flags.isEnabled(key)` on the returned snapshot.
 
 > **get** **isDisabled**(): `boolean`
 
+Checks whether the client is disabled from capturing events.
+
+##### Example
+
+```ts
+if (!client.isDisabled) {
+  client.capture({ distinctId: 'user_123', event: 'page_viewed' })
+}
+```
+
 ##### Returns
 
 `boolean`
+
+`true` when capture and network requests are disabled
 
 ### `PostHog.optedOut`
 
 > **get** **optedOut**(): `boolean`
 
+Checks whether the client is currently opted out.
+
+##### Example
+
+```ts
+if (client.optedOut) {
+  console.log('Capture is paused for this client')
+}
+```
+
 ##### Returns
 
 `boolean`
+
+`true` when the client is opted out
 
 ## Opt in
 
@@ -2028,17 +2190,41 @@ await client.enable()
 
 > **optIn**(): `Promise`\<`void`\>
 
+Opts the client in so it resumes capturing events.
+
+Equivalent to `enable()`.
+
 #### Returns
 
 `Promise`\<`void`\>
+
+Promise that resolves when the client opts back in
+
+#### Example
+
+```ts
+await client.optIn()
+```
 
 ### `PostHog.optOut`
 
 > **optOut**(): `Promise`\<`void`\>
 
+Opts the client out so it stops capturing events.
+
+Equivalent to `disable()`.
+
 #### Returns
 
 `Promise`\<`void`\>
+
+Promise that resolves when the client opts out
+
+#### Example
+
+```ts
+await client.optOut()
+```
 
 ## Register
 
@@ -2096,9 +2282,10 @@ console.log('Feature flags reloaded')
 ```
 
 ```ts
-// Reload before checking a specific flag
+// Reload before evaluating flags
 await client.reloadFeatureFlags()
-const flag = await client.getFeatureFlag('flag-key', 'user_123')
+const flags = await client.evaluateFlags('user_123')
+const value = flags.getFlag('flag-key')
 ```
 
 ## Set person properties
@@ -2107,13 +2294,15 @@ const flag = await client.getFeatureFlag('flag-key', 'user_123')
 
 > **setPersonProperties**(`data`): `void`
 
-Set properties on a person profile.
+Queue a `$set` event to set or set-once properties on a person profile.
+
+Falls back to `withContext()` when `distinctId` is blank, and no-ops when both `properties` and `propertiesOnce` are empty.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `SetPersonPropertiesMessage` | The data containing distinctId and properties to set |
+| `data` | `SetPersonPropertiesMessage` | Distinct ID and person properties to set |
 
 #### Returns
 
@@ -2125,7 +2314,7 @@ Set properties on a person profile.
 client.setPersonProperties({
   distinctId: 'user_123',
   properties: { plan: 'premium' },
-  propertiesOnce: { first_seen: '2026-06-15' }
+  propertiesOnce: { first_seen: '2026-06-15' },
 })
 ```
 
@@ -2133,13 +2322,15 @@ client.setPersonProperties({
 
 > **unsetPersonProperties**(`data`): `void`
 
-Remove properties from a person profile.
+Queue a `$set` event carrying `$unset` to remove properties from a person profile.
+
+Falls back to `withContext()` when `distinctId` is blank, and no-ops when `properties` is empty.
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `UnsetPersonPropertiesMessage` | The data containing distinctId and property names to unset |
+| `data` | `UnsetPersonPropertiesMessage` | Distinct ID and property names to unset |
 
 #### Returns
 
@@ -2150,7 +2341,7 @@ Remove properties from a person profile.
 ```ts
 client.unsetPersonProperties({
   distinctId: 'user_123',
-  properties: ['plan', 'email']
+  properties: ['plan', 'email'],
 })
 ```
 
@@ -2160,32 +2351,35 @@ client.unsetPersonProperties({
 
 > **shutdown**(`shutdownTimeoutMs?`): `Promise`\<`void`\>
 
-Shuts down the PostHog instance and ensures all events are sent.
+Shuts down the client, drains pending queues, and flushes queued telemetry before exit.
 
-Call shutdown() once before the process exits to ensure that all events have been sent and all promises
-have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it.
-Use flush() for per-request cleanup instead.
+Call `shutdown()` once on process exit. Use `flush()` when you'll keep reusing the client.
+
+- **What it stops and drains.** Halts flag polling, calls `flagDefinitionCacheProvider.shutdown()`, and drains analytics events, AI events, logs, metrics, and ended spans.
+- **Shared timeout budget.** Analytics queues and OTel signal flushing share `shutdownTimeoutMs`. Open spans that haven't ended are discarded.
+- **Delivery vs. ingestion.** Resolving confirms the client tried to drain within `shutdownTimeoutMs`, not that PostHog ingested every event.
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `shutdownTimeoutMs?` | `number` | Maximum time to wait for shutdown in milliseconds |
+| Parameter | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `shutdownTimeoutMs?` | `number` | `30000` | Maximum wait in milliseconds, defaulting to `30000` |
 
 #### Returns
 
 `Promise`\<`void`\>
 
-A promise that resolves when shutdown is complete
+Promise that resolves when shutdown finishes or hits `shutdownTimeoutMs`
 
-#### Example
+#### Examples
 
-```js
-// shutdown before process exit
-process.on('SIGINT', async () => {
-  await posthog.shutdown()
-  process.exit(0)
-})
+```ts
+await client.shutdown()
+```
+
+```ts
+// Shutdown with a 5-second timeout
+await client.shutdown(5000)
 ```
 
 ## Unregister
@@ -2218,28 +2412,24 @@ Check if local evaluation of feature flags is ready.
 
 `boolean`
 
-true if flag definitions have loaded successfully and include at least one flag, false otherwise
+`true` if flag definitions have loaded and include at least one flag, `false` otherwise
 
 #### Example
 
 ```ts
-// Check if ready
+// Check if ready before evaluating
 if (client.isLocalEvaluationReady()) {
-  // Local evaluation is ready, can evaluate flags locally
-  const flag = await client.getFeatureFlag('flag-key', 'user_123')
+  const flags = await client.evaluateFlags('user_123', { onlyEvaluateLocally: true })
+  const value = flags.getFlag('flag-key')
 } else {
-  // Local evaluation not ready, will use remote evaluation
-  const flag = await client.getFeatureFlag('flag-key', 'user_123')
+  const flags = await client.evaluateFlags('user_123')
+  const value = flags.getFlag('flag-key')
 }
 ```
 
 #### Remarks
 
-Readiness requires at least one loaded flag definition. A successful load that returns no
-flags (for example, after every flag is deleted) does not count as ready, and readiness
-returns to `false` if a later load returns no flags. To react to every successful load,
-including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
-number of loaded flags.
+Readiness requires at least one loaded flag definition. A successful load that returns no flags (for example, after every flag is deleted) doesn't count as ready, and readiness returns to `false` if a later load returns no flags. To react to every successful load, including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
 
 ### `PostHog.waitForLocalEvaluationReady`
 
@@ -2251,7 +2441,7 @@ Wait for local evaluation of feature flags to be ready.
 
 | Parameter | Type | Default value | Description |
 | ------ | ------ | ------ | ------ |
-| `timeoutMs?` | `number` | `THIRTY_SECONDS` | Timeout in milliseconds (default: 30000) |
+| `timeoutMs?` | `number` | `30000` | Timeout in milliseconds |
 
 #### Returns
 
@@ -2320,7 +2510,7 @@ if (payload) {
 
 #### Throws
 
-Error if personal API key is not provided
+Error if neither `secretKey` nor `personalApiKey` is configured. Set `enableLocalEvaluation: false` when `secretKey` is only for remote config or email.
 
 ### `RemoteConfigPayloadError`
 
@@ -2392,13 +2582,13 @@ periodically. Configure via the `metrics` client option.
 
 > **getContext**(): `ContextData` \| `undefined`
 
-Get the current context data.
+Read the active `withContext()` data, or `undefined` outside a context (and always `undefined` on `posthog-node/edge`).
 
 #### Returns
 
 `ContextData` \| `undefined`
 
-The current context data, or undefined if no context is set
+The current context data, or `undefined` if no context is active
 
 #### Example
 
@@ -2589,10 +2779,13 @@ Remove an option added with `registerOptions()`.
 
 > **withContext**\<`T`\>(`data`, `fn`, `options?`): `T`
 
-Run a function with specific context that will be applied to all events captured within that context.
-It propagates the context to all subsequent calls down the call stack.
-Context properties like tags and sessionId will be automatically attached to all events.
-By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.
+Run a function with request-scoped context using `AsyncLocalStorage` so state propagates down function calls and `await`.
+
+By default, nested contexts inherit parent state while overriding keys locally without mutating the parent. Pass `{ fresh: true }` at request or job boundaries to clear inherited state, and pass `{ signal }` to end a context when an `AbortSignal` aborts.
+
+Events and exceptions inherit `distinctId`, `sessionId` (`$session_id`, except `groupIdentify()`), `properties`, and `options`. `evaluateFlags()`, `getAllFlags()`, `getAllFlagsAndPayloads()`, and `getFeatureFlagResult()` read `distinctId` when omitted. Logs and spans inherit `distinctId` and `sessionId`. Pass a UUIDv7 `sessionId` (such as `x-posthog-session-id` from `posthog-js`) to link backend telemetry to Session Replay.
+
+On `posthog-node/edge`, `withContext()` runs `fn` directly without `AsyncLocalStorage`, so nested calls won't see context data.
 
 #### Type Parameters
 
@@ -2604,9 +2797,9 @@ By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` 
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `data` | `Partial`\<`ContextData`\> | Context data to apply (sessionId, distinctId, properties, options) |
+| `data` | `Partial`\<`ContextData`\> | Context data to apply (`sessionId`, `distinctId`, `properties`, `options`) |
 | `fn` | () => `T` | Function to run with the context |
-| `options?` | `ContextOptions` | Context options (fresh: true to start with clean context instead of inheriting) |
+| `options?` | `ContextOptions` | Context options (`fresh: true` to clear inherited state, `signal` to expire on abort) |
 
 #### Returns
 
@@ -2616,13 +2809,9 @@ The return value of the function
 
 #### Remarks
 
-Context `properties` and `options` fill only what an event left unset: the event's own values
-win, and context values beat `register()` and `registerOptions()` values and the values the SDK
-adds. `beforeSend` sees the result and can change it.
+Context `properties` and `options` fill only what an event left unset: the event's own values win, and context values beat `register()`, `registerOptions()`, and SDK defaults. `beforeSend` sees the result and can change it.
 
-On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
-events, a context `process_person_profile` option applies only when the distinct id is
-generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
+On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set`, and `$set_once` events, a context `process_person_profile` option applies only when the distinct ID is generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
 
 #### Example
 
@@ -2831,21 +3020,100 @@ JSON string suitable for the PostHog cookie value
 
 > **setupExpressRequestContext**(`_posthog`, `app`): `void`
 
-Adds request context to events captured during an Express request. Call it before your routes.
-Events then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
-`$ip` is the first `x-forwarded-for` value when the request has that header, otherwise the socket's remote address.
+Register Express middleware that binds per-request PostHog context before your routes run.
+
+Reads `x-posthog-session-id` and `x-posthog-distinct-id` headers (or the `posthog-js` cookie when `readPostHogCookie` is enabled) and attaches `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip` (first `x-forwarded-for` entry or `req.socket.remoteAddress`) to events in that request.
+
+Tracing headers are untrusted client data, never authentication, so pass an authenticated `distinctId` explicitly for authorization or sensitive decisions. Client IP geolocation from `$ip` also requires `disableGeoip: false`.
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `_posthog` | `PostHogBackendClient` |
-| `app` | \{ `use`: (`middleware`) => `unknown`; \} |
-| `app.use` | (`middleware`) => `unknown` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `_posthog` | `PostHogBackendClient` | PostHog client instance |
+| `app` | \{ `use`: (`middleware`) => `unknown`; \} | Express app or router with `.use()` |
+| `app.use` | (`middleware`) => `unknown` | - |
 
 #### Returns
 
 `void`
+
+#### Example
+
+```ts
+import express from 'express'
+import { PostHog, setupExpressErrorHandler, setupExpressRequestContext } from 'posthog-node'
+
+const app = express()
+const client = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+
+setupExpressRequestContext(client, app)
+app.get('/', (_req, res) => {
+  client.capture({ event: 'page_loaded' })
+  res.send('ok')
+})
+setupExpressErrorHandler(client, app)
+```
+
+### `PostHogInterceptor`
+
+NestJS interceptor from `posthog-node/nestjs` that isolates per-request PostHog context with `AsyncLocalStorage` and optionally captures controller exceptions.
+
+Resolves `distinctId` in order: `getDistinctId(request)`, then `x-posthog-distinct-id` (or cookie when `readPostHogCookie` is enabled), then any outer `withContext()`. Attaches `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
+
+Tracing headers are untrusted client data, never authentication. Set `captureExceptions: true` (or `{ minStatusToCapture }`, default `500`) to capture errors with `$response_status_code`.
+
+#### Example
+
+```ts
+import { PostHog } from 'posthog-node'
+import { PostHogInterceptor } from 'posthog-node/nestjs'
+
+const posthog = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+app.useGlobalInterceptors(new PostHogInterceptor(posthog, { captureExceptions: true }))
+```
+
+#### Implements
+
+- `NestInterceptor`
+
+#### Constructors
+
+##### Constructor
+
+> **new PostHogInterceptor**(`posthog`, `options?`): `PostHogInterceptor`
+
+Create a NestJS interceptor bound to a PostHog client.
+
+###### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `posthog` | `PostHogBackendClient` | PostHog client instance |
+| `options?` | `PostHogInterceptorOptions` | Exception capture and user ID resolution options |
+
+###### Returns
+
+`PostHogInterceptor`
+
+#### Methods
+
+##### intercept()
+
+> **intercept**(`context`, `next`): `Observable`\<`any`\>
+
+Wrap an incoming NestJS request in an isolated PostHog context.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `context` | `ExecutionContext` |
+| `next` | `CallHandler` |
+
+###### Returns
+
+`Observable`\<`any`\>
 
 ## Types
 
@@ -2890,11 +3158,11 @@ Sync with plugin-server/src/types.ts
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="disablegeoip"></a> `disableGeoip?` | `boolean` | - |
-| <a id="groupproperties"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> | - |
-| <a id="groups"></a> `groups?` | `Record`\<`string`, `string`\> | - |
+| <a id="disablegeoip"></a> `disableGeoip?` | `boolean` | Overrides the client's `disableGeoip` setting for this evaluation call. |
+| <a id="groupproperties"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> | Group properties keyed by group type for evaluating group-targeted flags. |
+| <a id="groups"></a> `groups?` | `Record`\<`string`, `string`\> | Group types and keys to evaluate group-targeted flags against (for example `{ company: 'acme' }`). |
 | <a id="onlyevaluatelocally"></a> `onlyEvaluateLocally?` | `boolean` | Skip remote fallback and omit flags that local definitions cannot resolve. |
-| <a id="personproperties"></a> `personProperties?` | `Properties` | - |
+| <a id="personproperties"></a> `personProperties?` | `Properties` | Person properties used instead of stored server properties. Include `$geoip_*` keys (such as `$geoip_country_code` and `$geoip_subdivision_1_code`) to evaluate GeoIP flags using the client's location. |
 
 ### `BasicSurveyQuestion`
 
@@ -2919,23 +3187,6 @@ Sync with plugin-server/src/types.ts
 #### Returns
 
 `EventMessage` \| `null`
-
-### `BeforeSendFn`
-
-> **BeforeSendFn** = (`event`) => `CaptureEvent` \| `null`
-
-Function type for the `before_send` hook.
-Receives an event and can return a modified event or null to drop the event.
-
-#### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `event` | `CaptureEvent` |
-
-#### Returns
-
-`CaptureEvent` \| `null`
 
 ### `BeforeSendLogFn`
 
@@ -3018,6 +3269,22 @@ awaited and the span is dropped.
 
 `SpanRecord` \| `null`
 
+### `CallHandler`
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-t"></a> `T` | `any` |
+
+#### Methods
+
+##### handle()
+
+> **handle**(): `Observable`\<`T`\>
+
+###### Returns
+
+`Observable`\<`T`\>
+
 ### `CaptureDroppedEvent`
 
 A single event the server explicitly rejected (`drop`).
@@ -3042,24 +3309,6 @@ A single event the server explicitly rejected (`drop`).
 | <a id="property-endpoint"></a> `endpoint` | `CaptureEndpoint` | The capture lane the batch was sent to. |
 | <a id="property-requestid"></a> `requestId` | `string` | - |
 | <a id="property-retryexhausted"></a> `retryExhausted` | `string`[] | UUIDs of events still pending `retry` after the attempt budget was exhausted, or lost to a batch-level failure. |
-
-### `CaptureEvent`
-
-> **CaptureEvent** = `object`
-
-Represents an event before it's sent to PostHog.
-This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
-
-#### Properties
-
-| Property | Type | Description |
-| ------ | ------ | ------ |
-| <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
-| <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
-| <a id="event-1"></a> `event` | `string` | The name of the event |
-| <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
-| <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
-| <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
 
 ### `CaptureExceptionOptions`
 
@@ -3138,10 +3387,10 @@ the client renders. PostHog sends it as is and never stores it. PostHog derives 
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-distinctid"></a> `distinctId?` | `string` | - |
+| <a id="property-distinctid"></a> `distinctId?` | `string` | Distinct ID applied to events, flag evaluations, logs, and spans inside the context when not passed directly. |
 | <a id="property-options"></a> `options?` | `V1EventOptions` | Options that fill the options an event left unset (missing or `null`). The event's own options win; these beat options from `registerOptions()`. A `process_person_profile` here does not reach `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` or `$set_once` events unless their distinct id is generated. |
 | <a id="property-properties"></a> `properties?` | `Record`\<`string`, `any`\> | Properties that fill the keys an event left unset. The event's own values win. |
-| <a id="property-sessionid"></a> `sessionId?` | `string` | - |
+| <a id="property-sessionid"></a> `sessionId?` | `string` | Session ID (UUIDv7) attached as `$session_id` on events and `sessionId` on logs and spans inside the context. |
 
 ### `ContextOptions`
 
@@ -3412,26 +3661,35 @@ A warning PostHog returned with a queued email.
 
 ### `EventMessage`
 
-> **EventMessage** = `Omit`\<`IdentifyMessage`, `"distinctId"`\> & `object`
+> **EventMessage** = `object`
 
-#### Type Declaration
+#### Properties
 
-| Name | Type | Description |
+| Property | Type | Description |
 | ------ | ------ | ------ |
-| `_originatedFromCaptureException?` | `boolean` | Internal flag set by captureException() to indicate this $exception event originated from the proper exception capture path. Used to warn users who call capture() with '$exception' directly. |
-| `distinctId?` | `string` | The event's distinct id. When it is missing, empty or only whitespace, the context distinct id is used; without one, the event gets a generated id and `options.process_person_profile: false`. |
-| `event` | `string` | - |
-| `flags?` | `FeatureFlagEvaluations` | Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event. Prefer this over `sendFeatureFlags` — it guarantees the event carries the exact values the code branched on and avoids a hidden `/flags` request on every capture. |
-| `groups?` | `Record`\<`string`, `string` \| `number`\> | - |
-| `sendFeatureFlags?` | `boolean` \| `SendFeatureFlagsOptions` | **Deprecated** Use the `flags` option with a `FeatureFlagEvaluations` object obtained from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags` request on capture and may return different values than the ones the code branched on. |
-| `timestamp?` | `Date` | If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. |
-| `uuid?` | `string` | If provided overrides the auto-generated event UUID. Must be a valid UUID. |
+| <a id="_originatedfromcaptureexception"></a> `_originatedFromCaptureException?` | `boolean` | Internal flag set by captureException() to indicate this $exception event originated from the proper exception capture path. Used to warn users who call capture() with '$exception' directly. |
+| <a id="disablegeoip-1"></a> `disableGeoip?` | `boolean` | Overrides the client's `disableGeoip` setting for this event. |
+| <a id="distinctid-1"></a> `distinctId?` | `string` | The event's distinct ID. When missing, empty, or whitespace, uses `withContext()`, else generates a UUIDv7 and sets `options.process_person_profile: false`. |
+| <a id="event"></a> `event` | `string` | Event name (such as `'order_placed'` or `'$pageview'`). Must be 200 UTF-8 bytes or fewer. |
+| <a id="flags-1"></a> `flags?` | `FeatureFlagEvaluations` | Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event. Prefer this over `sendFeatureFlags` so the event carries the exact values your code branched on without a hidden `/flags` request. |
+| <a id="groups-1"></a> `groups?` | `Record`\<`string`, `string` \| `number`\> | Group types and keys to associate with this event (for example `{ company: 'acme' }`, up to 5 per project). |
+| <a id="options-2"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
+| <a id="properties-1"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Event properties (also accepts `$set`, `$set_once`, and `$current_url`). |
+| <a id="sendfeatureflags"></a> ~~`sendFeatureFlags?`~~ | `boolean` \| `SendFeatureFlagsOptions` | **Deprecated** Use the `flags` option with a `FeatureFlagEvaluations` object obtained from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags` request on capture and may return different values than the ones the code branched on. |
+| <a id="timestamp"></a> `timestamp?` | `Date` | If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. |
+| <a id="uuid-1"></a> `uuid?` | `string` | If provided overrides the auto-generated event UUID. Must be a valid UUID. |
 
 ### `EventOptions`
 
 > **EventOptions** = `V1EventOptions`
 
 Processing options sent with an event to capture v1.
+
+### `ExceptionCaptureOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-minstatustocapture"></a> `minStatusToCapture?` | `number` | Minimum HTTP status code to capture. Exceptions with a lower status (e.g. 4xx) are skipped. **Default** `500` |
 
 ### `ExceptionRateLimiterConfig`
 
@@ -3449,6 +3707,16 @@ per-type allowance, and are shared between the browser and Node SDKs.
 | ------ | ------ | ------ |
 | <a id="property-exceptionratelimiterbucketsize"></a> `exceptionRateLimiterBucketSize?` | `number` | ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket. Normally only altered alongside PostHog support guidance. Accepts values between 0 and 100. **Default** `10` |
 | <a id="property-exceptionratelimiterrefillrate"></a> `exceptionRateLimiterRefillRate?` | `number` | ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket. Normally only altered alongside PostHog support guidance. Accepts values between 0 and 100. **Default** `1` |
+
+### `ExecutionContext`
+
+##### switchToHttp()
+
+> **switchToHttp**(): `HttpArgumentsHost`
+
+###### Returns
+
+`HttpArgumentsHost`
 
 ### `ExpressErrorMiddleware`
 
@@ -3496,7 +3764,7 @@ per-type allowance, and are shared between the browser and Node SDKs.
 | Property | Type |
 | ------ | ------ |
 | <a id="aggregation_group_type_index"></a> `aggregation_group_type_index?` | `number` \| `null` |
-| <a id="properties-1"></a> `properties` | `FlagProperty`[] |
+| <a id="properties-2"></a> `properties` | `FlagProperty`[] |
 | <a id="rollout_percentage"></a> `rollout_percentage?` | `number` |
 | <a id="variant"></a> `variant?` | `string` |
 
@@ -3549,7 +3817,7 @@ server-side evaluation, so it matches either runtime.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="flags-1"></a> `flags?` | `false` \| `string`[] \| `Record`\<`string`, `FeatureFlagValue`\> | Flag overrides. Can be: - `false` to clear flag overrides - `string[]` to enable a list of flags - `Record<string, FeatureFlagValue>` to set specific values/variants |
+| <a id="flags-2"></a> `flags?` | `false` \| `string`[] \| `Record`\<`string`, `FeatureFlagValue`\> | Flag overrides. Can be: - `false` to clear flag overrides - `string[]` to enable a list of flags - `Record<string, FeatureFlagValue>` to set specific values/variants |
 | <a id="payloads"></a> `payloads?` | `false` \| `Record`\<`string`, `JsonType`\> | Payload overrides for flags. - `false` to clear payload overrides - `Record<string, JsonType>` to set specific payloads |
 
 ### `FeatureFlagResult`
@@ -3751,9 +4019,9 @@ Promise that resolves when cleanup is complete, or void for sync cleanup
 
 #### Type Declaration
 
-| Name | Type |
-| ------ | ------ |
-| `sendFeatureFlagEvents?` | `boolean` |
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `sendFeatureFlagEvents?` | `boolean` | Whether this call sends `$feature_flag_called`, overriding the client's `sendFeatureFlagEvent` option. |
 
 ### `FlagProperty`
 
@@ -3789,12 +4057,12 @@ The promise does not reject.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="disablegeoip-1"></a> `disableGeoip?` | `boolean` | - |
-| <a id="distinctid-1"></a> `distinctId?` | `string` | The event's distinct id. When it is missing, empty or only whitespace, the context distinct id is used, then `$<groupType>_<groupKey>`. |
-| <a id="groupkey"></a> `groupKey` | `string` | - |
-| <a id="grouptype"></a> `groupType` | `string` | - |
-| <a id="options-2"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
-| <a id="properties-2"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
+| <a id="disablegeoip-2"></a> `disableGeoip?` | `boolean` | Overrides the client's `disableGeoip` setting for this event. |
+| <a id="distinctid-2"></a> `distinctId?` | `string` | The event's distinct ID. When missing, empty, or whitespace, uses `withContext()`, then `$<groupType>_<groupKey>`. |
+| <a id="groupkey"></a> `groupKey` | `string` | Unique identifier for the group within `groupType`. |
+| <a id="grouptype"></a> `groupType` | `string` | Group type name (such as `'company'`). Projects support up to 5 group types. |
+| <a id="options-3"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
+| <a id="properties-3"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Group properties (`$group_set`). Set `name` for the display name in PostHog. |
 
 ### `HistogramOptions`
 
@@ -3826,6 +4094,36 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 | `req.routePath` | `string` | - |
 | <a id="property-res"></a> `res` | `Response` | - |
 
+### `HttpArgumentsHost`
+
+##### getRequest()
+
+> **getRequest**\<`T`\>(): `T`
+
+###### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-t-1"></a> `T` | `any` |
+
+###### Returns
+
+`T`
+
+##### getResponse()
+
+> **getResponse**\<`T`\>(): `T`
+
+###### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| <a id="type-parameter-t-2"></a> `T` | `any` |
+
+###### Returns
+
+`T`
+
 ### `IdentifyMessage`
 
 > **IdentifyMessage** = `object`
@@ -3834,10 +4132,10 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="disablegeoip-2"></a> `disableGeoip?` | `boolean` | - |
-| <a id="distinctid-2"></a> `distinctId` | `string` | - |
-| <a id="options-3"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
-| <a id="properties-3"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
+| <a id="disablegeoip-3"></a> `disableGeoip?` | `boolean` | Overrides the client's `disableGeoip` setting for this event. |
+| <a id="distinctid-3"></a> `distinctId` | `string` | User distinct ID matching your frontend `posthog.identify()` call. |
+| <a id="options-4"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
+| <a id="properties-4"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Person properties to set directly, or via `$set`, `$set_once`, and `$anon_distinct_id`. |
 
 ### `InstrumentRequestOptions`
 
@@ -3859,83 +4157,71 @@ The slice of a Hono `Context` the middleware uses, so `hono` is not a dependency
 
 > **alias**(`data`): `void`
 
+Queue a `$create_alias` event linking `alias` (the previous or secondary ID) to `distinctId` (the primary user ID).
+
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
-| `data.alias` | `string` |
-| `data.disableGeoip?` | `boolean` |
-| `data.distinctId` | `string` |
-| `data.options?` | `V1EventOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | Primary `distinctId`, previous `alias`, and optional `disableGeoip` or `options` |
+| `data.alias` | `string` | - |
+| `data.disableGeoip?` | `boolean` | - |
+| `data.distinctId` | `string` | - |
+| `data.options?` | `V1EventOptions` | - |
 
 ###### Returns
 
 `void`
-
-###### Description
-
-To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
-This will allow you to answer questions like "Which marketing channels leads to users churning after a month?"
-or "What do users do on our website before signing up?"
-In a purely back-end implementation, this means whenever an anonymous user does something, you'll want to send a session ID with the capture call.
-Then, when that users signs up, you want to do an alias call with the session ID and the newly created user ID.
-The same concept applies for when a user logs in. If you're using PostHog in the front-end and back-end,
- doing the identify call in the frontend will be enough.:
 
 ##### aliasImmediate()
 
 > **aliasImmediate**(`data`): `Promise`\<`void`\>
 
+Send a `$create_alias` event immediately to link `alias` to `distinctId`.
+
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} |
-| `data.alias` | `string` |
-| `data.disableGeoip?` | `boolean` |
-| `data.distinctId` | `string` |
-| `data.options?` | `V1EventOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `data` | \{ `alias`: `string`; `disableGeoip?`: `boolean`; `distinctId`: `string`; `options?`: `V1EventOptions`; \} | Primary `distinctId`, previous `alias`, and optional `disableGeoip` or `options` |
+| `data.alias` | `string` | - |
+| `data.disableGeoip?` | `boolean` | - |
+| `data.distinctId` | `string` | - |
+| `data.options?` | `V1EventOptions` | - |
 
 ###### Returns
 
 `Promise`\<`void`\>
 
-###### Description
-
-To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
-Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-
 ##### capture()
 
-> **capture**(`distinctId`): `void`
+> **capture**(`props`): `void`
+
+Queue a custom event in memory to send asynchronously.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `EventMessage` | which uniquely identifies your user |
+| `props` | `EventMessage` | Event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options` |
 
 ###### Returns
 
 `void`
 
-###### Description
-
-Capture allows you to capture anything a user does within your system,
-which you can later use in PostHog to find patterns in usage,
-work out which features to improve or where people are giving up.
-A capture call requires:
-
 ##### captureAi()
 
-> **captureAi**(`distinctId`): `string` \| `undefined`
+> **captureAi**(`props`): `string` \| `undefined`
+
+Capture an AI event on the dedicated AI capture endpoint (`/i/v1/ai/events`).
+
+Beta: the signature is stable, while operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async with no redaction or truncation.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `EventMessage` | which uniquely identifies your user |
+| `props` | `EventMessage` | AI event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options` |
 
 ###### Returns
 
@@ -3943,30 +4229,23 @@ A capture call requires:
 
 The event UUID, or `undefined` when the client is disabled
 
-###### Description
-
-Capture an AI event on the dedicated AI capture endpoint.
-Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
-
 ##### captureAiImmediate()
 
-> **captureAiImmediate**(`distinctId`): `Promise`\<`string` \| `undefined`\>
+> **captureAiImmediate**(`props`): `Promise`\<`string` \| `undefined`\>
+
+Capture an AI event on the dedicated AI capture endpoint (`/i/v1/ai/events`) and wait for the send attempt to settle.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `EventMessage` | which uniquely identifies your user |
+| `props` | `EventMessage` | AI event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options` |
 
 ###### Returns
 
 `Promise`\<`string` \| `undefined`\>
 
 The event UUID, or `undefined` when the client is disabled
-
-###### Description
-
-Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.
 
 ##### captureException()
 
@@ -4008,21 +4287,21 @@ Capture an exception as a $exception event immediately.
 
 ##### captureImmediate()
 
-> **captureImmediate**(`distinctId`): `Promise`\<`void`\>
+> **captureImmediate**(`props`): `Promise`\<`void`\>
+
+Capture an event and wait for the HTTP send attempt to settle. Use in short-lived runtimes where the process can freeze before a background flush.
+
+Don't mix queued `capture()` and `captureImmediate()` when event order matters.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `EventMessage` | which uniquely identifies your user |
+| `props` | `EventMessage` | Event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options` |
 
 ###### Returns
 
 `Promise`\<`void`\>
-
-###### Description
-
-Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
 
 ##### evaluateFlags()
 
@@ -4330,80 +4609,67 @@ if (result) {
 
 ##### groupIdentify()
 
-> **groupIdentify**(`groupType`): `void`
+> **groupIdentify**(`data`): `void`
+
+Queue a `$groupidentify` event to create or update group properties (up to 5 group types per project). Set `name` in `properties` for the UI display name.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `groupType` | `GroupIdentifyMessage` | Type of group (ex: 'company'). Limited to 5 per project |
+| `data` | `GroupIdentifyMessage` | Group identify payload with `groupType`, `groupKey`, optional `properties`, `distinctId`, and `options` |
 
 ###### Returns
 
 `void`
-
-###### Description
-
-Sets a groups properties, which allows asking questions like "Who are the most active companies"
-using my product in PostHog.
 
 ##### groupIdentifyImmediate()
 
-> **groupIdentifyImmediate**(`groupType`): `Promise`\<`void`\>
+> **groupIdentifyImmediate**(`data`): `Promise`\<`void`\>
+
+Send a `$groupidentify` event immediately and wait for the HTTP send attempt to settle.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `groupType` | `GroupIdentifyMessage` | Type of group (ex: 'company'). Limited to 5 per project |
+| `data` | `GroupIdentifyMessage` | Group identify payload with `groupType`, `groupKey`, optional `properties`, `distinctId`, and `options` |
 
 ###### Returns
 
 `Promise`\<`void`\>
 
-###### Description
-
-Sets a group's properties immediately. Useful for edge environments where the usual queue-based
-sending is not preferable. Do not mix immediate and non-immediate calls.
-
 ##### identify()
 
-> **identify**(`distinctId`): `void`
+> **identify**(`data`): `void`
+
+Queue an `$identify` event setting person properties for `distinctId`. Match the `distinctId` passed to frontend `posthog.identify()` so client and server activity join to one person.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `IdentifyMessage` | which uniquely identifies your user |
+| `data` | `IdentifyMessage` | Identify payload with `distinctId` and optional `properties` (`$set`, `$set_once`, `$anon_distinct_id`) |
 
 ###### Returns
 
 `void`
 
-###### Description
-
-Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
-and even do things like segment users by these properties.
-An identify call requires:
-
 ##### identifyImmediate()
 
-> **identifyImmediate**(`distinctId`): `Promise`\<`void`\>
+> **identifyImmediate**(`data`): `Promise`\<`void`\>
+
+Send an `$identify` event immediately and wait for the HTTP send attempt to settle.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `IdentifyMessage` | which uniquely identifies your user |
+| `data` | `IdentifyMessage` | Identify payload with `distinctId` and optional `properties` (`$set`, `$set_once`, `$anon_distinct_id`) |
 
 ###### Returns
 
 `Promise`\<`void`\>
-
-###### Description
-
-Identify lets you add metadata on your users so you can more easily identify who they are in PostHog.
-Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
 
 ##### ~~isFeatureEnabled()~~
 
@@ -4507,21 +4773,19 @@ already polled automatically at a regular interval.
 
 ##### setPersonProperties()
 
-> **setPersonProperties**(`distinctId`): `void`
+> **setPersonProperties**(`data`): `void`
+
+Queue a `$set` event to set or set-once properties on a person profile.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `SetPersonPropertiesMessage` | which uniquely identifies your user |
+| `data` | `SetPersonPropertiesMessage` | Distinct ID and properties (`properties` for `$set`, `propertiesOnce` for `$set_once`) |
 
 ###### Returns
 
 `void`
-
-###### Description
-
-Set properties on a person profile.
 
 ##### shutdown()
 
@@ -4568,21 +4832,19 @@ code never has to branch.
 
 ##### unsetPersonProperties()
 
-> **unsetPersonProperties**(`distinctId`): `void`
+> **unsetPersonProperties**(`data`): `void`
+
+Queue a `$set` event carrying `$unset` to remove properties from a person profile.
 
 ###### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `distinctId` | `UnsetPersonPropertiesMessage` | which uniquely identifies your user |
+| `data` | `UnsetPersonPropertiesMessage` | Distinct ID and property key or array of keys to remove |
 
 ###### Returns
 
 `void`
-
-###### Description
-
-Remove properties from a person profile.
 
 ##### waitForLocalEvaluationReady()
 
@@ -5170,6 +5432,13 @@ Supports multiple formats:
 
 > **PostHogForRequests** = `Pick`\<`PostHogBackendClient`, `"withContext"` \| `"withSpan"` \| `"getContext"` \| `"metrics"` \| `"apiKey"` \| `"options"` \| `"_flushMetricsWithinInvocation"`\>
 
+### `PostHogInterceptorOptions`
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-captureexceptions"></a> `captureExceptions?` | `boolean` \| `ExceptionCaptureOptions` | Enable exception capture. Pass `true` for defaults or an object to configure. **Default** `false` |
+| <a id="property-getdistinctid"></a> `getDistinctId?` | (`request`) => `string` \| `undefined` | Returns the distinct ID for a request, such as the signed-in user's ID from your auth layer. It takes precedence over the `X-POSTHOG-DISTINCT-ID` tracing header and over a distinct ID already set in the PostHog context. Return `undefined` to fall back to those. |
+
 ### `PostHogLogsConfig`
 
 Configuration for the logs feature on `new PostHog(key, { logs: ... })`.
@@ -5216,17 +5485,17 @@ differently for cellular cost vs tab-suspension behavior).
 | `disable_capture_url_hashes?` | `boolean` | **Deprecated** Use `disableCaptureUrlHashes` instead. This property will be removed in the next major version. |
 | `disableCaptureUrlHashes?` | `boolean` | Whether to strip URL fragments (`#...`) from automatically captured request URLs. **Default** `false` |
 | `disableCompression?` | `boolean` | Whether to disable GZIP compression. Analytics capture requests use `captureCompression` when it is set, and `captureAi` requests use `captureAiCompression`. **Default** `false` |
-| `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When on, every event gets `$geoip_disable: true` unless the event, its context or `register()` sets `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's own `$geoip_disable` property. **Default** `true` |
+| `disableGeoip?` | `boolean` | Whether to disable GeoIP lookups for events and feature flag requests. When `true`, every event gets `$geoip_disable: true` unless the event, its context, or `register()` sets `$geoip_disable`. Pass `disableGeoip: false` (here or per call) and set `$ip` in event `properties` to geolocate from a client IP. Setting `$ip` alone still skips GeoIP while `disableGeoip` is `true`. **Default** `true` |
 | `emailRequestMaxRetries?` | `number` | Number of retries for an `emails.send` after a network error, a rate limit, or an unavailable service. Every retry sends the same idempotency key. Set to 0 when a job runner already retries the send. **Default** `2` |
 | `emailRequestTimeoutMs?` | `number` | Timeout in milliseconds for each `emails.send` request. Each attachment upload is one request, so raise it when large files upload slowly. **Default** `15000` |
-| `enableExceptionAutocapture?` | `boolean` | - |
+| `enableExceptionAutocapture?` | `boolean` | Attach process `uncaughtException` and `unhandledRejection` listeners to capture unhandled errors automatically. **Default** `false` |
 | `enableFullAiCapture?` | `boolean` | Capture full AI content: PostHog AI wrapper events route through the dedicated AI capture endpoint, skip string truncation, and pass media (base64 / data URIs) through unredacted. Privacy mode always wins. Defaults to false. |
-| `enableLocalEvaluation?` | `boolean` | - |
+| `enableLocalEvaluation?` | `boolean` | Whether to poll feature flag definitions for local evaluation when `secretKey`, `personalApiKey`, or `flagDefinitionCacheProvider` is set. Set to `false` when `secretKey` is only for `getRemoteConfigPayload()` or `emails`. **Default** `true` |
 | `evaluationContexts?` | readonly `string`[] | Evaluation contexts for feature flags. When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated. Examples: ['production', 'backend', 'api'] **Default** `undefined` |
 | `evaluationEnvironments?` | readonly `string`[] | Evaluation environments for feature flags. **Deprecated** Use evaluationContexts instead. This property will be removed in a future version. |
 | `featureFlagsLogWarnings?` | `boolean` | Controls whether `FeatureFlagEvaluations` filter helpers (`onlyAccessed()` and `only()`) log warnings when their input is unexpected — for example, calling `onlyAccessed()` before accessing any flags, or passing unknown keys to `only()`. **Default** `true` |
 | `featureFlagsPollingInterval?` | `number` \| `null` | The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds. The minimum is 100 ms, and a lower value is raised to it. Set to null to disable automatic polling. Definitions are still loaded on initialization; call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions. |
-| `fetch()?` | (`url`, `options`) => `Promise`\<`PostHogFetchResponse`\> | - |
+| `fetch()?` | (`url`, `options`) => `Promise`\<`PostHogFetchResponse`\> | Custom HTTP transport replacing global `fetch`. Capture requests pass `redirect: 'manual'` and follow up to 5 same-origin `307` or `308` redirects, and a custom `fetch` that follows redirects itself still works. |
 | `fetchRetryCount?` | `number` | How many times HTTP requests are retried. Capture requests use `captureMaxRetries` when it is set. **Default** `3` |
 | `fetchRetryDelay?` | `number` | The delay between HTTP request retries in milliseconds. Capture requests do not use it: see `captureMaxRetries` for their retry waits. **Default** `3000` |
 | `flagDefinitionCacheProvider?` | `FlagDefinitionCacheProvider`\<`FlagDefinitionCacheInput`\> | Optional cache provider for feature flag definitions. Allows custom caching strategies (Redis, database, etc.) for flag definitions in multi-worker environments. If not provided, defaults to in-memory cache. Without a secretKey or personalApiKey, this instance only reads cached definitions on each refresh; it does not call shouldFetchFlagDefinitions or publish definitions. With a credential, it uses the provider's fetch decision to coordinate fetching fresh definitions from PostHog and publishing them to the cache. This enables distributed coordination where only one worker fetches flags while others use cached data, reducing API calls and improving performance. **Example** `import type { FlagDefinitionCacheProvider } from 'posthog-node' class RedisCacheProvider implements FlagDefinitionCacheProvider { // ... implementation } const client = new PostHog('api-key', { flagDefinitionCacheProvider: new RedisCacheProvider(redis) })` |
@@ -5237,7 +5506,7 @@ differently for cellular cost vs tab-suspension behavior).
 | `maxQueueSize?` | `number` | The maximum number of analytics events held in memory waiting to be sent (must be higher than `flushAt`). When the queue is full, the oldest event is dropped and reported through the `'error'` event. `captureAi` events have their own queue, sized by `captureAiMaxQueueSize`, and do not count toward this limit. **Default** `10000` |
 | `metrics?` | `MetricsConfig` | Configuration for the `posthog.metrics` API (count, gauge, histogram). Set `serviceName` so series can be filtered per service in the Metrics UI. **Example** `const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } }) client.metrics.count('invoices.processed')` |
 | `migratedFrom?` | `string` | The provider your email moved from, such as `'resend'`. Sent with every `posthog.emails` request. |
-| `persistence?` | `"memory"` | - |
+| `persistence?` | `"memory"` | Storage backend for client opt-out state and super properties. Node holds state in memory only, so it resets on restart. |
 | `personalApiKey?` | `string` | **Deprecated** Use `secretKey` instead. |
 | `privacyMode?` | `boolean` | Redact prompts, outputs and error details from every event that the PostHog AI integrations (`@posthog/ai`) capture with this client. Per-call privacy settings can only add redaction. Defaults to false. |
 | `reactEmailRenderer?` | `EmailReactRenderer` | Renders the `react` element of an `emails.send`. Set it when you bundle your app, such as for Cloudflare Workers, Convex, or Vercel Edge: posthog-node doesn't bundle `@react-email/render`, so apps that never send `react` don't carry it. Without it, posthog-node loads `@react-email/render` from `node_modules` when a send has `react`. **Example** `const client = new PostHog('phc_...', { reactEmailRenderer: await import('@react-email/render') })` |
@@ -5277,13 +5546,13 @@ resolved and the properties and options filled from every layer, after `beforeSe
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="disablegeoip-3"></a> `disableGeoip?` | `boolean` | - |
-| <a id="distinctid-3"></a> `distinctId` | `string` | - |
-| <a id="event"></a> `event` | `string` | - |
-| <a id="options-4"></a> `options?` | `EventOptions` | The event's options, sent to capture unchanged. |
-| <a id="properties-4"></a> `properties` | `PostHogEventProperties` | - |
-| <a id="timestamp"></a> `timestamp?` | `Date` | - |
-| <a id="uuid-1"></a> `uuid?` | `string` | - |
+| <a id="disablegeoip-4"></a> `disableGeoip?` | `boolean` | Per-call `disableGeoip` flag, if provided. |
+| <a id="distinctid-4"></a> `distinctId` | `string` | Resolved distinct ID after checking the call, `withContext()`, and personless fallback. |
+| <a id="event-1"></a> `event` | `string` | Final event name after SDK normalization (such as `$bot_pageview` preview renames). |
+| <a id="options-5"></a> `options?` | `EventOptions` | The event's options, sent to capture unchanged. |
+| <a id="properties-5"></a> `properties` | `PostHogEventProperties` | Merged event properties after context, `register()`, SDK defaults, and `beforeSend`. |
+| <a id="timestamp-1"></a> `timestamp?` | `Date` | Explicit event timestamp, if provided or set by `beforeSend`. |
+| <a id="uuid-2"></a> `uuid?` | `string` | Canonical event UUID. |
 
 ### `Properties`
 
@@ -5415,12 +5684,12 @@ The queued email. A result means PostHog queued the email, not that it was deliv
 
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="flagkeys"></a> `flagKeys?` | `string`[] |
-| <a id="groupproperties-1"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> |
-| <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` |
-| <a id="personproperties-1"></a> `personProperties?` | `Properties` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="flagkeys"></a> `flagKeys?` | `string`[] | Restrict evaluation to these flag keys. |
+| <a id="groupproperties-1"></a> `groupProperties?` | `Record`\<`string`, `Properties`\> | Group properties keyed by group type for evaluating group-targeted flags. |
+| <a id="onlyevaluatelocally-1"></a> `onlyEvaluateLocally?` | `boolean` | Skip remote `/flags` fallback and evaluate only against locally loaded flag definitions. |
+| <a id="personproperties-1"></a> `personProperties?` | `Properties` | Person properties used during flag evaluation instead of stored server properties. |
 
 ### `SendTemplateEmailOptions`
 
@@ -5467,10 +5736,10 @@ The promise does not reject.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="distinctid-4"></a> `distinctId` | `string` | - |
-| <a id="options-5"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
-| <a id="properties-5"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | - |
-| <a id="propertiesonce"></a> `propertiesOnce?` | `Record`\<`string` \| `number`, `any`\> | - |
+| <a id="distinctid-5"></a> `distinctId` | `string` | User distinct ID. Falls back to `withContext()` when missing or blank. |
+| <a id="options-6"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
+| <a id="properties-6"></a> `properties?` | `Record`\<`string` \| `number`, `any`\> | Person properties to overwrite (`$set`). |
+| <a id="propertiesonce"></a> `propertiesOnce?` | `Record`\<`string` \| `number`, `any`\> | Person properties to write only when unset (`$set_once`). |
 
 ### `SeverityLevel`
 
@@ -6021,9 +6290,16 @@ const posthog = new PostHog('phc_...', { traces: { serviceName: 'checkout-api' }
 
 > **UnresolvedFlagReason** = `"experience_continuity"` \| `"unsupported_definition"` \| `"missing_context"` \| `"unresolved_dependency"`
 
-Why local evaluation could not resolve a flag. `experience_continuity` and
-`unsupported_definition` come from the flag's definition, `missing_context` from the
-evaluation call, and `unresolved_dependency` from a flag the definition depends on.
+Why local evaluation couldn't resolve a flag.
+
+When more than one cause applies, the SDK reports the first matching reason in this order:
+
+| Reason | Cause |
+| --- | --- |
+| `experience_continuity` | The flag uses experience continuity, which local evaluation can't resolve. |
+| `unsupported_definition` | The flag uses a rule local evaluation doesn't support, such as a static cohort, an unknown operator, or a circular or missing dependency. |
+| `unresolved_dependency` | A dependency flag has a loaded definition but stayed unresolved. |
+| `missing_context` | The call didn't pass a person property, group property, or device ID the flag needs, or passed an unusable value. |
 
 ### `UnsetPersonPropertiesMessage`
 
@@ -6033,9 +6309,9 @@ evaluation call, and `unresolved_dependency` from a flag the definition depends 
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="distinctid-5"></a> `distinctId` | `string` | - |
-| <a id="options-6"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
-| <a id="properties-6"></a> `properties` | `string` \| `string`[] | - |
+| <a id="distinctid-6"></a> `distinctId` | `string` | User distinct ID. Falls back to `withContext()` when missing or blank. |
+| <a id="options-7"></a> `options?` | `EventOptions` | Processing options sent with this event to capture v1. |
+| <a id="properties-7"></a> `properties` | `string` \| `string`[] | Property name or list of property names to remove from the person profile (`$unset`). |
 
 ### `V1EventOptions`
 
