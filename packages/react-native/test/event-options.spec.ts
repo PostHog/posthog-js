@@ -203,6 +203,21 @@ describe('per-event options', () => {
       1,
     ],
     ['sends it again when before_send dropped the first one', (event, nthSet) => (nthSet === 1 ? null : event), 1],
+    [
+      'sends it again when before_send rewrote the first $set',
+      (event, nthSet) => (nthSet === 1 ? { ...event, $set: { plan: 'free' } } : event),
+      2,
+    ],
+    [
+      'sends it again when before_send renamed the first one',
+      (event, nthSet) => (nthSet === 1 ? { ...event, event: 'Renamed' } : event),
+      1,
+    ],
+    [
+      'sends it again when before_send made the first $set a non-object',
+      (event, nthSet) => (nthSet === 1 ? { ...event, $set: 'pro' } : event),
+      2,
+    ],
   ])('repeated identical $set: %s', async (_name, hook, expectedSets) => {
     await posthog.shutdown()
     let nthSet = 0
