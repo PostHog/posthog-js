@@ -260,7 +260,8 @@ export type ConfigV2 = {
  *
  * - `identifier`: the person's resolved targeting key, as a string.
  * - `properties`: the person properties, or `null` when there are none to read. A key whose value
- *   is `undefined` is absent, as it is from the JSON a remote request sends.
+ *   is `undefined`, a function or a symbol is absent, as it is from the JSON a remote request
+ *   sends.
  * - `propertiesComplete`: whether `properties` holds every property of the person. A complete map
  *   shows that a property is absent. A partial map does not, so a filter on a key it lacks is
  *   inconclusive.
@@ -867,8 +868,7 @@ function matches(predicate: Predicate, context: ConfigV2Context): boolean {
   if (properties === null || properties === undefined) {
     throw unusableContext('No person properties were passed')
   }
-  // An undefined value is left out of JSON, so it is absent.
-  const present = hasOwn(properties, predicate.key) && properties[predicate.key] !== undefined
+  const present = hasOwn(properties, predicate.key) && isKeptByJson(properties[predicate.key])
   if (!present && !context.propertiesComplete) {
     throw unusableContext(`The person property '${predicate.key}' was not passed`)
   }
@@ -883,6 +883,11 @@ function matches(predicate: Predicate, context: ConfigV2Context): boolean {
   }
   const matched = matchOperator(predicate, present, present ? properties[predicate.key] : undefined, context)
   return matched !== predicate.negation
+}
+
+/** Whether JSON keeps an object member with this value. It leaves out `undefined`, functions and symbols. */
+function isKeptByJson(value: unknown): boolean {
+  return value !== undefined && typeof value !== 'function' && typeof value !== 'symbol'
 }
 
 function matchOperator(predicate: Predicate, present: boolean, value: unknown, context: ConfigV2Context): boolean {
@@ -1035,8 +1040,9 @@ function matchNumber(predicate: Predicate, value: unknown): boolean {
 }
 
 // The decimal numbers the reference reads from a string. JavaScript's `Number` also takes
-// surrounding whitespace, hexadecimal and an empty string.
-const NUMBER_PATTERN = /^[+-]?(?:inf|infinity|nan|(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:e[+-]?[0-9]+)?)$/i
+// surrounding whitespace, hexadecimal and an empty string. Digits after the integer part follow a
+// point, so a run of digits splits one way only and a failed match takes linear time.
+const NUMBER_PATTERN = /^[+-]?(?:inf|infinity|nan|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)$/i
 
 function parseNumberText(text: string): number {
   const unsigned = text.replace(/^[+-]/, '').toLowerCase()
@@ -1344,7 +1350,7 @@ function versionKey(version: Version): SortKey {
  * {@link parseVersion} reads, such as a leading `v`.
  */
 function readSemverFilter(operator: string, text: string): VersionKey | Requirement | null {
-  const admitted = operator === 'semver_wildcard' ? text.replace(/[.*]+$/, '') : text
+  const admitted = operator === 'semver_wildcard' ? trimWildcards(text) : text
   const parsed = parseVersion(admitted)
   const numbers = admitted.split('-')[0].split('.').slice(0, 3)
   if (parsed === null || !numbers.every(isPlainNumber)) {
@@ -1360,6 +1366,15 @@ function readSemverFilter(operator: string, text: string): VersionKey | Requirem
     return parseRequirement(parts.join('.').replace(/\*/g, 'x'), null)
   }
   return parseRequirement(canonicalVersion(version), operator === 'semver_tilde' ? 'tilde' : 'caret')
+}
+
+/** Drops the trailing points and `*`. A loop, because the pattern `/[.*]+$/` is quadratic on a long run. */
+function trimWildcards(text: string): string {
+  let end = text.length
+  while (end > 0 && (text[end - 1] === '.' || text[end - 1] === '*')) {
+    end--
+  }
+  return text.slice(0, end)
 }
 
 function isPlainNumber(text: string): boolean {
