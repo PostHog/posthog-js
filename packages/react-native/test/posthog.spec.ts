@@ -619,6 +619,32 @@ describe('PostHog React Native', () => {
         })
       })
     })
+
+    it('reports a flag read made before storage loads with the stored value', async () => {
+      const storage = createEventsStorage(mockStorage)
+      await storage.preloadPromise
+      storage.setItem(PostHogPersistedProperty.FeatureFlags, { 'cached-flag': true })
+      await storage.waitForPersist()
+
+      const onCapture = vi.fn()
+      posthog = new PostHog('1', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      posthog.on('capture', onCapture)
+
+      // e.g. the first render of a useFeatureFlag() hook
+      expect(posthog.getFeatureFlag('cached-flag')).toBeUndefined()
+
+      await posthog.ready()
+      expect(posthog.getFeatureFlag('cached-flag')).toEqual(true)
+
+      await waitForExpect(200, () => {
+        const flagCalls = onCapture.mock.calls.filter(([e]) => e.event === '$feature_flag_called')
+        expect(flagCalls.map(([e]) => e.properties.$feature_flag_response)).toEqual([true])
+      })
+    })
   })
 
   describe('sync initialization', () => {
