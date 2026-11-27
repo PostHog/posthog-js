@@ -1445,7 +1445,7 @@ export interface CapturePageviewOptions {
 
 /**
  * Configuration options for the PostHog JavaScript SDK.
- * @see https://posthog.com/docs/libraries/js#config
+ * @see https://posthog.com/docs/libraries/js/config
  */
 export interface PostHogConfig {
     /** URL of your PostHog instance.
@@ -1559,7 +1559,7 @@ export interface PostHogConfig {
     cross_subdomain_cookie: boolean
 
     /**
-     * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
+     * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js/persistence) for details.
      *
      * PostHog stores the distinct ID, session ID, device ID, feature flags, super properties, and some config in the browser.
      *
