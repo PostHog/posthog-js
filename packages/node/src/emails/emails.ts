@@ -133,6 +133,27 @@ interface PreparedSend {
   maxRetries: number
 }
 
+export interface MessagingCall<T> {
+  method: 'GET' | 'POST'
+  /** The route's path on the app host. */
+  path: string
+  body?: string
+  idempotencyKey?: string
+  /** Defaults to the sender's `maxRetries`. */
+  maxRetries?: number
+  /** What the caller sends, such as `push notifications`, for the client error messages. */
+  sends: string
+  /** Ends the client error messages, such as `no push notification was sent`. */
+  nothingDone: string
+  missingSecretKey: string
+  /** Reads the fields of a 2xx reply. Undefined when a required one is missing. */
+  read: (fields: Record<string, unknown>) => T | undefined
+  unreadable: string
+  unexpected: string
+}
+
+export type MessagingReply<T> = { data: T; error: null } | { data: null; error: EmailError }
+
 interface Upload {
   url: string
   headers: Record<string, string>
@@ -219,6 +240,39 @@ export class EmailSender implements Emails {
       return { data: result, error: null }
     } catch (error) {
       return { data: null, error: asEmailError(error, 'Sending the email failed unexpectedly.') }
+    }
+  }
+
+  /**
+   * Calls another messaging route with this sender's host, key, timeout and retries. `posthog.push` uses it, so
+   * `flush()` and `shutdown()` wait for its calls too. Does not reject.
+   */
+  call<T>(request: MessagingCall<T>): Promise<MessagingReply<T>> {
+    return this.track(this.callUntracked(request))
+  }
+
+  private async callUntracked<T>(request: MessagingCall<T>): Promise<MessagingReply<T>> {
+    try {
+      const { appHost, secretKey } = this.connect(request.nothingDone, request.missingSecretKey, request.sends)
+      const headers = this.headers(secretKey, {
+        ...(request.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(request.idempotencyKey === undefined ? {} : { 'Idempotency-Key': request.idempotencyKey }),
+      })
+      const data = await this.withRetries(request.maxRetries ?? this.config.maxRetries, async () => {
+        const reply = await this.request(appHost + request.path, request.method, headers, request.body)
+        const fields = replyFields(parseJson(reply.text))
+        if (reply.status < 200 || reply.status >= 300) {
+          throw replyError(fields, reply.status, reply.retryAfterMs)
+        }
+        const result = request.read(fields)
+        if (result === undefined) {
+          throw new EmailError({ code: 'api_error', message: request.unreadable, statusCode: reply.status })
+        }
+        return result
+      })
+      return { data, error: null }
+    } catch (error) {
+      return { data: null, error: asEmailError(error, request.unexpected) }
     }
   }
 
@@ -339,7 +393,11 @@ export class EmailSender implements Emails {
     }
   }
 
-  private connect(nothingDone: string, missingSecretKey: string): { appHost: string; secretKey: string } {
+  private connect(
+    nothingDone: string,
+    missingSecretKey: string,
+    sends = 'email'
+  ): { appHost: string; secretKey: string } {
     if (this.hooks.isDisabled()) {
       throw new EmailError({
         code: 'client_disabled',
@@ -357,8 +415,7 @@ export class EmailSender implements Emails {
       // A custom host is often an ingestion proxy, which must not receive the secret key.
       throw new EmailError({
         code: 'missing_app_host',
-        message:
-          "The client's host is not PostHog Cloud, so the client can't tell where to send email. Set appHost to your PostHog app host on the client.",
+        message: `The client's host is not PostHog Cloud, so the client can't tell where to send ${sends}. Set appHost to your PostHog app host on the client.`,
       })
     }
     const secretKey = this.config.secretKey?.trim()

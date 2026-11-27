@@ -35,6 +35,17 @@ export type {
   SetEmailPreferencesResponse,
   TemplateEmailForm,
 } from './emails/types'
+export { PushError } from './push/errors'
+export type { PushErrorName } from './push/errors'
+export type {
+  GetPushResponse,
+  Push,
+  PushDeliveryStatus,
+  PushStatus,
+  SendPushOptions,
+  SendPushResponse,
+  SendPushResult,
+} from './push/types'
 export type {
   FlagDefinitionCacheData,
   FlagDefinitionCacheInput,
