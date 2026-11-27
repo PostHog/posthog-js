@@ -15,6 +15,7 @@ You need to change code or configuration if your app does any of these:
 - calls `getFeatureFlagPayload()`, `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`, `onFeatureFlag()` or `overrideFeatureFlag()`, or reads `getFeatureFlagDetails()` (see [Removed feature flag methods](#removed-feature-flag-methods))
 - uses the `useFeatureFlag()`, `useFeatureFlags()` or `useFeatureFlagWithPayload()` hooks (see [Feature flag hooks](#feature-flag-hooks))
 - passes `sendEvent` to `getFeatureFlag()`, `getFeatureFlagResult()` or `isFeatureEnabled()`
+- calls `getAllFeatureFlags()`, which returns `undefined` until flags are cached (see [`getAllFeatureFlags`](#getallfeatureflags))
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
 - reads `enabled` from `getFeatureFlagResult()` or `getAllFeatureFlags()` for a flag whose variant is an empty string, or filters on `$active_feature_flags`
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header the SDK sets in `requestHeaders` and expects capture requests to carry it
@@ -115,10 +116,27 @@ If your 4.x code read flags both in the callback and right after registering it,
 | `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                           |
 | `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
 
-To build the 4.x maps from `getAllFeatureFlags()`:
+### `getAllFeatureFlags`
+
+`getAllFeatureFlags()` returns `undefined` until flags are cached: before the first successful load, after a first load that failed or was quota-limited, and after `reset()` until flags reload.
+In 4.x it returned an empty list in all of these cases.
+Flags are cached once a load succeeds or flags are bootstrapped; a list that is empty then means no flags apply to the user.
 
 ```ts
 const results = posthog.getAllFeatureFlags()
+if (results === undefined) {
+  // flags haven't loaded yet; wait for onFeatureFlags() or reloadFeatureFlagsAsync()
+} else {
+  // results lists every loaded flag, and is empty when none apply
+}
+```
+
+Where you only iterate, use `posthog.getAllFeatureFlags() ?? []`.
+
+To build the 4.x maps from `getAllFeatureFlags()`:
+
+```ts
+const results = posthog.getAllFeatureFlags() ?? []
 const flags = Object.fromEntries(results.map((r) => [r.key, r.variant ?? r.enabled]))
 const payloads = Object.fromEntries(
   results.filter((r) => r.enabled && r.payload !== null).map((r) => [r.key, r.payload])

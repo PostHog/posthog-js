@@ -152,6 +152,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const newFeatureFlagDetails = {
           ...this.getStoredFlagDetails(),
           requestError: undefined,
+          noFlagsCached: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
             ...Object.fromEntries(
@@ -952,10 +953,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a
             // signal that the server turned minimal flag-called events off.
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
             })
           }
           return undefined
@@ -965,10 +968,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
             })
           }
           this._logger.warn(
@@ -1158,10 +1163,17 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   /**
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   *
+   * Returns `undefined` while no flags are cached, such as before the first successful load or when no
+   * flags were bootstrapped, and a list, empty when no flags apply, once they are.
    */
-  getAllFeatureFlags(): FeatureFlagResult[] {
+  getAllFeatureFlags(): FeatureFlagResult[] | undefined {
+    const flags = this.getFeatureFlagDetails()?.flags
+    if (!flags || this.getStoredFlagDetails()?.noFlagsCached) {
+      return undefined
+    }
     return flagDetailsToResults(
-      this.getFeatureFlagDetails()?.flags ?? {},
+      flags,
       (payload) => this.decodeFeatureFlagPayload(payload),
       (value) => this.isFlagValueEnabled(value)
     )
@@ -1897,6 +1909,15 @@ export abstract class PostHogCore extends PostHogCoreBase {
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
     return this.loadFeatureFlagsAsync(sendAnonDistinctId)
+  }
+
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s, or an empty list while none are
+   * cached. This is a synchronous read of the flags from the last load (no network request) and does not
+   * send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return super.getAllFeatureFlags() ?? []
   }
 
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
