@@ -16,6 +16,7 @@
         "**/references/*.json",
         "**/references/*.md",
         "packages/browser/docs/*.md",
+        "**/skills/**/SKILL.md",
         "packages/browser/playwright/compatibility/goldens/*.json",
         "packages/browser/src/__tests__/fixtures/released-flags-*.json"
     ]

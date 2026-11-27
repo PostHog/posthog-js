@@ -1,0 +1,313 @@
+# Setup and getting started
+
+## Getting started
+
+
+The JavaScript Web SDK runs in the browser.
+
+To send your first event, add the HTML snippet to your site, or install `posthog-js` and call `posthog.init` once. Both take your project token and host from your [project settings](https://app.posthog.com/project/settings).
+
+After `init`, PostHog captures pageviews and clicks by itself, so loading a page sends your first event to the Activity page in PostHog. Use `capture` for your own events.
+
+For server-side JavaScript, use the Node.js SDK.
+
+### Install with the HTML snippet
+
+The snippet is the quickest way to add PostHog to a website. Paste it inside your site's `<head>` tags, just before `</head>`, so PostHog loads on every page. Replace the project token and host with your own.
+
+The snippet loads the latest SDK from PostHog and calls `init`, so you can skip the next two steps.
+
+<!-- prettier-ignore -->
+```html
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],Object.defineProperty(u,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}}),Object.defineProperty(u.people,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(){return u.toString(1)+".people (stub)"}}),o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('<ph_project_token>', {
+        api_host: 'https://us.i.posthog.com',
+    })
+</script>
+```
+
+### Install with a package manager
+
+```bash
+npm install posthog-js
+```
+
+### Initialize
+
+```ts
+import posthog from 'posthog-js'
+
+posthog.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com' })
+```
+
+### Capture an event
+
+```ts
+posthog.capture('signed_up', { plan: 'pro' })
+```
+
+### Identify a user
+
+```ts
+posthog.identify('user_123', { email: 'user@example.com' })
+```
+
+### Track across marketing website and app
+
+Install PostHog on both your marketing site and your web app to follow visitors from landing through signup and product usage.
+
+PostHog sets a cross-subdomain cookie by default, so visitors moving between `example.com` and `app.example.com` keep the same session and identity. For tracking across unrelated domains, see the [cross-website tracking tutorial](https://posthog.com/tutorials/cross-domain-tracking).
+
+### Replay triggers
+
+Configure replay triggers in your [project settings](https://app.posthog.com/project/settings) to start or pause session recording on matching URLs. You can also set up event triggers so recording starts immediately before PostHog queues a matching event.
+
+### Pin the snippet version
+
+To pin the snippet, change `/static/array.js` to a major path such as `/static/1/array.js` or an exact path such as `/static/1.380.0/array.js`. Minor paths such as `/static/1.380/array.js` are not supported. Exact version paths never change, so your CDN or proxy can cache them for a long time. Keep cache times short for `/static/array.js` and `/static/1/array.js`.
+
+### Verify the SDK with Subresource Integrity
+
+From `posthog-js` 1.445.0, each release publishes a manifest of SHA-384 hashes at `/static/<SDK_VERSION>/integrity.json`. The npm package includes the same manifest at `dist/integrity.json`.
+
+```bash
+curl --fail --silent --show-error --location \
+  "https://us-assets.i.posthog.com/static/<SDK_VERSION>/integrity.json" \
+  --output posthog-integrity.json
+```
+
+The `files` object in the manifest maps each asset to its hash. Store the hashes in your source code. Don't fetch them at page load. Then replace the inline snippet with the static loader. Set `integrity` to `files["loader.js"]` and `data-core-integrity` to `files["array.js"]`.
+
+```html
+<script
+    src="https://us-assets.i.posthog.com/static/<SDK_VERSION>/loader.js"
+    integrity="sha384-<LOADER_SHA384_BASE64_DIGEST>"
+    data-core-integrity="sha384-<ARRAY_SHA384_BASE64_DIGEST>"
+    data-project-token="<ph_project_token>"
+    crossorigin="anonymous"
+></script>
+```
+
+The loader reads its options from these attributes:
+
+- `data-api-host` sets your ingestion URL when you use a reverse proxy.
+- `data-config` takes your other `init` options as JSON.
+- `data-defer-init="true"` skips the automatic `init`, so you can call `posthog.init` yourself with function options.
+
+A cross-origin asset proxy must preserve the CORS response headers from PostHog's asset host and serve the same approved script bytes. When upgrading, update the pinned version and both hashes together. A hash mismatch blocks execution. Don't retry without integrity.
+
+The hashes cover only `loader.js` and `array.js`. They don't cover the recorder, surveys, toolbar, or `config.js` scripts. Use the manifest from the regional asset host you serve, because toolbar assets differ between regions.
+
+### Prevent runtime script downloads
+
+Use a no-external build and set `disable_external_dependency_loading: true` on the first initialization of every SDK instance. See [browser extension setup](https://posthog.com/docs/advanced/browser-extension) for no-external imports and feature trade-offs. The default `posthog-js` npm import can still download dependencies.
+
+Don't combine this setup with the snippet, a tag-manager installation, or another permissively configured SDK copy. A no-external build doesn't remove shared loaders or renderers registered by another bundle.
+
+With external loading disabled, the standard loader doesn't fetch executable `config.js`. Without preloaded configuration, the SDK requests configuration as JSON instead. Configuration, flags and events still use the network. Preventing script downloads doesn't sanitize remote HTML or disable bundled renderers.
+
+### Use samplers with the HTML snippet
+
+Load the customization script before the snippet calls `posthog.init`. Adjust the host for your region or proxy:
+
+```html
+<script src="https://us.i.posthog.com/static/customizations.full.js"></script>
+```
+
+Set the snippet's `before_send` option to `posthogCustomizations.sampleByDistinctId(0.4)` to keep about 40% of distinct IDs, or `posthogCustomizations.sampleBySessionId(0.25)` to keep about 25% of sessions. A given distinct ID or session sends either all its events or none.
+
+### Cookies in iframes
+
+In an iframe on another site, browsers treat PostHog cookies as third-party cookies and can block them. Pass an ID from the parent page and call `identify` inside the iframe.
+
+### Enriched flag analytics
+
+To add view and interaction charts to a flag's Usage tab, capture `$feature_view` when a user sees the feature and `$feature_interaction` when they use it.
+
+```ts
+posthog.capture('$feature_view', { feature_flag: flag })
+
+posthog.capture('$feature_interaction', {
+    feature_flag: flag,
+    $set: { [`$feature_interaction/${flag}`]: true },
+})
+```
+
+### Block Lighthouse traffic
+
+posthog-js already skips browsers whose user agent contains `Chrome-Lighthouse`, ignoring case. Some tools built on Lighthouse, such as Ahrefs and Semrush, send an ordinary browser user agent instead, so PostHog can't tell them apart from real visitors. If one of them inflates your numbers, add a string that only its user agent contains to `custom_blocked_useragents`. The SDK sends nothing from a browser whose user agent contains one of these strings, ignoring case, so never add a full browser user agent: that also blocks real visitors on the same browser and platform.
+
+```ts
+posthog.init('<ph_project_token>', {
+    custom_blocked_useragents: ['example-crawler'],
+})
+```
+
+#### Removing already ingested events
+
+You can't easily delete already ingested events, so add unwanted user agents to the [internal and test accounts filter](https://app.posthog.com/settings/project-customization#internal-user-filtering) in your project settings to exclude them from analytics.
+
+### Use `posthog` in the browser console
+
+Bundled apps often don't expose `window.posthog`. To reach the instance in Chrome or Firefox, set `debug: true`, find the `[PostHog.js] Starting in debug mode` log, expand the logged object, right-click `this`, and select **Store as global variable**. The instance is then available as `temp1` in Chrome or `temp0` in Firefox.
+
+## Setup
+
+### `new PostHog(...)`
+
+> **new PostHog**(): `PostHog`
+
+Creates an uninitialized PostHog instance.
+
+#### Returns
+
+`PostHog`
+
+#### Remarks
+
+Most browser applications should use the default exported singleton and call `posthog.init()`.
+Construct a new instance only when you need to manage a separate SDK instance manually.
+
+#### Example
+
+```js
+const instance = new PostHog()
+instance.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com' })
+```
+
+### `PostHog.init`
+
+> **init**(`token`, `config?`, `name?`): `PostHog`
+
+Initializes a new instance of the PostHog capturing object.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `token` | `string` | Your PostHog API token |
+| `config?` | `Partial`\<`PostHogConfig`\> | A dictionary of config options to override |
+| `name?` | `string` | The name for the new posthog instance that you want created |
+
+#### Returns
+
+`PostHog`
+
+The newly initialized PostHog instance
+
+#### Remarks
+
+All new instances are added to the main posthog object as sub properties (such as
+`posthog.library_name`) and also returned by this function. [Learn more about configuration options](https://posthog.com/docs/libraries/js/config)
+
+#### Examples
+
+```js
+// basic initialization
+posthog.init('<ph_project_token>', {
+    api_host: '<ph_client_api_host>'
+})
+```
+
+```js
+// multiple instances
+posthog.init('<ph_project_token>', {}, 'project1')
+posthog.init('<ph_project_token>', {}, 'project2')
+```
+
+### `PostHog.set_config`
+
+> **set\_config**(`config`): `void`
+
+Updates the configuration of the PostHog instance.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `config` | `Partial`\<`PostHogConfig`\> | A dictionary of new configuration values to update |
+
+#### Returns
+
+`void`
+
+### `posthog`
+
+> `const` **posthog**: `PostHog`
+
+The default PostHog JavaScript Web SDK singleton instance.
+
+## Shutdown
+
+### `PostHog.shutdown`
+
+> **shutdown**(`_shutdownTimeoutMs?`): `Promise`\<`void`\>
+
+Flushes any queued events and resolves once teardown is complete.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `_shutdownTimeoutMs?` | `number` | Retained for parity with the Node.js SDK; ignored in browsers. |
+
+#### Returns
+
+`Promise`\<`void`\>
+
+A promise that resolves once best-effort cleanup and queue flushing complete.
+
+#### Remarks
+
+This exists primarily for parity with the server-side
+[Node.js SDK](https://posthog.com/docs/libraries/node.md), whose `shutdown()` you call once before a
+process exits. In the browser there is no process to exit, so this method
+performs synchronous best-effort extension cleanup, flushes the request
+queues, and always resolves.
+
+It is safe to call in isomorphic teardown code (for example a Nuxt/Next module
+that calls `shutdown()` on both the server and the client) so the same
+symmetric cleanup works in either environment without throwing.
+
+#### Example
+
+```js
+// symmetric teardown that runs on both server and client
+await posthog.shutdown()
+```
+
+## Debug
+
+### `PostHog.debug`
+
+> **debug**(`debug?`): `void`
+
+Enables or disables debug mode for detailed logging.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `debug?` | `boolean` | If true, will enable debug mode. |
+
+#### Returns
+
+`void`
+
+#### Remarks
+
+Debug mode logs all PostHog calls to the browser console for troubleshooting.
+Can also be enabled by adding `?__posthog_debug=true` to the URL.
+
+#### Examples
+
+```js
+// enable debug mode
+posthog.debug(true)
+```
+
+```js
+// disable debug mode
+posthog.debug(false)
+```

@@ -4,6 +4,7 @@ const { execFileSync } = require('child_process')
 const referencePaths = [
     'packages/browser/references/posthog-js-1.md',
     'packages/browser/references/posthog-js-reference.md',
+    'packages/browser/skills/posthog-js',
     'packages/node/references/posthog-node-5.md',
     'packages/node/references/posthog-node-6.md',
     'packages/node/references/posthog-node-reference.md',
