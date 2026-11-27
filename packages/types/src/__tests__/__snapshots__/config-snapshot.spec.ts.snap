@@ -768,6 +768,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"false\\",
       \\"true\\"
     ],
+    \\"release\\": [
+      \\"undefined\\",
+      \\"{ id: string; name?: undefined; version?: undefined; build?: undefined; }\\",
+      \\"{ id?: undefined; name: string; version: string; build?: string | undefined; }\\"
+    ],
     \\"__capturePostHogExceptions\\": [
       \\"undefined\\",
       \\"false\\",
@@ -1079,6 +1084,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"string[]\\"
   ],
   \\"__preview_replay_sync_fetch\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_replay_early_fetch_response\\": [
     \\"undefined\\",
     \\"false\\",
     \\"true\\"

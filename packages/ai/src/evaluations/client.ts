@@ -43,6 +43,8 @@ export interface ExperimentOptions {
   expectedItemCount?: EvaluationCount | null
   expectedResultCount?: EvaluationCount | null
   suiteKey?: string | null
+  /** Exact scorer version for the run. Omission or null uses the suite default. */
+  experimentScorerVersionId?: string | null
   datasetSource?: string | null
   datasetIdentifier?: string | null
   datasetRevisionIdentifier?: string | null
@@ -100,6 +102,7 @@ function experimentBody(options: ExperimentOptions): string {
     'expectedItemCount',
     'expectedResultCount',
     'datasetRevisionId',
+    'experimentScorerVersionId',
     ...Object.keys(EXPERIMENT_TEXT),
   ])
   const body: WireObject = {
@@ -120,6 +123,8 @@ function experimentBody(options: ExperimentOptions): string {
   if (options.expectedResultCount !== undefined)
     body.expected_result_count = nullable(options.expectedResultCount, count)
   if (options.datasetRevisionId !== undefined) body.dataset_revision_id = nullable(options.datasetRevisionId, uuid)
+  if (options.experimentScorerVersionId !== undefined)
+    body.experiment_scorer_version_id = nullable(options.experimentScorerVersionId, uuid)
   return encode(body)
 }
 function experimentReceipt(data: WireObject, id: string): ExperimentReceipt {
@@ -540,6 +545,7 @@ function submissionOptions(data: WireObject): ExperimentOptions {
     expectedItemCount: 'expected_item_count',
     expectedResultCount: 'expected_result_count',
     datasetRevisionId: 'dataset_revision_id',
+    experimentScorerVersionId: 'experiment_scorer_version_id',
   }))
     if (Object.hasOwn(data, wire)) result[key] = data[wire]
   return result as unknown as ExperimentOptions

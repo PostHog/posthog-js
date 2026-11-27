@@ -2,6 +2,7 @@ import { ERROR_TRACKING_SUPPRESSION_RULES, ERROR_TRACKING_CAPTURE_EXTENSION_EXCE
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { PostHogPersistence } from '../posthog-persistence'
+import { defaultPostHog } from './helpers/posthog-instance'
 import {
     ErrorTrackingSuppressionRule,
     ErrorTrackingSuppressionRuleValue,
@@ -35,9 +36,11 @@ describe('PostHogExceptions', () => {
     let posthog: PostHog
     let exceptions: PostHogExceptions
     let config: PostHogConfig
+    let sessionProps: Map<string, Property>
 
     beforeEach(() => {
         config = { ...defaultConfig(), persistence: 'memory' }
+        sessionProps = new Map()
 
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
@@ -47,6 +50,7 @@ describe('PostHogExceptions', () => {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.props[property_key]
             },
+            getSessionProperty: (property_key: string): Property | undefined => sessionProps.get(property_key),
             config: config,
             capture: captureMock,
             persistence: postHogPersistence,
@@ -132,6 +136,163 @@ describe('PostHogExceptions', () => {
             } finally {
                 delete (globalThis as any)._posthogReleaseId
             }
+        })
+
+        describe('release', () => {
+            afterEach(() => {
+                delete (globalThis as any)._posthogReleaseId
+            })
+
+            it('attaches the configured release id when none is injected', () => {
+                config.error_tracking = { release: { id: '  configured-release  ' } }
+
+                exceptions.sendExceptionEvent({ custom_property: true })
+
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'configured-release' },
+                    expect.anything()
+                )
+            })
+
+            it('prefers the configured release id over the injected one', () => {
+                config.error_tracking = { release: { id: 'configured-release' } }
+                ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+
+                exceptions.sendExceptionEvent({ custom_property: true })
+
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'configured-release' },
+                    expect.anything()
+                )
+            })
+
+            it.each(['', '   '])('omits a blank configured release id %j', (releaseId) => {
+                config.error_tracking = { release: { id: releaseId } }
+
+                exceptions.sendExceptionEvent({ custom_property: true })
+
+                expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
+            })
+
+            it('keeps a release id supplied by the caller', () => {
+                config.error_tracking = { release: { id: 'configured-release' } }
+                ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+
+                exceptions.sendExceptionEvent({ custom_property: true, $release_id: 'caller-release' })
+
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'caller-release' },
+                    expect.anything()
+                )
+            })
+
+            it.each([
+                ['super property', () => posthog.persistence!.register({ $release_id: 'registered-release' })],
+                ['session property', () => sessionProps.set('$release_id', 'registered-release')],
+            ])('leaves a release id registered as a %s for capture to add', (_, register) => {
+                config.error_tracking = { release: { id: 'configured-release' } }
+                ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+                register()
+
+                exceptions.sendExceptionEvent({ custom_property: true })
+
+                expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
+            })
+        })
+
+        it('exposes release context to before_send only for exceptions', () => {
+            const beforeSend = vi.fn((event) => event)
+            const instance = defaultPostHog().init(
+                'release-test-token',
+                {
+                    persistence: 'memory',
+                    capture_pageview: false,
+                    error_tracking: { release: { name: 'example-web', version: 'abc123' } },
+                    before_send: beforeSend,
+                },
+                'release-test-instance'
+            )!
+            instance.exceptions = new PostHogExceptions(instance)
+
+            instance.captureException(new Error('test error'))
+            instance.capture('ordinary-event')
+
+            const events = beforeSend.mock.calls.map(([event]) => event)
+            expect(events.find((event) => event.event === '$exception')?.properties).toMatchObject({
+                $app_namespace: 'example-web',
+                $app_version: 'abc123',
+            })
+            const ordinary = events.find((event) => event.event === 'ordinary-event')!
+            expect(ordinary).toBeDefined()
+            expect(ordinary.properties).not.toHaveProperty('$app_namespace')
+            expect(ordinary.properties).not.toHaveProperty('$app_version')
+        })
+
+        describe('named release', () => {
+            afterEach(() => {
+                delete (globalThis as any)._posthogReleaseId
+            })
+
+            it.each([undefined, '  42  '])('maps the release to app properties with build %j', (build) => {
+                config.error_tracking = { release: { name: '  example-web  ', version: '  abc123  ', build } }
+                ;(globalThis as any)._posthogReleaseId = 'injected-release'
+
+                exceptions.sendExceptionEvent({ custom_property: true })
+
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    {
+                        custom_property: true,
+                        $app_namespace: 'example-web',
+                        $app_version: 'abc123',
+                        ...(build ? { $app_build: '42' } : {}),
+                    },
+                    expect.anything()
+                )
+                expect(posthog.get_property('$app_namespace')).toBeUndefined()
+                expect(posthog.get_property('$app_version')).toBeUndefined()
+            })
+
+            it.each([
+                { name: '', version: 'abc123' },
+                { name: 'example-web', version: '  ' },
+                { name: 'example-web' },
+                { id: 42 },
+                { id: 'id', name: 'example-web', version: 'abc123' },
+                null,
+            ])('falls back to injection for invalid release %j', (release) => {
+                config.error_tracking = { release } as any
+                ;(globalThis as any)._posthogReleaseId = 'injected-release'
+
+                exceptions.sendExceptionEvent({})
+
+                expect(captureMock).toBeCalledWith('$exception', { $release_id: 'injected-release' }, expect.anything())
+            })
+
+            it.each(['caller', 'super', 'session'])(
+                'preserves %s app identity instead of applying defaults',
+                (source) => {
+                    config.error_tracking = { release: { name: 'configured-app', version: 'configured-version' } }
+                    ;(globalThis as any)._posthogReleaseId = 'injected-release'
+                    const explicit = { $app_namespace: 'explicit-app', $app_version: 'explicit-version' }
+                    if (source === 'super') {
+                        posthog.persistence!.register(explicit)
+                    } else if (source === 'session') {
+                        Object.entries(explicit).forEach(([key, value]) => sessionProps.set(key, value))
+                    }
+
+                    exceptions.sendExceptionEvent(source === 'caller' ? explicit : {})
+
+                    expect(captureMock).toBeCalledWith(
+                        '$exception',
+                        source === 'caller' ? explicit : {},
+                        expect.anything()
+                    )
+                }
+            )
         })
 
         it('fails gracefully with a warning when capture throws', () => {

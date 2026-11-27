@@ -2313,7 +2313,7 @@ describe('posthog core', () => {
                 vi.advanceTimersByTime(10)
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/flags/?v=2',
+                    url: 'http://localhost/flags/?v=4',
                 })
             })
 

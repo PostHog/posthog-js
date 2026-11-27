@@ -828,7 +828,7 @@ Gets the value of a feature flag for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `FeatureFlagOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. |
+| `options?` | `FeatureFlagOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. |
 
 #### Returns
 
@@ -907,7 +907,8 @@ A result with `enabled: false` is a conclusive off evaluation. `undefined` means
 evaluation is available for the key. This includes globally inactive flags, which are omitted
 from the remote `/flags` response.
 
-By default, this method emits the `$feature_flag_called` event.
+By default, this method emits the `$feature_flag_called` event, and also `$experiment_exposure` when a
+config version 2 experiment split supplies the value.
 
 #### Parameters
 
@@ -1087,7 +1088,7 @@ Checks if a feature flag is enabled for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `FeatureFlagOptions` & `object` & `object` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
+| `options?` | `FeatureFlagOptions` & `object` & `object` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
 
 ##### Returns
 
@@ -1130,7 +1131,7 @@ Checks if a feature flag is enabled for the current user.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | Key of the feature flag. |
-| `options?` | `IsFeatureEnabledOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
+| `options?` | `IsFeatureEnabledOptions` | Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog, or the `$experiment_exposure` event of a config version 2 experiment split. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value. |
 
 ##### Returns
 
@@ -3223,7 +3224,7 @@ Per-call capture overrides, mirroring the client's public capture options.
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-delivery"></a> `delivery?` | `"unload"` | Send immediately without batching, using best-effort unload-safe delivery. |
+| <a id="property-delivery"></a> `delivery?` | `"immediate"` \| `"unload"` | Start delivering this event now instead of waiting for a batch. `immediate` keeps the host's normal transport, retries and queue; `unload` uses best-effort unload-safe delivery. A host that cannot honor the mode delivers the event normally. |
 | <a id="property-set"></a> `set?` | `Record`\<`string`, `unknown`\> | Person properties to set, emitted as `$set`. |
 | <a id="property-setonce"></a> `setOnce?` | `Record`\<`string`, `unknown`\> | Person properties to set if unset, emitted as `$set_once`. |
 | <a id="property-timestamp"></a> `timestamp?` | `Date` | Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. |
@@ -3696,6 +3697,7 @@ per-type allowance, and are shared between the browser and Node SDKs.
 | <a id="property-exception_steps"></a> `exception_steps?` | `ExceptionStepsConfig` | Controls buffering and payload limits for exception steps added via `addExceptionStep`. | - |
 | <a id="property-exceptionratelimiterbucketsize"></a> `exceptionRateLimiterBucketSize?` | `number` | ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket. Normally only altered alongside PostHog support guidance. Accepts values between 0 and 100. **Default** `10` | `ExceptionRateLimiterConfig`.`exceptionRateLimiterBucketSize` |
 | <a id="property-exceptionratelimiterrefillrate"></a> `exceptionRateLimiterRefillRate?` | `number` | ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket. Normally only altered alongside PostHog support guidance. Accepts values between 0 and 100. **Default** `1` | `ExceptionRateLimiterConfig`.`exceptionRateLimiterRefillRate` |
+| <a id="property-release"></a> `release?` | \{ `build?`: `undefined`; `id`: `string`; `name?`: `undefined`; `version?`: `undefined`; \} \| \{ `build?`: `string`; `id?`: `undefined`; `name`: `string`; `version`: `string`; \} | Release identity for manual and automatically captured exceptions only. Supply either a PostHog release id, or the name and version of a release that already exists in the project, as given to `posthog-cli` through `--release-name`, `--release-version`, and optional `--build`. A Git commit SHA can be used as the version. This option does not create releases. Create the release first, for example with `posthog-cli release resolve`. Explicit event, session, or super-property release identity takes precedence over this option, which takes precedence over a build-injected release id. Name/version configuration sends `$app_namespace`, `$app_version`, and optional `$app_build` instead of `$release_id`. Blank or incomplete configuration is ignored. Values are trimmed. **Example** `error_tracking: { release: { name: 'my-app', version: gitSha } }` **Default** `undefined` | - |
 
 ### `ErrorTrackingSuppressionRule`
 
@@ -4005,23 +4007,24 @@ Result of evaluating a feature flag, including both the flag value and its paylo
 
 ### `FeatureFlagsConfig`
 
-| Property | Modifier | Type |
-| ------ | ------ | ------ |
-| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` |
-| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> |
-| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> |
-| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` |
-| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` |
-| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` |
-| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] |
-| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` |
-| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] |
-| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` |
-| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` |
-| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` |
-| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` |
-| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` |
-| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` |
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-bootstrap"></a> `bootstrap` | `readonly` | `object` | - |
+| `bootstrap.featureFlagPayloads?` | `readonly` | `Readonly`\<`Record`\<`string`, `JsonType`\>\> | - |
+| `bootstrap.featureFlags?` | `readonly` | `Readonly`\<`Record`\<`string`, `string` \| `boolean`\>\> | - |
+| <a id="property-cachettlms"></a> `cacheTtlMs?` | `readonly` | `number` | - |
+| <a id="property-compression"></a> `compression?` | `readonly` | `Compression` \| `"best-available"` | - |
+| <a id="property-deduplicatecallspersession"></a> `deduplicateCallsPerSession` | `readonly` | `boolean` | - |
+| <a id="property-encodebootstrappayloads"></a> `encodeBootstrapPayloads?` | `readonly` | `boolean` | Store bootstrapped payloads JSON-encoded, like payloads from `/flags`, so reads return them as supplied. Only `$feature_flag_bootstrapped_payload` reports the supplied value; `$feature_flag_payload` reports the stored JSON string, like payloads from `/flags`. |
+| <a id="property-evaluationcontexts"></a> `evaluationContexts` | `readonly` | readonly `string`[] | - |
+| <a id="property-featureflagsdisabled"></a> `featureFlagsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-flagkeys"></a> `flagKeys?` | `readonly` | readonly `string`[] | - |
+| <a id="property-idlerefreshbackoff"></a> `idleRefreshBackoff` | `readonly` | `boolean` | - |
+| <a id="property-onlyevaluatesurveyfeatureflags"></a> `onlyEvaluateSurveyFeatureFlags` | `readonly` | `boolean` | - |
+| <a id="property-refreshintervalms"></a> `refreshIntervalMs?` | `readonly` | `number` | - |
+| <a id="property-remoterequestsdisabled-1"></a> `remoteRequestsDisabled` | `readonly` | `boolean` | - |
+| <a id="property-requestmaxretries"></a> `requestMaxRetries?` | `readonly` | `number` | - |
+| <a id="property-requesttimeoutms"></a> `requestTimeoutMs` | `readonly` | `number` | - |
 
 ### `FeatureFlagsConfigSource`
 

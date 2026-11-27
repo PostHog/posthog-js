@@ -113,3 +113,63 @@ test('SDK replay markers and historical flush diagnostics retain session identit
         second
     )
 })
+
+const replayText = (...texts) => ({
+    events: [],
+    snapshots: [
+        {
+            properties: {
+                $snapshot_data: texts.map((text, index) =>
+                    index === 0
+                        ? { type: 2, data: { node: { textContent: text } } }
+                        : { type: 3, data: { source: 0, texts: [{ id: 1, value: text }] } }
+                ),
+            },
+        },
+    ],
+})
+
+test('linked-flag proof requires zero uploads under a nonmatching variant before the linked variant', () => {
+    const network = replayText('Initial', 'After trigger')
+    const replay = { beforeTriggerSnapshots: 0, variantBeforeTrigger: 'red', variantAfterTrigger: 'blue' }
+    assertReplayLifecycleProof('replay-linked-flag', network, replay)
+    assert.throws(
+        () => assertReplayLifecycleProof('replay-linked-flag', network, { ...replay, beforeTriggerSnapshots: 1 }),
+        /before its trigger/
+    )
+    for (const variantBeforeTrigger of ['blue', undefined])
+        assert.throws(
+            () => assertReplayLifecycleProof('replay-linked-flag', network, { ...replay, variantBeforeTrigger }),
+            /start unmatched/
+        )
+    assert.throws(
+        () => assertReplayLifecycleProof('replay-linked-flag', network, { ...replay, variantAfterTrigger: 'red' }),
+        /switch to its variant/
+    )
+    assert.throws(
+        () => assertReplayLifecycleProof('replay-linked-flag', replayText('Initial', 'Before trigger'), replay),
+        /after its trigger/
+    )
+})
+
+test('URL proof rejects blocked activity delivered after resuming and requires resumed activity', () => {
+    const replay = { beforeTriggerSnapshots: 0, blockedMutationSuppressed: true }
+    assertReplayLifecycleProof(
+        'replay-url-trigger',
+        replayText('Initial', 'After trigger', 'After blocked URL'),
+        replay
+    )
+    assert.throws(
+        () =>
+            assertReplayLifecycleProof(
+                'replay-url-trigger',
+                replayText('Initial', 'After trigger', 'On blocked URL', 'After blocked URL'),
+                replay
+            ),
+        /blocked URL after resuming/
+    )
+    assert.throws(
+        () => assertReplayLifecycleProof('replay-url-trigger', replayText('Initial', 'After trigger'), replay),
+        /did not resume/
+    )
+})

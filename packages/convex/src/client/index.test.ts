@@ -151,6 +151,108 @@ describe('local-eval configuration', () => {
     const value = await posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })
     expect(value).toBeUndefined()
   })
+
+  // When POSTHOG_PROJECT_TOKEN is unset on the component, getFlagDefinitions reports disabled=true.
+  // Local-eval methods must degrade cleanly instead of throwing "set POSTHOG_PERSONAL_API_KEY".
+  test('degrades to empty/undefined when component reports disabled=true even without PAK', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: vi.fn(async () => ({
+        disabled: true,
+        localEvalConfigured: false,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    expect(await posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })).toBeUndefined()
+    expect(await posthog.isFeatureEnabled(ctx as never, { key: 'my-flag', distinctId: 'u1' })).toBeUndefined()
+    expect(await posthog.getFeatureFlagPayload(ctx as never, { key: 'my-flag', distinctId: 'u1' })).toBeUndefined()
+    expect(await posthog.getFeatureFlagResult(ctx as never, { key: 'my-flag', distinctId: 'u1' })).toBeUndefined()
+    expect(await posthog.getAllFlags(ctx as never, { distinctId: 'u1' })).toEqual({})
+    expect(await posthog.getAllFlagsAndPayloads(ctx as never, { distinctId: 'u1' })).toEqual({
+      featureFlags: {},
+      featureFlagPayloads: {},
+    })
+  })
+})
+
+describe('disabled option', () => {
+  test('short-circuits all methods without scheduling actions, running queries, or invoking callbacks', async () => {
+    const component = {
+      lib: {
+        capture: 'capture_ref',
+        identify: 'identify_ref',
+        groupIdentify: 'groupIdentify_ref',
+        alias: 'alias_ref',
+        captureException: 'captureException_ref',
+        getFlagDefinitions: 'getFlagDefinitions_ref',
+        evaluateFlag: 'evaluateFlag_ref',
+        evaluateFlagPayload: 'evaluateFlagPayload_ref',
+        evaluateAllFlags: 'evaluateAllFlags_ref',
+        refreshFlagDefinitions: 'refresh_ref',
+      },
+    }
+    const identify = vi.fn(async () => ({ distinctId: 'auth-user' }))
+    const beforeSend = vi.fn((event: Parameters<BeforeSendFn>[0]) => event)
+    const posthog = new PostHog(component as never, {
+      disabled: true,
+      identify,
+      beforeSend,
+    })
+    const ctx = {
+      scheduler: { runAfter: vi.fn() },
+      runQuery: vi.fn(),
+      runAction: vi.fn(),
+    }
+
+    // Fire-and-forget capture methods (intentionally omit distinctId to verify short-circuit runs first)
+    await posthog.capture(ctx as never, { event: 'test-event' })
+    await posthog.identify(ctx as never, {})
+    await posthog.groupIdentify(ctx as never, { groupType: 'company', groupKey: 'acme' })
+    await posthog.alias(ctx as never, { alias: 'alias-1' })
+    await posthog.captureException(ctx as never, { error: new Error('boom') })
+
+    // Local flag methods
+    expect(await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })).toBeUndefined()
+    expect(await posthog.isFeatureEnabled(ctx as never, { key: 'my-flag' })).toBeUndefined()
+    expect(await posthog.getFeatureFlagPayload(ctx as never, { key: 'my-flag' })).toBeUndefined()
+    expect(await posthog.getFeatureFlagResult(ctx as never, { key: 'my-flag' })).toBeUndefined()
+    expect(await posthog.getAllFlags(ctx as never, {})).toEqual({})
+    expect(await posthog.getAllFlagsAndPayloads(ctx as never, {})).toEqual({
+      featureFlags: {},
+      featureFlagPayloads: {},
+    })
+
+    // Remote flag methods and manual refresh
+    expect(await posthog.evaluateFlag(ctx as never, { key: 'my-flag' })).toBeNull()
+    expect(await posthog.evaluateFlagPayload(ctx as never, { key: 'my-flag' })).toBeNull()
+    expect(await posthog.evaluateAllFlags(ctx as never, {})).toEqual({
+      featureFlags: {},
+      featureFlagPayloads: {},
+    })
+    expect(await posthog.reloadFeatureFlags(ctx as never)).toEqual({
+      status: 'skipped',
+      reason: 'disabled',
+    })
+
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled()
+    expect(ctx.runQuery).not.toHaveBeenCalled()
+    expect(ctx.runAction).not.toHaveBeenCalled()
+    expect(identify).not.toHaveBeenCalled()
+    expect(beforeSend).not.toHaveBeenCalled()
+  })
+
+  test('behaves normally when disabled is false', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, { disabled: false })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, { distinctId: 'user-1', event: 'test-event' })
+
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('normalizeError', () => {

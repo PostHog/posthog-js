@@ -35,7 +35,6 @@ const base = {
     capturePageview: false,
     flags: false,
     logs: false,
-    analytics: false,
     remoteConfig: {
         toolbarParams: {},
         toolbarVersion: 'toolbar' as const,
@@ -82,7 +81,7 @@ describe('survey autocapture selectors', () => {
         clients.push(client)
         expect(setSelectors).toHaveBeenCalledOnce()
         expect(setSelectors).toHaveBeenCalledWith(new Set(['.first']))
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(
             expect.objectContaining({ properties: expect.objectContaining({ $element_selectors: ['.first'] }) })
@@ -138,7 +137,7 @@ describe('survey autocapture selectors', () => {
             })
             expect(second.surveys?.getElementSelectors()).toEqual(new Set(['.first']))
             const captured = vi.fn()
-            requireInstalledExtension(second.analytics).onEvent(captured)
+            second.onEvent(captured)
             document.querySelector('button')!.click()
             expect(captured.mock.calls[0]![0].properties.$element_selectors).toEqual(['.first'])
             expect(await requireInstalledExtension(second.surveys).canRenderSurvey('action')).toMatchObject({
@@ -182,8 +181,8 @@ describe('survey autocapture selectors', () => {
         clients.push(client)
         await fetchDefinitions(client)
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
-        requireInstalledExtension(client.analytics).capture('$autocapture', {
+        client.onEvent(captured)
+        client.capture('$autocapture', {
             $element_selectors: ['.first'],
             ...(url === undefined ? {} : { $current_url: url }),
         })
@@ -231,15 +230,15 @@ describe('survey autocapture selectors', () => {
         })
         clients.push(client)
         await fetchDefinitions(client)
-        requireInstalledExtension(client.analytics).capture('arm')
-        requireInstalledExtension(client.analytics).capture('purchase')
+        client.capture('arm')
+        client.capture('purchase')
         expect(await requireInstalledExtension(client.surveys).canRenderSurvey('event')).toMatchObject({
             visible: false,
         })
         expect(await requireInstalledExtension(client.surveys).canRenderSurvey('cancel')).toMatchObject({
             visible: true,
         })
-        requireInstalledExtension(client.analytics).capture('action')
+        client.capture('action')
         expect(await requireInstalledExtension(client.surveys).canRenderSurvey('action')).toMatchObject({
             visible: true,
         })
@@ -262,12 +261,12 @@ describe('survey autocapture selectors', () => {
         clients.push(client)
         await fetchDefinitions(client)
         const captured = vi.fn()
-        requireInstalledExtension(client.analytics).onEvent(captured)
+        client.onEvent(captured)
         document.querySelector<HTMLElement>('.first')!.click()
         expect(await requireInstalledExtension(client.surveys).canRenderSurvey('action')).toMatchObject({
             visible: true,
         })
-        const activation = JSON.parse(storage.getItem('survey-merge')!).extensionData.surveys[
+        const activation = JSON.parse(storage.getItem('survey-merge')!).extensionData.core[
             '$surveys_activated_timestamps'
         ]
         expect(activation).toBeTruthy()
@@ -276,7 +275,7 @@ describe('survey autocapture selectors', () => {
             visible: true,
         })
         expect(
-            JSON.parse(storage.getItem('survey-merge')!).extensionData.surveys['$surveys_activated_timestamps']
+            JSON.parse(storage.getItem('survey-merge')!).extensionData.core['$surveys_activated_timestamps']
         ).toEqual(activation)
         fail = true
         await fetchDefinitions(client)

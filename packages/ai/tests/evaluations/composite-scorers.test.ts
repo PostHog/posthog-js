@@ -1,4 +1,4 @@
-import type { ScorerComposition, CreateScorerOptions } from '../../src/evaluations'
+import type { ScorerComposition, CreateScorerOptions, ExperimentScorerComposition } from '../../src/evaluations'
 import {
   client,
   ID,
@@ -289,4 +289,79 @@ it('rejects calculation/composition mismatches, mutable modes, and numeric steps
   await expect(scorers.update(ID, { calculation: 'reported' } as never)).rejects.toThrow(TypeError)
   await expect(scorers.createVersion(ID, { config: {}, calculation: 'reported' } as never)).rejects.toThrow(TypeError)
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('round-trips experiment formula statistics and preserves suite assignment intent', async () => {
+  const formula: ExperimentScorerComposition = {
+    expression: 'quality',
+    inputs: [
+      {
+        alias: 'quality',
+        scorerVersionId: VERSION,
+        statistic: 'category_rate',
+        category: 'correct',
+        versionPolicy: 'combine',
+      },
+    ],
+  }
+  const wire = {
+    expression: 'quality',
+    inputs: [
+      {
+        alias: 'quality',
+        scorer_version_id: VERSION,
+        statistic: 'category_rate',
+        category: 'correct',
+        version_policy: 'combine',
+      },
+    ],
+  }
+  const response = compositeResponse({ scope: 'experiment', composition: wire, suite_keys: ['Agent-CI'] })
+  const fetch = mockFetch().mockImplementation(() => reply(response))
+  const scorers = client().scorers
+  const created = await scorers.create({
+    name: 'Overall',
+    kind: 'numeric',
+    scope: 'experiment',
+    calculation: 'composite',
+    config: {},
+    composition: formula,
+    applyToSuiteKeys: ['Agent-CI'],
+  })
+  expect(requestBody(fetch)).toMatchObject({
+    scope: 'experiment',
+    calculation: 'composite',
+    composition: wire,
+    apply_to_suite_keys: ['Agent-CI'],
+  })
+  expect(created).toMatchObject({ scope: 'experiment', composition: formula, suiteKeys: ['Agent-CI'] })
+  expect(created).not.toHaveProperty('assignedSuiteKeys')
+
+  fetch.mockResolvedValueOnce(reply({ ...response, assigned_suite_keys: [] }))
+  const detail = await scorers.get(ID)
+  expect(detail.assignedSuiteKeys).toEqual([])
+  await scorers.createVersion(ID, { config: {}, composition: detail.composition })
+  expect(requestBody(fetch, 2)).toEqual({ config: {}, composition: wire })
+  await scorers.createVersion(ID, { config: {}, composition: detail.composition, applyToSuiteKeys: [] })
+  expect(requestBody(fetch, 3)).toEqual({ config: {}, composition: wire, apply_to_suite_keys: [] })
+  await scorers.update(ID, { applyToSuiteKeys: [], suiteVersionId: REVISION })
+  expect(requestBody(fetch, 4)).toEqual({ suite_version_id: REVISION, apply_to_suite_keys: [] })
+
+  fetch.mockResolvedValueOnce(reply({ ...response, id: VERSION, definition_id: ID, version: 1 }))
+  expect(await scorers.getVersion(ID, VERSION)).toMatchObject({
+    scope: 'experiment',
+    composition: formula,
+    suiteKeys: ['Agent-CI'],
+  })
+  fetch.mockResolvedValueOnce(reply({ valid: true }))
+  expect(await scorers.validateComposition({ kind: 'numeric', scope: 'experiment', composition: formula })).toBe(true)
+  expect(requestBody(fetch, 6)).toEqual({ kind: 'numeric', scope: 'experiment', composition: wire })
+
+  fetch.mockResolvedValueOnce(reply({ ...pageResponse([response]), count: 8 }))
+  await scorers.list({ scope: 'experiment', offset: 7, tags: ['quality'] })
+  expect(Object.fromEntries(requestURL(fetch, 7).searchParams)).toMatchObject({
+    scope: 'experiment',
+    offset: '7',
+    tags: '["quality"]',
+  })
 })

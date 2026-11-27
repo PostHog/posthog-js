@@ -1038,6 +1038,304 @@ describe('evaluateFlags', () => {
     })
   })
 
+  describe('feature enrollment', () => {
+    // Early-access features: the person's opt-in in `$feature_enrollment/<flag key>` decides the
+    // flag before holdouts and release conditions (sdk-specs local-feature-flag-evaluator).
+    const enrollmentKey = '$feature_enrollment/beta-feature'
+    const betaFeature = (filters: Record<string, any> = {}, extra: Record<string, any> = {}): Record<string, any> => ({
+      id: 1,
+      name: 'Beta feature',
+      key: 'beta-feature',
+      active: true,
+      filters: { feature_enrollment: true, groups: [{ properties: [], rollout_percentage: 100 }], ...filters },
+      ...extra,
+    })
+    const dependent = (): Record<string, any> => ({
+      id: 2,
+      name: 'Dependent',
+      key: 'dependent',
+      active: true,
+      filters: {
+        groups: [
+          {
+            properties: [
+              {
+                key: 'beta-feature',
+                type: 'flag',
+                operator: 'flag_evaluates_to',
+                value: true,
+                dependency_chain: ['beta-feature'],
+              },
+            ],
+            rollout_percentage: 100,
+          },
+        ],
+      },
+    })
+    const control = (): Record<string, any> => ({
+      id: 3,
+      name: 'Control',
+      key: 'control',
+      active: true,
+      filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+    })
+    const remoteBetaFeature = (enabled: boolean): PostHogV2FlagsResponse => ({
+      flags: {
+        'beta-feature': {
+          key: 'beta-feature',
+          enabled,
+          variant: undefined,
+          reason: { code: 'condition_match', condition_index: 0, description: 'Matched condition set 1' },
+          metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'request-id-1',
+    })
+    const setupWithDefinitions = async (
+      localFlags: Record<string, any>[],
+      remoteResponse: Parameters<typeof apiImplementationV4>[0] = { flags: {}, errorsWhileComputingFlags: false },
+      extraDefinitions: Record<string, any> = {}
+    ): Promise<void> => {
+      const localApi = apiImplementation({ localFlags: { flags: localFlags, ...extraDefinitions } })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+      await posthog.reloadFeatureFlags()
+      mockedFetch.mockClear()
+    }
+    const remoteFlagCalls = (): unknown[] =>
+      mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=4'))
+
+    it.each([
+      ['true', true, 0, true],
+      ['"true"', 'true', 0, true],
+      ['false', false, 100, false],
+      ['"false"', 'false', 100, false],
+      ['1', 1, 100, false],
+      ['0', 0, 100, false],
+      ['null', null, 100, false],
+      ['"True"', 'True', 100, false],
+      ['""', '', 100, false],
+      ['[]', [], 100, false],
+      ['{}', {}, 100, false],
+    ])('returns %s enrollment as %s before release conditions', async (_, enrollment, rollout, expected) => {
+      await setupWithDefinitions([betaFeature({ groups: [{ properties: [], rollout_percentage: rollout }] })])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { [enrollmentKey]: enrollment },
+      })
+
+      expect(flags.getFlag('beta-feature')).toBe(expected)
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each([
+      [true, { plan: 'beta' }],
+      [false, undefined],
+    ])('resolves the payload of enrollment %s locally', async (enrollment, expected) => {
+      await setupWithDefinitions([betaFeature({ payloads: { true: '{"plan":"beta"}' } })])
+      const personProperties = { [enrollmentKey]: enrollment }
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+      expect(flags.getFlagPayload('beta-feature')).toEqual(expected)
+
+      const result = await posthog.getFeatureFlagResult('beta-feature', 'user-123', {
+        onlyEvaluateLocally: true,
+        personProperties,
+      })
+      expect(result).toMatchObject({ enabled: enrollment, payload: expected })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each([
+      [true, 0, true],
+      [false, 100, false],
+    ])('resolves enrollment %s before a full holdout', async (enrollment, rollout, expected) => {
+      await setupWithDefinitions([
+        betaFeature({
+          holdout: { id: 727, exclusion_percentage: 100 },
+          groups: [{ properties: [], rollout_percentage: rollout }],
+        }),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { [enrollmentKey]: enrollment },
+      })
+
+      expect(flags.getFlag('beta-feature')).toBe(expected)
+    })
+
+    it.each([
+      ['enrolled', { [enrollmentKey]: true }],
+      ['without enrollment', {}],
+    ])('keeps an inactive flag false when %s', async (_, personProperties) => {
+      await setupWithDefinitions([betaFeature({}, { active: false })])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.getFlag('beta-feature')).toBe(false)
+    })
+
+    it.each([false, null, undefined])('uses ordinary targeting when feature_enrollment is %s', async (marker) => {
+      await setupWithDefinitions([betaFeature({ feature_enrollment: marker })])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.getFlag('beta-feature')).toBe(true)
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each([
+      [true, 0],
+      [false, 100],
+    ])('passes enrollment %s to a dependent flag', async (enrollment, rollout) => {
+      await setupWithDefinitions([
+        betaFeature({ groups: [{ properties: [], rollout_percentage: rollout }] }),
+        dependent(),
+      ])
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        personProperties: { [enrollmentKey]: enrollment },
+      })
+
+      expect(flags.getFlag('beta-feature')).toBe(enrollment)
+      expect(flags.getFlag('dependent')).toBe(enrollment)
+    })
+
+    it('leaves missing enrollment and its dependent flag unresolved locally', async () => {
+      await setupWithDefinitions([betaFeature(), dependent(), control()])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true })
+
+      expect(flags.keys).toEqual(['control'])
+      expect(flags.getFlag('control')).toBe(true)
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.getFlag('dependent')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({
+        'beta-feature': 'missing_context',
+        dependent: 'unresolved_dependency',
+      })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it('treats undefined enrollment as missing', async () => {
+      await setupWithDefinitions([betaFeature()], remoteBetaFeature(true))
+      const personProperties = { [enrollmentKey]: undefined }
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({ 'beta-feature': 'missing_context' })
+      expect(remoteFlagCalls()).toHaveLength(0)
+
+      const result = await posthog.getFeatureFlag('beta-feature', 'user-123', { personProperties })
+
+      expect(result).toBe(true)
+      expect(remoteFlagCalls()).toHaveLength(1)
+    })
+
+    it('falls back to /flags for missing enrollment even when the release conditions match', async () => {
+      await setupWithDefinitions([betaFeature()], remoteBetaFeature(false))
+
+      const result = await posthog.getFeatureFlag('beta-feature', 'user-123')
+
+      expect(result).toBe(false)
+      expect(remoteFlagCalls()).toHaveLength(1)
+    })
+
+    it.each([
+      ['enrolled', { [enrollmentKey]: true }, true],
+      ['opted out', { [enrollmentKey]: false }, false],
+      ['without enrollment', {}, undefined],
+    ])('does not read an unsupported release condition when %s', async (_, personProperties, expected) => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await setupWithDefinitions([
+          betaFeature({
+            groups: [{ properties: [{ key: 'id', type: 'cohort', value: 123 }], rollout_percentage: 100 }],
+          }),
+          control(),
+        ])
+        expect(warnSpy.mock.calls.filter((call) => call.join(' ').includes('beta-feature'))).toEqual([])
+      } finally {
+        warnSpy.mockRestore()
+      }
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.getFlag('control')).toBe(true)
+      expect(flags.getFlag('beta-feature')).toBe(expected)
+      expect(flags.unresolvedFlags).toEqual(expected === undefined ? { 'beta-feature': 'missing_context' } : {})
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it.each([
+      ['enrolled', { [enrollmentKey]: true }],
+      ['opted out', { [enrollmentKey]: false }],
+      ['without enrollment', {}],
+    ])('leaves experience continuity unresolved when %s', async (_, personProperties) => {
+      await setupWithDefinitions([betaFeature({}, { ensure_experience_continuity: true }), control()])
+
+      const flags = await posthog.evaluateFlags('user-123', { onlyEvaluateLocally: true, personProperties })
+
+      expect(flags.getFlag('control')).toBe(true)
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.unresolvedFlags['beta-feature']).toBe('experience_continuity')
+    })
+
+    it('reads person enrollment on a group flag without group context', async () => {
+      await setupWithDefinitions(
+        [betaFeature({ aggregation_group_type_index: 0, groups: [{ properties: [], rollout_percentage: 0 }] })],
+        remoteBetaFeature(true),
+        { group_type_mapping: { '0': 'company' } }
+      )
+
+      const result = await posthog.getFeatureFlag('beta-feature', 'user-123', {
+        personProperties: { [enrollmentKey]: true },
+      })
+
+      expect(result).toBe(true)
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it('does not read a missing enrollment from group properties', async () => {
+      await setupWithDefinitions([betaFeature({ aggregation_group_type_index: 0 })], remoteBetaFeature(false), {
+        group_type_mapping: { '0': 'company' },
+      })
+
+      const flags = await posthog.evaluateFlags('user-123', {
+        onlyEvaluateLocally: true,
+        groups: { company: 'acme' },
+        groupProperties: { company: { [enrollmentKey]: true } },
+      })
+
+      expect(flags.getFlag('beta-feature')).toBeUndefined()
+      expect(flags.unresolvedFlags).toEqual({ 'beta-feature': 'missing_context' })
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+
+    it("does not let group properties turn a person's opt-out into enrollment", async () => {
+      await setupWithDefinitions([betaFeature({ aggregation_group_type_index: 0 })], remoteBetaFeature(false), {
+        group_type_mapping: { '0': 'company' },
+      })
+
+      const result = await posthog.getFeatureFlag('beta-feature', 'user-123', {
+        groups: { company: 'acme' },
+        personProperties: { [enrollmentKey]: false },
+        groupProperties: { company: { [enrollmentKey]: true } },
+      })
+
+      expect(result).toBe(false)
+      expect(remoteFlagCalls()).toHaveLength(0)
+    })
+  })
+
   describe('unresolved flags', () => {
     const alwaysOn = (key: string, extra: Record<string, any> = {}): Record<string, any> => ({
       id: 1,
