@@ -1275,7 +1275,7 @@ export class PostHog extends PostHogCoreBase {
   ): V1CaptureSender {
     // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them.
     const warnedStatuses = new Set<number>()
-    const url = `${this.host.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1')}${path}`
+    const url = `${this.host.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i, '$1')}${path}`
     const warnOnStatus = (status: number): void => {
       const warning =
         status === 404

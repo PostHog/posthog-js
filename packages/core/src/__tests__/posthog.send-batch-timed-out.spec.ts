@@ -51,4 +51,23 @@ describe('PostHog Core sendBatch timedOut outcome', () => {
     expect(client.sentBatches).toEqual([['first', 'second'], ['first'], ['second']])
     expect(queuedEvents(client)).toEqual([])
   })
+
+  it('doubles the batch size back after a timeout once batches are delivered again', async () => {
+    const [client] = createClient()
+    let slow = true
+    client.outcome = (batch) =>
+      slow && batch.length > 1 ? { keepIndices: batch.map((_, index) => index), timedOut: true } : undefined
+    for (let index = 0; index < 4; index++) {
+      client.capture(`a${index}`)
+    }
+    await client.flush()
+    slow = false
+    await client.flush()
+    for (let index = 0; index < 8; index++) {
+      client.capture(`b${index}`)
+    }
+    await client.flush()
+
+    expect(client.sentBatches.map((batch) => batch.length)).toEqual([4, 2, 2, 8])
+  })
 })

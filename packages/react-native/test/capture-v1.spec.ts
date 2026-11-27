@@ -147,28 +147,31 @@ describe('React Native capture v1 delivery', () => {
     ])
   })
 
-  it('leaves credentials in the host out of the 404 warning', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const client = new PostHog('test-token', {
-      host: 'https://user:secret@proxy.example.com',
-      persistence: 'memory',
-      flushInterval: 0,
-      preloadFeatureFlags: false,
-      disableCompression: true,
-      captureAppLifecycleEvents: false,
-    })
-    await client.ready()
-    respond = () => ({ status: 404 })
-    client.capture('kept')
-    await client.flush()
-    ;(client as any)._captureResendAt = 0
-    await client.shutdown()
+  it.each(['https://user:secret@proxy.example.com', 'https://user:sec@ret@proxy.example.com'])(
+    'leaves credentials in the host %s out of the 404 warning',
+    async (host) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const client = new PostHog('test-token', {
+        host,
+        persistence: 'memory',
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        disableCompression: true,
+        captureAppLifecycleEvents: false,
+      })
+      await client.ready()
+      respond = () => ({ status: 404 })
+      client.capture('kept')
+      await client.flush()
+      ;(client as any)._captureResendAt = 0
+      await client.shutdown()
 
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/^\[PostHog\] https:\/\/proxy\.example\.com\/i\/v1\/analytics\/events returned 404/)
-    )
-    expect(warn.mock.calls.flat().join()).not.toContain('secret')
-  })
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[PostHog\] https:\/\/proxy\.example\.com\/i\/v1\/analytics\/events returned 404/)
+      )
+      expect(warn.mock.calls.flat().join()).not.toMatch(/sec|ret@/)
+    }
+  )
 
   it('halves a batch whose request timed out, and resends the halves as new requests', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
