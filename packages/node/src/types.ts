@@ -27,8 +27,11 @@ import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
+  /** User distinct ID matching your frontend `posthog.identify()` call. */
   distinctId: string
+  /** Person properties to set via `$set`, `$set_once`, `$unset`, or `$anon_distinct_id`. */
   properties?: Record<string | number, any>
+  /** Overrides the client's `disableGeoip` setting for this event. */
   disableGeoip?: boolean
   /**
    * Processing options sent with this event to capture v1.
@@ -37,8 +40,11 @@ export type IdentifyMessage = {
 }
 
 export type SetPersonPropertiesMessage = {
+  /** User distinct ID. Falls back to `withContext()` when missing or blank. */
   distinctId: string
+  /** Person properties to overwrite (`$set`). */
   properties?: Record<string | number, any>
+  /** Person properties to write only when unset (`$set_once`). */
   propertiesOnce?: Record<string | number, any>
   /**
    * Processing options sent with this event to capture v1.
@@ -47,7 +53,9 @@ export type SetPersonPropertiesMessage = {
 }
 
 export type UnsetPersonPropertiesMessage = {
+  /** User distinct ID. Falls back to `withContext()` when missing or blank. */
   distinctId: string
+  /** Property name or list of property names to remove from the person profile (`$unset`). */
   properties: string | string[]
   /**
    * Processing options sent with this event to capture v1.
@@ -56,24 +64,28 @@ export type UnsetPersonPropertiesMessage = {
 }
 
 export type SendFeatureFlagsOptions = {
+  /** Skip remote `/flags` fallback and evaluate only against locally loaded flag definitions. */
   onlyEvaluateLocally?: boolean
+  /** Person properties used during flag evaluation instead of stored server properties. */
   personProperties?: Properties
+  /** Group properties keyed by group type for evaluating group-targeted flags. */
   groupProperties?: Record<string, Properties>
+  /** Restrict evaluation to these flag keys. */
   flagKeys?: string[]
 }
 
 export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   /**
-   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
-   * is used; without one, the event gets a generated id and `options.process_person_profile: false`.
+   * The event's distinct ID. When missing, empty, or whitespace, uses `withContext()`, else generates a UUIDv7 and sets `options.process_person_profile: false`.
    */
   distinctId?: string
+  /** Event name (such as `'order_placed'` or `'$pageview'`). Must be 200 UTF-8 bytes or fewer. */
   event: string
-  groups?: Record<string, string | number> // Mapping of group type to group id
+  /** Group types and keys to associate with this event (for example `{ company: 'acme' }`, up to 5 per project). */
+  groups?: Record<string, string | number>
   /**
    * Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event.
-   * Prefer this over `sendFeatureFlags` — it guarantees the event carries the exact
-   * values the code branched on and avoids a hidden `/flags` request on every capture.
+   * Prefer this over `sendFeatureFlags` so the event carries the exact values your code branched on without a hidden `/flags` request.
    */
   flags?: FeatureFlagEvaluations
   /**
@@ -122,25 +134,34 @@ export type CaptureExceptionOptions = {
  * resolved and the properties and options filled from every layer, after `beforeSend`.
  */
 export type PreparedEventMessage = {
+  /** Resolved distinct ID after checking the call, `withContext()`, and personless fallback. */
   distinctId: string
+  /** Final event name after SDK normalization (such as `$bot_pageview` preview renames). */
   event: string
+  /** Merged event properties after context, `register()`, SDK defaults, and `beforeSend`. */
   properties: PostHogEventProperties
   /** The event's options, sent to capture unchanged. */
   options?: EventOptions
+  /** Canonical event UUID. */
   uuid?: string
+  /** Explicit event timestamp, if provided or set by `beforeSend`. */
   timestamp?: Date
+  /** Per-call `disableGeoip` flag, if provided. */
   disableGeoip?: boolean
 }
 
 export type GroupIdentifyMessage = {
+  /** Group type name (such as `'company'`). Projects support up to 5 group types. */
   groupType: string
-  groupKey: string // Unique identifier for the group
+  /** Unique identifier for the group within `groupType`. */
+  groupKey: string
+  /** Group properties (`$group_set`). Set `name` for the display name in PostHog. */
   properties?: Record<string | number, any>
   /**
-   * The event's distinct id. When it is missing, empty or only whitespace, the context distinct id
-   * is used, then `$<groupType>_<groupKey>`.
+   * The event's distinct ID. When missing, empty, or whitespace, uses `withContext()`, then `$<groupType>_<groupKey>`.
    */
   distinctId?: string
+  /** Overrides the client's `disableGeoip` setting for this event. */
   disableGeoip?: boolean
   /**
    * Processing options sent with this event to capture v1.
@@ -180,14 +201,19 @@ export type OverrideFeatureFlagsOptions =
   | FeatureFlagOverrideOptions
 
 export type BaseFlagEvaluationOptions = {
+  /** Group types and keys to evaluate group-targeted flags against (for example `{ company: 'acme' }`). */
   groups?: Record<string, string>
+  /** Person properties used instead of stored server properties. Include `$geoip_*` keys (such as `$geoip_country_code` and `$geoip_subdivision_1_code`) to evaluate GeoIP flags using the client's location. */
   personProperties?: Properties
+  /** Group properties keyed by group type for evaluating group-targeted flags. */
   groupProperties?: Record<string, Properties>
   /** Skip remote fallback and omit flags that local definitions cannot resolve. */
   onlyEvaluateLocally?: boolean
+  /** Overrides the client's `disableGeoip` setting for this evaluation call. */
   disableGeoip?: boolean
 }
 export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
+  /** Whether this call sends `$feature_flag_called`, overriding the client's `sendFeatureFlagEvent` option. */
   sendFeatureFlagEvents?: boolean
 }
 
@@ -234,6 +260,24 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
  */
 export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
+/**
+ * Why local evaluation couldn't resolve a flag.
+ *
+ * When more than one cause applies, the SDK reports the first matching reason in this order:
+ *
+ * | Reason | Cause |
+ * | --- | --- |
+ * | `experience_continuity` | The flag uses experience continuity, which local evaluation can't resolve. |
+ * | `unsupported_definition` | The flag uses a rule local evaluation doesn't support, such as a static cohort, an unknown operator, or a circular or missing dependency. |
+ * | `unresolved_dependency` | A dependency flag has a loaded definition but stayed unresolved. |
+ * | `missing_context` | The call didn't pass a person property, group property, or device ID the flag needs, or passed an unusable value. |
+ */
+export type UnresolvedFlagReason =
+  | 'experience_continuity'
+  | 'unsupported_definition'
+  | 'missing_context'
+  | 'unresolved_dependency'
+
 export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<
@@ -248,6 +292,7 @@ export type PostHogOptions = Omit<
   | 'disableCompression'
   | 'requestTimeout'
 > & {
+  /** Storage backend for client opt-out state and super properties. Node holds state in memory only, so it resets on restart. */
   persistence?: 'memory'
   /**
    * Whether to strip URL fragments (`#...`) from automatically captured request URLs.
@@ -260,10 +305,9 @@ export type PostHogOptions = Omit<
    */
   disable_capture_url_hashes?: boolean
   /**
-   * Whether to disable GeoIP lookups for events and feature flag requests. When on, every event
-   * gets `$geoip_disable: true` unless the event, its context or `register()` sets
-   * `$geoip_disable`. A per-call `disableGeoip` argument sets it for that event, under the event's
-   * own `$geoip_disable` property.
+   * Whether to disable GeoIP lookups for events and feature flag requests. When `true`, every event gets `$geoip_disable: true` unless the event, its context, or `register()` sets `$geoip_disable`.
+   *
+   * Pass `disableGeoip: false` (here or per call) and set `$ip` in event `properties` to geolocate from a client IP. Setting `$ip` alone still skips GeoIP while `disableGeoip` is `true`.
    *
    * @default true
    */
@@ -485,6 +529,11 @@ export type PostHogOptions = Omit<
    * can only add redaction. Defaults to false.
    */
   privacyMode?: boolean
+  /**
+   * Attach process `uncaughtException` and `unhandledRejection` listeners to capture unhandled errors automatically.
+   *
+   * @default false
+   */
   enableExceptionAutocapture?: boolean
   /**
    * The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
@@ -498,9 +547,15 @@ export type PostHogOptions = Omit<
    * per user. When the cache is full the least recently used distinct ids are evicted. Defaults to 50000.
    */
   maxCacheSize?: number
+  /**
+   * Custom HTTP transport replacing global `fetch`. Capture requests pass `redirect: 'manual'` and follow up to 5 same-origin `307` or `308` redirects, so a custom `fetch` must return `3xx` responses unchanged.
+   */
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable local evaluation and definition polling. Defaults to true when a secretKey, personalApiKey, or flagDefinitionCacheProvider is provided.
-  // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
+  /**
+   * Whether to poll feature flag definitions for local evaluation when `secretKey`, `personalApiKey`, or `flagDefinitionCacheProvider` is set. Set to `false` when `secretKey` is only for `getRemoteConfigPayload()` or `emails`.
+   *
+   * @default true
+   */
   enableLocalEvaluation?: boolean
   /**
    * Optional cache provider for feature flag definitions.
@@ -776,29 +831,20 @@ export type FeatureFlagResult = {
 
 export interface IPostHog {
   /**
-   * @description Capture allows you to capture anything a user does within your system,
-   * which you can later use in PostHog to find patterns in usage,
-   * work out which features to improve or where people are giving up.
-   * A capture call requires:
-   * @param distinctId which uniquely identifies your user
-   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
-   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
-   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * Queue a custom event in memory to send asynchronously.
+   *
+   * @param props - Event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options`
    */
-  capture({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): void
+  capture(props: EventMessage): void
 
   /**
-   * @description Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-   * @param distinctId which uniquely identifies your user
-   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
-   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
-   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * Capture an event and wait for the HTTP send attempt to settle. Use in short-lived runtimes where the process can freeze before a background flush.
+   *
+   * Don't mix queued `capture()` and `captureImmediate()` when event order matters.
+   *
+   * @param props - Event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options`
    */
-  captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
+  captureImmediate(props: EventMessage): Promise<void>
 
   /**
    * @description Capture an exception as a $exception event.
@@ -815,87 +861,62 @@ export interface IPostHog {
   captureExceptionImmediate(error: unknown, options?: CaptureExceptionOptions): Promise<void>
 
   /**
-   * @description Capture an AI event on the dedicated AI capture endpoint.
-   * Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
-   * @param distinctId which uniquely identifies your user
-   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
-   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
-   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * Capture an AI event on the dedicated AI capture endpoint (`/i/v1/ai/events`).
+   *
+   * Beta: the signature is stable, while operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async with no redaction or truncation.
+   *
+   * @param props - AI event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options`
    * @returns The event UUID, or `undefined` when the client is disabled
    */
-  captureAi({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): string | undefined
+  captureAi(props: EventMessage): string | undefined
 
   /**
-   * @description Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.
-   * @param distinctId which uniquely identifies your user
-   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
-   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
-   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * Capture an AI event on the dedicated AI capture endpoint (`/i/v1/ai/events`) and wait for the send attempt to settle.
+   *
+   * @param props - AI event payload including `event`, optional `distinctId`, `properties`, `groups`, `flags`, and `options`
    * @returns The event UUID, or `undefined` when the client is disabled
    */
-  captureAiImmediate({
-    distinctId,
-    event,
-    properties,
-    groups,
-    flags,
-    sendFeatureFlags,
-  }: EventMessage): Promise<string | undefined>
+  captureAiImmediate(props: EventMessage): Promise<string | undefined>
 
   /**
-   * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
-   * and even do things like segment users by these properties.
-   * An identify call requires:
-   * @param distinctId which uniquely identifies your user
-   * @param properties with a dict with any key: value pairs
+   * Queue an `$identify` event setting person properties for `distinctId`. Match the `distinctId` passed to frontend `posthog.identify()` so client and server activity join to one person.
+   *
+   * @param data - Identify payload with `distinctId` and optional `properties` (`$set`, `$set_once`, `$anon_distinct_id`)
    */
-  identify({ distinctId, properties }: IdentifyMessage): void
+  identify(data: IdentifyMessage): void
 
   /**
-   * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog.
-   * Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-   * @param distinctId which uniquely identifies your user
-   * @param properties with a dict with any key: value pairs
+   * Send an `$identify` event immediately and wait for the HTTP send attempt to settle.
+   *
+   * @param data - Identify payload with `distinctId` and optional `properties` (`$set`, `$set_once`, `$anon_distinct_id`)
    */
-  identifyImmediate({ distinctId, properties }: IdentifyMessage): Promise<void>
+  identifyImmediate(data: IdentifyMessage): Promise<void>
 
   /**
-   * @description Set properties on a person profile.
-   * @param distinctId which uniquely identifies your user
-   * @param properties properties to set on the person profile
-   * @param propertiesOnce properties to set once on the person profile
+   * Queue a `$set` event to set or set-once properties on a person profile.
+   *
+   * @param data - Distinct ID and properties (`properties` for `$set`, `propertiesOnce` for `$set_once`)
    */
-  setPersonProperties({ distinctId, properties, propertiesOnce }: SetPersonPropertiesMessage): void
+  setPersonProperties(data: SetPersonPropertiesMessage): void
 
   /**
-   * @description Remove properties from a person profile.
-   * @param distinctId which uniquely identifies your user
-   * @param properties property name or property names to unset
+   * Queue a `$set` event carrying `$unset` to remove properties from a person profile.
+   *
+   * @param data - Distinct ID and property key or array of keys to remove
    */
-  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void
+  unsetPersonProperties(data: UnsetPersonPropertiesMessage): void
 
   /**
-   * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
-   * This will allow you to answer questions like "Which marketing channels leads to users churning after a month?"
-   * or "What do users do on our website before signing up?"
-   * In a purely back-end implementation, this means whenever an anonymous user does something, you'll want to send a session ID with the capture call.
-   * Then, when that users signs up, you want to do an alias call with the session ID and the newly created user ID.
-   * The same concept applies for when a user logs in. If you're using PostHog in the front-end and back-end,
-   *  doing the identify call in the frontend will be enough.:
-   * @param distinctId the current unique id
-   * @param alias the unique ID of the user before
+   * Queue a `$create_alias` event linking `alias` (the previous or secondary ID) to `distinctId` (the primary user ID).
+   *
+   * @param data - Primary `distinctId`, previous `alias`, and optional `disableGeoip` or `options`
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: EventOptions }): void
 
   /**
-   * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
-   * Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
-   * @param distinctId the current unique id
-   * @param alias the unique ID of the user before
+   * Send a `$create_alias` event immediately to link `alias` to `distinctId`.
+   *
+   * @param data - Primary `distinctId`, previous `alias`, and optional `disableGeoip` or `options`
    */
   aliasImmediate(data: {
     distinctId: string
@@ -1096,24 +1117,18 @@ export interface IPostHog {
   evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 
   /**
-   * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"
-   * using my product in PostHog.
+   * Queue a `$groupidentify` event to create or update group properties (up to 5 group types per project). Set `name` in `properties` for the UI display name.
    *
-   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
-   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param data - Group identify payload with `groupType`, `groupKey`, optional `properties`, `distinctId`, and `options`
    */
-  groupIdentify({ groupType, groupKey, properties }: GroupIdentifyMessage): void
+  groupIdentify(data: GroupIdentifyMessage): void
 
   /**
-   * @description Sets a group's properties immediately. Useful for edge environments where the usual queue-based
-   * sending is not preferable. Do not mix immediate and non-immediate calls.
+   * Send a `$groupidentify` event immediately and wait for the HTTP send attempt to settle.
    *
-   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
-   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
-   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param data - Group identify payload with `groupType`, `groupKey`, optional `properties`, `distinctId`, and `options`
    */
-  groupIdentifyImmediate({ groupType, groupKey, properties }: GroupIdentifyMessage): Promise<void>
+  groupIdentifyImmediate(data: GroupIdentifyMessage): Promise<void>
 
   /**
    * @description Force an immediate reload of the polled feature flags. Please note that they are

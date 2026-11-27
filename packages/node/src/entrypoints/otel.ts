@@ -10,12 +10,32 @@ function hasReadableAttributes(span: Span | undefined): span is ReadableSpan {
   return !!span && 'attributes' in span && typeof span.attributes === 'object' && span.attributes !== null
 }
 
+/**
+ * OpenTelemetry `SpanProcessor` that stamps `posthogDistinctId` and `sessionId` from the active PostHog context onto recording spans and the nearest enclosing `SERVER` span.
+ *
+ * Requires `@opentelemetry/api` (`^1.2.0`) as an optional peer dependency. Skips spans when the client is disabled or opted out.
+ *
+ * @example
+ * ```ts
+ * import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
+ * import { PostHog } from 'posthog-node'
+ * import { PostHogContextSpanProcessor } from 'posthog-node/otel'
+ *
+ * const posthog = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+ * const provider = new BasicTracerProvider({ spanProcessors: [new PostHogContextSpanProcessor(posthog)] })
+ * ```
+ */
 export class PostHogContextSpanProcessor {
   private active = true
   private readonly snapshots = new WeakSet<Span>()
   private readonly parents = new WeakMap<Span, WeakRef<Span>>()
   private readonly unsubscribe: () => void
 
+  /**
+   * Create a span processor bound to one PostHog client instance.
+   *
+   * @param posthog - Client whose active request context populates span attributes
+   */
   constructor(private readonly posthog: PostHogBackendClient) {
     this.unsubscribe = addContextListener(posthog, (requestEntry) => {
       const span = trace.getActiveSpan()

@@ -495,32 +495,43 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Initialize a new PostHog client instance.
+   * Create a `PostHog` server client (`import { PostHog } from 'posthog-node'`).
+   *
+   * Keep one client for your server's lifetime and call `await client.shutdown()` on exit. For serverless handlers, reuse a module-scope client and call `await client.flush()`, or pass `waitUntil` in `PostHogOptions`.
+   *
+   * Passing an empty `apiKey` or a `phx_...` personal API key logs one error and disables the client (`isDisabled === true`). Passing a `phc_...` project token as `secretKey` throws an `Error`.
+   *
+   * #### Know what to await
+   *
+   * | Call | Methods | Reach for it when |
+   * | --- | --- | --- |
+   * | Don't `await` | `capture`, `captureAi`, `identify`, `alias`, `groupIdentify`, `setPersonProperties`, `unsetPersonProperties`, `captureException`, `captureLog`, `logger.*` | Queueing telemetry in memory on the request path without waiting on HTTP |
+   * | `await` | `captureImmediate`, `captureAiImmediate`, `identifyImmediate`, `aliasImmediate`, `groupIdentifyImmediate`, `captureExceptionImmediate` | Waiting for an upload attempt to finish before a short-lived handler exits |
+   * | `await` | `evaluateFlags`, `getFeatureFlagResult`, `getAllFlags`, `getAllFlagsAndPayloads`, `getRemoteConfigPayload`, `flush`, `shutdown`, `reloadFeatureFlags`, `waitForLocalEvaluationReady` | Reading flags, remote config, or draining queues |
+   * | `await` (`{ data, error }`) | `emails.send`, `emails.get`, `emails.setPreferences` | Sending transactional email or updating preferences (never rejects) |
    *
    * @example
    * ```ts
    * // Basic initialization
-   * const client = new PostHogBackendClient(
-   *   'your-api-key',
-   *   { host: 'https://app.posthog.com' }
-   * )
+   * import { PostHog } from 'posthog-node'
+   *
+   * const client = new PostHog('<ph_project_api_key>', {
+   *   host: 'https://us.i.posthog.com',
+   * })
    * ```
    *
    * @example
    * ```ts
-   * // With a secret key (Personal API Key or Project Secret API Key) for local evaluation
-   * const client = new PostHogBackendClient(
-   *   'your-api-key',
-   *   {
-   *     host: 'https://app.posthog.com',
-   *     secretKey: 'your-secret-key'
-   *   }
-   * )
+   * // With a secret key (Project Secret API Key or Personal API Key) for local evaluation and emails
+   * const client = new PostHog('<ph_project_api_key>', {
+   *   host: 'https://us.i.posthog.com',
+   *   secretKey: 'phs_...',
+   * })
    * ```
    *
    * {@label Initialization}
    *
-   * @param apiKey - Your PostHog project API key
+   * @param apiKey - Your PostHog project API key (`phc_...`)
    * @param options - Configuration options for the client
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
@@ -1164,18 +1175,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.emails` API: sends transactional email from PostHog email templates, reads
-   * the status of each email it sent, and sets a recipient's topic preferences.
+   * Send transactional email from PostHog templates or inline code, read send status, and update topic preferences.
    *
-   * Needs `secretKey`, a project secret API key. `send` needs the `transactional_email:write` scope
-   * (the "Send transactional email" preset), and `get` needs `transactional_email:read` or
-   * `transactional_email:write`. `setPreferences` needs the
-   * `messaging_preference:write` scope, which cannot send email. Keys made with `hog_flow:write` still
-   * work for all three. Requests go to `appHost`, or to the PostHog Cloud app host of `host`. `send`,
-   * `get` and `setPreferences` resolve to `{ data, error }` and do not reject.
-   * `data.id` is the queued email's message ID, which `get` takes. A disabled client sends nothing
-   * and returns the error `client_disabled`. After `shutdown()`, the client sends nothing and
-   * returns the error `client_closed`.
+   * - **Credentials and scopes.** Needs `secretKey` (`phs_...`). `send` needs `transactional_email:write`, `get` needs `transactional_email:read` or `transactional_email:write`, `setPreferences` needs `messaging_preference:write`, and `hog_flow:write` keys cover all three. Set `enableLocalEvaluation: false` when the key is only for email.
+   * - **Routing and retries.** Requests go to `appHost`, or the PostHog Cloud app host for `host`. Configure `emailRequestTimeoutMs` and `emailRequestMaxRetries` per client.
+   * - **Result handling.** `send`, `get`, and `setPreferences` resolve to `{ data, error }` and never reject. `data.id` is the queued email's ID for `get`.
+   * - **Lifecycle.** A disabled client returns `client_disabled`, and a shut-down client returns `client_closed`.
    *
    * @example
    * ```ts
@@ -1582,6 +1587,96 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  /**
+   * Checks whether the client is disabled from capturing events.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```ts
+   * if (!client.isDisabled) {
+   *   client.capture({ distinctId: 'user_123', event: 'page_viewed' })
+   * }
+   * ```
+   *
+   * @returns `true` when capture and network requests are disabled
+   */
+  override get isDisabled(): boolean {
+    return super.isDisabled
+  }
+
+  /**
+   * Checks whether debug logging is enabled on this client.
+   *
+   * {@label Initialization}
+   *
+   * @example
+   * ```ts
+   * if (client.isDebug) {
+   *   console.log('PostHog debug logging is active')
+   * }
+   * ```
+   *
+   * @returns `true` when debug logging is active
+   */
+  override get isDebug(): boolean {
+    return super.isDebug
+  }
+
+  /**
+   * Checks whether the client is currently opted out.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```ts
+   * if (client.optedOut) {
+   *   console.log('Capture is paused for this client')
+   * }
+   * ```
+   *
+   * @returns `true` when the client is opted out
+   */
+  override get optedOut(): boolean {
+    return super.optedOut
+  }
+
+  /**
+   * Opts the client in so it resumes capturing events.
+   *
+   * Equivalent to `enable()`.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```ts
+   * await client.optIn()
+   * ```
+   *
+   * @returns Promise that resolves when the client opts back in
+   */
+  override optIn(): Promise<void> {
+    return super.optIn()
+  }
+
+  /**
+   * Opts the client out so it stops capturing events.
+   *
+   * Equivalent to `disable()`.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```ts
+   * await client.optOut()
+   * ```
+   *
+   * @returns Promise that resolves when the client opts out
+   */
+  override optOut(): Promise<void> {
+    return super.optOut()
+  }
+
   protected describeDebugPayload(payload: unknown): unknown {
     return summarizeForDebugLog(payload)
   }
@@ -1690,21 +1785,42 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Capture an event manually.
+   * Queue an event in memory to send asynchronously without blocking the caller.
+   *
+   * Events with a `distinctId` (explicit or from `withContext()`) create or update person profiles (`process_person_profile: true`). Pass `$set` and `$set_once` inside `properties` to set person properties, pass `groups` (such as `{ company: 'acme' }`) to link groups, or send `event: '$pageview'` with `$current_url` for backend-only pageviews.
+   *
+   * Omitting `distinctId` outside an identified context generates a UUIDv7 and sends a personless event (`options: { process_person_profile: false }`). Pass `options: { process_person_profile: false }` to send a personless event for a known `distinctId`.
+   *
+   * Pass `flags` from `evaluateFlags()` to attach evaluated flags without extra requests. Use `captureException()` instead of `capture({ event: '$exception' })`, and don't mix `capture()` with `captureImmediate()` when event order matters.
    *
    * @example
    * ```ts
-   * // Basic capture
+   * // Basic capture with person properties and groups
    * client.capture({
    *   distinctId: 'user_123',
-   *   event: 'button_clicked',
-   *   properties: { button_color: 'red' }
+   *   event: 'movie_played',
+   *   properties: {
+   *     movie_id: '123',
+   *     $set: { name: 'Max Hedgehog' },
+   *     $set_once: { initial_url: '/blog' },
+   *   },
+   *   groups: { company: 'acme' },
+   * })
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Personless event for a known user
+   * client.capture({
+   *   distinctId: 'user_123',
+   *   event: 'background_job',
+   *   options: { process_person_profile: false },
    * })
    * ```
    *
    * {@label Capture}
    *
-   * @param props - The event properties
+   * @param props - The event payload
    * @returns void
    */
   capture(props: EventMessage): void {
@@ -1717,7 +1833,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Capture an event immediately (synchronously).
+   * Send an event immediately and wait for the HTTP send attempt to settle.
+   *
+   * Use in short-lived runtimes where the process can freeze before a background flush. Follows the same `distinctId`, person-profile, `properties`, `groups`, and `flags` rules as `capture()`, and shouldn't be mixed with queued `capture()` calls when order matters.
    *
    * @example
    * ```ts
@@ -1725,39 +1843,35 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * await client.captureImmediate({
    *   distinctId: 'user_123',
    *   event: 'button_clicked',
-   *   properties: { button_color: 'red' }
+   *   properties: { button_color: 'red' },
    * })
    * ```
    *
    * @example
    * ```ts
-   * // With feature flags
+   * // With an evaluated flags snapshot
+   * const flags = await client.evaluateFlags('user_123')
    * await client.captureImmediate({
    *   distinctId: 'user_123',
    *   event: 'user_action',
-   *   sendFeatureFlags: true
+   *   flags,
    * })
    * ```
    *
    * @example
    * ```ts
-   * // With custom feature flags options
+   * // Personless immediate capture
    * await client.captureImmediate({
    *   distinctId: 'user_123',
-   *   event: 'user_action',
-   *   sendFeatureFlags: {
-   *     onlyEvaluateLocally: true,
-   *     personProperties: { plan: 'premium' },
-   *     groupProperties: { org: { tier: 'enterprise' } },
-   *     flagKeys: ['flag1', 'flag2']
-   *   }
+   *   event: 'webhook_received',
+   *   options: { process_person_profile: false },
    * })
    * ```
    *
    * {@label Capture}
    *
-   * @param props - The event properties
-   * @returns Promise that resolves when the event is captured
+   * @param props - The event payload
+   * @returns Promise that resolves when the send attempt completes
    */
   async captureImmediate(props: EventMessage): Promise<void> {
     this._warnIfInvalidCapture(
@@ -1816,7 +1930,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Identify a user and set their properties.
+   * Queue an `$identify` event setting person properties for `distinctId`.
+   *
+   * Use the same `distinctId` your frontend passes to `posthog.identify()` so server events, session replays, error tracking, and traces link to one person. Server `identify()` holds no ambient anonymous ID and only merges one when `$anon_distinct_id` is passed in `properties`.
+   *
+   * Prefer `$set` or `$set_once` on `capture()` (or `setPersonProperties()`) when you only need to update properties without linking an anonymous ID.
    *
    * @example
    * ```ts
@@ -1826,27 +1944,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   properties: {
    *     name: 'John Doe',
    *     email: 'john@example.com',
-   *     plan: 'premium'
-   *   }
+   *     plan: 'premium',
+   *   },
    * })
    * ```
    *
    * @example
    * ```ts
-   * // Using $set and $set_once
+   * // Using $set, $set_once, and $anon_distinct_id
    * client.identify({
    *   distinctId: 'user_123',
    *   properties: {
    *     $set: { name: 'John Doe', email: 'john@example.com' },
    *     $set_once: { first_login: new Date().toISOString() },
-   *     $anon_distinct_id: 'anonymous_user_456'
-   *   }
+   *     $anon_distinct_id: 'anonymous_user_456',
+   *   },
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The identify data containing distinctId and properties
+   * @param data - The identify payload containing `distinctId` and `properties`
    */
   identify({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): void {
     const eventProperties = identifyEventProperties(properties)
@@ -1858,7 +1976,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Identify a user and set their properties immediately (synchronously).
+   * Send an `$identify` event immediately and wait for the HTTP send attempt to settle.
+   *
+   * Use in short-lived runtimes where the process can freeze before a background flush. Follows the same `distinctId` matching and `$anon_distinct_id` rules as `identify()`.
    *
    * @example
    * ```ts
@@ -1867,15 +1987,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   distinctId: 'user_123',
    *   properties: {
    *     name: 'John Doe',
-   *     email: 'john@example.com'
-   *   }
+   *     email: 'john@example.com',
+   *   },
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The identify data containing distinctId and properties
-   * @returns Promise that resolves when the identify is processed
+   * @param data - The identify payload containing `distinctId` and `properties`
+   * @returns Promise that resolves when the identify call settles
    */
   async identifyImmediate({ distinctId, properties = {}, disableGeoip, options }: IdentifyMessage): Promise<void> {
     const eventProperties = identifyEventProperties(properties)
@@ -1887,20 +2007,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Set properties on a person profile.
+   * Queue a `$set` event to set or set-once properties on a person profile.
+   *
+   * Falls back to `withContext()` when `distinctId` is blank, and no-ops when both `properties` and `propertiesOnce` are empty.
    *
    * @example
    * ```ts
    * client.setPersonProperties({
    *   distinctId: 'user_123',
    *   properties: { plan: 'premium' },
-   *   propertiesOnce: { first_seen: '2026-06-15' }
+   *   propertiesOnce: { first_seen: '2026-06-15' },
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The data containing distinctId and properties to set
+   * @param data - Distinct ID and person properties to set
    */
   setPersonProperties({ distinctId, properties = {}, propertiesOnce = {}, options }: SetPersonPropertiesMessage): void {
     if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
@@ -1924,19 +2046,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Remove properties from a person profile.
+   * Queue a `$set` event carrying `$unset` to remove properties from a person profile.
+   *
+   * Falls back to `withContext()` when `distinctId` is blank, and no-ops when `properties` is empty.
    *
    * @example
    * ```ts
    * client.unsetPersonProperties({
    *   distinctId: 'user_123',
-   *   properties: ['plan', 'email']
+   *   properties: ['plan', 'email'],
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The data containing distinctId and property names to unset
+   * @param data - Distinct ID and property names to unset
    */
   unsetPersonProperties({ distinctId, properties, options }: UnsetPersonPropertiesMessage): void {
     const propertyNames = normalizeUnsetPersonProperties(properties)
@@ -1948,20 +2072,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Create an alias to link two distinct IDs together.
+   * Queue a `$create_alias` event linking `alias` (the previous or secondary ID) to `distinctId` (the primary user ID).
+   *
+   * `distinctId` falls back to `withContext()` when blank, while `alias` never reads from context or `register()`. Never alias to shared placeholder values such as `'anonymous'` or `'null'`. Frontend `posthog.identify()` already links anonymous users, so backend `alias()` is mainly for backend-only flows.
    *
    * @example
    * ```ts
-   * // Link an anonymous user to an identified user
+   * // Link an anonymous user ID to a primary user ID
    * client.alias({
-   *   distinctId: 'anonymous_123',
-   *   alias: 'user_456'
+   *   distinctId: 'user_456',
+   *   alias: 'anonymous_123',
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The alias data containing distinctId and alias
+   * @param data - Primary `distinctId`, previous `alias`, and optional flags or options
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean; options?: EventOptions }): void {
     this._sendPreparedEvent(
@@ -1979,21 +2105,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Create an alias to link two distinct IDs together immediately (synchronously).
+   * Send a `$create_alias` event immediately to link `alias` to `distinctId`.
+   *
+   * Follows the same ID precedence and placeholder warnings as `alias()`. Use in short-lived runtimes where the process can freeze before a background flush.
    *
    * @example
    * ```ts
-   * // Link an anonymous user to an identified user immediately
+   * // Link an anonymous user ID to a primary user ID immediately
    * await client.aliasImmediate({
-   *   distinctId: 'anonymous_123',
-   *   alias: 'user_456'
+   *   distinctId: 'user_456',
+   *   alias: 'anonymous_123',
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The alias data containing distinctId and alias
-   * @returns Promise that resolves when the alias is processed
+   * @param data - Primary `distinctId`, previous `alias`, and optional flags or options
+   * @returns Promise that resolves when the alias call settles
    */
   async aliasImmediate(data: {
     distinctId: string
@@ -2020,26 +2148,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * // Check if ready
+   * // Check if ready before evaluating
    * if (client.isLocalEvaluationReady()) {
-   *   // Local evaluation is ready, can evaluate flags locally
-   *   const flag = await client.getFeatureFlag('flag-key', 'user_123')
+   *   const flags = await client.evaluateFlags('user_123', { onlyEvaluateLocally: true })
+   *   const value = flags.getFlag('flag-key')
    * } else {
-   *   // Local evaluation not ready, will use remote evaluation
-   *   const flag = await client.getFeatureFlag('flag-key', 'user_123')
+   *   const flags = await client.evaluateFlags('user_123')
+   *   const value = flags.getFlag('flag-key')
    * }
    * ```
    *
    * @remarks
-   * Readiness requires at least one loaded flag definition. A successful load that returns no
-   * flags (for example, after every flag is deleted) does not count as ready, and readiness
-   * returns to `false` if a later load returns no flags. To react to every successful load,
-   * including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the
-   * number of loaded flags.
+   * Readiness requires at least one loaded flag definition. A successful load that returns no flags (for example, after every flag is deleted) doesn't count as ready, and readiness returns to `false` if a later load returns no flags. To react to every successful load, including empty ones, listen for the `localEvaluationFlagsLoaded` event, which reports the number of loaded flags.
    *
    * {@label Feature flags}
    *
-   * @returns true if flag definitions have loaded successfully and include at least one flag, false otherwise
+   * @returns `true` if flag definitions have loaded and include at least one flag, `false` otherwise
    */
   isLocalEvaluationReady(): boolean {
     return this.featureFlagsPoller?.isLocalEvaluationReady() ?? false
@@ -2120,10 +2244,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Feature flags}
    *
-   * @param timeoutMs - Timeout in milliseconds (default: 30000)
+   * @param timeoutMs - Timeout in milliseconds
    * @returns Promise that resolves to true if ready, false if timed out or if the next load returned no flags
    */
-  async waitForLocalEvaluationReady(timeoutMs: number = THIRTY_SECONDS): Promise<boolean> {
+  async waitForLocalEvaluationReady(timeoutMs: number = 30000): Promise<boolean> {
     if (this.isLocalEvaluationReady()) {
       return true
     }
@@ -2686,7 +2810,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * - `undefined`, when the flag has no payload, or the request failed. A response with a status
    *   outside 200 to 299 emits a `RemoteConfigPayloadError` carrying the `statusCode` and `flagKey` on the
    *   client's `error` event; a network error, a timeout or an unreadable body emits the underlying error there.
-   * @throws Error if personal API key is not provided
+   * @throws Error if neither `secretKey` nor `personalApiKey` is configured. Set `enableLocalEvaluation: false` when `secretKey` is only for remote config or email.
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
     if (this.disabled) {
@@ -3462,39 +3586,41 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Create or update a group and its properties.
+   * Queue a `$groupidentify` event to create or update a group and its properties (requires Group Analytics).
+   *
+   * Projects support up to 5 group types. Set `name` in `properties` for the group's display name in PostHog, otherwise PostHog shows `groupKey`. When `distinctId` is omitted outside `withContext()`, it falls back to `$<groupType>_<groupKey>`. Pass `groups` on `capture()` and `evaluateFlags()` to link events and flags to the group.
    *
    * @example
    * ```ts
-   * // Create a company group
+   * // Create or update a company group
    * client.groupIdentify({
    *   groupType: 'company',
    *   groupKey: 'acme-corp',
    *   properties: {
    *     name: 'Acme Corporation',
    *     industry: 'Technology',
-   *     employee_count: 500
+   *     employee_count: 500,
    *   },
-   *   distinctId: 'user_123'
+   *   distinctId: 'user_123',
    * })
    * ```
    *
    * @example
    * ```ts
-   * // Update organization properties
+   * // Update organization properties using fallback distinctId ($organization_org-456)
    * client.groupIdentify({
    *   groupType: 'organization',
    *   groupKey: 'org-456',
    *   properties: {
    *     plan: 'enterprise',
-   *     region: 'US-West'
-   *   }
+   *     region: 'US-West',
+   *   },
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The group identify data
+   * @param data - Group identify payload
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip, options }: GroupIdentifyMessage): void {
     this._sendPreparedEvent(
@@ -3516,7 +3642,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Create or update a group and its properties immediately (synchronously).
+   * Send a `$groupidentify` event immediately and wait for the HTTP send attempt to settle.
+   *
+   * Follows the same `name` property, `distinctId` fallback (`$<groupType>_<groupKey>`), and `groups` linking rules as `groupIdentify()`. Use in short-lived runtimes where the process can freeze before a background flush.
    *
    * @example
    * ```ts
@@ -3527,15 +3655,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   properties: {
    *     name: 'Acme Corporation',
    *     industry: 'Technology',
-   *     employee_count: 500
-   *   }
+   *     employee_count: 500,
+   *   },
    * })
    * ```
    *
    * {@label Identification}
    *
-   * @param data - The group identify data
-   * @returns Promise that resolves when the group identify is processed
+   * @param data - Group identify payload
+   * @returns Promise that resolves when the group identify call settles
    */
   async groupIdentifyImmediate({
     groupType,
@@ -3575,9 +3703,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * // Reload before checking a specific flag
+   * // Reload before evaluating flags
    * await client.reloadFeatureFlags()
-   * const flag = await client.getFeatureFlag('flag-key', 'user_123')
+   * const flags = await client.evaluateFlags('user_123')
+   * const value = flags.getFlag('flag-key')
    * ```
    *
    * {@label Feature flags}
@@ -3781,19 +3910,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected abstract initializeContext(): IPostHogContext | undefined
 
   /**
-   * Run a function with specific context that will be applied to all events captured within that context.
-   * It propagates the context to all subsequent calls down the call stack.
-   * Context properties like tags and sessionId will be automatically attached to all events.
-   * By default, nested contexts inherit from parent contexts. Use `{ fresh: true }` to start with a clean context.
+   * Run a function with request-scoped context using `AsyncLocalStorage` so state propagates down function calls and `await`.
+   *
+   * By default, nested contexts inherit parent state while overriding keys locally without mutating the parent. Pass `{ fresh: true }` at request or job boundaries to clear inherited state, and pass `{ signal }` to end a context when an `AbortSignal` aborts.
+   *
+   * Events and exceptions inherit `distinctId`, `sessionId` (`$session_id`), `properties`, and `options`. `evaluateFlags()`, `getAllFlags()`, `getAllFlagsAndPayloads()`, and `getFeatureFlagResult()` read `distinctId` when omitted. Logs and spans inherit `distinctId` and `sessionId`. Pass a UUIDv7 `sessionId` (such as `x-posthog-session-id` from `posthog-js`) to link backend telemetry to Session Replay.
+   *
+   * On `posthog-node/edge`, `withContext()` runs `fn` directly without `AsyncLocalStorage`, so nested calls won't see context data.
    *
    * @remarks
-   * Context `properties` and `options` fill only what an event left unset: the event's own values
-   * win, and context values beat `register()` and `registerOptions()` values and the values the SDK
-   * adds. `beforeSend` sees the result and can change it.
+   * Context `properties` and `options` fill only what an event left unset: the event's own values win, and context values beat `register()`, `registerOptions()`, and SDK defaults. `beforeSend` sees the result and can change it.
    *
-   * On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set` and `$set_once`
-   * events, a context `process_person_profile` option applies only when the distinct id is
-   * generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
+   * On `$identify`, `$create_alias`, `$merge_dangerously`, `$groupidentify`, `$set`, and `$set_once` events, a context `process_person_profile` option applies only when the distinct ID is generated, and a `$process_person_profile` property never applies (see `registerOptions()`).
    *
    * @example
    * ```ts
@@ -3804,9 +3932,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Context}
    *
-   * @param data - Context data to apply (sessionId, distinctId, properties, options)
+   * @param data - Context data to apply (`sessionId`, `distinctId`, `properties`, `options`)
    * @param fn - Function to run with the context
-   * @param options - Context options (fresh: true to start with clean context instead of inheriting)
+   * @param options - Context options (`fresh: true` to clear inherited state, `signal` to expire on abort)
    * @returns The return value of the function
    */
   withContext<T>(data: Partial<ContextData>, fn: () => T, options?: ContextOptions): T {
@@ -3826,7 +3954,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Get the current context data.
+   * Read the active `withContext()` data, or `undefined` outside a context (and always `undefined` on `posthog-node/edge`).
    *
    * @example
    * ```ts
@@ -3839,31 +3967,46 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Context}
    *
-   * @returns The current context data, or undefined if no context is set
+   * @returns The current context data, or `undefined` if no context is active
    */
   getContext(): ContextData | undefined {
     return this.context?.get()
   }
 
   /**
-   * Shutdown the PostHog client gracefully.
+   * Shuts down the client, drains pending queues, and flushes queued telemetry before exit.
+   *
+   * Call `shutdown()` once on process exit. Use `flush()` when you'll keep reusing the client.
+   *
+   * - **What it stops and drains.** Halts flag polling, calls `flagDefinitionCacheProvider.shutdown()`, and drains analytics events, AI events, logs, metrics, and ended spans.
+   * - **Shared timeout budget.** Analytics queues and OTel signal flushing share `shutdownTimeoutMs`. Open spans that haven't ended are discarded.
+   * - **Delivery vs. ingestion.** Resolving confirms the client tried to drain within `shutdownTimeoutMs`, not that PostHog ingested every event.
    *
    * @example
    * ```ts
-   * // Shutdown with default timeout
-   * await client._shutdown()
+   * await client.shutdown()
    * ```
    *
    * @example
    * ```ts
-   * // Shutdown with custom timeout
-   * await client._shutdown(5000) // 5 seconds
+   * // Shutdown with a 5-second timeout
+   * await client.shutdown(5000)
    * ```
    *
    * {@label Shutdown}
    *
-   * @param shutdownTimeoutMs - Timeout in milliseconds for shutdown
-   * @returns Promise that resolves when shutdown is complete
+   * @param shutdownTimeoutMs - Maximum wait in milliseconds, defaulting to `30000`
+   * @returns Promise that resolves when shutdown finishes or hits `shutdownTimeoutMs`
+   */
+  override shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    return super.shutdown(shutdownTimeoutMs)
+  }
+
+  /**
+   * Internal shutdown hook invoked by `shutdown()`.
+   *
+   * @param shutdownTimeoutMs - Maximum wait in milliseconds
+   * @returns Promise that resolves when internal shutdown completes
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
     // One absolute deadline for the whole shutdown: the metrics flush race and

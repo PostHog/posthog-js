@@ -1,4 +1,12 @@
-import type { IPostHog, PostHog } from '../../entrypoints/index.node'
+import type { IPostHog, PostHog, UnresolvedFlagReason } from '../../entrypoints/index.node'
+import type { UnresolvedFlagReason as CoreUnresolvedFlagReason } from '@posthog/core'
+
+export function checkUnresolvedFlagReasonCompatibility(
+  nodeReason: UnresolvedFlagReason,
+  coreReason: CoreUnresolvedFlagReason
+): [CoreUnresolvedFlagReason, UnresolvedFlagReason] {
+  return [nodeReason, coreReason]
+}
 
 export function checkPublicInterface(posthog: PostHog): Promise<void> {
   const client: IPostHog = posthog

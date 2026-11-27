@@ -65,9 +65,30 @@ function buildRequestContextData(posthog: PostHogBackendClient, req: Request): P
 }
 
 /**
- * Adds request context to events captured during an Express request. Call it before your routes.
- * Events then include `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
- * `$ip` is the first `x-forwarded-for` value when the request has that header, otherwise the socket's remote address.
+ * Register Express middleware that binds per-request PostHog context before your routes run.
+ *
+ * Reads `x-posthog-session-id` and `x-posthog-distinct-id` headers (or the `posthog-js` cookie when `readPostHogCookie` is enabled) and attaches `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip` (first `x-forwarded-for` entry or `req.socket.remoteAddress`) to events in that request.
+ *
+ * Tracing headers are untrusted client data, never authentication, so pass an authenticated `distinctId` explicitly for authorization or sensitive decisions. Client IP geolocation from `$ip` also requires `disableGeoip: false`.
+ *
+ * @example
+ * ```ts
+ * import express from 'express'
+ * import { PostHog, setupExpressErrorHandler, setupExpressRequestContext } from 'posthog-node'
+ *
+ * const app = express()
+ * const client = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+ *
+ * setupExpressRequestContext(client, app)
+ * app.get('/', (_req, res) => {
+ *   client.capture({ event: 'page_loaded' })
+ *   res.send('ok')
+ * })
+ * setupExpressErrorHandler(client, app)
+ * ```
+ *
+ * @param _posthog - PostHog client instance
+ * @param app - Express app or router with `.use()`
  */
 export function setupExpressRequestContext(
   _posthog: PostHogBackendClient,
@@ -88,7 +109,12 @@ function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware
 }
 
 /**
- * Captures errors that Express passes to its error middleware. Call it after your routes.
+ * Register Express error-handling middleware after your routes to capture unhandled exceptions.
+ *
+ * Attaches request context, `$response_status_code`, and `$session_id`, skips errors already captured by process autocapture, and forwards each error to `next(error)`.
+ *
+ * @param _posthog - PostHog client instance
+ * @param app - Express app with `.use()`
  */
 export function setupExpressErrorHandler(
   _posthog: PostHogBackendClient,

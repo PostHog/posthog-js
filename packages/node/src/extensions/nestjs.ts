@@ -70,12 +70,34 @@ function getExceptionStatus(exception: unknown): number | undefined {
   return undefined
 }
 
+/**
+ * NestJS interceptor from `posthog-node/nestjs` that isolates per-request PostHog context with `AsyncLocalStorage` and optionally captures controller exceptions.
+ *
+ * Resolves `distinctId` in order: `getDistinctId(request)`, then `x-posthog-distinct-id` (or cookie when `readPostHogCookie` is enabled), then any outer `withContext()`. Attaches `$current_url`, `$request_method`, `$request_path`, `$user_agent`, and `$ip`.
+ *
+ * Tracing headers are untrusted client data, never authentication. Set `captureExceptions: true` (or `{ minStatusToCapture }`, default `500`) to capture errors with `$response_status_code`.
+ *
+ * @example
+ * ```ts
+ * import { PostHog } from 'posthog-node'
+ * import { PostHogInterceptor } from 'posthog-node/nestjs'
+ *
+ * const posthog = new PostHog('<ph_project_api_key>', { host: 'https://us.i.posthog.com' })
+ * app.useGlobalInterceptors(new PostHogInterceptor(posthog, { captureExceptions: true }))
+ * ```
+ */
 export class PostHogInterceptor implements NestInterceptor {
   private posthog: PostHogBackendClient
   private captureExceptions: boolean
   private minStatusToCapture: number
   private getDistinctId?: (request: any) => string | undefined
 
+  /**
+   * Create a NestJS interceptor bound to a PostHog client.
+   *
+   * @param posthog - PostHog client instance
+   * @param options - Exception capture and user ID resolution options
+   */
   constructor(posthog: PostHogBackendClient, options?: PostHogInterceptorOptions) {
     this.posthog = posthog
     const capture = options?.captureExceptions
@@ -98,6 +120,7 @@ export class PostHogInterceptor implements NestInterceptor {
     }
   }
 
+  /** Wrap an incoming NestJS request in an isolated PostHog context. */
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const httpHost = context.switchToHttp()
     const request = httpHost.getRequest()
