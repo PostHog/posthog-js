@@ -10,8 +10,8 @@ import {
   type V1RequestIdentity,
   type V1SendDeferral,
 } from '@posthog/core/capture-v1'
+import type { ExpoFileStorage } from './native-deps'
 import type { PostHogRNStorage } from './storage'
-import type { PostHogCustomStorage } from './types'
 
 /** Capture drops AI events whose properties are over 8 MiB; the whole-event measure allows 64 KiB for the rest. */
 export const CAPTURE_AI_DEFAULT_MAX_EVENT_BYTES = 8 * 1024 * 1024 + 64 * 1024
@@ -29,14 +29,14 @@ export interface CaptureAiLaneSettings {
   maxEventBytes: number
 }
 
-/** Where queued AI events are stored across launches: each event's JSON in its own slot of `storage`. */
+/** Where queued AI events are stored across launches: each event's JSON in its own file, named `prefix` and a number. */
 export interface CaptureAiEventFiles {
-  storage: PostHogCustomStorage
-  key: (slot: number) => string
+  storage: Pick<ExpoFileStorage, 'getItem' | 'setItem' | 'removeItem' | 'keys'>
+  prefix: string
 }
 
 /**
- * A queued AI event's entry in the stored index; its JSON is in slot `slot`. It is written field by field
+ * A queued AI event's entry in the stored index; its JSON is in file number `file`. It is written field by field
  * rather than as core's `SerializedV1Event`, so a change to that type can't silently drop events an
  * earlier version queued.
  */
@@ -44,32 +44,33 @@ interface StoredAiEvent {
   uuid: string
   bytes: number
   propertiesBytes: number
-  slot: number
+  file: number
 }
 
 const isStoredEvent = (item: unknown): item is StoredAiEvent => {
   if (typeof item !== 'object' || item === null) {
     return false
   }
-  const { uuid, bytes, propertiesBytes, slot } = item as StoredAiEvent
+  const { uuid, bytes, propertiesBytes, file } = item as StoredAiEvent
   return (
     typeof uuid === 'string' &&
     typeof bytes === 'number' &&
     typeof propertiesBytes === 'number' &&
-    Number.isInteger(slot) &&
-    slot >= 0
+    Number.isInteger(file) &&
+    file >= 0
   )
 }
 
-/** A queued event. With slots, its `json` is let go once its slot is written, and read back when its batch is sent. */
+/** A queued event. With files, its `json` is let go once its file is written, and read back when its batch is sent. */
 type QueuedAiEvent = Omit<SerializedV1Event, 'json'> & { json?: string }
 
 /**
  * The `captureAi()` delivery lane: its own durable queue, flush cycle, resend wait and sender, so a
  * slow or failing AI upload never holds back analytics events, and the reverse. Events are queued
  * already serialized, so each one is serialized once. With `files`, each event is written once to its
- * own slot and only a small index is rewritten on each change; only the index stays in memory, and a
- * batch's events are read from their slots when it is sent. Without `files`, the queue is kept in memory.
+ * own file, deleted once it leaves the queue, and only a small index is rewritten on each change; only
+ * the index stays in memory, and a batch's events are read from their files when it is sent. Without
+ * `files`, the queue is kept in memory.
  */
 export class CaptureAiLane {
   private _chain: Promise<void>
@@ -88,11 +89,13 @@ export class CaptureAiLane {
   private _events: QueuedAiEvent[] = []
   private _loaded = false
   private readonly _loadPromise: Promise<void>
-  private _slots = new Map<QueuedAiEvent, number>()
-  // The last write to each slot, so writes to one slot land in order.
-  private _slotWrites = new Map<number, Promise<boolean>>()
-  // Content for a slot whose write hasn't started yet; a newer write replaces it, so an evicted event's JSON isn't kept.
-  private _pendingSlotContent = new Map<number, string>()
+  private _fileIds = new Map<QueuedAiEvent, number>()
+  // Numbers only go up, and start above every file found at launch, so no stored file is ever overwritten.
+  private _nextFileId = 0
+  // File writes and deletes run one at a time, in the order they were queued.
+  private _fileOps: Promise<void> = Promise.resolve()
+  // JSON for a file whose write hasn't started; deleting the file first drops it, so an evicted event's JSON isn't kept.
+  private _unwritten = new Map<number, string>()
 
   constructor(
     private readonly _storage: PostHogRNStorage,
@@ -108,13 +111,13 @@ export class CaptureAiLane {
     this._chain = this._loadPromise
   }
 
-  /** Resolves once storage has loaded and the stored index and every started event write have landed. Never rejects. */
+  /** Resolves once storage has loaded and the stored index and every queued file write and delete have landed. Never rejects. */
   async waitForPersist(): Promise<void> {
-    // Events captured while storage loads get their slots only once it has.
+    // Events captured while storage loads get their files only once it has.
     if (!this._loaded) {
       await this._loadPromise
     }
-    await Promise.all([this._storage.waitForPersist(), ...this._slotWrites.values()])
+    await Promise.all([this._storage.waitForPersist(), this._fileOps])
   }
 
   /** Queues an already built and normalized event and returns its uuid as sent; undefined when it is dropped instead. */
@@ -308,9 +311,9 @@ export class CaptureAiLane {
     return batch
   }
 
-  /** The batch's events as sent, each with its queued event; events whose slot can't be read are dropped from the queue. */
+  /** The batch's events as sent, each with its queued event; events whose file can't be read are dropped from the queue. */
   private async _readBatch(queued: QueuedAiEvent[]): Promise<Map<SerializedV1Event, QueuedAiEvent>> {
-    const jsons = await Promise.all(queued.map((item) => item.json ?? this._readSlot(item)))
+    const jsons = await Promise.all(queued.map((item) => item.json ?? this._readFile(item)))
     if (this._stopped) {
       return new Map()
     }
@@ -390,15 +393,31 @@ export class CaptureAiLane {
         }
         const stored = this._storage.getItem(PostHogPersistedProperty.AiQueue)
         const entries = Array.isArray(stored) ? stored.filter(isStoredEvent) : []
-        for (const { uuid, bytes, propertiesBytes, slot } of entries) {
+        const found = await this._listFiles()
+        if (this._stopped) {
+          return
+        }
+        const indexed = new Set<number>()
+        for (const { uuid, bytes, propertiesBytes, file } of entries) {
           const item: QueuedAiEvent = { uuid, bytes, propertiesBytes }
-          this._slots.set(item, slot)
+          this._fileIds.set(item, file)
+          indexed.add(file)
           restored.push(item)
+        }
+        this._nextFileId = Math.max(-1, ...indexed, ...found) + 1
+        // Files the index doesn't list were sent, evicted, or never indexed before the app was killed. Without
+        // a stored index that was read, a failed read can't be told from an empty queue, so every file is kept.
+        if (this._storage.loadedStoredContents) {
+          for (const file of found) {
+            if (!indexed.has(file)) {
+              this._removeFile(file)
+            }
+          }
         }
       }
     } finally {
       this._loaded = true
-      // Events captured while storage loaded go after the earlier launch's, and get their slots now.
+      // Events captured while storage loaded go after the earlier launch's, and get their files now.
       if (!this._stopped && (restored.length > 0 || this._events.length > 0)) {
         this._events = [...restored, ...this._events]
         this._setTrimmedQueue([...this._events])
@@ -409,27 +428,33 @@ export class CaptureAiLane {
     }
   }
 
-  /**
-   * The event's JSON from its slot, or undefined when the slot now holds another event or was cut off
-   * mid-write. A slot starts with its event's uuid, and the JSON must be the size the index recorded.
-   */
-  private async _readSlot(item: QueuedAiEvent): Promise<string | undefined> {
-    const slot = this._slots.get(item)
-    if (!this._files || slot === undefined) {
+  /** The event's JSON from its file, or undefined when the file is missing or was cut off mid-write. */
+  private async _readFile(item: QueuedAiEvent): Promise<string | undefined> {
+    const file = this._fileIds.get(item)
+    if (!this._files || file === undefined) {
       return undefined
     }
-    let content: string | null = null
+    let json: string | null = null
     try {
-      content = await this._files.storage.getItem(this._files.key(slot))
+      json = await this._files.storage.getItem(this._files.prefix + file)
     } catch (e) {
       this._logger.error('Reading a stored AI event failed:', e)
     }
-    const prefix = `${item.uuid}\n`
-    if (typeof content !== 'string' || !content.startsWith(prefix)) {
-      return undefined
+    // A file cut off mid-write is shorter than the size the index recorded.
+    return typeof json === 'string' && utf8Length(json) === item.bytes ? json : undefined
+  }
+
+  /** The numbers of this project's AI event files on disk; none when the directory can't be listed. */
+  private async _listFiles(): Promise<number[]> {
+    const { storage, prefix } = this._files!
+    try {
+      return (await storage.keys())
+        .filter((key) => key.startsWith(prefix) && /^\d+$/.test(key.slice(prefix.length)))
+        .map((key) => Number(key.slice(prefix.length)))
+    } catch (e) {
+      this._logger.error('Listing stored AI events failed:', e)
+      return []
     }
-    const json = content.slice(prefix.length)
-    return utf8Length(json) === item.bytes ? json : undefined
   }
 
   /** Drops the oldest events beyond the queue's count and byte caps, then stores what is left. */
@@ -457,49 +482,38 @@ export class CaptureAiLane {
   private _setQueue(queue: QueuedAiEvent[]): void {
     const previous = this._events
     this._events = queue
-    // Until storage has loaded, slots in use are unknown; _load stores these events once it has.
+    // Until storage has loaded, the files in use are unknown; _load stores these events once it has.
     if (!this._files || !this._loaded) {
       return
     }
     const kept = new Set(queue)
-    const freed = new Set<number>()
     for (const event of previous) {
-      const slot = this._slots.get(event)
-      if (slot !== undefined && !kept.has(event)) {
+      const file = this._fileIds.get(event)
+      if (file !== undefined && !kept.has(event)) {
         // A batch being sent has already read its JSON, so a removed event's copy can go now, not after its write.
         event.json = undefined
-        this._slots.delete(event)
-        freed.add(slot)
+        this._fileIds.delete(event)
+        this._removeFile(file)
       }
     }
-    const used = new Set(this._slots.values())
-    let free = 0
     for (const event of queue) {
-      if (!this._slots.has(event)) {
-        while (used.has(free)) {
-          free++
-        }
-        used.add(free)
-        freed.delete(free)
-        this._slots.set(event, free)
-        // Only events captured this launch are without a slot, and they still hold their JSON.
-        void this._writeSlot(free, `${event.uuid}\n${event.json!}`).then((stored) => {
+      if (!this._fileIds.has(event)) {
+        const file = this._nextFileId++
+        this._fileIds.set(event, file)
+        // Only events captured this launch are without a file, and they still hold their JSON.
+        void this._writeFile(file, event.json!).then((stored) => {
           if (stored) {
             event.json = undefined
           }
         })
       }
     }
-    // A freed slot that a new event took is overwritten by it, so only the rest are cleared.
-    for (const slot of freed) {
-      void this._writeSlot(slot, '')
-    }
     if (queue.length > 0) {
       const index: StoredAiEvent[] = queue.map(({ uuid, bytes, propertiesBytes }, i) => ({
         uuid,
         bytes,
         propertiesBytes,
-        slot: this._slots.get(queue[i])!,
+        file: this._fileIds.get(queue[i])!,
       }))
       this._storage.setItem(PostHogPersistedProperty.AiQueue, index)
     } else {
@@ -507,36 +521,47 @@ export class CaptureAiLane {
     }
   }
 
-  /**
-   * Resolves true once `content`, or newer content for the slot, is in the slot, or false when the write
-   * failed. Writes queued behind a running one are merged, so only the newest content is written.
-   */
-  private _writeSlot(slot: number, content: string): Promise<boolean> {
-    const files = this._files!
-    const queued = this._pendingSlotContent.has(slot)
-    this._pendingSlotContent.set(slot, content)
-    if (queued) {
-      return this._slotWrites.get(slot)!
-    }
-    const write = (this._slotWrites.get(slot) ?? Promise.resolve(true))
-      .then(() => {
-        const latest = this._pendingSlotContent.get(slot)!
-        this._pendingSlotContent.delete(slot)
-        return files.storage.setItem(files.key(slot), latest)
-      })
-      .then(
-        () => true,
-        (e) => {
-          this._logger.error('Storing an AI event failed:', e)
-          return false
-        }
-      )
-    this._slotWrites.set(slot, write)
-    void write.then(() => {
-      if (this._slotWrites.get(slot) === write) {
-        this._slotWrites.delete(slot)
+  /** Resolves true once `json` is in the file, or false when the write failed or the file was deleted first. */
+  private _writeFile(file: number, json: string): Promise<boolean> {
+    const { storage, prefix } = this._files!
+    this._unwritten.set(file, json)
+    return this._queueFileOp(async () => {
+      const content = this._unwritten.get(file)
+      if (content === undefined) {
+        return false
+      }
+      this._unwritten.delete(file)
+      try {
+        await storage.setItem(prefix + file, content)
+        return true
+      } catch (e) {
+        this._logger.error('Storing an AI event failed:', e)
+        return false
       }
     })
-    return write
+  }
+
+  /** Deletes the file once the writes queued before it land; a file whose write hasn't started is never written. */
+  private _removeFile(file: number): void {
+    if (this._unwritten.delete(file)) {
+      return
+    }
+    const { storage, prefix } = this._files!
+    void this._queueFileOp(async () => {
+      try {
+        await storage.removeItem(prefix + file)
+      } catch (e) {
+        this._logger.error('Deleting a stored AI event failed:', e)
+      }
+    })
+  }
+
+  private _queueFileOp<T>(op: () => Promise<T>): Promise<T> {
+    const result = this._fileOps.then(op)
+    this._fileOps = result.then(
+      () => {},
+      () => {}
+    )
+    return result
   }
 }

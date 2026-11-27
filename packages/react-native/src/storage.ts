@@ -30,6 +30,8 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
+  // True once stored contents were read and parsed; false when there were none or the read failed.
+  loadedStoredContents = false
   private _storageKey: string
   // Each pending persist resolves to a boolean: true if the underlying setItem
   // resolved, false if it rejected. waitForPersistSuccess() uses this to surface
@@ -201,6 +203,7 @@ export class PostHogRNStorage {
       for (const key in data) {
         this.memoryCache[key] = data[key]
       }
+      this.loadedStoredContents = !!res
     } catch (e) {
       console.warn(
         "PostHog failed to load persisted data from storage. This is likely because the storage format is. We'll reset the storage.",
@@ -241,8 +244,8 @@ export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogR
 /** Named per project, so AI events queued for one project are never sent with another's token. */
 export const aiStorageKey = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.json`
 
-/** Holds the JSON of one queued AI event; the index in {@link aiStorageKey} says which slots are in use. */
-export const aiEventKey = (projectToken: string, slot: number): string => `.posthog-rn-ai-${projectToken}.event-${slot}`
+/** Starts the name of each file holding one queued AI event's JSON; the file's number follows it. */
+export const aiEventKeyPrefix = (projectToken: string): string => `.posthog-rn-ai-${projectToken}.event-`
 
 export function createAiStorage(customStorage: PostHogCustomStorage, projectToken: string): PostHogRNStorage {
   return new PostHogRNStorage(customStorage, aiStorageKey(projectToken))

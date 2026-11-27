@@ -3,6 +3,8 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
   OptionalExpoFileSystem: {
     readAsStringAsync: vi.fn(),
     writeAsStringAsync: vi.fn(),
+    deleteAsync: vi.fn(),
+    readDirectoryAsync: vi.fn().mockResolvedValue(['a', 'b']),
     documentDirectory: '/mock-doc-dir/',
     cacheDirectory: '/mock-cache-dir/',
   },
@@ -68,6 +70,15 @@ describe('PostHog React Native', () => {
       await buildAiEventStorage()!.setItem('ai-key', 'ai-value')
 
       expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledWith('/mock-cache-dir/ai-key', 'ai-value')
+    })
+
+    it('deletes AI event files and lists the legacy cache directory', async () => {
+      const storage = buildAiEventStorage()!
+      await storage.removeItem('ai-key')
+
+      expect(mockedOptionalFileSystem!.deleteAsync).toHaveBeenCalledWith('/mock-cache-dir/ai-key', { idempotent: true })
+      expect(await storage.keys()).toEqual(['a', 'b'])
+      expect(mockedOptionalFileSystem!.readDirectoryAsync).toHaveBeenCalledWith('/mock-cache-dir/')
     })
 
     it('has no AI event storage when the legacy cache directory is null', () => {

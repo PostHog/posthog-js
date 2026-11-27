@@ -4,6 +4,7 @@
 const {
   mockFileWrite,
   mockFileText,
+  mockFileDelete,
   mockDocument,
   mockCache,
   mockLegacyReadAsStringAsync,
@@ -11,8 +12,9 @@ const {
 } = vi.hoisted(() => ({
   mockFileWrite: vi.fn(),
   mockFileText: vi.fn().mockResolvedValue('stored-value'),
+  mockFileDelete: vi.fn(),
   mockDocument: { uri: 'file:///mock-doc-dir/' },
-  mockCache: { uri: 'file:///mock-cache-dir/' },
+  mockCache: { uri: 'file:///mock-cache-dir/', list: () => [{ name: 'a' }, { name: 'b' }] },
   mockLegacyReadAsStringAsync: vi.fn(),
   mockLegacyWriteAsStringAsync: vi.fn(),
 }))
@@ -33,9 +35,11 @@ vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
       document: mockDocument,
       cache: mockCache,
     },
-    File: vi.fn().mockImplementation((_dir: any, _key: string) => ({
+    File: vi.fn().mockImplementation((_dir: any, key: string) => ({
       text: mockFileText,
       write: mockFileWrite,
+      delete: mockFileDelete,
+      exists: key !== 'missing-key',
     })),
   },
 }))
@@ -87,6 +91,16 @@ describe('Expo SDK 55 - prefers new File API over working legacy subpath', () =>
 
     expect((OptionalExpoFileSystem as any).File).toHaveBeenCalledWith(mockCache, 'ai-key')
     expect(mockLegacyWriteAsStringAsync).not.toHaveBeenCalled()
+  })
+
+  it('deletes AI event files that exist and lists the cache directory', async () => {
+    const storage = buildAiEventStorage()!
+    await storage.removeItem('ai-key')
+    await storage.removeItem('missing-key')
+
+    expect(mockFileDelete).toHaveBeenCalledTimes(1)
+    expect((OptionalExpoFileSystem as any).File).toHaveBeenCalledWith(mockCache, 'ai-key')
+    expect(await storage.keys()).toEqual(['a', 'b'])
   })
 
   it('has no AI event storage, and does not throw, when reading the cache directory throws', () => {
