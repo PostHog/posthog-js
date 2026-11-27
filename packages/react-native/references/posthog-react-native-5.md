@@ -1887,7 +1887,7 @@ posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
 
 ### `PostHog.unsetPersonProperties`
 
-> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`): `void`
+> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`, `options?`): `void`
 
 Removes properties from the person profile associated with the current `distinct_id`.
 Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
@@ -1898,6 +1898,7 @@ Learn more about [identifying users](https://posthog.com/docs/product-analytics/
 | ------ | ------ | ------ | ------ |
 | `propertyNames` | `string` \| `string`[] | `undefined` | The name (or names) of the person properties to remove. |
 | `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after removing the properties. Defaults to true. |
+| `options?` | `PostHogCaptureOptions` | `undefined` | Optional capture options for the `$set` event |
 
 #### Returns
 
@@ -2509,7 +2510,7 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
 | <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
 | <a id="event-1"></a> `event` | `string` | The name of the event |
-| <a id="options"></a> `options?` | `object` | Settings that tell PostHog how to process the event, sent apart from its properties. A hook that returns a new object keeps the event's options unless it sets `options`; `{}` clears them. |
+| <a id="options"></a> `options?` | `object` | Settings that tell PostHog how to process the event, sent apart from its properties. |
 | <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
 | <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
 | <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
@@ -2848,7 +2849,7 @@ Log capture types
 
 ### `PostHogCaptureOptions`
 
-> **PostHogCaptureOptions** = `PostHogCaptureOptions` & `object`
+> **PostHogCaptureOptions** = `PostHogCaptureOptionsWithEventOptions` & `object`
 
 Options for a call that sends an event, such as `capture()`, `identify()` or `alias()`.
 
