@@ -109,8 +109,9 @@ function asExpectation(outcome: v2.ConfigV2Outcome): Case {
   switch (outcome.outcome) {
     case 'evaluated': {
       const expectation: Case = { status: 'success', value: outcome.value, reason: outcome.reason }
-      if (outcome.ruleId !== undefined) {
-        expectation.rule = { id: outcome.ruleId, rule_type: outcome.ruleType, index: outcome.ruleIndex }
+      const rule = { id: outcome.ruleId, rule_type: outcome.ruleType, index: outcome.ruleIndex }
+      if (Object.values(rule).some((field) => field !== undefined)) {
+        expectation.rule = rule
       }
       if (outcome.variantKey !== undefined) {
         expectation.variant = outcome.variantKey
@@ -203,6 +204,22 @@ describe('the config version 2 evaluator', () => {
       '%s is about the remote request boundary, not the evaluator',
       () => {}
     )
+  })
+
+  it('compares every rule field', () => {
+    // A result without a rule matches an expectation without a `rule` member only when it has none
+    // of the three rule fields.
+    const expected = { status: 'success', value: false, reason: 'no_rule_match' }
+    const evaluated = (fields: Partial<v2.ConfigV2Evaluated> = {}): v2.ConfigV2Evaluated => ({
+      outcome: 'evaluated',
+      value: false,
+      reason: 'no_rule_match',
+      ...fields,
+    })
+
+    expect(sameJson(asExpectation(evaluated()), expected)).toBe(true)
+    expect(sameJson(asExpectation(evaluated({ ruleType: 'targeted_release' })), expected)).toBe(false)
+    expect(sameJson(asExpectation(evaluated({ ruleIndex: 0 })), expected)).toBe(false)
   })
 
   it('replays every corpus case the local outcome mapping covers', () => {
