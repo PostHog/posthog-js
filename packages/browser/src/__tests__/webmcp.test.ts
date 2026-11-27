@@ -44,6 +44,7 @@ describe('WebMCP', () => {
             config: { ...defaultConfig(), capture_webmcp: true, capture_exceptions: captureExceptions },
             capture,
             get_property: vi.fn(),
+            getSessionProperty: vi.fn(),
         })
         vi.spyOn(ExceptionObserver.prototype, 'startIfEnabledOrStop').mockImplementation(() => {})
         posthog.exceptions = new PostHogExceptions(posthog)
