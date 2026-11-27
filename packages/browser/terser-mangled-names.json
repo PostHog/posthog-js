@@ -340,6 +340,7 @@
         "_getRemoteConfigPayload",
         "_getSdkContext",
         "_getSessionId",
+        "_getSessionManager",
         "_getSessionState",
         "_getShownEventName",
         "_getStored",
