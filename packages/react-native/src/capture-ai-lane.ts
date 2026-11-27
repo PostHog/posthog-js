@@ -82,6 +82,8 @@ export class CaptureAiLane {
   private _resend?: { events: QueuedAiEvent[]; request: V1RequestIdentity }
   private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
+  // Set while a timeout keeps the batch size below `maxBatchSize`; each delivered batch then doubles it back.
+  private _batchSizeLoweredByTimeout = false
   private _stopped = false
   // Aborts the request in flight, including one still being compressed, when the lane stops.
   private _sendAbort?: AbortController
@@ -282,6 +284,10 @@ export class CaptureAiLane {
       await this.waitForPersist()
 
       if (!deferral) {
+        if (this._batchSizeLoweredByTimeout) {
+          this._batchSize = Math.min(this._settings.maxBatchSize, this._batchSize * 2)
+          this._batchSizeLoweredByTimeout = this._batchSize < this._settings.maxBatchSize
+        }
         this._resendCount = 0
         this._resendAt = 0
         this._clearResendTimer()
@@ -295,6 +301,7 @@ export class CaptureAiLane {
       // The whole request has one deadline, so a batch too big for the network to upload in time is resent in halves.
       if (deferral.timedOut && batch.size > 1) {
         this._batchSize = Math.max(1, Math.floor(batch.size / 2))
+        this._batchSizeLoweredByTimeout = true
         this._scheduleResend(deferral.retryAfterMs)
         return
       }
