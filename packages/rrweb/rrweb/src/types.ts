@@ -122,6 +122,8 @@ export type recordOptions<T> = {
   errorHandler?: ErrorHandler;
 };
 
+// Every emitting callback must be named with a `Cb` suffix: record() wraps
+// exactly those so events from a blocked iframe's document are dropped.
 export type observerParam = {
   mutationCb: mutationCallBack;
   mousemoveCb: mousemoveCallBack;

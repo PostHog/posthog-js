@@ -1,8 +1,8 @@
 import { requireInstalledExtension } from './helpers'
 import { createPostHog as createCore } from '../src/composition/npm/core'
 import { createPostHogCore } from '../src/core/posthog'
+import { createAnalyticsDelivery } from '../src/products/analytics/delivery/analytics-delivery'
 import { createPostHog } from '../src/composition/npm'
-import { analytics } from '../src/products/analytics/analytics'
 import { flags } from '../src/products/flags/flags'
 import { localRemoteConfig } from './helpers'
 
@@ -23,79 +23,37 @@ afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.dispose()))
 })
 
-it('does not construct analytics in the manual core without explicit composition', async () => {
+it('does not install products in the manual core without explicit composition', async () => {
     const client = await createCore(base)
     clients.push(client)
-    expect(client.analytics).toBeUndefined()
-    expect(await client.resolveExtension('analytics')).toBeUndefined()
+    for (const name of ['featureFlags', 'logs', 'surveys', 'autocapture'] as const) {
+        expect(client[name]).toBeUndefined()
+        expect(await client.resolveExtension(name)).toBeUndefined()
+    }
     await client.flush()
     expect(client.session).toBeUndefined()
 })
 
-it('acquires the entire analytics product on demand and then admits captures synchronously', async () => {
-    const client = await createPostHog(base)
-    clients.push(client)
-    expect(client.analytics).toBeUndefined()
-    const [first, second] = await Promise.all([
-        client.resolveExtension('analytics'),
-        client.resolveExtension('analytics'),
-    ])
-    expect(first).toBeDefined()
-    expect(second).toBe(first)
-    expect(client.analytics).toBe(first)
-    const observed: string[] = []
-    requireInstalledExtension(first).onEvent(({ event }) => observed.push(event))
-    expect(requireInstalledExtension(first).capture('after_acquisition')).toBe(true)
-    expect(observed).toEqual(['after_acquisition'])
-})
-
-it('does not implicitly acquire disabled analytics', async () => {
-    const client = await createPostHog({ ...base, analytics: false })
-    clients.push(client)
-    expect(client.analytics).toBeUndefined()
-    expect(await client.resolveExtension('analytics')).toBeUndefined()
-    expect(client.session).toBeUndefined()
-})
-
-it('prefers an explicitly composed analytics instance to disabled automatic loading', async () => {
-    const extension = analytics({ flushInterval: 0 })
-    const client = await createPostHog({ ...base, analytics: false, extensions: [extension] })
-    clients.push(client)
-    expect(client.analytics).toBe(extension)
-    expect(await client.resolveExtension('analytics')).toBe(extension)
-})
-
-it('acquires analytics before exposing a product whose shared implementation captures synchronously', async () => {
+it('captures through the client from a product whose shared implementation captures synchronously', async () => {
     const extension = flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
     const client = await createPostHog({ ...base, extensions: [extension] })
     clients.push(client)
-    expect(client.analytics).toBeDefined()
     const observed: string[] = []
-    requireInstalledExtension(client.analytics).onEvent(({ event }) => observed.push(event))
+    client.onEvent(({ event }) => observed.push(event))
     expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('checkout')?.enabled).toBe(true)
     expect(observed).toEqual(['$feature_flag_called'])
 })
 
-it('initializes automatic flags and their analytics dependency before root readiness', async () => {
+it('initializes automatic flags before root readiness', async () => {
     const client = await createPostHog({
         ...base,
         flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } },
     })
     clients.push(client)
-    const product = requireInstalledExtension(client.analytics)
     const observed: string[] = []
-    product.onEvent(({ event }) => observed.push(event))
+    client.onEvent(({ event }) => observed.push(event))
     expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('checkout')?.enabled).toBe(true)
     expect(observed).toEqual(['$feature_flag_called'])
-})
-
-it('keeps flags usable with analytics explicitly disabled, without loading a capture product', async () => {
-    const extension = flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { checkout: true } } })
-    const client = await createPostHog({ ...base, analytics: false, extensions: [extension] })
-    clients.push(client)
-    expect(client.analytics).toBeUndefined()
-    expect(requireInstalledExtension(client.featureFlags).getFeatureFlag('checkout')?.enabled).toBe(true)
-    expect(client.session).toBeUndefined()
 })
 
 it('reuses an explicitly supplied dependency even when another product resolves it first', async () => {
@@ -104,7 +62,6 @@ it('reuses an explicitly supplied dependency even when another product resolves 
     let dependency: unknown
     const client = await createPostHog({
         ...base,
-        analytics: false,
         extensions: [
             {
                 name: 'consumer',
@@ -133,18 +90,20 @@ it('does not publish an in-flight product when shutdown starts after its setup h
     const extension = {
         name: 'late',
         setup: vi.fn(() => {
-            queueMicrotask(() =>
-                queueMicrotask(() => {
-                    closing = client.shutdown()
-                    queueMicrotask(() => observe(Reflect.get(client, 'late')))
-                })
-            )
+            // Runs after setup returns and before installation resumes.
+            queueMicrotask(() => {
+                closing = client.shutdown()
+                queueMicrotask(() => observe(Reflect.get(client, 'late')))
+            })
         }),
         dispose: vi.fn(),
     }
-    const client = await createPostHogCore(base, [{ name: 'waiting', setup() {}, flush: () => flushing }], {
-        late: () => extension,
-    })
+    const client = await createPostHogCore(
+        base,
+        createAnalyticsDelivery,
+        [{ name: 'waiting', setup() {}, flush: () => flushing }],
+        { late: () => extension }
+    )
     clients.push(client)
     const installing = client.resolveExtension('late')
     try {
@@ -165,12 +124,19 @@ it('does not acquire new products once shutdown starts', async () => {
     const pending = new Promise<void>((resolve) => {
         finish = resolve
     })
-    const client = await createPostHog({ ...base, extensions: [{ name: 'waiting', setup() {}, flush: () => pending }] })
+    const load = vi.fn(() => ({ name: 'late', setup() {} }))
+    const client = await createPostHogCore(
+        base,
+        createAnalyticsDelivery,
+        [{ name: 'waiting', setup() {}, flush: () => pending }],
+        { late: load }
+    )
     clients.push(client)
     const closing = client.shutdown()
     try {
-        expect(await client.resolveExtension('analytics')).toBeUndefined()
-        expect(client.analytics).toBeUndefined()
+        expect(await client.resolveExtension('late')).toBeUndefined()
+        expect(Reflect.get(client, 'late')).toBeUndefined()
+        expect(load).not.toHaveBeenCalled()
     } finally {
         finish()
         await closing

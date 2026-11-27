@@ -1,10 +1,12 @@
-import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import { getServerTrackingData } from '../extensions/internal'
-import { deriveSessionIdFromConversation, getSessionId } from '../extensions/session'
+import { deriveSessionIdFromConversation, resolveSession } from '../extensions/session'
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
+import { MAX_HELD_CUSTOM_EVENTS } from '../extensions/request-scope'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -61,23 +63,23 @@ describe('conversation_id as the session anchor', () => {
       .map((e) => e.sessionId)
   }
 
-  describe('getSessionId', () => {
+  describe('resolveSession', () => {
     it('derives the session id from the conversation id when one is supplied', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      const derived = getSessionId(lowLevel, undefined, 'conversation-abc')
+      const derived = resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
 
       expect(derived).toMatch(/^ses_/)
-      expect(derived).not.toBe(getSessionId(lowLevel, undefined))
+      expect(derived).not.toBe(resolveSession(lowLevel, undefined).sessionId)
     })
 
     it('is deterministic — the same handle always yields the same session id', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      expect(getSessionId(lowLevel, undefined, 'conversation-abc')).toBe(
-        getSessionId(lowLevel, undefined, 'conversation-abc')
+      expect(resolveSession(lowLevel, undefined, 'conversation-abc').sessionId).toBe(
+        resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
       )
     })
 
@@ -85,8 +87,8 @@ describe('conversation_id as the session anchor', () => {
       instrument(server, fakePostHog())
       const lowLevel = server.server as MCPServerLike
 
-      expect(getSessionId(lowLevel, undefined, 'conversation-a')).not.toBe(
-        getSessionId(lowLevel, undefined, 'conversation-b')
+      expect(resolveSession(lowLevel, undefined, 'conversation-a').sessionId).not.toBe(
+        resolveSession(lowLevel, undefined, 'conversation-b').sessionId
       )
     })
 
@@ -96,11 +98,11 @@ describe('conversation_id as the session anchor', () => {
       const data = getServerTrackingData(lowLevel)!
       const before = data.sessionId
 
-      getSessionId(lowLevel, undefined, 'conversation-abc')
+      resolveSession(lowLevel, undefined, 'conversation-abc').sessionId
 
       // A concurrent request with no handle must still see the original session.
       expect(data.sessionId).toBe(before)
-      expect(getSessionId(lowLevel, undefined)).toBe(before)
+      expect(resolveSession(lowLevel, undefined).sessionId).toBe(before)
     })
 
     it('falls back to the existing resolution when no handle is supplied', () => {
@@ -108,7 +110,7 @@ describe('conversation_id as the session anchor', () => {
       const lowLevel = server.server as MCPServerLike
       const data = getServerTrackingData(lowLevel)!
 
-      expect(getSessionId(lowLevel, undefined, undefined)).toBe(data.sessionId)
+      expect(resolveSession(lowLevel, undefined, undefined).sessionId).toBe(data.sessionId)
     })
   })
 
@@ -139,7 +141,7 @@ describe('conversation_id as the session anchor', () => {
         },
       } as never
 
-      const derived = getSessionId(lowLevel, extra, CONVERSATION_HANDLE)
+      const derived = resolveSession(lowLevel, extra, CONVERSATION_HANDLE).sessionId
 
       expect(derived).toBe(deriveSessionIdFromConversation(CONVERSATION_HANDLE))
       expect(data.sessionInfo.clientName).toBe('acme-client')
@@ -158,8 +160,12 @@ describe('conversation_id as the session anchor', () => {
       instrument(other.server, fakePostHog())
 
       try {
-        const fromA = getSessionId(server.server as MCPServerLike, undefined, 'shared-conversation')
-        const fromB = getSessionId(other.server.server as unknown as MCPServerLike, undefined, 'shared-conversation')
+        const fromA = resolveSession(server.server as MCPServerLike, undefined, 'shared-conversation').sessionId
+        const fromB = resolveSession(
+          other.server.server as unknown as MCPServerLike,
+          undefined,
+          'shared-conversation'
+        ).sessionId
 
         // The cross-pod property: two processes that never met agree on the session.
         expect(fromA).toBe(fromB)
@@ -294,5 +300,275 @@ describe('conversation_id as the session anchor', () => {
       const expected = deriveSessionIdFromConversation(minted!)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
+  })
+})
+
+describe('a minted handle the agent never received', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const throws = async () => {
+    throw new Error('tool failed')
+  }
+  // No `content` array means no prompt-back, and no output schema means no mirror.
+  const noContent = async () => ({ structuredContent: { ok: true } })
+  const stdio = undefined
+  const statelessHttp = { requestInfo: { headers: {} } }
+
+  // Without the handle, a one-client connection keeps its own session, and a
+  // stateless HTTP request carrying no session gets a fresh one per request.
+  it.each([
+    ['the tool throws', 'stdio', throws, stdio, 1],
+    ['the result has no content array', 'stdio', noContent, stdio, 1],
+    ['the tool throws', 'stateless HTTP', throws, statelessHttp, 3],
+    ['the result has no content array', 'stateless HTTP', noContent, statelessHttp, 3],
+  ])(
+    'falls back to the handle-less session when %s over %s',
+    async (_case, _transport, toolHandler, extra, sessions) => {
+      const server = new Server({ name: 'undelivered-handle', version: '1.0.0' }, { capabilities: { tools: {} } })
+      server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: [{ name: 'echo', inputSchema: { type: 'object' as const } }],
+      }))
+      const lowLevel = server as unknown as MCPServerLike
+      // Set after `setRequestHandler` so the SDK's result validation can't add a `content` array.
+      lowLevel._requestHandlers.set('tools/call', toolHandler)
+      instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+      const call = () =>
+        lowLevel._requestHandlers.get('tools/call')!(
+          { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+          extra as never
+        ).catch(() => undefined)
+
+      await lowLevel._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, extra as never)
+      await call()
+      await call()
+      await new Promise((r) => setTimeout(r, 50))
+
+      const listed = capture.findCapturesByEvent('$mcp_tools_list').map((e) => e.properties)
+      const called = capture.findCapturesByEvent('$mcp_tool_call').map((e) => e.properties)
+      expect(called.map((p) => [p.$mcp_session_source, p.$mcp_conversation_id])).toEqual([
+        ['generated', undefined],
+        ['generated', undefined],
+      ])
+      expect(new Set([...listed, ...called].map((p) => p.$session_id)).size).toBe(sessions)
+    }
+  )
+
+  it("keeps the host's session and drops the handle when a host sessionId outranks it", async () => {
+    const server = new Server({ name: 'undelivered-handle', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', throws)
+    instrument(lowLevel, fakePostHog(), { enableConversationId: true, sessionId: () => 'host-session-1' })
+
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      statelessHttp as never
+    ).catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const called = capture.findCapturesByEvent('$mcp_tool_call')[0].properties
+    expect(called.$session_id).toBe(deriveSessionIdFromConversation('host-session-1'))
+    expect(called.$mcp_conversation_id).toBeUndefined()
+  })
+})
+
+describe('a custom event captured on a minted handle', () => {
+  let capture: EventCapture
+
+  beforeEach(async () => {
+    capture = new EventCapture()
+    await capture.start()
+  })
+
+  afterEach(async () => {
+    await capture.stop()
+  })
+
+  const outcomes = {
+    delivered: async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
+    undelivered: async () => ({ structuredContent: { ok: true } }),
+    raised: async () => {
+      throw new Error('tool failed')
+    },
+  }
+
+  it.each([
+    ['delivered', 'in the tool'],
+    ['undelivered', 'in the tool'],
+    ['raised', 'in the tool'],
+    ['delivered', 'after it settles'],
+    ['undelivered', 'after it settles'],
+    ['raised', 'after it settles'],
+  ] as const)('takes the session its call settles on: %s, captured %s', async (outcome, when) => {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    let late: Promise<void> | undefined
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      if (when === 'in the tool') {
+        await analytics.capture({ event: 'inside_tool' })
+        await new Promise((r) => setTimeout(r, 40))
+      } else {
+        late = new Promise<void>((resolve) => setTimeout(resolve, 20)).then(() =>
+          analytics.capture({ event: 'inside_tool' })
+        )
+      }
+      return outcomes[outcome]()
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    ).catch(() => undefined)
+    await late
+    await new Promise((r) => setTimeout(r, 50))
+
+    const [custom] = capture.findCapturesByEvent('inside_tool')
+    const [call] = capture.findCapturesByEvent('$mcp_tool_call')
+    expect(custom?.properties.$session_id).toBe(call?.properties.$session_id)
+    expect(custom?.properties.$mcp_duration_ms).toBeLessThan(20)
+  })
+
+  it('drops a held-back custom event that fails to build without an unhandled rejection', async () => {
+    let reads = 0
+    // The first read (truncation) is guarded; the second, while the event is built, is not.
+    const properties = {
+      get value(): number {
+        reads += 1
+        if (reads >= 2) {
+          throw new Error('property getter threw')
+        }
+        return 1
+      },
+    }
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+      const lowLevel = server as unknown as MCPServerLike
+      lowLevel._requestHandlers.set('tools/call', async () => {
+        await analytics.capture({ event: 'inside_tool', properties })
+        return { content: [{ type: 'text' as const, text: 'ok' }] }
+      })
+      const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true })
+
+      await lowLevel._requestHandlers.get('tools/call')!(
+        { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+        { requestInfo: { headers: {} } } as never
+      )
+      await new Promise((r) => setTimeout(r, 50))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+  })
+
+  it('returns the result without waiting for held-back custom events to be sent', async () => {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      void analytics.capture({ event: 'inside_tool' })
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), {
+      enableConversationId: true,
+      beforeSend: async (event) => {
+        await new Promise((r) => setTimeout(r, 300))
+        return event
+      },
+    })
+
+    const started = Date.now()
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    )
+
+    expect(Date.now() - started).toBeLessThan(150)
+  })
+
+  /** A tool call on a stateless HTTP request with a minted handle, whose tool runs `body` with the analytics handle. */
+  async function callMintingTool(
+    body: (analytics: ReturnType<typeof instrument>) => Promise<void>,
+    options: Parameters<typeof instrument>[2] = {}
+  ): Promise<void> {
+    const server = new Server({ name: 'minted-custom-event', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const lowLevel = server as unknown as MCPServerLike
+    lowLevel._requestHandlers.set('tools/call', async () => {
+      await body(analytics)
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    const analytics = instrument(lowLevel, fakePostHog(), { enableConversationId: true, ...options })
+    await lowLevel._requestHandlers.get('tools/call')!(
+      { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+      { requestInfo: { headers: {} } } as never
+    )
+    await new Promise((r) => setTimeout(r, 50))
+  }
+
+  it('asks a declining host session callback once per call', async () => {
+    let asked = 0
+    await callMintingTool(async (analytics) => analytics.capture({ event: 'inside_tool' }), {
+      sessionId: () => {
+        asked += 1
+        return undefined
+      },
+    })
+
+    expect(asked).toBe(1)
+  })
+
+  it.each([
+    ['the host fixes the session, so it is sent at once', () => 'host-session', 1],
+    ['a minted handle chose the session, so it waits for the call', undefined, 0],
+  ] as const)('completes a capture when %s', async (_case, sessionId, sentDuringTheCall) => {
+    let sent = -1
+    await callMintingTool(
+      async (analytics) => {
+        await analytics.capture({ event: 'inside_tool' })
+        sent = capture.findCapturesByEvent('inside_tool').length
+      },
+      sessionId ? { sessionId } : {}
+    )
+
+    expect(sent).toBe(sentDuringTheCall)
+    expect(capture.findCapturesByEvent('inside_tool')).toHaveLength(1)
+  })
+
+  it('keeps the properties and options a held event was captured with', async () => {
+    await callMintingTool(async (analytics) => {
+      const properties: Record<string, number> = { step: 0 }
+      const eventOptions = { process_person_profile: true }
+      await analytics.capture({ event: 'progress', properties, eventOptions })
+      properties.step = 1
+      await analytics.capture({ event: 'progress', properties })
+      delete properties.step
+      eventOptions.process_person_profile = false
+    })
+
+    expect(capture.findCapturesByEvent('progress').map((e) => e.properties.step)).toEqual([0, 1])
+  })
+
+  it('holds at most its bound of custom events per call', async () => {
+    await callMintingTool(async (analytics) => {
+      for (let i = 0; i < MAX_HELD_CUSTOM_EVENTS + 5; i++) {
+        await analytics.capture({ event: 'tick' })
+      }
+    })
+
+    expect(capture.findCapturesByEvent('tick')).toHaveLength(MAX_HELD_CUSTOM_EVENTS)
   })
 })

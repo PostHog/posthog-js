@@ -393,6 +393,88 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(captureArgs[0].properties['$ai_input_tokens']).toBe(55)
   })
 
+  describe('streamed inline data output', () => {
+    const imageChunk = (data: string) => ({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data } }] } }],
+    })
+    const textChunk = (text: string) => ({
+      text,
+      candidates: [{ content: { parts: [{ text }] } }],
+    })
+    const finalChunk = {
+      candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3, totalTokenCount: 8 },
+    }
+
+    const streamProperties = async (chunks: any[]) => {
+      ;(client as any).client.models.generateContentStream = mockGenerateContentStream(chunks)
+      for await (const _chunk of client.models.generateContentStream({
+        model: 'gemini-2.5-flash-image',
+        contents: 'Draw a small red square',
+        posthogDistinctId: 'test-id',
+      })) {
+        // consume
+      }
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      return (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+    }
+
+    test('an image-only stream captures the image and a time to first token', async () => {
+      const base64Data = 'A'.repeat(2000)
+      const properties = await streamProperties([imageChunk(base64Data), finalChunk])
+
+      const content = properties['$ai_output_choices'][0].content
+      expect(content).toHaveLength(1)
+      expect(content[0].type).toBe('image')
+      expect(content[0].inline_data.mime_type).toBe('image/png')
+      expect(content[0].inline_data.data).not.toBe(base64Data)
+      expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+    })
+
+    test('a text and image stream keeps both blocks in order', async () => {
+      const properties = await streamProperties([textChunk('Here it is'), imageChunk('A'.repeat(2000)), finalChunk])
+
+      const content = properties['$ai_output_choices'][0].content
+      expect(content.map((block: any) => block.type)).toEqual(['text', 'image'])
+      expect(content[0].text).toBe('Here it is')
+    })
+
+    test('the time to first token starts at an image chunk that comes before any text', async () => {
+      let now = 1_000
+      const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        ;(client as any).client.models.generateContentStream = vi.fn().mockImplementation(() =>
+          (async function* () {
+            now = 1_500
+            yield imageChunk('A'.repeat(2000))
+            now = 3_000
+            yield textChunk('caption')
+            yield finalChunk
+          })()
+        )
+        for await (const _chunk of client.models.generateContentStream({
+          model: 'gemini-2.5-flash-image',
+          contents: 'Draw a small red square',
+          posthogDistinctId: 'test-id',
+        })) {
+          // consume
+        }
+      } finally {
+        dateNow.mockRestore()
+      }
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_time_to_first_token']).toBe(0.5)
+    })
+
+    test('preserves streamed inline data when the client enables multimodal capture', async () => {
+      const base64Data = 'A'.repeat(2000)
+      ;(mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = true
+      const properties = await streamProperties([imageChunk(base64Data), finalChunk])
+
+      expect(properties['$ai_output_choices'][0].content[0].inline_data.data).toBe(base64Data)
+    })
+  })
+
   test('preserves output inline data when the client enables multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
     ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({

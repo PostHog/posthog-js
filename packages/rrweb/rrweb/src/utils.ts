@@ -365,8 +365,12 @@ export function isBlocked(
     // e
   }
   if (blockSelector) {
-    if (el.matches(blockSelector)) return true;
-    if (checkAncestors && el.closest(blockSelector) !== null) return true;
+    try {
+      if (el.matches(blockSelector)) return true;
+      if (checkAncestors && el.closest(blockSelector) !== null) return true;
+    } catch (e) {
+      // an invalid selector blocks nothing, matching _isBlockedElement
+    }
   }
   return false;
 }

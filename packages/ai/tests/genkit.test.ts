@@ -2,6 +2,7 @@ import { genkit, z } from 'genkit'
 import { enableTelemetry, flushTracing } from 'genkit/tracing'
 import { PostHog } from 'posthog-node'
 import { PostHogGenkitSpanProcessor } from '../src/genkit'
+import { redactKeys } from '../src/mcpCredentials'
 import { EVENT_OPTION_CASES, USER_EVENT_OPTIONS, asPostHogNodeMajor, expectUserEventOptions } from './test-utils'
 
 // Genkit sets up OpenTelemetry once per process, so one forwarding processor is registered
@@ -73,6 +74,93 @@ function createWeatherFlow() {
     return text
   })
 }
+
+const toolResult = (credentialKey: string) => ({
+  auth: { [credentialKey]: 'tool-secret', token_type: 'Bearer', budgetTokens: 1234 },
+  forecast: 'Sunny',
+})
+
+// [what the tool returns, the tool's result, whether the rest of the result survives]
+const TOOL_CREDENTIAL_CASES: [string, unknown, boolean?][] = [
+  ...[
+    'apiKey',
+    'password',
+    'refresh_token',
+    'refresh_tokens',
+    'refreshToken',
+    'idToken',
+    'sessionToken',
+    'SecretAccessKey',
+    'oauth_token_secret',
+    'privateKey',
+    'cookie',
+    'cookies',
+    'Set-Cookie',
+    'Credentials',
+    'credential',
+    'Proxy-Authorization',
+    'authorization_header',
+    'refresh_token ',
+    'requestHeaders',
+  ].map((credentialKey): [string, unknown] => [credentialKey, toolResult(credentialKey)]),
+  ['JSON text', JSON.stringify(toolResult('refresh_token'))],
+  ['JSON text with a BOM', `\uFEFF${JSON.stringify(toolResult('refresh_token'))}`],
+  [
+    'JSON text with an escaped key',
+    '{"auth":{"refresh_tok\\u0065n":"tool-secret","token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
+  ],
+  [
+    'JSON lines',
+    `{"forecast":"Sunny","token_type":"Bearer","inputTokens":1234}\n{"refresh_token":"tool-secret"}`,
+    false,
+  ],
+  ['JSON text after prose', `Result: ${JSON.stringify(toolResult('refresh_token'))}`, false],
+  ['double-encoded JSON text', JSON.stringify(JSON.stringify(toolResult('refresh_token')))],
+  [
+    'truncated JSON text with the key in an embedded JSON string',
+    JSON.stringify({ status: 200, body: JSON.stringify(toolResult('access_token')) }).slice(0, -5),
+    false,
+  ],
+  [
+    'JSON text with escaped whitespace before a nested colon',
+    JSON.stringify({
+      body: '{"auth":{"refresh_token"\n: "tool-secret","token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
+    }),
+  ],
+  [
+    'JSON text with a nested key in escaped quotes',
+    '{"forecast":"Sunny","body":"{\\u0022refresh_token\\u0022:\\u0022tool-secret\\u0022}"}',
+    false,
+  ],
+  ['malformed JSON text with a non-breaking space before the colon', '{"refresh_token"\u00a0:"tool-secret"}', false],
+  ['a form-encoded token response', 'access_token=tool-secret&refresh_token=tool-secret&token_type=bearer', false],
+  ['JSON text in a form value', 'body={"refresh_token":"tool-secret"}', false],
+  ['a form-encoded response after a newline', '\naccess_token=tool-secret&token_type=bearer', false],
+  ['a form-encoded response after a status line', 'Status: 200\n\naccess_token=tool-secret&scope=repo', false],
+  ['JSON text with an escaped colon inside a key', JSON.stringify('{"oauth\\u003at\\u006fken":"tool-secret"}'), false],
+  ['a token in a URL fragment', 'https://app.example/cb?state=xyz#access_token=tool-secret&token_type=bearer', false],
+  ['a URL with a token in the query', { next: 'https://api.example.com/feed?access_token=tool-secret&after=x' }, false],
+  ['Python-style text', "{'refresh_token': 'tool-secret', 'token_type': 'Bearer'}", false],
+  [
+    'JSON text with a duplicate key',
+    '{"auth":{"refresh_token":"tool-secret"},"auth":{"token_type":"Bearer","inputTokens":1234},"forecast":"Sunny"}',
+  ],
+]
+
+describe('redactKeys on text that names no credential', () => {
+  it.each([
+    ['JSON text with a big integer', '{"id": 12345678901234567890}'],
+    ['pretty-printed JSON text', '{\n  "a": 1\n}'],
+    ['prose mentioning a token', 'Use your API token wisely: rotate it monthly.'],
+    ['a URL with harmless query params', 'https://example.com/search?page=2&sort=asc'],
+  ])('returns %s as written', (_name, text) => {
+    expect(redactKeys(text, (key) => key.endsWith('token'))).toBe(text)
+  })
+
+  it('masks a numeric credential', () => {
+    expect(redactKeys({ otp_token: 123456 }, (key) => key.endsWith('token'))).toEqual({ otp_token: '[REDACTED]' })
+  })
+})
 
 describe('PostHogGenkitSpanProcessor', () => {
   let client: any
@@ -314,36 +402,51 @@ describe('PostHogGenkitSpanProcessor', () => {
     expect(generate.properties.$ai_output_state.request.config).toEqual({ temperature: 0.2, apiKey: '[REDACTED]' })
   })
 
-  it('keeps credentials a tool returns out of the next model input', async () => {
+  it.each(TOOL_CREDENTIAL_CASES)(
+    'keeps the credential in a tool result (%s) out of the next model input',
+    async (_name, result, keepsContent = true) => {
+      const ai = genkit({})
+      const getForecast = ai.defineTool(
+        {
+          name: 'getForecast',
+          description: 'Get the forecast',
+          inputSchema: z.object({ city: z.string() }),
+          outputSchema: z.any(),
+        },
+        async () => result
+      )
+      ai.defineModel({ name: 'fake/forecast-model', supports: { tools: true } }, async (request) =>
+        request.messages.at(-1)?.role !== 'tool'
+          ? {
+              message: {
+                role: 'model',
+                content: [{ toolRequest: { name: 'getForecast', ref: 'call_1', input: { city: 'Paris' } } }],
+              },
+            }
+          : { message: { role: 'model', content: [{ text: 'Sunny.' }] } }
+      )
+
+      await ai.generate({ model: 'fake/forecast-model', prompt: 'Forecast for Paris?', tools: [getForecast] })
+
+      const events = capturedEvents(client)
+      expect(JSON.stringify(events)).not.toContain('tool-secret')
+      const followUp = events.filter((event) => event.event === '$ai_generation').at(-1)
+      const input = JSON.stringify(followUp.properties.$ai_input)
+      if (keepsContent) {
+        expect(input).toContain('Sunny')
+        expect(input).toContain('Bearer')
+        expect(input).toContain('1234')
+      }
+    }
+  )
+
+  it('still captures a generation whose prompt is deeply nested JSON', async () => {
     const ai = genkit({})
-    const getForecast = ai.defineTool(
-      {
-        name: 'getForecast',
-        description: 'Get the forecast',
-        inputSchema: z.object({ city: z.string() }),
-        outputSchema: z.object({ apiKey: z.string(), forecast: z.string() }),
-      },
-      async () => ({ apiKey: 'tool-secret', forecast: 'Sunny' })
-    )
-    ai.defineModel({ name: 'fake/forecast-model', supports: { tools: true } }, async (request) =>
-      request.messages.at(-1)?.role !== 'tool'
-        ? {
-            message: {
-              role: 'model',
-              content: [{ toolRequest: { name: 'getForecast', ref: 'call_1', input: { city: 'Paris' } } }],
-            },
-          }
-        : { message: { role: 'model', content: [{ text: 'Sunny.' }] } }
-    )
+    ai.defineModel({ name: 'fake/echo-model' }, async () => ({ message: { role: 'model', content: [{ text: 'Hi' }] } }))
 
-    await ai.generate({ model: 'fake/forecast-model', prompt: 'Forecast for Paris?', tools: [getForecast] })
+    await ai.generate({ model: 'fake/echo-model', prompt: `${'['.repeat(50000)}{"token":"x"}${']'.repeat(50000)}` })
 
-    const events = capturedEvents(client)
-    expect(JSON.stringify(events)).not.toContain('tool-secret')
-    const followUp = events.filter((event) => event.event === '$ai_generation').at(-1)
-    const input = JSON.stringify(followUp.properties.$ai_input)
-    expect(input).toContain('Sunny')
-    expect(input).toContain('[REDACTED]')
+    expect(capturedEvents(client).some((event) => event.event === '$ai_generation')).toBe(true)
   })
 
   it.each([

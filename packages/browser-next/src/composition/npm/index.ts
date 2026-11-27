@@ -1,27 +1,26 @@
 import type { IPostHog, PostHogOptions } from '../../core/types'
 import { createPostHogCore } from '../../core/posthog'
+import { createAnalyticsDelivery } from '../../products/analytics/delivery/analytics-delivery'
 import { createProductComposition } from './root-composition'
 
-/** Creates a browser host with on-demand first-party analytics acquisition. */
+/** Creates the browser client with durable delivery and on-demand products. */
 export const createPostHog = async (options: PostHogOptions): Promise<IPostHog> => {
     const { extensions, loaders, automatic, loadingErrors } = createProductComposition(options)
-    const client = await createPostHogCore(options, extensions, loaders, automatic)
+    const client = await createPostHogCore(options, createAnalyticsDelivery, extensions, loaders, automatic)
     for (const [label, error] of loadingErrors.reverse()) {
         client.logger.error(`Automatic ${label} loading failed`, error)
     }
     return client
 }
 
-export type { IAnalytics } from '../../products/analytics/analytics-api'
 export { version } from '../../primitives/version'
 export { FeatureFlagsExtension, type FeatureFlags } from '../../products/flags/flags-token'
-export type { IPostHogInternal, BrowserExtension, IdentifyInfo, GroupInfo } from '../../core/context/browser-client'
+export type { BrowserExtension, IdentifyInfo, GroupInfo } from '../../core/context/browser-client'
 export type {
-    AnalyticsConfiguration,
     AnalyticsOptions,
     ApiResponse,
-    AutomaticAnalyticsOptions,
     BrowserFetch,
+    BootstrapOptions,
     BrowserNavigator,
     CaptureOptions,
     CaptureOutcome,
@@ -29,22 +28,28 @@ export type {
     CaptureSummary,
     CorePostHogOptions,
     Disposable,
+    ExplicitConsentStatus,
     Extension,
-    LoadStrategy,
     NewSessionInfo,
     NewSessionReason,
     IPostHog,
     PostHogOptions,
     RemoteConfig,
+    ResetOptions,
+    RuntimeOptions,
     SendRequestInit,
     SessionContext,
     StorageLike,
 } from '../../core/types'
 
 export type {
+    EarlyAccessFeature,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     FlagsOptions,
     FlagsConfiguration,
     FlagsCallback,
+    FlagsReadOptions,
     FeatureFlagResult,
     FeatureFlagsReloadResult,
 } from '../../products/flags/flags-options'

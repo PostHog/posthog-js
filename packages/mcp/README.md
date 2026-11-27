@@ -22,6 +22,13 @@ stable with no server-side store.
 The SDK publishes no standalone `$identify` event. The `identify` callback runs on every request,
 on any pod, and stamps `distinct_id` and `$set` onto each event it sends.
 
+A custom event from `analytics.capture()` takes the session and identity of the request it
+was captured in, even when requests overlap on one instance. That needs `AsyncLocalStorage`,
+which Node, Bun, Deno, Vercel Edge and Cloudflare Workers with the `nodejs_compat` or
+`nodejs_als` flag provide. Without it the SDK cannot tell requests apart, so it sends custom
+events with a session of their own and no identity rather than another caller's, and logs one
+warning.
+
 ### Streamable HTTP: set `enableJsonResponse: true`
 
 The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`
@@ -65,6 +72,45 @@ if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
 ```
 
 Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
+
+### Flushing on per-request runtimes
+
+Auto-captured events reach `posthog.capture()` asynchronously, after the handler's response is
+built. On a runtime that freezes or exits after each request (serverless and edge functions,
+Convex HTTP actions), await `analytics.flush()` before you return. It waits until every event the
+server has captured so far is handed to `posthog-node`, then flushes the `posthog-node` queue:
+
+```ts
+const analytics = instrument(server, posthog)
+
+const response = await handleRequest(request)
+await analytics.flush()
+return response
+```
+
+On a runtime with background work, such as Cloudflare Workers or Vercel, pass it to `waitUntil`
+so the response doesn't wait: `ctx.waitUntil(analytics.flush())`.
+
+An event is captured when its handler finishes. A JSON response is complete by then, but a streamed
+(SSE) one is returned before the handler has run, so there `flush()` has nothing to wait for yet.
+Return JSON (`enableJsonResponse: true`), or flush when the stream ends:
+
+```ts
+const response = await handleRequest(request)
+if (!response.body) {
+  await analytics.flush()
+  return response
+}
+const { readable, writable } = new TransformStream()
+const sent = response.body.pipeTo(writable).catch(() => undefined) // the client may disconnect
+ctx.waitUntil(sent.then(() => analytics.flush()))
+return new Response(readable, response)
+```
+
+It flushes the whole client, so events you capture on it yourself are sent too. It never rejects.
+When `posthog.flush()` does, that goes to the `logger` option. posthog-node 6.x.x reports failed
+deliveries through `posthog.on('error', ...)` instead. Which failed events are retried is up to
+`posthog-node`.
 
 ## MCP TypeScript SDK v2
 
@@ -254,6 +300,14 @@ On fresh low-level instances, tools with an `outputSchema` deliver new handles t
 
 A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
 
+Some MCP clients name the conversation in each tool call's `params._meta`: ChatGPT's
+`openai/session`, Codex's `sessionId`, and VS Code's `vscode.conversationId`. The SDK reads each key
+only from a request whose `User-Agent` or client name identifies that client, and derives
+`$session_id` from it ahead of any conversation handle or transport session. ChatGPT sends its id on
+every call, so its `tools/list` has no `conversation_id` argument and its results get no handle, even
+with `enableConversationId` on. Each event records which source grouped it in `$mcp_session_source`:
+`client_metadata`, `conversation`, `transport`, or `generated`.
+
 Intent, model capture, conversation correlation, exception capture, and `$mcp_initialize` are
 enabled by default. Missing-capability reporting and feedback collection remain disabled.
 
@@ -401,9 +455,11 @@ return preparedResult.result
 ```
 
 A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
-Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
-without changing the arguments sent to the tool. Pass an existing transport or request session as
-`sessionId`. A valid echoed conversation handle takes precedence. Otherwise, the existing session
+Pass `requestMeta` whenever the request supplies `_meta`, and `headers` (plus `clientInfo` from a
+handshake bound to the request, if you hold one) so the SDK can recognize the client; this enables
+recognized client metadata and client conversation ids without changing the arguments sent to the
+tool. Pass the same `headers` to `prepareToolList`. Pass an existing transport or request session as
+`sessionId`. A client conversation id or a valid echoed conversation handle takes precedence. Otherwise, the existing session
 prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.
 

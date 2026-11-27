@@ -1061,10 +1061,120 @@ describe('emails', () => {
         code: 'missing_react_renderer',
         message:
           "react needs the @react-email/render package, which isn't installed or failed to load, so no email was sent.",
-        fix: 'Install @react-email/render with react and react-dom next to posthog-node, or render the email yourself and send html.',
+        fix: "Install @react-email/render with react and react-dom next to posthog-node. If you bundle your app, also pass the client reactEmailRenderer: await import('@react-email/render'). Or render the email yourself and send html.",
         cause: expect.any(Error),
       })
       expect(inbox).toEqual([])
+    })
+
+    it('renders with a custom reactEmailRenderer wrapper', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      makeClient({
+        reactEmailRenderer: {
+          render: (element) => render(element, { pretty: true }),
+          toPlainText,
+        },
+      })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('\n'),
+          text: 'Welcome, Ada',
+        }),
+      ])
+      expect(inbox[0].html).toContain('<p>Welcome, Ada</p>')
+    })
+
+    it('renders with the @react-email/render module passed as reactEmailRenderer', async () => {
+      const reactEmailRenderer = await import('@react-email/render')
+      makeClient({ reactEmailRenderer })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
+      ])
+    })
+
+    it('renders with reactEmailRenderer after send() returns, not synchronously', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      let renderedSynchronously = false
+      makeClient({
+        reactEmailRenderer: {
+          render: (element) => {
+            renderedSynchronously = true
+            return render(element)
+          },
+          toPlainText,
+        },
+      })
+
+      const pending = sendReact({ react: welcome })
+      expect(renderedSynchronously).toBe(false)
+
+      const { error } = await pending
+      expect(error).toBeNull()
+      expect(renderedSynchronously).toBe(true)
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.render resolves to a non-string even with text supplied', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => undefined as unknown as string,
+          toPlainText: (html) => html,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome, text: 'Fallback text' })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('reports react_render_failed when reactEmailRenderer.toPlainText returns a non-string', async () => {
+      makeClient({
+        reactEmailRenderer: {
+          render: async () => '<p>Welcome, Ada</p>',
+          toPlainText: () => undefined as unknown as string,
+        },
+      })
+
+      const { data, error } = await sendReact({ react: welcome })
+
+      expect(data).toBeNull()
+      expect(error).toMatchObject({
+        code: 'react_render_failed',
+        message: 'Rendering the react element failed, so no email was sent.',
+      })
+      expect(inbox).toEqual([])
+    })
+
+    it('renders with a thenable reactEmailRenderer object without invoking its then method', async () => {
+      const { render, toPlainText } = await import('@react-email/render')
+      makeClient({
+        reactEmailRenderer: {
+          render,
+          toPlainText,
+          then() {
+            throw new Error('renderer object must not be awaited')
+          },
+        } as unknown as Parameters<typeof makeClient>[0]['reactEmailRenderer'],
+      })
+
+      const { error } = await sendReact({ react: welcome })
+
+      expect(error).toBeNull()
+      expect(inbox).toEqual([
+        expect.objectContaining({ html: expect.stringContaining('<p>Welcome, Ada</p>'), text: 'Welcome, Ada' }),
+      ])
     })
 
     it('sends html without loading @react-email/render', async () => {
