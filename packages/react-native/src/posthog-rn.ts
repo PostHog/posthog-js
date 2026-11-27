@@ -1275,13 +1275,15 @@ export class PostHog extends PostHogCoreBase {
   ): V1CaptureSender {
     // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them.
     const warnedStatuses = new Set<number>()
-    const url = `${this.host.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i, '$1')}${path}`
+    // Only the scheme and host:port, so credentials in the host's userinfo, path or query never reach the console.
+    const origin = this.host.match(/^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#@]*)/i)
+    const endpoint = origin ? `${path} on ${origin[1]}${origin[2]}` : path
     const warnOnStatus = (status: number): void => {
       const warning =
         status === 404
-          ? `${url} returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves ${path}.`
+          ? `${endpoint} returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves ${path}.`
           : status === 401
-            ? `${url} returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.`
+            ? `${endpoint} returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.`
             : undefined
       if (warning === undefined || warnedStatuses.has(status)) {
         return

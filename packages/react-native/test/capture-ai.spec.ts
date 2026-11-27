@@ -942,7 +942,7 @@ describe('React Native captureAi', () => {
     expect(requests.filter((r) => r.path === AI_PATH)).toHaveLength(2)
     expect(warn.mock.calls).toEqual([
       [
-        '[PostHog] https://us.i.posthog.com/i/v1/ai/events returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/ai/events.',
+        '[PostHog] /i/v1/ai/events on https://us.i.posthog.com returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/ai/events.',
       ],
     ])
   })

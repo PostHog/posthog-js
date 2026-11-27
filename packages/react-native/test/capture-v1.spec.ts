@@ -139,39 +139,41 @@ describe('React Native capture v1 delivery', () => {
     expect(sentEvents()).toEqual([['kept'], ['kept'], ['kept'], ['dropped']])
     expect(warn.mock.calls).toEqual([
       [
-        '[PostHog] https://us.i.posthog.com/i/v1/analytics/events returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/analytics/events.',
+        '[PostHog] /i/v1/analytics/events on https://us.i.posthog.com returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/analytics/events.',
       ],
       [
-        '[PostHog] https://us.i.posthog.com/i/v1/analytics/events returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.',
+        '[PostHog] /i/v1/analytics/events on https://us.i.posthog.com returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.',
       ],
     ])
   })
 
-  it.each(['https://user:secret@proxy.example.com', 'https://user:sec@ret@proxy.example.com'])(
-    'leaves credentials in the host %s out of the 404 warning',
-    async (host) => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const client = new PostHog('test-token', {
-        host,
-        persistence: 'memory',
-        flushInterval: 0,
-        preloadFeatureFlags: false,
-        disableCompression: true,
-        captureAppLifecycleEvents: false,
-      })
-      await client.ready()
-      respond = () => ({ status: 404 })
-      client.capture('kept')
-      await client.flush()
-      ;(client as any)._captureResendAt = 0
-      await client.shutdown()
+  it.each([
+    'https://user:secret@proxy.example.com',
+    'https://user:sec@ret@proxy.example.com',
+    'https://me@corp.com:secret@proxy.example.com',
+    'https://proxy.example.com/ingest/secret?token=secret#secret',
+  ])('leaves credentials in the host %s out of the 404 warning', async (host) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const client = new PostHog('test-token', {
+      host,
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      disableCompression: true,
+      captureAppLifecycleEvents: false,
+    })
+    await client.ready()
+    respond = () => ({ status: 404 })
+    client.capture('kept')
+    await client.flush()
+    ;(client as any)._captureResendAt = 0
+    await client.shutdown()
 
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringMatching(/^\[PostHog\] https:\/\/proxy\.example\.com\/i\/v1\/analytics\/events returned 404/)
-      )
-      expect(warn.mock.calls.flat().join()).not.toMatch(/sec|ret@/)
-    }
-  )
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[PostHog\] \/i\/v1\/analytics\/events on https:\/\/proxy\.example\.com returned 404/)
+    )
+    expect(warn.mock.calls.flat().join()).not.toMatch(/sec|ret@|corp|ingest/)
+  })
 
   it('halves a batch whose request timed out, and resends the halves as new requests', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
