@@ -402,9 +402,7 @@ export class SessionReplayTriggerGroupsEvaluator {
   // A groups load checks the $screen event of this session again, whatever a live check found: the
   // groups or the person properties can differ by now.
   checkScreenOnGroupsLoad(sessionId: string, personProperties: Record<string, unknown> | undefined): boolean {
-    if (sessionId !== this.lastScreenSessionId) {
-      return this.checkScreenOnNewSession(sessionId, personProperties)
-    }
+    this.screenCheckedSessionId = sessionId
     return this.checkLastScreen(sessionId, personProperties)
   }
 

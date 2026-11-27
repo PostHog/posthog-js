@@ -767,6 +767,127 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       expect(replay.start).not.toHaveBeenCalled()
     })
 
+    it('keeps a start the groups sampled out, and starts it once a later config raises the rate', async () => {
+      currentSessionRecording = v2Config([
+        { id: 'g1', name: 'No one', sampleRate: 0, conditions: { matchType: 'all' } },
+      ])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => true)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.startSessionRecording()
+      await wait(100)
+      expect(replay.startRecording).not.toHaveBeenCalled()
+      expect(replay.start).not.toHaveBeenCalled()
+
+      currentSessionRecording = v2Config([
+        { id: 'g1', name: 'Everyone', sampleRate: 1, conditions: { matchType: 'all' } },
+      ])
+      await posthog.reloadFeatureFlagsAsync()
+      await waitForExpect(2000, () =>
+        expect(replay.startRecording.mock.calls.length + replay.start.mock.calls.length).toBeGreaterThan(0)
+      )
+    })
+
+    it.each([true, false])(
+      'does not re-evaluate on every matching event once the group sampled the session out (enableSessionReplay=%s)',
+      async (enabled) => {
+        currentSessionRecording = v2Config([
+          { id: 'g1', name: 'None', sampleRate: 0, conditions: { matchType: 'any', events: [{ name: 'purchase' }] } },
+        ])
+        await warmup()
+        replay.isEnabled.mockImplementation(async () => true)
+
+        posthog = newPostHog({ enableSessionReplay: enabled })
+        await posthog.ready()
+        await wait(50)
+        await posthog.startSessionRecording()
+        await wait(50)
+        replay.stopRecording.mockClear()
+        const evaluate = vi.spyOn(posthog as any, '_evaluateAndStartSessionReplay')
+
+        for (let i = 0; i < 5; i++) {
+          posthog.capture('purchase')
+          await wait(50)
+          await waitForNativePluginEvaluation(posthog)
+        }
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(replay.stopRecording.mock.calls.length).toBeLessThanOrEqual(1)
+        expect(evaluate.mock.calls.length).toBeLessThanOrEqual(1)
+      }
+    )
+
+    it('stops an initialized native once, not on every matching event, when a new manual session samples out', async () => {
+      const group = {
+        id: 'g1',
+        name: 'Half',
+        sampleRate: 0.5,
+        conditions: { matchType: 'any', events: [{ name: 'purchase' }] },
+      }
+      currentSessionRecording = v2Config([group])
+      await warmup()
+      const inId = sessionIdSampled('g1', 0.5, true)
+      const outId = sessionIdSampled('g1', 0.5, false)
+      const uuid = vi.spyOn(uuidModule, 'uuidv7').mockReturnValue(inId)
+      try {
+        replay.isEnabled.mockImplementation(async () => true)
+        posthog = newPostHog({ enableSessionReplay: false })
+        await posthog.ready()
+        await posthog.startSessionRecording()
+        posthog.capture('purchase')
+        await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+
+        uuid.mockReturnValue(outId)
+        await posthog.startSessionRecording(false)
+        await wait(50)
+        replay.stopRecording.mockClear()
+        replay.startRecording.mockClear()
+        const evaluate = vi.spyOn(posthog as any, '_evaluateAndStartSessionReplay')
+
+        for (let i = 0; i < 5; i++) {
+          posthog.capture('purchase')
+          await wait(50)
+          await waitForNativePluginEvaluation(posthog)
+        }
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(replay.stopRecording.mock.calls.length).toBeLessThanOrEqual(1)
+        expect(evaluate.mock.calls.length).toBeLessThanOrEqual(1)
+      } finally {
+        uuid.mockRestore()
+      }
+    })
+
+    it('retries a start native refused, after the timer retries are spent, on a matching event', async () => {
+      currentSessionRecording = v2Config([purchaseGroup])
+      await warmup()
+      replay.isEnabled.mockImplementation(async () => false)
+
+      posthog = newPostHog({ enableSessionReplay: false })
+      await posthog.ready()
+      await posthog.startSessionRecording()
+      expect(replay.startRecording).not.toHaveBeenCalled()
+
+      posthog.capture('purchase')
+      await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalled())
+      await waitForNativePluginEvaluation(posthog)
+
+      // Exhaust the 1s..16s retry budget without waiting 31s.
+      const request = (posthog as any)._manualRecordingStartRequest
+      expect(request?.pending).toBe(true)
+      clearTimeout(request.timer)
+      request.timer = undefined
+      request.retryCount = 5
+      replay.startRecording.mockClear()
+
+      replay.isEnabled.mockImplementation(async () => true)
+      posthog.capture('purchase')
+      await wait(300)
+      await waitForNativePluginEvaluation(posthog)
+      expect(replay.startRecording).toHaveBeenCalled()
+    })
+
     it('records when a group already records the session', async () => {
       currentSessionRecording = v2Config([
         purchaseGroup,
@@ -1030,6 +1151,24 @@ describe('PostHog RN session replay v2 trigger groups', () => {
         expect(activation()).toBeFalsy()
         expect(startsCount()).toBe(1)
       })
+
+      it('checks the remembered screen on the next start when a groups reload came while stopped', async () => {
+        currentSessionRecording = v2Config([{ ...checkoutGroup(), id: 'g1' }])
+        await reloadFlags({})
+        await posthog.stopSessionRecording()
+        const sessionId = posthog.getSessionId()
+        await posthog.screen('checkout-step-2')
+        await wait(50)
+        const before = startsCount()
+
+        await reloadFlags({})
+        expect(startsCount()).toBe(before)
+        expect(activation()).toBeFalsy()
+
+        await posthog.startSessionRecording()
+        expect(activation()).toEqual({ sessionId, eventGroupIds: [], screenGroupIds: ['g1'] })
+        expect(startsCount()).toBe(before + 1)
+      })
     })
   })
 
@@ -1074,6 +1213,44 @@ describe('PostHog RN session replay v2 trigger groups', () => {
       uuid.mockRestore()
     }
   })
+
+  it.each([true, false])(
+    'stops native when a new manual session samples out (enableSessionReplay=%s)',
+    async (enabled) => {
+      currentSessionRecording = v2Config([
+        { id: 'g1', name: 'Half', sampleRate: 0.5, conditions: { matchType: 'all' } },
+      ])
+      await warmup()
+
+      const inId = sessionIdSampled('g1', 0.5, true)
+      const outId = sessionIdSampled('g1', 0.5, false)
+      const uuid = vi.spyOn(uuidModule, 'uuidv7').mockReturnValue(inId)
+      try {
+        replay.isEnabled.mockImplementation(async () => true)
+        posthog = newPostHog({
+          enableSessionReplay: enabled,
+          preloadFeatureFlags: false,
+          capturePushNotificationSubscriptions: false,
+          capturePushNotificationOpened: false,
+          errorTracking: { autocapture: false },
+        })
+        await posthog.ready()
+        await wait(50)
+        await posthog.startSessionRecording()
+        expect(posthog.getSessionId()).toBe(inId)
+        expect(replay.startRecording).toHaveBeenCalled()
+        replay.stopRecording.mockClear()
+
+        uuid.mockReturnValue(outId)
+        await posthog.startSessionRecording(false)
+        await wait(100)
+        expect(posthog.getSessionId()).toBe(outId)
+        expect(replay.stopRecording).toHaveBeenCalled()
+      } finally {
+        uuid.mockRestore()
+      }
+    }
+  )
 
   const configOnlyFetch = (configResponses: any[]): string[] => {
     const requests: string[] = []
@@ -1970,6 +2147,43 @@ describe('PostHog RN session replay v2 trigger groups', () => {
           expect(nativeRecording).toBe(true)
         })
       })
+    })
+
+    it('does not restart native from the old client timer after a replacement client stops recording', async () => {
+      currentSessionRecording = v2Config([flagGroup])
+      currentFlags = { 'replay-flag': false }
+      await warmup()
+      replay.startRecording.mockClear()
+
+      const first = newPostHog(replayOnlyOptions)
+      let second: PostHog | undefined
+      try {
+        await first.ready()
+        await settle()
+
+        vi.useFakeTimers()
+        nativeAccepts = false
+        currentFlags = { 'replay-flag': true }
+        await first.reloadFeatureFlagsAsync()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(replay.startRecording).toHaveBeenCalledTimes(1)
+
+        second = newPostHog(replayOnlyOptions)
+        await second.ready()
+        await vi.advanceTimersByTimeAsync(100)
+        await second.stopSessionRecording()
+        await vi.advanceTimersByTimeAsync(100)
+        replay.startRecording.mockClear()
+        nativeAccepts = true
+
+        await vi.advanceTimersByTimeAsync(130000)
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(nativeRecording).toBe(false)
+      } finally {
+        vi.useRealTimers()
+        await first.shutdown()
+        posthog = second ?? first
+      }
     })
   })
 })

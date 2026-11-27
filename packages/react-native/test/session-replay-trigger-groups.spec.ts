@@ -899,6 +899,16 @@ describe('SessionReplayTriggerGroupsEvaluator', () => {
       expect(evaluator.checkScreenOnGroupsLoad('s1', { plan: 'free' })).toBe(false)
       expect(evaluator.checkScreenOnStart('s1', { plan: 'pro' })).toBe(false)
     })
+
+    it('checks a reloaded group against the remembered screen of an earlier session', () => {
+      const evaluator = new SessionReplayTriggerGroupsEvaluator()
+      evaluator.onConfig([group({ conditions: conditions({ urls: [/Settings/] }) })])
+      evaluator.rememberScreen('s1', '$screen', { $screen_name: 'Checkout' })
+      expect(evaluator.checkScreenOnNewSession('s2', undefined)).toBe(false)
+
+      evaluator.onConfig([group({ conditions: conditions({ urls: [/Checkout/] }) })])
+      expect(evaluator.checkScreenOnGroupsLoad('s2', undefined)).toBe(true)
+    })
   })
 
   it('restores persisted activation only for its own session and tolerates malformed storage', () => {

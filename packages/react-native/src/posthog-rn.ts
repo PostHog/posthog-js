@@ -172,6 +172,9 @@ type ManualRecordingStartRequest = {
   awaitEventTrigger?: boolean
   // Set while no replay config has loaded yet; the load that brings it retries the start.
   awaitReplayConfig?: boolean
+  // Set while the trigger groups hold the start (pending or sampled out): only a newly activated
+  // group can change that, so a repeat matching event must not re-evaluate it.
+  heldByGroups?: boolean
 }
 
 export interface PostHogOptions extends PostHogCoreOptions {
@@ -2324,14 +2327,13 @@ export class PostHog extends PostHogCore {
       return false
     }
     if (groupsDecision && !groupsDecision.shouldRecord) {
-      if (groupsDecision.hasPendingGroups) {
-        request.pending = true
-        // Native optIn() restarts the recorder by itself.
-        if (this._sessionReplayNativeInitialized) {
-          await this._stopSessionRecording()
-        }
-      } else {
-        this._cancelManualRecordingStart()
+      // Pending or sampled out, the request stays until the app stops it: a later flags or config load
+      // re-evaluates it.
+      request.pending = true
+      request.heldByGroups = true
+      // Native optIn() restarts the recorder by itself.
+      if (this._sessionReplayNativeInitialized) {
+        await this._stopSessionRecording()
       }
       // Lowering the minimum while recording would release the held buffer, so only after the stop.
       await this._syncNativeMinimumDuration(groupsDecision)
@@ -2340,6 +2342,7 @@ export class PostHog extends PostHogCore {
     if (groupsDecision) {
       await this._syncNativeMinimumDuration(groupsDecision)
     }
+    request.heldByGroups = false
     this._sessionReplayStartedByApp = true
 
     const started = await this._startSessionRecording(request.resumeCurrent)
@@ -2478,7 +2481,7 @@ export class PostHog extends PostHogCore {
 
   // Shared start path. Also called by the flags-driven evaluation, which runs inside
   // _sessionReplayEvalChain and so must not re-enter it.
-  private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
+  private async _startSessionRecording(resumeCurrent: boolean, automatic = false): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
@@ -2515,6 +2518,11 @@ export class PostHog extends PostHogCore {
         this._rotateReplaySession()
         // An explicit start into a new session is its own decision: don't re-evaluate it as a rotation.
         this._replayEvaluatedSessionId = this._currentSessionId
+      }
+
+      // Another client may have taken native ownership while init awaited. Only an app's own start takes it.
+      if (automatic && !this._isNativeSessionOwner()) {
+        return false
       }
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
@@ -4022,7 +4030,7 @@ export class PostHog extends PostHogCore {
       // Record the actual outcome; on failure it stays false so the next reload retries.
       // (Already initialized means replay was paused by an earlier flag-off, so resume it.)
       if (this._sessionReplayNativeInitialized) {
-        this._sessionReplayRecordingActive = await this._startSessionRecording(true)
+        this._sessionReplayRecordingActive = await this._startSessionRecording(true, true)
       } else {
         // setup() leaves native replay off under trigger groups, so start it explicitly.
         const startAfterSetup =
@@ -4031,7 +4039,7 @@ export class PostHog extends PostHogCore {
           !this._isNativePluginInitialized()
         const initialized = await this.initializeNativePlugin(options, remoteConfig, true)
         this._sessionReplayRecordingActive =
-          initialized && startAfterSetup ? await this._startSessionRecording(true) : initialized
+          initialized && startAfterSetup ? await this._startSessionRecording(true, true) : initialized
       }
       this._sessionReplayStartFailed = this._sessionReplayRecordingActive !== true
       if (this._sessionReplayStartFailed && this._sessionReplayTriggerGroups !== null) {
@@ -4123,6 +4131,10 @@ export class PostHog extends PostHogCore {
     retry.timer = safeSetTimeout(() => {
       retry.timer = undefined
       if (this._triggerGroupsStartRetry === retry && !this._isShutDown) {
+        if (!this._isNativeSessionOwner()) {
+          this._cancelTriggerGroupsStartRetry()
+          return
+        }
         retry.attempts++
         void this._evaluateAndStartSessionReplay()
       }
@@ -4380,12 +4392,18 @@ export class PostHog extends PostHogCore {
         PostHogPersistedProperty.SessionReplayTriggerGroupsActivation,
         this._triggerGroupsEvaluator.getActivation()
       )
-    } else if (!this._sessionReplayStartFailed) {
+    } else if (!this._sessionReplayStartFailed && !this._isManualStartRetryable()) {
       // Nothing changed: recording is already on, or off for a reason another match can't fix
-      // (the group sampled out, another leg pending). Only a failed native start is worth retrying.
+      // (the group sampled out, another leg pending). Only a start native refused, automatic or
+      // manual, is worth retrying.
       return
     }
     void this._evaluateAndStartSessionReplay()
+  }
+
+  private _isManualStartRetryable(): boolean {
+    const request = this._manualRecordingStartRequest
+    return !!request?.pending && !request.heldByGroups
   }
 
   // Runs where recording is decided for a session, with the session id read there, so the screen
