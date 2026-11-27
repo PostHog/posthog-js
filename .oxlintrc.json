@@ -427,6 +427,7 @@
         "packages/react-native/src/tooling/**",
         "packages/web/src/version.ts",
         "packages/browser/**/test_fixtures/**",
-        "packages/convex/src/component/_generated/**"
+        "packages/convex/src/component/_generated/**",
+        "packages/convex/src/events-only/_generated/**"
     ]
 }
