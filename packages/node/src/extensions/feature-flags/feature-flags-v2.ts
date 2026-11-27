@@ -255,7 +255,8 @@ export type ConfigV2 = {
  *
  * - `identifier`: the person's resolved targeting key, as a string.
  * - `properties`: the person properties, or `null` when there are none to read. A key whose value
- *   is `undefined` is absent, as it is from the JSON a remote request sends.
+ *   is `undefined`, a function or a symbol is absent, as it is from the JSON a remote request
+ *   sends.
  * - `propertiesComplete`: whether `properties` holds every property of the person. A complete map
  *   shows that a property is absent. A partial map does not, so a filter on a key it lacks is
  *   inconclusive.
@@ -862,8 +863,7 @@ function matches(predicate: Predicate, context: ConfigV2Context): boolean {
   if (properties === null || properties === undefined) {
     throw unusableContext('No person properties were passed')
   }
-  // An undefined value is left out of JSON, so it is absent.
-  const present = hasOwn(properties, predicate.key) && properties[predicate.key] !== undefined
+  const present = hasOwn(properties, predicate.key) && isKeptByJson(properties[predicate.key])
   if (!present && !context.propertiesComplete) {
     throw unusableContext(`The person property '${predicate.key}' was not passed`)
   }
@@ -878,6 +878,11 @@ function matches(predicate: Predicate, context: ConfigV2Context): boolean {
   }
   const matched = matchOperator(predicate, present, present ? properties[predicate.key] : undefined, context)
   return matched !== predicate.negation
+}
+
+/** Whether JSON keeps an object member with this value. It leaves out `undefined`, functions and symbols. */
+function isKeptByJson(value: unknown): boolean {
+  return value !== undefined && typeof value !== 'function' && typeof value !== 'symbol'
 }
 
 function matchOperator(predicate: Predicate, present: boolean, value: unknown, context: ConfigV2Context): boolean {

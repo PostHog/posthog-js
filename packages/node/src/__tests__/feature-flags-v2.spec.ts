@@ -674,14 +674,18 @@ describe('the config version 2 evaluator, beyond the corpora', () => {
     })
   })
 
-  it('reads an undefined property value as absent, as JSON does', async () => {
+  it.each([
+    ['undefined', undefined],
+    ['a function', (): string => 'pro'],
+    ['a symbol', Symbol('pro')],
+  ])('reads a property value that is %s as absent, as JSON does', async (_name, value) => {
     const document = filters([targeted([person('plan', 'is_set', null)])])
 
-    expect(await evaluate(document, { plan: undefined }, { complete: false })).toMatchObject({
+    expect(await evaluate(document, { plan: value }, { complete: false })).toMatchObject({
       outcome: 'inconclusive',
       reason: 'missing_context',
     })
-    expect(await evaluate(document, { plan: undefined })).toMatchObject({ reason: 'no_rule_match' })
+    expect(await evaluate(document, { plan: value })).toMatchObject({ reason: 'no_rule_match' })
   })
 
   it('reads no properties as a missing context', async () => {
