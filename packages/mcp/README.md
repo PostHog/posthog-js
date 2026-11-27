@@ -336,6 +336,45 @@ instrument(server, posthog, { sendInitializeEvent: false })
 Set `sendToolsListEvent: false` to stop sending `$mcp_tools_list`. Nothing else changes: tools keep
 their injected arguments, and the virtual tools stay listed.
 
+### Capturing metadata without tool content
+
+To record tool usage while keeping argument values, tool results, and error
+messages on your MCP server, disable each content channel explicitly:
+
+```ts
+instrument(server, posthog, {
+  captureParameters: false,
+  captureResponse: false,
+  captureErrorMessages: false,
+})
+```
+
+The three options default to `true` for existing integrations and can be set
+independently. They apply to both `instrument(server, posthog, options)` and the
+custom dispatcher `new PostHogMCP(apiKey, options)`. Disabled fields are omitted
+by the **shared outbound MCP event sink**, before analytics sanitisation,
+truncation and `beforeSend`; they are not merely redacted at delivery time.
+
+`captureErrorMessages: false` also omits the separate `$exception` event,
+because its stack and exception list can contain the same original message.
+It also omits a **failed tool's** `$mcp_response` even if `captureResponse` is
+still enabled: error results often echo the error message. Successful responses
+remain independently configurable. Tool names, permitted input-key names,
+duration, structured error categories and HTTP status remain available.
+Only recognised error classes and categories (such as `TypeError` and
+`validation`) are retained when message capture is off. All unrecognised
+error types become `Error`, including private values that happen to look like
+valid identifiers.
+
+These options are **not** a general privacy shutdown. `$mcp_intent` from a
+`context` argument, feedback from an explicitly enabled `collectFeedback`
+virtual tool, identified users, and host-supplied `eventProperties` or custom
+`capture()` payloads can contain user data. Configure those channels separately
+(`context: false`, disable intent inference/feedback, and avoid sensitive custom
+properties). If even argument **names** are sensitive, configure
+`shouldRecordInputKey` separately. These analytics settings never alter the
+actual tool arguments or responses delivered to the MCP client.
+
 ### Identifying the deployed server build
 
 MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable

@@ -6,7 +6,7 @@
 import type { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
-import type { BeforeSendFn, Event, McpEvent } from '../types'
+import type { BeforeSendFn, Event, McpEvent, MCPAnalyticsOptions } from '../types'
 import { clientOptionFields, hasPersonlessDefault, settlePersonProcessing } from './event-options'
 import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
@@ -15,14 +15,81 @@ import { sanitizeEvent } from './sanitization'
 import { truncateEvent } from './truncation'
 
 /** Per-event toggles consulted by the sink when fanning out an event. */
-export interface McpCaptureOptions {
+export interface McpCaptureOptions extends Pick<
+  MCPAnalyticsOptions,
+  'captureParameters' | 'captureResponse' | 'captureErrorMessages'
+> {
   enableExceptionAutocapture: boolean
   /** Inspect/modify/drop hook applied to each fanned-out payload before capture. */
   beforeSend?: BeforeSendFn
 }
 
+// A shape-only check is insufficient: an arbitrary customer identifier can
+// have the syntax of an Error name. Keep only recognised classes/categories
+// when the caller has explicitly disabled raw exception data.
+const SAFE_ERROR_TYPES = new Set([
+  'Error',
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'AggregateError',
+  'AbortError',
+  'TimeoutError',
+  'NetworkError',
+  'ValidationError',
+  'McpError',
+  'MCPError',
+  'HTTPError',
+  'HttpError',
+  'validation',
+  'rate_limited',
+])
+
+function safeErrorType(event: McpEvent): string | undefined {
+  const type = event.errorType ?? event.error?.$exception_list?.[0]?.type
+  if (type === undefined || type === null) {
+    return undefined
+  }
+  // Unknown names (including private data disguised as identifiers) are not
+  // trustworthy metadata. Map them to a generic, non-sensitive category.
+  return typeof type === 'string' && SAFE_ERROR_TYPES.has(type) ? type : 'Error'
+}
+
 /**
- * Runs an MCP event through the full transform: sanitize → truncate → fan out
+ * Enforce content exclusions at the single outbound MCP analytics boundary.
+ * Both instrument() and the custom PostHogMCP dispatcher use this sink.
+ * Suppress failed tool results alongside exception details: a failed result
+ * commonly repeats the same sensitive message in its content text.
+ *
+ * Custom event properties (including explicit host-defined properties) remain
+ * host-owned, not part of these three built-in content channels.
+ */
+function omitCapturedContent(event: McpEvent, options: McpCaptureOptions): McpEvent {
+  const omitParameters = options.captureParameters === false
+  const omitErrors = options.captureErrorMessages === false
+  const omitResponse = options.captureResponse === false || (omitErrors && event.isError === true)
+  if (!omitParameters && !omitResponse && !omitErrors) {
+    return event
+  }
+
+  return {
+    ...event,
+    ...(omitParameters ? { parameters: undefined } : {}),
+    ...(omitResponse ? { response: undefined } : {}),
+    ...(omitErrors
+      ? {
+          error: undefined,
+          errorType: safeErrorType(event),
+        }
+      : {}),
+  }
+}
+
+/**
+ * Runs an MCP event through the full transform: content opt-outs → sanitize → truncate → fan out
  * into the `$mcp_*` / `$exception` capture payloads → `beforeSend` → settle
  * person processing into the `process_person_profile` option. Returns
  * `null` (and logs) if a transform stage throws, so the event is dropped rather
@@ -38,10 +105,13 @@ export async function processMcpEvent(
   options: McpCaptureOptions,
   logger: LoggerFn = log
 ): Promise<{ event: Event; captures: PostHogCaptureEvent[] } | null> {
+  // Drop opted-out values before either a sanitizer, callback, or fanned-out
+  // payload can observe them. Do not mutate the event held by the host.
+  // Treat a getter that throws on a malformed event like a sanitisation error.
   let processed: McpEvent = event
 
   try {
-    processed = sanitizeEvent(processed)
+    processed = sanitizeEvent(omitCapturedContent(event, options))
   } catch (err) {
     logger(`Failed to sanitize event: ${err}`)
     return null

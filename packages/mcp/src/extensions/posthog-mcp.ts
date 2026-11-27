@@ -54,7 +54,7 @@ import {
   resolveModel,
   setEventModel,
 } from './model-parameters'
-import { McpEventSink } from './sink'
+import { McpEventSink, type McpCaptureOptions } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import {
   deriveSessionIdFromConversation,
@@ -116,6 +116,12 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * results, and capture data unchanged.
    */
   enableConversationId?: boolean
+  /** Omit built-in tool arguments before sending analytics. Defaults to enabled. */
+  captureParameters?: MCPAnalyticsOptions['captureParameters']
+  /** Omit built-in tool results before sending analytics. Defaults to enabled. */
+  captureResponse?: MCPAnalyticsOptions['captureResponse']
+  /** Omit exception messages, stacks and failed-tool result bodies. Defaults to enabled. */
+  captureErrorMessages?: MCPAnalyticsOptions['captureErrorMessages']
 }
 
 interface PreparedConversationState {
@@ -181,6 +187,10 @@ export class PostHogMCP extends PostHog {
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #enableConversationId: boolean
   readonly #serverBuild: string | undefined
+  readonly #contentCaptureOptions: Pick<
+    McpCaptureOptions,
+    'captureParameters' | 'captureResponse' | 'captureErrorMessages'
+  >
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
   // Least recently used first. At most MAX_CONNECTIONS, so a dispatcher that never ends its connections stays bounded.
   readonly #connections = new Map<string, ConnectionClock & { sessionId: string }>()
@@ -201,6 +211,11 @@ export class PostHogMCP extends PostHog {
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
     this.#serverBuild = serverBuild
+    this.#contentCaptureOptions = {
+      captureParameters: options.captureParameters,
+      captureResponse: options.captureResponse,
+      captureErrorMessages: options.captureErrorMessages,
+    }
     applyMcpLibIdentity(this)
   }
 
@@ -668,7 +683,10 @@ export class PostHogMCP extends PostHog {
   #emit(event: McpEvent): void {
     event.serverBuild = this.#serverBuild
     void this.#sink
-      .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
+      .capture(event, {
+        enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true,
+        ...this.#contentCaptureOptions,
+      })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
   }
 
