@@ -69,7 +69,7 @@ Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'Po
 `@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later, Xcode 26 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md) for its own steps.
 
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
-An installed plugin older than 3.0 is ignored the same way, with a warning that asks you to upgrade it.
+With a plugin older than 3.0 installed, the SDK logs a warning that asks you to upgrade it.
 
 ## Removed options
 
