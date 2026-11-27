@@ -879,6 +879,30 @@ describe('React Native captureAi', () => {
     expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
   })
 
+  it('doubles the AI batch back after a timeout once batches are delivered again', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let slow = true
+    respond = (request) =>
+      slow && request.path === AI_PATH && request.body.batch.length > 1
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 20, captureAiRequestTimeoutMs: 20 })
+
+    for (let index = 0; index < 4; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await client.flush()
+    endResendWait(client)
+    slow = false
+    await client.flush()
+    for (let index = 0; index < 8; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([4, 2, 2, 8])
+  })
+
   it('moves a lone AI event that keeps timing out behind the queued events, and keeps it', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     respond = (request) =>
