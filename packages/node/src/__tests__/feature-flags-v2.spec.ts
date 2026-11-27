@@ -885,6 +885,31 @@ describe('the config version 2 evaluator, beyond the corpora', () => {
     expect(await match(operator, filterValue, propertyValue)).toBe('missing_context')
   })
 
+  const elapsedMilliseconds = (start: bigint): number => Number(process.hrtime.bigint() - start) / 1e6
+
+  // Many digits and then a character that ends the number. A pattern whose digit quantifiers
+  // overlap backtracks over this in quadratic time.
+  const LONG_DIGITS = '1'.repeat(100_000) + 'x'
+
+  it.each([
+    ['a person property', 'gt', 10, LONG_DIGITS, 'invalid_property'],
+    ['a filter value', 'gt', LONG_DIGITS, 6, 'invalid_property'],
+    ['a date property', 'is_date_after', '2025-06-15', LONG_DIGITS, 'missing_context'],
+  ])('reads a long run of digits in %s quickly', async (_name, operator, filterValue, propertyValue, expected) => {
+    const start = process.hrtime.bigint()
+
+    expect(await match(operator, filterValue, propertyValue)).toBe(expected)
+    expect(elapsedMilliseconds(start)).toBeLessThan(1000)
+  })
+
+  it('reads a semver wildcard with a long run of dots quickly', () => {
+    const start = process.hrtime.bigint()
+    const document = filters([targeted([person('plan', 'semver_wildcard', `1${'.'.repeat(100_000)}1`)])])
+
+    expect(v2.parseConfigV2(document)).toMatchObject({ outcome: 'unsupported', kind: 'malformed' })
+    expect(elapsedMilliseconds(start)).toBeLessThan(1000)
+  })
+
   // The flags service reads JSON nested at most 127 arrays or objects deep.
   it.each([
     ['127 arrays around a number', nested(127), false],

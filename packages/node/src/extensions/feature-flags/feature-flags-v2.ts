@@ -1035,8 +1035,9 @@ function matchNumber(predicate: Predicate, value: unknown): boolean {
 }
 
 // The decimal numbers the reference reads from a string. JavaScript's `Number` also takes
-// surrounding whitespace, hexadecimal and an empty string.
-const NUMBER_PATTERN = /^[+-]?(?:inf|infinity|nan|(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:e[+-]?[0-9]+)?)$/i
+// surrounding whitespace, hexadecimal and an empty string. Digits after the integer part follow a
+// point, so a run of digits splits one way only and a failed match takes linear time.
+const NUMBER_PATTERN = /^[+-]?(?:inf|infinity|nan|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)$/i
 
 function parseNumberText(text: string): number {
   const unsigned = text.replace(/^[+-]/, '').toLowerCase()
@@ -1344,7 +1345,7 @@ function versionKey(version: Version): SortKey {
  * {@link parseVersion} reads, such as a leading `v`.
  */
 function readSemverFilter(operator: string, text: string): VersionKey | Requirement | null {
-  const admitted = operator === 'semver_wildcard' ? text.replace(/[.*]+$/, '') : text
+  const admitted = operator === 'semver_wildcard' ? trimWildcards(text) : text
   const parsed = parseVersion(admitted)
   const numbers = admitted.split('-')[0].split('.').slice(0, 3)
   if (parsed === null || !numbers.every(isPlainNumber)) {
@@ -1360,6 +1361,15 @@ function readSemverFilter(operator: string, text: string): VersionKey | Requirem
     return parseRequirement(parts.join('.').replace(/\*/g, 'x'), null)
   }
   return parseRequirement(canonicalVersion(version), operator === 'semver_tilde' ? 'tilde' : 'caret')
+}
+
+/** Drops the trailing points and `*`. A loop, because the pattern `/[.*]+$/` is quadratic on a long run. */
+function trimWildcards(text: string): string {
+  let end = text.length
+  while (end > 0 && (text[end - 1] === '.' || text[end - 1] === '*')) {
+    end--
+  }
+  return text.slice(0, end)
 }
 
 function isPlainNumber(text: string): boolean {
