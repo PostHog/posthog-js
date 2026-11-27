@@ -879,6 +879,32 @@ describe('React Native captureAi', () => {
     expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
   })
 
+  it('moves a lone AI event that keeps timing out behind the queued events, and keeps it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) =>
+      request.path === AI_PATH && request.body.batch.some((event) => event.properties?.index === 0)
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10, captureAiRequestTimeoutMs: 20 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    const ai = requests.filter((request) => request.path === AI_PATH)
+    expect(ai.map((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([
+      [0, 1],
+      [0],
+      [1],
+      [0],
+    ])
+    expect((client as any)._aiLane._events.map((item: { uuid: string }) => item.uuid)).toHaveLength(1)
+  })
+
   it('drops a single AI event the server rejects with 413', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     respond = (request) => (request.path === AI_PATH ? { status: 413 } : { status: 200, body: { results: {} } })

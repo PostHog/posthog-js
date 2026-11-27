@@ -299,6 +299,14 @@ export class CaptureAiLane {
         return
       }
       const keptInOrder = [...batch].filter(([event]) => keptEvents.has(event)).map(([, item]) => item)
+      // A lone event that keeps timing out goes to the back of the queue, so the events behind it still go out.
+      if (deferral.timedOut && keptInOrder.length === 1 && this._events.length > 1) {
+        const [stuck] = keptInOrder
+        this._setQueue([...this._events.filter((event) => event !== stuck), stuck])
+        await this.waitForPersist()
+        this._scheduleResend(deferral.retryAfterMs)
+        return
+      }
       if (keptInOrder.length > 0) {
         this._resend = { events: keptInOrder, request: deferral.request }
       }
