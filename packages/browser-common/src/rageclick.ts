@@ -9,8 +9,35 @@ const DEFAULT_THRESHOLD_PX = 30
 const DEFAULT_TIMEOUT_MS = 1000
 const DEFAULT_CLICK_COUNT = 3
 
+// closest('label') without closest(), which IE11 lacks. The target may be a non-Element, for
+// example the document when a click is dispatched on it.
+function findLabel(target: EventTarget | null): HTMLLabelElement | null {
+    if (typeof Node === 'undefined' || !(target instanceof Element)) {
+        return null
+    }
+    // The native getter: a form exposes a control named "parentNode" as a property of that name,
+    // which would otherwise make this walk loop forever. IE11 defines parentElement only on
+    // HTMLElement, so parentNode is the getter available on Node.prototype everywhere.
+    const parentNodeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'parentNode')?.get
+    if (!parentNodeGetter) {
+        return null
+    }
+    let node: Node | null = target
+    // like closest(), stop at the document or a shadow root
+    while (node && node.nodeType === 1) {
+        // localName, unlike tagName, is lowercase in XHTML documents too
+        if ((node as Element).localName === 'label') {
+            return node as HTMLLabelElement
+        }
+        node = parentNodeGetter.call(node) as Node | null
+    }
+    return null
+}
+
 export default class RageClick {
     clicks: { x: number; y: number; timestamp: number }[]
+    lastTarget: EventTarget | null
+    lastTimestamp: number
 
     thresholdPx: number
     timeoutMs: number
@@ -26,10 +53,27 @@ export default class RageClick {
         this.clickCount = conf.click_count || DEFAULT_CLICK_COUNT
 
         this.clicks = []
+        this.lastTarget = null
+        this.lastTimestamp = 0
     }
 
-    isRageClick(x: number, y: number, timestamp: number): boolean {
+    isRageClick(x: number, y: number, timestamp: number, target?: EventTarget | null): boolean {
         if (this.disabled) {
+            return false
+        }
+
+        // Clicking a <label> makes the browser dispatch a second, synthetic click at the labeled
+        // control. Chromium and WebKit give that forwarded click `detail === 0`, but Firefox sends
+        // `detail === 1`, so the detail value can't tell it apart from a genuine click. Recognise it
+        // by its target instead: the control of the <label> the previous click landed in, dispatched
+        // a few milliseconds later. Counting it would double-count a single user click and could
+        // trigger a false rage click, so drop it without recording it.
+        const previousLabel = findLabel(this.lastTarget)
+        const isForwardedLabelClick =
+            !!previousLabel && !!target && previousLabel.control === target && timestamp - this.lastTimestamp < 50
+        this.lastTarget = target ?? null
+        this.lastTimestamp = timestamp
+        if (isForwardedLabelClick) {
             return false
         }
 

@@ -1,3 +1,4 @@
+import { raceWithTimeout } from '@posthog/core'
 import { PostHog, type EventMessage, type PostHogOptions } from 'posthog-node'
 
 import type {
@@ -209,6 +210,19 @@ export class PostHogMCP extends PostHog {
 
   override captureAiImmediate(event: EventMessage): Promise<string | undefined> {
     return super.captureAiImmediate(this.#withServerBuild(event))
+  }
+
+  /** Waits for MCP captures still in the pipeline, then flushes like `posthog-node`. */
+  override async flush(): Promise<void> {
+    await this.#sink.settled()
+    await super.flush()
+  }
+
+  /** Waits for MCP captures still in the pipeline, then shuts down within the same time budget. */
+  override async shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    const deadline = Date.now() + shutdownTimeoutMs
+    await raceWithTimeout(this.#sink.settled(), shutdownTimeoutMs)
+    await super.shutdown(Math.max(0, deadline - Date.now()))
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */

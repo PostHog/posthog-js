@@ -243,6 +243,125 @@ describe('PostHog RN onFeatureFlags', () => {
     })
   })
 
+  describe('getAllFeatureFlags()', () => {
+    it('returns undefined before any flags are cached', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+    })
+
+    it('returns an empty list once a load returns no flags, also after a later load fails', async () => {
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: flagsStatus,
+        json: () => Promise.resolve({ featureFlags: {} }),
+        text: () => Promise.resolve(''),
+      }))
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+
+    it('stays undefined after a restart when no load has succeeded', async () => {
+      flagsStatus = 500
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.shutdown()
+
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      flagsStatus = 200
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui', 'checkout', 'old-ui', 'empty'])
+    })
+
+    it('returns undefined after a quota-limited first load, and keeps the list after a later one', async () => {
+      let quotaLimited = true
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: 200,
+        json: () =>
+          Promise.resolve(quotaLimited ? { quotaLimited: ['feature_flags'] } : { featureFlags: { 'beta-ui': true } }),
+        text: () => Promise.resolve(''),
+      }))
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      quotaLimited = false
+      await posthog.reloadFeatureFlagsAsync()
+      quotaLimited = true
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui'])
+    })
+
+    it('returns bootstrapped flags when a load fails', async () => {
+      flagsStatus = 500
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        fetchRetryCount: 0,
+        bootstrap: { featureFlags: { bootstrapped: true } },
+      })
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['bootstrapped'])
+    })
+
+    it('returns bootstrapped flags after a restart that follows a failed load', async () => {
+      flagsStatus = 500
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.shutdown()
+
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        fetchRetryCount: 0,
+        bootstrap: { featureFlags: { bootstrapped: true } },
+      })
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['bootstrapped'])
+    })
+
+    it('returns the loaded flags', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key, enabled }) => [key, enabled])).toEqual([
+        ['beta-ui', true],
+        ['checkout', true],
+        ['old-ui', false],
+        ['empty', false],
+      ])
+    })
+  })
+
   describe('flags whose variant is an empty string', () => {
     it('read as disabled in getFeatureFlagResult() and getAllFeatureFlags()', async () => {
       posthog = newPostHog()
@@ -253,7 +372,7 @@ describe('PostHog RN onFeatureFlags', () => {
         enabled: false,
         variant: '',
       })
-      expect(posthog.getAllFeatureFlags().find((result) => result.key === 'empty')).toMatchObject({
+      expect(posthog.getAllFeatureFlags()?.find((result) => result.key === 'empty')).toMatchObject({
         enabled: false,
       })
       expect(posthog.isFeatureEnabled('empty')).toBe(false)

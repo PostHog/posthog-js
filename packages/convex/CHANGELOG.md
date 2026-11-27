@@ -1,5 +1,12 @@
 # @posthog/convex
 
+## 2.2.0
+
+### Minor Changes
+
+- [#5859](https://github.com/PostHog/posthog-js/pull/5859) [`be4704f`](https://github.com/PostHog/posthog-js/commit/be4704fc98f6512e197a47127c5bd65343136698) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Make `POSTHOG_PROJECT_TOKEN` optional on the component and add a `disabled` option to `PostHog`.
+  (2026-11-25)
+
 ## 2.1.9
 
 ### Patch Changes

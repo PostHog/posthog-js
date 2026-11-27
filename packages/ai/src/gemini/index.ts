@@ -21,6 +21,7 @@ import {
   utf8ByteLength,
   isPrivacyModeEnabled,
   buildInlineDataBlock,
+  formatInlineDataBlock,
   getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
@@ -199,6 +200,13 @@ export class WrappedModels {
                       },
                     })
                   }
+                } else if (part.inlineData) {
+                  // Image (or other binary) output, formatted and redacted as
+                  // formatResponseGemini does for generateContent.
+                  if (firstTokenTime === undefined) {
+                    firstTokenTime = Date.now()
+                  }
+                  accumulatedContent.push(formatInlineDataBlock(part.inlineData, this.phClient))
                 }
               }
             }

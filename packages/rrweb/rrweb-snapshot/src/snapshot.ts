@@ -333,6 +333,35 @@ export function _isBlockedElement(
   return false;
 }
 
+// Includes ancestors, shadow hosts and parent frames, which closest() does
+// not cross.
+function isBlockedIncludingAncestors(
+  element: Element,
+  blockClass: string | RegExp,
+  blockSelector: string | null,
+): boolean {
+  let node: Node | null = element;
+  while (node) {
+    if (
+      node.nodeType === node.ELEMENT_NODE &&
+      _isBlockedElement(node as Element, blockClass, blockSelector)
+    )
+      return true;
+    let parent: Node | null = dom.parentNode(node);
+    if (parent && isShadowRoot(parent)) parent = dom.host(parent);
+    // The page embedding this recorder is not part of its recording.
+    if (!parent && node.nodeType === node.DOCUMENT_NODE && node !== document) {
+      try {
+        parent = (node as Document).defaultView?.frameElement ?? null;
+      } catch {
+        parent = null;
+      }
+    }
+    node = parent;
+  }
+  return false;
+}
+
 export function classMatchesRegex(
   node: Node | null,
   regex: RegExp,
@@ -1720,11 +1749,15 @@ export function serializeNodeWithId(
 
   if (
     serializedNode.type === NodeType.Element &&
-    serializedNode.tagName === 'iframe'
+    serializedNode.tagName === 'iframe' &&
+    !_isBlockedElement(n as HTMLElement, blockClass, blockSelector)
   ) {
     const iframeDisposer = onceIframeLoaded(
       n as HTMLIFrameElement,
       () => {
+        // The iframe may have become blocked since this listener was added.
+        if (isBlockedIncludingAncestors(n as Element, blockClass, blockSelector))
+          return;
         const iframeDoc = (n as HTMLIFrameElement).contentDocument;
         if (iframeDoc && onIframeLoad) {
           const serializedIframeNode = serializeNodeWithId(iframeDoc, {

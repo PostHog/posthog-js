@@ -334,6 +334,22 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(false)
   })
 
+  it('carries the options before_send set as their legacy properties', async () => {
+    posthog = await readyClient({
+      before_send: (event: any) =>
+        event && { ...event, options: { ...event.options, process_person_profile: false, cookieless_mode: true } },
+    })
+    posthog.identify('user-42')
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    handler(new Error('no consent'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    const [, , properties] = mockPlugin.captureFatalException.mock.calls[0]
+    expect(properties.$process_person_profile).toBe(false)
+    expect(properties.$cookieless_mode).toBe(true)
+  })
+
   it('does not capture an exception before_send rejected', async () => {
     posthog = await readyClient({ before_send: () => null })
 

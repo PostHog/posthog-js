@@ -19,6 +19,7 @@ You need to change code or configuration if your app does any of these:
 - calls `getFeatureFlagPayload()`, `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`, `onFeatureFlag()` or `overrideFeatureFlag()`, or reads `getFeatureFlagDetails()` (see [Removed feature flag methods](#removed-feature-flag-methods))
 - uses the `useFeatureFlag()`, `useFeatureFlags()` or `useFeatureFlagWithPayload()` hooks (see [Feature flag hooks](#feature-flag-hooks))
 - passes `sendEvent` to `getFeatureFlag()`, `getFeatureFlagResult()` or `isFeatureEnabled()`
+- calls `getAllFeatureFlags()`, which returns `undefined` until flags are cached (see [`getAllFeatureFlags`](#getallfeatureflags))
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
 - reads `enabled` from `getFeatureFlagResult()` or `getAllFeatureFlags()` for a flag whose variant is an empty string, or filters on `$active_feature_flags`
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header the SDK sets in `requestHeaders` and expects capture requests to carry it
@@ -119,10 +120,27 @@ If your 4.x code read flags both in the callback and right after registering it,
 | `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                           |
 | `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
 
-To build the 4.x maps from `getAllFeatureFlags()`:
+### `getAllFeatureFlags`
+
+`getAllFeatureFlags()` returns `undefined` until flags are cached: before the first successful load, after a first load that failed or was quota-limited, and after `reset()` until flags reload.
+In 4.x it returned an empty list in all of these cases.
+Flags are cached once a load succeeds or flags are bootstrapped; a list that is empty then means no flags apply to the user.
 
 ```ts
 const results = posthog.getAllFeatureFlags()
+if (results === undefined) {
+  // flags haven't loaded yet; wait for onFeatureFlags() or reloadFeatureFlagsAsync()
+} else {
+  // results lists every loaded flag, and is empty when none apply
+}
+```
+
+Where you only iterate, use `posthog.getAllFeatureFlags() ?? []`.
+
+To build the 4.x maps from `getAllFeatureFlags()`:
+
+```ts
+const results = posthog.getAllFeatureFlags() ?? []
 const flags = Object.fromEntries(results.map((r) => [r.key, r.variant ?? r.enabled]))
 const payloads = Object.fromEntries(
   results.filter((r) => r.enabled && r.payload !== null).map((r) => [r.key, r.payload])
@@ -185,6 +203,27 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Person processing is sent as posthog-ios and posthog-android 4.0 send it: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none, since PostHog processes the person by default. In 4.x every event carried a `$process_person_profile` property of `true` or `false`. Now events carry no `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person.
 - `$autocapture` events carry `$is_identified`, and get the `process_person_profile: false` option when the person isn't processed, like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
 - `null` and `undefined` property values are left off events, except inside `$set`, `$set_once` and `$group_set`, where a `null` still clears the property. Array elements keep their positions.
+
+### Per-event options
+
+Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `alias()`, `group()`, `groupIdentify()`, `captureException()` and `captureAi()` take them in their options argument:
+
+```ts
+// 4.x
+posthog.capture('signed_up', { $process_person_profile: false })
+
+// 5.0
+posthog.capture('signed_up', {}, { options: { process_person_profile: false } })
+```
+
+| Option                    | Legacy property           |
+| ------------------------- | ------------------------- |
+| `process_person_profile`  | `$process_person_profile` |
+| `cookieless_mode`         | `$cookieless_mode`        |
+| `disable_skew_correction` | `$ignore_sent_at`         |
+| `product_tour_id`         | `$product_tour_id`        |
+
+The legacy properties still work, and an option wins over its property. `before_send` reads and changes options through `event.options`. A hook that returns a new event keeps them unless it sets `options`, and `options: {}` removes the ones passed on the call.
 
 ## AI events
 

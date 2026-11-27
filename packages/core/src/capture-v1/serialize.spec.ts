@@ -59,6 +59,13 @@ describe('serializeV1Event', () => {
     expect(serialized.bytes).toBe(utf8Bytes(serialized.json))
   })
 
+  it('repairs lone surrogates in option keys and values to U+FFFD', () => {
+    const serialized = serializeV1Event(message({ options: { custom: 'a\ud800', ['k\udc00']: true } }))
+
+    expect(JSON.parse(serialized.json).options).toEqual({ custom: 'a\ufffd', ['k\ufffd']: true })
+    expect(serialized.bytes).toBe(utf8Bytes(serialized.json))
+  })
+
   it('counts bytes, not UTF-16 code units', () => {
     const serialized = serializeV1Event(message({ properties: { emoji: '🦔'.repeat(10) } }))
 
