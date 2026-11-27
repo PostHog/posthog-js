@@ -1926,6 +1926,113 @@ describe('posthog core', () => {
         )
     })
 
+    describe('groupIdentify()', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.featureFlags.reset()
+            posthog.reloadFeatureFlags = vi.fn()
+            posthog.featureFlags.reloadFeatureFlags = vi.fn()
+            posthog.capture = vi.fn()
+        })
+
+        it('captures $groupidentify with the supplied properties under $group_set', () => {
+            posthog.groupIdentify('organization', 'org::5', { name: 'PostHog' })
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$groupidentify',
+                {
+                    $group_type: 'organization',
+                    $group_key: 'org::5',
+                    $group_set: { name: 'PostHog' },
+                },
+                undefined
+            )
+        })
+
+        it('captures an empty $group_set when no properties are supplied', () => {
+            posthog.groupIdentify('organization', 'org::5')
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$groupidentify',
+                {
+                    $group_type: 'organization',
+                    $group_key: 'org::5',
+                    $group_set: {},
+                },
+                undefined
+            )
+        })
+
+        it('accepts a numeric group key', () => {
+            posthog.groupIdentify('organization', 5)
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$groupidentify',
+                expect.objectContaining({ $group_key: 5 }),
+                undefined
+            )
+        })
+
+        it('passes capture options through', () => {
+            posthog.groupIdentify('organization', 'org::5', undefined, { send_instantly: true })
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', expect.any(Object), {
+                send_instantly: true,
+            })
+        })
+
+        it('does not change registered groups or reload feature flags', () => {
+            posthog.groupIdentify('organization', 'org::5', { name: 'PostHog' })
+
+            expect(posthog.getGroups()).toEqual({})
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
+            expect(
+                vi.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                    vi.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+            ).toBe(0)
+        })
+
+        it.each([
+            ['', 'org::5'],
+            ['organization', ''],
+            [undefined, 'org::5'],
+            ['organization', undefined],
+            ['organization', null],
+        ])('drops the event and warns when type or key is missing (%s, %s)', (groupType, groupKey) => {
+            posthog.groupIdentify(groupType as string, groupKey as string)
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(mockLogger.error).toHaveBeenCalledWith('posthog.groupIdentify requires a group type and group key')
+        })
+
+        it('does not capture when person processing is disabled', () => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
+                    person_profiles: 'never',
+                },
+                uuidv7()
+            )!
+            posthog.capture = vi.fn()
+
+            posthog.groupIdentify('organization', 'org::5', { name: 'PostHog' })
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+    })
+
     describe('group()', () => {
         let posthog: PostHog
 
