@@ -1182,6 +1182,9 @@ importers:
 
   packages/react-native:
     dependencies:
+      '@babel/runtime':
+        specifier: ^7.27.1
+        version: 7.29.10
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
