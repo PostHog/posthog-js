@@ -394,7 +394,7 @@ keep them without keeping `$mcp_response`:
 
 ```ts
 instrument(server, posthog, {
-  resultProperties: (toolName, result) => {
+  resultProperties: ({ toolName, result }) => {
     if (toolName !== 'search_slots') {
       return null
     }

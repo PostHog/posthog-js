@@ -72,18 +72,29 @@ describe('resultProperties', () => {
   }
 
   it('merges properties derived from the result into the tool call event', async () => {
-    const resultProperties = vi.fn((_toolName: string, result: any) => ({
+    const resultProperties = vi.fn(({ result }: { result: any }) => ({
       search_status: result.structuredContent.status,
       result_count: result.structuredContent.items.length,
     }))
-    const server = createServer({ resultProperties }, async () => searchResult)
+    const tool = vi.fn(async (_request: MCPRequestLike) => searchResult)
+    const server = createServer({ resultProperties }, tool)
+    await server._requestHandlers.get('tools/list')!({ method: 'tools/list', params: {} }, undefined)
 
-    const result = await callTool(server)
+    const request = {
+      method: 'tools/call',
+      params: {
+        name: 'search',
+        arguments: { query: 'tomorrow', context: 'Find availability' },
+        _meta: { trace: 'abc' },
+      },
+    }
+    const result = await server._requestHandlers.get('tools/call')!(request, undefined)
     await flushCaptures()
 
     expect(result).toEqual(searchResult)
     expect(resultProperties).toHaveBeenCalledTimes(1)
-    expect(resultProperties).toHaveBeenCalledWith('search', searchResult)
+    expect(tool.mock.calls[0][0].params?.arguments).toEqual({ query: 'tomorrow' })
+    expect(resultProperties).toHaveBeenCalledWith({ toolName: 'search', result: searchResult, request })
     expect(toolCallProperties()).toMatchObject({ search_status: 'no_results', result_count: 0 })
   })
 
@@ -163,7 +174,7 @@ describe('resultProperties', () => {
   )(
     'runs for the isError result a %s McpServer builds from a throw (tool registered %s instrument())',
     async (major, _when, early) => {
-      const resultProperties = vi.fn((_toolName: string, result: any) => ({ is_error_result: result.isError }))
+      const resultProperties = vi.fn(({ result }: { result: any }) => ({ is_error_result: result.isError }))
       const server =
         major === 'v1'
           ? new V1McpServer({ name: 'throwing', version: '1.0.0' })
@@ -182,7 +193,11 @@ describe('resultProperties', () => {
 
       expect(result).toMatchObject({ isError: true })
       expect(resultProperties).toHaveBeenCalledTimes(1)
-      expect(resultProperties).toHaveBeenCalledWith('search', expect.objectContaining({ isError: true }))
+      expect(resultProperties).toHaveBeenCalledWith({
+        toolName: 'search',
+        result: expect.objectContaining({ isError: true }),
+        request: expect.objectContaining({ method: 'tools/call' }),
+      })
       expect(toolCallProperties()).toMatchObject({ is_error_result: true, $mcp_is_error: true })
       // The original error still reaches `$exception`, with the properties.
       const [exception] = capture.findCapturesByEvent('$exception')
@@ -217,7 +232,7 @@ describe('resultProperties', () => {
     const server = createServer(
       {
         enableConversationId: true,
-        resultProperties: (_toolName, result) => {
+        resultProperties: ({ result }) => {
           seen.push(structuredClone(result))
           return null
         },
@@ -302,6 +317,28 @@ describe('resultProperties', () => {
     }
   })
 
+  it('drops reserved result properties from the tool call and its exception', async () => {
+    const resultProperties = () => ({
+      $mcp_tool_name: 'spoofed',
+      $mcp_is_error: false,
+      get $mcp_future_key(): never {
+        throw new Error('Reserved property should be ignored')
+      },
+      search_status: 'failed',
+    })
+    const failure = { content: [{ type: 'text', text: 'Unavailable' }], isError: true }
+    const result = await callTool(createServer({ resultProperties }, async () => failure))
+    await flushCaptures()
+
+    expect(result).toEqual(failure)
+    const properties = toolCallProperties()
+    expect(properties).toMatchObject({ $mcp_tool_name: 'search', $mcp_is_error: true, search_status: 'failed' })
+    expect(properties).not.toHaveProperty('$mcp_future_key')
+    const [exception] = capture.findCapturesByEvent('$exception')
+    expect(exception.properties).toMatchObject({ search_status: 'failed' })
+    expect(exception.properties).not.toHaveProperty('$mcp_future_key')
+  })
+
   it('wins over eventProperties on the same key and keeps the others', async () => {
     const server = createServer(
       {
@@ -344,7 +381,7 @@ describe('resultProperties', () => {
   })
 
   it('works on a high-level McpServer', async () => {
-    const resultProperties = vi.fn((toolName: string) => ({ derived_from: toolName }))
+    const resultProperties = vi.fn(({ toolName }: { toolName: string }) => ({ derived_from: toolName }))
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
@@ -355,7 +392,11 @@ describe('resultProperties', () => {
       )
       await flushCaptures()
 
-      expect(resultProperties).toHaveBeenCalledWith('add_todo', expect.objectContaining({ content: expect.any(Array) }))
+      expect(resultProperties).toHaveBeenCalledWith({
+        toolName: 'add_todo',
+        result: expect.objectContaining({ content: expect.any(Array) }),
+        request: expect.objectContaining({ params: expect.objectContaining({ arguments: { text: 'Count me' } }) }),
+      })
       expect(toolCallProperties()).toMatchObject({ derived_from: 'add_todo' })
     } finally {
       await cleanup()

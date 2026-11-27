@@ -282,18 +282,22 @@ export interface MCPAnalyticsOptions {
    * Derive extra properties from a tool's result, e.g. a domain status code from
    * `structuredContent` or how many items the result held. Runs synchronously once for every
    * result a `tools/call` sends the client, `isError` results included, also one the MCP SDK or
-   * a framework built from a throw. It gets the result as the tool produced it, before the SDK
-   * writes the conversation handle into it, so treat it as read-only. Not called when the client
-   * gets no result (a tool that threw on a low-level `Server`), for the SDK's virtual tools, or
-   * for an unknown tool.
+   * a framework built from a throw. Treat the original request and result as read-only.
+   * The result is passed before the SDK writes a conversation handle into it. Not called when
+   * the client gets no result (a tool that threw on a low-level `Server`), for the SDK's
+   * virtual tools, or for an unknown tool.
    *
-   * The return value is merged into that `$mcp_tool_call` event's properties before
-   * `beforeSend`, whether or not `$mcp_response` is captured, and wins over `eventProperties`
-   * on the same key. For an `isError` result it is also on the `$exception` sibling. Values must
-   * be JSON-serializable and are sent as-is, without the redaction `$mcp_response` gets. A throw,
-   * or a promise from an `async` callback, is logged and adds nothing; a rejection is handled.
+   * Returned properties are merged before `beforeSend`, whether or not `$mcp_response` is
+   * captured. Keys starting with `$mcp_` are ignored. Other keys win over `eventProperties`
+   * on collision and also appear on the `$exception` sibling for an `isError` result.
+   * Values must be JSON-serializable and are sent without the redaction `$mcp_response` gets.
+   * A throw, or a promise from an `async` callback, is logged and adds nothing. A rejection is handled.
    */
-  resultProperties?: (toolName: string, result: unknown) => JsonRecord | null | undefined
+  resultProperties?: (context: {
+    toolName: string
+    result: unknown
+    request: MCPRequestLike
+  }) => JsonRecord | null | undefined
   /**
    * Attach posthog-node per-event options, such as `process_person_profile`, on every
    * auto-captured event, including the `$exception` sibling. Values must be JSON-serializable.

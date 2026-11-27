@@ -299,7 +299,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     // `result`, not `finalResult`: the error and the result properties are read from what
     // the tool produced, before the conversation handle was written into it. See below.
     if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-      applyResultProperties(preparedEvent.event, data, result)
+      applyResultProperties(preparedEvent.event, data, result, request)
     }
     publishSuccessfulToolEvent(server, preparedEvent, finalResult, durationMs, data.logger, takeCapturedError, result)
   }
@@ -307,13 +307,18 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 }
 
 /** Merges the host's `resultProperties` for the result the client gets into the event's properties. */
-function applyResultProperties(event: McpEvent, data: MCPAnalyticsData, result: unknown): void {
+function applyResultProperties(
+  event: McpEvent,
+  data: MCPAnalyticsData,
+  result: unknown,
+  request: MCPRequestLike
+): void {
   const callback = data.options.resultProperties
   if (!callback) {
     return
   }
   try {
-    const properties: unknown = callback(event.resourceName ?? '', result)
+    const properties = callback({ toolName: event.resourceName ?? '', result, request })
     if (isThenable(properties)) {
       // Not awaited, so the event isn't held back. A rejection must not reach the host as an
       // unhandled rejection, which ends a Node.js process by default.
@@ -322,7 +327,13 @@ function applyResultProperties(event: McpEvent, data: MCPAnalyticsData, result: 
       return
     }
     if (properties) {
-      event.properties = { ...event.properties, ...(properties as JsonRecord) }
+      const customProperties: JsonRecord = Object.create(null)
+      for (const key of Object.keys(properties)) {
+        if (!key.startsWith('$mcp_')) {
+          customProperties[key] = properties[key]
+        }
+      }
+      event.properties = { ...event.properties, ...customProperties }
     }
   } catch (e) {
     data.logger(`resultProperties callback error: ${e}`)
