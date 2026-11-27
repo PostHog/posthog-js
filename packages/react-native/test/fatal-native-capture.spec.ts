@@ -319,6 +319,21 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(false)
   })
 
+  it('keeps the personless option over a before_send $process_person_profile on the native handoff', async () => {
+    posthog = await readyClient({
+      personProfiles: 'identified_only',
+      before_send: (event: any) =>
+        event?.event === '$exception'
+          ? { ...event, properties: { ...event.properties, $process_person_profile: true } }
+          : event,
+    })
+
+    handler(new Error('anonymous'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(false)
+  })
+
   it('does not capture an exception before_send rejected', async () => {
     posthog = await readyClient({ before_send: () => null })
 
