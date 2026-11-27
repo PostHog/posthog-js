@@ -1828,8 +1828,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
     this.wrap(() => {
       const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
         (name) => isString(name) && name.length > 0
@@ -1856,7 +1861,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.reloadFeatureFlags()
       }
 
-      this.capture('$set', { $unset: names })
+      this.capture('$set', { $unset: names }, options)
 
       // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
       // property is not skipped as a duplicate.

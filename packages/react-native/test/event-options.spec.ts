@@ -80,6 +80,7 @@ describe('per-event options', () => {
       '$set',
       (client) => client.setPersonProperties({ plan: 'pro' }, undefined, false, { options }),
     ],
+    ['unsetPersonProperties', '$set', (client) => client.unsetPersonProperties('plan', false, { options })],
     ['alias', '$create_alias', (client) => client.alias('alias-1', { options })],
     ['group', '$groupidentify', (client) => client.group('company', 'acme', { name: 'Acme' }, { options })],
     [

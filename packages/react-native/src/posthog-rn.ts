@@ -3560,9 +3560,14 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
-    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags, options)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
