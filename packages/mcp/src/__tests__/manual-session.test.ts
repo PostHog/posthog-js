@@ -208,6 +208,19 @@ describe('PostHogMCP step-path sessions', () => {
       expect(next.$session_id).toBe(session)
     })
 
+    it('restarts the idle clock when an earlier call ends after a later one', async () => {
+      const earlier = client.prepareToolCall('search_docs', {}, stdio)
+      await call({ options: stdio, result: undelivered })
+      minutes(25)
+      const ended = client.prepareToolResult(undelivered, earlier)
+      minutes(10)
+
+      const next = client.prepareToolCall('search_docs', {}, stdio)
+      const after = client.prepareToolResult(undelivered, next)
+
+      expect(after.sessionId).toBe(ended.sessionId)
+    })
+
     it('rotates after a call that never ends once the latest call has ended', async () => {
       client.prepareToolCall('search_docs', {}, stdio)
       const latest = client.prepareToolCall('search_docs', {}, stdio)

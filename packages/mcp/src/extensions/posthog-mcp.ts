@@ -399,9 +399,11 @@ export class PostHogMCP extends PostHog {
    *   return preparedResult.result
    * }
    * let toolResult
+   * let thrown
    * try {
    *   toolResult = await runTool(name, preparedCall.args)
    * } catch (error) {
+   *   thrown = error
    *   toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
    * }
    * const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
@@ -410,6 +412,8 @@ export class PostHogMCP extends PostHog {
    *   intent: preparedCall.intent,
    *   sessionId: preparedResult.sessionId,
    *   conversationId: preparedResult.conversationId,
+   *   isError: toolResult.isError === true,
+   *   error: thrown,
    *   ...identity,
    * })
    * return preparedResult.result

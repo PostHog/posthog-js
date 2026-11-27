@@ -440,9 +440,11 @@ const preparedCall = posthog.prepareToolCall(toolName, rawArgs, {
   sessionId: transportSessionId,
 })
 let toolResult
+let thrown
 try {
   toolResult = await dispatch(toolName, preparedCall.args)
 } catch (error) {
+  thrown = error
   toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
 }
 const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
@@ -454,7 +456,8 @@ posthog.captureToolCall({
   sessionId: preparedResult.sessionId,
   sessionSource: preparedResult.sessionSource,
   conversationId: preparedResult.conversationId,
-  isError: false,
+  isError: toolResult.isError === true,
+  error: thrown,
 })
 
 return preparedResult.result

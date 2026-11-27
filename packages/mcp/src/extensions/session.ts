@@ -103,9 +103,9 @@ export function arriveToolCall(clock: ConnectionClock, callId: string): boolean 
 }
 
 export function endToolCall(clock: ConnectionClock, callId: string): void {
+  clock.lastToolCallEnded = Date.now()
   if (clock.runningToolCall === callId) {
     clock.runningToolCall = undefined
-    clock.lastToolCallEnded = Date.now()
   }
 }
 
