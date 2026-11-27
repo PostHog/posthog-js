@@ -203,3 +203,90 @@ test.describe('tracing headers with a distinct ID that cannot be a header value'
         }
     })
 })
+
+const CONSENT_URL = '/__posthog_tracing_consent_test'
+
+test.describe('tracing headers across consent changes in cookieless on_reject', () => {
+    test('follows the session manager that opting in creates and opting out removes', async ({ page, context }) => {
+        const received: Array<{ path: string; body: string | null; headers: Record<string, string> }> = []
+        await context.route(`**${CONSENT_URL}/**`, async (route) => {
+            const request = route.request()
+            received.push({
+                path: new URL(request.url()).pathname.slice(CONSENT_URL.length + 1),
+                body: request.postData(),
+                headers: request.headers(),
+            })
+            await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+        })
+        await installRequestRebuildingFetchWrapper(page)
+
+        await start(
+            {
+                options: {
+                    tracing_headers: ['localhost'],
+                    cookieless_mode: 'on_reject',
+                    opt_out_capturing_by_default: true,
+                },
+                url: '/playground/cypress/index.html',
+            },
+            page,
+            context
+        )
+        await page.waitForFunction(() => {
+            const win = window as any
+            return win.__PosthogExtensions__?.tracingHeadersPatchFns && win.posthog
+        })
+
+        const sendBoth = (step: string) =>
+            page.evaluate(
+                async ({ baseUrl, step }) => {
+                    const response = await fetch(`${baseUrl}/${step}-fetch`, { method: 'POST', body: 'fetch body' })
+                    const xhrStatus = await new Promise<number>((resolve, reject) => {
+                        const xhr = new XMLHttpRequest()
+                        xhr.onload = () => resolve(xhr.status)
+                        xhr.onerror = () => reject(new Error('XHR failed'))
+                        xhr.open('POST', `${baseUrl}/${step}-xhr`)
+                        xhr.send('xhr body')
+                    })
+                    return [response.status, xhrStatus]
+                },
+                { baseUrl: CONSENT_URL, step }
+            )
+        const liveIds = () =>
+            page.evaluate(() => (window as any).posthog.sessionManager.checkAndGetSessionAndWindowId(true))
+
+        expect(await sendBoth('rejected')).toEqual([200, 200])
+
+        await page.evaluate(() => (window as any).posthog.opt_in_capturing())
+        const optedInIds = await liveIds()
+        expect(await sendBoth('opted-in')).toEqual([200, 200])
+
+        await page.evaluate(() => (window as any).posthog.opt_out_capturing())
+        expect(await sendBoth('opted-out')).toEqual([200, 200])
+
+        await page.evaluate(() => (window as any).posthog.opt_in_capturing())
+        const reOptedInIds = await liveIds()
+        expect(await sendBoth('re-opted-in')).toEqual([200, 200])
+
+        const sessionHeaders = (step: string) =>
+            received
+                .filter(({ path }) => path.startsWith(`${step}-`))
+                .map(({ path, body, headers }) => ({
+                    path,
+                    body,
+                    sessionId: headers['x-posthog-session-id'],
+                    windowId: headers['x-posthog-window-id'],
+                }))
+        const expected = (step: string, ids?: { sessionId: string; windowId: string }) => [
+            { path: `${step}-fetch`, body: 'fetch body', sessionId: ids?.sessionId, windowId: ids?.windowId },
+            { path: `${step}-xhr`, body: 'xhr body', sessionId: ids?.sessionId, windowId: ids?.windowId },
+        ]
+
+        expect(optedInIds.sessionId).toBeTruthy()
+        expect(reOptedInIds.sessionId).toBeTruthy()
+        expect(sessionHeaders('rejected')).toEqual(expected('rejected'))
+        expect(sessionHeaders('opted-in')).toEqual(expected('opted-in', optedInIds))
+        expect(sessionHeaders('opted-out')).toEqual(expected('opted-out'))
+        expect(sessionHeaders('re-opted-in')).toEqual(expected('re-opted-in', reOptedInIds))
+    })
+})
