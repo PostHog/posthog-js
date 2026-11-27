@@ -349,9 +349,8 @@ export abstract class PostHogCoreStateless {
   readonly preloadFeatureFlags: boolean
   readonly disableSurveys: boolean
   private maxBatchSize: number
-  private readonly configuredMaxBatchSize: number
-  // Set while a timeout keeps `maxBatchSize` below the configured size; each delivered batch then doubles it back.
-  private batchSizeLoweredByTimeout = false
+  // The batch size before a timeout lowered it; each delivered batch doubles `maxBatchSize` back towards it.
+  private batchSizeBeforeTimeout: number | undefined
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
@@ -465,7 +464,6 @@ export abstract class PostHogCoreStateless {
     this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
     this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
     this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
-    this.configuredMaxBatchSize = this.maxBatchSize
     this.maxQueueSize = Math.max(this.flushAt, options.maxQueueSize ?? 1000)
     this.flushInterval = options.flushInterval ?? 10000
     this.preloadFeatureFlags = options.preloadFeatureFlags ?? true
@@ -1839,6 +1837,7 @@ export abstract class PostHogCoreStateless {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
           this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
+          this.batchSizeBeforeTimeout = undefined
           this._logger.warn(
             `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
           )
@@ -1864,6 +1863,7 @@ export abstract class PostHogCoreStateless {
           await persistQueueChange(keepIndices)
         }
         this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
+        this.batchSizeBeforeTimeout = undefined
         this._logger.warn(
           `Received 413 when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
         )
@@ -1872,8 +1872,8 @@ export abstract class PostHogCoreStateless {
 
       if (keepIndices && keepIndices.size > 0) {
         if (outcome?.timedOut && keepIndices.size > 1) {
+          this.batchSizeBeforeTimeout ??= this.maxBatchSize
           this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
-          this.batchSizeLoweredByTimeout = true
           this._logger.warn(
             `Request timed out when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
           )
@@ -1888,9 +1888,11 @@ export abstract class PostHogCoreStateless {
 
       sentMessages.push(...batchMessages)
       sentFromRoute += batchMessages.length
-      if (this.batchSizeLoweredByTimeout) {
-        this.maxBatchSize = Math.min(this.configuredMaxBatchSize, this.maxBatchSize * 2)
-        this.batchSizeLoweredByTimeout = this.maxBatchSize < this.configuredMaxBatchSize
+      if (this.batchSizeBeforeTimeout !== undefined) {
+        this.maxBatchSize = Math.min(this.batchSizeBeforeTimeout, this.maxBatchSize * 2)
+        if (this.maxBatchSize >= this.batchSizeBeforeTimeout) {
+          this.batchSizeBeforeTimeout = undefined
+        }
       }
     }
   }

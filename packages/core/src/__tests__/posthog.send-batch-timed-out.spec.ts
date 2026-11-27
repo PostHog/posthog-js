@@ -70,4 +70,51 @@ describe('PostHog Core sendBatch timedOut outcome', () => {
 
     expect(client.sentBatches.map((batch) => batch.length)).toEqual([4, 2, 2, 8])
   })
+
+  it('keeps a 413 batch size after a timeout lowered it', async () => {
+    const [client] = createClient()
+    let slow = true
+    client.outcome = (batch) => {
+      const keepIndices = batch.map((_, index) => index)
+      if (slow && batch.length > 1) {
+        slow = false
+        return { keepIndices, timedOut: true }
+      }
+      return batch.length > 2 ? { keepIndices, tooLarge: true } : undefined
+    }
+    for (let index = 0; index < 8; index++) {
+      client.capture(`e${index}`)
+    }
+    await client.flush()
+    await client.flush()
+
+    expect(client.sentBatches.map((batch) => batch.length)).toEqual([8, 4, 2, 2, 2, 2])
+  })
+
+  it('restores the batch size a 413 set, not the configured one, after a timeout', async () => {
+    const [client] = createClient()
+    let timeouts = 1
+    client.outcome = (batch) => {
+      const keepIndices = batch.map((_, index) => index)
+      if (batch.length > 4) {
+        return { keepIndices, tooLarge: true }
+      }
+      if (timeouts > 0 && batch.length > 1) {
+        timeouts--
+        return { keepIndices, timedOut: true }
+      }
+      return undefined
+    }
+    for (let index = 0; index < 8; index++) {
+      client.capture(`a${index}`)
+    }
+    await client.flush()
+    await client.flush()
+    for (let index = 0; index < 8; index++) {
+      client.capture(`b${index}`)
+    }
+    await client.flush()
+
+    expect(client.sentBatches.map((batch) => batch.length)).toEqual([8, 4, 2, 4, 2, 4, 4])
+  })
 })
