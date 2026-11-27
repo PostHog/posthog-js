@@ -1,4 +1,5 @@
 import { PostHog } from '../src'
+import { PostHogPersistedProperty } from '@posthog/core'
 
 type CaptureRequest = { headers: Record<string, string>; body: { batch: { event: string; uuid: string }[] } }
 
@@ -152,6 +153,8 @@ describe('React Native capture v1 delivery', () => {
     'https://user:sec@ret@proxy.example.com',
     'https://me@corp.com:secret@proxy.example.com',
     'https://proxy.example.com/ingest/secret?token=secret#secret',
+    'https://proxy.example.com\\ingest\\secret',
+    'https://user:secret@proxy.example.com\\ingest',
   ])('leaves credentials in the host %s out of the 404 warning', async (host) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const client = new PostHog('test-token', {
@@ -212,6 +215,23 @@ describe('React Native capture v1 delivery', () => {
     posthog.capture('third', { blob: twoMiB })
 
     await vi.waitFor(() => expect(sentEvents()).toEqual([['first', 'second'], ['third']]))
+  })
+
+  it('counts malformed stored queue entries as nothing when checking the queued bytes', async () => {
+    ;(posthog as any).setPersistedProperty(PostHogPersistedProperty.Queue, [{ message: 'bad' }, { message: 7 }])
+    const timerErrors: unknown[] = []
+    const onError = (error: unknown): void => {
+      timerErrors.push(error)
+    }
+    process.on('uncaughtException', onError)
+    try {
+      posthog.capture('after-bad-entries')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    } finally {
+      process.off('uncaughtException', onError)
+    }
+
+    expect(timerErrors).toEqual([])
   })
 
   it('halves a batch that got a 413 and sends the same events', async () => {

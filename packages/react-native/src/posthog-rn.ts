@@ -1276,7 +1276,11 @@ export class PostHog extends PostHogCoreBase {
     // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them.
     const warnedStatuses = new Set<number>()
     // Only the scheme and host:port, so credentials in the host's userinfo, path or query never reach the console.
-    const origin = this.host.match(/^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#@]*)/i)
+    // Fetch reads `\` as `/` and drops tabs and newlines, so the host is normalized the same way first.
+    const origin = this.host
+      .replace(/[\t\n\r]/g, '')
+      .replace(/\\/g, '/')
+      .match(/^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#@]*)/i)
     const endpoint = origin ? `${path} on ${origin[1]}${origin[2]}` : path
     const warnOnStatus = (status: number): void => {
       const warning =
@@ -1400,8 +1404,10 @@ export class PostHog extends PostHogCoreBase {
         return
       }
       let bytes = 0
-      for (const { message } of queue) {
-        if (message) {
+      for (const item of queue) {
+        const message = item?.message
+        // A malformed stored entry counts as nothing here; the flush discards it.
+        if (isObject(message)) {
           bytes += this._queuedEventBytes(message)
         }
         if (bytes >= CAPTURE_V1_BATCH_BYTE_TARGET) {
