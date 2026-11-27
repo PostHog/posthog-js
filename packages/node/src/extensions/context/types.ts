@@ -1,7 +1,9 @@
 import type { EventOptions } from '../../types'
 
 export interface ContextData {
+  /** Distinct ID applied to events, flag evaluations, logs, and spans inside the context when not passed directly. */
   distinctId?: string
+  /** Session ID (UUIDv7) attached as `$session_id` on events and `sessionId` on logs and spans inside the context. */
   sessionId?: string
   /** Properties that fill the keys an event left unset. The event's own values win. */
   properties?: Record<string, any>

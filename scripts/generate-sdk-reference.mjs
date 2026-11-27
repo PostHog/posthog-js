@@ -37,7 +37,13 @@ const PACKAGES = {
         entry: 'src/entrypoints/module.no-external.es.ts',
         extraEntries: ['src/customizations/before-send.ts'],
     },
-    node: { id: 'posthog-node', name: 'Node.js', logo: 'nodejs', entry: 'src/entrypoints/index.node.ts' },
+    node: {
+        id: 'posthog-node',
+        name: 'Node.js',
+        logo: 'nodejs',
+        entry: 'src/entrypoints/index.node.ts',
+        extraEntries: ['src/entrypoints/nestjs.ts', 'src/entrypoints/otel.ts'],
+    },
     'react-native': { id: 'posthog-react-native', name: 'React Native', logo: 'react', entry: 'src/index.ts' },
 }
 const FIRST = ['setup', 'capture', 'identify']
@@ -147,9 +153,19 @@ function capabilityMap(labels, caps, current) {
 
 function reference(app, project, caps, current) {
     const render = renderer(app, project)
-    const entries = config.extraEntries
+    const rawEntries = config.extraEntries
         ? project.children.flatMap((r) => (r.kindOf(Kind.Module) && r.name !== '<internal>' ? r.children : [r]))
         : project.children
+    // Deduplicate symbols re-exported across subpath entrypoints on node, keeping the primary entrypoint first.
+    let entries = rawEntries
+    if (positionals[0] === 'node') {
+        const seenExports = new Set()
+        entries = rawEntries.filter((r) => {
+            if (r.kindOf(Kind.Reference) || seenExports.has(r.name)) return false
+            seenExports.add(r.name)
+            return true
+        })
+    }
     const exported = entries.filter(isPublic)
     const main = exported.find((c) => c.name === 'PostHog')
     // Every public PostHog member and every other public export goes through the capability map.
@@ -172,11 +188,13 @@ function reference(app, project, caps, current) {
     for (let c = main; c.extendedTypes?.[0]?.reflection; c = c.extendedTypes[0].reflection) bases.add(c)
     const isType = (t) => t.kindOf(TYPE_KINDS) && isPublic(t) && t !== main && !bases.has(t) && !others.includes(t)
     const types = new Set(exported.filter(isType))
+    const typeNames = new Set([...types].map((t) => t.name))
     const queue = [...shown, ...types]
     while (queue.length) {
         for (const t of referenced(queue.pop())) {
-            if (isType(t) && !types.has(t)) {
+            if (isType(t) && !types.has(t) && (positionals[0] !== 'node' || !typeNames.has(t.name))) {
                 types.add(t)
+                typeNames.add(t.name)
                 queue.push(t)
             }
         }
@@ -237,7 +255,10 @@ const nextMajor = (await readChangesets(values.source ?? ROOT)).some((c) =>
 const major = Number(values.major ?? declared + Number(nextMajor))
 
 const app = await Application.bootstrapWithPlugins({
-    entryPoints: [config.entry, ...(config.extraEntries ?? [])].map((entry) => path.join(pkgDir, entry)),
+    entryPoints: [
+        config.entry,
+        ...(config.extraEntries ?? []).filter((entry) => fs.existsSync(path.join(pkgDir, entry))),
+    ].map((entry) => path.join(pkgDir, entry)),
     tsconfig: path.join(pkgDir, 'tsconfig.json'),
     // missing-exports documents the types a page names that the package doesn't export, such as @posthog/core's.
     plugin: ['typedoc-plugin-markdown', 'typedoc-plugin-missing-exports'].map((p) =>

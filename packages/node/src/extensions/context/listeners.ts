@@ -28,8 +28,9 @@ export function notifyContextListeners(client: PostHogBackendClient, requestEntr
 }
 
 /**
- * Notify installed span processors after request IDs become available.
- * This entry point does not load OpenTelemetry; without a processor it does nothing.
+ * Notify installed `PostHogContextSpanProcessor` instances after request IDs become available.
+ *
+ * This helper doesn't load OpenTelemetry, so it's a no-op unless you register `PostHogContextSpanProcessor` from `posthog-node/otel`.
  */
 export function enrichCurrentSpan(client: PostHogBackendClient): void {
   notifyContextListeners(client, true)
