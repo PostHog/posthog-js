@@ -566,6 +566,9 @@ export class PostHog extends PostHogCoreBase {
   private _captureResendCount = 0
   private _captureResendAt = 0
   private _captureResendTimer?: ReturnType<typeof setTimeout>
+  private _queuedBytesCheckTimer?: ReturnType<typeof setTimeout>
+  // Only the size is kept, so a queued event never holds a second, serialized copy.
+  private _queuedEventSizes = new WeakMap<PostHogEventProperties, number>()
   // The events capture left to send again, by queued uuid in queue order, and the request they came from.
   private _captureResend?: { uuids: string[]; request: V1RequestIdentity }
   // Set once shutdown() returns, so a capture response that lands later schedules no resend.
@@ -1000,6 +1003,8 @@ export class PostHog extends PostHogCoreBase {
       clearTimeout(this._captureResendTimer)
       this._captureResendTimer = undefined
     }
+    clearTimeout(this._queuedBytesCheckTimer)
+    this._queuedBytesCheckTimer = undefined
     if (nativeSessionOwner === this) {
       nativeSessionOwner = undefined
     }
@@ -1153,14 +1158,16 @@ export class PostHog extends PostHogCoreBase {
     const keepIndices = kept
       .map((event) => batchIndices.get(event))
       .filter((index): index is number => index !== undefined)
+    // The whole request has one deadline, so a batch too big for the network to upload in time is resent in halves.
+    const timedOut = deferral.timedOut === true && keepIndices.length > 1
     // A halved batch starts over as new requests.
-    if (!deferral.tooLarge) {
+    if (!deferral.tooLarge && !timedOut) {
       const uuids = keepIndices.map((index) => batchMessages[index]?.uuid)
       if (uuids.every((uuid): uuid is string => typeof uuid === 'string')) {
         this._captureResend = { uuids, request: deferral.request }
       }
     }
-    return { keepIndices, tooLarge: deferral.tooLarge }
+    return { keepIndices, tooLarge: deferral.tooLarge, timedOut }
   }
 
   protected resendBatchSize(messages: (PostHogEventProperties | undefined)[]): number | undefined {
@@ -1266,6 +1273,26 @@ export class PostHog extends PostHogCoreBase {
     compression: 'gzip' | 'none',
     requestTimeoutMs: number
   ): V1CaptureSender {
+    // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them.
+    const warnedStatuses = new Set<number>()
+    const url = `${this.host.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1')}${path}`
+    const warnOnStatus = (status: number): void => {
+      const warning =
+        status === 404
+          ? `${url} returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves ${path}.`
+          : status === 401
+            ? `${url} returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.`
+            : undefined
+      if (warning === undefined || warnedStatuses.has(status)) {
+        return
+      }
+      warnedStatuses.add(status)
+      try {
+        console.warn(`[PostHog] ${warning}`)
+      } catch {
+        // A throwing console must not turn the response into a failed send.
+      }
+    }
     return new V1CaptureSender(
       {
         host: this.host,
@@ -1285,7 +1312,11 @@ export class PostHog extends PostHogCoreBase {
       {
         // The platform follows redirects. On react-native-web, `redirect: 'manual'` would hide a 307/308
         // behind status 0 and the batch would be dropped.
-        fetch: (url, { redirect: _redirect, ...fetchOptions }) => this.fetch(url, fetchOptions),
+        fetch: async (url, { redirect: _redirect, ...fetchOptions }) => {
+          const response = await this.fetch(url, fetchOptions)
+          warnOnStatus(response.status)
+          return response
+        },
         compress: compressCaptureBody,
         onError: (error, summary) => {
           this._logger.warn(summary)
@@ -1348,6 +1379,48 @@ export class PostHog extends PostHogCoreBase {
       return
     }
     super.enqueue(type, message, options, explicitRoute)
+    this._scheduleQueuedBytesCheck()
+  }
+
+  // Flushes once 5 MiB of analytics events is queued, as flushAt does for a count. It runs after
+  // capture() returns, so capture never serializes the event.
+  private _scheduleQueuedBytesCheck(): void {
+    if (this._queuedBytesCheckTimer || this._captureShuttingDown) {
+      return
+    }
+    this._queuedBytesCheckTimer = safeSetTimeout(() => {
+      this._queuedBytesCheckTimer = undefined
+      if (this._captureShuttingDown) {
+        return
+      }
+      const queue = this.getPersistedProperty<{ message?: PostHogEventProperties }[]>(PostHogPersistedProperty.Queue)
+      if (!queue || queue.length >= this.flushAt) {
+        return
+      }
+      let bytes = 0
+      for (const { message } of queue) {
+        if (message) {
+          bytes += this._queuedEventBytes(message)
+        }
+        if (bytes >= CAPTURE_V1_BATCH_BYTE_TARGET) {
+          void this.flushAutomatic().catch(logFlushError)
+          return
+        }
+      }
+    }, 0)
+  }
+
+  private _queuedEventBytes(message: PostHogEventProperties): number {
+    let bytes = this._queuedEventSizes.get(message)
+    if (bytes === undefined) {
+      try {
+        bytes = wireProblem(message) ? 0 : serializeV1Event(message).bytes
+      } catch {
+        bytes = 0
+      }
+      this._queuedEventSizes.set(message, bytes)
+    }
+    return bytes
   }
 
   private _enqueueAi(type: string, message: any, options?: PostHogCaptureOptions): void {

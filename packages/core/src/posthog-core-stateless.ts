@@ -281,9 +281,10 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
  * What a `sendBatch()` override can resolve with when the transport keeps some events for a later
  * flush. The flush removes the rest of the batch from the queue, keeps the events at `keepIndices`
  * (positions in the batch passed to `sendBatch()`), and stops draining that route until the next
- * flush. `tooLarge` halves the batch size and resends the kept events instead.
+ * flush. `tooLarge` halves the batch size and resends the kept events instead. `timedOut` keeps the
+ * events the same way and halves the batch size for the next flush.
  */
-export type SendBatchOutcome = { keepIndices: readonly number[]; tooLarge?: boolean }
+export type SendBatchOutcome = { keepIndices: readonly number[]; tooLarge?: boolean; timedOut?: boolean }
 
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core so
@@ -1866,6 +1867,12 @@ export abstract class PostHogCoreStateless {
       }
 
       if (keepIndices && keepIndices.size > 0) {
+        if (outcome?.timedOut && keepIndices.size > 1) {
+          this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
+          this._logger.warn(
+            `Request timed out when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
+          )
+        }
         await persistQueueChange(keepIndices)
         sentMessages.push(...batchMessages.filter((_, index) => !keepIndices.has(index)))
         // The transport asked to wait before sending the kept events again.

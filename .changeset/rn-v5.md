@@ -49,3 +49,6 @@
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
 - Gzip analytics and AI requests on iOS and Android when `@posthog/react-native-plugin` 3.0 or later is installed; without it they're sent uncompressed, as in 4.x
 - Send AI events again in batches half the size after a request reaches `captureAiRequestTimeoutMs`, so a slow network still delivers them; a single AI event that still times out is kept and sent again after the AI events queued behind it
+- Warn once, even without `debug: true`, when the analytics or AI endpoint returns `404` (a reverse proxy or self-hosted instance that doesn't serve `/i/v1/analytics/events` or `/i/v1/ai/events`) or `401` (a proxy that doesn't forward the `Authorization` header), like posthog-ios and posthog-android
+- Send analytics events as soon as 5 MiB of them is queued, without waiting for `flushAt`, like posthog-ios and posthog-android
+- Send analytics events again in batches half the size after a request reaches `requestTimeout`, so a slow network still delivers them
