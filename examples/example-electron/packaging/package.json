@@ -18,7 +18,7 @@
     },
     "devDependencies": {
         "@electron-forge/core": "8.0.1",
-        "electron": "42.4.0",
+        "electron": "42.11.16",
         "electron-builder": "26.11.0"
     },
     "config": {
