@@ -142,7 +142,8 @@ describe('per-event options', () => {
     posthog.capture('Signed Up', {}, { options: { cookieless_mode: true } })
     await posthog.flush()
 
-    expect(seen).toEqual([{ cookieless_mode: true }])
+    // Anonymous, so the SDK adds the personless option before before_send.
+    expect(seen).toEqual([{ cookieless_mode: true, process_person_profile: false }])
     expect(sentEvent('Signed Up').options).toMatchObject({ cookieless_mode: true, product_tour_id: 'tour-1' })
   })
 
@@ -176,11 +177,11 @@ describe('per-event options', () => {
     posthog.identify('user-1', { plan: 'pro' })
     await posthog.flush()
 
-    // Identified, so the SDK sends true when the caller passes no option; the last identify is deduplicated.
+    // Identified, so the SDK sends no option when the caller passes none; the last identify is deduplicated.
     const settings = sent
       .filter(({ event }) => event.event === '$set')
       .map(({ event }) => event.options?.process_person_profile)
-    expect(settings).toEqual([true, value, true])
+    expect(settings).toEqual([undefined, value, undefined])
   })
 
   it.each<[string, (event: any, nthSet: number) => any, number]>([

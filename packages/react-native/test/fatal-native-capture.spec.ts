@@ -287,6 +287,53 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(properties.redacted).toBe(true)
   })
 
+  it('tells native the person is processed when the JS event leaves person processing on', async () => {
+    posthog = await readyClient({ personProfiles: 'identified_only' })
+    posthog.identify('user-42')
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    handler(new Error('identified'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(true)
+  })
+
+  it('tells native the JS identified state when $is_identified is registered as null', async () => {
+    posthog = await readyClient()
+    posthog.identify('user-42')
+    posthog.register({ $is_identified: null })
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    handler(new Error('identified'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$is_identified).toBe(true)
+  })
+
+  it('keeps a personless JS exception personless on the native handoff', async () => {
+    posthog = await readyClient({ personProfiles: 'identified_only' })
+
+    handler(new Error('anonymous'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(false)
+  })
+
+  it('keeps the personless option over a before_send $process_person_profile on the native handoff', async () => {
+    posthog = await readyClient({
+      personProfiles: 'identified_only',
+      before_send: (event: any) =>
+        event?.event === '$exception'
+          ? { ...event, properties: { ...event.properties, $process_person_profile: true } }
+          : event,
+    })
+
+    handler(new Error('anonymous'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException.mock.calls[0][2].$process_person_profile).toBe(false)
+  })
+
   it('carries the options before_send set as their legacy properties', async () => {
     posthog = await readyClient({
       before_send: (event: any) =>
