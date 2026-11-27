@@ -329,6 +329,25 @@ describe('PostHog RN onFeatureFlags', () => {
       expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['bootstrapped'])
     })
 
+    it('returns bootstrapped flags after a restart that follows a failed load', async () => {
+      flagsStatus = 500
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.shutdown()
+
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        fetchRetryCount: 0,
+        bootstrap: { featureFlags: { bootstrapped: true } },
+      })
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['bootstrapped'])
+    })
+
     it('returns the loaded flags', async () => {
       posthog = newPostHog()
       await posthog.ready()
