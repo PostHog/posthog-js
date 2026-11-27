@@ -38,6 +38,16 @@ describe('PostHog Core - Person Profiles', () => {
       expect(body.batch[0].properties.$is_identified).toBe(false)
     })
 
+    it('should set $process_person_profile and $is_identified on $autocapture for anonymous users', async () => {
+      posthog.autocapture('touch', [{ tag_name: 'Button' }])
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].event).toBe('$autocapture')
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
+      expect(body.batch[0].properties.$is_identified).toBe(false)
+    })
+
     it('should set $is_identified to true after identify()', async () => {
       posthog.identify('user-123')
       await waitForPromises()
@@ -185,6 +195,15 @@ describe('PostHog Core - Person Profiles', () => {
       await waitForPromises()
 
       const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.$process_person_profile).toBe(false)
+    })
+
+    it('should set $process_person_profile to false on $autocapture events', async () => {
+      posthog.autocapture('touch', [{ tag_name: 'Button' }])
+      await waitForPromises()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].event).toBe('$autocapture')
       expect(body.batch[0].properties.$process_person_profile).toBe(false)
     })
 

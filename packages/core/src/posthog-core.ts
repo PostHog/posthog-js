@@ -504,14 +504,22 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   ): void {
     this.wrap(() => {
       const distinctId = this.getDistinctId()
+      // Same person processing flags as capture(), so personProfiles applies to autocapture too
+      const hasPersonProcessing = this._hasPersonProcessing()
       const payload = {
         distinct_id: distinctId,
         event: '$autocapture',
         properties: {
           ...this.enrichProperties(properties),
+          $process_person_profile: hasPersonProcessing,
+          $is_identified: this._isIdentified(),
           $event_type: eventType,
           $elements: elements,
         },
+      }
+
+      if (hasPersonProcessing) {
+        this._requirePersonProcessing('autocapture')
       }
 
       this.enqueue('autocapture', payload, options)
