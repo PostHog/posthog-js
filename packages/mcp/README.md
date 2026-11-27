@@ -306,7 +306,7 @@ only from a request whose `User-Agent` or client name identifies that client, an
 `$session_id` from it ahead of any conversation handle or transport session. ChatGPT sends its id on
 every call, so its `tools/list` has no `conversation_id` argument and its results get no handle, even
 with `enableConversationId` on. Each event records which source grouped it in `$mcp_session_source`:
-`client_metadata`, `conversation`, `transport`, or `generated`.
+`host` (your `sessionId` option), `client_metadata`, `conversation`, `transport`, or `generated`.
 
 Intent, model capture, conversation correlation, exception capture, and `$mcp_initialize` are
 enabled by default. Missing-capability reporting and feedback collection remain disabled.

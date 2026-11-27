@@ -5,7 +5,7 @@
 
 import { uuidv7 } from '@posthog/core'
 
-export type MCPAnalyticsIDPrefix = 'evt' | 'ses'
+export type MCPAnalyticsIDPrefix = 'evt' | 'ses' | 'call'
 
 export function newPrefixedId(prefix: MCPAnalyticsIDPrefix): string {
   return `${prefix}_${uuidv7()}`

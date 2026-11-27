@@ -10,6 +10,7 @@ import type {
   InputAliasMap,
   JsonRecord,
   MCPAnalyticsData,
+  MCPAnalyticsSessionSource,
   MCPRequestLike,
   MCPServerLike,
   McpEvent,
@@ -46,6 +47,7 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { runInRequestScope, type PendingCustomEvents } from './request-scope'
 import {
+  beginToolCall,
   deriveSessionIdFromMCPSession,
   getSessionInfo,
   instanceSessionSource,
@@ -93,6 +95,10 @@ const UNBOUND_HTTP_SCHEMA_KEY = 'unbound-http'
 // Every sessionless client's listing merges into the shared entry, so it is the one
 // that needs a cap; a session's own entry holds no more than its catalogue.
 const MAX_SHARED_SCHEMAS = 10_000
+
+function hostSession(sessionId: string, source: MCPAnalyticsSessionSource): string | undefined {
+  return source === 'host' ? sessionId : undefined
+}
 
 /**
  * A host session keeps its listings to itself: its schemas decide which argument
@@ -194,6 +200,15 @@ interface TraceToolCallParams {
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
 export async function captureToolCall(params: TraceToolCallParams): Promise<unknown> {
+  const endToolCall = beginToolCall(params.data, params.extra)
+  try {
+    return await captureArrivedToolCall(params)
+  } finally {
+    endToolCall()
+  }
+}
+
+async function captureArrivedToolCall(params: TraceToolCallParams): Promise<unknown> {
   const {
     server,
     data,
@@ -271,7 +286,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 
   // Only a session the minted handle chose can still change with the outcome.
   const pendingCustomEvents: PendingCustomEvents | undefined = preparedEvent?.sessionWithoutHandle
-    ? { events: [] }
+    ? { events: [], overflow: preparedEvent.sessionWithoutHandle }
     : undefined
   let result: unknown
   try {
@@ -461,11 +476,13 @@ async function prepareToolCallEvent(
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
-    const {
-      sessionId,
-      source: sessionSource,
-      fromHost,
-    } = resolveSession(server, extra, conversation.conversationId, request, client)
+    const { sessionId, source: sessionSource } = resolveSession(
+      server,
+      extra,
+      conversation.conversationId,
+      request,
+      client
+    )
     // Resolved now, with the handle's, so both describe the call as it arrived.
     // Only when the minted handle chose the session; a host or client id outranks it.
     // The handle chose the session only when the host's callback declined, so the
@@ -514,7 +531,7 @@ async function prepareToolCallEvent(
       const resolvedModel = resolveModel(request, ownership.read.llmModel)
       setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
-    return { event, requestAttribution, hostSessionId: fromHost && sessionId, sessionWithoutHandle }
+    return { event, requestAttribution, hostSessionId: hostSession(sessionId, sessionSource), sessionWithoutHandle }
   } catch (error) {
     data.logger(
       `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
@@ -937,7 +954,7 @@ export async function handleListToolsRequest(
 ): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const { sessionId, source: sessionSource, fromHost } = resolveSession(server, extra, undefined, request)
+  const { sessionId, source: sessionSource } = resolveSession(server, extra, undefined, request)
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId, extra)
@@ -972,7 +989,7 @@ export async function handleListToolsRequest(
     originalListToolsHandler,
     request,
     extra,
-    data ? listingSchemaKey(data, extra, fromHost && sessionId) : undefined,
+    data ? listingSchemaKey(data, extra, hostSession(sessionId, sessionSource)) : undefined,
     event,
     logger,
     requestAttribution,
@@ -1291,7 +1308,6 @@ function mintStatelessSessionOnInitialize(
     data.sessionInfo.clientName = clientInfo?.name
     data.sessionInfo.clientVersion = clientInfo?.version
     data.sessionInfo.protocolVersion = requestedProtocolVersion
-    data.lastActivity = new Date()
     setServerTrackingData(server, data)
     return sessionId
   } catch (error) {

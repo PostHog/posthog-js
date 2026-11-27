@@ -1,4 +1,5 @@
 import type { MCPAnalyticsData, McpEvent, MCPAnalyticsSessionSource, SessionInfo } from '../types'
+import type { ResolvedSession } from './session'
 
 export interface RequestScope {
   data: MCPAnalyticsData
@@ -17,27 +18,32 @@ export interface RequestScope {
 export interface PendingCustomEvents {
   events: McpEvent[]
   settled?: { sessionId: string | undefined; sessionSource: MCPAnalyticsSessionSource | undefined }
-  dropped?: number
+  /** The session the call has without its handle, for events past the bound. */
+  overflow: ResolvedSession
+  warnedOverflow?: boolean
 }
 
-// A call holds its custom events until it settles; beyond this many, the rest are dropped.
+// A call holds this many custom events until it settles; the rest go out at once.
 export const MAX_HELD_CUSTOM_EVENTS = 1000
 
 /**
  * Holds a custom event until its call settles, fixed as it was when captured: its
  * top-level properties and options are copied, and its duration is the capture's.
+ * Returns false past the bound, when the caller sends it at once instead.
  */
 export function holdCustomEvent(
   pending: PendingCustomEvents,
   event: McpEvent,
   logger: (message: string) => void
-): void {
+): boolean {
   if (pending.events.length >= MAX_HELD_CUSTOM_EVENTS) {
-    pending.dropped = (pending.dropped ?? 0) + 1
-    if (pending.dropped === 1) {
-      logger(`Warning: a tool call captured more than ${MAX_HELD_CUSTOM_EVENTS} custom events; dropping the rest`)
+    if (!pending.warnedOverflow) {
+      pending.warnedOverflow = true
+      logger(
+        `Warning: a tool call captured more than ${MAX_HELD_CUSTOM_EVENTS} custom events; the rest are sent at once, with the session the call has without its handle`
+      )
     }
-    return
+    return false
   }
   try {
     pending.events.push({
@@ -49,6 +55,7 @@ export function holdCustomEvent(
   } catch (error) {
     logger(`Warning: dropped a custom event whose properties could not be copied - ${error}`)
   }
+  return true
 }
 
 interface AsyncLocalStorageLike<T> {
