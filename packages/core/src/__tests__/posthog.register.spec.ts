@@ -80,6 +80,16 @@ describe('PostHog Core', () => {
       })
     })
 
+    it.each([true, false])('lets a per-call disableGeoip: %s win over a registered GeoIP property', (disableGeoip) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { disableGeoip: true })
+      useNativePropertyOrder()
+      posthog.register({ $geoip_disable: !disableGeoip })
+      const onCapture = vi.fn()
+      posthog.on('capture', onCapture)
+      posthog.capture('custom-event', {}, { disableGeoip })
+      expect(onCapture.mock.calls[0][0].properties.$geoip_disable).toBe(disableGeoip)
+    })
+
     it.each([null, ' '])('treats a %j caller session id as unset', (sessionId) => {
       useNativePropertyOrder()
       expect(captured({ $session_id: sessionId }).$session_id).toBe(posthog.getSessionId())

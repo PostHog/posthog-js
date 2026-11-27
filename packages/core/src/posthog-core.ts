@@ -412,9 +412,16 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // The capture options' `options` go on the message, which capture v1 sends as the event's options. Outside the
-  // legacy property order, a registered or caller `$geoip_disable` wins over the client-level setting.
+  // legacy property order, a per-call `disableGeoip` is sent as `$geoip_disable` and wins over a registered or
+  // caller value, which in turn wins over the client-level setting.
   protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
-    const geoipDisable = this.usesLegacyEventPropertyOrder() ? undefined : message?.properties?.['$geoip_disable']
+    const legacy = this.usesLegacyEventPropertyOrder()
+    const perCallGeoipDisable = options?.disableGeoip
+    const geoipDisable = legacy
+      ? undefined
+      : perCallGeoipDisable != null
+        ? perCallGeoipDisable
+        : message?.properties?.['$geoip_disable']
     const prepared = super.prepareMessage(message, options)
     if (geoipDisable != null) {
       ;(prepared.properties as PostHogEventProperties)['$geoip_disable'] = geoipDisable

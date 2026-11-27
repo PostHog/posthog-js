@@ -26,6 +26,7 @@ You need to change code or configuration if your app does any of these:
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events, or calls `captureTraceFeedback()` or `captureTraceMetric()` (see [AI events](#ai-events))
 - registers `$is_identified` or `$process_person_profile`, or sends `null` property values (see [Event properties](#event-properties))
+- registers or passes a property the SDK also sets, such as `$os_name`, `$lib`, `$lib_version`, `$session_id`, `$geoip_disable` or `$recording_status` (see [Event properties](#event-properties))
 - sends distinct IDs or event names over 200 UTF-8 bytes, such as a JWT as the distinct ID (see [Event delivery](#event-delivery))
 
 ## Reverse proxies and self-hosted PostHog
@@ -203,6 +204,11 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Person processing is sent as posthog-ios and posthog-android 4.0 send it: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none, since PostHog processes the person by default. In 4.x every event carried a `$process_person_profile` property of `true` or `false`. Now events carry no `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person.
 - `$autocapture` events carry `$is_identified`, and get the `process_person_profile: false` option when the person isn't processed, like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
 - `null` and `undefined` property values are left off events, except inside `$set`, `$set_once` and `$group_set`, where a `null` still clears the property. Array elements keep their positions.
+- A registered property replaces the SDK's own value of the same name, such as `$os_name`, `$app_version`, `$screen_width`, `$feature/<key>` or `$active_feature_flags`, and a property passed on the call wins over both. In 4.x the SDK's value replaced a registered one. Unregister a property to send the SDK's value again.
+- `$lib` and `$lib_version` are filled as a pair after your properties. A `$lib` you pass or register without `$lib_version` is sent without one, so the SDK's version isn't attributed to another library, and a `$lib_version` without `$lib` is replaced by the SDK's pair. In 4.x the SDK's pair replaced a registered one, and a caller `$lib` got the SDK's `$lib_version`.
+- A registered or caller `$session_id` is sent on that event instead of the SDK's session id. A `null` or blank one counts as unset. In 4.x the SDK's session id always won.
+- A registered or caller `$geoip_disable` wins over the `disableGeoip` option. A per-call `disableGeoip` capture option wins over both and is sent as `$geoip_disable: true` or `false`. In 4.x `disableGeoip: true` always sent `$geoip_disable: true`, and a per-call `disableGeoip: false` sent nothing.
+- A registered or caller `$recording_status` or `$sdk_debug_*` property wins over the SDK's session replay debug value, except `$sdk_debug_pending_queue_size`, which the SDK always sets. In 4.x the SDK's values replaced them.
 
 ### Per-event options
 

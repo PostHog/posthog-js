@@ -92,6 +92,17 @@ describe('event property order', () => {
     expect(queued(client, 'Logged Out').properties.$geoip_disable).toBe(false)
   })
 
+  it('lets a per-call disableGeoip win over a registered $geoip_disable', () => {
+    const client = newPostHog({ disableGeoip: true })
+    client.register({ $geoip_disable: false })
+    client.capture('Signed Up', {}, { disableGeoip: true })
+    expect(queued(client, 'Signed Up').properties.$geoip_disable).toBe(true)
+
+    client.register({ $geoip_disable: true })
+    client.capture('Viewed Dashboard', {}, { disableGeoip: false })
+    expect(queued(client, 'Viewed Dashboard').properties.$geoip_disable).toBe(false)
+  })
+
   it('lets a registered or caller $session_id win for that event, and treats a null or blank one as unset', () => {
     const client = newPostHog()
     const sessionId = client.getSessionId()

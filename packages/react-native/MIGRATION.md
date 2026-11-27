@@ -203,7 +203,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - A registered property replaces the SDK's own value of the same name, such as `$os_name`, `$app_version`, `$screen_width`, `$feature/<key>` or `$active_feature_flags`, and a property passed on the call wins over both. In 4.x the SDK's value replaced a registered one. Unregister a property to send the SDK's value again.
 - `$lib` and `$lib_version` are filled as a pair after your properties. A `$lib` you pass or register without `$lib_version` is sent without one, so the SDK's version isn't attributed to another library, and a `$lib_version` without `$lib` is replaced by the SDK's pair. In 4.x the SDK's pair replaced a registered one, and a caller `$lib` got the SDK's `$lib_version`.
 - A registered or caller `$session_id` is sent on that event instead of the SDK's session id. A `null` or blank one counts as unset. In 4.x the SDK's session id always won.
-- A registered or caller `$geoip_disable` wins over the `disableGeoip` option. In 4.x `disableGeoip: true` always sent `$geoip_disable: true`.
+- A registered or caller `$geoip_disable` wins over the `disableGeoip` option. A per-call `disableGeoip` capture option wins over both and is sent as `$geoip_disable: true` or `false`. In 4.x `disableGeoip: true` always sent `$geoip_disable: true`, and a per-call `disableGeoip: false` sent nothing.
 - A registered or caller `$recording_status` or `$sdk_debug_*` property wins over the SDK's session replay debug value, except `$sdk_debug_pending_queue_size`, which the SDK always sets. In 4.x the SDK's values replaced them.
 
 ### Per-event options

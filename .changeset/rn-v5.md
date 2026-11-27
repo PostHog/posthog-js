@@ -37,7 +37,7 @@
 - **Breaking:** let a registered property replace the SDK's own value of the same name, such as `$os_name`, `$app_version`, `$screen_width`, `$feature/<key>` or `$active_feature_flags`, like posthog-ios and posthog-android 4.0; a property passed on the call still wins over both
 - **Breaking:** fill `$lib` and `$lib_version` as a pair after your properties, like posthog-ios and posthog-android 4.0: a `$lib` you pass or register without `$lib_version` is sent without one, and a `$lib_version` without `$lib` is replaced by the SDK's
 - **Breaking:** send a registered or caller `$session_id` on that event instead of the SDK's session id; a `null` or blank one counts as unset
-- **Breaking:** let a registered or caller `$geoip_disable` win over the `disableGeoip` option
+- **Breaking:** let a registered or caller `$geoip_disable` win over the `disableGeoip` option; a per-call `disableGeoip` wins over both and is sent as `$geoip_disable: true` or `false`
 - **Breaking:** let a registered or caller `$recording_status` or `$sdk_debug_*` property win over the SDK's session replay debug value, except `$sdk_debug_pending_queue_size`
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
