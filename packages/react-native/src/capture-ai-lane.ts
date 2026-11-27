@@ -296,6 +296,7 @@ export class CaptureAiLane {
       }
       if (deferral.tooLarge) {
         this._batchSize = Math.max(1, Math.floor(batch.size / 2))
+        this._batchSizeLoweredByTimeout = false
         continue
       }
       // The whole request has one deadline, so a batch too big for the network to upload in time is resent in halves.
