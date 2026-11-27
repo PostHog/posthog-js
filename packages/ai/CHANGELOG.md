@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.23.0
+
+### Minor Changes
+
+- [#5906](https://github.com/PostHog/posthog-js/pull/5906) [`d64cdee`](https://github.com/PostHog/posthog-js/commit/d64cdeeca207e1e13c2d78fc54448fc9ebd75eb7) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Select experiment scorer versions and manage experiment formulas and suite defaults for offline evaluations.
+  (2026-11-27)
+
 ## 8.22.5
 
 ### Patch Changes
