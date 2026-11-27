@@ -37,7 +37,7 @@
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
 - **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
-- **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase
+- **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase, and one that isn't a valid UUID is replaced with a new one
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`

@@ -115,14 +115,14 @@ If your 4.x code read flags both in the callback and right after registering it,
 
 ### Removed feature flag methods
 
-| 4.x                                                                                          | 5.0                                                                                                                                                                               |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getFeatureFlagPayload(key)`                                                                 | `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`                                                                                                             |
-| `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                  |
-| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const value = posthog.getFeatureFlag(key); if (value !== undefined) cb(value) })`                                                                         |
-| `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade. |
-| `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                           |
-| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
+| 4.x                                                                                          | 5.0                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getFeatureFlagPayload(key)`                                                                 | `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`                                                                                                                                            |
+| `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                                                 |
+| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const result = posthog.getFeatureFlagResult(key); if (result) cb(result.variant ?? result.enabled) })`. Unlike 4.x, a flag missing from the loaded flags doesn't call `cb` with `false`. |
+| `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade.                                |
+| `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                                                          |
+| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                                                             |
 
 ### `getAllFeatureFlags`
 
@@ -194,7 +194,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
   posthog.on('error', (err) => report(err.message, (err.drops?.length ?? 0) + (err.retryExhausted?.length ?? 0)))
   ```
 
-- Event uuids are sent in lowercase.
+- Event uuids are sent in lowercase, and a `uuid` you pass that isn't a valid UUID is replaced with a new one.
 - PostHog drops an event whose distinct ID or name is over 200 UTF-8 bytes (`distinct_id_too_large`, `event_name_too_long`), and `posthog.on('error')` reports it. 4.x capture shortened the distinct ID and kept the event.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
 
