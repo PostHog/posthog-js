@@ -103,6 +103,16 @@ describe('event property order', () => {
     expect(queued(client, 'Viewed Dashboard').properties.$geoip_disable).toBe(false)
   })
 
+  it('lets a caller $geoip_disable win over a per-call disableGeoip', () => {
+    const client = newPostHog({ disableGeoip: true })
+    client.capture('Signed Up', { $geoip_disable: false }, { disableGeoip: true })
+    expect(queued(client, 'Signed Up').properties.$geoip_disable).toBe(false)
+
+    client.register({ $geoip_disable: false })
+    client.capture('Viewed Dashboard', { $geoip_disable: true }, { disableGeoip: false })
+    expect(queued(client, 'Viewed Dashboard').properties.$geoip_disable).toBe(true)
+  })
+
   it('leaves the SDK session alone when a caller $session_id wins', () => {
     const client = newPostHog()
     const sessionId = client.getSessionId()
