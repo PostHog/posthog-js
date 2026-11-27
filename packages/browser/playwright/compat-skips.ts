@@ -15,6 +15,11 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
+        range: '<1.455.5',
+        test: 'follows the session manager that opting in creates and opting out removes',
+        reason: 'tracing headers read the session manager per request since #5917',
+    },
+    {
         range: '<1.454.4',
         test: 'preserves campaign params when landing on a sibling subdomain after a reset',
         reason: 'cookieWinsOnConflict capture-order fix for campaign params added in #5858',
