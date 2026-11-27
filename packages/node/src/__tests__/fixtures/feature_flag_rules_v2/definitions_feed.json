@@ -1,0 +1,636 @@
+{
+  "schema": "schemas/definitions_v2.schema.json",
+  "description": "One definitions feed with config version 1 and 2 flags, active and inactive, a cohort map, a group type mapping, and three entries that a config version 2 reader does not support. Each expectation states what a local evaluator does with the feed entry of the same position. A config version 2 entry that it evaluates also states its result for the context.",
+  "feed": {
+    "flags": [
+      {
+        "id": 301,
+        "name": "Banner for every person",
+        "key": "legacy-banner",
+        "filters": {
+          "groups": [
+            {
+              "properties": [],
+              "rollout_percentage": 100
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 4,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 302,
+        "name": "Layout preview for paying plans",
+        "key": "layout-preview",
+        "filters": {
+          "version": 2,
+          "return_type": "boolean",
+          "default_value": false,
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": [
+                  {
+                    "key": "plan",
+                    "type": "person",
+                    "operator": "exact",
+                    "value": [
+                      "pro"
+                    ],
+                    "negation": false,
+                    "label": "Plan"
+                  }
+                ]
+              },
+              "description": "Preview for paying plans.",
+              "metadata": {
+                "display_color": "blue"
+              },
+              "value": true
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 7,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 303,
+        "name": "Unknown config version",
+        "key": "future-config-version",
+        "filters": {
+          "version": 3,
+          "return_type": "boolean",
+          "default_value": false,
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": []
+              },
+              "value": true
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 2,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 304,
+        "name": "Retired banner",
+        "key": "legacy-retired-banner",
+        "filters": {
+          "version": 1,
+          "groups": [
+            {
+              "properties": [],
+              "rollout_percentage": 100
+            }
+          ]
+        },
+        "deleted": false,
+        "active": false,
+        "ensure_experience_continuity": false,
+        "version": 9,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 305,
+        "name": "Checkout button copy",
+        "key": "checkout-copy",
+        "filters": {
+          "version": 2,
+          "return_type": "string",
+          "default_value": "standard",
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": [
+                  {
+                    "key": "plan",
+                    "type": "person",
+                    "operator": "exact",
+                    "value": [
+                      "enterprise"
+                    ],
+                    "negation": false
+                  }
+                ]
+              },
+              "value": "priority"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "rule_type": "percentage_rollout",
+              "targeting": {
+                "properties": []
+              },
+              "value": "short",
+              "rollout_percentage": 100,
+              "on_rollout_miss": "return_default",
+              "assignment_algorithm": "sha1_60_v1",
+              "seed": "checkout-copy-rollout",
+              "assign_by": "person"
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 3,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 306,
+        "name": "Unknown rule type after a rule that matches",
+        "key": "future-rule-type",
+        "filters": {
+          "version": 2,
+          "return_type": "boolean",
+          "default_value": false,
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": []
+              },
+              "value": true
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "rule_type": "scheduled_release",
+              "targeting": {
+                "properties": []
+              },
+              "value": true
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 1,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 307,
+        "name": "Beta for team workspaces",
+        "key": "legacy-workspace-beta",
+        "filters": {
+          "aggregation_group_type_index": 0,
+          "groups": [
+            {
+              "properties": [
+                {
+                  "key": "tier",
+                  "type": "group",
+                  "group_type_index": 0,
+                  "operator": "exact",
+                  "value": [
+                    "team"
+                  ]
+                }
+              ],
+              "rollout_percentage": 100
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 2,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 308,
+        "name": "Results per page test",
+        "key": "results-per-page",
+        "filters": {
+          "version": 2,
+          "return_type": "number",
+          "default_value": 10,
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "experiment",
+              "targeting": {
+                "properties": []
+              },
+              "paused": false,
+              "rollout_percentage": 100,
+              "on_rollout_miss": "continue",
+              "assignment_algorithm": "sha1_60_v1",
+              "seed": "results-per-page-test",
+              "assign_by": "person",
+              "variants": [
+                {
+                  "key": "control",
+                  "weight": 50,
+                  "value": 20
+                },
+                {
+                  "key": "test",
+                  "weight": 50,
+                  "value": 50
+                }
+              ]
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 5,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": true
+      },
+      {
+        "id": 309,
+        "name": "Unknown rule field after a rule that matches",
+        "key": "future-rule-field",
+        "filters": {
+          "version": 2,
+          "return_type": "string",
+          "default_value": "standard",
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": []
+              },
+              "value": "compact"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "rule_type": "percentage_rollout",
+              "targeting": {
+                "properties": []
+              },
+              "value": "short",
+              "rollout_percentage": 100,
+              "on_rollout_miss": "return_default",
+              "assignment_algorithm": "sha1_60_v1",
+              "seed": "future-rule-field-rollout",
+              "assign_by": "person",
+              "schedule": {
+                "starts_at": "2030-01-01"
+              }
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 1,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 310,
+        "name": "Offer for the paying cohort",
+        "key": "legacy-cohort-offer",
+        "filters": {
+          "groups": [
+            {
+              "properties": [
+                {
+                  "key": "id",
+                  "type": "cohort",
+                  "value": 41
+                }
+              ],
+              "rollout_percentage": 100
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 6,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 311,
+        "name": "Search ranking model",
+        "key": "search-ranking",
+        "filters": {
+          "version": 2,
+          "return_type": "object",
+          "default_value": {
+            "model": "baseline"
+          },
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": [
+                  {
+                    "key": "plan",
+                    "type": "person",
+                    "operator": "exact",
+                    "value": [
+                      "pro",
+                      "enterprise"
+                    ],
+                    "negation": false
+                  }
+                ]
+              },
+              "value": {
+                "model": "semantic",
+                "boost": 1.5
+              }
+            }
+          ]
+        },
+        "deleted": false,
+        "active": true,
+        "ensure_experience_continuity": false,
+        "version": 8,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      },
+      {
+        "id": 312,
+        "name": "Seasonal theme",
+        "key": "seasonal-theme",
+        "filters": {
+          "version": 2,
+          "return_type": "string",
+          "default_value": "plain",
+          "rules": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "rule_type": "targeted_release",
+              "targeting": {
+                "properties": []
+              },
+              "value": "winter"
+            }
+          ]
+        },
+        "deleted": false,
+        "active": false,
+        "ensure_experience_continuity": false,
+        "version": 4,
+        "evaluation_runtime": "all",
+        "bucketing_identifier": "distinct_id",
+        "evaluation_contexts": [],
+        "has_experiment": false
+      }
+    ],
+    "group_type_mapping": {
+      "0": "workspace"
+    },
+    "cohorts": {
+      "41": {
+        "type": "OR",
+        "values": [
+          {
+            "type": "AND",
+            "values": [
+              {
+                "key": "plan",
+                "type": "person",
+                "operator": "exact",
+                "value": [
+                  "pro"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "minimal_flag_called_events": false,
+    "property_matching_version": 2
+  },
+  "context": {
+    "identifier": "person-example",
+    "properties": {
+      "plan": "pro"
+    },
+    "properties_complete": false,
+    "timezone": "UTC",
+    "explicit_exact_matching": true,
+    "now": "2024-03-31T12:00:00Z"
+  },
+  "expectations": [
+    {
+      "key": "legacy-banner",
+      "producer_expected": "valid",
+      "evaluator": "v1",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      }
+    },
+    {
+      "key": "layout-preview",
+      "producer_expected": "valid",
+      "evaluator": "v2",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      },
+      "expected": {
+        "status": "success",
+        "value": true,
+        "reason": "targeting_match",
+        "rule": {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "rule_type": "targeted_release",
+          "index": 0
+        }
+      }
+    },
+    {
+      "key": "future-config-version",
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "const",
+        "instance_path": "/filters/version"
+      },
+      "reader": {
+        "auto": "remote_fallback",
+        "local_only": "unsupported"
+      }
+    },
+    {
+      "key": "legacy-retired-banner",
+      "producer_expected": "valid",
+      "evaluator": "v1",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      }
+    },
+    {
+      "key": "checkout-copy",
+      "producer_expected": "valid",
+      "evaluator": "v2",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      },
+      "expected": {
+        "status": "success",
+        "value": "short",
+        "reason": "targeting_match",
+        "rule": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "rule_type": "percentage_rollout",
+          "index": 1
+        }
+      }
+    },
+    {
+      "key": "future-rule-type",
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "const",
+        "instance_path": "/filters/rules/1/rule_type"
+      },
+      "reader": {
+        "auto": "remote_fallback",
+        "local_only": "unsupported"
+      }
+    },
+    {
+      "key": "legacy-workspace-beta",
+      "producer_expected": "valid",
+      "evaluator": "v1",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      }
+    },
+    {
+      "key": "results-per-page",
+      "producer_expected": "valid",
+      "evaluator": "v2",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      },
+      "expected": {
+        "status": "success",
+        "value": 20,
+        "reason": "experiment_split",
+        "rule": {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "rule_type": "experiment",
+          "index": 0
+        },
+        "variant": "control"
+      }
+    },
+    {
+      "key": "future-rule-field",
+      "producer_expected": "invalid",
+      "producer_failure": {
+        "layer": "schema",
+        "keyword": "additionalProperties",
+        "instance_path": "/filters/rules/1",
+        "message_contains": "schedule"
+      },
+      "reader": {
+        "auto": "remote_fallback",
+        "local_only": "unsupported"
+      }
+    },
+    {
+      "key": "legacy-cohort-offer",
+      "producer_expected": "valid",
+      "evaluator": "v1",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      }
+    },
+    {
+      "key": "search-ranking",
+      "producer_expected": "valid",
+      "evaluator": "v2",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      },
+      "expected": {
+        "status": "success",
+        "value": {
+          "model": "semantic",
+          "boost": 1.5
+        },
+        "reason": "targeting_match",
+        "rule": {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "rule_type": "targeted_release",
+          "index": 0
+        }
+      }
+    },
+    {
+      "key": "seasonal-theme",
+      "producer_expected": "valid",
+      "evaluator": "v2",
+      "reader": {
+        "auto": "local_evaluation",
+        "local_only": "local_evaluation"
+      },
+      "expected": {
+        "status": "success",
+        "value": null,
+        "reason": "flag_disabled"
+      }
+    }
+  ]
+}

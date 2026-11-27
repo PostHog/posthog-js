@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://posthog.com/contracts/feature_flag_rules_v2/local_outcomes.schema.json",
+  "title": "Local outcome of an evaluation case",
+  "description": "Maps the expected status and error kind of an evaluation case to what a local evaluator does with it. The unresolved reasons are the ones SDKs already report for a flag that local evaluation did not resolve.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "description",
+    "corpora",
+    "outcomes",
+    "rows"
+  ],
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "corpora": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^corpus/[a-z0-9_]+\\.json$"
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conclusive",
+        "inconclusive",
+        "not_applicable"
+      ],
+      "properties": {
+        "conclusive": {
+          "type": "string"
+        },
+        "inconclusive": {
+          "type": "string"
+        },
+        "not_applicable": {
+          "type": "string"
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "local_evaluation"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "success",
+            "error",
+            "parse_error",
+            "omitted"
+          ]
+        },
+        "error": {
+          "enum": [
+            "missing_context",
+            "invalid_property",
+            "invalid_regex"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "malformed",
+            "unsupported"
+          ]
+        },
+        "local_evaluation": {
+          "enum": [
+            "conclusive",
+            "inconclusive",
+            "not_applicable"
+          ]
+        },
+        "unresolved_reason": {
+          "enum": [
+            "missing_context",
+            "unsupported_definition"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "error"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "error"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "parse_error"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "kind"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "kind"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "local_evaluation": {
+                "const": "inconclusive"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "unresolved_reason"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "unresolved_reason"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

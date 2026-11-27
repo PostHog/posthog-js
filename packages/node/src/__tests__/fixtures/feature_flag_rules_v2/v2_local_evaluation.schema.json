@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:posthog:feature-flag-rules-v2:corpus:v2_local_evaluation:1.0.0",
+  "$defs": {
+    "context": {
+      "type": "object",
+      "properties": {
+        "identifier": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "x-posthog-open-object": "supplied person property values"
+        },
+        "properties_complete": {
+          "const": false,
+          "description": "A caller-supplied map never establishes that a property is absent."
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "explicit_exact_matching": {
+          "type": "boolean"
+        },
+        "now": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result": {
+      "description": "A result that the local evaluator returns itself.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "success"
+        },
+        "value": {
+          "type": [
+            "boolean",
+            "string",
+            "number",
+            "object",
+            "null"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "targeting_match",
+            "experiment_split",
+            "rollout_miss",
+            "experiment_paused",
+            "holdout",
+            "no_rule_match",
+            "flag_disabled"
+          ]
+        },
+        "rule": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "rule_type": {
+              "enum": [
+                "targeted_release",
+                "percentage_rollout",
+                "experiment"
+              ]
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "rule_type",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        "variant": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "The assigned variant key."
+        }
+      },
+      "required": [
+        "status",
+        "value",
+        "reason"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "no_rule_match",
+                  "flag_disabled"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "rule"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "rule"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "experiment_split"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "variant"
+            ],
+            "properties": {
+              "rule": {
+                "properties": {
+                  "rule_type": {
+                    "const": "experiment"
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "variant"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "targeting_match"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "rule": {
+                "properties": {
+                  "rule_type": {
+                    "enum": [
+                      "targeted_release",
+                      "percentage_rollout"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "flag_disabled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "const": null
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "corpus_version": {
+      "const": "1.0.0"
+    },
+    "config_version": {
+      "const": 2
+    },
+    "description": {
+      "type": "string"
+    },
+    "defaults": {
+      "type": "object",
+      "description": "The context of every case. A case's context fields replace the default context fields of the same name.",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/context",
+          "required": [
+            "identifier",
+            "properties",
+            "properties_complete",
+            "timezone",
+            "explicit_exact_matching",
+            "now"
+          ]
+        }
+      },
+      "required": [
+        "context"
+      ],
+      "additionalProperties": false
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^v2_local(\\.[a-z0-9_]+)+$"
+          },
+          "family": {
+            "enum": [
+              "flag_disabled",
+              "context"
+            ]
+          },
+          "flag": {
+            "type": "object",
+            "description": "The definitions entry fields the evaluator reads besides the config.",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "active": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "active"
+            ],
+            "additionalProperties": false
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "return_type": {
+                "enum": [
+                  "boolean",
+                  "string",
+                  "number",
+                  "object"
+                ]
+              }
+            },
+            "required": [
+              "return_type"
+            ],
+            "additionalProperties": true,
+            "x-posthog-open-object": "validated separately against the canonical config schema"
+          },
+          "context": {
+            "$ref": "#/$defs/context",
+            "minProperties": 1
+          },
+          "expected": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/result"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "error"
+                  },
+                  "error": {
+                    "enum": [
+                      "missing_context",
+                      "invalid_property",
+                      "invalid_regex"
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "error"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "family",
+          "flag",
+          "config",
+          "expected"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "flag": {
+                  "properties": {
+                    "active": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "family": {
+                  "const": "flag_disabled"
+                },
+                "expected": {
+                  "properties": {
+                    "reason": {
+                      "const": "flag_disabled"
+                    }
+                  },
+                  "required": [
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "family": {
+                  "const": "context"
+                },
+                "expected": {
+                  "not": {
+                    "properties": {
+                      "reason": {
+                        "const": "flag_disabled"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "corpus_version",
+    "config_version",
+    "description",
+    "defaults",
+    "cases"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,54 @@
+{
+  "description": "The local outcome of an evaluation case, by its expected status and error kind. A local evaluator holds only the definitions feed and the context its caller supplied. Exactly one row has the status, and the error or kind, of each case's expected result.",
+  "corpora": [
+    "corpus/v2_boolean_evaluation.json",
+    "corpus/v2_value_evaluation.json",
+    "corpus/v2_experiment_evaluation.json",
+    "corpus/v2_local_evaluation.json"
+  ],
+  "outcomes": {
+    "conclusive": "The local evaluator returns the case's expected value, reason, rule and variant itself, as a config version 2 result. The SDK sends no /flags request for the flag.",
+    "inconclusive": "The local evaluator returns no value. In auto mode the SDK asks the server for that flag. In local-only mode the flag is unresolved, with the row's unresolved_reason.",
+    "not_applicable": "The case describes the remote request boundary. A local evaluator does not run it."
+  },
+  "rows": [
+    {
+      "status": "success",
+      "local_evaluation": "conclusive"
+    },
+    {
+      "status": "error",
+      "error": "missing_context",
+      "local_evaluation": "inconclusive",
+      "unresolved_reason": "missing_context"
+    },
+    {
+      "status": "error",
+      "error": "invalid_property",
+      "local_evaluation": "inconclusive",
+      "unresolved_reason": "missing_context"
+    },
+    {
+      "status": "error",
+      "error": "invalid_regex",
+      "local_evaluation": "inconclusive",
+      "unresolved_reason": "unsupported_definition"
+    },
+    {
+      "status": "parse_error",
+      "kind": "unsupported",
+      "local_evaluation": "inconclusive",
+      "unresolved_reason": "unsupported_definition"
+    },
+    {
+      "status": "parse_error",
+      "kind": "malformed",
+      "local_evaluation": "inconclusive",
+      "unresolved_reason": "unsupported_definition"
+    },
+    {
+      "status": "omitted",
+      "local_evaluation": "not_applicable"
+    }
+  ]
+}
