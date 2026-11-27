@@ -2291,6 +2291,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               reason: flagReason,
               reasonCode: flag.active === false ? 'flag_disabled' : undefined,
             }
+            if (localResult.record !== undefined) {
+              // A config version 2 flag: its record is read, and its events built, as a remote one.
+              flagRecord = localResult.record.record
+              flagId = flagRecord.metadata.id
+              flagVersion = flagRecord.metadata.version
+              flagHasExperiment = flagRecord.metadata.hasExperiment
+              result.reasonCode = flagRecord.reason?.code
+            }
           }
         } catch (e) {
           if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
@@ -3005,7 +3013,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
    * first time each flag value is read for a user. Experiments use these events as exposures.
-   * When a remotely evaluated config version 2 flag assigns an experiment variant, the read also
+   * When a config version 2 flag assigns an experiment variant, locally or remotely, the read also
    * sends `$experiment_exposure`, once per user, groups, flag, rule and variant.
    * The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
    * `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
@@ -3144,18 +3152,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (localResult) {
       for (const [key, value] of Object.entries(localResult.response)) {
         const flagDef = this.featureFlagsPoller?.featureFlagsByKey[key]
+        // A config version 2 flag has the record a /flags?v=4 response gives, which supplies its
+        // id, version, experiment link and flag events.
+        const parsed = localResult.records[key]?.record
         records[key] = {
           key,
           enabled: value !== false,
           variant: typeof value === 'string' ? value : undefined,
           payload: localResult.payloads[key],
-          id: flagDef?.id,
-          // The local-evaluation flag definition (`PostHogFeatureFlag`) does not carry a
-          // version field; only the remote `/flags` response does via `metadata.version`.
-          version: undefined,
+          id: parsed !== undefined ? parsed.metadata.id : flagDef?.id,
+          // The version 1 local-evaluation definition is read without a version field; only the
+          // remote `/flags` response and a config version 2 record carry `metadata.version`.
+          version: parsed?.metadata.version,
           reason: 'Evaluated locally',
           locallyEvaluated: true,
-          hasExperiment: flagDef?.has_experiment,
+          hasExperiment: parsed !== undefined ? parsed.metadata.hasExperiment : flagDef?.has_experiment,
+          ...(parsed !== undefined ? { parsed } : {}),
         }
         locallyEvaluatedKeys.add(key)
       }

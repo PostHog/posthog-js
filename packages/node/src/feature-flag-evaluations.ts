@@ -21,9 +21,10 @@ export type EvaluatedFlagRecord = {
   /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
   hasExperiment: boolean | undefined
   /**
-   * The parsed `/flags` record of a remotely evaluated flag, with its typed value, failure
-   * state, reason and rule metadata, for the typed flag API and flag events. Absent for locally
-   * evaluated flags and flags with a value override.
+   * The parsed `/flags` record of a remotely evaluated flag, or the same record of a locally
+   * evaluated config version 2 flag, with its typed value, failure state, reason and rule
+   * metadata, for the typed flag API and flag events. Absent for locally evaluated version 1
+   * flags and flags with a value override.
    */
   parsed?: ParsedFlagRecord
 }
@@ -41,9 +42,10 @@ export type FlagCalledEventParams = {
   disableGeoip: boolean | undefined
   properties: Record<string, any>
   /**
-   * The parsed `/flags` record supplying the read's value or failure diagnostics. Absent for
-   * local evaluation, overrides and missing flags. A failed record keeps config/reason
-   * attribution, but only a successful experiment split sends `$experiment_exposure`.
+   * The parsed `/flags` record supplying the read's value or failure diagnostics, or the same
+   * record of a locally evaluated config version 2 flag. Absent for local evaluation of version 1
+   * flags, overrides and missing flags. A failed record keeps config/reason attribution, but only
+   * a successful experiment split sends `$experiment_exposure`.
    */
   record?: ParsedFlagRecord
 }

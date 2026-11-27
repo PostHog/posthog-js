@@ -28,6 +28,21 @@ import {
   safeSetTimeout,
 } from '@posthog/core'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData, FlagDefinitionCacheInput } from './cache'
+import {
+  ConfigV2LocalResult,
+  configV2UnresolvedReason,
+  evaluateConfigV2Definition,
+  isConfigVersion1,
+  ParsedConfigV2Definition,
+  parseConfigV2Definitions,
+} from './feature-flags-v2'
+
+// The field of the external definition cache that holds the definitions whose config version is
+// not 1. `flags` keeps the version 1 definitions only, so a release that reads only `flags` never
+// evaluates a definition it cannot read. Not part of the public cache types.
+const CONFIG_V2_FLAGS_CACHE_FIELD = 'flags_v2'
+
+type FlagDefinitionCacheDataWithConfigV2 = FlagDefinitionCacheData & { [CONFIG_V2_FLAGS_CACHE_FIELD]?: unknown }
 
 const SIXTY_SECONDS = 60 * 1000
 
@@ -135,6 +150,8 @@ type FlagEvaluationSnapshot = {
   cohorts: Record<string, PropertyGroup>
   filteredOutFlagKeys: Set<string>
   propertyMatchingVersion?: number
+  // The config version 2 definitions of `featureFlagsByKey`, parsed when they loaded.
+  parsedConfigV2Definitions: ReadonlyMap<string, ParsedConfigV2Definition>
 }
 
 export type FeatureFlagEvaluationContext = {
@@ -149,6 +166,16 @@ export type FeatureFlagEvaluationContext = {
 type ComputeFlagAndPayloadOptions = {
   matchValue?: FeatureFlagValue
   skipLoadCheck?: boolean
+}
+
+/**
+ * A locally computed flag. `record` is the `/flags?v=4` record of a config version 2 flag, which
+ * the client reads and sends flag events from as for a remote record. A version 1 flag has none.
+ */
+type LocalFlagResult = {
+  value: FeatureFlagValue
+  payload: JsonType | null
+  record?: ConfigV2LocalResult
 }
 
 class FeatureFlagsPoller {
@@ -186,6 +213,7 @@ class FeatureFlagsPoller {
   private filteredOutFlagKeys: Set<string> = new Set()
   // Definition fingerprint per flag key already warned about as never locally resolvable.
   private warnedUnresolvableFlags: Map<string, string> = new Map()
+  private parsedConfigV2Definitions: ReadonlyMap<string, ParsedConfigV2Definition> = new Map()
 
   constructor({
     pollingInterval,
@@ -235,6 +263,7 @@ class FeatureFlagsPoller {
       cohorts: this.cohorts,
       filteredOutFlagKeys: this.filteredOutFlagKeys,
       propertyMatchingVersion: this.propertyMatchingVersion,
+      parsedConfigV2Definitions: this.parsedConfigV2Definitions,
     }
   }
 
@@ -308,6 +337,8 @@ class FeatureFlagsPoller {
     response: Record<string, FeatureFlagValue>
     payloads: Record<string, JsonType>
     unresolved: Record<string, UnresolvedFlagReason>
+    /** The `/flags?v=4` record of each config version 2 flag in `response`. */
+    records: Record<string, ConfigV2LocalResult>
     fallbackToFlags: boolean
   }> {
     await this.loadFeatureFlags()
@@ -315,6 +346,7 @@ class FeatureFlagsPoller {
     const response: Record<string, FeatureFlagValue> = {}
     const payloads: Record<string, JsonType> = {}
     const unresolved: Record<string, UnresolvedFlagReason> = {}
+    const records: Record<string, ConfigV2LocalResult> = {}
     let fallbackToFlags = this.featureFlags.length == 0
 
     const flagsToEvaluate = flagKeysToExplicitlyEvaluate
@@ -329,14 +361,17 @@ class FeatureFlagsPoller {
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
-          const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
-            flag,
-            sharedEvaluationContext,
-            { skipLoadCheck: true }
-          )
+          const {
+            value: matchValue,
+            payload: matchPayload,
+            record,
+          } = await this.computeFlagAndPayloadLocally(flag, sharedEvaluationContext, { skipLoadCheck: true })
           response[flag.key] = matchValue
           if (matchPayload !== undefined && matchPayload !== null) {
             payloads[flag.key] = matchPayload
+          }
+          if (record !== undefined) {
+            records[flag.key] = record
           }
         } catch (e) {
           if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
@@ -352,17 +387,14 @@ class FeatureFlagsPoller {
       })
     )
 
-    return { response, payloads, unresolved, fallbackToFlags }
+    return { response, payloads, unresolved, records, fallbackToFlags }
   }
 
   async computeFlagAndPayloadLocally(
     flag: PostHogFeatureFlag,
     evaluationContext: FeatureFlagEvaluationContext,
     options: ComputeFlagAndPayloadOptions = {}
-  ): Promise<{
-    value: FeatureFlagValue
-    payload: JsonType | null
-  }> {
+  ): Promise<LocalFlagResult> {
     const { matchValue, skipLoadCheck = false } = options
     if (this.loadedSuccessfullyOnce) {
       evaluationContext = this.withEvaluationSnapshot(evaluationContext)
@@ -379,6 +411,22 @@ class FeatureFlagsPoller {
 
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     flag = evaluationContext.definitions!.featureFlagsByKey[flag.key] ?? flag
+
+    if (!isConfigVersion1(flag)) {
+      // A config version 2 definition has no payloads to look a match value up in. A number or
+      // object value is its own payload, so the flag is evaluated, and a match value replaces only
+      // the value, without the record's attribution.
+      const record = await evaluateConfigV2Definition(flag, evaluationContext.definitions!.parsedConfigV2Definitions, {
+        distinctId: evaluationContext.distinctId,
+        properties: evaluationContext.personProperties,
+        propertyMatchingVersion: evaluationContext.definitions!.propertyMatchingVersion,
+      })
+      if (matchValue !== undefined) {
+        return { value: matchValue, payload: record.payload }
+      }
+      return { value: record.value, payload: record.payload, record }
+    }
+
     let flagValue: FeatureFlagValue
 
     // If matchValue is provided, use it directly; otherwise evaluate the flag
@@ -540,6 +588,19 @@ class FeatureFlagsPoller {
     )
     if (missingDependency !== undefined) {
       throw new InconclusiveMatchError(`Missing flag dependency '${missingDependency}' for flag '${targetFlagKey}'`)
+    }
+
+    // A config version 1 flag cannot depend on a flag of another config version. Reading one here
+    // as version 1 would give it a value, and a later condition must not answer for the flag
+    // either, so the whole flag goes to the server.
+    const otherVersionDependency = dependencyChain.find((depFlagKey) => {
+      const depFlag = evaluationContext.definitions!.featureFlagsByKey[depFlagKey]
+      return depFlag !== undefined && !isConfigVersion1(depFlag)
+    })
+    if (otherVersionDependency !== undefined) {
+      throw new RequiresServerEvaluation(
+        `Flag dependency '${otherVersionDependency}' for flag '${targetFlagKey}' is not a config version 1 flag`
+      )
     }
 
     // Evaluate all dependencies in the chain order
@@ -907,7 +968,12 @@ class FeatureFlagsPoller {
   }
 
   private updateFlagState(flagData: FlagDefinitionCacheInput): void {
-    const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
+    // The cache keeps definitions of another config version apart; evaluation reads them all.
+    const configV2Flags = (flagData as FlagDefinitionCacheDataWithConfigV2)[CONFIG_V2_FLAGS_CACHE_FIELD]
+    const allFlags = Array.isArray(configV2Flags)
+      ? [...flagData.flags, ...(configV2Flags as PostHogFeatureFlag[])]
+      : flagData.flags
+    const flags = this.filterFlagsByEvaluationContexts(allFlags)
     const featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
@@ -915,11 +981,10 @@ class FeatureFlagsPoller {
     // Remember which definitions were dropped by context filtering so dependency evaluation can
     // treat them as false (mirroring the remote path) rather than as genuinely missing.
     const keptKeys = new Set(flags.map((flag) => flag.key))
-    const filteredOutFlagKeys = new Set(
-      flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key)
-    )
+    const filteredOutFlagKeys = new Set(allFlags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
     this.featureFlags = flags
     this.featureFlagsByKey = featureFlagsByKey
+    this.parsedConfigV2Definitions = parseConfigV2Definitions(flags)
     this.filteredOutFlagKeys = filteredOutFlagKeys
     this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
@@ -1192,6 +1257,7 @@ class FeatureFlagsPoller {
           )
           this.featureFlags = []
           this.featureFlagsByKey = {}
+          this.parsedConfigV2Definitions = new Map()
           this.filteredOutFlagKeys = new Set()
           this.groupTypeMapping = {}
           this.cohorts = {}
@@ -1228,8 +1294,9 @@ class FeatureFlagsPoller {
           const groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
           // Absence of the field always flips the gate off — fail safe to full events.
           const minimalFlagCalledEvents = responseJson.minimal_flag_called_events === true
-          const flagData: FlagDefinitionCacheData = {
-            flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
+          const flags: PostHogFeatureFlag[] = (responseJson.flags as PostHogFeatureFlag[]) ?? []
+          const flagData: FlagDefinitionCacheDataWithConfigV2 = {
+            flags: flags.filter(isConfigVersion1),
             group_type_mapping: groupTypeMapping,
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
             minimal_flag_called_events: minimalFlagCalledEvents,
@@ -1238,6 +1305,11 @@ class FeatureFlagsPoller {
             // Keep existing providers and older Node SDKs compatible with newly written entries.
             groupTypeMapping,
             minimalFlagCalledEvents,
+          }
+          const configV2Flags = flags.filter((flag) => !isConfigVersion1(flag))
+          if (configV2Flags.length > 0) {
+            // Left out without such flags, so the data stays as before for them.
+            flagData[CONFIG_V2_FLAGS_CACHE_FIELD] = configV2Flags
           }
 
           this.updateFlagState(flagData)
@@ -1388,6 +1460,9 @@ function getDefinitionUnresolvedReason(
   flag: PostHogFeatureFlag,
   definitions: FlagEvaluationSnapshot
 ): UnresolvedFlagReason | undefined {
+  if (!isConfigVersion1(flag)) {
+    return configV2UnresolvedReason(flag, definitions.parsedConfigV2Definitions)
+  }
   if (!flag.active) {
     return undefined
   }
@@ -1435,9 +1510,13 @@ function isUnsupportedProperty(
     if (!Array.isArray(dependencyChain) || dependencyChain.length === 0) {
       return true
     }
-    return dependencyChain.some(
-      (key) => !definitions.featureFlagsByKey[key] && !definitions.filteredOutFlagKeys.has(key)
-    )
+    return dependencyChain.some((key) => {
+      const dependency = definitions.featureFlagsByKey[key]
+      if (dependency === undefined) {
+        return !definitions.filteredOutFlagKeys.has(key)
+      }
+      return !isConfigVersion1(dependency)
+    })
   }
   if (property.type !== 'cohort') {
     try {
