@@ -62,7 +62,8 @@ const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolea
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
 // Whether stored flag details hold no flags from a successful load or bootstrap. Details stored before
-// the `noFlagsCached` marker existed count as holding none when a failed or quota-limited load left them empty.
+// the `noFlagsCached` marker existed count as holding none when a failed or quota-limited load left them empty,
+// unless they carry `minimalFlagCalledEvents`, which every successful load has written since RN 4.58.0.
 const holdsNoCachedFlags = (storedDetails: PostHogFlagsStorageFormat): boolean => {
   if (storedDetails.noFlagsCached !== undefined) {
     return storedDetails.noFlagsCached
@@ -70,7 +71,11 @@ const holdsNoCachedFlags = (storedDetails: PostHogFlagsStorageFormat): boolean =
   const failedOrQuotaLimited =
     storedDetails.requestError !== undefined ||
     storedDetails.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags) === true
-  return failedOrQuotaLimited && Object.keys(storedDetails.flags ?? {}).length === 0
+  return (
+    failedOrQuotaLimited &&
+    storedDetails.minimalFlagCalledEvents === undefined &&
+    Object.keys(storedDetails.flags ?? {}).length === 0
+  )
 }
 
 // The per-event `options` a caller or the SDK passed with the capture options, which capture v1 sends apart from the properties.

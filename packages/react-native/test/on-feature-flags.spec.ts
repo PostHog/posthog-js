@@ -393,6 +393,16 @@ describe('PostHog RN onFeatureFlags', () => {
       expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui'])
     })
 
+    it.each([
+      ['failed', { requestError: { type: 'api_error', statusCode: 500 } }],
+      ['quota-limited', { quotaLimited: ['feature_flags'] }],
+    ])('returns an empty list after upgrading from a 4.x empty load followed by a %s one', async (_, details) => {
+      // RN 4.58+ wrote minimalFlagCalledEvents on every successful load and kept it on later failed ones.
+      await storeFlagDetailsAndRestart({ flags: {}, minimalFlagCalledEvents: false, ...details })
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+
     it('keeps an empty list after a restart that follows an empty load and a failed one', async () => {
       ;(globalThis as any).window.fetch = vi.fn(async () => ({
         status: flagsStatus,
