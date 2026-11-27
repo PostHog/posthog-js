@@ -110,7 +110,8 @@ export class PostHog {
    * Trigger a one-off refresh of the cached feature flag definitions. Named for parity with
    * `posthog-node`'s `reloadFeatureFlags()`. The component already refreshes on a cron when
    * `POSTHOG_PERSONAL_API_KEY` is set, so call this only when you need an immediate refresh
-   * (e.g. after creating a flag in development). Requires an action context.
+   * (e.g. after creating a flag in development). Requires an action context. The event-only
+   * component has no flag definitions to refresh, so this returns a `skipped` result there.
    */
   async reloadFeatureFlags(ctx: RunActionCtx): Promise<unknown> {
     if (this.disabled) return { status: 'skipped' as const, reason: 'disabled' as const }
@@ -149,11 +150,20 @@ export class PostHog {
     const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as {
       disabled?: boolean
       localEvalConfigured: boolean
+      eventsOnly?: boolean
       data: string | null
       fetchedAt: number | null
       etag?: string
     }
     if (row.disabled) return null
+    if (row.eventsOnly) {
+      throw new Error(
+        'PostHog: local feature flag evaluation is not available in the event-only component ' +
+          '(`@posthog/convex/events-only/convex.config`). Call the remote `evaluateFlag` / ' +
+          '`evaluateFlagPayload` / `evaluateAllFlags` methods instead (action context only), or install ' +
+          '`@posthog/convex/convex.config` to evaluate flags locally.'
+      )
+    }
     if (!row.localEvalConfigured) {
       // Loud failure rather than silent `undefined`: a caller invoking a local-eval method
       // without `POSTHOG_PERSONAL_API_KEY` configured almost certainly meant to use a remote

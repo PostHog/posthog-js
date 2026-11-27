@@ -135,6 +135,24 @@ describe('local-eval configuration', () => {
     )
   })
 
+  test('throws a pointer to the remote methods when the component is the event-only install', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: vi.fn(async () => ({
+        disabled: false,
+        localEvalConfigured: false,
+        eventsOnly: true,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    await expect(posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })).rejects.toThrow(
+      'not available in the event-only component'
+    )
+  })
+
   // PAK *is* set but the first cron tick hasn't landed yet — graceful degradation rather than
   // throwing, so callers' fallback paths still work during the brief warm-up window.
   test('returns undefined when PAK is configured but definitions have not been cached yet', async () => {

@@ -59,6 +59,20 @@
     "./convex.config": {
       "types": "./dist/component/convex.config.d.ts",
       "default": "./dist/component/convex.config.js"
+    },
+    "./events-only/_generated/component.js": {
+      "types": "./dist/events-only/_generated/component.d.ts"
+    },
+    "./events-only/_generated/component": {
+      "types": "./dist/events-only/_generated/component.d.ts"
+    },
+    "./events-only/convex.config.js": {
+      "types": "./dist/events-only/convex.config.d.ts",
+      "default": "./dist/events-only/convex.config.js"
+    },
+    "./events-only/convex.config": {
+      "types": "./dist/events-only/convex.config.d.ts",
+      "default": "./dist/events-only/convex.config.js"
     }
   },
   "types": "./dist/client/index.d.ts",

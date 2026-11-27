@@ -24,6 +24,7 @@
         "compliance",
         "patches",
         "packages/convex/src/component/_generated",
+        "packages/convex/src/events-only/_generated",
         ".changeset",
         "packages/browser/references",
         "packages/node/references",
