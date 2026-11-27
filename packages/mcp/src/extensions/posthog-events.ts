@@ -17,6 +17,7 @@ const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.mcpPromptsList]: PostHogMCPAnalyticsEvent.PromptsList,
   [MCPAnalyticsEventType.mcpResourcesList]: PostHogMCPAnalyticsEvent.ResourcesList,
   [MCPAnalyticsEventType.mcpResourcesRead]: PostHogMCPAnalyticsEvent.ResourceRead,
+  [MCPAnalyticsEventType.mcpRequestRejected]: PostHogMCPAnalyticsEvent.RequestRejected,
   [MCPAnalyticsEventType.mcpToolsCall]: PostHogMCPAnalyticsEvent.ToolCall,
   [MCPAnalyticsEventType.mcpToolsList]: PostHogMCPAnalyticsEvent.ToolsList,
   [MCPAnalyticsEventType.mcpUnknownTool]: PostHogMCPAnalyticsEvent.UnknownTool,
@@ -125,10 +126,14 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
     properties[PostHogMCPAnalyticsProperty.ResourceName] = event.resourceName
     if (
       event.eventType === MCPAnalyticsEventType.mcpToolsCall ||
-      event.eventType === MCPAnalyticsEventType.mcpUnknownTool
+      event.eventType === MCPAnalyticsEventType.mcpUnknownTool ||
+      event.eventType === MCPAnalyticsEventType.mcpRequestRejected
     ) {
       properties[PostHogMCPAnalyticsProperty.ToolName] = event.resourceName
     }
+  }
+  if (event.method) {
+    properties[PostHogMCPAnalyticsProperty.Method] = event.method
   }
   if (event.toolDescription && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
     properties[PostHogMCPAnalyticsProperty.ToolDescription] = event.toolDescription
@@ -198,9 +203,10 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
     if (errorType) {
       properties[PostHogMCPAnalyticsProperty.ErrorType] = errorType
     }
-    if (firstException?.value) {
-      // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList`.
-      properties[PostHogMCPAnalyticsProperty.ErrorMessage] = firstException.value
+    // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList` / `truncateEvent`.
+    const errorMessage = firstException?.value || event.errorMessage
+    if (errorMessage) {
+      properties[PostHogMCPAnalyticsProperty.ErrorMessage] = errorMessage
     }
     if (event.errorStatus !== undefined) {
       properties[PostHogMCPAnalyticsProperty.ErrorStatus] = event.errorStatus

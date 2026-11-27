@@ -16,6 +16,7 @@ import type {
   PreparedToolResult,
   PrepareToolCallOptions,
   PrepareToolListOptions,
+  RejectedRequestCaptureData,
   ToolCallCaptureData,
   ToolsListCaptureData,
   UnknownToolCaptureData,
@@ -43,7 +44,7 @@ import {
 } from './context-parameters'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
-import { captureException, httpStatus } from './exceptions'
+import { captureException, httpStatus, isHttpStatus } from './exceptions'
 import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
@@ -259,6 +260,22 @@ export class PostHogMCP extends PostHog {
     event.response = data.response
     event.duration = data.durationMs
     this.#emit(event)
+  }
+
+  /**
+   * Capture a request your HTTP layer rejected before the MCP server ran (401, 403, 429,
+   * 400). Emits `$mcp_request_rejected` with `$mcp_is_error: true`, `$mcp_error_status` and a
+   * `$mcp_error_type` derived from the status, so refusals can be queried alongside tool calls.
+   * No `$exception` is sent: a refused request is not a server failure. Resolves once the
+   * event is handed to `capture()`, and never rejects, so a serverless host can await it
+   * before `flush()`.
+   */
+  async captureRejectedRequest(data: RejectedRequestCaptureData): Promise<void> {
+    try {
+      await this.#emit(buildRejectedRequestEvent(data))
+    } catch (error) {
+      log(`Warning: PostHogMCP failed to capture rejected request - ${error}`)
+    }
   }
 
   /**
@@ -566,11 +583,12 @@ export class PostHogMCP extends PostHog {
   /**
    * Fire-and-forget, mirroring posthog-node's `capture()`: the event is enqueued
    * on the client, not awaited. Never throws — a failure to record analytics
-   * must not break the host request.
+   * must not break the host request. The promise, which never rejects, is for
+   * callers that wait for the event to be handed to `capture()`.
    */
-  #emit(event: McpEvent): void {
+  #emit(event: McpEvent): Promise<void> {
     event.serverBuild = this.#serverBuild
-    void this.#sink
+    return this.#sink
       .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
   }
@@ -603,7 +621,9 @@ export class PostHogMCP extends PostHog {
 function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): McpEvent {
   const event: McpEvent = {
     eventType,
-    sessionId: common.sessionId || newSessionId(),
+    // A rejected request belongs to no MCP session unless the host knows one.
+    sessionId:
+      common.sessionId || (eventType === MCPAnalyticsEventType.mcpRequestRejected ? undefined : newSessionId()),
     conversationId: common.conversationId,
     protocolVersion: common.protocolVersion,
     // There is no `extra` on this path, so the host reads the request headers and
@@ -624,6 +644,75 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     event.identifyActorData = common.setProperties
   }
   return event
+}
+
+/** `$mcp_error_type` for a rejected request's HTTP status. */
+function rejectedRequestErrorType(status: number | undefined): string | undefined {
+  if (status === 401 || status === 403) {
+    return 'auth'
+  }
+  if (status === 429) {
+    return 'rate_limited'
+  }
+  return status !== undefined && status >= 400 && status < 500 ? 'protocol' : undefined
+}
+
+/** Trims a value read from an unvalidated body. Anything but a non-blank string is `undefined`. */
+function nonBlankString(value: unknown): string | undefined {
+  return (typeof value === 'string' && value.trim()) || undefined
+}
+
+/** Like {@link nonBlankString}, but untrimmed, so an id still equals the one on the host's other events. */
+function nonBlankId(value: unknown): string | undefined {
+  return nonBlankString(value) && (value as string)
+}
+
+function buildRejectedRequestEvent(data: RejectedRequestCaptureData): McpEvent {
+  const status = isHttpStatus(data.status) ? data.status : undefined
+  return {
+    ...baseEvent(MCPAnalyticsEventType.mcpRequestRejected, {
+      ...data,
+      distinctId: nonBlankId(data.distinctId),
+      sessionId: nonBlankId(data.sessionId),
+      conversationId: nonBlankId(data.conversationId),
+      protocolVersion: nonBlankString(data.protocolVersion),
+    }),
+    method: nonBlankString(data.method),
+    resourceName: nonBlankString(data.toolName),
+    serverName: nonBlankString(data.serverName),
+    serverVersion: nonBlankString(data.serverVersion),
+    clientName: nonBlankString(data.clientName),
+    clientVersion: nonBlankString(data.clientVersion),
+    isError: true,
+    errorStatus: status,
+    errorType: nonBlankString(data.errorType) ?? rejectedRequestErrorType(status),
+    errorMessage: nonBlankString(data.reason),
+  }
+}
+
+/**
+ * Records a request your HTTP layer rejected before the MCP server ran, on any `posthog-node`
+ * client (for servers wired with `instrument()`). Emits `$mcp_request_rejected` through the
+ * same sanitize and truncate pipeline as auto-captured events, and labels the client's `$lib`
+ * as `instrument()` does. Resolves once the event is handed to `posthog.capture()`, and never
+ * rejects. `instrument()`'s `beforeSend`, `serverBuild` and `logger` do not apply here; the
+ * client's own `beforeSend` does.
+ *
+ * @example
+ * ```ts
+ * if (!token) {
+ *   await captureRejectedRequest(posthog, { status: 401, reason: 'missing_token', serverName: 'my-mcp' })
+ *   return new Response('Unauthorized', { status: 401 })
+ * }
+ * ```
+ */
+export async function captureRejectedRequest(posthog: PostHog, data: RejectedRequestCaptureData): Promise<void> {
+  try {
+    applyMcpLibIdentity(posthog)
+    await new McpEventSink(posthog).capture(buildRejectedRequestEvent(data), { enableExceptionAutocapture: false })
+  } catch (error) {
+    log(`Warning: failed to capture rejected request - ${error}`)
+  }
 }
 
 const NO_CONVERSATION = { minted: false, conversationId: undefined } as const

@@ -471,7 +471,10 @@ export function truncateEvent<T extends Event | McpEvent>(event: T): T {
   // controlled in length. Any real User-Agent fits well inside the metadata cap.
   result.clientUserAgent = truncateString(result.clientUserAgent, MAX_METADATA_LENGTH)
   result.vendorClient = truncateString(result.vendorClient, MAX_METADATA_LENGTH)
+  result.protocolVersion = truncateString(result.protocolVersion, MAX_METADATA_LENGTH)
   result.errorType = truncateString(result.errorType, MAX_METADATA_LENGTH)
+  result.errorMessage = truncateString(result.errorMessage, MAX_ERROR_MESSAGE_LENGTH)
+  result.method = truncateString(result.method, MAX_METADATA_LENGTH)
   // Agent-supplied free text, same trust level as a header. Real model ids are
   // tens of characters; anything past the metadata cap is junk, not a model.
   result.llmModel = truncateString(result.llmModel, MAX_METADATA_LENGTH)
