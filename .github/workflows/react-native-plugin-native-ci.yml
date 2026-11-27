@@ -98,7 +98,8 @@ jobs:
     permissions:
       contents: read
     name: Build example for iOS (CocoaPods)
-    runs-on: macos-15-xlarge
+    # posthog-ios 4 requires Xcode 26.
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,6 +111,12 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Verify Xcode 26 or newer
+        run: |
+          version="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          echo "Xcode $version"
+          test "${version%%.*}" -ge 26
+
       - name: Setup environment
         uses: ./.github/actions/setup
         with:
@@ -120,6 +127,10 @@ jobs:
         uses: ./.github/actions/is-affected
         with:
           package-name: '@posthog/react-native-plugin'
+
+      - name: Check podspec Podfile guards
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: ruby packages/react-native-plugin/scripts/check-podspec-guards.rb
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
@@ -151,15 +162,15 @@ jobs:
             -destination generic/platform=iOS | xcpretty
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
-  build-ios-hybrid-spm:
+  build-ios-dynamic-frameworks:
     permissions:
       contents: read
-    name: Build example for iOS (CocoaPods plugin + SwiftPM posthog-ios)
-    # Exercises the hybrid opt-in path: `posthog.useSpm` in
-    # Podfile.properties.json routes posthog-ios through the React Native
-    # spm_dependency helper while the React Native plugin remains a CocoaPod.
-    # The hybrid path requires dynamic frameworks. macos-26 uses the latest
-    # Xcode shipped with the runner image.
+    name: Build example for iOS (CocoaPods, dynamic frameworks)
+    # The plugin is a CocoaPod that pulls posthog-ios in as a Swift package
+    # through React Native's spm_dependency helper. The static-library job
+    # above covers the default linkage; this one covers
+    # `use_frameworks! :linkage => :dynamic`. macos-26 uses the latest Xcode
+    # shipped with the runner image.
     runs-on: macos-26
     steps:
       - name: Checkout repository
@@ -189,16 +200,6 @@ jobs:
         # example lockfile must be kept in sync with its package.json.
         # The cooldown is explicit because --ignore-workspace skips the YAML policy.
         run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
-        working-directory: ${{ env.EXAMPLE_DIR }}
-
-      - name: Opt example into SPM resolution
-        if: steps.is-affected.outputs.is-affected == 'true'
-        run: |
-          cat > ios/Podfile.properties.json <<'JSON'
-          {
-            "posthog.useSpm": "true"
-          }
-          JSON
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -293,11 +294,58 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
 
+  build-ios-cocoapods-rn-087:
+    permissions:
+      contents: read
+    name: Build example for iOS (CocoaPods, React Native 0.87)
+    # Runs the podspec's module map path fix for React Native 0.87 and 0.88,
+    # which the 0.79 CocoaPods lanes never reach.
+    runs-on: macos-26
+    env:
+      SPM_EXAMPLE_DIR: examples/example-rn-spm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build React Native package tarballs
+        run: |
+          export PACKAGE_DEST="$PWD/target"
+          pnpm turbo package \
+            --filter=posthog-react-native... \
+            --filter=@posthog/react-native-plugin
+
+      - name: Install React Native 0.87.1 example dependencies
+        run: pnpm install --lockfile=false --config.node-linker=hoisted
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        run: pod install
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Build Debug with CocoaPods
+        run: |
+          xcodebuild \
+            -workspace PosthogReactNativeSpmExample.xcworkspace \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
   build-macos:
     permissions:
       contents: read
     name: Build example for macOS (CocoaPods)
-    runs-on: macos-15-xlarge
+    # posthog-ios 4 requires Xcode 26.
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -308,6 +356,12 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
+
+      - name: Verify Xcode 26 or newer
+        run: |
+          version="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          echo "Xcode $version"
+          test "${version%%.*}" -ge 26
 
       - name: Setup environment
         uses: ./.github/actions/setup

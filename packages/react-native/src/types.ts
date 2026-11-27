@@ -275,14 +275,25 @@ export type PostHogSessionReplayConfig = {
    */
   screenshotColorMode?: 'ARGB_8888' | 'RGB_565'
   /**
+   * How iOS captures each replay screenshot.
+   *
+   * - `'standard'`: draws the window on the main thread.
+   * - `'gpu'`: experimental. Copies the window's layers and renders the copy on the GPU, in short main-thread
+   *   steps. Content from another process, such as a web view's page, and Metal content are not captured.
+   *   Falls back to `'standard'` when a capture can't be made this way.
+   *
+   * iOS only. `'gpu'` requires `@posthog/react-native-plugin` 3.0.0 or later; older plugins capture with
+   * `'standard'`.
+   *
+   * @default 'standard'
+   */
+  iOSCaptureMethod?: 'standard' | 'gpu'
+  /**
    * Schedule screenshot image capture on a background queue.
    * iOS only
-   * Experimental support
    *
-   * Warning: Enabling this option will trigger Main Thread Checker warnings and may
-   * briefly freeze the app the first time a screenshot is captured. Consider disabling
-   * Main Thread Checker in your scheme's run diagnostics when enabling this.
-   *
+   * @deprecated ignored by `@posthog/react-native-plugin` 3.0 and later, because posthog-ios 4.0 removed background
+   * capture. Remove it, or use `iOSCaptureMethod: 'gpu'`. Ignored when `iOSCaptureMethod` is set.
    * @default false
    */
   screenshotModeBackgroundCapture?: boolean

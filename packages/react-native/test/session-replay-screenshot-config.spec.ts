@@ -89,6 +89,20 @@ describe.each(['setup', 'start'] as const)('screenshot configuration through nat
     expect(config).not.toHaveProperty('screenshotCompressionQuality')
     expect(config.screenshotColorMode).toBe('RGB_565')
   })
+
+  it.each<[PostHogSessionReplayConfig | undefined, string, boolean]>([
+    [undefined, 'standard', false],
+    [{ screenshotModeBackgroundCapture: true }, 'standard', true],
+    [{ iOSCaptureMethod: 'gpu' }, 'gpu', false],
+    [{ iOSCaptureMethod: 'gpu', screenshotModeBackgroundCapture: true }, 'gpu', false],
+    [{ iOSCaptureMethod: 'standard', screenshotModeBackgroundCapture: true }, 'standard', false],
+  ])('resolves the iOS capture method from %j', async (options, method, backgroundCapture) => {
+    const config = await initialize(options)
+
+    expect(config.iOSCaptureMethod).toBe(method)
+    // Plugins before 3.0 read only the boolean.
+    expect(config.screenshotModeBackgroundCapture).toBe(backgroundCapture)
+  })
 })
 
 describe('screenshot configuration before replay starts', () => {
