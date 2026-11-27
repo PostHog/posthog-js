@@ -309,11 +309,54 @@ async function captureArrivedToolCall(params: TraceToolCallParams): Promise<unkn
   if (isUnknownTool && isToolResultError(result)) {
     publishUnknownToolEvent(server, preparedEvent, hostProperties, data.logger)
   } else {
-    // `result`, not `finalResult`: the error is read from what the tool produced,
-    // before the conversation handle was written into it. See below.
-    publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
+    // Measured before resultProperties runs, so the host's callback isn't counted as the tool's time.
+    const durationMs = Date.now() - startTime.getTime()
+    // `result`, not `finalResult`: the error and the result properties are read from what
+    // the tool produced, before the conversation handle was written into it. See below.
+    if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
+      applyResultProperties(preparedEvent.event, data, result, request)
+    }
+    publishSuccessfulToolEvent(server, preparedEvent, finalResult, durationMs, data.logger, takeCapturedError, result)
   }
   return finalResult
+}
+
+/** Merges the host's `resultProperties` for the result the client gets into the event's properties. */
+function applyResultProperties(
+  event: McpEvent,
+  data: MCPAnalyticsData,
+  result: unknown,
+  request: MCPRequestLike
+): void {
+  const callback = data.options.resultProperties
+  if (!callback) {
+    return
+  }
+  try {
+    const properties = callback({ toolName: event.resourceName ?? '', result, request })
+    if (isThenable(properties)) {
+      // Not awaited, so the event isn't held back. A rejection must not reach the host as an
+      // unhandled rejection, which ends a Node.js process by default.
+      properties.then(undefined, () => {})
+      data.logger('resultProperties returned a promise; it must return synchronously, so its value is ignored')
+      return
+    }
+    if (properties) {
+      const customProperties: JsonRecord = Object.create(null)
+      for (const key of Object.keys(properties)) {
+        if (!key.startsWith('$mcp_')) {
+          customProperties[key] = properties[key]
+        }
+      }
+      event.properties = { ...event.properties, ...customProperties }
+    }
+  } catch (e) {
+    data.logger(`resultProperties callback error: ${e}`)
+  }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof (value as PromiseLike<unknown> | null)?.then === 'function'
 }
 
 const NO_CONVERSATION: ConversationIdResolution = { minted: false, conversationId: undefined }
@@ -599,7 +642,7 @@ function publishSuccessfulToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   result: unknown,
-  startTime: Date,
+  durationMs: number,
   logger: LoggerFn,
   takeCapturedError?: () => unknown,
   resultBeforeInstructions?: unknown
@@ -609,6 +652,7 @@ function publishSuccessfulToolEvent(
   }
   const { event, requestAttribution } = preparedEvent
   try {
+    event.duration = durationMs
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
@@ -620,7 +664,6 @@ function publishSuccessfulToolEvent(
       event.isError = false
     }
     event.response = result
-    event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, logger, requestAttribution)
   } catch (error) {
     logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
