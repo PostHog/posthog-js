@@ -61,7 +61,7 @@ const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let pendingKeepaliveBytes = 0
 let nativeAsyncGzipDisabled = false
 
-const removeURLParam = (url: string, param: string): string => {
+export const removeURLParam = (url: string, param: string): string => {
     const [urlWithoutHash, hash] = url.split('#')
     const [baseUrl, search] = urlWithoutHash.split('?')
 

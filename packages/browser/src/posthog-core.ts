@@ -3992,6 +3992,7 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
+        this._retryQueue?.clearStoredReplayHandoff()
         const bootstrapSessionID = bootstrap?.sessionID
         this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
         this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
@@ -4481,6 +4482,14 @@ export class PostHog implements PostHogInterface {
             this.metrics?.onConfigChange()
             this.webMCP?.startIfEnabled()
 
+            if (
+                config.disable_session_recording ||
+                config.persistence === 'memory' ||
+                config.before_send ||
+                config.session_recording?.selectMaskingFn
+            ) {
+                this._retryQueue?.clearStoredReplayHandoff()
+            }
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
@@ -4977,6 +4986,12 @@ export class PostHog implements PostHogInterface {
 
     private _sync_opt_out_with_persistence(): boolean {
         const persistenceDisabled = this._is_persistence_disabled()
+
+        if (this.consent.isOptedOut()) {
+            this._retryQueue?.clearReplayRetries()
+        } else if (persistenceDisabled) {
+            this._retryQueue?.clearStoredReplayHandoff()
+        }
 
         // Release what console capture is holding as soon as capturing is off, rather
         // than at the next console write.
