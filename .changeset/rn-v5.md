@@ -51,4 +51,4 @@
 - Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts in the app's cache directory, which isn't backed up, when the SDK uses Expo's file system; with `persistence: 'memory'`, `customStorage` or AsyncStorage they're kept only in memory
 - Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
-- Send the device time zone as `timezone` with `/flags` requests, like posthog-ios and posthog-android
+- Send the device time zone as `timezone` with `/flags` requests, like posthog-ios and posthog-android; set `$timezone` to `null` in `customAppProperties` to leave it out

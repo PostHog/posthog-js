@@ -464,20 +464,31 @@ describe('PostHog RN onFeatureFlags', () => {
     }
 
     it.each([
-      ['the event $timezone', 'Europe/Berlin', 'Europe/Berlin'],
-      ["the JS runtime's time zone without an event $timezone", null, Intl.DateTimeFormat().resolvedOptions().timeZone],
-    ])('send %s as timezone', async (_, $timezone, expected) => {
+      [
+        'the event $timezone as timezone',
+        (properties: any) => ({ ...properties, $timezone: 'Europe/Berlin' }),
+        'Europe/Berlin',
+      ],
+      [
+        "the JS runtime's time zone as timezone without an event $timezone",
+        ({ $timezone: _, ...properties }: any) => properties,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ],
+      ['no timezone for a null event $timezone', (properties: any) => ({ ...properties, $timezone: null }), undefined],
+      ['no timezone for a blank event $timezone', (properties: any) => ({ ...properties, $timezone: '' }), undefined],
+    ])('sends %s', async (_, customAppProperties, expected) => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         flushInterval: 0,
         preloadFeatureFlags: false,
         fetchRetryCount: 0,
-        customAppProperties: (properties) => ({ ...properties, $timezone }),
+        customAppProperties,
       })
       await posthog.ready()
       await posthog.reloadFeatureFlagsAsync()
 
       expect(flagsBody().timezone).toBe(expected)
+      expect('timezone' in flagsBody()).toBe(expected !== undefined)
     })
   })
 

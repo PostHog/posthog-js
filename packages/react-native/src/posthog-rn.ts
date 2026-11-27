@@ -1399,11 +1399,13 @@ export class PostHog extends PostHogCoreBase {
     }
   }
 
-  // The event `$timezone` when expo-localization or react-native-localize provides it, else the JS runtime's.
+  // The event `$timezone` when the app properties have one, none when `customAppProperties` sets it to null or '',
+  // else the JS runtime's. The default app properties have `$timezone` only when expo-localization or
+  // react-native-localize provides it.
   protected getFlagsRequestTimezone(): string | undefined {
-    const timezone = this._appProperties.$timezone
-    if (typeof timezone === 'string' && timezone) {
-      return timezone
+    if ('$timezone' in this._appProperties) {
+      const timezone = this._appProperties.$timezone
+      return typeof timezone === 'string' && timezone ? timezone : undefined
     }
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
