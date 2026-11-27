@@ -51,12 +51,12 @@ describe('OptionalPlugin loader', () => {
     expect(loadOptionalPlugin('ios').version).toBe('3.0.0')
   })
 
-  it.each(['2.13.3', '1.6.0'])('ignores plugin %s and warns to upgrade', (primaryVersion) => {
+  it.each(['2.13.3', '1.6.0'])('loads plugin %s and warns to upgrade', (primaryVersion) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const loaded = loadOptionalPlugin('ios', { primaryVersion })
 
-    expect(loaded).toEqual({ plugin: undefined, version: undefined })
+    expect(loaded).toEqual({ plugin: PRIMARY, version: primaryVersion })
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain(`@posthog/react-native-plugin ${primaryVersion}`)
     expect(warn.mock.calls[0][0]).toContain('3.0.0 or later')
@@ -71,11 +71,15 @@ describe('OptionalPlugin loader', () => {
     warn.mockRestore()
   })
 
-  it('keeps a plugin whose version cannot be read', () => {
+  it('loads a plugin whose version cannot be read without warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
     const loaded = loadOptionalPlugin('ios', { primaryMetadataAvailable: false })
 
     expect(loaded.plugin).toBe(PRIMARY)
     expect(loaded.version).toBeUndefined()
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it.each(['ios', 'android', 'macos'])('loads no plugin on %s when the plugin is not installed', (os) => {

@@ -3,8 +3,7 @@
 ---
 
 - **Breaking:** stop loading `posthog-react-native-session-replay` when `@posthog/react-native-plugin` isn't installed — install `@posthog/react-native-plugin` 3.0 or later for session replay and native features
-- **Breaking:** require `@posthog/react-native-plugin` 3.0 or later
-- **Breaking:** ignore `@posthog/react-native-plugin` older than 3.0 and log a warning to upgrade, leaving session replay and other native features off
+- **Breaking:** require `@posthog/react-native-plugin` 3.0 or later, and log a warning to upgrade when an older one is installed
 - **Breaking:** remove the `PostHogProvider` `apiKey` prop — pass `projectToken` instead
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type

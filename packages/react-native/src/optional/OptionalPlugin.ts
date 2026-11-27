@@ -52,13 +52,14 @@ export const resolveOptionalPlugin = (
     } catch {}
   }
 
+  // The plugin stays loaded whatever its version, so reset and opt-out still reach the native SDK.
+  // The warning needs a readable version; every 3.0 release exposes its package.json.
   const major = Number(version?.match(/^(\d+)\./)?.[1])
   if (plugin && major < 3) {
     console.warn(
-      `[PostHog] posthog-react-native ignores the installed @posthog/react-native-plugin ${version}, so session replay ` +
-        'and other native features are off. Upgrade to @posthog/react-native-plugin 3.0.0 or later and rebuild your app.'
+      `[PostHog] posthog-react-native 5.0 does not support the installed @posthog/react-native-plugin ${version}. ` +
+        'Upgrade to @posthog/react-native-plugin 3.0.0 or later and rebuild your app.'
     )
-    return { plugin: undefined, version: undefined }
   }
 
   return { plugin, version }
