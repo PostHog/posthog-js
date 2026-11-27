@@ -63,6 +63,7 @@
     "files": [
         "lib/*",
         "dist/*",
+        "skills/**",
         "test-fixtures/*.json",
         "react/dist/**",
         "react/package.json",
