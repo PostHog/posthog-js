@@ -1,4 +1,5 @@
 import { isNullish } from '@posthog/core'
+import { isMatchingRegex } from '@posthog/core/surveys'
 
 export function extractHref(elementsChain: string): string {
     const match = elementsChain.match(/(?::|")href="(.*?)"/)
@@ -35,11 +36,7 @@ export function matchString(
             return new RegExp(likePattern, 'i').test(value)
         }
         case 'regex':
-            try {
-                return new RegExp(pattern).test(value)
-            } catch {
-                return false
-            }
+            return isMatchingRegex(value, pattern)
         default:
             return false
     }
