@@ -16,6 +16,14 @@ export const ConsentStatus = {
 export type ConsentStatus = (typeof ConsentStatus)[keyof typeof ConsentStatus]
 
 /**
+ * Reads consent from the shared store on each call, so it is true as soon as another tab rejects, before this
+ * instance has dropped its own identity.
+ */
+export const isCookielessMode = (config: PostHog['config'], consent: ConsentManager): boolean =>
+    config.cookieless_mode === COOKIELESS_ALWAYS ||
+    (config.cookieless_mode === COOKIELESS_ON_REJECT && consent.isRejected())
+
+/**
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
 export class ConsentManager {

@@ -252,6 +252,25 @@ test.describe('tracing headers across consent changes in cookieless on_reject', 
                 },
                 { baseUrl: CONSENT_URL, step }
             )
+        const sendWithStaleIds = (step: string, ids: { sessionId: string; windowId: string }) =>
+            page.evaluate(
+                async ({ baseUrl, step, ids }) => {
+                    const headers = { 'x-posthog-session-id': ids.sessionId, 'x-posthog-window-id': ids.windowId }
+                    const request = new window.Request(`${baseUrl}/${step}-request`, {
+                        method: 'POST',
+                        headers,
+                        body: 'stale request body',
+                    })
+                    const fromRequest = await fetch(request)
+                    const fromUrl = await fetch(`${baseUrl}/${step}-url`, {
+                        method: 'POST',
+                        headers,
+                        body: 'stale url body',
+                    })
+                    return [fromRequest.status, fromUrl.status]
+                },
+                { baseUrl: CONSENT_URL, step, ids }
+            )
         const liveIds = () =>
             page.evaluate(() => (window as any).posthog.sessionManager.checkAndGetSessionAndWindowId(true))
 
@@ -263,6 +282,7 @@ test.describe('tracing headers across consent changes in cookieless on_reject', 
 
         await page.evaluate(() => (window as any).posthog.opt_out_capturing())
         expect(await sendBoth('opted-out')).toEqual([200, 200])
+        expect(await sendWithStaleIds('stale-opted-out', optedInIds)).toEqual([200, 200])
 
         await page.evaluate(() => (window as any).posthog.opt_in_capturing())
         const reOptedInIds = await liveIds()
@@ -287,6 +307,19 @@ test.describe('tracing headers across consent changes in cookieless on_reject', 
         expect(sessionHeaders('rejected')).toEqual(expected('rejected'))
         expect(sessionHeaders('opted-in')).toEqual(expected('opted-in', optedInIds))
         expect(sessionHeaders('opted-out')).toEqual(expected('opted-out'))
+        expect(
+            received
+                .filter(({ path }) => path.startsWith('stale-opted-out-'))
+                .map(({ path, body, headers }) => ({
+                    path,
+                    body,
+                    sessionId: headers['x-posthog-session-id'],
+                    windowId: headers['x-posthog-window-id'],
+                }))
+        ).toEqual([
+            { path: 'stale-opted-out-request', body: 'stale request body', sessionId: undefined, windowId: undefined },
+            { path: 'stale-opted-out-url', body: 'stale url body', sessionId: undefined, windowId: undefined },
+        ])
         expect(sessionHeaders('re-opted-in')).toEqual(expected('re-opted-in', reOptedInIds))
     })
 })

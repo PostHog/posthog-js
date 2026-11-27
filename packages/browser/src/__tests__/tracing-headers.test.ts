@@ -423,6 +423,164 @@ describe('tracing headers', () => {
             const downstreamRequest = originalFetch.mock.calls[0][0] as Request
             await expect(downstreamRequest.text()).resolves.toBe('request-body')
         })
+
+        describe('stale PostHog headers on a matched host', () => {
+            const STALE = {
+                'X-POSTHOG-SESSION-ID': 'stale-session',
+                'X-POSTHOG-WINDOW-ID': 'stale-window',
+                'X-POSTHOG-DISTINCT-ID': 'stale-distinct',
+            }
+            const POSTHOG_HEADER_NAMES = Object.keys(STALE)
+            const expectNoPostHogHeaders = (headers: Headers) =>
+                POSTHOG_HEADER_NAMES.forEach((name) => expect(headers.has(name)).toBe(false))
+            const expectStale = (headers: Headers) =>
+                Object.entries(STALE).forEach(([name, value]) => expect(headers.get(name)).toBe(value))
+            const patchWithoutIdentity = () =>
+                patchFns._patchFetch(['example.com'], COOKIELESS_SENTINEL_VALUE, undefined, undefined, () => undefined)
+
+            it('removes stale headers from a Request when there is no session manager and no usable distinct ID', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const request = new Request('https://example.com/path', {
+                    body: 'request-body',
+                    headers: { ...STALE, 'x-app': 'app-value' },
+                    method: 'POST',
+                })
+                await window.fetch(request)
+
+                const downstreamRequest = originalFetch.mock.calls[0][0] as Request
+                expectNoPostHogHeaders(downstreamRequest.headers)
+                expect(downstreamRequest.headers.get('x-app')).toBe('app-value')
+                await expect(downstreamRequest.text()).resolves.toBe('request-body')
+                expectStale(request.headers)
+            })
+
+            it('removes stale headers from a plain object init', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const init = { body: 'request-body', headers: { ...STALE, 'x-app': 'app-value' }, method: 'POST' }
+                await window.fetch('https://example.com/path', init)
+
+                const [, downstreamInit] = originalFetch.mock.calls[0]
+                const headers = new Headers(downstreamInit?.headers)
+                expectNoPostHogHeaders(headers)
+                expect(headers.get('x-app')).toBe('app-value')
+                expect(downstreamInit?.body).toBe('request-body')
+                expect(downstreamInit?.method).toBe('POST')
+                expect(init.headers['X-POSTHOG-SESSION-ID']).toBe('stale-session')
+                expect(init.headers['X-POSTHOG-WINDOW-ID']).toBe('stale-window')
+                expect(init.headers['X-POSTHOG-DISTINCT-ID']).toBe('stale-distinct')
+            })
+
+            it('removes stale headers from a Headers init without mutating it', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const callerHeaders = new Headers({ ...STALE, 'x-app': 'app-value' })
+                await window.fetch('https://example.com/path', { headers: callerHeaders })
+
+                const headers = new Headers(originalFetch.mock.calls[0][1]?.headers)
+                expectNoPostHogHeaders(headers)
+                expect(headers.get('x-app')).toBe('app-value')
+                expectStale(callerHeaders)
+            })
+
+            it('leaves a request to an unmatched host completely untouched', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const init = { headers: { ...STALE } }
+                await window.fetch('https://other.example/path', init)
+                expect(originalFetch.mock.calls[0][1]).toBe(init)
+
+                const request = new Request('https://other.example/path', { headers: { ...STALE } })
+                await window.fetch(request)
+                expectStale((originalFetch.mock.calls[1][0] as Request).headers)
+            })
+
+            it('replaces stale headers with the current values when there is a session manager', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
+
+                await window.fetch('https://example.com/path', { headers: { ...STALE } })
+                const urlHeaders = new Headers(originalFetch.mock.calls[0][1]?.headers)
+                expect(urlHeaders.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+                expect(urlHeaders.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+                expect(urlHeaders.get('X-POSTHOG-DISTINCT-ID')).toBe('distinct-id')
+
+                await window.fetch(new Request('https://example.com/path', { headers: { ...STALE } }))
+                const requestHeaders = (originalFetch.mock.calls[1][0] as Request).headers
+                expect(requestHeaders.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+                expect(requestHeaders.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+                expect(requestHeaders.get('X-POSTHOG-DISTINCT-ID')).toBe('distinct-id')
+            })
+
+            it('removes only the stale distinct ID when a session manager exists but the distinct ID is the cookieless sentinel', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchFns._patchFetch(
+                    ['example.com'],
+                    COOKIELESS_SENTINEL_VALUE,
+                    sessionManager as any
+                )
+
+                await window.fetch('https://example.com/path', { headers: { ...STALE } })
+
+                const headers = new Headers(originalFetch.mock.calls[0][1]?.headers)
+                expect(headers.has('X-POSTHOG-DISTINCT-ID')).toBe(false)
+                expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('session-id')
+                expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe('window-id')
+            })
+
+            it('sends no stale headers when the distinct ID is not a valid header value', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchFns._patchFetch(['example.com'], '用户-1', sessionManager as any)
+
+                await window.fetch('https://example.com/path', { headers: { ...STALE } })
+                expectNoPostHogHeaders(new Headers(originalFetch.mock.calls[0][1]?.headers))
+
+                await window.fetch(new Request('https://example.com/path', { headers: { ...STALE } }))
+                expectNoPostHogHeaders((originalFetch.mock.calls[1][0] as Request).headers)
+            })
+
+            it.each([
+                ['string', () => 'request-body'],
+                ['FormData', () => new FormData()],
+                ['Blob', () => new Blob(['request-body'])],
+                ['ArrayBuffer', () => new ArrayBuffer(8)],
+                ['URLSearchParams', () => new URLSearchParams({ a: '1' })],
+                ['ReadableStream', () => new ReadableStream()],
+            ])('keeps a %s body when removing stale headers rebuilds the init', async (_name, createBody) => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const body = createBody() as BodyInit
+                const signal = new AbortController().signal
+                const init = { body, duplex: 'half', headers: { ...STALE }, method: 'POST', signal } as RequestInit
+                await window.fetch('https://example.com/path', init)
+
+                const [input, downstreamInit] = originalFetch.mock.calls[0]
+                expect(input).toBe('https://example.com/path')
+                expect(downstreamInit?.body).toBe(body)
+                expect(downstreamInit?.method).toBe('POST')
+                expect(downstreamInit?.signal).toBe(signal)
+                expect((downstreamInit as { duplex?: string }).duplex).toBe('half')
+                expectNoPostHogHeaders(new Headers(downstreamInit?.headers))
+            })
+
+            it('passes the original arguments through when there are no PostHog headers and no SDK values', async () => {
+                const originalFetch = mockFetch()
+                restoreFetchPatch = patchWithoutIdentity()
+
+                const init = { headers: { 'x-app': 'app-value' }, method: 'POST' }
+                await window.fetch('https://example.com/path', init)
+                await window.fetch('https://example.com/path')
+
+                expect(originalFetch.mock.calls[0][1]).toBe(init)
+                expect(originalFetch.mock.calls[1]).toEqual(['https://example.com/path'])
+            })
+        })
     })
 
     describe('xhr', () => {
@@ -1063,6 +1221,23 @@ describe('tracing headers', () => {
             const headers = await fetchHeaders(originalFetch)
             expect(headers.get('X-POSTHOG-SESSION-ID')).toBe(sessionId)
             expect(headers.get('X-POSTHOG-WINDOW-ID')).toBe(windowId)
+        })
+
+        it('sends no PostHog IDs once consent is rejected outside this instance', async () => {
+            const originalFetch = mockFetch()
+            const instance = await setup()
+            instance.opt_in_capturing()
+            expect((await fetchHeaders(originalFetch)).get('X-POSTHOG-SESSION-ID')).toBe(liveIds(instance).sessionId)
+
+            // What another tab's opt out does: it writes the shared consent, and this instance has not reconciled yet.
+            instance.consent.optInOut(false)
+            expect(instance.sessionManager).toBeDefined()
+
+            const headers = await fetchHeaders(originalFetch)
+            expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBeNull()
+            expect(headers.get('X-POSTHOG-SESSION-ID')).toBeNull()
+            expect(headers.get('X-POSTHOG-WINDOW-ID')).toBeNull()
+            expect(xhrHeaders()).toEqual({})
         })
     })
 })

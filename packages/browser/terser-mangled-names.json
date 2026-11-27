@@ -183,6 +183,7 @@
         "_crossTabPersistence",
         "_crossTabPersistenceUnsubscribe",
         "_cross_subdomain",
+        "_currentDistinctId",
         "_currentLanguage",
         "_currentMaskedHostname",
         "_currentPageview",
