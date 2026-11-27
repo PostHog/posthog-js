@@ -1,4 +1,6 @@
 import { PostHog } from '../posthog-core'
+import { COOKIELESS_SENTINEL_VALUE } from '../constants'
+import { isCookielessMode } from '../consent'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isString, isUndefined } from '@posthog/core'
@@ -106,6 +108,16 @@ export class TracingHeaders implements Extension {
         }
     }
 
+    // Consent can be rejected in another tab before this instance drops its identity, so both IDs are read through
+    // the consent that applies now. The sentinel is what a cookieless instance already hands the patches.
+    private _currentDistinctId = () =>
+        isCookielessMode(this._instance.config, this._instance.consent)
+            ? COOKIELESS_SENTINEL_VALUE
+            : this._instance.get_distinct_id()
+
+    private _getSessionManager = () =>
+        isCookielessMode(this._instance.config, this._instance.consent) ? undefined : this._instance.sessionManager
+
     private _startCapturing = () => {
         const { hostnames, traceparentTargets } = this._syncForPatch()
         if (!hostnames && !traceparentTargets) {
@@ -127,17 +139,19 @@ export class TracingHeaders implements Extension {
         if (isUndefined(this._restoreXHRPatch)) {
             this._restoreXHRPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 this._hostnamesForPatch,
-                () => this._instance.get_distinct_id(),
+                this._currentDistinctId,
                 this._instance.sessionManager,
-                this._traceparentTargetsForPatch
+                this._traceparentTargetsForPatch,
+                this._getSessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             this._restoreFetchPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
                 this._hostnamesForPatch,
-                () => this._instance.get_distinct_id(),
+                this._currentDistinctId,
                 this._instance.sessionManager,
-                this._traceparentTargetsForPatch
+                this._traceparentTargetsForPatch,
+                this._getSessionManager
             )
         }
     }

@@ -1,6 +1,6 @@
 import Config from './config'
 import { getBundledExtensionLoader, LoadExternalDependency } from './utils/extension-loader'
-import { ConsentManager, ConsentStatus } from './consent'
+import { ConsentManager, ConsentStatus, isCookielessMode } from './consent'
 import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
@@ -580,10 +580,7 @@ export class PostHog implements PostHogInterface {
     }
 
     private _inCookielessMode(): boolean {
-        return (
-            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
-        )
+        return isCookielessMode(this.config, this.consent)
     }
 
     // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
