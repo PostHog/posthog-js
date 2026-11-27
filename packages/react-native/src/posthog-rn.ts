@@ -1407,9 +1407,8 @@ export class PostHog extends PostHogCoreBase {
   }
 
   // The replay debug keys are stamped on every enqueue path, including autocapture, which skips
-  // buildPayload. As on the native SDKs, a registered or caller value of the same name wins, except
-  // for the SDK-owned `$sdk_debug_pending_queue_size`, which the SDK's depth replaces and a healthy
-  // queue leaves off. The optional bundle goes only on an event that claimed it. `$snapshot` and a
+  // buildPayload. A registered or caller value of the same name wins, except for
+  // `$sdk_debug_pending_queue_size`: the SDK's depth replaces it, and a healthy queue leaves it off. The optional bundle goes only on an event that claimed it. `$snapshot` and a
   // minimal $feature_flag_called envelope get none.
   private _stampReplayDebugProperties(message: PostHogEventProperties, includeOptionalBundle: boolean): void {
     const properties = (message.properties ?? {}) as { [key: string]: JsonType | undefined }
@@ -4679,9 +4678,10 @@ export class PostHog extends PostHogCoreBase {
     if (!this._sessionReplayEventTriggers.includes(eventName)) {
       return
     }
-    // Use super.getSessionId() (not this.getSessionId()) deliberately: the capture path already ran the
-    // overriding getSessionId() during enrichProperties, so rotation handling has fired and the id is
-    // synced. Calling the override again here would re-enter rotation logic from inside capture.
+    // Use super.getSessionId() (not this.getSessionId()) deliberately: unless a registered or caller
+    // `$session_id` won, the capture path already ran the overriding getSessionId() during
+    // enrichProperties, so rotation handling has fired and the id is synced. Calling the override again
+    // here would re-enter rotation logic from inside capture.
     const sessionId = super.getSessionId()
     if (!sessionId) {
       return

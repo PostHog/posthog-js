@@ -340,17 +340,16 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
     // As in native 4.0: the SDK's own properties, then registered and session properties, then the caller's. A
     // `null`, `undefined` or blank `$session_id` counts as unset, and `$lib` and `$lib_version` fill last, as a pair.
+    // The SDK session is read only when no id wins, as getSessionId() can rotate the session.
     const { $lib, $lib_version, ...sdkProperties } = this.getCommonEventProperties()
-    const sessionId = this.getSessionId()
     const enriched: PostHogEventProperties = {
       ...sdkProperties,
-      $session_id: sessionId,
       ...this.props,
       ...this.sessionProps,
       ...userProperties,
     }
     if (!isFilledString(enriched.$session_id) || !enriched.$session_id.trim()) {
-      enriched.$session_id = sessionId
+      enriched.$session_id = this.getSessionId()
     }
     fillLibraryIdentity(enriched, $lib, $lib_version)
     return enriched

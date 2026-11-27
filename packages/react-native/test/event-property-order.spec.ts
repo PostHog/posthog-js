@@ -103,6 +103,18 @@ describe('event property order', () => {
     expect(queued(client, 'Viewed Dashboard').properties.$geoip_disable).toBe(false)
   })
 
+  it('leaves the SDK session alone when a caller $session_id wins', () => {
+    const client = newPostHog()
+    const sessionId = client.getSessionId()
+    const lastActivity = Date.now() - 3600 * 1000
+    client.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, lastActivity)
+
+    client.capture('Signed Up', { $session_id: 'caller-session' })
+
+    expect(client.getPersistedProperty(PostHogPersistedProperty.SessionId)).toBe(sessionId)
+    expect(client.getPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp)).toBe(lastActivity)
+  })
+
   it('lets a registered or caller $session_id win for that event, and treats a null or blank one as unset', () => {
     const client = newPostHog()
     const sessionId = client.getSessionId()

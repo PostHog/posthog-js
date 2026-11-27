@@ -90,6 +90,19 @@ describe('PostHog Core', () => {
       expect(onCapture.mock.calls[0][0].properties.$geoip_disable).toBe(disableGeoip)
     })
 
+    it('reads the SDK session only when no registered or caller session id is set', () => {
+      useNativePropertyOrder()
+      const getSessionId = vi.spyOn(posthog, 'getSessionId')
+      posthog.register({ $session_id: 'registered-session' })
+      captured({ $session_id: 'caller-session' })
+      captured()
+      expect(getSessionId).not.toHaveBeenCalled()
+
+      posthog.unregister('$session_id')
+      captured({ $session_id: ' ' })
+      expect(getSessionId).toHaveBeenCalledTimes(1)
+    })
+
     it.each([null, ' '])('treats a %j caller session id as unset', (sessionId) => {
       useNativePropertyOrder()
       expect(captured({ $session_id: sessionId }).$session_id).toBe(posthog.getSessionId())
