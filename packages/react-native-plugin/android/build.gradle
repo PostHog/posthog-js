@@ -68,12 +68,12 @@ dependencies {
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
   // strictly: Gradle otherwise raises this version when the app or another library asks for a
-  // newer posthog-android, and this plugin, compiled against 4.0.x, then crashes at runtime. It calls
-  // posthog-android internals, which can change in a minor, so stay on 4.0.x like posthog-ios.
+  // newer posthog-android, and this plugin, compiled against 4.1.x, then crashes at runtime. It calls
+  // posthog-android internals, which can change in a minor, so stay on 4.1.x like posthog-ios.
   implementation("com.posthog:posthog-android") {
     version {
-      strictly "[4.0.3,4.1.0)"
-      prefer "4.0.3"
+      strictly "[4.1.0,4.2.0)"
+      prefer "4.1.0"
     }
   }
 

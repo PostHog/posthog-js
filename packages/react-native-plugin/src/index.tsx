@@ -88,6 +88,20 @@ export function isEnabled(): Promise<boolean> {
   return PosthogReactNativePlugin.isEnabled()
 }
 
+/**
+ * Sets how long a recording must last before the native recorder sends it, overriding the
+ * project's minimum duration. Pass `null` to go back to the project's minimum.
+ *
+ * @internal Used by `posthog-react-native`'s session replay trigger groups. Not part of the public API.
+ */
+export function setSessionReplayMinimumDuration(minimumDurationMs: number | null): Promise<void> {
+  // An OTA-updated JS bundle can run on a native build that predates this method.
+  if (typeof PosthogReactNativePlugin.setSessionReplayMinimumDuration !== 'function') {
+    return Promise.resolve()
+  }
+  return PosthogReactNativePlugin.setSessionReplayMinimumDuration(minimumDurationMs)
+}
+
 export function identify(distinctId: string, anonymousId: string): Promise<void> {
   return PosthogReactNativePlugin.identify(distinctId, anonymousId)
 }
@@ -262,6 +276,8 @@ export interface PostHogReactNativePluginModule {
 
   isEnabled: () => Promise<boolean>
 
+  setSessionReplayMinimumDuration: (minimumDurationMs: number | null) => Promise<void>
+
   identify: (distinctId: string, anonymousId: string) => Promise<void>
 
   reset: (distinctId: string, anonymousId: string) => Promise<void>
@@ -300,6 +316,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   startSession,
   endSession,
   isEnabled,
+  setSessionReplayMinimumDuration,
   identify,
   reset,
   startRecording,

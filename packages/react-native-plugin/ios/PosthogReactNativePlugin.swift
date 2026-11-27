@@ -538,6 +538,17 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         #endif
     }
 
+    @objc(setSessionReplayMinimumDuration:withResolver:withRejecter:)
+    func setSessionReplayMinimumDuration(
+        minimumDurationMs: NSNumber?, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        #if os(iOS)
+            PostHogSDK.shared.setSessionReplayMinimumDuration(minimumDurationMs?.intValue)
+        #endif
+        // JS sends one after every setup, including on macOS where replay is unsupported, so no log here.
+        resolve(nil)
+    }
+
     @objc(endSession:withRejecter:)
     func endSession(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
         PostHogSDK.shared.endSession()

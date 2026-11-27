@@ -1,7 +1,7 @@
 import { PostHog, PostHogCustomStorage } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
-import { waitForExpect, wait } from './test-utils'
+import { waitForExpect, wait, waitForRemoteConfig } from './test-utils'
 
 // Mock the native plugin bridge. No `setup` key, so the SDK takes the legacy start()
 // path (same surface as the standalone posthog-react-native-session-replay package).
@@ -109,6 +109,7 @@ describe('PostHog RN manual session recording controls', () => {
   it('preserves the Promise<void> public recording control contract', async () => {
     posthog = newPostHog()
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
 
     const starting: Promise<void> = posthog.startSessionRecording()
     expect(await starting).toBeUndefined()
@@ -122,6 +123,7 @@ describe('PostHog RN manual session recording controls', () => {
   it('starts the native recorder without returning a result', async () => {
     posthog = newPostHog()
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
 
     expect(await posthog.startSessionRecording()).toBeUndefined()
     expect(await posthog.isSessionReplayActive()).toBe(true)
@@ -130,6 +132,7 @@ describe('PostHog RN manual session recording controls', () => {
   it('lets a newer queued start supersede an earlier call without rotating the session', async () => {
     posthog = newPostHog()
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
     const sessionId = posthog.getSessionId()
 
     const first = posthog.startSessionRecording(false)
@@ -193,6 +196,7 @@ describe('PostHog RN manual session recording controls', () => {
     nativeAccepts = false
     posthog = newPostHog()
     await posthog.ready()
+    await waitForRemoteConfig(posthog)
 
     expect(await posthog.startSessionRecording()).toBeUndefined()
     expect(await posthog.isSessionReplayActive()).toBe(false)
@@ -301,6 +305,33 @@ describe('PostHog RN manual session recording controls', () => {
 
     expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
     expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
+  it('keeps an explicit stop across linked flag reloads with replay enabled', async () => {
+    let flags: Record<string, boolean> = { 'replay-flag': true }
+    vi.mocked(window.fetch).mockImplementation(async (url: any) => {
+      const res: any = { status: 'ok', sessionRecording: { endpoint: '/s/', linkedFlag: 'replay-flag' } }
+      if (String(url).includes('flags')) {
+        res.featureFlags = flags
+      }
+      return { status: 200, json: () => Promise.resolve(res) } as any
+    })
+    const reloadFlags = async (next: Record<string, boolean>): Promise<void> => {
+      flags = next
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(50)
+    }
+    const starts = (): number => replay.start.mock.calls.length + replay.startRecording.mock.calls.length
+
+    posthog = new PostHog('test-token', { customStorage: mockStorage, enableSessionReplay: true, flushInterval: 0 })
+    await posthog.ready()
+    await reloadFlags({ 'replay-flag': true })
+    await waitForExpect(2000, () => expect(starts()).toBe(1))
+
+    await posthog.stopSessionRecording()
+    await reloadFlags({ 'replay-flag': false })
+    await reloadFlags({ 'replay-flag': true })
+    expect(starts()).toBe(1)
   })
 
   describe('automatic manual-start retries', () => {
@@ -475,6 +506,7 @@ describe('PostHog RN manual session recording controls', () => {
     try {
       posthog = newPostHog()
       await posthog.ready()
+      await waitForRemoteConfig(posthog)
 
       expect(await posthog.startSessionRecording()).toBeUndefined()
       expect(await posthog.isSessionReplayActive()).toBe(false)

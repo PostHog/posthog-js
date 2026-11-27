@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Dynamic
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -20,6 +21,7 @@ import com.posthog.PostHogConfig
 import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogInternalReplayApi
 import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
@@ -274,6 +276,27 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("getSessionReplayDebugProperties", e)
       promise.resolve(Arguments.createMap())
+    }
+  }
+
+  @OptIn(PostHogInternalReplayApi::class)
+  @ReactMethod
+  fun setSessionReplayMinimumDuration(
+    minimumDurationMs: Dynamic,
+    promise: Promise,
+  ) {
+    try {
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      applySessionReplayMinimumDuration(minimumDurationFromDynamic(minimumDurationMs), integration?.let { it::setSessionReplayMinimumDuration })
+    } catch (e: Throwable) {
+      logError("setSessionReplayMinimumDuration", e)
+    } finally {
+      minimumDurationMs.recycle()
+      promise.resolve(null)
     }
   }
 
@@ -896,6 +919,17 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// A Dynamic parameter keeps a JS null from crashing the old bridge's primitive Double unboxing before the method runs.
+internal fun minimumDurationFromDynamic(value: Dynamic): Double? = if (value.isNull) null else value.asDouble()
+
+// JS numbers cross the bridge as doubles; null clears the override. With no replay integration there is nothing to set.
+internal fun applySessionReplayMinimumDuration(
+  minimumDurationMs: Double?,
+  setMinimumDuration: ((Long?) -> Unit)?,
+) {
+  setMinimumDuration?.invoke(minimumDurationMs?.toLong())
+}
 
 // Two separate native features: autoCapture covers JVM crashes, while captureNativeCrashes
 // installs the tombstone scanner that reports NDK crashes on the next launch.

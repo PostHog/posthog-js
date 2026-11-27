@@ -1,5 +1,6 @@
 package com.posthogreactnativeplugin
 
+import com.facebook.react.bridge.DynamicFromObject
 import com.facebook.react.bridge.JavaOnlyMap
 import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroidConfig
@@ -147,6 +148,35 @@ class PosthogReactNativePluginModuleTest {
     applyScreenshotConfig(JavaOnlyMap.of("screenshotColorMode", "ARGB_8888"), config)
 
     assertEquals(PostHogScreenshotColorMode.ARGB_8888, config.screenshotColorMode)
+  }
+
+  @Test
+  fun `a JS minimum duration reaches the replay integration as a Long`() {
+    val received = mutableListOf<Long?>()
+
+    applySessionReplayMinimumDuration(5000.0) { received.add(it) }
+
+    assertEquals(listOf<Long?>(5000L), received)
+  }
+
+  @Test
+  fun `a null minimum duration reaches the replay integration as null`() {
+    val received = mutableListOf<Long?>()
+
+    applySessionReplayMinimumDuration(null) { received.add(it) }
+
+    assertEquals(listOf<Long?>(null), received)
+  }
+
+  @Test
+  fun `a dynamic minimum duration converts null to null and a number to a Double`() {
+    assertNull(minimumDurationFromDynamic(DynamicFromObject(null)))
+    assertEquals(5000.0, minimumDurationFromDynamic(DynamicFromObject(5000.0))!!, 0.0)
+  }
+
+  @Test
+  fun `a minimum duration without a replay integration does not throw`() {
+    applySessionReplayMinimumDuration(5000.0, null)
   }
 
   @Test
