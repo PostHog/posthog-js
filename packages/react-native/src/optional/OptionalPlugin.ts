@@ -57,7 +57,7 @@ export const resolveOptionalPlugin = (
   const major = Number(version?.match(/^(\d+)\./)?.[1])
   if (plugin && major < 3) {
     console.warn(
-      `[PostHog] posthog-react-native 5.0 does not support the installed @posthog/react-native-plugin ${version}. ` +
+      `[PostHog] posthog-react-native 5 does not support the installed @posthog/react-native-plugin ${version}. ` +
         'Upgrade to @posthog/react-native-plugin 3.0.0 or later and rebuild your app.'
     )
   }
