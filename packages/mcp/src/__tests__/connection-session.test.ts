@@ -138,6 +138,21 @@ describe('one-client connection session rotation', () => {
     expectGroups('aaa')
   })
 
+  it('rotates when an earlier call never settles but the latest call ended', async () => {
+    gate = new Promise(() => {})
+    const { server } = createStdioServer()
+    const call = (args: Record<string, unknown>): Promise<unknown> =>
+      server._requestHandlers.get('tools/call')!({ method: 'tools/call', params: { name: 'work', arguments: args } })
+
+    void call({ block: true })
+    await call({})
+    vi.advanceTimersByTime(40 * 60_000)
+    await call({})
+    await settle()
+
+    expectGroups('ab')
+  })
+
   it.each<{ name: string; extra: CompatibleRequestHandlerExtra }>([
     { name: 'a transport session', extra: { sessionId: 'transport-session' } },
     {

@@ -642,7 +642,7 @@ export interface MCPAnalyticsData {
   /** Safe logger bound to this server; a no-op when no logger was configured. */
   logger: LoggerFn
   /** Tool calls on this instance, which rotate a one-client connection's own session. */
-  connection: { runningToolCalls: number; lastToolCallEnded?: number }
+  connection: { runningToolCall?: string; lastToolCallEnded?: number }
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
