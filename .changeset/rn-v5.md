@@ -9,7 +9,6 @@
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
 - **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** `onFeatureFlags` callbacks receive one object, `{ flags, variants, errorsLoading }`, like posthog-ios, posthog-android and posthog_flutter: `flags` lists the enabled flag keys, `variants` maps them to `true` or their variant, and `errorsLoading` is `true` when the latest load failed (the values are then the last known ones). Disabled flags and flags whose variant is an empty string are left out. Replace `onFeatureFlags((flags) => …)` with `onFeatureFlags(({ flags, variants, errorsLoading }) => …)`
 - **Breaking:** a callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags` returns
@@ -36,11 +35,14 @@
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
+- **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
+- **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog
 - **Breaking:** `captureTraceFeedback()` and `captureTraceMetric()` send `$ai_feedback` and `$ai_metric` through `captureAi()` to the AI endpoint instead of the analytics endpoint
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request
 - Keep events queued when a send gets no response, a 404, 408, 429, 500, 502, 503 or 504, or a `retry` result, and send them again after a wait of 1 second doubling to 30 seconds (longer if the server's `Retry-After` asks, up to 30 seconds), with no attempt limit. `flush()` during that wait resolves without sending, and `shutdown()` waits it out when it fits in its timeout

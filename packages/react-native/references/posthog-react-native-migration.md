@@ -12,6 +12,7 @@ Read the checklist first, then the sections that apply to you.
 You need to change code or configuration if your app does any of these:
 
 - sends events through a reverse proxy, or to a self-hosted PostHog (see [Reverse proxies and self-hosted PostHog](#reverse-proxies-and-self-hosted-posthog))
+- passes a personal API key (`phx_...`) as the project token (see [Personal API keys](#personal-api-keys))
 - uses session replay or another native feature with `posthog-react-native-session-replay`, or with `@posthog/react-native-plugin` older than 3.0 (see [Session replay and the native plugin](#session-replay-and-the-native-plugin))
 - passes `apiKey` to `PostHogProvider`, or sets `evaluationEnvironments`, `disableRemoteConfig`, `sessionReplayConfig.iOSdebouncerDelayMs`, `sessionReplayConfig.androidDebouncerDelayMs`, `sessionReplayConfig.screenshotModeBackgroundCapture` or `autocapture.navigationRef` (see [Removed options](#removed-options))
 - calls `useNavigationTracker()` with a `navigationRef` argument
@@ -48,6 +49,7 @@ If you send events through your own reverse proxy, update it before you upgrade:
 - Forward `/i/v1/analytics/events` and `/i/v1/ai/events` to PostHog.
 - Pass `Authorization` through unchanged when it starts with `Bearer phc_`, or is `Bearer <your project token>` for a token older than the `phc_` prefix. The project token is no longer in the request body, and PostHog answers `401` without it.
 - Pass every `PostHog-*` header, `Content-Type`, `Content-Encoding` and `User-Agent` through unchanged. PostHog answers `400` without them.
+- On react-native-web, if your proxy answers CORS preflight requests with a fixed `Access-Control-Allow-Headers` list, add `Authorization`, `PostHog-Sdk-Info`, `PostHog-Attempt`, `PostHog-Request-Id` and `PostHog-Request-Timestamp` to it, next to `Content-Type`, `Content-Encoding` and any `requestHeaders` you set. 4.x didn't send these on capture requests. Without them the browser blocks every capture request, and events stay queued.
 - Return PostHog's response body unchanged. The SDK drops a batch whose `2xx` response has no PostHog `results` body.
 - Accept request bodies up to 20 MB. Analytics requests carry up to 5 MiB of events, and a single AI event can be over 8 MiB.
 - Answer capture requests directly instead of redirecting them. React Native's fetch follows every redirect, including one to another origin, so a redirect can send your `requestHeaders` to that origin. The native SDKs follow only same-origin `307` and `308` redirects.
@@ -69,6 +71,11 @@ Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'Po
 `@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later, Xcode 26 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md) for its own steps.
 
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
+
+## Personal API keys
+
+5.0 disables the client when the project token is a personal API key (`phx_...`), like posthog-node, posthog-ios and posthog-android, and logs `A personal API key ("phx_...") was passed where the project token ("phc_...") belongs. The client will be disabled.`
+4.x sent the key to PostHog with its requests. Pass your project token (`phc_...`) from your [project settings](https://us.posthog.com/settings/project-details#variables) instead.
 
 ## Removed options
 
@@ -206,7 +213,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 ### Per-event options
 
-Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `alias()`, `group()`, `groupIdentify()`, `captureException()` and `captureAi()` take them in their options argument:
+Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `unsetPersonProperties()`, `alias()`, `group()`, `groupIdentify()`, `captureException()` and `captureAi()` take them in their options argument:
 
 ```ts
 // 4.x
@@ -251,4 +258,4 @@ AI events have their own queue and options:
 `flushAt`, `maxBatchSize` and `flushInterval` apply to both queues. `disableCompression` doesn't affect AI events.
 
 The SDK doesn't redact or truncate prompts, outputs or media; use `before_send` to strip them.
-With Expo's file system as storage (the default where `expo-file-system` is installed), unsent AI events survive a restart up to their newest 5 MiB. With `@react-native-async-storage/async-storage` as storage (the default without Expo's file system), or `persistence: 'memory'`, they're kept in memory only, so they're lost if the app is killed before they're sent. Pass AsyncStorage itself as `customStorage`, not a wrapper around it.
+With Expo's file system as storage (the default where `expo-file-system` is installed), unsent AI events are stored in the app's cache directory, which isn't backed up, and survive a restart; the OS may clear that directory when the device is low on space. With any `customStorage`, AsyncStorage included, with `@react-native-async-storage/async-storage` as storage (the default without Expo's file system), or with `persistence: 'memory'`, they're kept in memory only, so they're lost if the app is killed before they're sent.
