@@ -42,6 +42,8 @@ export const forms: SendEmailOptions[] = [
   { to, templateKey: 'reset', subject: 'Reset', react },
   { to, templateKey: 'reset', subject: 'Reset', react: jsxReact },
   { to, templateKey: 'reset', subject: 'Reset', react, text: 'Reset' },
+  { to, templateId, scheduledAt: new Date('2026-12-01T09:00:00Z') },
+  { to, templateKey: 'reminder', subject: 'Reminder', html: '<p>Soon</p>', scheduledAt: '2026-12-01T10:00:00+01:00' },
 ]
 
 export const wrongCombinations: SendEmailOptions[] = [
@@ -79,6 +81,8 @@ export const wrongCombinations: SendEmailOptions[] = [
   { to, templateKey: 'reset', subject: 'Reset', react, html: '<p>Reset</p>' },
   // @ts-expect-error a template made in PostHog sets its own content
   { to, templateId, react },
+  // @ts-expect-error scheduledAt takes a Date or an ISO 8601 time, not milliseconds
+  { to, templateId, scheduledAt: 1795597200000 },
 ]
 
 export const reactRenderers: EmailReactRenderer[] = [

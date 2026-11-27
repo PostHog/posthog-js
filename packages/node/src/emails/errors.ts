@@ -22,6 +22,7 @@ export interface EmailErrorParams {
   docsUrl?: string
   field?: string
   retryAfterMs?: number
+  messageId?: string
   cause?: unknown
 }
 
@@ -44,6 +45,8 @@ export class EmailError extends Error {
   readonly field?: string
   /** How long PostHog asked the client to wait before it sends again, in milliseconds. */
   readonly retryAfterMs?: number
+  /** The message ID of an email PostHog accepted although the call failed, such as an unconfirmed scheduled send. */
+  readonly messageId?: string
 
   constructor(params: EmailErrorParams) {
     super(params.message, params.cause === undefined ? undefined : { cause: params.cause })
@@ -55,6 +58,7 @@ export class EmailError extends Error {
     this.docsUrl = params.docsUrl
     this.field = params.field
     this.retryAfterMs = params.retryAfterMs
+    this.messageId = params.messageId
   }
 }
 
