@@ -107,6 +107,9 @@ jobs:
       - name: Check task graph
         run: pnpm test:build-graph
 
+      - name: Check SDK reference generator
+        run: pnpm test:sdk-reference-generator
+
       - name: Check SDK types
         run: pnpm check-types --concurrency=50%
 
