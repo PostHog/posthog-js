@@ -439,7 +439,14 @@ const preparedCall = posthog.prepareToolCall(toolName, rawArgs, {
   requestMeta: request.params?._meta,
   sessionId: transportSessionId,
 })
-const toolResult = await dispatch(toolName, preparedCall.args)
+let toolResult
+let thrown
+try {
+  toolResult = await dispatch(toolName, preparedCall.args)
+} catch (error) {
+  thrown = error
+  toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
+}
 const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
 
 posthog.captureToolCall({
@@ -447,8 +454,10 @@ posthog.captureToolCall({
   llmModel: preparedCall.llmModel,
   llmModelSource: preparedCall.llmModelSource,
   sessionId: preparedResult.sessionId,
+  sessionSource: preparedResult.sessionSource,
   conversationId: preparedResult.conversationId,
-  isError: false,
+  isError: toolResult.isError === true,
+  error: thrown,
 })
 
 return preparedResult.result
@@ -459,8 +468,15 @@ Pass `requestMeta` whenever the request supplies `_meta`, and `headers` (plus `c
 handshake bound to the request, if you hold one) so the SDK can recognize the client; this enables
 recognized client metadata and client conversation ids without changing the arguments sent to the
 tool. Pass the same `headers` to `prepareToolList`. Pass an existing transport or request session as
-`sessionId`. A client conversation id or a valid echoed conversation handle takes precedence. Otherwise, the existing session
-prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
+`sessionId`: a PostHog session token gives the session inside it, and any other id is hashed into a
+`ses_` id, as `instrument()` does. A client conversation id or a valid echoed conversation handle
+takes precedence. Otherwise, the existing session prevents a new handle from being minted. On a
+one-client connection such as stdio, pass a `connectionKey` you keep for the connection's lifetime
+instead: the SDK gives it a session and rotates it on the first call that arrives 30 minutes or more
+after the previous one ended. A call holds the session open until its result is prepared, so call
+`prepareToolResult` for failed calls too, with the `preparedCall` object unchanged. For `captureInitialize`, `captureToolsList`, and other
+events outside a tool call, spread `posthog.resolveSession({ sessionId, connectionKey })` into the
+capture so they share the tool calls' session. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.
 
 ### Collecting agent feedback (`send_feedback`)

@@ -10,6 +10,7 @@ import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
+import type { ConnectionClock } from './extensions/session'
 
 export type JsonRecord = Record<string, unknown>
 
@@ -642,7 +643,7 @@ export interface MCPAnalyticsData {
   /** Safe logger bound to this server; a no-op when no logger was configured. */
   logger: LoggerFn
   /** Tool calls on this instance, which rotate a one-client connection's own session. */
-  connection: { runningToolCall?: string; lastToolCallEnded?: number }
+  connection: ConnectionClock
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
@@ -689,6 +690,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Which source grouped the event into `sessionId` → `$mcp_session_source`. Pass the
+   * value from {@link PostHogMCP.prepareToolResult}. Without a `sessionId`, the SDK
+   * generates one and records `generated`.
+   */
+  sessionSource?: MCPAnalyticsSessionSource
   /**
    * Conversation handle → `$mcp_conversation_id`. For custom dispatchers,
    * use the value returned by {@link PostHogMCP.prepareToolResult} so a newly
@@ -881,11 +888,23 @@ export interface PrepareToolCallOptions {
    */
   clientInfo?: { name?: string; version?: string }
   /**
-   * A session id carried by the request or transport. A client conversation id
-   * or a valid echoed `conversation_id` takes precedence. Otherwise this value
-   * prevents the SDK from minting a second session handle.
+   * The transport session the request carried, such as its `Mcp-Session-Id`. A
+   * PostHog session token gives the session inside it; any other id is hashed into
+   * a `ses_` id, as `instrument()` does. A client conversation id or a valid echoed
+   * `conversation_id` takes precedence. Otherwise this value prevents the SDK from
+   * minting a second session handle.
    */
   sessionId?: string
+  /**
+   * A key you keep for the lifetime of a one-client connection (such as stdio), in
+   * place of a transport session. The SDK gives the connection a generated session
+   * and rotates it on the first call that arrives 30 minutes or more after the
+   * previous one ended, as `instrument()` does over stdio. A call still running
+   * holds it open, so pass every call to {@link PostHogMCP.prepareToolResult},
+   * failed ones included: that marks its end. Resolve events outside a tool call
+   * with {@link PostHogMCP.resolveSession}.
+   */
+  connectionKey?: string
 }
 
 /**
@@ -906,6 +925,8 @@ export interface PreparedToolCall {
   args?: Record<string, unknown>
   /** The resolved session id to use when capturing this call. */
   sessionId?: string
+  /** Which source grouped the call into {@link PreparedToolCall.sessionId}. */
+  sessionSource?: MCPAnalyticsSessionSource
   /**
    * The resolved conversation handle. Use the value from
    * {@link PostHogMCP.prepareToolResult} for capture because result delivery can
@@ -936,6 +957,8 @@ export interface PreparedToolResult<TResult = unknown> {
   result: TResult
   /** The resolved session id to use when capturing this call. */
   sessionId?: string
+  /** Which source grouped the call into {@link PreparedToolResult.sessionId}. */
+  sessionSource?: MCPAnalyticsSessionSource
   /** The conversation handle to capture, if it reached the client. */
   conversationId?: string
 }

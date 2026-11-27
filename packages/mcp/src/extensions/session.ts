@@ -79,6 +79,40 @@ export function isModernEraRequest(
 
 const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
 
+/** The tool calls on a one-client connection, which decide when its own id rotates. */
+export interface ConnectionClock {
+  /**
+   * The most recent call to arrive, until it ends. Only that call holds the session
+   * open, so a call that never settles cannot stop a later one from rotating it, and
+   * a call from an evicted clock ends nothing.
+   */
+  runningToolCall?: string
+  lastToolCallEnded?: number
+}
+
+/**
+ * Counts a tool call in. True when it is the first to arrive 30 minutes or more
+ * after the previous one ended, with none still running, so the connection's own
+ * id rotates.
+ */
+export function arriveToolCall(clock: ConnectionClock, callId: string): boolean {
+  const ended = clock.lastToolCallEnded
+  const rotate = clock.runningToolCall === undefined && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
+  clock.runningToolCall = callId
+  return rotate
+}
+
+export function endToolCall(clock: ConnectionClock, callId: string): void {
+  clock.lastToolCallEnded = Date.now()
+  if (clock.runningToolCall === callId) {
+    clock.runningToolCall = undefined
+  }
+}
+
+export function newToolCallId(): string {
+  return newPrefixedId('call')
+}
+
 export function newSessionId(): string {
   return newPrefixedId('ses')
 }
@@ -89,6 +123,11 @@ export function newSessionId(): string {
  */
 export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
   return deterministicPrefixedId('ses', mcpSessionId)
+}
+
+/** Rule 3 for a transport session id: a PostHog session token gives its `sid`, any other id is hashed. */
+export function deriveSessionIdFromTransport(transportSessionId: string): string {
+  return decodeSessionId(transportSessionId)?.sessionId ?? deriveSessionIdFromMCPSession(transportSessionId)
 }
 
 /**
@@ -216,25 +255,12 @@ export function resolveSession(
  * Not for a shared HTTP instance, where the instance's own id is no one's session.
  */
 export function beginToolCall(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): () => void {
-  const { connection } = data
-  const ended = connection.lastToolCallEnded
   const oneClient = data.sessionSource === 'generated' && !extra?.sessionId && !getRequestHeaders(extra)
-  if (
-    oneClient &&
-    connection.runningToolCall === undefined &&
-    ended !== undefined &&
-    Date.now() - ended >= ROTATE_AFTER_MS
-  ) {
+  const callId = newToolCallId()
+  if (arriveToolCall(data.connection, callId) && oneClient) {
     data.sessionId = newSessionId()
   }
-  const callId = newPrefixedId('call')
-  connection.runningToolCall = callId
-  return () => {
-    connection.lastToolCallEnded = Date.now()
-    if (connection.runningToolCall === callId) {
-      connection.runningToolCall = undefined
-    }
-  }
+  return () => endToolCall(data.connection, callId)
 }
 
 /** The source of the session this instance holds: steps 3 and 4 of {@link resolveSession}. */

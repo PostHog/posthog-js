@@ -56,7 +56,15 @@ import {
 } from './model-parameters'
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
-import { deriveSessionIdFromConversation, newSessionId } from './session'
+import {
+  deriveSessionIdFromConversation,
+  deriveSessionIdFromTransport,
+  arriveToolCall,
+  endToolCall,
+  newSessionId,
+  newToolCallId,
+} from './session'
+import type { ConnectionClock, ResolvedSession } from './session'
 import {
   deriveSessionIdFromClientConversation,
   readClientConversation,
@@ -113,6 +121,9 @@ export interface PostHogMCPOptions extends PostHogOptions {
 interface PreparedConversationState {
   minted: boolean
   outputInstructions: boolean
+  /** The session the call has if a minted handle never reaches the agent. */
+  withoutHandle?: ResolvedSession
+  connection?: { key: string; callId: string }
 }
 
 const PREPARED_CONVERSATION_STATE_KEY = '__posthogMcpConversationState'
@@ -171,6 +182,8 @@ export class PostHogMCP extends PostHog {
   readonly #enableConversationId: boolean
   readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
+  // Least recently used first. At most MAX_CONNECTIONS, so a dispatcher that never ends its connections stays bounded.
+  readonly #connections = new Map<string, ConnectionClock & { sessionId: string }>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     const serverBuild = validateServerBuild(options.serverBuild)
@@ -367,7 +380,9 @@ export class PostHogMCP extends PostHog {
    * whether the call targeted the `get_more_tools` virtual tool.
    *
    * Dispatch the returned `args` to your tool. Then pass the tool result and
-   * this prepared call to {@link prepareToolResult}. Use its result as the MCP
+   * this prepared call, unchanged, to {@link prepareToolResult}: the call's
+   * connection state travels on it, and a rebuilt copy never ends the call. If the
+   * handler threw, pass an error result so the call still ends. Use its result as the MCP
    * response and its session and conversation values with
    * {@link captureToolCall}.
    *
@@ -397,13 +412,22 @@ export class PostHogMCP extends PostHog {
    *   })
    *   return preparedResult.result
    * }
-   * const toolResult = await runTool(name, preparedCall.args)
+   * let toolResult
+   * let thrown
+   * try {
+   *   toolResult = await runTool(name, preparedCall.args)
+   * } catch (error) {
+   *   thrown = error
+   *   toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
+   * }
    * const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
    * posthog.captureToolCall({
    *   toolName: name,
    *   intent: preparedCall.intent,
    *   sessionId: preparedResult.sessionId,
    *   conversationId: preparedResult.conversationId,
+   *   isError: toolResult.isError === true,
+   *   error: thrown,
    *   ...identity,
    * })
    * return preparedResult.result
@@ -437,11 +461,13 @@ export class PostHogMCP extends PostHog {
     const conversation =
       resolvedConversation.minted && (options.sessionId || client?.handleFree) ? NO_CONVERSATION : resolvedConversation
     const conversationId = conversation.conversationId
-    const sessionId = clientConversation
-      ? deriveSessionIdFromClientConversation(clientConversation)
+    const connectionCall = options.connectionKey ? { key: options.connectionKey, callId: newToolCallId() } : undefined
+    const withoutHandle = this.#sessionWithoutHandle(options, connectionCall?.callId)
+    const session: ResolvedSession | undefined = clientConversation
+      ? { sessionId: deriveSessionIdFromClientConversation(clientConversation), source: 'client_metadata' }
       : conversationId
-        ? deriveSessionIdFromConversation(conversationId)
-        : options.sessionId
+        ? { sessionId: deriveSessionIdFromConversation(conversationId), source: 'conversation' }
+        : withoutHandle
     // A supplied `originalTool` is a real application tool by this name (it
     // comes from the host's own list, which never holds the virtual tool), so
     // the real tool wins — the stateless twin of instrument()'s listing-derived
@@ -459,7 +485,8 @@ export class PostHogMCP extends PostHog {
         conversationId: this.#enableConversationId && ownership?.conversationId === true,
         llmModel: ownsModel,
       }) as Record<string, unknown> | undefined,
-      sessionId,
+      sessionId: session?.sessionId,
+      sessionSource: session?.source,
       conversationId,
       isMissingCapability: name === this.#missingCapabilityToolName,
       isFeedback,
@@ -469,6 +496,8 @@ export class PostHogMCP extends PostHog {
       [PREPARED_CONVERSATION_STATE_KEY]: {
         minted: conversation.minted,
         outputInstructions: this.#enableConversationId && !client?.handleFree && ownership?.outputInstructions === true,
+        withoutHandle,
+        connection: connectionCall,
       },
     }
     return preparedCall
@@ -486,12 +515,18 @@ export class PostHogMCP extends PostHog {
    */
   prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
     const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
-    const conversationId = preparedCall.conversationId
+    if (state?.connection) {
+      const connection = this.#connections.get(state.connection.key)
+      if (connection) {
+        endToolCall(connection, state.connection.callId)
+      }
+    }
+    const { sessionId, sessionSource, conversationId } = preparedCall
     if (!conversationId) {
-      return { result, sessionId: preparedCall.sessionId, conversationId }
+      return { result, sessionId, sessionSource, conversationId }
     }
     if (!state) {
-      return { result, sessionId: preparedCall.sessionId, conversationId: undefined }
+      return { result, sessionId, sessionSource, conversationId: undefined }
     }
 
     let preparedResult: unknown = result
@@ -506,10 +541,72 @@ export class PostHogMCP extends PostHog {
       delivered = true
     }
 
-    return {
-      result: preparedResult as TResult,
-      sessionId: preparedCall.sessionId,
-      conversationId: state.minted && !delivered ? undefined : conversationId,
+    if (state.minted && !delivered) {
+      return {
+        result: preparedResult as TResult,
+        sessionId: state.withoutHandle?.sessionId,
+        sessionSource: state.withoutHandle?.source,
+        conversationId: undefined,
+      }
+    }
+    return { result: preparedResult as TResult, sessionId, sessionSource, conversationId }
+  }
+
+  /**
+   * The session for an event outside a tool call, such as {@link captureInitialize}
+   * or {@link captureToolsList}, from the same `sessionId` or `connectionKey` you pass
+   * to {@link prepareToolCall}, so one connection's events share one session. Only
+   * tool calls rotate a connection's session, so this never does.
+   */
+  resolveSession(
+    options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>
+  ): Pick<PreparedToolResult, 'sessionId' | 'sessionSource'> {
+    const session = this.#sessionWithoutHandle(options)
+    return { sessionId: session?.sessionId, sessionSource: session?.source }
+  }
+
+  /** Rule 3 of the spec's session identity: the transport session, else the connection's own. */
+  #sessionWithoutHandle(
+    options: Pick<PrepareToolCallOptions, 'sessionId' | 'connectionKey'>,
+    toolCallId?: string
+  ): ResolvedSession | undefined {
+    if (options.connectionKey) {
+      const connection = this.#connection(options.connectionKey)
+      if (toolCallId && arriveToolCall(connection, toolCallId)) {
+        connection.sessionId = newSessionId()
+      }
+      if (!options.sessionId) {
+        return { sessionId: connection.sessionId, source: 'generated' }
+      }
+    }
+    return options.sessionId
+      ? { sessionId: deriveSessionIdFromTransport(options.sessionId), source: 'transport' }
+      : undefined
+  }
+
+  #connection(key: string): ConnectionClock & { sessionId: string } {
+    const known = this.#connections.get(key)
+    if (!known && this.#connections.size >= MAX_CONNECTIONS) {
+      this.#evictConnection()
+    }
+    const connection = known ?? { sessionId: newSessionId() }
+    this.#connections.delete(key)
+    this.#connections.set(key, connection)
+    return connection
+  }
+
+  /** The least recently used connection with no call running, else the least recently used. */
+  #evictConnection(): void {
+    let evicted: string | undefined
+    for (const [key, connection] of this.#connections) {
+      evicted ??= key
+      if (connection.runningToolCall === undefined) {
+        evicted = key
+        break
+      }
+    }
+    if (evicted !== undefined) {
+      this.#connections.delete(evicted)
     }
   }
 
@@ -604,6 +701,7 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
   const event: McpEvent = {
     eventType,
     sessionId: common.sessionId || newSessionId(),
+    sessionSource: common.sessionId ? common.sessionSource : 'generated',
     conversationId: common.conversationId,
     protocolVersion: common.protocolVersion,
     // There is no `extra` on this path, so the host reads the request headers and
@@ -627,6 +725,8 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
 }
 
 const NO_CONVERSATION = { minted: false, conversationId: undefined } as const
+
+const MAX_CONNECTIONS = 10_000
 
 function readMetaClientName(meta: JsonRecord | undefined): string | undefined {
   return meta ? resolveClientIdentity({ request: { params: { _meta: meta } } })?.clientName : undefined

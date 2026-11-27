@@ -2,6 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { PostHogMCP, instrument } from '../index'
 import { CLIENT_CONVERSATION_ROWS, recognizeClient } from '../extensions/client-conversation'
+import { deriveSessionIdFromMCPSession } from '../extensions/session'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -446,7 +447,7 @@ describe('client conversation ids', () => {
       {
         name: 'a carried session',
         options: { headers: { 'user-agent': CHATGPT }, sessionId: 'ses_carried' },
-        expected: { sessionId: 'ses_carried', minted: false },
+        expected: { sessionId: deriveSessionIdFromMCPSession('ses_carried'), minted: false },
       },
     ])('prepareToolCall resolves $name', ({ options, expected }) => {
       const call = client.prepareToolCall('search_docs', {}, options)
