@@ -1214,6 +1214,65 @@ describe('PostHog RN session replay v2 trigger groups', () => {
     }
   })
 
+  describe('a manual start held by sampling with replay off', () => {
+    const startSampledOut = async (): Promise<{ inId: string; uuid: ReturnType<typeof vi.spyOn> }> => {
+      currentSessionRecording = v2Config([{ id: 'g1', sampleRate: 0.5, conditions: {} }])
+      await warmup()
+      const outId = sessionIdSampled('g1', 0.5, false)
+      const inId = sessionIdSampled('g1', 0.5, true)
+      const uuid = vi.spyOn(uuidModule, 'uuidv7').mockReturnValue(outId)
+      posthog = newPostHog({
+        enableSessionReplay: false,
+        preloadFeatureFlags: false,
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        errorTracking: { autocapture: false },
+      })
+      await posthog.ready()
+      await wait(50)
+      return { inId, uuid }
+    }
+
+    it('starts in the next session once it samples in after inactivity', async () => {
+      const { inId, uuid } = await startSampledOut()
+      try {
+        await posthog.startSessionRecording()
+        await wait(100)
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(replay.start).not.toHaveBeenCalled()
+
+        uuid.mockReturnValue(inId)
+        rotateSession()
+        expect(posthog.getSessionId()).toBe(inId)
+
+        await waitForExpect(2000, () =>
+          expect(replay.startRecording.mock.calls.length + replay.start.mock.calls.length).toBeGreaterThan(0)
+        )
+      } finally {
+        uuid.mockRestore()
+      }
+    })
+
+    it('does not revive a request the app stopped when the session rotates', async () => {
+      const { inId, uuid } = await startSampledOut()
+      try {
+        await posthog.startSessionRecording()
+        await posthog.stopSessionRecording()
+        await wait(100)
+
+        uuid.mockReturnValue(inId)
+        rotateSession()
+        expect(posthog.getSessionId()).toBe(inId)
+        await wait(300)
+
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(replay.start).not.toHaveBeenCalled()
+      } finally {
+        uuid.mockRestore()
+      }
+    })
+  })
+
   it.each([true, false])(
     'stops native when a new manual session samples out (enableSessionReplay=%s)',
     async (enabled) => {

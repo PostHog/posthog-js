@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Dynamic
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -281,7 +282,7 @@ class PosthogReactNativePluginModule(
   @OptIn(PostHogInternalReplayApi::class)
   @ReactMethod
   fun setSessionReplayMinimumDuration(
-    minimumDurationMs: Double?,
+    minimumDurationMs: Dynamic,
     promise: Promise,
   ) {
     try {
@@ -290,10 +291,11 @@ class PosthogReactNativePluginModule(
           ?.integrations
           ?.filterIsInstance<PostHogReplayIntegration>()
           ?.firstOrNull()
-      applySessionReplayMinimumDuration(minimumDurationMs, integration?.let { it::setSessionReplayMinimumDuration })
+      applySessionReplayMinimumDuration(minimumDurationFromDynamic(minimumDurationMs), integration?.let { it::setSessionReplayMinimumDuration })
     } catch (e: Throwable) {
       logError("setSessionReplayMinimumDuration", e)
     } finally {
+      minimumDurationMs.recycle()
       promise.resolve(null)
     }
   }
@@ -917,6 +919,9 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// A Dynamic parameter keeps a JS null from crashing the old bridge's primitive Double unboxing before the method runs.
+internal fun minimumDurationFromDynamic(value: Dynamic): Double? = if (value.isNull) null else value.asDouble()
 
 // JS numbers cross the bridge as doubles; null clears the override. With no replay integration there is nothing to set.
 internal fun applySessionReplayMinimumDuration(

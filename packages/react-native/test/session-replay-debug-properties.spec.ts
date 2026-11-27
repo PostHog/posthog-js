@@ -712,6 +712,25 @@ describe('PostHog RN session replay debug properties', () => {
       const nextWindow = captureOne(client, '$screen').properties
       expect(V2_KEYS.filter((key) => nextWindow[key] !== undefined)).toEqual(V2_KEYS)
     })
+
+    it('carries the trigger group keys on a manual recording with replay off', async () => {
+      currentSessionRecording = { version: 2, triggerGroups: [everyoneGroup], endpoint: '/s/' }
+      await warmup()
+
+      const client = await readyClient({ enableSessionReplay: false })
+      pluginMock.isEnabled.mockResolvedValue(true)
+      await client.startSessionRecording()
+      await waitForNativeChain(client)
+
+      advanceClock(WINDOW_MS)
+      const { properties } = captureOne(client, '$screen')
+      expect(properties.$recording_status).toBe('active')
+      expect(properties.$sdk_debug_replay_remote_trigger_matching_config).toBe('v2_trigger_groups')
+      expect(properties.$sdk_debug_replay_trigger_groups_count).toBe(1)
+      expect(properties.$sdk_debug_replay_matched_recording_trigger_groups).toEqual([
+        { id: 'g1', name: 'Everyone', matched: true, sampled: true },
+      ])
+    })
   })
 
   // The flags-driven pause is the stop path that owns the JS recording flag; the manual

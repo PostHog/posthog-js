@@ -1,5 +1,6 @@
 package com.posthogreactnativeplugin
 
+import com.facebook.react.bridge.DynamicFromObject
 import com.facebook.react.bridge.JavaOnlyMap
 import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroidConfig
@@ -165,6 +166,12 @@ class PosthogReactNativePluginModuleTest {
     applySessionReplayMinimumDuration(null) { received.add(it) }
 
     assertEquals(listOf<Long?>(null), received)
+  }
+
+  @Test
+  fun `a dynamic minimum duration converts null to null and a number to a Double`() {
+    assertNull(minimumDurationFromDynamic(DynamicFromObject(null)))
+    assertEquals(5000.0, minimumDurationFromDynamic(DynamicFromObject(5000.0))!!, 0.0)
   }
 
   @Test

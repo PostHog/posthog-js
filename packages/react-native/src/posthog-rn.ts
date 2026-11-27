@@ -2182,24 +2182,30 @@ export class PostHog extends PostHogCore {
   getSessionId(): string {
     const sessionId = super.getSessionId()
 
-    if (!this._isEnableSessionReplay() && !this._isNativePluginInitialized()) {
+    const nativeInUse = this._isEnableSessionReplay() || this._isNativePluginInitialized()
+    // A manual start held by sampling with replay off still needs the rotation re-evaluation below.
+    if (!nativeInUse && !this._manualRecordingStartRequest?.pending) {
       return sessionId
     }
 
-    // only rotate if there is a new sessionId and it is different from the current one
-    if (sessionId.length > 0 && this._currentSessionId && sessionId !== this._currentSessionId) {
-      if (OptionalReactNativePlugin) {
-        try {
-          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
-          this._refreshNativeSessionReplayDebugProperties()
-          this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
-        } catch (e) {
-          this._logger.error(`Failed to rotate sessionId: ${e}.`)
+    if (nativeInUse) {
+      // only rotate if there is a new sessionId and it is different from the current one
+      if (sessionId.length > 0 && this._currentSessionId && sessionId !== this._currentSessionId) {
+        if (OptionalReactNativePlugin) {
+          try {
+            this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+            this._refreshNativeSessionReplayDebugProperties()
+            this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
+          } catch (e) {
+            this._logger.error(`Failed to rotate sessionId: ${e}.`)
+          }
         }
+        this._currentSessionId = sessionId
+      } else {
+        this._logger.info(
+          `sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`
+        )
       }
-      this._currentSessionId = sessionId
-    } else {
-      this._logger.info(`sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`)
     }
 
     // Triggers and trigger groups are decided per session: re-evaluate once the session moves on from
@@ -2383,6 +2389,8 @@ export class PostHog extends PostHogCore {
       this._rotateSessionForManualStart()
       request.resumeCurrent = true
     }
+    // With replay off nothing else records the evaluated session, so a held request needs it to see a rotation.
+    this._replayEvaluatedSessionId = super.getSessionId()
     return this._evaluateTriggerGroups(triggerGroups, true)
   }
 
@@ -2401,11 +2409,13 @@ export class PostHog extends PostHogCore {
       )
     )
     this._checkTriggerGroupsScreen(sessionId, explicitStart)
-    return this._triggerGroupsEvaluator.evaluate(
+    const decision = this._triggerGroupsEvaluator.evaluate(
       sessionId,
       this.getKnownFeatureFlags(),
       this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
     )
+    this._registerTriggerGroupsDebugProperties(decision)
+    return decision
   }
 
   private _isReplayConfigUnknown(
@@ -3953,7 +3963,6 @@ export class PostHog extends PostHogCore {
     } else if (triggerGroups) {
       this._sessionReplayEventTriggers = []
       const decision = this._evaluateTriggerGroups(triggerGroups, false)
-      this._registerTriggerGroupsDebugProperties(decision)
       this._logger.info(
         `Session replay trigger groups v2 (${decision.groupsCount} groups): ` +
           `record=${decision.shouldRecord}, pending=${decision.hasPendingGroups}, ` +
