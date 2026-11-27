@@ -439,7 +439,12 @@ const preparedCall = posthog.prepareToolCall(toolName, rawArgs, {
   requestMeta: request.params?._meta,
   sessionId: transportSessionId,
 })
-const toolResult = await dispatch(toolName, preparedCall.args)
+let toolResult
+try {
+  toolResult = await dispatch(toolName, preparedCall.args)
+} catch (error) {
+  toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
+}
 const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
 
 posthog.captureToolCall({
@@ -466,7 +471,7 @@ takes precedence. Otherwise, the existing session prevents a new handle from bei
 one-client connection such as stdio, pass a `connectionKey` you keep for the connection's lifetime
 instead: the SDK gives it a session and rotates it on the first call that arrives 30 minutes or more
 after the previous one ended. A call holds the session open until its result is prepared, so call
-`prepareToolResult` for failed calls too. For `captureInitialize`, `captureToolsList`, and other
+`prepareToolResult` for failed calls too, with the `preparedCall` object unchanged. For `captureInitialize`, `captureToolsList`, and other
 events outside a tool call, spread `posthog.resolveSession({ sessionId, connectionKey })` into the
 capture so they share the tool calls' session. Set `enableConversationId: false` on `PostHogMCP` to keep
 the previous custom-dispatcher behavior.

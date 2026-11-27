@@ -81,8 +81,12 @@ const ROTATE_AFTER_MS = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
 
 /** The tool calls on a one-client connection, which decide when its own id rotates. */
 export interface ConnectionClock {
-  /** By call id, so a call ends once and a call from an evicted clock ends nothing. */
-  runningToolCalls: Set<string>
+  /**
+   * The most recent call to arrive, until it ends. Only that call holds the session
+   * open, so a call that never settles cannot stop a later one from rotating it, and
+   * a call from an evicted clock ends nothing.
+   */
+  runningToolCall?: string
   lastToolCallEnded?: number
 }
 
@@ -93,13 +97,14 @@ export interface ConnectionClock {
  */
 export function arriveToolCall(clock: ConnectionClock, callId: string): boolean {
   const ended = clock.lastToolCallEnded
-  const rotate = clock.runningToolCalls.size === 0 && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
-  clock.runningToolCalls.add(callId)
+  const rotate = clock.runningToolCall === undefined && ended !== undefined && Date.now() - ended >= ROTATE_AFTER_MS
+  clock.runningToolCall = callId
   return rotate
 }
 
 export function endToolCall(clock: ConnectionClock, callId: string): void {
-  if (clock.runningToolCalls.delete(callId)) {
+  if (clock.runningToolCall === callId) {
+    clock.runningToolCall = undefined
     clock.lastToolCallEnded = Date.now()
   }
 }
@@ -120,6 +125,11 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
   return deterministicPrefixedId('ses', mcpSessionId)
 }
 
+/** Rule 3 for a transport session id: a PostHog session token gives its `sid`, any other id is hashed. */
+export function deriveSessionIdFromTransport(transportSessionId: string): string {
+  return decodeSessionId(transportSessionId)?.sessionId ?? deriveSessionIdFromMCPSession(transportSessionId)
+}
+
 /**
  * Derives the SDK session id from the agent's conversation handle (ADR-0004).
  * Deterministic and unsalted on purpose: two pods that never met must agree on
@@ -134,11 +144,6 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
  * reproduce it byte for byte or the same conversation splits into two sessions
  * depending on which SDK served the call.
  */
-/** Rule 3 for a transport session id: a PostHog session token gives its `sid`, any other id is hashed. */
-export function deriveSessionIdFromTransport(transportSessionId: string): string {
-  return decodeSessionId(transportSessionId)?.sessionId ?? deriveSessionIdFromMCPSession(transportSessionId)
-}
-
 export function deriveSessionIdFromConversation(conversationId: string): string {
   return deterministicPrefixedId('ses', conversationId)
 }

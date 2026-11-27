@@ -366,7 +366,9 @@ export class PostHogMCP extends PostHog {
    * whether the call targeted the `get_more_tools` virtual tool.
    *
    * Dispatch the returned `args` to your tool. Then pass the tool result and
-   * this prepared call to {@link prepareToolResult}. Use its result as the MCP
+   * this prepared call, unchanged, to {@link prepareToolResult}: the call's
+   * connection state travels on it, and a rebuilt copy never ends the call. If the
+   * handler threw, pass an error result so the call still ends. Use its result as the MCP
    * response and its session and conversation values with
    * {@link captureToolCall}.
    *
@@ -396,7 +398,12 @@ export class PostHogMCP extends PostHog {
    *   })
    *   return preparedResult.result
    * }
-   * const toolResult = await runTool(name, preparedCall.args)
+   * let toolResult
+   * try {
+   *   toolResult = await runTool(name, preparedCall.args)
+   * } catch (error) {
+   *   toolResult = { content: [{ type: 'text', text: String(error) }], isError: true }
+   * }
    * const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
    * posthog.captureToolCall({
    *   toolName: name,
@@ -560,12 +567,13 @@ export class PostHogMCP extends PostHog {
   }
 
   #connection(key: string): ConnectionClock & { sessionId: string } {
-    const connection = this.#connections.get(key) ?? { sessionId: newSessionId(), runningToolCalls: new Set<string>() }
-    this.#connections.delete(key)
-    this.#connections.set(key, connection)
-    if (this.#connections.size > MAX_CONNECTIONS) {
+    const known = this.#connections.get(key)
+    if (!known && this.#connections.size >= MAX_CONNECTIONS) {
       this.#evictConnection()
     }
+    const connection = known ?? { sessionId: newSessionId() }
+    this.#connections.delete(key)
+    this.#connections.set(key, connection)
     return connection
   }
 
@@ -574,7 +582,7 @@ export class PostHogMCP extends PostHog {
     let evicted: string | undefined
     for (const [key, connection] of this.#connections) {
       evicted ??= key
-      if (connection.runningToolCalls.size === 0) {
+      if (connection.runningToolCall === undefined) {
         evicted = key
         break
       }

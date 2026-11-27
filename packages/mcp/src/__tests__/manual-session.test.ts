@@ -208,6 +208,28 @@ describe('PostHogMCP step-path sessions', () => {
       expect(next.$session_id).toBe(session)
     })
 
+    it('rotates after a call that never ends once the latest call has ended', async () => {
+      client.prepareToolCall('search_docs', {}, stdio)
+      const latest = client.prepareToolCall('search_docs', {}, stdio)
+      const before = client.prepareToolResult(undelivered, latest)
+      minutes(31)
+
+      const next = client.prepareToolCall('search_docs', {}, stdio)
+      const after = client.prepareToolResult(undelivered, next)
+
+      expect(after.sessionId).not.toBe(before.sessionId)
+    })
+
+    it('keeps the arriving call connection when every cached connection is running a call', async () => {
+      for (let i = 0; i < 10_000; i++) {
+        client.prepareToolCall('search_docs', {}, { connectionKey: `busy-${i}` })
+      }
+      const arriving = client.prepareToolCall('search_docs', {}, stdio)
+      const ended = client.prepareToolResult(undelivered, arriving)
+
+      expect(client.resolveSession(stdio).sessionId).toBe(ended.sessionId)
+    })
+
     it.each([
       { name: 'a transport session', options: { sessionId: 'mcp-transport-abc' }, source: 'transport' },
       { name: 'a connection key', options: stdio, source: 'generated' },
