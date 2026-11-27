@@ -547,9 +547,11 @@ export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
 
     /**
      * Release identity for manual and automatically captured exceptions only.
-     * Supply either a PostHog release id, or a name and version matching the release created
-     * during source-map upload (`--release-name`, `--release-version`, and optional `--build`).
-     * A Git commit SHA can be used as the version. This option does not create releases.
+     * Supply either a PostHog release id, or the name and version of a release that already
+     * exists in the project, as given to `posthog-cli` through `--release-name`,
+     * `--release-version`, and optional `--build`. A Git commit SHA can be used as the version.
+     * This option does not create releases. Create the release first, for example with
+     * `posthog-cli release resolve`.
      *
      * Explicit event, session, or super-property release identity takes precedence over this
      * option, which takes precedence over a build-injected release id. Name/version configuration
