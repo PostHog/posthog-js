@@ -320,11 +320,15 @@ describe('PostHog RN session replay debug properties', () => {
   it('Session keys follow a caller-supplied session id (mobile)', async () => {
     const client = await readyClient({ enableSessionReplay: true })
     const { properties } = captureOne(client, '$screen', { $session_id: '0190a0a0-0000-7000-8000-000000000000' })
-    // Core always sets $session_id last, so a JS-built event never keeps a caller id.
-    expect(properties.$session_id).toBe(client.getPersistedProperty(PostHogPersistedProperty.SessionId))
-    expect(properties.$sdk_debug_session_start).toBe(
-      client.getPersistedProperty(PostHogPersistedProperty.SessionStartTimestamp)
-    )
+    expect(properties.$session_id).toBe('0190a0a0-0000-7000-8000-000000000000')
+    expect(properties.$sdk_debug_session_start).toBe(0x0190a0a00000)
+  })
+
+  it('Session start is left off for a caller-supplied session id that is not a UUIDv7 (mobile)', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    const { properties } = captureOne(client, '$screen', { $session_id: 'caller-session' })
+    expect(properties.$session_id).toBe('caller-session')
+    expect(properties.$sdk_debug_session_start).toBeUndefined()
   })
 
   it('session keys describe the rotated session when the previous one expired during capture', async () => {
@@ -387,19 +391,30 @@ describe('PostHog RN session replay debug properties', () => {
     expect(activated.$recording_status).toBe('active')
   })
 
-  it('Debug values win over same-named caller or registered properties', async () => {
+  it('Same-named registered properties win over debug values, and caller ones win over both', async () => {
     nativeDebugMap = { $recording_status: 'disabled' }
     const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
     client.register({ $recording_status: 'registered', $sdk_debug_session_start: 'registered' })
-    const { properties } = captureOne(client, '$screen', {
-      $recording_status: 'caller',
-      $sdk_debug_session_start: 'caller',
-    })
-    expect(properties.$recording_status).toBe('disabled')
-    expect(properties.$sdk_debug_session_start).toBe(
+    const { properties } = captureOne(client, '$screen', { $recording_status: 'caller' })
+    expect(properties.$recording_status).toBe('caller')
+    expect(properties.$sdk_debug_session_start).toBe('registered')
+
+    client.unregister('$recording_status')
+    client.unregister('$sdk_debug_session_start')
+    advanceClock(WINDOW_MS)
+    const next = captureOne(client, '$screen').properties
+    expect(next.$recording_status).toBe('disabled')
+    expect(next.$sdk_debug_session_start).toBe(
       client.getPersistedProperty(PostHogPersistedProperty.SessionStartTimestamp)
     )
+  })
+
+  it('A caller-supplied optional-bundle key on a custom event is kept', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    const { properties } = captureOne(client, 'custom event', { $sdk_debug_session_start: 123 })
+    expect(properties.$sdk_debug_session_start).toBe(123)
+    expect(bundleKeysOf(properties)).toEqual(['$sdk_debug_session_start'])
   })
 
   it('Capture mode is screenshot when screenshot recording is on', async () => {
@@ -484,13 +499,13 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client).properties.$sdk_debug_pending_queue_size).toBe(2)
   })
 
-  it('builds the debug map once per capture, after the caller properties', async () => {
+  it('builds the debug map once per capture, under the caller properties', async () => {
     const client = await readyClient()
     const build = vi.spyOn(client as any, '_sessionReplayDebugProperties')
 
     const { properties } = captureOne(client, '$screen', { $recording_status: 'caller' })
     expect(build).toHaveBeenCalledTimes(1)
-    expect(properties.$recording_status).toBe('disabled')
+    expect(properties.$recording_status).toBe('caller')
   })
 
   it('autocapture carries the required keys even though it skips buildPayload', async () => {
@@ -498,7 +513,7 @@ describe('PostHog RN session replay debug properties', () => {
     const seen: CapturedEvent[] = []
     client.on('autocapture', (message: CapturedEvent) => seen.push(message))
 
-    client.autocapture('touch', [], { $recording_status: 'caller' })
+    client.autocapture('touch', [])
 
     expect(seen).toHaveLength(1)
     expect(seen[0].event).toBe('$autocapture')
